@@ -10496,8 +10496,8 @@ select tst.ok((select c.first_name = 'Ann' and c.last_name = 'Lee' and c.company
 select count(*) as t138_cards from public.customers where display_name like 'T138 %' \gset
 -- the answer was lost: the same batch again
 :as_office_a
-select tst.ok((select jsonb_agg(e ->> 'result' order by (e ->> 'line')::int) from jsonb_array_elements(public.import_customers('f1380000-0000-4000-8000-000000000001', :'t138_rows')) e)
-              = '["added","added","skipped","skipped"]'::jsonb, 'T138 the same batch again — the same answers');
+select tst.ok((select jsonb_agg(e - 'customer_id' order by (e ->> 'line')::int) from jsonb_array_elements(public.import_customers('f1380000-0000-4000-8000-000000000001', :'t138_rows')) e)
+              = (select jsonb_agg(e - 'customer_id' order by (e ->> 'line')::int) from t138, jsonb_array_elements(j) e), 'T138 the same batch again — the same answers, word for word');
 :as_super
 select tst.ok((select count(*) from public.customers where display_name like 'T138 %') = :t138_cards, 'T138 …and no new cards');
 :as_office_a
@@ -10505,6 +10505,8 @@ select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000
 select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":6,"name":"T138 Past The End","phone":"909 138 0006"}]')$q$, '%import_bad_line%', 'T138 a line past the total — refused');
 select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
                         (select jsonb_agg(jsonb_build_object('line', 2, 'name', 'x')) from generate_series(1, 251))), '%import_too_big%', 'T138 more than 250 rows in a batch — refused');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":2.5,"name":"T138 Half","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a line that is not a whole number — import_bad_line');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":1e12,"name":"T138 Huge","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a huge line — import_bad_line, not a raw error');
 select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
                         jsonb_build_array(jsonb_build_object('line', 5, 'name', repeat('x', 201)))), '%import_too_big%', 'T138 a cell over 200 characters — refused');
 -- nobody writes the tables, the keys are closed (§14.9 №2)
@@ -10531,6 +10533,7 @@ select tst.ok((select j ->> 'status' = 'applied' and (j -> 'counts' ->> 'added')
 select tst.ok((select j ->> 'status' = 'applied' from (select public.import_customers_finish('f1380000-0000-4000-8000-000000000001') j) x), 'T138 finish again — the same');
 select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":5,"name":"T138 Late","phone":"909 138 0007"}]')$q$, '%import_closed%', 'T138 no batch into a finished import');
 :as_super
+select tst.ok((select count(*) = 0 from public.import_rows where job_id = 'f1380000-0000-4000-8000-000000000001' and name is not null), 'T138 the names of the rows are not kept after the import');
 select tst.ok((select count(*) = 1 and bool_and(not (after ? 'file_name') and after ->> 'total' = '4') from public.audit_log
                 where entity_type = 'import_job' and entity_id = 'f1380000-0000-4000-8000-000000000001' and action = 'apply'), 'T138 one audit line, no file name');
 -- the same file again: a warning
@@ -10546,6 +10549,23 @@ select public.import_customers_finish('f1380000-0000-4000-8000-000000000003');
 :as_super
 insert into public.notes (company_id, subject_type, subject_id, body, visibility)
 select 'ca000000-0000-0000-0000-000000000000', 'customer', id, 'T138 called back', 'team' from public.customers where display_name = 'T138 Bob';
+-- the third card: nothing on the card itself, a gate code on its property (a row that points to the property)
+:as_office_a
+select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000007', 'more.csv', repeat('7', 64), 1, '1a000000-0000-0000-0000-000000000001') is not null as t138_s7 \gset
+select public.import_customers('f1380000-0000-4000-8000-000000000007', '[{"line":2,"name":"T138 Gate","phone":"909 138 0010"}]') is not null as t138_b7 \gset
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a1380000-0000-4000-8000-000000000002', 'office138@a.test', '{"full_name":"Olivia 138"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a1380000-0000-4000-8000-000000000002', 'office', 'active');
+reset role; set request.jwt.claim.sub = 'a1380000-0000-4000-8000-000000000002'; set role authenticated;
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000007')$q$, '%not allowed%', 'T138 another office does not undo an import still being sent');
+:as_super
+insert into public.property_secrets (company_id, property_id, gate_code)
+select p.company_id, p.id, '1380' from public.properties p join public.customers c on c.id = p.customer_id where c.display_name = 'T138 Gate';
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 0 and (j -> 'counts' ->> 'kept')::int = 1
+                 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000007') j) x), 'T138 undo keeps a card whose property has a gate code (any row pointing to its person or property)');
+:as_super
+select tst.ok((select c.deleted_at is null and p.deleted_at is null from public.customers c join public.properties p on p.customer_id = c.id where c.display_name = 'T138 Gate'), 'T138 …card and property are there');
 :as_tech_a
 select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000001')$q$, '%not allowed%', 'T138 a tech does not undo');
 :as_owner_b
@@ -10578,6 +10598,7 @@ select tst.ok((select j ->> 'status' = 'applying'
   'T138 a new import starts though one was left open for a day…');
 :as_super
 select tst.ok((select status = 'applied' and undo_until is not null from public.import_jobs where id = 'f1380000-0000-4000-8000-000000000004'), 'T138 …that one is closed with what it had');
+select tst.ok((select count(*) = 1 from public.audit_log where entity_type = 'import_job' and entity_id = 'f1380000-0000-4000-8000-000000000004' and action = 'apply' and actor_type = 'system'), 'T138 …with its audit line');
 :as_office_a
 select public.import_customers_finish('f1380000-0000-4000-8000-000000000005');
 :as_super

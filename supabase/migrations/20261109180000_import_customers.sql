@@ -61,20 +61,21 @@ language sql stable security definer set search_path = '' as $$
       join cards on cards.id = k.customer_id
      where k.company_id = p_company and k.deleted_at is null
   )
-  select customer_id, 'p', app.phone_key(phone) from people where app.phone_key(phone) is not null
-  union
-  select people.customer_id, 'p', app.phone_key(x.number) from public.contact_phones x join people on people.contact_id = x.contact_id
-   where x.company_id = p_company and x.deleted_at is null and app.phone_key(x.number) is not null
-  union
-  select customer_id, 'e', app.email_key(email) from people where position('@' in coalesce(email, '')) > 1
-  union
-  select people.customer_id, 'e', app.email_key(x.address) from public.contact_emails x join people on people.contact_id = x.contact_id
-   where x.company_id = p_company and x.deleted_at is null and app.email_key(x.address) is not null
-  union
-  select p.customer_id, 'a', app.address_key(p.address_line1, p.address_unit, p.address_city, p.address_zip)
-    from public.properties p join cards on cards.id = p.customer_id and cards.status <> 'archived'
-   where p.company_id = p_company and p.deleted_at is null
-     and app.address_key(p.address_line1, p.address_unit, p.address_city, p.address_zip) is not null;
+  select x.customer_id, x.kind, x.key from (
+    select customer_id, 'p' as kind, app.phone_key(phone) as key from people
+    union
+    select people.customer_id, 'p', app.phone_key(x.number) from public.contact_phones x join people on people.contact_id = x.contact_id
+     where x.company_id = p_company and x.deleted_at is null
+    union
+    select customer_id, 'e', app.email_key(email) from people where position('@' in coalesce(email, '')) > 1
+    union
+    select people.customer_id, 'e', app.email_key(x.address) from public.contact_emails x join people on people.contact_id = x.contact_id
+     where x.company_id = p_company and x.deleted_at is null
+    union
+    select p.customer_id, 'a', app.address_key(p.address_line1, p.address_unit, p.address_city, p.address_zip)
+      from public.properties p join cards on cards.id = p.customer_id and cards.status <> 'archived'
+     where p.company_id = p_company and p.deleted_at is null
+  ) x where x.key is not null;
 $$;
 revoke all on function app.customer_keys(uuid) from public, anon, authenticated;
 
@@ -114,7 +115,7 @@ create table public.import_rows (
   job_id         uuid not null,
   line           int not null check (line between 2 and 5001),
   row_key        text not null check (row_key ~ '^[0-9a-f]{32}$'),
-  name           text check (char_length(name) <= 200),          -- shown in «повтор строки N» of the same file
+  name           text check (char_length(name) <= 200),          -- «повтор строки N» while the import runs; cleared when it ends
   result         text not null check (result in ('added', 'dup_added', 'skipped')),
   reason         text check (reason in ('noName', 'noContact', 'badPhone', 'badEmail', 'dupClient', 'dupFile')),
   customer_id    uuid,                                           -- the new card, or the one it matched
@@ -123,7 +124,7 @@ create table public.import_rows (
   created_at     timestamptz not null default now(),
   primary key (job_id, line),
   foreign key (company_id, job_id) references public.import_jobs (company_id, id),
-  foreign key (company_id, customer_id) references public.customers (company_id, id),
+  foreign key (company_id, customer_id) references public.customers (company_id, id) on delete set null (customer_id),
   check (created = (result in ('added', 'dup_added'))),
   check ((result = 'skipped') = (reason is not null))
 );
@@ -154,8 +155,11 @@ begin
   if jsonb_typeof(p_row -> p_key) not in ('string', 'null') and p_row ? p_key then
     raise exception 'import_bad_row' using errcode = 'P0001';
   end if;
-  v := btrim(regexp_replace(coalesce(p_row ->> p_key, ''),
-         '[[:cntrl:]' || chr(8206) || chr(8207) || chr(8234) || '-' || chr(8238) || chr(8294) || '-' || chr(8297) || chr(65279) || ']', '', 'g'));
+  -- control, bidi and zero-width characters out (U+061C, U+200B–U+200F, U+202A–U+202E, U+2066–U+2069, U+FEFF);
+  -- then spaces at the ends, the no-break and line / paragraph separators too (JS trim() on the phone)
+  v := regexp_replace(coalesce(p_row ->> p_key, ''),
+         '[[:cntrl:]' || chr(1564) || chr(8203) || '-' || chr(8207) || chr(8234) || '-' || chr(8238) || chr(8294) || '-' || chr(8297) || chr(65279) || ']', '', 'g');
+  v := regexp_replace(v, '^[[:space:]' || chr(160) || chr(8232) || chr(8233) || chr(8239) || chr(12288) || ']+|[[:space:]' || chr(160) || chr(8232) || chr(8233) || chr(8239) || chr(12288) || ']+$', '', 'g');
   if char_length(v) > 200 then raise exception 'import_too_big' using errcode = 'P0001'; end if;
   return v;
 end;
@@ -187,10 +191,19 @@ revoke all on function app.import_state(public.import_jobs) from public, anon, a
 
 -- an open import with no batch for a day closes itself with what it has (a phone lost in the middle never holds the company)
 create or replace function app.import_close_stale(p_company uuid)
-returns void language sql security definer set search_path = '' as $$
-  update public.import_jobs set status = 'applied', applied_at = now(), undo_until = now() + interval '30 days',
-         counts = app.import_counts(id)
-   where company_id = p_company and status = 'applying' and last_batch_at < now() - interval '24 hours';
+returns void language plpgsql security definer set search_path = '' as $$
+declare j public.import_jobs;
+begin
+  for j in update public.import_jobs set status = 'applied', applied_at = now(), undo_until = now() + interval '30 days',
+                  counts = app.import_counts(id)
+            where company_id = p_company and status = 'applying' and last_batch_at < now() - interval '24 hours'
+        returning * loop
+    update public.import_rows set name = null where job_id = j.id and name is not null;
+    insert into public.audit_log (company_id, actor_type, actor_id, entity_type, entity_id, action, after)
+    values (j.company_id, 'system', null, 'import_job', j.id, 'apply',
+            jsonb_build_object('job_id', j.id, 'total', j.total_rows, 'counts', j.counts, 'stale', true));
+  end loop;
+end;
 $$;
 revoke all on function app.import_close_stale(uuid) from public, anon, authenticated;
 
@@ -246,7 +259,7 @@ declare
   v_name text; v_first text; v_last text; v_comp text; v_phone text; v_email text; v_addr text; v_city text;
   v_digits text; v_pk text; v_ek text; v_ak text;
   v_reason text; v_result text; v_hit uuid; v_who text; v_status text; v_cust uuid; v_contact uuid;
-  v_out jsonb := '[]';
+  v_out jsonb := '[]'; v_keys boolean;
 begin
   if jsonb_typeof(p_rows) is distinct from 'array' then raise exception 'import_bad_row' using errcode = 'P0001'; end if;
   if jsonb_array_length(p_rows) > 250 then raise exception 'import_too_big' using errcode = 'P0001'; end if;
@@ -257,14 +270,14 @@ begin
   end if;
   if j.status <> 'applying' then raise exception 'import_closed' using errcode = 'P0001'; end if;
 
-  -- the company's keys once per batch (+ the cards this batch adds, as it adds them)
-  drop table if exists pg_temp.import_keys;
-  create temp table import_keys on commit drop as select * from app.customer_keys(j.company_id);
-  create index on pg_temp.import_keys (key);
+  -- the company's keys once per batch, only when a new row comes (a repeated batch reads nothing); + the cards this
+  -- batch adds, as it adds them. The caller's own temp table of that name is dropped first (pg_temp is not searched).
+  v_keys := false;
 
   for r in select * from jsonb_array_elements(p_rows) loop
-    if jsonb_typeof(r) <> 'object' or jsonb_typeof(r -> 'line') <> 'number' then raise exception 'import_bad_row' using errcode = 'P0001'; end if;
-    v_line := (r ->> 'line')::numeric::int;
+    if jsonb_typeof(r) <> 'object' then raise exception 'import_bad_row' using errcode = 'P0001'; end if;
+    if jsonb_typeof(r -> 'line') <> 'number' or (r ->> 'line') !~ '^[0-9]{1,4}$' then raise exception 'import_bad_line' using errcode = 'P0001'; end if;
+    v_line := (r ->> 'line')::int;
     if v_line < 2 or v_line > j.total_rows + 1 then raise exception 'import_bad_line' using errcode = 'P0001'; end if;
     v_name := app.import_cell(r, 'name'); v_first := app.import_cell(r, 'first_name'); v_last := app.import_cell(r, 'last_name');
     v_comp := app.import_cell(r, 'company'); v_phone := app.import_cell(r, 'phone'); v_email := app.import_cell(r, 'email');
@@ -275,9 +288,20 @@ begin
     if found then
       -- a repeat of a batch whose answer was lost: what is stored; the same line with other content — refused
       if v_old.row_key <> v_key then raise exception 'row_changed' using errcode = 'P0001'; end if;
+      -- the same answer as the first time (who and their status as they are now)
+      select c.display_name, c.status into v_who, v_status from public.customers c where c.id = v_old.customer_id;
       v_out := v_out || jsonb_build_object('line', v_line, 'result', v_old.result, 'reason', v_old.reason, 'customer_id', v_old.customer_id,
-                         'who', (select c.display_name from public.customers c where c.id = v_old.customer_id and v_old.result <> 'added'));
+                         'who', case when v_old.result = 'added' then null
+                                     when v_old.reason = 'dupFile' then (select x.name from public.import_rows x where x.job_id = j.id and x.customer_id = v_old.customer_id and x.created order by x.line limit 1)
+                                     else v_who end,
+                         'who_status', case when v_old.reason = 'dupClient' and v_status in ('archived', 'do_not_service') then v_status end);
       continue;
+    end if;
+    if not v_keys then
+      drop table if exists pg_temp.import_keys;
+      create temp table import_keys on commit drop as select * from app.customer_keys(j.company_id);
+      create index on pg_temp.import_keys (key);
+      v_keys := true;
     end if;
 
     v_digits := regexp_replace(v_phone, '\D', '', 'g');
@@ -362,6 +386,7 @@ begin
     update public.import_jobs set status = 'applied', applied_at = now(), undo_until = now() + interval '30 days',
            counts = app.import_counts(id)
      where id = j.id returning * into j;
+    update public.import_rows set name = null where job_id = j.id and name is not null;
     -- one line for the import; no file name, no rows (a file name is often a person's name — §14.9 №10)
     insert into public.audit_log (company_id, actor_type, actor_id, entity_type, entity_id, action, after)
     values (j.company_id, 'user', auth.uid(), 'import_job', j.id, 'apply',
@@ -375,54 +400,82 @@ grant execute on function public.import_customers_finish(uuid) to authenticated;
 
 -- ---- 7. Undo --------------------------------------------------------------------------------------
 -- ≤ 30 days: the cards THIS import made (created) and nothing was added to since — deleted_at with their person and
--- property. A card with a lead, a document, money, a note, a task, a call, a tag, another person or property, a
--- change of its own, a merge — stays (kept). A matched card is never touched. A repeat — the same state.
+-- property. «Nothing added» = no row anywhere points to the card, its person or its property (every foreign key to
+-- customers / contacts / properties, found in the catalog — a module's table too, a future table too), no task / note /
+-- feed line / own field on them, no change of their own (row_version), not merged. A matched card is never touched.
+-- An open import: only its author or the owner / admin. A repeat — the same state.
 create or replace function public.undo_customer_import(p_job uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
-declare j public.import_jobs; x record; c public.customers; v_now timestamptz := now();
+declare j public.import_jobs; f record; v_now timestamptz := now();
 begin
   select * into j from public.import_jobs where id = p_job for update;
-  if not found or auth.uid() is null or not app.has_role(j.company_id, array['owner', 'admin', 'office']) then
+  if not found or auth.uid() is null or not app.has_role(j.company_id, array['owner', 'admin', 'office'])
+     or (j.status = 'applying' and j.created_by <> auth.uid() and not app.has_role(j.company_id, array['owner', 'admin'])) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if j.status = 'undone' then return app.import_state(j); end if;
   if j.status = 'applied' and j.undo_until < v_now then raise exception 'import_undo_expired' using errcode = 'P0001'; end if;
-  for x in select r.line, r.customer_id from public.import_rows r where r.job_id = j.id and r.created and not r.undone order by r.line loop
-    select * into c from public.customers where id = x.customer_id and company_id = j.company_id for update;
-    if not found or c.deleted_at is not null then continue; end if;
-    -- row_version: insert = 1, our primary_contact_id = 2; anything after that is somebody's change
-    if c.row_version > 2 or c.status <> 'active' or c.merged_into_customer_id is not null
-       or exists (select 1 from public.customers m where m.merged_into_customer_id = c.id)
-       or (select count(*) from public.contacts k where k.customer_id = c.id) <> 1
-       or exists (select 1 from public.contacts k where k.customer_id = c.id and k.row_version > 1)
-       or (select count(*) from public.properties p where p.customer_id = c.id) <> 1
-       or exists (select 1 from public.properties p where p.customer_id = c.id and p.row_version > 1)
-       or exists (select 1 from public.contact_phones p join public.contacts k on k.id = p.contact_id where k.customer_id = c.id)
-       or exists (select 1 from public.contact_emails e join public.contacts k on k.id = e.contact_id where k.customer_id = c.id)
-       or exists (select 1 from public.leads l where l.customer_id = c.id or l.referred_by_customer_id = c.id)
-       or exists (select 1 from public.estimates e where e.customer_id = c.id)
-       or exists (select 1 from public.jobs w where w.customer_id = c.id)
-       or exists (select 1 from public.invoices i where i.customer_id = c.id)
-       or exists (select 1 from public.payments p where p.customer_id = c.id)
-       or exists (select 1 from public.payment_attempts p where p.customer_id = c.id)
-       or exists (select 1 from public.expenses e where e.customer_id = c.id)
-       or exists (select 1 from public.files f where f.customer_id = c.id)
-       or exists (select 1 from public.lead_sources s where s.customer_id = c.id)
-       or exists (select 1 from public.customer_tags t where t.customer_id = c.id)
-       or exists (select 1 from public.custom_field_values v where v.entity_id = c.id)
-       or exists (select 1 from public.activities a where a.subject_type = 'customer' and a.subject_id = c.id and a.company_id = c.company_id)
-       or exists (select 1 from public.notes n where n.subject_type = 'customer' and n.subject_id = c.id and n.company_id = c.company_id)
-       or exists (select 1 from public.tasks t where t.subject_type = 'customer' and t.subject_id = c.id and t.company_id = c.company_id) then
-      continue;
-    end if;
-    update public.properties set deleted_at = v_now where customer_id = c.id and deleted_at is null;
-    update public.customers set primary_contact_id = null where id = c.id;
-    update public.contacts set deleted_at = v_now, is_primary = false where customer_id = c.id and deleted_at is null;
-    update public.customers set deleted_at = v_now where id = c.id;
-    update public.import_rows set undone = true where job_id = j.id and line = x.line;
+
+  drop table if exists pg_temp.import_undo;
+  create temp table import_undo on commit drop as
+  select r.line, c.id as customer_id, k.id as contact_id, p.id as property_id
+    from public.import_rows r
+    join public.customers c on c.id = r.customer_id and c.company_id = j.company_id and c.deleted_at is null
+    left join public.contacts k on k.customer_id = c.id
+    left join public.properties p on p.customer_id = c.id
+   where r.job_id = j.id and r.created and not r.undone;
+  -- the cards first, locked: a document made at the same moment waits and is seen
+  perform 1 from public.customers c where c.id in (select u.customer_id from pg_temp.import_undo u) order by c.id for update;
+  drop table if exists pg_temp.import_kept;
+  create temp table import_kept (customer_id uuid) on commit drop;
+
+  -- the card's own shape: one person, one property, untouched (insert = 1, our primary_contact_id = 2), not merged
+  insert into pg_temp.import_kept
+  select u.customer_id from pg_temp.import_undo u join public.customers c on c.id = u.customer_id
+   where c.row_version > 2 or c.status <> 'active' or c.merged_into_customer_id is not null or u.contact_id is null or u.property_id is null
+      or (select count(*) from public.contacts k where k.customer_id = c.id) <> 1
+      or (select count(*) from public.properties p where p.customer_id = c.id) <> 1
+      or exists (select 1 from public.contacts k where k.id = u.contact_id and k.row_version > 1)
+      or exists (select 1 from public.properties p where p.id = u.property_id and p.row_version > 1);
+  -- every foreign key to a card, a person or a property (but the card's own person / property and this journal)
+  for f in
+    select distinct k.conrelid::regclass::text as tbl, a.attname::text as col,
+           case k.confrelid when 'public.customers'::regclass then 'customer_id' when 'public.contacts'::regclass then 'contact_id' else 'property_id' end as via
+      from pg_constraint k
+      join lateral unnest(k.conkey, k.confkey) as u(ck, fk) on true
+      join pg_attribute a on a.attrelid = k.conrelid and a.attnum = u.ck
+      join pg_attribute fa on fa.attrelid = k.confrelid and fa.attnum = u.fk
+     where k.contype = 'f' and fa.attname = 'id'
+       and k.confrelid in ('public.customers'::regclass, 'public.contacts'::regclass, 'public.properties'::regclass)
+       and (k.conrelid::regclass::text, a.attname::text) not in
+           (('public.contacts', 'customer_id'), ('public.properties', 'customer_id'), ('public.customers', 'primary_contact_id'),
+            ('public.import_rows', 'customer_id'))
+  loop
+    execute format('insert into pg_temp.import_kept select u.customer_id from pg_temp.import_undo u
+                     where exists (select 1 from %s x where x.%I = u.%I)', f.tbl, f.col, f.via);
   end loop;
+  -- links without a foreign key: tasks, notes, the feed, own fields — on the card, its person or its property
+  insert into pg_temp.import_kept
+  select u.customer_id from pg_temp.import_undo u
+   where exists (select 1 from public.activities a where a.company_id = j.company_id and a.subject_id in (u.customer_id, u.contact_id, u.property_id))
+      or exists (select 1 from public.notes n where n.company_id = j.company_id and n.subject_id in (u.customer_id, u.contact_id, u.property_id))
+      or exists (select 1 from public.tasks t where t.company_id = j.company_id and t.subject_id in (u.customer_id, u.contact_id, u.property_id))
+      or exists (select 1 from public.custom_field_values v where v.entity_id in (u.customer_id, u.contact_id, u.property_id));
+
+  update public.properties set deleted_at = v_now
+   where id in (select u.property_id from pg_temp.import_undo u where u.customer_id not in (select customer_id from pg_temp.import_kept));
+  update public.customers set primary_contact_id = null
+   where id in (select u.customer_id from pg_temp.import_undo u where u.customer_id not in (select customer_id from pg_temp.import_kept));
+  update public.contacts set deleted_at = v_now, is_primary = false
+   where id in (select u.contact_id from pg_temp.import_undo u where u.customer_id not in (select customer_id from pg_temp.import_kept));
+  update public.customers set deleted_at = v_now
+   where id in (select u.customer_id from pg_temp.import_undo u where u.customer_id not in (select customer_id from pg_temp.import_kept));
+  update public.import_rows r set undone = true
+   where r.job_id = j.id and r.line in (select u.line from pg_temp.import_undo u where u.customer_id not in (select customer_id from pg_temp.import_kept));
+  update public.import_rows set name = null where job_id = j.id and name is not null;
+
   update public.import_jobs set status = 'undone', undone_at = v_now, undone_by = auth.uid(),
-         applied_at = coalesce(applied_at, v_now), counts = '{}' where id = j.id;
+         applied_at = coalesce(applied_at, v_now), undo_until = coalesce(undo_until, v_now) where id = j.id;
   update public.import_jobs set counts = app.import_counts(id) where id = j.id returning * into j;
   insert into public.audit_log (company_id, actor_type, actor_id, entity_type, entity_id, action, after)
   values (j.company_id, 'user', auth.uid(), 'import_job', j.id, 'undo', jsonb_build_object('job_id', j.id, 'counts', j.counts));
