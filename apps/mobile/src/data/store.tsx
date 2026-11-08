@@ -34,7 +34,7 @@ import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
-import { newToken, reIdDoc, storedDoc, summarize } from "@/features/estimateDoc";
+import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -1668,8 +1668,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
-        const re = prev && prev.status !== "draft" ? reIdDoc(doc0, uid) : null;
-        const doc = re ? re.doc : doc0;
+        const { doc, linesFrom } = docForSave(prev?.status, doc0, uid);
         const sum = summarize(doc);
         const versionId = uid();
         return mutate(
@@ -1686,7 +1685,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             };
             return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: storedDoc(doc), costs: costsOf(doc), ...(re ? { linesFrom: re.from } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
         );
       },
       approveEstimate: (id, a) => {

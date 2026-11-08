@@ -1,6 +1,6 @@
 /** Debt 4 of «Сметы» №1: a sent estimate edited → new ids, and the map new line → sent line (the server copies costs). */
 import { describe, expect, it } from "vitest";
-import { reIdDoc } from "../src/features/estimateDoc";
+import { docForSave, reIdDoc } from "../src/features/estimateDoc";
 import type { EstimateDoc } from "../src/data/types";
 
 describe("reIdDoc", () => {
@@ -16,5 +16,20 @@ describe("reIdDoc", () => {
     expect(Object.keys(r.from)).toHaveLength(3);
     expect(r.doc.options[0]!.lines[0]).toMatchObject({ name: "Gutter", unitCostCents: 400 });
     expect(doc.options[0]!.id).toBe("o1");
+  });
+  it("docForSave: the map only for a sent estimate — not for a new one or a draft", () => {
+    const doc = { options: [{ id: "o1", name: "A", lines: [{ id: "l1", name: "Gutter" }] }], settings: {} } as unknown as EstimateDoc;
+    let n = 0;
+    const id = () => `n${++n}`;
+    for (const st of [undefined, "draft"]) {
+      const r = docForSave(st, doc, id);
+      expect(r.linesFrom).toBeUndefined();
+      expect(r.doc).toBe(doc);
+    }
+    for (const st of ["sent", "viewed", "declined", "awaiting_countersign"]) {
+      const r = docForSave(st, doc, id);
+      expect(Object.values(r.linesFrom!)).toEqual(["l1"]);
+      expect(r.doc.options[0]!.lines[0]!.id).not.toBe("l1");
+    }
   });
 });

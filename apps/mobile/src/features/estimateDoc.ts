@@ -250,6 +250,14 @@ export function reIdDoc(doc: EstimateDoc, newId: () => string): { doc: EstimateD
   return { doc: { ...doc, options }, from };
 }
 
+/** What saveEstimate stores and sends: a sent (not draft) estimate gets new ids and the map to its sent lines; a new
+ *  estimate or a draft keeps its ids and sends no map (director's review #420 №2). Pure: test/reIdDoc.test.ts. */
+export function docForSave(prevStatus: string | undefined, doc: EstimateDoc, newId: () => string): { doc: EstimateDoc; linesFrom?: Record<string, string> } {
+  if (!prevStatus || prevStatus === "draft") return { doc };
+  const r = reIdDoc(doc, newId);
+  return { doc: r.doc, linesFrom: r.from };
+}
+
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
 export function summarize(doc: EstimateDoc, approved?: { optionId: string; addonIds: string[] }) {
   const base = (approved && doc.options.find((o) => o.id === approved.optionId)) || mainOption(doc);

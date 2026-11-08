@@ -1143,7 +1143,14 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
         ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
       })),
   );
-  if (lines.length) await run(supabase.from("estimate_line_items").insert(lines));
+  if (lines.length) {
+    const r = await supabase.from("estimate_line_items").insert(lines);
+    // a server before migration 20261108200000 has no copied_from_line_id: the lines go without it (the cost is not
+    // copied — as before), never a save that keeps failing and leaves a draft with no lines (director's review #420 №1)
+    const noColumn = r.error && (r.error.code === "PGRST204" || r.error.code === "42703") && lines.some((l) => "copied_from_line_id" in l);
+    if (noColumn) await run(supabase.from("estimate_line_items").insert(lines.map(({ copied_from_line_id: _, ...l }) => l)));
+    else await run(Promise.resolve(r));
+  }
   const costRows = lines.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, company_id: c, unit_cost_cents: op.costs[l.id] }));
   if (costRows.length) {
     // Tech without "view costs" cannot write costs (42501): the estimate itself is still saved. Any other failure

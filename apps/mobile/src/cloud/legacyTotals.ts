@@ -46,3 +46,34 @@ export function legacyTotals(lines: LegacyLine[], v: LegacyVersion): { totalCent
   );
   return { totalCents: t.total, depositCents: depositAmount(t.total, serverDepositRule(v.depositRule)) };
 }
+
+type Row = Record<string, unknown>;
+const str = (v: unknown) => (v == null ? "" : String(v));
+const num = (v: unknown) => (v == null ? 0 : Number(v));
+
+/**
+ * The glue of repo.ts (director's review #420 №2): for an estimate row, the totals the client will sign — or null.
+ * The version the server signs (sign_estimate_on_site): sent_version_id while the estimate is sent / viewed, else the
+ * current one; its first option by position, created_at. Only a version with no document; a signed estimate keeps what
+ * was signed (selection, else the old totals — review PR-B №2).
+ */
+export function legacyForEstimate(
+  e: Row,
+  d: { versionOf: Map<string, Row>; options: Row[]; lines: Row[]; signed: boolean },
+): { totalCents: number; depositCents: number } | null {
+  if (d.signed) return null;
+  const open = e.status === "sent" || e.status === "viewed";
+  const ver = (open ? d.versionOf.get(str(e.sent_version_id)) : undefined) ?? d.versionOf.get(str(e.current_version_id));
+  if (!ver || ver.calc_inputs != null) return null;
+  const opt = d.options
+    .filter((o) => o.version_id === ver.id)
+    .sort((a, b) => num(a.position) - num(b.position) || str(a.created_at).localeCompare(str(b.created_at)))[0];
+  if (!opt) return null;
+  return legacyTotals(
+    d.lines.filter((l) => l.option_id === opt.id).map((l) => ({ lineTotalCents: num(l.line_total_cents), taxable: !!l.taxable, optional: !!l.is_optional, clientVisible: l.client_visible !== false })),
+    {
+      taxEnabled: !!ver.tax_enabled, taxRateBps: ver.tax_rate_bps == null ? null : num(ver.tax_rate_bps), depositRule: ver.deposit_rule,
+      discountMode: (opt.discount_mode as string | null) ?? null, discountValue: opt.discount_value == null ? null : num(opt.discount_value),
+    },
+  );
+}

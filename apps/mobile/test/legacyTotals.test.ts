@@ -1,6 +1,6 @@
 /** The old quick estimate (no document): the phone shows what the server signs (core_rls T121 — the same numbers). */
 import { describe, expect, it } from "vitest";
-import { legacyTotals, serverDepositRule } from "../src/cloud/legacyTotals";
+import { legacyForEstimate, legacyTotals, serverDepositRule } from "../src/cloud/legacyTotals";
 
 const line = (lineTotalCents: number, x: Partial<{ taxable: boolean; optional: boolean; clientVisible: boolean }> = {}) =>
   ({ lineTotalCents, taxable: false, optional: false, clientVisible: true, ...x });
@@ -27,5 +27,34 @@ describe("legacyTotals", () => {
     // the server casts the text: "1000" is 10% there too (review PR-B №6)
     expect(serverDepositRule({ kind: "pct", bps: "1000" })).toEqual({ kind: "pct", bps: 1000 });
     expect(serverDepositRule({ kind: "pct", bps: "ten" })).toEqual({ kind: "none" });
+  });
+});
+
+describe("legacyForEstimate — the glue of repo.ts (director's review #420 №2)", () => {
+  const ver = (id: string, x: Record<string, unknown> = {}) => [id, { id, calc_inputs: null, tax_enabled: false, tax_rate_bps: null, deposit_rule: null, ...x }] as [string, Record<string, unknown>];
+  const versionOf = new Map([ver("vSent"), ver("vCur"), ver("vDoc", { calc_inputs: { options: [] } })]);
+  const options = [
+    { id: "oSentB", version_id: "vSent", position: 1, created_at: "2026-11-01T00:00:00Z" },
+    { id: "oSentA2", version_id: "vSent", position: 0, created_at: "2026-11-02T00:00:00Z" },
+    { id: "oSentA1", version_id: "vSent", position: 0, created_at: "2026-11-01T00:00:00Z" },
+    { id: "oCur", version_id: "vCur", position: 0, created_at: "2026-11-03T00:00:00Z" },
+    { id: "oDoc", version_id: "vDoc", position: 0, created_at: "2026-11-03T00:00:00Z" },
+  ];
+  const lines = [
+    { option_id: "oSentA1", line_total_cents: 1000 }, { option_id: "oSentA2", line_total_cents: 2000 }, { option_id: "oSentB", line_total_cents: 3000 },
+    { option_id: "oCur", line_total_cents: 4000 }, { option_id: "oDoc", line_total_cents: 5000 },
+  ];
+  const d = { versionOf, options, lines, signed: false };
+  it("sent / viewed: the sent version, its first option by position, then created_at", () => {
+    for (const status of ["sent", "viewed"]) expect(legacyForEstimate({ status, sent_version_id: "vSent", current_version_id: "vCur" }, d)).toEqual({ totalCents: 1000, depositCents: 0 });
+  });
+  it("any other status: the current version", () => {
+    for (const status of ["draft", "declined", "expired"]) expect(legacyForEstimate({ status, sent_version_id: "vSent", current_version_id: "vCur" }, d)).toEqual({ totalCents: 4000, depositCents: 0 });
+    expect(legacyForEstimate({ status: "sent", sent_version_id: null, current_version_id: "vCur" }, d)).toEqual({ totalCents: 4000, depositCents: 0 });
+  });
+  it("signed: what was signed (null here — repo takes the selection); a version with a document: null", () => {
+    expect(legacyForEstimate({ status: "sent", sent_version_id: "vSent", current_version_id: "vCur" }, { ...d, signed: true })).toBeNull();
+    expect(legacyForEstimate({ status: "draft", current_version_id: "vDoc" }, d)).toBeNull();
+    expect(legacyForEstimate({ status: "draft", current_version_id: "nope" }, d)).toBeNull();
   });
 });

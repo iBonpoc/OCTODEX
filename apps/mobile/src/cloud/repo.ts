@@ -10,7 +10,7 @@ import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
-import { legacyTotals } from "./legacyTotals";
+import { legacyForEstimate } from "./legacyTotals";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -387,24 +387,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const opt = options
       .filter((o) => o.version_id === e.current_version_id)
       .sort((a, b) => n(a.position) - n(b.position) || s(a.created_at).localeCompare(s(b.created_at)))[0];
-    // the old quick estimate (no document), not signed yet: the total and deposit the client will sign — from the lines
-    // of the version the server signs (sign_estimate_on_site: sent_version_id, its first option), legacyTotals. A signed
-    // one keeps what was signed (selection, else the old totals — review PR-B №2).
     const appr = approvals.filter((a) => a.estimate_id === e.id && a.party !== "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
-    // (sent_version_id only while it is open for signing: a reopened draft has a new current version with a document)
-    const signVer = (e.status === "sent" || e.status === "viewed" ? versionOf.get(s(e.sent_version_id)) : undefined) ?? ver;
-    const signOpt = signVer
-      ? options
-          .filter((o) => o.version_id === signVer.id)
-          .sort((a, b) => n(a.position) - n(b.position) || s(a.created_at).localeCompare(s(b.created_at)))[0]
-      : undefined;
-    const legacy =
-      !appr && signVer && signVer.calc_inputs == null && signOpt
-        ? legacyTotals(
-            lines.filter((l) => l.option_id === signOpt.id).map((l) => ({ lineTotalCents: n(l.line_total_cents), taxable: !!l.taxable, optional: !!l.is_optional, clientVisible: l.client_visible !== false })),
-            { taxEnabled: !!signVer.tax_enabled, taxRateBps: signVer.tax_rate_bps == null ? null : n(signVer.tax_rate_bps), depositRule: signVer.deposit_rule, discountMode: (signOpt.discount_mode as string | null) ?? null, discountValue: signOpt.discount_value == null ? null : n(signOpt.discount_value) },
-          )
-        : null;
+    // the old quick estimate (no document), not signed yet: what the client will sign (legacyForEstimate)
+    const legacy = legacyForEstimate(e, { versionOf, options, lines, signed: !!appr });
     // E2a: the company's signature (an employee in their own name)
     const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
     const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
