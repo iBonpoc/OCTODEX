@@ -5,21 +5,24 @@
  * estimate and both parts), in the engine's section order, labor last on its own lines (founder О4). The price is the
  * company's item's (M7d, whole cents); no item → price 0 and `noPrice` (never a silent $0 — the screen says «нет цены»).
  *
- * Each module line carries `source` — what the module wrote: its key, section, quantity, price and name. «Обновить
+ * Each module line carries `source` — what the module wrote: its key, section, quantity, price, name and unit. It is
+ * the company's, not the client's: the core's clientDoc must drop it before anything leaves for the client (C4, П23.5). «Обновить
  * смету» (resyncLines) tells a hand change by comparing the line with its `source`, not by a flag: an older app
  * version that knows nothing of `source` keeps it on edits (lines are spread) and its hand changes are still seen.
  * A line without `source` (typed by hand, or re-picked from the price list on an old phone) is the person's own: never
  * changed, never removed; a part whose price-list item such a line already uses is not added again.
  */
-import { catalogCost, dec, type CustomLine, type PartQty } from "@octo/estimating-engine";
+import { dec, type CustomLine, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
+import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
 import { findItem, matchKey } from "./prices";
 
 /** the engine's sections in the order the estimate shows them; labor last (О4) */
 export const SECTION_ORDER = ["gutter", "corners_caps", "fasteners", "downspouts", "adapters", "ds_bottom", "guards", "consumables", "labor"] as const;
-const sectionAt = (s: string) => {
+/** a section the module does not know yet (a newer engine) goes right before labor: labor stays last (О4) */
+export const sectionAt = (s: string) => {
   const i = (SECTION_ORDER as readonly string[]).indexOf(s);
-  return i < 0 ? SECTION_ORDER.length - 1 : i;
+  return i < 0 ? SECTION_ORDER.length - 1.5 : i;
 };
 
 /** what the module wrote into a line (П23.1): the base for telling a hand change at the next update */
@@ -33,8 +36,11 @@ export interface LineSource {
   /** the client price per unit the module wrote, cents */
   priceCents: number;
   name: string;
-  /** no item in the price list: price 0 until someone sets it */
+  unit: string;
+  /** no price: no item in the price list, or its price is broken, or a $0 TEST price — price 0 until someone sets it */
   noPrice?: true;
+  /** the item's price is a TEST one (rule 9): the check before sending says so (C5) */
+  testPrice?: true;
   /** gone from the measurement, kept because someone changed it by hand */
   gone?: true;
   /** the measurement revision the line was made from (M8b) */
@@ -67,10 +73,14 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
   return rows.map(([key, { part, qty }]) => {
     const it = findItem(catalog, part);
     const quantity = billQty(qty.toString(), part.unit);
-    const priceCents = it && Number.isSafeInteger(it.priceCents) && it.priceCents >= 0 ? it.priceCents : 0;
+    // the core's price and cost of an item (a material: cost × supplier tax × markup) — as a line picked from the list
+    const listPrice = it ? catalogUnitPrice(it) : undefined;
+    const valid = listPrice !== undefined && Number.isSafeInteger(listPrice) && listPrice >= 0;
+    const priceCents = valid ? listPrice : 0;
+    // never a silent $0 (П23.1): no item, a broken price, or a $0 test price is «нет цены»; a real $0 is the company's choice
+    const noPrice = !it || !valid || (priceCents === 0 && !!it.placeholder);
     const lineName = it?.name ?? name(part);
-    // our cost of a bought item includes the supplier's tax (the core's catalog, catalogCost); labor has none
-    const cost = it?.costCents !== undefined ? catalogCost(it.costCents, it.vendorTaxBps ?? 0) : undefined;
+    const cost = it ? catalogUnitCost(it) : undefined;
     return {
       id: uid(),
       name: lineName,
@@ -80,19 +90,32 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
       unitPriceCents: priceCents,
       ...(cost !== undefined ? { unitCostCents: cost } : {}),
       ...(it ? { catalogItemId: it.id } : {}),
-      source: { module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, ...(it ? {} : { noPrice: true as const }), ...(revisionId ? { revisionId } : {}) },
+      source: {
+        module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, unit: part.unit,
+        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}),
+      },
     };
   });
 }
 
-/** what a person changed in a module line since the module wrote it */
+/** what a person changed in a module line since the module wrote it; a quantity that is not a number counts as changed
+ *  (an update never fails on one odd line, and never overwrites it) */
 export function handChanges(l: ModuleLine & { source: LineSource }) {
+  let qty = true;
+  try {
+    qty = !dec(String(l.quantity)).eq(dec(String(l.source.qty)));
+  } catch {
+    qty = true;
+  }
   return {
-    qty: !dec(String(l.quantity)).eq(dec(l.source.qty)),
+    qty,
     price: l.unitPriceCents !== l.source.priceCents,
     name: l.name !== l.source.name,
+    // what the module never sets: a description, an add-on, another unit or group
+    other: !!l.description || !!l.optional || (l.source.unit !== undefined && l.unit !== l.source.unit),
   };
 }
+const touched = (l: ModuleLine & { source: LineSource }) => Object.values(handChanges(l)).some(Boolean);
 
 /**
  * «Обновить смету» (П23.1): the option's lines with the measurement's new ones.
@@ -100,8 +123,9 @@ export function handChanges(l: ModuleLine & { source: LineSource }) {
  * - a module line still in the measurement: the new quantity, price and name unless a person changed that one; its id,
  *   place and everything else (optional, description) stay;
  * - a module line gone from the measurement: removed if nobody changed it, else kept and marked `gone`;
- * - a new part: after the last line of its section (else after the module's last line before it), — unless an own
- *   line already uses its price-list item (an old phone re-picked it).
+ * - a second module line of one part (a copy): the person's, as it is;
+ * - a new part: before the first module line of a later section (else after the module's last line, else at the end) —
+ *   unless an own line already uses its price-list item.
  */
 export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLine[]): ModuleLine[] {
   const nextByKey = new Map(next.filter(isOurs).map((l) => [l.source.key, l]));
@@ -113,39 +137,54 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
       out.push(l);
       continue;
     }
+    // a second line of the same part (copied to split the work): the person's — as it is, never removed (review M8a №4)
+    if (seen.has(l.source.key)) {
+      out.push(l);
+      continue;
+    }
     const n = nextByKey.get(l.source.key);
-    const ch = handChanges(l);
-    if (!n || seen.has(l.source.key)) {
-      if (ch.qty || ch.price || ch.name) out.push({ ...l, source: { ...l.source, gone: true } });
+    if (!n) {
+      if (touched(l)) out.push({ ...l, source: { ...l.source, gone: true } });
       continue;
     }
     seen.add(l.source.key);
+    const ch = handChanges(l);
     const { gone: _g, ...src } = n.source!;
-    out.push({
+    const merged: ModuleLine = {
       ...l,
       quantity: ch.qty ? l.quantity : n.quantity,
       name: ch.name ? l.name : n.name,
       unitPriceCents: ch.price ? l.unitPriceCents : n.unitPriceCents,
-      // a hand price keeps its own cost; else the item's
-      ...(ch.price ? {} : n.unitCostCents !== undefined ? { unitCostCents: n.unitCostCents } : { unitCostCents: undefined }),
-      catalogItemId: n.catalogItemId ?? l.catalogItemId,
       // what the module computed now: the base for the next update
       source: src as LineSource,
-    });
+    };
+    if (!ch.price) {
+      // the item's price, cost and link — or none, when the item is gone from the list (review M8a №8)
+      if (n.unitCostCents !== undefined) merged.unitCostCents = n.unitCostCents;
+      else delete merged.unitCostCents;
+      if (n.catalogItemId) merged.catalogItemId = n.catalogItemId;
+      else delete merged.catalogItemId;
+    }
+    out.push(merged);
   }
   for (const n of next) {
     if (!isOurs(n) || seen.has(n.source.key)) continue;
     if (n.catalogItemId && ownItems.has(n.catalogItemId)) continue;
     const at = sectionAt(n.source.section);
-    // after the last module line of this section or an earlier one
-    let pos = -1;
-    out.forEach((l, i) => {
-      if (isOurs(l) && sectionAt(l.source.section) <= at) pos = i;
-    });
-    out.splice(pos + 1, 0, n);
+    // before the first module line of a later section; else after the module's last line; else at the end (review №10)
+    const later = out.findIndex((l) => isOurs(l) && sectionAt(l.source.section) > at);
+    let pos = later;
+    if (later < 0) {
+      pos = out.length;
+      for (let i = out.length - 1; i >= 0; i--) if (isOurs(out[i]!)) { pos = i + 1; break; }
+    }
+    out.splice(pos, 0, n);
   }
-  return out.map((l) => (l.unitCostCents === undefined && "unitCostCents" in l ? (({ unitCostCents: _c, ...r }) => r)(l) : l));
+  return out;
 }
 
-/** «нет цены» lines: the screen and the check before sending (C5) say how many */
+/** what the check before sending (C5) and the estimate's marks (C4) say: «нет цены», a test price still there, a changed
+ *  line no longer in the measurement (it would bill a part twice — review M8a №6) */
 export const noPriceLines = (lines: readonly ModuleLine[]) => lines.filter((l) => isOurs(l) && l.source.noPrice && l.unitPriceCents === 0);
+export const testPriceLines = (lines: readonly ModuleLine[]) => lines.filter((l) => isOurs(l) && l.source.testPrice && l.unitPriceCents === l.source.priceCents);
+export const goneLines = (lines: readonly ModuleLine[]) => lines.filter((l) => isOurs(l) && l.source.gone);
