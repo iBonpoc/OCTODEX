@@ -572,8 +572,8 @@ export const en: Dict = {
   "account.synced": "Everything is saved to the database",
   "account.pending": "Waiting to send: {n}",
   // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
-  "account.syncErr.network": "No connection to the server — changes will be sent later",
-  "account.syncErr.general": "Sync error — changes will be sent later",
+  "account.syncErr.network": "No connection to the server",
+  "account.syncErr.general": "Sync error",
   "account.refresh": "Refresh data",
   "account.emptyHint": "The company is empty. Add a lead with “+” and it appears in the Inbox.",
   "ue.title": "Estimate",

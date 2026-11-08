@@ -8871,7 +8871,7 @@ insert into public.estimate_options (id, company_id, version_id, name, position,
   values ('a1090000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000002', 'A', 0, true, 'pct', 1234);   -- truncated, not rounded
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable)
   values ('a1090000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-0000000000a1', 'Install', 3, 33333, false);
-select tst.fails_like($q$select public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef')$q$, '%do not match%', 'T109 1234 bps for 0.123456: not sent');
+select tst.fails_like($q$select public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef')$q$, '%(discount)%', 'T109 1234 bps for 0.123456: not sent, the discount differs');
 update public.estimate_options set discount_value = 1235 where id = 'a1090000-0000-4000-8000-0000000000a1';
 select tst.ok(public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef') = 'tok_t109_0123456789abcdef', 'T109 1235 bps (the engine''s discountBps): sent');
 :as_super

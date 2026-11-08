@@ -50,8 +50,9 @@ export default function EstimateScreen() {
   const st = estimateStatusView(e.status);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
-  // the office: the margin, or why it is not counted (debt 5); a tech never sees it
-  const margin = store.role === "tech" ? null : marginView(e);
+  // the office: the margin, or why it is not counted (debt 5); who may not see costs (a tech, sales without view_costs —
+  // the server's app.can_view_costs, db.costsVisible) never sees it: their lines come without costs (review PR-A №1)
+  const margin = store.role === "tech" || db.costsVisible === false ? null : marginView(e);
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   const pdf = () => {

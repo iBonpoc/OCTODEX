@@ -2,7 +2,7 @@
  * e2e 175 — debts 1 and 5 of «Сметы» №1. Every view.
  * - debt 5: the server has no margin after a tech's change (spec 19 §9.1). The office sees the margin counted from its
  *   own document when every line has a cost, and «Маржа не посчитана · строк без себестоимости: N» when some have none —
- *   never an empty place. A tech sees neither.
+ *   never an empty place. A tech, and sales without view_costs, see neither.
  * - debt 1: a quantity typed as 1.23455 is shown as 1.2346 — the number the sum counts — on the client page /p/.
  * Seeded estimates, no module. By testID; waits on what it checks.
  */
@@ -57,6 +57,15 @@ exports.run = async (h) => {
   await h.go(`/estimate/${PART}`);
   await h.expectText(/EST-0175B/, "the tech opens the estimate");
   h.expect((await tid("est-margin-missing").count()) === 0 && (await tid("est-margin").count()) === 0, "a tech sees no margin at all");
+  await setRole(h, "director");
+
+  // who may not see costs (sales without view_costs: db.costsVisible false) — no margin, no «not counted» (review PR-A №1)
+  await setRole(h, "sales");
+  await p.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)); s.db.costsVisible = false; localStorage.setItem(k, JSON.stringify(s)); }, DB_KEY);
+  await h.go(`/estimate/${PART}`);
+  await h.expectText(/EST-0175B/, "sales opens the estimate");
+  h.expect((await tid("est-margin-missing").count()) === 0 && (await tid("est-margin").count()) === 0, "no margin without the right to see costs");
+  await p.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k)); delete s.db.costsVisible; localStorage.setItem(k, JSON.stringify(s)); }, DB_KEY);
   await setRole(h, "director");
 
   // the client page: the quantity the sum counts

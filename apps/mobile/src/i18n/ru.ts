@@ -571,8 +571,8 @@ export const ru = {
   "account.synced": "Всё отправлено в базу",
   "account.pending": "Ждут отправки: {n}",
   // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
-  "account.syncErr.network": "Нет связи с сервером — изменения уйдут позже",
-  "account.syncErr.general": "Ошибка синхронизации — изменения уйдут позже",
+  "account.syncErr.network": "Нет связи с сервером",
+  "account.syncErr.general": "Ошибка синхронизации",
   "account.refresh": "Обновить данные",
   "account.emptyHint": "Компания пустая. Добавьте лид через «+» — он появится во «Входящих».",
   "ue.title": "Смета",

@@ -572,8 +572,8 @@ export const es: Dict = {
   "account.synced": "Todo guardado en la base",
   "account.pending": "Pendientes: {n}",
   // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
-  "account.syncErr.network": "Sin conexión con el servidor — los cambios se enviarán después",
-  "account.syncErr.general": "Error de sincronización — los cambios se enviarán después",
+  "account.syncErr.network": "Sin conexión con el servidor",
+  "account.syncErr.general": "Error de sincronización",
   "account.refresh": "Actualizar datos",
   "account.emptyHint": "La empresa está vacía. Agregue un cliente con “+”.",
   "ue.title": "Presupuesto",

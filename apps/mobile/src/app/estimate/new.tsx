@@ -99,7 +99,7 @@ export default function EstimateBuilder() {
   const lineTotal = (l: CustomLine) => totals.lineTotals[act.indexOf(l)] ?? 0;
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
   const taxValue = !s.tax.enabled || !taxGroups.length ? t("ue.off") : `${s.tax.rateBps / 100}% · ${taxGroups.map((g) => t(`ue.group.${g}` as DictKey).toLowerCase()).join(", ")}`;
-  const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${Number(s.discount.value) * 100}%` : money(s.discount.cents);
+  const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
   return (
