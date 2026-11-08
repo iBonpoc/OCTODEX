@@ -162,3 +162,22 @@ export function orderTotalCents(o: Pick<PurchaseOrder, "lines">): number | undef
   if (!o.lines.length || o.lines.some((l) => l.costCents === undefined)) return undefined;
   return orderCostCents(o.lines.map((l) => ({ qty: l.qty, costCents: l.costCents ?? 0 })));
 }
+
+/** "2026-11-12" → "11/12/2026" (the date field shows US dates) */
+export const usDate = (iso?: string) => (iso ? `${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.slice(0, 4)}` : "");
+/** "11/12/2026" → "2026-11-12"; not a real date → undefined */
+export function isoDate(us: string): string | undefined {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(us.trim());
+  if (!m) return undefined;
+  const iso = `${m[3]}-${m[1]}-${m[2]}`;
+  const d = new Date(`${iso}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== iso ? undefined : iso;
+}
+
+/** «Получено: 1 из 2» — lines that have all their quantity */
+export const receivedCount = (o: Pick<PurchaseOrder, "lines">) => o.lines.filter((l) => Number(l.receivedQty) >= Number(l.qty)).length;
+
+/** the status chip: draft / cancelled — neutral, sent — info, partially — warn, received — ok (colour only with the word) */
+export const PO_TONE: Record<PoStatus, "neutral" | "info" | "warn" | "ok"> = {
+  draft: "neutral", sent: "info", partially_received: "warn", received: "ok", cancelled: "neutral",
+};

@@ -135,6 +135,13 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     }
     case "catalog":
       return id ? { section: "catalog", kind: "cat.item", up: { href: "/catalog", label: K("cat.title") } } : { section: "catalog" };
+    case "purchase-orders":
+      return { section: "purchase-orders" };
+    case "purchase-order": {
+      // spec 37: an order of a job sits under its job; one for stock under «Заказы поставщикам»
+      const jid = (db.purchaseOrders ?? []).find((o) => o.id === id)?.jobId;
+      return jid ? { section: "clients", kind: "po.order", up: toJob(jid) } : { section: "purchase-orders", kind: "po.order", up: { href: "/purchase-orders", label: K("po.title") } };
+    }
     case "suppliers":
       // spec 36: a supplier sits under «Поставщики»
       return id ? { section: "suppliers", kind: "sup.edit", up: { href: "/suppliers", label: K("sup.title") } } : { section: "suppliers" };
