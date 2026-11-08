@@ -134,7 +134,7 @@ describe("$ под рисунком из прайса компании", () => {
   });
   it("все детали в прайсе настоящими ценами — сумма из прайса, без «тестовые»", () => {
     const rows = [...materialRows({}), ...laborRows()];
-    const real = missingItems(C, rows, [], name).map((it) => ({ ...it, placeholder: false, priceCents: 1234 }));
+    const real = missingItems(C, rows, [], name).map((it) => ({ ...it, placeholder: false, priceCents: 1234, ...(it.kind === "material" ? { costCents: 1234 } : {}) }));
     const r = listPreview(parts, real);
     const client = parts.filter((p) => p.use !== "purchase");
     expect(r.listed).toBe(client.length);
@@ -160,5 +160,16 @@ describe("слова деталей и причина «не сохранено�
     expect(notSavedKey("trial")).toBe("rereading");
     expect(notSavedKey("paid")).toBe("rereading");
     for (const a of ["expired", "off", "never", undefined]) expect(notSavedKey(a)).toBe("notActive");
+  });
+});
+
+describe("цена материала — как в ядре (ревью M8a №1)", () => {
+  it("материал с закупкой: цена = закупка × налог поставщика × наценка (catalogUnitPrice), а не копия priceCents", () => {
+    const parts = computeGutterParts(sampleJob({})).parts;
+    const g = parts.find((p) => p.key.startsWith("gutter."))!;
+    const it: CatalogItem = { id: "g", kind: "material", name: "G", unit: "ft", priceCents: 0, costCents: 1000, vendorTaxBps: 1025, markupBps: 1000, attributes: matchAttrs(g) };
+    const r = listPreview([g], [it]);
+    // $10.00 + 10.25 % + 10 % = $12.1275 → $12.13 a foot
+    expect(r.totalCents).toBe(Math.round(Number(g.qty) * 1213));
   });
 });

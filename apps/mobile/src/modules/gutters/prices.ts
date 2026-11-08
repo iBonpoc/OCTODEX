@@ -14,6 +14,7 @@
 import { computeGutterParts, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogMatch } from "@/features/catalogMatch";
+import { catalogUnitPrice } from "@/features/estimateDoc";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
@@ -170,7 +171,8 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
     const it = findItem(priced, p);
     if (!it) return undefined;
     if (it.placeholder) test = true;
-    return it.priceCents;
+    // the core's price of an item (a material: cost × supplier tax × markup, as the estimate's line from the list)
+    return catalogUnitPrice(it);
   });
   const client = parts.filter((p) => p.use !== "purchase").length;
   return { ...r, test: test || r.listed < client };
