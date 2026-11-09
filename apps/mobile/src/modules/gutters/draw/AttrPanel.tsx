@@ -17,6 +17,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
+import { Wheel } from "./Wheel";
 import { eighthLabel, ftIn, LEN_UNITS, MM_PER_IN, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
@@ -65,11 +66,9 @@ function Pick<K extends string>({ label, testID, items, value, onChange, offered
 
 /** 1/8″ of the tape (founder 08.11): 0, ⅛ … ⅞ */
 function Eighths({ value, onChange, testID }: { value: number; onChange: (k: number) => void; testID: string }) {
-  return (
-    <View testID={testID}>
-      <ChoiceChips items={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ key: String(n), label: eighthLabel(n) }))} value={String(value)} onChange={(v) => onChange(Number(v))} />
-    </View>
-  );
+  const { t } = useI18n();
+  // a wheel to spin, as the iPhone's alarm (founder 09.11), beside the inches
+  return <Wheel items={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ key: n, label: eighthLabel(n) }))} value={value} onChange={onChange} testID={testID} label={t(k("frac"))} />;
 }
 const split = (n: number) => {
   const e = Math.round(n * 8);
@@ -100,7 +99,7 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   const taped = run.lengthIn !== undefined;
   return (
     <Field label={t(k("length"))} testID="attr-length">
-      <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+      <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-ft">
           <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} />
         </View>
@@ -108,11 +107,11 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
           <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
         </View>
+        <Eighths value={e8} onChange={setE8} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
         <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
         {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
-      <Eighths value={e8} onChange={setE8} testID="attr-length-frac" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -162,7 +161,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
       </View>
       {unit === "ftin" ? (
         <>
-          <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+          <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
               <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} autoFocus selectOnFocus />
             </View>
@@ -170,9 +169,9 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
               <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} selectOnFocus />
             </View>
+            <Eighths value={e8} onChange={setE8} testID="quick-length-frac" />
             <T v="body" tone="mut">{t(k("in"))}</T>
           </RowView>
-          <Eighths value={e8} onChange={setE8} testID="quick-length-frac" />
         </>
       ) : (
         <RowView style={{ gap: space[2] }}>

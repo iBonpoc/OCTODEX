@@ -3,7 +3,8 @@
  * Every view.
  * - a gutter drawn → the sheet «Длина желоба» opens at once; the feet field has the focus (the number keyboard on a
  *   phone), holds the drawn feet and they are selected — a digit typed replaces them (founder 09.11);
- * - 25 ft 6 in → «Применить» → the run is 306″ by tape, the sheet is gone; in the store too;
+ * - the eighths are a wheel: spun → ⅜, a row tapped → that one; 25 ft 6⅜ in → «Применить» → 306⅜″ by tape, the sheet
+ *   is gone; in the store too;
  * - a bad length (inches 12) says so and keeps the sheet;
  * - the next gutter → «Применить» untouched keeps the drawn length (no tape);
  * - inches alone: 260 → 21′ 8″; mm: 1000 → 39⅜″;
@@ -67,12 +68,25 @@ exports.run = async (h) => {
   await tid("quick-length-bad").waitFor({ timeout: 3000 });
   h.expect((await tid("quick-length").count()) === 1, "a bad length keeps the sheet");
 
-  // 25′ 6″ → «Применить»
+  // the eighths are a wheel to spin (founder 09.11, as the iPhone's alarm): spun three rows down → ⅜; a tap on a row → it
+  const picked = async () => ((await tid("quick-length-frac").locator('[aria-checked="true"]').getAttribute("aria-label")) || "").trim();
+  h.expect((await picked()) === "0", "the wheel starts at 0");
+  const wb = await tid("quick-length-frac").boundingBox();
+  await p.mouse.move(wb.x + wb.width / 2, wb.y + wb.height / 2);
+  await p.mouse.wheel(0, 3 * 44);
+  await waitFor(async () => (await picked()) === "⅜", "spun three rows: ⅜");
+  await h.shot("wheel");
+  await tid("quick-length-frac").getByRole("radio", { name: "½", exact: true }).click();
+  await waitFor(async () => (await picked()) === "½", "a row tapped: ½");
+  await tid("quick-length-frac").getByRole("radio", { name: "⅜", exact: true }).click();
+  await waitFor(async () => (await picked()) === "⅜", "…and back to ⅜");
+
+  // 25′ 6⅜″ → «Применить»
   await field("quick-length-in").fill("6");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await tid("quick-length").count()) === 0, "the sheet is gone after «Применить»");
-  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 306), "the run is 306″ by tape in the store");
-  await waitFor(async () => /25′ 6″/.test(await tid("draw-selected").innerText()), "the picked bar shows 25′ 6″");
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 306.375), "the run is 306⅜″ by tape in the store");
+  await waitFor(async () => /25′ 6⅜″/.test(await tid("draw-selected").innerText()), "the picked bar shows 25′ 6⅜″");
 
   // the second gutter → «Применить» untouched: the drawn length stays
   await stroke([x1, y + b.height * 0.2], [x0, y + b.height * 0.2]);
