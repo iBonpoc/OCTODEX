@@ -58,10 +58,37 @@ export function measurementOf(g: GutterData, id: string): { m: MeasurementRow; e
 /** the module's data as a place gets it (DB.moduleData.gutters, unknown to the core) */
 export const asGutterData = (data: unknown): GutterData => gutterData({ moduleData: { [KEY]: data } });
 
-/** the newest measurement of a lead or a property (the place's «Открыть замер»), or undefined */
-export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: string }): MeasurementRow | undefined {
-  const of = g.measurements.filter((m) => (by.leadId ? m.leadId === by.leadId : !!by.propertyId && m.propertyId === by.propertyId));
+/**
+ * the newest measurement of a lead or a property (the place's «Открыть замер»), or undefined. A property also finds the
+ * measurements of its leads (`leadIds`): a lead that got the address (S3, conversion, S8b, merge) keeps its measurement
+ * with an empty property — it shows on the address without a write (spec 33 П24 Б4, S4h, #704)
+ */
+export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): MeasurementRow | undefined {
+  const of = g.measurements.filter((m) =>
+    by.leadId ? m.leadId === by.leadId : (!!by.propertyId && m.propertyId === by.propertyId) || (!!m.leadId && !!by.leadIds?.includes(m.leadId)),
+  );
   return of.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+}
+
+/** where «Замер желобов» goes for a lead / an address: its newest measurement, else a new one linked to it */
+export function measureHref(draw: string, g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): { href: string; open?: MeasurementRow } {
+  const m = latestFor(g, by);
+  if (m) return { href: `${draw}?m=${encodeURIComponent(m.id)}`, open: m };
+  const q = [by.leadId ? `lead=${encodeURIComponent(by.leadId)}` : "", by.propertyId ? `property=${encodeURIComponent(by.propertyId)}` : ""].filter(Boolean).join("&");
+  return { href: `${draw}?${q}` };
+}
+
+/**
+ * «Замер желобов» on a client's card (spec 33 П24 А3, #697): the measurement is always an address's — one address →
+ * straight to it; several → pick; none → the client's card says to add one first
+ */
+export function clientStart(draw: string, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
+  const g = gutterData(db);
+  const places = db.properties.filter((p) => p.customerId === customerId);
+  const go = (propertyId: string) => measureHref(draw, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
+  if (!places.length) return { kind: "none" as const };
+  if (places.length === 1) return { kind: "go" as const, href: go(places[0]!.id) };
+  return { kind: "pick" as const, places: places.map((p) => ({ id: p.id, address: p.address, city: p.city, href: go(p.id) })) };
 }
 
 /** the measurement's own fields (what measurement.save writes) */

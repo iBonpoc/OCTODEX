@@ -1,6 +1,6 @@
 /**
- * e2e 147 — «Замерить здесь» → «Сделать заявкой» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
- * - the home «＋» has «Замерить здесь» only while the module is active;
+ * e2e 147 — «Замер желобов» (было «Замерить здесь») → «Сделать заявкой» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
+ * - the home «＋» has «Замер желобов» (было «Замерить здесь») only while the module is active;
  * - it opens a new draft without a lead; before the first save there is no «Сделать заявкой»; after it — there is;
  * - «Сделать заявкой» → «Привязать замер» → «Новая заявка» → the core's own new-lead form; saved → the new lead's card has «Открыть замер», and the draft
  *   is now the lead's; the canvas shows the lead.
@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await h.go("/today");
   await plus().first().click();
   await tid("fab-lead").or(tid("fab-module.gutters.here")).first().waitFor({ timeout: 5000 }).catch(() => {});
-  h.expect((await here().count()) === 0, "off: no «Замерить здесь»");
+  h.expect((await here().count()) === 0, "off: no «Замер желобов» (было «Замерить здесь»)");
   await p.keyboard.press("Escape");
 
   await h.go("/company/modules");

@@ -50,7 +50,7 @@ exports.run = async (h) => {
 
   await h.go(`/lead/${lead.id}`);
   await measureBtn().waitFor({ timeout: 8000 });
-  h.expect(/^Замер$/.test((await measureBtn().innerText()).trim()), "«Замер»");
+  h.expect(/^Замер желобов$/.test((await measureBtn().innerText()).trim()), "«Замер желобов» (founder 09.11, #697)");
   await h.shot("lead");
   await measureBtn().getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/draw\?/, { timeout: 5000 });
@@ -78,7 +78,7 @@ exports.run = async (h) => {
   const prop = (await db()).properties.find((x) => x.id !== lead.propertyId);
   await h.go(`/property/${prop.id}`);
   await measureBtn().waitFor({ timeout: 8000 });
-  h.expect(/^Замер$/.test((await measureBtn().innerText()).trim()), "another property: «Замер» (no measurement yet)");
+  h.expect(/^Замер желобов$/.test((await measureBtn().innerText()).trim()), "another property: «Замер желобов» (no measurement yet)");
   await measureBtn().getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/draw\?property=/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });

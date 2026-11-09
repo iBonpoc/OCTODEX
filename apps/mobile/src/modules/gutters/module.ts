@@ -1,27 +1,26 @@
 /**
  * The Gutters module as the core sees it (docs/specs/33-gutters-module.md П15): found by src/modules/registry.ts.
- * Add-on $30 a month a company, 7-day trial (founder О1, О2, 07.11.2026). Places (spec 33 П21 M5b): «Замер» on a lead and a property, «Замерить здесь» in the home «＋».
+ * Add-on $30 a month a company, 7-day trial (founder О1, О2, 07.11.2026). Places (spec 33 П21 M5b, П24): «Замер желобов» on a lead, an address, a client, a visit and in the home «＋».
  * Screens (spec 33-gutters-canvas П20.3–П20.4): /module/gutters/draw — the measuring canvas (M4b: one draft on the phone;
  * the entry from a lead and a property is M5), /module/gutters/bench — the canvas speed check, /module/gutters/settings —
  * the company's settings (M7b, spec 33 П22), /module/gutters/prices — labor prices and the price list's items (M7d, П22.10).
  */
 import { moduleHref, type ModuleDef } from "../registry";
-import { asGutterData, guttersOps, latestFor, linkLead, loadGutters } from "./data";
+import { asGutterData, guttersOps, linkLead, loadGutters, measureHref } from "./data";
 import { staleMeasurements } from "./estimateLink";
 
 const draw = moduleHref("gutters", "draw");
-/** «Замер» on a lead or a property: its newest measurement opens, else a new one linked to it (S4g, spec 33 П21) */
-function measure(data: unknown, by: { leadId?: string; propertyId?: string }) {
+/** «Замер желобов» on a lead, an address or a visit: its newest measurement opens, else a new one linked to it (S4g, П24) */
+function measure(data: unknown, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }) {
   const g = asGutterData(data);
-  const m = latestFor(g, by);
+  const { href, open: m } = measureHref(draw, g, by);
   if (m) {
-    const open = { id: "measure", labelKey: "mod.gutters.measureOpen" as const, icon: "pencil" as const, href: `${draw}?m=${encodeURIComponent(m.id)}` };
+    const open = { id: "measure", labelKey: "mod.gutters.measureOpen" as const, icon: "pencil" as const, href };
     // M8b (S5g): something is drawn → «Смета из замера»: the canvas opens and makes or updates it (П23.8)
     const drawn = g.elements.some((e) => e.measurementId === m.id && e.kind === "run");
     return drawn ? [open, { id: "estimate", labelKey: "mod.gutters.est.fromLead" as const, icon: "plus" as const, href: `${draw}?m=${encodeURIComponent(m.id)}&estimate=1` }] : [open];
   }
-  const q = [by.leadId ? `lead=${encodeURIComponent(by.leadId)}` : "", by.propertyId ? `property=${encodeURIComponent(by.propertyId)}` : ""].filter(Boolean).join("&");
-  return [{ id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const, href: `${draw}?${q}` }];
+  return [{ id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const, href }];
 }
 
 const gutters: ModuleDef = {
@@ -33,7 +32,12 @@ const gutters: ModuleDef = {
   places: {
     // everyone who measures (П11): owner, admin, office, sales, tech; a subcontractor has no measuring role here
     lead: (ctx, data) => (ctx.leadId ? measure(data, { leadId: ctx.leadId, ...(ctx.propertyId ? { propertyId: ctx.propertyId } : {}) }) : []),
-    property: (ctx, data) => (ctx.propertyId ? measure(data, { propertyId: ctx.propertyId }) : []),
+    property: (ctx, data) => (ctx.propertyId ? measure(data, { propertyId: ctx.propertyId, leadIds: ctx.leadIds }) : []),
+    // П24 А3 (#697): the client's card — one button; the start screen goes to the address (one), a pick (several) or says
+    // to add an address (none)
+    client: (ctx) => (ctx.customerId ? [{ id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const, href: `${moduleHref("gutters", "start")}?customer=${encodeURIComponent(ctx.customerId)}` }] : []),
+    // П24 А7: a visit — the measurement of its lead, else of its address
+    visit: (ctx, data) => (ctx.leadId || ctx.propertyId ? measure(data, ctx.leadId ? { leadId: ctx.leadId, ...(ctx.propertyId ? { propertyId: ctx.propertyId } : {}) } : { propertyId: ctx.propertyId, leadIds: ctx.leadIds }) : []),
     // «Замерить здесь»: a draft without a lead (S1b → «Сделать заявкой»); the address by location — stage 3 (П21.2 №8)
     home: () => [
       { id: "here", labelKey: "mod.gutters.measureHere", icon: "pencil", href: draw },
@@ -102,6 +106,7 @@ const gutters: ModuleDef = {
   screens: {
     draw: () => require("./draw/DrawScreen").default,
     list: () => require("./list/MeasurementsScreen").default,
+    start: () => require("./list/StartScreen").default,
     bench: () => require("./bench/BenchScreen").default,
     settings: () => require("./settings/SettingsScreen").default,
     prices: () => require("./prices/PricesScreen").default,
