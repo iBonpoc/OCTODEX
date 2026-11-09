@@ -7759,16 +7759,41 @@ set session_replication_role = replica;  -- straight to «approved» (the flow i
 update public.estimates set status = 'approved' where title = 'T161 signed on a measurement';
 set session_replication_role = origin;
 :as_owner_a
-select tst.fails($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
-  'T161 an approved estimate stands on it: the server refuses to delete');
+select tst.fails_like($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
+  'a signed estimate stands on this measurement', 'T161 an approved estimate stands on it: the server refuses to delete (the guard, not RLS)');
 :as_super
 set session_replication_role = replica;
 update public.estimates set status = 'awaiting_countersign' where title = 'T161 signed on a measurement';
 set session_replication_role = origin;
 :as_owner_a
-select tst.fails($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
-  'T161 signed by the client, waiting for the company: refused too');
+select tst.fails_like($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
+  'a signed estimate stands on this measurement', 'T161 signed by the client, waiting for the company: refused too');
 select tst.ok((select deleted_at is null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 the measurement stays');
+-- the id written in capitals (an old phone, a hand edit) is the same measurement
+:as_super
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,source,measurementId}', '"9E161000-0000-4000-8000-000000000001"')
+ where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+:as_owner_a
+select tst.fails_like($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
+  'a signed estimate stands on this measurement', 'T161 the id in capitals holds it too');
+-- another company's signed estimate naming A's measurement does not hold it; a deleted estimate does not either
+:as_super
+set session_replication_role = replica;
+update public.estimates set company_id = 'cb000000-0000-0000-0000-000000000000' where title = 'T161 signed on a measurement';
+update public.estimate_versions set company_id = 'cb000000-0000-0000-0000-000000000000' where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+set session_replication_role = origin;
+:as_owner_a
+update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001';
+select tst.ok((select deleted_at is not null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 another company''s signed estimate does not hold A''s measurement');
+:as_super
+update public.gutter_measurements set deleted_at = null where id = '9e161000-0000-4000-8000-000000000001';
+set session_replication_role = replica;
+update public.estimate_versions set company_id = 'ca000000-0000-0000-0000-000000000000' where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+update public.estimates set company_id = 'ca000000-0000-0000-0000-000000000000', deleted_at = now() where title = 'T161 signed on a measurement';
+set session_replication_role = origin;
+:as_owner_a
+update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001';
+select tst.ok((select deleted_at is not null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 a deleted estimate does not hold it');
 :as_super
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_gutter_measurement_delete_guard()', 'EXECUTE')
           and not has_function_privilege('anon', 'app.tg_gutter_measurement_delete_guard()', 'EXECUTE'), 'T161 the guard is nobody''s to call');
