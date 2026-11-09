@@ -65,6 +65,15 @@ describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт
   it("four different storeys", () => expect(new Set(c.drawing.story.map((x) => x.toLowerCase())).size).toBe(4));
 });
 
+describe.each(names)("%s tape measure (founder 09.11, #674: the number under the mark on a pill like the main button)", (name) => {
+  const c = themes[name];
+  it("the number on its pill ≥ 4.5:1", () => expect(ratio(parse(c.tape.markText), parse(c.tape.markFill))).toBeGreaterThanOrEqual(4.5));
+  it("the pill is the main button's colours", () => {
+    expect(c.tape.markFill.toLowerCase()).toBe(c.acc.toLowerCase());
+    expect(c.tape.markText.toLowerCase()).toBe(c.onAcc.toLowerCase());
+  });
+});
+
 describe("print contrast on paper (documents for the client: text ≥ 4.5:1)", () => {
   const paper = parse(print.paper);
   it.each([["ink", print.ink], ["mut", print.mut], ["okText", print.okText]])("%s on paper", (_n, c) => {

@@ -126,3 +126,10 @@ describe("design system: tokens only", () => {
     expect(hits, hits.join("\n")).toEqual([]);
   });
 });
+
+describe("design system: the tape's yellow (founder 09.11, #674 — an exception to rule 2)", () => {
+  it("`tape.*` only in the Gutters tape measure", () => {
+    const hits = code.filter((f) => /\btape\.mark(Text|Fill)\b/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
+    expect(hits).toEqual([join("modules", "gutters", "draw", "Tape.tsx")]);
+  });
+});
