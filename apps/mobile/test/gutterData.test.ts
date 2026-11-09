@@ -318,8 +318,20 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     const data = { gutters: g([{ propertyId: "p1" }]) };
     expect(placeActions("property", on, { role: "sales", propertyId: "p1" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/draw?m=m0" });
     expect(placeActions("property", on, { role: "sales", propertyId: "p2" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/draw?property=p2" });
-    expect(placeActions("home", on, { role: "tech" })).toEqual([expect.objectContaining({ id: "here", labelKey: "mod.gutters.measureHere", href: "/module/gutters/draw" })]);
+    expect(placeActions("home", on, { role: "tech" })).toEqual([
+      expect.objectContaining({ id: "here", labelKey: "mod.gutters.measureHere", href: "/module/gutters/draw" }),
+      // «Замеры» (founder 09.11): every measurement, the drafts too
+      expect.objectContaining({ id: "list", labelKey: "mod.gutters.list.action", href: "/module/gutters/list" }),
+    ]);
     expect(placeActions("home", { modules: {} }, { role: "tech" })).toEqual([]);
+  });
+  it("«Замеры» is a tab (bottom tabs, side menu) only while the module is usable — for every role", async () => {
+    const { moduleTabs } = await import("../src/modules/registry");
+    for (const role of ["director", "dispatcher", "sales", "tech"] as const) {
+      expect(moduleTabs(on, role)).toEqual([expect.objectContaining({ tabId: "module-gutters-list", labelKey: "mod.gutters.list.tab", href: "/module/gutters/list" })]);
+    }
+    expect(moduleTabs({ modules: {} }, "director")).toEqual([]);
+    expect(moduleTabs({ modules: { gutters: { ...on.modules.gutters, enabled: false } } }, "director")).toEqual([]);
   });
   it("linkLead: the new lead takes the saved draft (one full write of the measurement, «Отменить» back); already on a lead or never saved — nothing", async () => {
     const { linkLead } = await import("../src/modules/gutters/data");

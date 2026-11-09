@@ -79,6 +79,30 @@ export function linkLead(store: ModuleStore, ref: string, leadId: string): (() =
   return typeof undo === "function" ? (undo as () => void) : null;
 }
 
+/**
+ * «Привязать» (founder 09.11, версия 475): a draft for nobody goes to a client's address (the client's place shows it,
+ * «Открыть замер»). A measurement the store does not have, or one already on a lead or an address — nothing.
+ */
+export function linkProperty(store: ModuleStore, ref: string, propertyId: string): (() => void) | null {
+  const m = gutterData(store.db).measurements.find((x) => x.id === ref);
+  if (!m || m.leadId || m.propertyId) return null;
+  const row = { ...ownFields(m), propertyId };
+  const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...m, propertyId })), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/** what «Привязать» offers for a typed text: open leads and clients by name (and a lead's address), the first few */
+export function linkChoices(db: Pick<DB, "leads" | "customers" | "properties">, q: string, max = 8) {
+  const s = q.trim().toLowerCase();
+  const hit = (...xs: (string | undefined)[]) => !s || xs.some((x) => x?.toLowerCase().includes(s));
+  const leads = db.leads.filter((l) => l.status !== "won" && l.status !== "lost" && l.status !== "declined" && hit(l.name, l.address)).slice(0, max);
+  const clients = db.customers
+    .filter((c) => hit(c.name))
+    .slice(0, max)
+    .map((c) => ({ c, places: db.properties.filter((p) => p.customerId === c.id) }));
+  return { leads, clients };
+}
+
 /* ---------- the server's rows ---------- */
 const KINDS = new Set(["run", "downspout"]);
 const CONF = new Set(["auto", "drawn", "taped"]);

@@ -35,7 +35,13 @@ const gutters: ModuleDef = {
     lead: (ctx, data) => (ctx.leadId ? measure(data, { leadId: ctx.leadId, ...(ctx.propertyId ? { propertyId: ctx.propertyId } : {}) }) : []),
     property: (ctx, data) => (ctx.propertyId ? measure(data, { propertyId: ctx.propertyId }) : []),
     // «Замерить здесь»: a draft without a lead (S1b → «Сделать заявкой»); the address by location — stage 3 (П21.2 №8)
-    home: () => [{ id: "here", labelKey: "mod.gutters.measureHere", icon: "pencil", href: draw }],
+    home: () => [
+      { id: "here", labelKey: "mod.gutters.measureHere", icon: "pencil", href: draw },
+      // «Замеры» (founder 09.11): every measurement, the drafts without a client too — found again after leaving
+      { id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") },
+    ],
+    // «Замеры» in the bottom tabs and the side menu (founder 09.11: «делай»): every measurement, the drafts too
+    tab: () => [{ id: "list", labelKey: "mod.gutters.list.tab", icon: "note", href: moduleHref("gutters", "list") }],
     // the module's own card in «Компания → Модули»: the speed check saves nothing, so it is there even when off
     // the canvas draws even when off: it says at once that nothing will be saved (§6, founder О2)
     // «Настройки» (M7b, spec 33 П22): the director changes them, the office reads them; a tech or a seller never needs the page
@@ -43,6 +49,7 @@ const gutters: ModuleDef = {
       ...(ctx.role === "director" || ctx.role === "dispatcher" ? [{ id: "settings", labelKey: "mod.gutters.set.action" as const, icon: "sliders" as const, href: moduleHref("gutters", "settings") }] : []),
       // «Цены и прайс» (M7d, spec 33 П22.10): who writes the price list (all but a tech — app.is_staff, the core's /catalog)
       ...(ctx.role !== "tech" ? [{ id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") }] : []),
+      { id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") },
       { id: "draw", labelKey: "mod.gutters.draw.action", icon: "pencil", href: draw },
       { id: "bench", labelKey: "mod.gutters.bench.action", icon: "clock", href: moduleHref("gutters", "bench") },
     ],
@@ -94,6 +101,7 @@ const gutters: ModuleDef = {
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
   screens: {
     draw: () => require("./draw/DrawScreen").default,
+    list: () => require("./list/MeasurementsScreen").default,
     bench: () => require("./bench/BenchScreen").default,
     settings: () => require("./settings/SettingsScreen").default,
     prices: () => require("./prices/PricesScreen").default,
