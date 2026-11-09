@@ -7,7 +7,7 @@
  * - «Выбрать», a long press on a free end, then a drag → a new gutter from that end (a corner), not a moved end.
  * Finds things by id / testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -71,9 +71,11 @@ exports.run = async (h) => {
   else await tid("draw-panel-close").getByRole("button").click();
 
   // drag the downspout along its run
+  await waitFor(async () => (await tid("attr-panel").count()) === 0, "the downspout's menu is closed");
   const at0 = (await live("downspout"))[0].geom.atIn;
   const mark = await svg().locator("circle").first().boundingBox();
   const c = [mark.x + mark.width / 2, mark.y + mark.height / 2];
+  await canvasAt(p, c[0], c[1]); // nothing of the closed menu over the mark any more
   await drag(c, [x0 + (x1 - x0) * 0.8, y + 20]);
   await waitFor(async () => (await live("downspout"))[0].geom.atIn > at0 + 12, "dragged: further along the run");
   h.expect((await live("run")).length === 1, "dragging a downspout draws no line");
