@@ -153,6 +153,8 @@ export const component = {
   /** bottom sheet: drag down this far (pt) or this fast (pt/ms) to close */
   sheetDismissDrag: 120,
   sheetDismissVelocity: 0.8,
+  /** bottom sheet body: a downward move this long (pt) at the top of the scroll becomes a swipe to close, not a tap */
+  sheetBodySlop: 10,
   /** width of the countdown ring around the toast Undo button */
   toastRing: 2,
   /** widest "‹ Parent" back button in a header */
