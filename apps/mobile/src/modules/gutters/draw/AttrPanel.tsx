@@ -116,7 +116,8 @@ function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenU
   );
 }
 /** inches alone: every inch numbered as it is (no feet) */
-const EIGHTHS_SCALE_IN = (k: number) => (k % 8 === 0 ? { h: 0.45, text: k ? String(k / 8) : undefined, bold: k % 96 === 0 } : { h: k % 4 === 0 ? 0.32 : k % 2 === 0 ? 0.24 : 0.16 });
+const EIGHTHS_SCALE_IN = (k: number) =>
+  k % 8 === 0 ? { h: 0.45, text: k ? `${k / 8}″` : undefined, bold: k % 96 === 0 } : { h: k % 4 === 0 ? 0.36 : k % 2 === 0 ? 0.28 : 0.2, frac: eighthLabel(k % 8), big: k % 8 === 4 };
 const split = (n: number) => {
   const e = Math.round(n * 8);
   return { ft: Math.floor(e / 96), inch: Math.floor((e % 96) / 8), eighths: e % 8 };

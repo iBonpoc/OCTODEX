@@ -37,11 +37,11 @@ exports.run = async (h) => {
     await tid("quick-length-ft").locator("input").fill(String(ftv));
     await tid("quick-length-in").locator("input").fill(String(inv));
     if (eighths) {
-      // ⅛: the tape pulled one mark (8 px) to the left
+      // ⅛: the tape pulled one mark (12 px) to the left
       const tb = await tid("quick-length-tape").boundingBox();
       await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
       await p.mouse.down();
-      for (let i = 1; i <= 4; i++) await p.mouse.move(tb.x + tb.width / 2 - 2 * i, tb.y + tb.height / 2);
+      for (let i = 1; i <= 4; i++) await p.mouse.move(tb.x + tb.width / 2 - 3 * i, tb.y + tb.height / 2); // one mark: 12 px
       await p.waitForTimeout(200); // stopped, then lifted: no flick
       await p.mouse.up();
       await tid("quick-length-frac").filter({ hasText: eighths }).waitFor({ timeout: 3000 });

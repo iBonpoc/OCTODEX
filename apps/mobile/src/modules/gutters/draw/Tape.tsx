@@ -9,14 +9,14 @@
 import { useEffect, useRef, useState } from "react";
 import { PanResponder, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
-import { drawing as dt, font, radius, size, space } from "@octo/design-tokens";
+import { drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 
-/** px per mark */
-const TICK = space[2];
+/** px per mark: room for a fraction under each eighth, as on a real tape (founder 09.11) */
+const TICK = space[3];
 const H = size.hitMin * 2;
 /** a flick: the share of speed kept per millisecond, and the speed (marks per ms) at which it settles */
 const KEEP_PER_MS = 0.996;
@@ -36,7 +36,7 @@ const OFF = 0.35;
 export const coastEnd = (at: number, speed: number) => (Math.abs(speed) < STOP ? at : at + speed / -Math.log(KEEP_PER_MS));
 
 /** one mark of a scale: its height (share of the tape), a number under it, bold */
-export interface Mark { h: number; text?: string; bold?: boolean }
+export interface Mark { h: number; text?: string; bold?: boolean; /** a fraction under a short mark (⅛ … ⅞), ½ bigger */ frac?: string; big?: boolean }
 export type Scale = (k: number) => Mark;
 
 /**
@@ -48,7 +48,9 @@ export const EIGHTHS_SCALE: Scale = (k) =>
     ? { h: 0.45, text: k ? `${k / 96}′` : undefined, bold: true }
     : k % 8 === 0
       ? { h: 0.45, text: `${Math.floor(k / 96)}′ ${(k / 8) % 12}″` }
-      : { h: k % 4 === 0 ? 0.32 : k % 2 === 0 ? 0.24 : 0.16 };
+      : { h: k % 4 === 0 ? 0.36 : k % 2 === 0 ? 0.28 : 0.2, frac: EIGHTH[k % 8], big: k % 8 === 4 };
+/** the fractions of an inch as a tape writes them */
+const EIGHTH = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"];
 /** millimetres: every centimetre with the whole length «102 cm», every 10 cm bold «1.1 m», the millimetres between */
 export const MM_SCALE: Scale = (k) =>
   k % 100 === 0 ? { h: 0.45, text: k ? `${k / 1000} m` : undefined, bold: true } : k % 10 === 0 ? { h: 0.45, text: `${k / 10} cm` } : { h: k % 5 === 0 ? 0.3 : 0.18 };
@@ -148,11 +150,19 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
     const x = cx + (k - at) * TICK;
     const m = scale(k);
     // the number under the mark stands out (the sample's picked page)
-    const on = !!m.text && Math.abs(k - at) < 0.5;
+    const on = Math.abs(k - at) < 0.5;
     drawn.push(<Line key={`m${k}`} x1={x} y1={0} x2={x} y2={H * m.h} stroke={c.ink} strokeWidth={m.bold ? dt.runW / 2 : 1} />);
+    // the fraction under its mark (a real tape: ⅛ ¼ ⅜ ½ ⅝ ¾ ⅞, ½ bigger)
+    if (m.frac) {
+      drawn.push(
+        <SvgText key={`f${k}`} x={x} y={H * m.h + font.size.micro + spaceHalf.hair} fontSize={m.big || on ? font.size.body : font.size.micro} fontFamily={m.big || on ? font.families.bold : font.families.medium} fill={m.big || on ? c.ink : c.mut} textAnchor="middle">
+          {m.frac}
+        </SvgText>,
+      );
+    }
     if (m.text) {
       drawn.push(
-        <SvgText key={`t${k}`} x={x} y={H * 0.45 + font.size.body + space[1]} fontSize={m.bold || on ? font.size.heading : font.size.body} fontFamily={m.bold || on ? font.families.bold : font.families.medium} fill={m.bold || on ? c.ink : c.mut} textAnchor="middle">
+        <SvgText key={`t${k}`} x={x} y={H - space[2]} fontSize={m.bold || on ? font.size.heading : font.size.body} fontFamily={m.bold || on ? font.families.bold : font.families.medium} fill={m.bold || on ? c.ink : c.mut} textAnchor="middle">
           {m.text}
         </SvgText>,
       );
@@ -211,8 +221,8 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
             {/* the tape runs into the dark at both sides (the sample's shade) */}
             <Rect x={0} y={0} width={w} height={H} fill={`url(#${testID}-fade)`} />
             {/* the mark the length is read at */}
-            {/* down to the marks only: the length written under them stays readable («25′ 6″») */}
-            <Line x1={cx} y1={0} x2={cx} y2={H * 0.5} stroke={c.ink} strokeWidth={dt.runW} />
+            {/* as long as the shortest mark: the fraction and the length written under it stay readable */}
+            <Line x1={cx} y1={0} x2={cx} y2={H * 0.2} stroke={c.ink} strokeWidth={dt.runW} />
             <Path d={`M${cx - space[2]} 0L${cx + space[2]} 0L${cx} ${space[2]}Z`} fill={c.ink} />
           </Svg>
         ) : null}

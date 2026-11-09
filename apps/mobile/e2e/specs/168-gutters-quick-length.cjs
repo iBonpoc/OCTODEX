@@ -75,9 +75,10 @@ exports.run = async (h) => {
     const cx = tb.x + tb.width / 2, cy = tb.y + tb.height / 2;
     await p.mouse.move(cx, cy);
     await p.mouse.down();
-    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 8 * i) / 6, cy);
+    // one mark is 12 px (room for the fractions)
+    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 12 * i) / 6, cy);
     // the finger stops, then lifts: no flick (a flick runs on — the founder's sample; that is the arrows' and the unit's job)
-    await p.mouse.move(cx - marks * 8, cy);
+    await p.mouse.move(cx - marks * 12, cy);
     await p.waitForTimeout(200);
     await p.mouse.up();
   };
