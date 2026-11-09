@@ -75,6 +75,9 @@ exports.run = async (h) => {
   h.expect((await lines()).length === 1, "one line on the canvas");
   // grown again, then «Отменить» in its length sheet: back to the length before — the gutter stays (part 1 × #479)
   const before = (await runs())[0].geom.lengthIn;
+  // grown, its end may run under the properties panel beside the canvas (820/1280): the whole drawing in view first
+  await tid("draw-fit").getByRole("button").click();
+  await p.waitForTimeout(300);
   const caps3 = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const r3 = caps3.sort((a, c) => c[0] - a[0])[0];
   await canvasAt(p, r3[0], r3[1]);
