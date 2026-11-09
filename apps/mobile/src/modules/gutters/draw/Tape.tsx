@@ -14,6 +14,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
+import { useSheetHold } from "@/ui/overlays";
 
 /** px per mark: room for a fraction under each eighth, as on a real tape (founder 09.11) */
 const TICK = space[4];
@@ -101,12 +102,15 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
   };
   /** past an end the tape gives a little (a third of the pull), as a real one does — the sample's edge */
   const give = (f: number) => (f < 1 ? 1 - (1 - f) * GIVE : f > max ? max + (f - max) * GIVE : f);
+  // in a sheet: the tape keeps its finger — the sheet's swipe to close never takes it over (#714)
+  const hold = useSheetHold();
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
+        hold.current = true;
         stop();
         start.current = now.current.v;
         touch.current = e.nativeEvent.locationX;
@@ -118,7 +122,11 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
         set(f);
       },
       // let go while moving: it runs on, slowing, and settles on the nearest mark (the sample's inertia)
+      onPanResponderTerminate: () => {
+        hold.current = false;
+      },
       onPanResponderRelease: (_, g) => {
+        hold.current = false;
         // a tap, not a drag: on a number — the tape comes to it (the sample's click on a page)
         if (Math.abs(g.dx) < MOVE_PX) {
           setPos(null);
