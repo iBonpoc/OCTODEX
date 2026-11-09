@@ -9,6 +9,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { meIsSub, menuGroups, sectionHref, type SectionId } from "./sections";
+import { moduleTabs } from "@/modules/registry";
 import { GROUP_TITLE, useMenuCurrent, useNavMenu } from "./NavMenu";
 import { openSection } from "./go";
 import { isAppPath, sideNavWidth } from "./shell";
@@ -39,6 +40,8 @@ export function SideNav() {
   const me = db.members.find((m) => m.id === db.me);
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
   const go = (id: SectionId) => openSection(sectionHref(id, role));
+  const mods = moduleTabs(db.company, role);
+  const modNow = mods.find((m) => path === m.href || path.startsWith(`${m.href}/`));
   const toggle = device === "desktop" ? menu.toggleSide : menu.open;
   return (
     <View
@@ -68,8 +71,14 @@ export function SideNav() {
               </T>
             ) : null}
             {g.items.map((s) => (
-              <Item key={s.id} icon={s.icon} label={t(s.label)} open={open} selected={s.id === current} onPress={() => go(s.id)} testID={`side-${s.id}`} />
+              <Item key={s.id} icon={s.icon} label={t(s.label)} open={open} selected={!modNow && s.id === current} onPress={() => go(s.id)} testID={`side-${s.id}`} />
             ))}
+            {/* the usable modules' sections (place «tab», founder 09.11 «Замеры»): with the work */}
+            {g.group === "work"
+              ? mods.map((m) => (
+                  <Item key={m.tabId} icon={m.icon} label={t(m.labelKey)} open={open} selected={modNow?.tabId === m.tabId} onPress={() => openSection(m.href)} testID={`side-${m.tabId}`} />
+                ))
+              : null}
           </View>
         ))}
       </ScrollView>

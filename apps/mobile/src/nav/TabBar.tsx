@@ -4,7 +4,7 @@ import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Glass, Sheet } from "@/ui/overlays";
@@ -19,6 +19,7 @@ import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
 import { sectionHref, tabs, type SectionId } from "./sections";
+import { moduleTabs } from "@/modules/registry";
 
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
@@ -43,7 +44,10 @@ export function TabBar() {
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
   const sec = own && !tabs(store.role).some((s) => s.id === own) ? "more" : own;
   // every phone screen but forms, the signature, sign-in, /p and the legal texts (docs/specs/28)
-  if (wide || signing || !showsTabBar(segments.join("/"))) return null;
+  // a module's own screens hide the bar (the canvas needs the whole screen) — but not the one that is a tab of its own
+  // («Замеры», place «tab»)
+  const modTab = moduleTabs(store.db.company, store.role).some((m) => pathname === m.href);
+  if (wide || signing || !(showsTabBar(segments.join("/")) || modTab)) return null;
   // help and the documents before the consent is given (the gate is open over them): the app is closed — no bar
   if (session && (legal === "first" || legal === "changed") && gateFreePath(pathname)) return null;
   // a tab from a card: back down to the tabs (dismissTo — navigate would push a second copy of the tabs, review #274),
@@ -54,8 +58,8 @@ export function TabBar() {
     if (tabLeave(appStackRoutes(root)) === "dismissTo") router.dismissTo(href);
     else router.navigate(href);
   };
-  const go = (id: SectionId) => {
-    const href = sectionHref(id, store.role) as Href;
+  const go = (id: SectionId) => goHref(sectionHref(id, store.role) as Href);
+  const goHref = (href: Href) => {
     // a form lies under this card (a new lead → «already a client» → the client): never drop it silently (rule 5)
     const forms = formsAbove(appStackRoutes(root));
     if (forms.length) setAsk(href);
@@ -63,7 +67,7 @@ export function TabBar() {
   };
   return (
     <>
-      <NavPill current={sec} onGo={go} />
+      <NavPill current={sec} onGo={go} onGoHref={goHref} path={pathname} />
       <Sheet visible={!!ask} onClose={() => setAsk(null)} title={t("fr8.tab.leaveTitle")}>
         <T v="body" tone="mut">{t("fr8.tab.leaveText")}</T>
         <Button label={t("fr8.tab.stay")} variant="primary" full onPress={() => setAsk(null)} />
@@ -82,8 +86,8 @@ export function TabBar() {
   );
 }
 
-function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: (id: SectionId) => void }) {
-  const { role } = useStore();
+function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: SectionId | undefined; onGo: (id: SectionId) => void; onGoHref: (href: Href) => void; path: string }) {
+  const { role, db } = useStore();
   const { t } = useI18n();
   const { c, name } = useTheme();
   const { wide } = useDevice();
@@ -93,7 +97,16 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
   const reduce = useReducedMotion();
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
-  const items = tabs(role);
+  // the core's tabs, the usable modules' sections before «Ещё» (place «tab», founder 09.11 «Замеры»)
+  const core = tabs(role);
+  const mods = moduleTabs(db.company, role);
+  const items: { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void }[] = [
+    ...core.filter((s) => s.id !== "more").map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) })),
+    ...mods.map((m) => ({ id: m.tabId, label: m.labelKey as string, icon: m.icon, onPress: () => onGoHref(m.href as Href) })),
+    ...core.filter((s) => s.id === "more").map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) })),
+  ];
+  const modNow = mods.find((m) => path === m.href || path.startsWith(`${m.href}/`));
+  const current: string | undefined = modNow ? modNow.tabId : sectionNow;
 
   const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
   const left = useSharedValue(0);
@@ -130,11 +143,11 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
       <Press
         key={it.id}
         testID={`tab-${it.id}`}
-        onPress={() => go(it.id)}
+        onPress={it.onPress}
         accessibilityRole="tab"
         accessibilityState={{ selected: sel }}
         aria-selected={sel}
-        accessibilityLabel={t(it.label)}
+        accessibilityLabel={t(it.label as DictKey)}
         containerStyle={wide ? undefined : { flex: 1 }}
         onLayout={(e: LayoutChangeEvent) => {
           const { x, width: w } = e.nativeEvent.layout;
@@ -153,7 +166,7 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
       >
         <Icon name={it.icon} s={wide ? 16 : 20} color={c.ink} />
         <T v="micro" w={sel ? "semibold" : "medium"} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
-          {t(it.label)}
+          {t(it.label as DictKey)}
         </T>
       </Press>
     );

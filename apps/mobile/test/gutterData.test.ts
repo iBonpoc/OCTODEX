@@ -325,6 +325,14 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     ]);
     expect(placeActions("home", { modules: {} }, { role: "tech" })).toEqual([]);
   });
+  it("«Замеры» is a tab (bottom tabs, side menu) only while the module is usable — for every role", async () => {
+    const { moduleTabs } = await import("../src/modules/registry");
+    for (const role of ["director", "dispatcher", "sales", "tech"] as const) {
+      expect(moduleTabs(on, role)).toEqual([expect.objectContaining({ tabId: "module-gutters-list", labelKey: "mod.gutters.list.action", href: "/module/gutters/list" })]);
+    }
+    expect(moduleTabs({ modules: {} }, "director")).toEqual([]);
+    expect(moduleTabs({ modules: { gutters: { ...on.modules.gutters, enabled: false } } }, "director")).toEqual([]);
+  });
   it("linkLead: the new lead takes the saved draft (one full write of the measurement, «Отменить» back); already on a lead or never saved — nothing", async () => {
     const { linkLead } = await import("../src/modules/gutters/data");
     const sent: { kind: string; payload: Record<string, unknown>; coalesceKey?: string }[] = [];
