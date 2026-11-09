@@ -130,8 +130,7 @@ exports.run = async (h) => {
   await closeAttrs();
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await labels()).every((t) => !/^25′ 6″/.test(t)), "«Назад»: the drawn length again");
-  await tid("draw-more").getByRole("button").click();
-  await tid("draw-redo").getByRole("button").click();
+  await tid("draw-redo").getByRole("button").click(); // «Вперёд» on the toolbar (founder 09.11)
   await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "«Ещё» → «Вернуть»: the tape again");
 
   // a downspout on the run

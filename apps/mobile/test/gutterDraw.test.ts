@@ -1,6 +1,6 @@
 /** Холст замера Gutters M4b (docs/specs/33-gutters-canvas.md П20.4): правка пальцем, «назад», строки как в П19. */
 import { describe, expect, it } from "vitest";
-import { addDownspout, addRun, endAt, finishStroke, hitTest, moveEnd, MIN_RUN_IN, pushHistory, redo, removeElement, restoreRemoved, setStory, startAt, undo, type History } from "../src/modules/gutters/canvas/edit";
+import { addDownspout, addRun, endAt, extendRun, finishStroke, hitTest, moveEnd, MIN_RUN_IN, pushHistory, redo, removeElement, restoreRemoved, setStory, startAt, undo, type History } from "../src/modules/gutters/canvas/edit";
 import { makeLocalStore, makeSaver, type KV } from "../src/modules/gutters/canvas/draftStore";
 import { applyChange, DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, diffElements, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import type { Drawing } from "../src/modules/gutters/geometry";
@@ -211,5 +211,44 @@ describe("review #362: the phone's draft store", () => {
     expect(await saver.flush(m, rows(L(empty)))).toBe("saved");
     expect(fromElements((await makeLocalStore(kv).load())!.elements)).toEqual(L(empty));
     expect(await saver.flush(m, rows(L(empty)))).toBe("nothing");
+  });
+  it("the measurement's own fields alone (the accuracy) are written too; a new one with nothing drawn is not (e2e 174)", async () => {
+    const kv = slowKV();
+    const saver = makeSaver(makeLocalStore(kv));
+    expect(await saver.flush(m, [])).toBe("nothing"); // opened, nothing drawn: no empty draft
+    expect(await saver.flush(m, rows(L(empty)))).toBe("saved");
+    const tape = { ...m, accuracy: "tape" as const };
+    expect(await saver.flush(tape, rows(L(empty)))).toBe("saved");
+    expect((await makeLocalStore(kv).load())!.m.accuracy).toBe("tape");
+    expect(await saver.flush(tape, rows(L(empty)))).toBe("nothing");
+    // an opened measurement: seeded with its row and elements — nothing to write until something changes
+    const again = makeSaver(makeLocalStore(kv));
+    again.seed(rows(L(empty)), tape);
+    expect(await again.flush(tape, rows(L(empty)))).toBe("nothing");
+    expect(await again.flush({ ...tape, accuracy: "rough" }, rows(L(empty)))).toBe("saved");
+  });
+});
+
+describe("drawing on from a free end straight on (founder 09.11, версия 474)", () => {
+  const one = line(empty, "r1", [0, 0], [480, 0]);
+  const nr = { id: "new", attrs: DEFAULT_RUN_ATTRS };
+  it("grows the same gutter: no second line, its length the sum", () => {
+    const d = finishStroke({ kind: "line", a: [480, 0] }, one, [600, 3], 18, false, nr);
+    expect(d.runs).toHaveLength(1);
+    expect(d.runs[0]).toMatchObject({ id: "r1", a: [0, 0], b: [600, 0] });
+  });
+  it("from the start end too; a taped length grows by the drawn bit; downspouts keep their place on the wall", () => {
+    const taped = addDownspout({ ...one, runs: [{ ...one.runs[0]!, lengthIn: 500 }] }, "d1", [100, 0], 18, DEFAULT_DS_ATTRS);
+    const at0 = taped.downspouts[0]!.atIn;
+    const d = extendRun(taped, [0, 0], [-120, 0], DEFAULT_RUN_ATTRS)!;
+    expect(d.runs[0]).toMatchObject({ a: [-120, 0], b: [480, 0], lengthIn: 620 });
+    expect(d.downspouts[0]!.atIn).toBe(at0 + 120);
+  });
+  it("a turn, another storey, a short slip or a corner already there → not a growth", () => {
+    expect(extendRun(one, [480, 0], [480, 200], DEFAULT_RUN_ATTRS)).toBeNull();
+    expect(extendRun(one, [480, 0], [600, 0], { ...DEFAULT_RUN_ATTRS, story: 2 })).toBeNull();
+    expect(extendRun(one, [480, 0], [480 + MIN_RUN_IN - 1, 0], DEFAULT_RUN_ATTRS)).toBeNull();
+    expect(extendRun(L(empty), [480, 0], [600, 0], DEFAULT_RUN_ATTRS)).toBeNull();
+    expect(finishStroke({ kind: "line", a: [480, 0] }, one, [480, 200], 18, false, nr).runs).toHaveLength(2);
   });
 });

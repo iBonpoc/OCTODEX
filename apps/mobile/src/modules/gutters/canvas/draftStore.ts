@@ -43,18 +43,28 @@ export function makeLocalStore(kv: KV, key = DRAFT_KEY): MeasurementStore {
  * What the canvas has written: the next save sends only the difference. «Saved» moves only after the write
  * succeeded — a failed write leaves its change to be sent again.
  */
+/** the measurement's own fields as one key: a change of them alone (the accuracy, a link) is a change to write too */
+const ownKey = (m: MeasurementRow) => JSON.stringify([m.label, m.status, m.propertyId, m.leadId, m.accuracy ?? null]);
+
 export function makeSaver(store: MeasurementStore) {
   let saved: readonly ElementRow[] = [];
+  let savedM: string | null = null;
   return {
-    seed(rows: readonly ElementRow[]) {
+    seed(rows: readonly ElementRow[], m?: MeasurementRow) {
       saved = rows;
+      if (m) savedM = ownKey(m);
     },
     async flush(m: MeasurementRow, rows: readonly ElementRow[]): Promise<"saved" | "nothing" | "failed"> {
       const ch = diffElements(saved, rows);
-      if (!ch.save.length && !ch.remove.length) return "nothing";
+      const mk = ownKey(m);
+      // nothing drawn changed and the measurement's own fields neither (e2e 174: «Рулетка» alone was never written once
+      // every stroke was written at once)
+      // — and a measurement never written with nothing drawn stays unwritten (opening the canvas makes no empty draft)
+      if (!ch.save.length && !ch.remove.length && (savedM === null || mk === savedM)) return "nothing";
       try {
         await store.save(m, ch, rows);
         saved = rows;
+        savedM = mk;
         return "saved";
       } catch {
         return "failed";

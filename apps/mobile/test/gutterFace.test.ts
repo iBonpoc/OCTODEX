@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { capSide, chainOf, centre, findCorners, houseSide, toMeasurement, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
-import { addDownspout, flipFace, setRunAttrs } from "../src/modules/gutters/canvas/edit";
+import { addDownspout, addRun, flipFace, setRunAttrs } from "../src/modules/gutters/canvas/edit";
 import { computeGutterParts } from "@octo/estimating-engine";
 import { buildScene } from "../src/modules/gutters/canvas/scene";
 
@@ -45,16 +45,32 @@ describe("corners inside / outside", () => {
   it("chainOf: runs joined end to end", () => {
     expect([...chainOf(d([...L, r("far", [ft(90), 0], [ft(99), 0])]), "a")].sort()).toEqual(["a", "b", "c"]);
   });
-  it("flipFace flips the whole line: every corner swaps inside ↔ outside, the caps follow", () => {
+  it("flipFace flips the whole line: one face along it, every corner swaps inside ↔ outside, the caps follow", () => {
     const x = d(L);
     const kinds = (z: Drawing) => Object.fromEntries(findCorners(z).map((f) => [f.at.join(","), f.kind]));
-    const k0 = kinds(x);
     const y = flipFace(x, "c");
+    const z = flipFace(y, "c");
     const k1 = kinds(y);
-    expect(Object.values(k0).sort()).toEqual(["in", "out"]);
-    expect(k1).toEqual(Object.fromEntries(Object.entries(k0).map(([at, k]) => [at, k === "in" ? "out" : "in"])));
-    const c = centre(x.runs);
-    for (const run of y.runs) expect(houseSide(run, c)).not.toBe(houseSide(x.runs.find((q) => q.id === run.id)!, c));
+    expect(Object.values(k1).sort()).toEqual(["in", "out"]);
+    expect(kinds(z)).toEqual(Object.fromEntries(Object.entries(k1).map(([at, k]) => [at, k === "in" ? "out" : "in"])));
+    // drawn round one way, the face is on one side of every gutter: the same L/R for all; the line's caps one L, one R
+    for (const w of [y, z]) {
+      expect(new Set(w.runs.map((q) => q.houseSide)).size).toBe(1);
+      expect(sceneOf(w).caps.map((q) => q.side).sort()).toEqual(["L", "R"]);
+    }
+    expect(flipFace(z, "a")).toEqual(y);
+  });
+  it("a gutter drawn on from a line whose face was set by hand takes that face (founder 09.11: «две левые заглушки»)", () => {
+    // the first gutter's face set (a cap tapped), then a second one down from its end, and one drawn back the other way
+    const one = flipFace(d([r("a", [0, 0], [ft(40), 0])]), "a");
+    const two = addRun(one, "b", [ft(40), 0], [ft(40), -ft(10)], attrs);
+    expect(two.runs.map((q) => q.houseSide)).toEqual([one.runs[0]!.houseSide, one.runs[0]!.houseSide]);
+    expect(sceneOf(two).caps.map((q) => q.side).sort()).toEqual(["L", "R"]);
+    const back = addRun(one, "c", [0, -ft(10)], [0, 0], attrs);
+    expect(sceneOf(back).caps.map((q) => q.side).sort()).toEqual(["L", "R"]);
+    const rev = addRun(one, "d", [0, 0], [0, -ft(10)], attrs); // start to start: the other side, still one face
+    expect(rev.runs[1]!.houseSide).not.toBe(rev.runs[0]!.houseSide);
+    expect(sceneOf(rev).caps.map((q) => q.side).sort()).toEqual(["L", "R"]);
   });
   it("an inside corner gets a splash guard by itself; an outside one does not; a set choice wins", () => {
     const x = d(L);

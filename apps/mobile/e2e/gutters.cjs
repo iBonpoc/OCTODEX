@@ -1,7 +1,7 @@
-// Gutters canvas: right after a gutter is drawn the «Длина желоба» sheet opens (feet focused). Tests that do not
-// check the length close it with «Пропустить» — the drawn length stays.
+// Gutters canvas: right after a gutter is drawn the «Длина желоба» sheet opens (feet focused, the drawn length in the
+// fields). Tests that do not check the length press «Применить» — the drawn length stays («Отменить» takes the gutter away).
 async function skipLength(p) {
-  const skip = p.getByTestId("quick-length-skip").locator("visible=true").first();
+  const skip = p.getByTestId("quick-length-apply").locator("visible=true").first();
   try {
     await skip.waitFor({ timeout: 2000 });
   } catch {
@@ -9,6 +9,13 @@ async function skipLength(p) {
   }
   await skip.click();
   await p.getByTestId("quick-length").locator("visible=true").first().waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
+  await sheetGone(p);
+}
+
+// the sheet's own layer (the modal over the screen) is gone too — not only what was in it (GitHub 09.11: a stroke right
+// after a sheet closed landed on the leaving sheet)
+async function sheetGone(p) {
+  await p.waitForFunction(() => ![...document.querySelectorAll('[aria-modal="true"]')].some((e) => e.getBoundingClientRect().height > 0), null, { timeout: 5000 }).catch(() => {});
 }
 
 // A downspout just put opens its menu by itself (founder 09.11): on the phone a sheet over the canvas — tests that go on
@@ -38,4 +45,4 @@ async function canvasAt(p, x, y, timeout = 5000) {
   );
 }
 
-module.exports = { skipLength, closeDsMenu, canvasAt };
+module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone };

@@ -4,6 +4,11 @@ import { ftIn } from "../src/modules/gutters/canvas/format";
 import { tapeIn } from "../src/modules/gutters/canvas/attrs";
 import { setCornerAngle, setLength } from "../src/modules/gutters/canvas/edit";
 import { fromElements, toElements } from "../src/modules/gutters/canvas/model";
+import { fmtLen } from "../src/modules/gutters/canvas/format";
+import { oneIn } from "../src/modules/gutters/canvas/attrs";
+import { setCornerSplash, setRunUnit } from "../src/modules/gutters/canvas/edit";
+import { splashOff, toMeasurement } from "../src/modules/gutters/geometry";
+import { placeAt } from "../src/modules/gutters/canvas/localStore";
 
 /** docs/specs/33-gutters-canvas.md П20.14 — the cut of a corner and the tape to 1/8″ (founder 08.11). */
 
@@ -106,5 +111,42 @@ describe("the angle from a triangle measured on site (founder 08.11)", () => {
     const b = t.runs.find((x) => x.id === "b")!;
     expect(c.a).toEqual(b.b); // still joined
     expect(Math.round(Math.hypot(c.b[0] - c.a[0], c.b[1] - c.a[1]))).toBe(ft(10)); // the same shape
+  });
+});
+
+
+describe("part 1 of 09.11: units, the splash guard, the toolbar on top", () => {
+  it("a length shown in ft+in, inches or mm; kept in inches", () => {
+    expect(fmtLen(260)).toBe("21′ 8″");
+    expect(fmtLen(306.5, "in")).toBe("306½″");
+    expect(fmtLen(0.5, "in")).toBe("½″");
+    expect(fmtLen(39.375, "mm")).toBe("1000 mm");
+    // metres and centimetres too (founder 09.11)
+    expect(fmtLen(118.125, "m")).toBe("3 m");
+    expect(fmtLen(39.375, "cm")).toBe("100 cm");
+    expect(oneIn("3", "m")).toBe(118.125);
+    expect(oneIn("250,5", "cm")).toBe(98.625);
+    expect(oneIn("1000", "mm")).toBe(39.375);
+    expect(oneIn("260", "in")).toBe(260);
+    expect(oneIn("0", "m")).toBeNull();
+    expect(oneIn("x", "cm")).toBeNull();
+    const d = setRunUnit({ runs: [r("a", [0, 0], [ft(10), 0])], downspouts: [] }, "a", "mm");
+    expect(d.runs[0]!.unit).toBe("mm");
+    expect("unit" in setRunUnit(d, "a", "ftin").runs[0]!).toBe(false);
+    expect(fromElements(toElements(d, "m1")).runs[0]!.unit).toBe("mm");
+  });
+  it("the inside corner's splash guard off → the engine gets none; on again → back", () => {
+    const d = square();
+    const inside: Drawing = { ...d, runs: d.runs.map((x) => (x.id === "far" ? x : { ...x, houseSide: "L" as const })) };
+    const f = findCorners(inside)[0]!;
+    expect(toMeasurement(inside).corners[0]!.splashGuard).toBe(true);
+    const off = setCornerSplash(inside, f, false);
+    expect(splashOff(off, f)).toBe(true);
+    expect(toMeasurement(off).corners[0]!.splashGuard).toBeUndefined();
+    expect(toMeasurement(off).runs.every((x) => !("noSplash" in x))).toBe(true); // not an engine field
+    expect(toMeasurement(setCornerSplash(off, f, true)).corners[0]!.splashGuard).toBe(true);
+  });
+  it("the toolbar dropped near the top sticks to the top", () => {
+    expect(placeAt(195, 20, 390, 844)).toBe("top");
   });
 });

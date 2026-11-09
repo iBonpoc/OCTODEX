@@ -21,6 +21,8 @@ exports.run = async (h) => {
     h.expect(!!v, what);
   };
   const stroke = async (a, b) => {
+    // the length sheet of the last gutter may still be leaving: draw on the canvas, not on it (GitHub 09.11, #479)
+    await canvasAt(p, a[0], a[1]);
     await p.mouse.move(a[0], a[1]);
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
@@ -36,7 +38,16 @@ exports.run = async (h) => {
     await tid("quick-length").waitFor({ timeout: 5000 });
     await tid("quick-length-ft").locator("input").fill(String(ftv));
     await tid("quick-length-in").locator("input").fill(String(inv));
-    if (eighths) await tid("quick-length-frac").getByRole("radio", { name: eighths, exact: true }).click();
+    if (eighths) {
+      // ⅛: the tape pulled one mark (16 px) to the left
+      const tb = await tid("quick-length-tape").boundingBox();
+      await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
+      await p.mouse.down();
+      for (let i = 1; i <= 4; i++) await p.mouse.move(tb.x + tb.width / 2 - 4 * i, tb.y + tb.height / 2); // one mark: 16 px
+      await p.waitForTimeout(200); // stopped, then lifted: no flick
+      await p.mouse.up();
+      await tid("quick-length-frac").filter({ hasText: eighths }).waitFor({ timeout: 3000 });
+    }
     await tid("quick-length-apply").getByRole("button").click();
     await waitFor(async () => (await tid("quick-length").count()) === 0, "the length sheet closes");
   };
@@ -83,6 +94,10 @@ exports.run = async (h) => {
 
   // the other kind → the face follows
   await tid("corner-kind").getByRole("radio", { name: kind === "наружный" ? "внутренний" : "наружный", exact: true }).click();
+  // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
+  const kind1 = kind === "наружный" ? "внутренний" : "наружный";
+  await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === kind1), `${kind1} picked`);
+  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
   await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // …and has gone off the canvas
   await p.mouse.click(corner.x + corner.width / 2, corner.y + corner.height / 2);
