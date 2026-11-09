@@ -2578,6 +2578,8 @@ export const es: Dict = {
   "mod.gutters.attr.ft": "pies",
   "mod.gutters.attr.in": "pulg",
   "mod.gutters.attr.pull": "cinta: arrástrela, la longitud está bajo la marca",
+  "mod.gutters.attr.pullLess": "Más corto en {step}",
+  "mod.gutters.attr.pullMore": "Más largo en {step}",
   "mod.gutters.attr.apply": "Aplicar",
   "mod.gutters.attr.reset": "Del dibujo",
   "mod.gutters.attr.badLength": "Largo de 1″ a 500′, pulgadas de 0 a 11",

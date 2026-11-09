@@ -2578,6 +2578,8 @@ export const ru = {
   "mod.gutters.attr.ft": "фут",
   "mod.gutters.attr.in": "дюйм",
   "mod.gutters.attr.pull": "рулетка: тяните ленту, длина под меткой",
+  "mod.gutters.attr.pullLess": "Короче на {step}",
+  "mod.gutters.attr.pullMore": "Длиннее на {step}",
   "mod.gutters.attr.apply": "Применить",
   "mod.gutters.attr.reset": "По рисунку",
   "mod.gutters.attr.badLength": "Длина от 1″ до 500′, дюймы — от 0 до 11",

@@ -17,8 +17,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
-import { Tape as TapeStrip } from "./Tape";
-import { eighthLabel, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
+import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
+import { eighthLabel, fmtLen, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -77,8 +77,46 @@ function Pull({ ft, inc, e8, onPull, testID }: { ft: string; inc: string; e8: nu
   const typed = tapeIn(ft, inc, e8);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
-  return <TapeStrip value={last.current} max={MAX_RUN_IN} onChange={(n) => onPull(split(n))} testID={testID} label={t(k("pull"))} />;
+  return (
+    <TapeStrip
+      marks={Math.round(last.current * 8)}
+      max={Math.round(MAX_RUN_IN * 8)}
+      scale={EIGHTHS_SCALE}
+      readout={ftIn(last.current)}
+      onMarks={(m) => onPull(split(m / 8))}
+      testID={testID}
+      label={t(k("pull"))}
+      stepLabels={{ less: t(k("pullLess"), { step: "⅛″" }), more: t(k("pullMore"), { step: "⅛″" }) }}
+    />
+  );
 }
+/** the same tape for one number: inches (1/8″ marks) or metric (millimetre marks); it writes the field in its unit */
+function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenUnit, "ftin">; onOne: (v: string) => void; testID: string }) {
+  const { t } = useI18n();
+  const typed = oneIn(one, unit);
+  const last = useRef(typed ?? 12);
+  if (typed !== null) last.current = typed;
+  const metric = unit !== "in";
+  // metric: the field's own number, to the millimetre (it is kept to 1/8″ only when applied)
+  const x = Number(one.replace(",", "."));
+  const lastMm = useRef(Math.round(last.current * MM_PER_IN));
+  if (metric && Number.isFinite(x) && x > 0) lastMm.current = Math.round(x * MM_OF[unit]);
+  const mm = lastMm.current;
+  return (
+    <TapeStrip
+      marks={metric ? mm : Math.round(last.current * 8)}
+      max={metric ? Math.floor(MAX_RUN_IN * MM_PER_IN) : Math.round(MAX_RUN_IN * 8)}
+      scale={metric ? MM_SCALE : EIGHTHS_SCALE_IN}
+      readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
+      onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / 8))}
+      testID={testID}
+      label={t(k("pull"))}
+      stepLabels={{ less: t(k("pullLess"), { step: metric ? "1 mm" : "⅛″" }), more: t(k("pullMore"), { step: metric ? "1 mm" : "⅛″" }) }}
+    />
+  );
+}
+/** inches alone: every inch numbered as it is (no feet) */
+const EIGHTHS_SCALE_IN = (k: number) => (k % 8 === 0 ? { h: 0.45, text: k ? String(k / 8) : undefined, bold: k % 96 === 0 } : { h: k % 4 === 0 ? 0.32 : k % 2 === 0 ? 0.24 : 0.16 });
 const split = (n: number) => {
   const e = Math.round(n * 8);
   return { ft: Math.floor(e / 96), inch: Math.floor((e % 96) / 8), eighths: e % 8 };
@@ -185,6 +223,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
           <T v="body" tone="mut">{unit === "in" ? t(k("in")) : unit}</T>
         </RowView>
       )}
+      {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>

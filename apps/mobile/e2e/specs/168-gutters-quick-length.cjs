@@ -76,6 +76,9 @@ exports.run = async (h) => {
     await p.mouse.move(cx, cy);
     await p.mouse.down();
     for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 8 * i) / 6, cy);
+    // the finger stops, then lifts: no flick (a flick runs on — the founder's sample; that is the arrows' and the unit's job)
+    await p.mouse.move(cx - marks * 8, cy);
+    await p.waitForTimeout(200);
     await p.mouse.up();
   };
   await field("quick-length-in").fill("6"); // a good length again (25′ 6″) after the bad one
@@ -85,6 +88,12 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "the tape pulled three marks: ⅜");
   h.expect((await field("quick-length-ft").inputValue()) === ft0 && (await field("quick-length-in").inputValue()) === in0, "the feet and inches stay");
   await h.shot("tape");
+  // the arrows step one mark (the founder's sample): ⅜ → ½ → ⅜; the big value above follows
+  await tid("quick-length-tape-more").getByRole("button").click();
+  await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "½", "→ one mark longer: ½");
+  h.expect(/6½″/.test(await tid("quick-length-tape-value").innerText()), "the big value says 6½″");
+  await tid("quick-length-tape-less").getByRole("button").click();
+  await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "⅜", "← one mark shorter: ⅜");
   // a whole inch more: eight marks
   await pull(8);
   await waitFor(async () => (await field("quick-length-in").inputValue()) === String((Number(in0) + 1) % 12), "eight marks more: an inch more");
@@ -133,6 +142,12 @@ exports.run = async (h) => {
   await p.mouse.click(lab.x + lab.width / 2, lab.y + lab.height / 2);
   await tid("quick-length").waitFor({ timeout: 5000 });
   await tid("quick-length-unit").getByRole("radio", { name: "мм", exact: true }).click();
+  await field("quick-length-one").fill("1000");
+  // the metric tape: millimetre marks — two marks longer, 1002 mm in the field; back
+  await tid("quick-length-tape-more").getByRole("button").click();
+  await tid("quick-length-tape-more").getByRole("button").click();
+  await waitFor(async () => (await field("quick-length-one").inputValue()) === "1002", "the mm tape: two marks → 1002 mm");
+  h.expect(/1002 mm/.test(await tid("quick-length-tape-value").innerText()), "the big value says 1002 mm");
   await field("quick-length-one").fill("1000");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "1000 mm → 39⅜″");

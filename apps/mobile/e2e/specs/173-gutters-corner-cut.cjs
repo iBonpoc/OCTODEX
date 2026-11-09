@@ -42,6 +42,7 @@ exports.run = async (h) => {
       await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
       await p.mouse.down();
       for (let i = 1; i <= 4; i++) await p.mouse.move(tb.x + tb.width / 2 - 2 * i, tb.y + tb.height / 2);
+      await p.waitForTimeout(200); // stopped, then lifted: no flick
       await p.mouse.up();
       await tid("quick-length-frac").filter({ hasText: eighths }).waitFor({ timeout: 3000 });
     }
