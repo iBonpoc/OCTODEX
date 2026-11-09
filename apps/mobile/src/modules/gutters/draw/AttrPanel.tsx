@@ -14,6 +14,7 @@ import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
+import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
@@ -168,6 +169,44 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
 
 
 /**
+ * The unit at the end of the number (founder 09.11, #675: «нажать на этот дюйм — выпадает окно: метры, сантиметры,
+ * миллиметры… не сверху, а в конце числового поля»): the unit's word with a small arrow; a tap opens the units at it.
+ */
+function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit) => void; testID: string }) {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const ref = useRef<React.ComponentRef<typeof View>>(null);
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const word = unit === "ftin" || unit === "in" ? t(k("in")) : t(k(`unit.${unit}`));
+  return (
+    <>
+      <View ref={ref} collapsable={false}>
+        <Press
+          testID={testID}
+          onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))}
+          visibleHeight={sizes.hitMin}
+          accessibilityRole="button"
+          accessibilityLabel={t(k("unitPick"), { u: t(k(`unit.${unit}`)) })}
+          accessibilityState={{ expanded: !!at }}
+          style={{ minHeight: sizes.hitMin, flexDirection: "row", alignItems: "center", gap: space[1] }}
+        >
+          <T v="body" w="semibold">{word}</T>
+          <Icon name="chevronDown" s={sizes.iconSm} color={c.mut} />
+        </Press>
+      </View>
+      <Menu
+        visible={!!at}
+        anchor={at}
+        title={t(k("unitTitle"))}
+        items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)), selected: u === unit }))}
+        onSelect={onUnit}
+        onClose={() => setAt(null)}
+      />
+    </>
+  );
+}
+
+/**
  * Right after a gutter is drawn (founder 08.11, 09.11): its length by hand at once. The fields hold the drawn length,
  * selected — a digit typed replaces it. Feet + inches (+ ⅛), inches alone (260″ → 21′ 8″) or mm; kept in inches.
  * «Применить» keeps what is there; «Отменить» (or a tap outside) takes the gutter away — a stray line from a zoom.
@@ -198,9 +237,6 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
   return (
     <View testID="quick-length" style={{ gap: space[3] }}>
       <T v="heading" w="semibold">{t(k("quickTitle"))}</T>
-      <View testID="quick-length-unit">
-        <ChoiceChips items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)) }))} value={unit} onChange={pickUnit} />
-      </View>
       {unit === "ftin" ? (
         <>
           <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
@@ -212,16 +248,16 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
               <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} selectOnFocus />
             </View>
             <EighthsText value={e8} testID="quick-length-frac" />
-            <T v="body" tone="mut">{t(k("in"))}</T>
+            <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
           </RowView>
           <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="quick-length-tape" />
         </>
       ) : (
-        <RowView style={{ gap: space[2] }}>
+        <RowView style={{ gap: space[2], alignItems: "center" }}>
           <View style={{ width: component.qtyFieldW * 2 }} testID="quick-length-one">
             <TextField type="number" value={one} onChangeText={setOne} label={t(k(`unit.${unit}`))} onSubmit={apply} autoFocus selectOnFocus />
           </View>
-          <T v="body" tone="mut">{unit === "in" ? t(k("in")) : unit}</T>
+          <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
         </RowView>
       )}
       {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}

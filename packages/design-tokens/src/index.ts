@@ -210,6 +210,10 @@ export interface ThemeColors {
   /** the drawing canvas only (founder О3, 07.11.2026 — the one exception to «colour only for status»): a node, and the
    *  storeys 1..4 of a drawn line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
   drawing: { node: string; story: readonly [string, string, string, string] };
+  /** a module's tape measure only (founder 09.11.2026, issue #674 — an exception to rule 2): the number
+   *  or fraction under the tape's fixed mark stands on a pill of the main button's colours («как у нас кнопки»):
+   *  fill = acc, text = onAcc (≥ 4.5:1); nowhere else */
+  tape: { markFill: string; markText: string };
 }
 
 const statusFill = { ok: "#7CE08A", info: "#8FA2FF", warn: "#FF8A3D", bad: "#FF6B6B" } as const;
@@ -247,6 +251,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       neutral: { fill: "rgba(255,255,255,0.11)", text: "#CDD1DA", on: "#F2F3F5" },
     },
     drawing: { node: "#F2F3F5", story: ["#7FD4FF", "#FFC46B", "#D59BFF", "#7CEBC6"] },
+    tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
   light: {
     page: "#DDD9D2",
@@ -279,6 +284,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       neutral: { fill: "rgba(20,22,30,0.09)", text: "#575C68", on: "#15161A" },
     },
     drawing: { node: "#15161A", story: ["#0B6290", "#8A4F00", "#7A3DB8", "#0B6E50"] },
+    tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
 };
 

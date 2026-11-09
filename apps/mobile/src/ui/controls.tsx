@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -13,6 +13,7 @@ import { component, font, motion, radius, space, statusIcon, type StatusName, si
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { FIELD, type FieldType } from "./fieldTypes";
+import { focusPlan } from "./fieldFocus";
 import { offsetToShow } from "./segmentedScroll";
 
 /**
@@ -477,6 +478,17 @@ export function TextField({
   const f = FIELD[type];
   const multi = multiline ?? f.multiline ?? false;
   const h = wide ? component.field.h : component.field.phone;
+  const input = useRef<React.ComponentRef<typeof TextInput>>(null);
+  const len = useRef(value.length);
+  len.current = value.length;
+  // a field that opens in a sheet: on a phone focus once the sheet is up and select by hand (#691, ./fieldFocus)
+  const plan = focusPlan(Platform.OS, { autoFocus, selectOnFocus, readOnly: ro });
+  const selectAll = () => input.current?.setSelection?.(0, len.current);
+  useEffect(() => {
+    if (plan.focusAfterMs === null) return;
+    const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
+    return () => clearTimeout(id);
+  }, [plan.focusAfterMs]);
   return (
     <View
       style={{
@@ -494,8 +506,10 @@ export function TextField({
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
       <TextInput
+        ref={input}
         value={value}
         editable={!ro}
+        onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
         aria-disabled={ro || undefined}
         onChangeText={(v) => onChangeText(f.fmt ? f.fmt(v) : v)}
         placeholder={placeholder}
@@ -512,7 +526,7 @@ export function TextField({
         maxLength={f.max}
         returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
-        autoFocus={autoFocus && !ro}
+        autoFocus={plan.autoFocus}
         selectTextOnFocus={selectOnFocus}
         submitBehavior={multi ? "newline" : "blurAndSubmit"}
         accessibilityLabel={label ?? placeholder}

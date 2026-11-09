@@ -8,7 +8,9 @@
  * - a bad length (inches 12) says so and keeps the sheet;
  * - the next gutter → «Применить» untouched keeps the drawn length (no tape);
  * - only the inches changed → the feet stay (version 475: they were reset); the inches field is selected when reached;
- * - inches alone: 260 → 21′ 8″; mm: 1000 → 39⅜″; m: 3 → 118⅛″;
+ * - inches alone: 260 → 21′ 8″; mm: 1000 → 39⅜″; m: 3 → 118⅛″; the unit is picked at the end of the number (founder
+ *   09.11, #675): no unit row above the fields, a tap on «дюйм» → a menu of the units;
+ * - the number under the tape's mark on a pill of the main button's colours (`tape.*`, founder 09.11, #674);
  * - a gutter, then «Отменить» → it is gone; another, then a tap outside the sheet → gone too (a stray line);
  * - a length label tapped → the length sheet of that gutter («Отменить» there changes nothing);
  * - nothing drawn (a tap) → no sheet.
@@ -36,6 +38,14 @@ exports.run = async (h) => {
       return g ? g.elements.filter((e) => e.kind === "run" && !e.deletedAt) : [];
     }, KEY);
   const field = (id) => tid(id).locator("input");
+  /** the unit at the end of the number (#675): a tap → the menu at it → a unit; the menu goes, the field is there */
+  const pickUnit = async (name) => {
+    await tid("quick-length-unit").click();
+    const item = p.getByRole("menuitem", { name, exact: true });
+    await item.waitFor({ timeout: 3000 });
+    await item.click();
+    await item.waitFor({ state: "hidden", timeout: 3000 });
+  };
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
@@ -61,6 +71,22 @@ exports.run = async (h) => {
   h.expect(/^\d+$/.test(hint || ""), `the drawn feet in the field (${hint})`);
   h.expect(await field("quick-length-ft").evaluate((el) => el.selectionStart === 0 && el.selectionEnd === el.value.length), "…selected: a digit replaces them");
   await h.shot("sheet");
+  // #675: the unit is at the end of the number — no row of units above the fields; «дюйм» right of the inches
+  h.expect((await tid("quick-length").getByRole("radio").count()) === 0, "no unit chips above the fields");
+  const ub = await tid("quick-length-unit").boundingBox();
+  const ib = await tid("quick-length-in").boundingBox();
+  h.expect(ub.x >= ib.x + ib.width - 1 && /дюйм/.test(await tid("quick-length-unit").innerText()), "«дюйм» at the end of the number");
+  h.expect(ub.height >= 44, `the unit is a 44 tap (${Math.round(ub.height)})`);
+  // #674: the number under the tape's mark on a pill of the main button's colours (founder: «как у нас кнопки»)
+  const at = p.locator('[id="quick-length-tape-at"]').first();
+  await at.waitFor({ timeout: 3000 });
+  const look = await at.evaluate((el) => {
+    const pill = el.previousElementSibling;
+    const r = el.getBoundingClientRect(), q = pill && pill.getBoundingClientRect();
+    return { text: getComputedStyle(el).fill, pill: pill && pill.tagName.toLowerCase() === "rect" ? getComputedStyle(pill).fill : "", under: !!q && q.left <= r.left && q.right >= r.right };
+  });
+  h.expect(look.text === "rgb(11, 12, 15)" && look.pill === "rgb(251, 255, 0)", `the number under the mark: dark on the button's yellow (${JSON.stringify(look)})`);
+  h.expect(look.under, "the pill is under the whole number");
 
   // a bad length: inches 12
   await p.keyboard.type("25");
@@ -134,7 +160,8 @@ exports.run = async (h) => {
   await tid("quick-length").waitFor({ timeout: 5000 });
   const feet = Number(await field("quick-length-ft").inputValue());
   h.expect(feet > 0, `the feet field holds the drawn feet as a value (${feet})`);
-  await field("quick-length-in").click();
+  // inside the field's frame: the web input is wider than it, its middle lies under the unit at the end (#675)
+  await field("quick-length-in").click({ position: { x: 12, y: 12 } });
   await waitFor(() => field("quick-length-in").evaluate((el) => el === document.activeElement && el.selectionStart === 0 && el.selectionEnd === el.value.length), "the inches field: its value selected");
   await p.keyboard.type("9");
   await tid("quick-length-apply").getByRole("button").click();
@@ -144,7 +171,7 @@ exports.run = async (h) => {
   const y3 = y - b.height * 0.17;
   await stroke([x0, y3], [x1, y3]);
   await tid("quick-length").waitFor({ timeout: 5000 });
-  await tid("quick-length-unit").getByRole("radio", { name: "дюймы", exact: true }).click();
+  await pickUnit("дюймы");
   await field("quick-length-one").fill("260");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 260), "260″ in inches");
@@ -154,7 +181,7 @@ exports.run = async (h) => {
   // a length label tapped → its length sheet; mm: 1000 → 39⅜″
   await p.mouse.click(lab.x + lab.width / 2, lab.y + lab.height / 2);
   await tid("quick-length").waitFor({ timeout: 5000 });
-  await tid("quick-length-unit").getByRole("radio", { name: "мм", exact: true }).click();
+  await pickUnit("мм");
   await field("quick-length-one").fill("1000");
   // the metric tape: millimetre marks — two marks longer, 1002 mm in the field; back
   await tid("quick-length-tape-more").getByRole("button").click();
@@ -168,7 +195,7 @@ exports.run = async (h) => {
   const lab3 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "3′ 3⅜″" }).first().boundingBox();
   await p.mouse.click(lab3.x + lab3.width / 2, lab3.y + lab3.height / 2);
   await tid("quick-length").waitFor({ timeout: 5000 });
-  await tid("quick-length-unit").getByRole("radio", { name: "м", exact: true }).click();
+  await pickUnit("м");
   await field("quick-length-one").fill("3");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 118.125), "3 m → 118⅛″");
