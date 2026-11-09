@@ -47,7 +47,7 @@ exports.run = async (h) => {
   await waitFor(async () => /^Пробный/.test((await tid("module-gutters-status").innerText()).trim()), "trial on");
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
-  h.expect(/Примерная смета по замеру/.test(await tid("draw-money").innerText()), "the $ says what it is");
+  h.expect(/Итого по замеру/.test(await tid("draw-money").innerText()), "the $ says what it is");
   const b = await p.getByTestId("draw-surface").boundingBox();
   const x0 = b.x + b.width * 0.15, x1 = b.x + b.width * 0.4;
   const y0 = b.y + b.height * 0.3, y1 = b.y + b.height * 0.5;

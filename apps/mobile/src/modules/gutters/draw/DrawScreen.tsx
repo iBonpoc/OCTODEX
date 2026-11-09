@@ -64,7 +64,7 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { ic
       <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
         {body ? <T v="caption" w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
       </View>
-      <T v="micro" w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={1}>{label}</T>
+      <T v="micro" w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={grow ? 1 : undefined}>{label}</T>
     </Press>
   );
 }
@@ -506,11 +506,21 @@ export default function DrawScreen() {
   const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
   /** the toolbar is being dragged by its grip: it stands out and says where to let go (founder 09.11) */
   const [gripping, setGripping] = useState(false);
+  /** where it would stick if let go now — that edge is outlined while dragging (founder 09.11) */
+  const [dropAt, setDropAt] = useState<ToolbarPlace | null>(null);
+  /** the total folded by default (founder 09.11) */
+  const [totalOpen, setTotalOpen] = useState(false);
   const gripPan = usePanGesture({
     runOnJS: true,
     onActivate: () => setGripping(true),
-    onUpdate: (e) => setGripAt([e.translationX, e.translationY]),
-    onFinalize: () => setGripping(false),
+    onUpdate: (e) => {
+      setGripAt([e.translationX, e.translationY]);
+      setDropAt(placeAt(e.absoluteX, e.absoluteY, win.width, win.height));
+    },
+    onFinalize: () => {
+      setGripping(false);
+      setDropAt(null);
+    },
     onDeactivate: (e) => {
       setGripAt([0, 0]);
       setGripping(false);
@@ -624,18 +634,18 @@ export default function DrawScreen() {
     </GestureDetector>
   );
   /** 390 at the bottom: the row takes the width, six cells share it */
-  const grow = !side && !wide;
+  const grow = !side && !wide && !flat;
   const tools = (
     <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
-      <View testID="draw-tool-line" style={grow ? { flex: 1 } : undefined}><ToolCell icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
-      <View testID="draw-tool-ds" style={grow ? { flex: 1 } : undefined}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
-      <View testID="draw-tool-select" style={grow ? { flex: 1 } : undefined}><ToolCell icon="cursor" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => pick("select")} grow={grow} /></View>
-      <View testID="draw-story" style={grow ? { flex: 1 } : undefined}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
-      <View testID="draw-undo" style={grow ? { flex: 1 } : undefined}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
+      <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
+      <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
+      <View testID="draw-tool-select" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="cursor" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => pick("select")} grow={grow} /></View>
+      <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
+      <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
       {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
           the accuracy mark at the top */}
-      <View testID="draw-redo" style={grow ? { flex: 1 } : undefined}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} /></View>
+      <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} /></View>
     </View>
   );
   const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
@@ -674,7 +684,7 @@ export default function DrawScreen() {
           <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
           <View style={{ flex: 1 }} />
           {/* «Удалить» at the top beside «Весь рисунок» (founder 09.11) — only while something is picked */}
-          {selText && canSave ? (
+          {selText ? (
             <View testID="draw-delete"><IconButton icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} /></View>
           ) : null}
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
@@ -739,10 +749,35 @@ export default function DrawScreen() {
       ) : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
+      {/* where the toolbar sticks if let go now (founder 09.11): that edge outlined */}
+      {gripping && dropAt ? (
+        <View
+          pointerEvents="none"
+          testID={`draw-drop-${dropAt}`}
+          style={{
+            position: "absolute",
+            borderWidth: dt.runW / 2,
+            borderStyle: "dashed",
+            borderColor: c.ink,
+            borderRadius: radius.card,
+            ...(dropAt === "bottom" ? { left: ins.left + space[2], right: ins.right + space[2] + panelSide, bottom: ins.bottom + space[2], height: space[8] * 3 } : {}),
+            ...(dropAt === "top" ? { left: ins.left + space[2], right: ins.right + space[2] + panelSide, top: ins.top + space[2], height: space[8] * 3 } : {}),
+            ...(dropAt === "left" ? { left: ins.left + space[2], top: ins.top + space[2], bottom: ins.bottom + space[2], width: space[8] * 3 } : {}),
+            ...(dropAt === "right" ? { right: ins.right + space[2] + panelSide, top: ins.top + space[2], bottom: ins.bottom + space[2], width: space[8] * 3 } : {}),
+          }}
+        />
+      ) : null}
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
         {gripping ? (
           <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
+          </View>
+        ) : null}
+        {/* what next (П20.9): gutters drawn, no downspout yet → put them — a bubble, not a row of the total (09.11) */}
+        {nextDs && !hintText && !gripping && !flat ? (
+          <View testID="draw-next" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[1], paddingLeft: space[3], paddingRight: space[1], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+            <T v="caption" tone="mut">{t("mod.gutters.draw.nextDs")}</T>
+            <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
           </View>
         ) : null}
         {hintText && !gripping ? (
@@ -754,41 +789,41 @@ export default function DrawScreen() {
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         <View testID="draw-total" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
           {selText ? (
-            // 390: the words on their own line, the buttons under them (a narrow row broke «эт / 1», П20.9)
-            <View style={{ flexDirection: wide || flat ? "row" : "column", alignItems: wide || flat ? "center" : "stretch", justifyContent: "space-between", gap: space[2] }}>
-              <View testID="draw-selected" style={wide || flat ? { flex: 1 } : undefined}>
-                <T v="caption" w="semibold">{selText}</T>
+            // one row (founder 09.11: the block took too much room): what is picked and «Свойства»
+            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+              <View testID="draw-selected" style={{ flex: 1 }}>
+                <T v="caption" w="semibold" numberOfLines={2}>{selText}</T>
               </View>
-              <RowView style={{ gap: space[2], justifyContent: wide || flat ? "flex-end" : "space-between" }}>
-                {!wide ? (
-                  <View testID="draw-props">
-                    <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
-                  </View>
-                ) : null}
+              {!wide ? (
+                <View testID="draw-props">
+                  <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
+                </View>
+              ) : null}
+            </RowView>
+          ) : null}
+          {/* the total, folded (founder 09.11): «Итого по замеру $…»; a tap shows what it is made of */}
+          <Press testID="draw-total-toggle" onPress={() => setTotalOpen((x) => !x)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.moneyCaption")} accessibilityState={{ expanded: totalOpen }}>
+            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+              <View testID="draw-money" style={{ flexDirection: "row", alignItems: "baseline", gap: space[2], flexShrink: 1 }}>
+                <T v="caption" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
+                <T v="heading" w="bold" tabular>{money(preview.totalCents)}</T>
+              </View>
+              <RowView style={{ gap: space[1] }}>
+                {preview.test ? <View testID="draw-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
+                <Icon name={totalOpen ? "chevronDown" : "chevronRight"} s={sizes.iconSm} color={c.mut} />
               </RowView>
+            </RowView>
+          </Press>
+          {totalOpen ? (
+            <View testID="draw-total-more" style={{ gap: space[1] }}>
+              <RowView style={{ justifyContent: "space-between" }}>
+                <T v="caption" tone="mut" tabular>{t("mod.gutters.draw.summary", { ft: Math.round(Number(preview.gutterFt)), ds: drawing.downspouts.length })}</T>
+                {preview.unpriced ? <StatusChip status="warn" label={t("mod.gutters.draw.noPrice", { n: preview.unpriced })} soft /> : null}
+              </RowView>
+              <T v="micro" tone="mut">{t("mod.gutters.draw.totalNote")}</T>
             </View>
           ) : null}
-          {/* what next (П20.9): gutters drawn, no downspout yet → put them; then the «Смета» button is the next step */}
-          {nextDs && !flat ? (
-            <View testID="draw-next">
-              <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-                <T v="caption" tone="mut" style={{ flex: 1 }}>{t("mod.gutters.draw.nextDs")}</T>
-                <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
-              </RowView>
-            </View>
-          ) : null}
-          <RowView style={{ justifyContent: "space-between" }}>
-            <View testID="draw-money">
-              <T v="micro" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
-              <T v="title" w="bold" tabular>{money(preview.totalCents)}</T>
-            </View>
-            {preview.test ? <View testID="draw-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
-          </RowView>
           {estimateButton}
-          {flat ? null : <RowView style={{ justifyContent: "space-between" }}>
-            <T v="caption" tone="mut" tabular>{t("mod.gutters.draw.summary", { ft: Math.round(Number(preview.gutterFt)), ds: drawing.downspouts.length })}</T>
-            {preview.unpriced ? <StatusChip status="warn" label={t("mod.gutters.draw.noPrice", { n: preview.unpriced })} soft /> : null}
-          </RowView>}
         </View>
         {flat ? tools : null}
         </View>

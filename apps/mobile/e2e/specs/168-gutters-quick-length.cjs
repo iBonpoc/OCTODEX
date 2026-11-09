@@ -117,7 +117,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await runs()).length === 3, "«Отменить»: the new gutter is gone");
   await stroke([x0, y4], [x1, y4]);
   await tid("quick-length").waitFor({ timeout: 5000 });
-  await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
+  await p.getByRole("button", { name: "Закрыть", exact: true }).last().click({ position: { x: 10, y: 10 } });
   await waitFor(async () => (await runs()).length === 3, "a tap outside: the new gutter is gone too");
   await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 3, "three lines on the canvas");
 };

@@ -61,7 +61,7 @@ exports.run = async (h) => {
   await h.shot("empty");
   // П20.8: the words under the icons, whole
   const bar = await tid("draw-toolbar").innerText();
-  for (const w of ["Желоб", "Водосток", "Выбрать", "Эт 1", "Этаж", "Назад", "Ещё"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
+  for (const w of ["Желоб", "Водосток", "Выбрать", "Эт 1", "Этаж", "Назад", "Вперёд"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
   const cut = await p.getByTestId("draw-toolbar").locator("visible=true").first().evaluate((el) => [...el.querySelectorAll("div")].filter((d) => d.childElementCount === 0 && d.textContent && d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent));
   h.expect(cut.length === 0, `no word is cut off (${cut.join(", ")})`);
   h.expect((await tid("draw-delete").count()) === 0, "«Удалить» only by what is picked: nothing picked — no button");
@@ -100,6 +100,8 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once the downspout is there");
   h.expect((await tid("draw-next").count()) === 0, "a downspout is there: the next step is the estimate, no line");
   h.expect((await labels()).includes("D1"), "the downspout is «D1» on the canvas");
+  // the total is folded (founder 09.11): a tap shows what it is made of
+  if (!(await tid("draw-total-more").count())) await tid("draw-total-toggle").click();
   h.expect(/Желоб: \d+ ft · водостоков: 1/.test(await tid("draw-total").innerText()), "summary in plain words: gutter feet, downspouts");
   h.expect((await money()) > m2, "the downspout adds to the $");
   await h.shot("drawn");
@@ -147,10 +149,17 @@ exports.run = async (h) => {
   const vw = 2 * cb.x + cb.width;
   const t0 = await tx();
   h.expect(t0.w > t0.h, "bottom: a row");
+  // by its grip («Ещё» is gone, founder 09.11): dragged to an edge it sticks there
   const placeTo = async (k) => {
-    await tid("draw-accuracy").click(); // the sheet of the drawing: how it was measured, where the toolbar stands
-    await tid(`draw-place-${k}`).getByRole("button").click();
-    await tid("draw-more-sheet").waitFor({ state: "hidden", timeout: 3000 });
+    const g = await tid("draw-grip").boundingBox();
+    const vp = p.viewportSize();
+    const to = { right: [vp.width - 6, vp.height / 2], left: [6, vp.height / 2], bottom: [vp.width / 2, vp.height - 6] }[k];
+    const a = [g.x + g.width / 2, g.y + g.height / 2];
+    await p.mouse.move(a[0], a[1]);
+    await p.mouse.down();
+    for (let i = 1; i <= 15; i++) await p.mouse.move(a[0] + ((to[0] - a[0]) * i) / 15, a[1] + ((to[1] - a[1]) * i) / 15);
+    await p.mouse.up();
+    await p.waitForTimeout(300);
   };
   await placeTo("right");
   await waitFor(async () => { const t = await tx(); return t.h > t.w && t.cx > vw / 2; }, "under the right hand: a column on the right");

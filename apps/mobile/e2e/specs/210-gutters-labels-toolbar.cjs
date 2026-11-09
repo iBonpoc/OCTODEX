@@ -1,5 +1,5 @@
 /**
- * e2e 200 — часть 1 пачки основателя 09.11 (docs/specs/33-gutters-canvas.md П20.18): подписи открывают своё, отбойник,
+ * e2e 210 — часть 1 пачки основателя 09.11 (docs/specs/33-gutters-canvas.md П20.18): подписи открывают своё, отбойник,
  * панель, единица показа. Every view.
  * - a corner's chip tapped → the corner sheet; an inside corner has «Отбойник на угле» on, its dashed mark on the
  *   drawing; off → the mark goes; on → back;
@@ -33,7 +33,7 @@ exports.run = async (h) => {
   const els = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt), KEY);
   const centre = async (loc) => { const bb = await loc.boundingBox(); return [bb.x + bb.width / 2, bb.y + bb.height / 2]; };
   const closeSheet = async () => {
-    await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
+    await p.getByRole("button", { name: "Закрыть", exact: true }).last().click({ position: { x: 10, y: 10 } });
     await p.waitForTimeout(400);
   };
 
@@ -44,6 +44,12 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
   h.expect((await tid("draw-more").count()) === 0 && (await tid("draw-redo").count()) === 1, "«Вперёд» on the toolbar, no «Ещё»");
   h.expect((await tid("draw-delete").count()) === 0, "nothing picked: no «Удалить» at the top");
+  // the total folded: «Итого по замеру $…»; a tap shows what it is made of, again — folds
+  h.expect(/Итого по замеру/.test(await tid("draw-money").innerText()) && (await tid("draw-total-more").count()) === 0, "the total is folded, says what it is");
+  await tid("draw-total-toggle").click();
+  await tid("draw-total-more").waitFor({ timeout: 3000 });
+  await tid("draw-total-toggle").click();
+  await waitFor(async () => (await tid("draw-total-more").count()) === 0, "folded again");
   const b = await p.getByTestId("draw-surface").boundingBox();
   const x0 = b.x + b.width * 0.15, x1 = b.x + b.width * 0.45;
   const y0 = b.y + b.height * 0.25, y1 = b.y + b.height * 0.45;
@@ -108,6 +114,9 @@ exports.run = async (h) => {
   await p.mouse.down();
   const vw = p.viewportSize().width;
   for (let i = 1; i <= 15; i++) await p.mouse.move(g.x + g.width / 2 + (vw / 2 - g.x) * (i / 15), g.y + g.height / 2 - (g.y - 10) * (i / 15));
+  // while dragging: the edge it sticks to is outlined
+  await tid("draw-drop-top").waitFor({ timeout: 3000 });
   await p.mouse.up();
+  await waitFor(async () => (await tid("draw-drop-top").count()) === 0, "let go: the outline goes");
   await waitFor(async () => { const t = await tid("draw-toolbar").boundingBox(); return t.y < b.y + b.height * 0.3 && t.width > t.height; }, "dropped at the top: a row at the top");
 };
