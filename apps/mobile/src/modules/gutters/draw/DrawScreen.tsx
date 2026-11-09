@@ -160,7 +160,7 @@ export default function DrawScreen() {
         const d = fromElements(v.elements);
         // «saved» is what the screen would write for this drawing: only a real change is sent — opening the canvas
         // never turns a ready measurement into a draft (review M8b №7, e2e 154)
-        saver.seed(toElements(d, mid));
+        saver.seed(toElements(d, mid), v.m);
         setDrawing(d);
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)

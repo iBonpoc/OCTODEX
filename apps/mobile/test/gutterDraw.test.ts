@@ -212,4 +212,19 @@ describe("review #362: the phone's draft store", () => {
     expect(fromElements((await makeLocalStore(kv).load())!.elements)).toEqual(L(empty));
     expect(await saver.flush(m, rows(L(empty)))).toBe("nothing");
   });
+  it("the measurement's own fields alone (the accuracy) are written too; a new one with nothing drawn is not (e2e 174)", async () => {
+    const kv = slowKV();
+    const saver = makeSaver(makeLocalStore(kv));
+    expect(await saver.flush(m, [])).toBe("nothing"); // opened, nothing drawn: no empty draft
+    expect(await saver.flush(m, rows(L(empty)))).toBe("saved");
+    const tape = { ...m, accuracy: "tape" as const };
+    expect(await saver.flush(tape, rows(L(empty)))).toBe("saved");
+    expect((await makeLocalStore(kv).load())!.m.accuracy).toBe("tape");
+    expect(await saver.flush(tape, rows(L(empty)))).toBe("nothing");
+    // an opened measurement: seeded with its row and elements — nothing to write until something changes
+    const again = makeSaver(makeLocalStore(kv));
+    again.seed(rows(L(empty)), tape);
+    expect(await again.flush(tape, rows(L(empty)))).toBe("nothing");
+    expect(await again.flush({ ...tape, accuracy: "rough" }, rows(L(empty)))).toBe("saved");
+  });
 });
