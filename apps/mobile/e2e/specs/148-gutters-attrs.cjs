@@ -3,7 +3,7 @@
  * - 390: «Свойства» in the picked bar opens the sheet; 820/1280: the panel is a column right of the canvas (not over
  *   it: drawing goes on beside it), says how to pick when nothing is picked, no «Свойства» button, «Закрыть» unpicks;
  * - a run: drawn → profile «Полукруглый» (size 5″, hanger Shank #10 follow), colour «Коричневый», the tape
- *   25′ 6″ → «По рисунку» offered, the label and the $ follow; a bad tape (12 in) says so and changes nothing;
+ *   25′ 6″ → «По рисунку» offered, the label follows; a bad tape (12 in) says so and changes nothing;
  *   «Назад» on the canvas takes the tape back;
  * - a downspout: «Круглый» → size 3″; wall «Кирпич» → its default wall kit;
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
@@ -25,7 +25,6 @@ exports.run = async (h) => {
   };
   const svg = () => p.getByTestId("draw-svg").first();
   const labels = () => svg().locator("text").evaluateAll((ts) => ts.map((t) => t.textContent || ""));
-  const money = async () => Number((await tid("draw-money").innerText()).replace(/[^\d.]/g, ""));
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
@@ -98,7 +97,6 @@ exports.run = async (h) => {
   await more();
   h.expect((await tid("attr-length-reset").count()) === 0, "a drawn length: no «По рисунку» (П20.16: the accuracy is the drawing's, not a line's)");
   h.expect((await chosen("attr-profile")) === "K", "K-style by default");
-  const m0 = await money();
   await choose("attr-profile", "Полукруглый");
   await waitFor(async () => (await chosen("attr-profile")) === "Полукруглый", "half round picked");
   h.expect((await chosen("attr-size")) === "5″", "the size follows: 5″");
@@ -119,7 +117,6 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back");
   h.expect((await tid("attr-length-bad").count()) === 0, "the warning is gone");
   await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length");
-  await waitFor(async () => (await money()) !== m0, "the $ follows");
   await waitFor(async () => {
     const r = (await stored()).find((e) => e.kind === "run");
     return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia";

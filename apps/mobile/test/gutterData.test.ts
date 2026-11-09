@@ -304,13 +304,13 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     expect(placeActions("lead", on, ctx, undefined, data)).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measureOpen", href: "/module/gutters/draw?m=m1" })]);
     expect(placeActions("lead", on, { role: "director" }, undefined, data)).toEqual([]);
   });
-  it("M8b: something drawn on the lead's measurement → also «Смета из замера» (the canvas makes or updates it)", async () => {
+  it("M8b: something drawn on the lead's measurement → also «Смета из замера» (the review makes or updates it, #698)", async () => {
     const { placeActions } = await import("../src/modules/registry");
     const ctx = { role: "sales" as const, leadId: "l1" };
     const data = { gutters: { ...g([{ leadId: "l1" }]), elements: [{ ...E, measurementId: "m0" }] } };
     expect(placeActions("lead", on, ctx, undefined, data).map((a) => [a.labelKey, a.href])).toEqual([
       ["mod.gutters.measureOpen", "/module/gutters/draw?m=m0"],
-      ["mod.gutters.est.fromLead", "/module/gutters/draw?m=m0&estimate=1"],
+      ["mod.gutters.est.fromLead", "/module/gutters/view?m=m0&estimate=1"],
     ]);
   });
   it("property: its own measurements; home: «Замерить здесь» — a new draft; nothing while the module is not active", async () => {

@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowDimensions, View } from "react-native";
-import { router, Stack, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -21,7 +21,7 @@ import { computeGutterParts } from "@octo/estimating-engine";
 import { breakpoint, component, drawing as dt, motion, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { moduleState } from "@/modules/registry";
+import { moduleHref, moduleState } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
@@ -416,13 +416,6 @@ export default function DrawScreen() {
   );
   sceneRef.current = scene;
 
-  // M7d (spec 33 П22.10): a part with an item in the company's price list takes its price, the rest the test rate
-  const catalog = store.db.catalog;
-  const parts = useMemo(() => (drawing.runs.length ? computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts : []), [drawing, rules]);
-  const preview = useMemo(() => {
-    if (!parts.length) return { totalCents: 0, unpriced: 0, gutterFt: "0", listed: 0, test: true };
-    return listPreview(parts, catalog);
-  }, [parts, catalog]);
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
   const selText = !sel
@@ -541,8 +534,6 @@ export default function DrawScreen() {
   const [gripping, setGripping] = useState(false);
   /** where it would stick if let go now — that edge is outlined while dragging (founder 09.11) */
   const [dropAt, setDropAt] = useState<ToolbarPlace | null>(null);
-  /** the total folded by default (founder 09.11) */
-  const [totalOpen, setTotalOpen] = useState(false);
   const gripPan = usePanGesture({
     runOnJS: true,
     onActivate: () => setGripping(true),
@@ -608,71 +599,22 @@ export default function DrawScreen() {
     else router.replace("/company/modules");
   };
 
-  // M8b (spec 33 П23.8, S5g): «Смета» / «Обновить смета» / «Открыть смету» — through the core's store
-  const action = canSave && inStore ? estimateAction(store.db, inStore, drawing.runs.length > 0) : ({ kind: "none" } as const);
-  /** one press at a time; after a made estimate the screen is left — the flag stays (a second press of an old render
-   *  would make a second estimate, review M8b №2) */
-  const busy = useRef(false);
-  const doEstimate = async () => {
+  // «Готово» (founder 09.11, #698; spec 33 П20.25): the drawing saved, then «Просмотр замера» — the total, the estimate
+  // and the list live there now, not under the drawing (#700)
+  const done = async () => {
     const mm = cur.current.m;
-    if (!mm || busy.current) return;
-    busy.current = true;
-    let left = false;
-    try {
-      // the drawing first: the revision and the lines are of what is on the screen, and a change made a second ago
-      // turns «Открыть смету» into «Обновить смету» (review M8b №7)
-      if (timer.current) clearTimeout(timer.current);
-      const flushed = await saver.flush(mm, toElements(cur.current.drawing, mm.id));
-      const db = storeRef.current.db;
-      const est = estimateOfMeasurement(db, mm.id);
-      const signed = !!est && (est.status === "approved" || est.status === "awaiting_countersign");
-      // a signed one only opens; «Открыть смету» opens unless the drawing has just changed
-      if (est && (signed || (action.kind === "open" && flushed !== "saved"))) {
-        left = true;
-        router.push(`/estimate/${est.id}`);
-        return;
-      }
-      const now = gutterData(db).measurements.find((x) => x.id === mm.id) ?? mm;
-      // lines go to the client: a part without an item is named in the CLIENT's language (rule 7)
-      const tc = tFor(clientLangOf(db, now));
-      const r = makeEstimate(storeRef.current, {
-        m: now,
-        elements: toElements(cur.current.drawing, mm.id),
-        parts,
-        catalog: db.catalog,
-        name: (p) => partName(tc, p),
-        fallbackTitle: tc("mod.gutters.title"),
-      });
-      if (!r.ok) {
-        toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : "mod.gutters.est.off"));
-        return;
-      }
-      left = true;
-      toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
-      router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}`);
-    } finally {
-      if (!left) busy.current = false;
-    }
+    if (!mm) return;
+    if (timer.current) clearTimeout(timer.current);
+    if (cur.current.canSave) await saver.flush(mm, toElements(cur.current.drawing, mm.id));
+    router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(mm.id)}&from=draw` as Href);
   };
-  // «Смета из замера» in the lead (place lead): the canvas opens and does what the button does, once
-  const autoEstimate = useRef(params.estimate === "1");
+  // an old link «Смета из замера» (estimate=1) to the canvas: the review does the estimate now
+  const toView = useRef(params.estimate === "1");
   useEffect(() => {
-    if (!autoEstimate.current || !inStore || !drawing.runs.length) return;
-    autoEstimate.current = false;
-    if (action.kind === "make" || action.kind === "update" || action.kind === "open") void doEstimate();
+    if (!toView.current || !inStore) return;
+    toView.current = false;
+    router.replace(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}&estimate=1` as Href);
   });
-  const estimateButton =
-    action.kind === "make" || action.kind === "update" || action.kind === "open" ? (
-      <View testID={`draw-estimate-${action.kind === "open" && action.signed ? "signed" : action.kind}`}>
-        <Button
-          label={t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : action.signed ? "mod.gutters.est.signed" : "mod.gutters.est.open")}
-          icon={action.kind === "open" ? "chevronRight" : "plus"}
-          size="sm"
-          variant={action.kind === "open" ? "secondary" : "primary"}
-          onPress={() => void doEstimate()}
-        />
-      </View>
-    ) : null;
 
   // on its side (founder 08.11): one strip at the bottom — the card and the toolbar as a row beside it (a column would
   // not fit the height); the grip puts the toolbar left or right of the card
@@ -741,6 +683,9 @@ export default function DrawScreen() {
             <View testID="draw-delete"><IconButton icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} /></View>
           ) : null}
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
+          {inStore ? (
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
+          ) : null}
         </RowView>
         {flat && canSave ? null : canSave ? (
           <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
@@ -859,9 +804,10 @@ export default function DrawScreen() {
         ) : null}
         {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
-        <View testID="draw-total" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
-          {selText ? (
-            // one row (founder 09.11: the block took too much room): what is picked and «Свойства»
+        {selText ? (
+        <View testID="draw-sel-bar" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
+          {/* one row (founder 09.11: the block took too much room): what is picked and «Свойства»; the total and the
+              estimate are on «Просмотр замера» now (#700) */}
             <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
               <View testID="draw-selected" style={{ flex: 1 }}>
                 <T v="caption" w="semibold" numberOfLines={2}>{selText}</T>
@@ -872,31 +818,8 @@ export default function DrawScreen() {
                 </View>
               ) : null}
             </RowView>
-          ) : null}
-          {/* the total, folded (founder 09.11): «Итого по замеру $…»; a tap shows what it is made of */}
-          <Press testID="draw-total-toggle" onPress={() => setTotalOpen((x) => !x)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.moneyCaption")} accessibilityState={{ expanded: totalOpen }}>
-            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-              <View testID="draw-money" style={{ flexDirection: "row", alignItems: "baseline", gap: space[2], flexShrink: 1 }}>
-                <T v="caption" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
-                <T v="heading" w="bold" tabular>{money(preview.totalCents)}</T>
-              </View>
-              <RowView style={{ gap: space[1] }}>
-                {preview.test ? <View testID="draw-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
-                <Icon name={totalOpen ? "chevronDown" : "chevronRight"} s={sizes.iconSm} color={c.mut} />
-              </RowView>
-            </RowView>
-          </Press>
-          {totalOpen ? (
-            <View testID="draw-total-more" style={{ gap: space[1] }}>
-              <RowView style={{ justifyContent: "space-between" }}>
-                <T v="caption" tone="mut" tabular>{t("mod.gutters.draw.summary", { ft: Math.round(Number(preview.gutterFt)), ds: drawing.downspouts.length })}</T>
-                {preview.unpriced ? <StatusChip status="warn" label={t("mod.gutters.draw.noPrice", { n: preview.unpriced })} soft /> : null}
-              </RowView>
-              <T v="micro" tone="mut">{t("mod.gutters.draw.totalNote")}</T>
-            </View>
-          ) : null}
-          {estimateButton}
         </View>
+        ) : null}
         {flat ? tools : null}
         </View>
       </View>

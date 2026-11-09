@@ -4,10 +4,10 @@
  * - a lead → «Замер» → a run → «Смета»: the estimate has no word (the drawing is as estimated);
  * - another run on the canvas (the measurement is a draft again) → the estimate shows «Замер изменился после сметы»;
  *   «Отправить клиенту» and «PDF» ask first («Проверьте», «Всё равно …» — not a stop);
- * - «Обновить из замера» → the canvas's «Обновить смету» → the same estimate, the quantity grew, the word is gone.
+ * - «Обновить из замера» → the review's «Перенести изменения в смету» → the same estimate, the quantity grew, the word is gone.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, openView } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -52,7 +52,9 @@ exports.run = async (h) => {
   await tid("draw-saved").waitFor({ timeout: 5000 });
   await waitFor(() => !!new URL(p.url()).searchParams.get("m"), "saved: the address names the measurement");
   const mid = new URL(p.url()).searchParams.get("m");
-  await tid("draw-estimate-make").getByRole("button").click();
+  // «Готово» → «Просмотр замера» → «Сделать смету» (#698 #699)
+  await openView(p);
+  await tid("view-action-make").getByRole("button").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   const eid = new URL(p.url()).searchParams.get("id");
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "ready"), "the measurement is ready");
@@ -71,10 +73,14 @@ exports.run = async (h) => {
   h.expect((await tid("module-gutters-stale").count()) === 0, "no «Замер изменился» while the drawing is as estimated");
 
   // the drawing changes after the estimate
+  await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
+  await tid("view-action-open").waitFor({ timeout: 8000 });
   await h.go(`/module/gutters/draw?m=${encodeURIComponent(mid)}`);
-  await tid("draw-estimate-open").waitFor({ timeout: 8000 });
+  await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun(0.6);
-  await tid("draw-estimate-update").waitFor({ timeout: 8000 });
+  await openView(p);
+  await tid("view-action-update").waitFor({ timeout: 8000 });
+  h.expect((await tid("view-stale").count()) === 1, "the review says the drawing changed after the estimate");
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "draft"), "the measurement changed");
   const g = (await estimatesOf(mid))[0].doc.options[0].lines.find((l) => ofM(l, mid) && l.source.section === "gutter");
   const q1 = Number(g.quantity);
@@ -110,7 +116,7 @@ exports.run = async (h) => {
   await tid("pdf-check-force").getByRole("button").click();
   await p.waitForFunction(() => !!window.__pdf, null, { timeout: 5000 });
 
-  // «Обновить из замера» → the canvas's «Обновить смету»: the same estimate, the quantity grows, the word is gone
+  // «Обновить из замера» → the review's «Перенести изменения в смету»: the same estimate, the quantity grows, the word is gone
   await h.go(`/estimate/${eid}`);
   await tid("module-gutters-stale-update").getByRole("button").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
