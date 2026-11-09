@@ -210,7 +210,7 @@ export interface ThemeColors {
   /** the drawing canvas only (founder О3, 07.11.2026 — the one exception to «colour only for status»): a node, and the
    *  storeys 1..4 of a drawn line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
   drawing: { node: string; story: readonly [string, string, string, string] };
-  /** the tape measure of the Gutters module only (founder 09.11.2026, issue #674 — an exception to rule 2): the number
+  /** a module's tape measure only (founder 09.11.2026, issue #674 — an exception to rule 2): the number
    *  or fraction under the tape's fixed mark stands on a pill of the main button's colours («как у нас кнопки»):
    *  fill = acc, text = onAcc (≥ 4.5:1); nowhere else */
   tape: { markFill: string; markText: string };
