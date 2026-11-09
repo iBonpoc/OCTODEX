@@ -19,9 +19,13 @@ export interface DrawnRun {
   attrs: Omit<MeasuredRun, "id" | "lengthIn" | "ends" | "houseSide"> & {
     /** how the corner at this run's start (a) / end (b) is made (M7c, spec 33 П22.2 №15); none — the company's default */
     cornerMethod?: { a?: CornerChoice["method"]; b?: CornerChoice["method"] };
+    /** the splash guard of the inside corner at its start (a) / end (b) taken off (founder 09.11: «не всегда нужен») */
+    noSplash?: { a?: true; b?: true };
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
+  /** how its length is shown on the drawing (founder 09.11): feet + inches (none), inches, mm — a view, not a size */
+  unit?: "in" | "mm";
 }
 
 export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
@@ -256,13 +260,18 @@ export function cornerChoiceOf(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "r
   return x && x === y ? { method: x } : undefined;
 }
 
+/** the inside corner's splash guard was taken off: both runs say so at their meeting ends (like the corner's method) */
+export function splashOff(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">): boolean {
+  return f.runs.every((end) => !!d.runs.find((r) => r.id === end.id)?.attrs.noSplash?.[end.end ? "b" : "a"]);
+}
+
 export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
   const c = centre(d.runs);
   const found = findCorners(d);
   const ends = runEnds(d, found);
   const runs: MeasuredRun[] = d.runs.map((r) => {
     // the corner methods are the drawing's, not the engine's run input
-    const { cornerMethod: _cm, ...attrs } = r.attrs;
+    const { cornerMethod: _cm, noSplash: _ns, ...attrs } = r.attrs;
     return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: houseSide(r, c), ends: ends[r.id]! };
   });
   const byId = new Map(d.runs.map((r) => [r.id, r]));
@@ -272,7 +281,7 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
     // the corner is made of the first run's stock: gauge and finish too, or the coil splits into two lines
     const { profile, size, material, gauge, finish, color, story } = first.attrs;
     // an inside corner gets a splash guard by itself (founder 08.11): water from two roofs meets there
-    const splashGuard = choice.splashGuard ?? (f.kind === "in" ? true : undefined);
+    const splashGuard = choice.splashGuard ?? (f.kind === "in" && !splashOff(d, f) ? true : undefined);
     return { id: f.id, kind: f.kind, method: choice.method, ...(splashGuard !== undefined ? { splashGuard } : {}), profile, size, material, gauge, finish, color, story };
   });
   const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);

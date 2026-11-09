@@ -127,13 +127,8 @@ exports.run = async (h) => {
   // the canvas's own «назад» / «вперёд»
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await count("circle")) === 0 && (await count("line")) === 1, "«Назад» = the delete again");
-  await tid("draw-more").getByRole("button").click();
-  await tid("draw-more-sheet").waitFor({ timeout: 3000 });
-  await h.shot("more");
   await tid("draw-redo").getByRole("button").click();
-  await waitFor(async () => (await count("circle")) === 1, "«Ещё» → «Вернуть»");
-  // «Вернуть» closes the sheet with an animation: a drag before it is gone lands on the closing sheet, not the canvas (CHECKS §9)
-  await tid("draw-more-sheet").waitFor({ state: "hidden", timeout: 3000 });
+  await waitFor(async () => (await count("circle")) === 1, "«Вперёд» beside «Назад» (founder 09.11)");
 
   // «Выбрать»: drag the free end of the second run — it grows
   const ends = await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => ["x1", "y1", "x2", "y2"].map((k) => Number(l.getAttribute(k)))));
@@ -153,7 +148,7 @@ exports.run = async (h) => {
   const t0 = await tx();
   h.expect(t0.w > t0.h, "bottom: a row");
   const placeTo = async (k) => {
-    await tid("draw-more").getByRole("button").click();
+    await tid("draw-accuracy").click(); // the sheet of the drawing: how it was measured, where the toolbar stands
     await tid(`draw-place-${k}`).getByRole("button").click();
     await tid("draw-more-sheet").waitFor({ state: "hidden", timeout: 3000 });
   };

@@ -12,3 +12,19 @@ export function ftIn(inches: number): string {
   if (ft === 0) return `${ins || "0"}″`;
   return ins ? `${ft}′ ${ins}″` : `${ft}′`;
 }
+
+/** how a gutter's length is shown on the drawing (founder 09.11, chosen in its properties): feet + inches, inches, mm */
+export type LenUnit = "ftin" | "in" | "mm";
+export const LEN_UNITS: readonly LenUnit[] = ["ftin", "in", "mm"];
+export const MM_PER_IN = 25.4;
+
+export function fmtLen(inches: number, unit: LenUnit = "ftin"): string {
+  if (unit === "mm") return `${Math.round(inches * MM_PER_IN)} mm`;
+  if (unit === "in") {
+    const e = Math.max(0, Math.round(inches * 8));
+    const i = Math.floor(e / 8);
+    const frac = EIGHTHS[e % 8]!;
+    return `${i || !frac ? i : ""}${frac}″`;
+  }
+  return ftIn(inches);
+}

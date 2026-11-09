@@ -40,7 +40,7 @@ exports.run = async (h) => {
   for (let i = 1; i <= 12; i++) await p.mouse.move(a0[0] + ((a1[0] - a0[0]) * i) / 12, y);
   await p.mouse.up();
   await tid("quick-length").waitFor({ timeout: 5000 });
-  const ftDrawn = Number(await tid("quick-length-ft").locator("input").getAttribute("placeholder"));
+  const ftDrawn = Number(await tid("quick-length-ft").locator("input").inputValue());
   const px0 = await runLine();
   await tid("quick-length-ft").locator("input").fill(String(ftDrawn * 2));
   h.expect((await tid("quick-length-apply").innerText()).includes("Применить"), "the button says «Применить»");

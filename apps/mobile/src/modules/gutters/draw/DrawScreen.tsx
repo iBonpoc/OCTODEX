@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWindowDimensions, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, Stack, useLocalSearchParams } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -23,30 +23,30 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { moduleState } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
-import { Button, ChoiceChips, IconButton, StatusChip } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
-import { ftIn } from "../canvas/format";
+import { fmtLen, ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds" | "select";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -110,6 +110,9 @@ export default function DrawScreen() {
   const [moreSheet, setMoreSheet] = useState(false);
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
   const [quickRun, setQuickRun] = useState<string | null>(null);
+  /** a length label tapped (founder 09.11): the length of that gutter, without its properties */
+  const [lenEdit, setLenEdit] = useState<string | null>(null);
+  const sceneRef = useRef<Scene | null>(null);
   /** the corner tapped: inside / outside (founder 08.11) */
   const [cornerSheet, setCornerSheet] = useState<string | null>(null);
   /** a downspout just put blinks three times (founder 08.11: you see what appeared); `dim` — its off beat */
@@ -294,11 +297,29 @@ export default function DrawScreen() {
     onActivate: (e) => {
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
+      // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
+      // fittings word over a downspout → its menu
+      const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(e.x - l.x) <= l.w / 2 && Math.abs(e.y - l.y) <= l.h / 2) : undefined;
+      if (lab?.id.startsWith("len:")) {
+        setSelected(lab.id.slice(4));
+        setLenEdit(lab.id.slice(4));
+        return;
+      }
+      if (lab?.id.startsWith("corner:")) {
+        setCornerSheet(lab.id.slice(7));
+        return;
+      }
+      if (lab?.id.startsWith("ds:")) {
+        setSelected(lab.id.slice(3));
+        setSheet(true);
+        return;
+      }
       // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
       // in a tap on the web)
       const onDs = hitTest(d, p, tolIn());
       if (tl === "ds" && onDs?.kind === "ds") {
         setSelected(onDs.id);
+        setSheet(true); // its menu (founder 09.11)
         return;
       }
       if (tl === "ds") {
@@ -361,6 +382,7 @@ export default function DrawScreen() {
         : null,
     [drawing, view, size, selected, t, dim, fresh],
   );
+  sceneRef.current = scene;
 
   // M7d (spec 33 П22.10): a part with an item in the company's price list takes its price, the rest the test rate
   const catalog = store.db.catalog;
@@ -374,7 +396,7 @@ export default function DrawScreen() {
   const selText = !sel
     ? null
     : "a" in sel
-      ? t("mod.gutters.draw.selRun", { len: ftIn(runLengthIn(sel)), n: storyOf(sel.attrs.story) })
+      ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), sel.unit), n: storyOf(sel.attrs.story) })
       : t("mod.gutters.draw.selDs", { n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
 
   // the attribute panel (П21.8): one choice = one edit of the drawing, taken back by «Назад»
@@ -404,6 +426,20 @@ export default function DrawScreen() {
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
   };
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
+  const editRun = lenEdit ? drawing.runs.find((r) => r.id === lenEdit) : undefined;
+  /** «Отменить» or a tap outside the length sheet (founder 09.11): the gutter just drawn goes — no step left to undo */
+  const cancelQuick = () => {
+    const id = quickRun;
+    setQuickRun(null);
+    if (!id || !cur.current.drawing.runs.some((r) => r.id === id)) return;
+    const u = undo(hist, cur.current.drawing);
+    if (u && !u.d.runs.some((r) => r.id === id)) {
+      setHist({ past: u.h.past, future: hist.future });
+      setDrawing(u.d);
+    } else setDrawing(removeElement(cur.current.drawing, id));
+    setSelected(null);
+    later.current();
+  };
   const tape = m?.accuracy === "tape";
   const setAccuracy = (a: "rough" | "tape") => {
     setM((x) => (x ? { ...x, accuracy: a } : x));
@@ -428,7 +464,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} onUnit={(u) => commit(setRunUnit(cur.current.drawing, sel.id, u))} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );
@@ -578,7 +614,7 @@ export default function DrawScreen() {
   // on its side (founder 08.11): one strip at the bottom — the card and the toolbar as a row beside it (a column would
   // not fit the height); the grip puts the toolbar left or right of the card
   const at = place;
-  const side = !flat && at !== "bottom";
+  const side = !flat && (at === "left" || at === "right");
   // the grip (founder 08.11): drag the toolbar, let go — it sticks to the nearest edge
   const grip = (
     <GestureDetector gesture={gripPan}>
@@ -597,7 +633,9 @@ export default function DrawScreen() {
       <View testID="draw-tool-select" style={grow ? { flex: 1 } : undefined}><ToolCell icon="cursor" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => pick("select")} grow={grow} /></View>
       <View testID="draw-story" style={grow ? { flex: 1 } : undefined}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
       <View testID="draw-undo" style={grow ? { flex: 1 } : undefined}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
-      <View testID="draw-more" style={grow ? { flex: 1 } : undefined}><ToolCell icon="more" label={t("mod.gutters.draw.more")} onPress={() => setMoreSheet(true)} grow={grow} /></View>
+      {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
+          the accuracy mark at the top */}
+      <View testID="draw-redo" style={grow ? { flex: 1 } : undefined}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} /></View>
     </View>
   );
   const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
@@ -609,6 +647,8 @@ export default function DrawScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen">
+      {/* no edge swipe back on the canvas (founder 09.11): drawing from the left edge left the screen */}
+      <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView view={view ?? { k: 1, ox: 0, oy: 0 }} onView={setView} live={live} size={size} onSize={setSize} panPointers={2} testID="draw-canvas">
@@ -633,6 +673,10 @@ export default function DrawScreen() {
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
           <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
           <View style={{ flex: 1 }} />
+          {/* «Удалить» at the top beside «Весь рисунок» (founder 09.11) — only while something is picked */}
+          {selText && canSave ? (
+            <View testID="draw-delete"><IconButton icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} /></View>
+          ) : null}
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
         </RowView>
         {flat && canSave ? null : canSave ? (
@@ -643,8 +687,10 @@ export default function DrawScreen() {
               </Press>
             </View>
             {savedOnce ? (
-              <View testID="draw-saved">
-                <StatusChip status="ok" label={t("mod.gutters.draw.saved")} soft />
+              // a small mark, not a button (founder 09.11: «слишком большая»)
+              <View testID="draw-saved" style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
+                <Icon name="check" s={sizes.iconSm} color={c.mut} />
+                <T v="micro" tone="mut">{t("mod.gutters.draw.saved")}</T>
               </View>
             ) : null}
             {lead ? (
@@ -677,6 +723,8 @@ export default function DrawScreen() {
             </RowView>
           </View>
         )}
+        {/* the toolbar stuck to the top (founder 09.11): under the header */}
+        {at === "top" && !flat ? <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View> : null}
       </View>
 
       {!drawing.runs.length && !ghost ? (
@@ -702,7 +750,7 @@ export default function DrawScreen() {
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
         ) : null}
-        {flat ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
+        {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         <View testID="draw-total" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
           {selText ? (
@@ -712,9 +760,6 @@ export default function DrawScreen() {
                 <T v="caption" w="semibold">{selText}</T>
               </View>
               <RowView style={{ gap: space[2], justifyContent: wide || flat ? "flex-end" : "space-between" }}>
-                <View testID="draw-delete">
-                  <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="ghost" onPress={doDelete} />
-                </View>
                 {!wide ? (
                   <View testID="draw-props">
                     <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
@@ -772,8 +817,11 @@ export default function DrawScreen() {
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
         <AttrBody>{attrs}</AttrBody>
       </Sheet>
-      <Sheet visible={canSave && !!quick} onClose={() => setQuickRun(null)}>
-        {quick ? <QuickLength run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} /> : null}
+      <Sheet visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
+        {editRun ? <QuickLength key={editRun.id} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
+      </Sheet>
+      <Sheet visible={canSave && !!quick} onClose={cancelQuick}>
+        {quick ? <QuickLength run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </Sheet>
       <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
         {corner ? (
@@ -787,6 +835,12 @@ export default function DrawScreen() {
                 onChange={(k) => cornerKind(k)}
               />
             </View>
+            {corner.kind === "in" ? (
+              <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
+                <T v="body" style={{ flex: 1 }}>{t("mod.gutters.draw.splash")}</T>
+                <View testID="corner-splash"><Toggle on={!splashOff(drawing, corner)} onChange={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))} label={t("mod.gutters.draw.splash")} /></View>
+              </RowView>
+            ) : null}
             <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
             {/* the cut (founder 08.11): each run along the wall and along the face, to 1/8″ */}
             {cut ? (
@@ -832,9 +886,6 @@ export default function DrawScreen() {
               />
             </View>
           ) : null}
-          <View testID="draw-redo">
-            <ListRow title={t("mod.gutters.draw.redo")} left={<Icon name="redo" s={sizes.iconMd} color={c.ink} />} onPress={() => { setMoreSheet(false); doRedo(); }} />
-          </View>
           <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
           {TOOLBAR_PLACES.map((p) => (
             <View key={p} testID={`draw-place-${p}`}>

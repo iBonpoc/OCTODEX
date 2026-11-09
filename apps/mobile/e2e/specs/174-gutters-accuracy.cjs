@@ -54,8 +54,8 @@ exports.run = async (h) => {
   h.expect((await tid("corner-cut-rough").count()) === 1, "a rough measure: the cut says to re-measure with a tape");
   await closeSheet();
 
-  // «Ещё» → tape
-  await tid("draw-more").getByRole("button").click();
+  // the accuracy mark at the top → tape («Ещё» is gone, founder 09.11)
+  await tid("draw-accuracy").click();
   await tid("draw-accuracy-pick").getByRole("radio", { name: /^Рулетка/ }).click();
   await waitFor(async () => /Рулетка — для монтажа/.test(await tid("draw-accuracy").innerText()), "the top says «Рулетка — для монтажа»");
   await closeSheet();
