@@ -3,7 +3,7 @@
  * Every view.
  * - a gutter drawn → the sheet «Длина желоба» opens at once; the feet field has the focus (the number keyboard on a
  *   phone), holds the drawn feet and they are selected — a digit typed replaces them (founder 09.11);
- * - the eighths are a wheel: spun → ⅜, a row tapped → that one; 25 ft 6⅜ in → «Применить» → 306⅜″ by tape, the sheet
+ * - the tape pulled: three marks → ⅜, eight → an inch more; 25 ft 6⅜ in → «Применить» → 306⅜″ by tape, the sheet
  *   is gone; in the store too;
  * - a bad length (inches 12) says so and keeps the sheet;
  * - the next gutter → «Применить» untouched keeps the drawn length (no tape);
@@ -68,18 +68,25 @@ exports.run = async (h) => {
   await tid("quick-length-bad").waitFor({ timeout: 3000 });
   h.expect((await tid("quick-length").count()) === 1, "a bad length keeps the sheet");
 
-  // the eighths are a wheel to spin (founder 09.11, as the iPhone's alarm): spun three rows down → ⅜; a tap on a row → it
-  const picked = async () => ((await tid("quick-length-frac").locator('[aria-checked="true"]').getAttribute("aria-label")) || "").trim();
-  h.expect((await picked()) === "0", "the wheel starts at 0");
-  const wb = await tid("quick-length-frac").boundingBox();
-  await p.mouse.move(wb.x + wb.width / 2, wb.y + wb.height / 2);
-  await p.mouse.wheel(0, 3 * 44);
-  await waitFor(async () => (await picked()) === "⅜", "spun three rows: ⅜");
-  await h.shot("wheel");
-  await tid("quick-length-frac").getByRole("radio", { name: "½", exact: true }).click();
-  await waitFor(async () => (await picked()) === "½", "a row tapped: ½");
-  await tid("quick-length-frac").getByRole("radio", { name: "⅜", exact: true }).click();
-  await waitFor(async () => (await picked()) === "⅜", "…and back to ⅜");
+  // a tape to pull (founder 09.11: «как рулетка»): dragged left three marks → ⅜ more; the fields follow
+  const pull = async (marks) => {
+    const tb = await tid("quick-length-tape").boundingBox();
+    const cx = tb.x + tb.width / 2, cy = tb.y + tb.height / 2;
+    await p.mouse.move(cx, cy);
+    await p.mouse.down();
+    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 8 * i) / 6, cy);
+    await p.mouse.up();
+  };
+  await field("quick-length-in").fill("6"); // a good length again (25′ 6″) after the bad one
+  const ft0 = await field("quick-length-ft").inputValue();
+  const in0 = await field("quick-length-in").inputValue();
+  await pull(3);
+  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "the tape pulled three marks: ⅜");
+  h.expect((await field("quick-length-ft").inputValue()) === ft0 && (await field("quick-length-in").inputValue()) === in0, "the feet and inches stay");
+  await h.shot("tape");
+  // a whole inch more: eight marks
+  await pull(8);
+  await waitFor(async () => (await field("quick-length-in").inputValue()) === String((Number(in0) + 1) % 12), "eight marks more: an inch more");
 
   // 25′ 6⅜″ → «Применить»
   await field("quick-length-in").fill("6");

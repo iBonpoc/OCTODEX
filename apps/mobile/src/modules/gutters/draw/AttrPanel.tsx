@@ -6,7 +6,7 @@
  * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
@@ -17,7 +17,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
-import { Wheel } from "./Wheel";
+import { Tape as TapeStrip } from "./Tape";
 import { eighthLabel, ftIn, LEN_UNITS, MM_PER_IN, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
@@ -64,11 +64,20 @@ function Pick<K extends string>({ label, testID, items, value, onChange, offered
   );
 }
 
-/** 1/8″ of the tape (founder 08.11): 0, ⅛ … ⅞ */
-function Eighths({ value, onChange, testID }: { value: number; onChange: (k: number) => void; testID: string }) {
+/** the eighths typed by the tape, beside the inches: ⅜ (nothing at 0) */
+function EighthsText({ value, testID }: { value: number; testID: string }) {
+  return value ? <View testID={testID}><T v="title" w="semibold">{eighthLabel(value)}</T></View> : null;
+}
+/**
+ * A tape to pull (founder 09.11: «как рулетка, бегунком проматывать длину»): it shows the length in the fields and sets
+ * them — feet, inches and eighths — as it is dragged, to 1/8″.
+ */
+function Pull({ ft, inc, e8, onPull, testID }: { ft: string; inc: string; e8: number; onPull: (x: { ft: number; inch: number; eighths: number }) => void; testID: string }) {
   const { t } = useI18n();
-  // a wheel to spin, as the iPhone's alarm (founder 09.11), beside the inches
-  return <Wheel items={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ key: n, label: eighthLabel(n) }))} value={value} onChange={onChange} testID={testID} label={t(k("frac"))} />;
+  const typed = tapeIn(ft, inc, e8);
+  const last = useRef(typed ?? 12);
+  if (typed !== null) last.current = typed;
+  return <TapeStrip value={last.current} max={MAX_RUN_IN} onChange={(n) => onPull(split(n))} testID={testID} label={t(k("pull"))} />;
 }
 const split = (n: number) => {
   const e = Math.round(n * 8);
@@ -107,11 +116,12 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
           <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
         </View>
-        <Eighths value={e8} onChange={setE8} testID="attr-length-frac" />
+        <EighthsText value={e8} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
         <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
         {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
+      <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="attr-length-tape" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -169,9 +179,10 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
               <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} selectOnFocus />
             </View>
-            <Eighths value={e8} onChange={setE8} testID="quick-length-frac" />
+            <EighthsText value={e8} testID="quick-length-frac" />
             <T v="body" tone="mut">{t(k("in"))}</T>
           </RowView>
+          <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="quick-length-tape" />
         </>
       ) : (
         <RowView style={{ gap: space[2] }}>
