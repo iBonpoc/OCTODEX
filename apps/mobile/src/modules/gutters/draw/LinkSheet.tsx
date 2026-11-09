@@ -30,6 +30,7 @@ export function LinkSheet({ visible, onClose, measurementId }: { visible: boolea
   const [client, setClient] = useState<{ c: Customer; places: Property[] } | null>(null);
   const { leads, clients } = linkChoices(store.db, q);
   const reset = () => {
+    setTab("leads");
     setClient(null);
     setQ("");
     setPhone("");
