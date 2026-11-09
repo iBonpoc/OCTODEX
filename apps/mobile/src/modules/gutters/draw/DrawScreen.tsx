@@ -28,7 +28,7 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
-import { CanvasView, useLive } from "../canvas/CanvasView";
+import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
@@ -68,6 +68,8 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { ic
     </Press>
   );
 }
+
+const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
 export default function DrawScreen() {
   const { t, money } = useI18n();
@@ -133,6 +135,10 @@ export default function DrawScreen() {
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
   const [hint, setHint] = useState<Tool | null>(null);
   const live = useLive();
+  const viewNow = view ?? NO_VIEW;
+  // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
+  // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
+  const canvas = useCanvasGestures(viewNow, setView, live, 2);
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch });
@@ -230,6 +236,7 @@ export default function DrawScreen() {
   const pan = usePanGesture({
     runOnJS: true,
     maxPointers: 1,
+    simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: (e) => {
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
@@ -283,14 +290,18 @@ export default function DrawScreen() {
       }
       if (next !== d) {
         commit(next, d);
-        setSelected(id);
-        if (next.runs.some((r) => r.id === id)) setQuickRun(id);
+        // a new gutter, or one that grew straight on from its free end (founder 09.11): its length sheet
+        const grown = next.runs.length === d.runs.length ? next.runs.find((r, i) => r !== d.runs[i])?.id : undefined;
+        const got = next.runs.some((r) => r.id === id) ? id : grown;
+        setSelected(got ?? id);
+        if (got) setQuickRun(got);
       }
     },
   });
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
   const tap = useTapGesture({
     runOnJS: true,
+    simultaneousWith: [canvas.pinch, canvas.pan],
     onActivate: (e) => {
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
@@ -413,8 +424,8 @@ export default function DrawScreen() {
   const cut = corner ? cornerCut(drawing, corner) : null;
   const [sketchW, setSketchW] = useState(0);
   const cornerKind = (kind: "in" | "out") => {
+    // the sheet stays open (founder 09.11: a tap closed it) — the kind switches, the cut below follows
     if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
-    setCornerSheet(null);
   };
   // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK). The
   // module does not save (off, past the trial — founder О2): the photos it has are shown, nothing is added (M5e)
@@ -611,7 +622,7 @@ export default function DrawScreen() {
     <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen">
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
-        <CanvasView view={view ?? { k: 1, ox: 0, oy: 0 }} onView={setView} live={live} size={size} onSize={setSize} panPointers={2} testID="draw-canvas">
+        <CanvasView view={viewNow} onView={setView} live={live} size={size} onSize={setSize} gestures={canvas} testID="draw-canvas">
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
               {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}

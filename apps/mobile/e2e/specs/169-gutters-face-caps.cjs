@@ -74,7 +74,10 @@ exports.run = async (h) => {
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   const other = /^наруж/.test(k0) ? "внутренний" : "наружный";
   await tid("corner-kind").getByRole("radio", { name: other, exact: true }).click();
-  await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes after the choice");
+  // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
+  await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === other), `${other} picked`);
+  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
+  await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
   await waitFor(async () => {
     const k1 = await kindChip();
     return k1 !== "" && k1.split(" ")[0] !== k0.split(" ")[0];
