@@ -75,10 +75,10 @@ exports.run = async (h) => {
     const cx = tb.x + tb.width / 2, cy = tb.y + tb.height / 2;
     await p.mouse.move(cx, cy);
     await p.mouse.down();
-    // one mark is 12 px (room for the fractions)
-    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 12 * i) / 6, cy);
+    // one mark is 16 px (room for the fractions)
+    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 16 * i) / 6, cy);
     // the finger stops, then lifts: no flick (a flick runs on — the founder's sample; that is the arrows' and the unit's job)
-    await p.mouse.move(cx - marks * 12, cy);
+    await p.mouse.move(cx - marks * 16, cy);
     await p.waitForTimeout(200);
     await p.mouse.up();
   };
@@ -97,15 +97,15 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "⅜", "← one mark shorter: ⅜");
   // the tape says the whole length at every inch: «25′ 6″», «25′ 7″» … (founder 09.11)
   const marks = await tid("quick-length-tape").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
-  h.expect(["25′ 6″", "25′ 7″", "25′ 8″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
+  h.expect(["25′ 5″", "25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
   // a tap on a number: the tape comes to it — the whole inch, no eighths (the sample's click on a page)
-  const eight = await tid("quick-length-tape").locator("text").filter({ hasText: /^25′ 8″$/ }).first().boundingBox();
-  await p.mouse.click(eight.x + eight.width / 2, eight.y + eight.height / 2);
-  await waitFor(async () => (await field("quick-length-in").inputValue()) === "8" && (await tid("quick-length-frac").count()) === 0, "a tap on «25′ 8″»: 8″, no eighths");
+  const seven = await tid("quick-length-tape").locator("text").filter({ hasText: /^25′ 7″$/ }).first().boundingBox();
+  await p.mouse.click(seven.x + seven.width / 2, seven.y + seven.height / 2);
+  await waitFor(async () => (await field("quick-length-in").inputValue()) === "7" && (await tid("quick-length-frac").count()) === 0, "a tap on «25′ 7″»: 7″, no eighths");
   // the keyboard on a computer: → three times → ⅜
   await tid("quick-length-tape").focus();
   for (let i = 0; i < 3; i++) await p.keyboard.press("ArrowRight");
-  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "→ → →: 8⅜″");
+  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "→ → →: 7⅜″");
   // a whole inch more: eight marks
   const in1 = Number(await field("quick-length-in").inputValue());
   await pull(8);

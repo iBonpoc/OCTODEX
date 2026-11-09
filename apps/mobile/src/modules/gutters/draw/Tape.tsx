@@ -16,8 +16,9 @@ import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 
 /** px per mark: room for a fraction under each eighth, as on a real tape (founder 09.11) */
-const TICK = space[3];
-const H = size.hitMin * 2;
+const TICK = space[4];
+/** tall enough for the marks, the fractions under them and the length under the inch, readable (founder 09.11) */
+const H = size.hitMin * 3;
 /** a flick: the share of speed kept per millisecond, and the speed (marks per ms) at which it settles */
 const KEEP_PER_MS = 0.996;
 const STOP = 0.002;
@@ -155,14 +156,14 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
     // the fraction under its mark (a real tape: ⅛ ¼ ⅜ ½ ⅝ ¾ ⅞, ½ bigger)
     if (m.frac) {
       drawn.push(
-        <SvgText key={`f${k}`} x={x} y={H * m.h + font.size.micro + spaceHalf.hair} fontSize={m.big || on ? font.size.body : font.size.micro} fontFamily={m.big || on ? font.families.bold : font.families.medium} fill={m.big || on ? c.ink : c.mut} textAnchor="middle">
+        <SvgText key={`f${k}`} x={x} y={H * m.h + font.size.caption + spaceHalf.hair} fontSize={m.big || on ? font.size.heading : font.size.caption} fontFamily={m.big || on ? font.families.bold : font.families.medium} fill={m.big || on ? c.ink : c.mut} textAnchor="middle">
           {m.frac}
         </SvgText>,
       );
     }
     if (m.text) {
       drawn.push(
-        <SvgText key={`t${k}`} x={x} y={H - space[2]} fontSize={m.bold || on ? font.size.heading : font.size.body} fontFamily={m.bold || on ? font.families.bold : font.families.medium} fill={m.bold || on ? c.ink : c.mut} textAnchor="middle">
+        <SvgText key={`t${k}`} x={x} y={H - space[2]} fontSize={m.bold || on ? font.size.title : font.size.heading} fontFamily={m.bold || on ? font.families.bold : font.families.medium} fill={c.ink} textAnchor="middle">
           {m.text}
         </SvgText>,
       );
