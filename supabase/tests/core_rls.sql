@@ -11374,7 +11374,8 @@ select public.revoke_estimate_link('e1470000-0000-4000-8000-000000000001');
 select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147afterRevokeA0123456789abcdef');
 select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147afterRevokeB0123456789abcdef');
 :as_super
-select tst.set_expires('e1470000-0000-4000-8000-000000000001', current_date - 1);
+-- yesterday in the company's own day (CHECKS §9 п.1): current_date is UTC, and from 00:00 UTC to midnight in LA «UTC yesterday» is still today there
+select tst.set_expires('e1470000-0000-4000-8000-000000000001', (select (now() at time zone timezone)::date - 1 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'));
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.ok((public.portal_estimate('T147afterRevokeA0123456789abcdef') ->> 'status') = 'expired', 'T147 past «valid until» both links say «expired» (as before)');
 :as_owner_a
