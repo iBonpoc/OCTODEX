@@ -25,4 +25,17 @@ async function closeDsMenu(p) {
   await panel.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
 }
 
-module.exports = { skipLength, closeDsMenu };
+// A sheet just closed may still lie over the canvas for a moment (slow machines, GitHub 09.11: a drag or a tap right
+// after it landed on the leaving sheet). Waits until the point (page px) is the canvas itself — what the next tap needs.
+async function canvasAt(p, x, y, timeout = 5000) {
+  await p.waitForFunction(
+    ([px, py]) => {
+      const el = document.elementFromPoint(px, py);
+      return !!el && !!el.closest('[data-testid="draw-surface"]');
+    },
+    [x, y],
+    { timeout },
+  );
+}
+
+module.exports = { skipLength, closeDsMenu, canvasAt };

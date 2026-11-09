@@ -10,6 +10,8 @@
  * Finds things by testID; waits on what it checks.
  */
 
+const { canvasAt } = require("../gutters.cjs");
+
 exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
@@ -66,6 +68,7 @@ exports.run = async (h) => {
 
   // a tap on the corner
   const corner = await p.getByTestId("draw-svg").first().locator('[id^="c:"]').boundingBox();
+  await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // the length sheet has gone off the canvas
   await p.mouse.click(corner.x + corner.width / 2, corner.y + corner.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   await tid("corner-cut").waitFor({ timeout: 3000 });
@@ -80,7 +83,12 @@ exports.run = async (h) => {
 
   // the other kind → the face follows
   await tid("corner-kind").getByRole("radio", { name: kind === "наружный" ? "внутренний" : "наружный", exact: true }).click();
+  // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
+  const kind1 = kind === "наружный" ? "внутренний" : "наружный";
+  await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === kind1), `${kind1} picked`);
+  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
+  await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // …and has gone off the canvas
   await p.mouse.click(corner.x + corner.width / 2, corner.y + corner.height / 2);
   await tid("corner-cut").waitFor({ timeout: 5000 });
   const c1 = await cuts();
