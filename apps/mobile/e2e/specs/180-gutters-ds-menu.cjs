@@ -1,5 +1,5 @@
 /**
- * e2e 175 — меню водостока, цвет «как у желоба», этажи, ручка панели (просьба основателя 09.11;
+ * e2e 180 — меню водостока, цвет «как у желоба», этажи, ручка панели (просьба основателя 09.11;
  * docs/specs/33-gutters-canvas.md П20.17). Every view.
  * - over the $: «Примерная смета по замеру»;
  * - a 2nd storey gutter and a 3rd storey one from its end: no corner, a cap at each end (four);
