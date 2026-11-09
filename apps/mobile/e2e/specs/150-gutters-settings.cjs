@@ -104,7 +104,8 @@ exports.run = async (h) => {
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await more();
   h.expect((await radios("attr-profile").count()) === 4, "the panel offers 4 profiles (no Box)");
-  h.expect((await radios("attr-color").count()) === 8, "the panel offers the palette's 8 colours");
+  await tid("attr-color-open").click(); // folded (founder 09.11)
+  h.expect((await radios("attr-color").count()) === 9, "the panel offers the palette's 8 colours and «Без покраски»");
   await h.shot("canvas");
 
   // offline: saved on the phone, waits in the queue

@@ -55,7 +55,8 @@ exports.run = async (h) => {
   await waitFor(async () => (await texts()).includes("AAA"), "the default fittings over it: «AAA»");
 
   // elbows by style
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  // the menu opened by itself when it was put (founder 09.11)
+  if (!wide) await tid("attr-panel").waitFor({ timeout: 5000 });
   await tid("attr-elbow-qty").waitFor({ timeout: 5000 });
   await step("B", 1);
   await waitFor(async () => (await texts()).includes("AAAB"), "B +1 → «AAAB»");
@@ -76,6 +77,7 @@ exports.run = async (h) => {
   await drag(c, [x0 + (x1 - x0) * 0.8, y + 20]);
   await waitFor(async () => (await live("downspout"))[0].geom.atIn > at0 + 12, "dragged: further along the run");
   h.expect((await live("run")).length === 1, "dragging a downspout draws no line");
+  h.expect((await live("downspout")).length === 1, "dragging a downspout puts no second one");
   const mark2 = await svg().locator("circle").first().boundingBox();
   h.expect(Math.abs(mark2.y + mark2.height / 2 - y) < 6, "it stays on the run (not where the finger went)");
 

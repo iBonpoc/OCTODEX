@@ -15,7 +15,7 @@
  * Finds things by testID; waits on what it checks.
  */
 // the demo company's data on the phone: the module's slice DB.moduleData.gutters (spec 33 П21)
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, closeDsMenu } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -95,6 +95,7 @@ exports.run = async (h) => {
   h.expect(/Нажмите на желоб, где водосток/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
   await h.shot("hint");
   await p.mouse.click((x0 + x1) / 2, y + 3);
+  await closeDsMenu(p);
   await waitFor(async () => (await count("circle")) === 1, "a downspout on the run");
   await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once the downspout is there");
   h.expect((await tid("draw-next").count()) === 0, "a downspout is there: the next step is the estimate, no line");

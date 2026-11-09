@@ -3,9 +3,9 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { centre, chainOf, houseSide, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { centre, chainOf, houseSide, sameStory, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
-import { changeDs, changeRun, type DsAttrs } from "./attrs";
+import { changeDs, changeRun, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
 
 /** shorter than this is a slip of the finger, not a line */
@@ -79,7 +79,9 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
   const r = d.runs.find((x) => x.id === n.runId)!;
   const L = runLengthIn(r);
   const atIn = Math.min(L, Math.max(0, Math.round(projectOnRun(r, p).atIn)));
-  return { ...d, downspouts: [...d.downspouts, { ...attrs, id, runId: n.runId, atIn } as DrawnDownspout] };
+  // the colour of its gutter by default (founder 09.11), unless it is copper or zinc
+  const paint = MILL_ONLY.has(attrs.material) || MILL_ONLY.has(r.attrs.material) ? {} : { finish: r.attrs.finish ?? (r.attrs.color ? "painted" : "mill"), ...(r.attrs.color ? { color: r.attrs.color } : {}) };
+  return { ...d, downspouts: [...d.downspouts, { ...attrs, ...paint, id, runId: n.runId, atIn } as DrawnDownspout] };
 }
 
 /** remove a line (with its downspouts) or a downspout */
@@ -100,7 +102,13 @@ export function setRunAttrs(d: Drawing, id: string, patch: Partial<DrawnRun["att
   const r = d.runs.find((x) => x.id === id);
   if (!r) return d;
   const attrs = changeRun(r.attrs, patch, ch);
-  return attrs === r.attrs ? d : { ...d, runs: d.runs.map((x) => (x.id === id ? { ...x, attrs } : x)) };
+  if (attrs === r.attrs) return d;
+  // its downspouts «как у желоба» follow its colour (founder 09.11): those that had the gutter's colour take the new one
+  const paint = (x: { finish?: string; color?: string }) => ((x.finish ?? (x.color ? "painted" : "mill")) === "mill" ? "@mill" : `c:${x.color}`);
+  const was = paint(r.attrs), now = paint(attrs);
+  const downspouts = was === now ? d.downspouts : d.downspouts.map((s) =>
+    s.runId === id && paint(s) === was && !MILL_ONLY.has(s.material) ? { ...s, finish: attrs.finish ?? (attrs.color ? "painted" : "mill"), ...(attrs.color ? { color: attrs.color } : {}) } : s);
+  return { ...d, runs: d.runs.map((x) => (x.id === id ? { ...x, attrs } : x)), downspouts };
 }
 
 /** a downspout's attributes changed in the panel */
@@ -136,13 +144,13 @@ export function setLength(d: Drawing, id: string, lengthIn: number | null): Draw
   // what hangs on end b (joined end to end, not through this run): it moves as a whole, keeping its shape — unless it
   // comes round to end a (a closed line), then only the joined ends move
   const beyond = new Set<string>();
-  const todo = d.runs.filter((x) => x.id !== id && (at(x.a) || at(x.b))).map((x) => x.id);
+  const todo = d.runs.filter((x) => x.id !== id && sameStory(x, r) && (at(x.a) || at(x.b))).map((x) => x.id);
   todo.forEach((x) => beyond.add(x));
   while (todo.length) {
     const cid = todo.pop();
     const cur = d.runs.find((x) => x.id === cid)!;
     for (const o of d.runs) {
-      if (o.id === id || beyond.has(o.id)) continue;
+      if (o.id === id || beyond.has(o.id) || !sameStory(o, cur)) continue;
       if ([o.a, o.b].some((p) => near(p, cur.a) || near(p, cur.b))) {
         beyond.add(o.id);
         todo.push(o.id);
@@ -157,6 +165,7 @@ export function setLength(d: Drawing, id: string, lengthIn: number | null): Draw
     runs: d.runs.map((x) => {
       if (x.id === id) return next;
       if (!closed && beyond.has(x.id)) return { ...x, a: shift(x.a), b: shift(x.b) };
+      if (!sameStory(x, r)) return x;
       return at(x.a) ? { ...x, a: nb } : at(x.b) ? { ...x, b: nb } : x;
     }),
     downspouts: d.downspouts.map((s) => (s.runId === id ? { ...s, atIn: Math.min(want, Math.round((s.atIn * want) / was)) } : s)),
@@ -281,7 +290,7 @@ export function setCornerAngle(d: Drawing, f: Pick<FoundCorner, "runs" | "at">, 
     if (seenPts.some((q) => near(q, pt)) || near(pt, c)) continue;
     seenPts.push(pt);
     for (const o of d.runs) {
-      if (o.id === B.id || hang.has(o.id)) continue;
+      if (o.id === B.id || hang.has(o.id) || !sameStory(o, B)) continue;
       if (near(o.a, pt) || near(o.b, pt)) {
         hang.add(o.id);
         todo.push(near(o.a, pt) ? o.b : o.a);
@@ -295,7 +304,7 @@ export function setCornerAngle(d: Drawing, f: Pick<FoundCorner, "runs" | "at">, 
     runs: d.runs.map((x) => {
       if (x.id === B.id) return f.runs[1].end ? { ...x, a: nb } : { ...x, b: nb };
       if (!closed && hang.has(x.id)) return { ...x, a: rot(x.a), b: rot(x.b) };
-      if (closed && x.id !== A.id) return near(x.a, bFar) ? { ...x, a: nb } : near(x.b, bFar) ? { ...x, b: nb } : x;
+      if (closed && x.id !== A.id && sameStory(x, B)) return near(x.a, bFar) ? { ...x, a: nb } : near(x.b, bFar) ? { ...x, b: nb } : x;
       return x;
     }),
   };

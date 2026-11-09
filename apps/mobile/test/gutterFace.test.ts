@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { capSide, chainOf, centre, findCorners, houseSide, toMeasurement, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
-import { flipFace } from "../src/modules/gutters/canvas/edit";
+import { addDownspout, flipFace, setRunAttrs } from "../src/modules/gutters/canvas/edit";
 import { computeGutterParts } from "@octo/estimating-engine";
 import { buildScene } from "../src/modules/gutters/canvas/scene";
 
@@ -142,5 +142,38 @@ describe("the toolbar dropped by its grip (founder 08.11)", () => {
     expect(placeAt(10, 400, 390, 844)).toBe("left");
     expect(placeAt(380, 400, 390, 844)).toBe("right");
     expect(placeAt(640, 880, 1280, 900)).toBe("bottom");
+  });
+});
+
+describe("gutters on different storeys never meet (founder 09.11)", () => {
+  const up = (x: DrawnRun, story: number): DrawnRun => ({ ...x, attrs: { ...x.attrs, story } });
+  it("a 2nd and a 3rd storey run touching: no corner, a cap at each end, two lines", () => {
+    const x = d([up(r("a", [0, 0], [0, ft(30)]), 2), up(r("b", [0, ft(30)], [ft(8), ft(30)]), 3)]);
+    expect(findCorners(x)).toHaveLength(0);
+    expect(sceneOf(x).caps).toHaveLength(4);
+    expect([...chainOf(x, "a")]).toEqual(["a"]);
+    expect(toMeasurement(x).runs.every((q) => q.ends.every((e) => e.kind === "cap"))).toBe(true);
+  });
+  it("the same storey still makes the corner", () => {
+    expect(findCorners(d([up(r("a", [0, 0], [0, ft(30)]), 2), up(r("b", [0, ft(30)], [ft(8), ft(30)]), 2)]))).toHaveLength(1);
+  });
+});
+
+
+describe("a downspout's colour is its gutter's by default and follows it (founder 09.11)", () => {
+  const painted = { ...attrs, finish: "painted" as const, color: "brown" };
+  const dsBase = { shape: "rect", size: "2x3", material: "alu_032", finish: "painted", color: "white", bottom: { kind: "extension" } } as never;
+  const base = (): Drawing => ({ runs: [{ ...r("x", [0, 0], [ft(20), 0]), attrs: painted }], downspouts: [] });
+  it("put on a brown gutter → brown", () => {
+    const x = addDownspout(base(), "d1", [ft(5), 0], 36, dsBase);
+    expect(x.downspouts[0]).toMatchObject({ finish: "painted", color: "brown" });
+  });
+  it("the gutter turns black → its brown downspouts too; one painted its own colour keeps it", () => {
+    let x = addDownspout(base(), "d1", [ft(5), 0], 36, dsBase);
+    x = addDownspout(x, "d2", [ft(15), 0], 36, dsBase);
+    x = { ...x, downspouts: x.downspouts.map((s) => (s.id === "d2" ? { ...s, color: "white" } : s)) };
+    const y = setRunAttrs(x, "x", { color: "black" });
+    expect(y.downspouts.find((s) => s.id === "d1")).toMatchObject({ color: "black" });
+    expect(y.downspouts.find((s) => s.id === "d2")).toMatchObject({ color: "white" });
   });
 });

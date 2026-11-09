@@ -252,8 +252,8 @@ export function smallerSizes(shape: string, size: string): string[] {
   return i > 0 ? list.slice(0, i) : [];
 }
 
-/** standard offsets (engine rule stdOffsetsIn): the panel offers these */
-export const OFFSETS_IN = [1, 2, 4] as const;
+/** offsets the panel offers (founder 09.11: 1″ to 5″); what the engine does not stock (rule stdOffsetsIn) it marks custom */
+export const OFFSETS_IN = [1, 2, 3, 4, 5] as const;
 export const DS_HEADS = ["none", "funnel", "conductor"] as const;
 /** the panel's «Своя высота», feet: 0 = by the storey */
 export const MAX_DS_HEIGHT_FT = 60;

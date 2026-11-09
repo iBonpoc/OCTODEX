@@ -46,12 +46,17 @@ exports.run = async (h) => {
     }, KEY);
   const panel = () => tid("attr-panel");
   /** the chosen chip of a field */
-  const chosen = (field) => tid(field).locator('[aria-checked="true"]').innerText();
-  const choose = (field, name) => tid(field).getByRole("radio", { name, exact: true }).click();
+  // a folded choice (size, colour — founder 09.11) shows what is picked in a row; a tap opens the choices
+  const chosen = async (field) => ((await tid(`${field}-value`).count()) ? tid(`${field}-value`).innerText() : tid(field).locator('[aria-checked="true"]').innerText());
+  const choose = async (field, name) => {
+    if ((await tid(`${field}-open`).count()) && !(await tid(field).getByRole("radio").count())) await tid(`${field}-open`).click();
+    await tid(field).getByRole("radio", { name, exact: true }).click();
+  };
   /** open the attributes of what is picked: the sheet on 390; the panel is already there on 820/1280 */
   const openAttrs = async () => {
     if (!wide) {
-      await tid("draw-props").getByRole("button").click();
+      // a downspout just put opens its menu by itself (founder 09.11)
+      if (!(await panel().count())) await tid("draw-props").getByRole("button").click();
     } else h.expect((await tid("draw-props").count()) === 0, "820/1280: no «Свойства» button — the panel is on the side");
     await panel().waitFor({ timeout: 5000 });
   };
@@ -85,7 +90,7 @@ exports.run = async (h) => {
   if (!wide) {
     // 390 (П20.9): storey, size, colour and the tape on top; the rest under «Ещё»
     for (const id of ["attr-story", "attr-size", "attr-color", "attr-length"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
-    h.expect((await tid("attr-finish").count()) === 1, "390: the finish beside the colour");
+    h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
     h.expect((await tid("attr-profile").count()) === 0 && (await tid("attr-hanger").count()) === 0, "390: profile and hangers under «Ещё»");
     h.expect(/профиль/.test(await tid("attr-more").innerText()), "«Ещё» says what is in it");
     await h.shot("props");

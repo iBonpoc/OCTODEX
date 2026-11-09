@@ -94,6 +94,9 @@ export function centre(runs: Pick<DrawnRun, "a" | "b">[]): P {
   return [x / (2 * runs.length), y / (2 * runs.length)];
 }
 
+/** two runs on the same storey (none set — the 1st): only they join at their ends */
+export const sameStory = (a: Pick<DrawnRun, "attrs">, b: Pick<DrawnRun, "attrs">) => (Number(a.attrs.story) || 1) === (Number(b.attrs.story) || 1);
+
 /** Which side of the run (looking a→b) the house is on. */
 export function autoHouseSide(r: Pick<DrawnRun, "a" | "b">, c: P): "L" | "R" {
   return cross(sub(r.b, r.a), sub(c, r.a)) > 0 ? "L" : "R";
@@ -116,7 +119,7 @@ export function chainOf(d: Pick<Drawing, "runs">, runId: string, tolIn = 1): Set
     const r = d.runs.find((x) => x.id === id);
     if (!r) continue;
     for (const o of d.runs) {
-      if (seen.has(o.id)) continue;
+      if (seen.has(o.id) || !sameStory(o, r)) continue;
       if ([o.a, o.b].some((p) => dist(p, r.a) <= tolIn || dist(p, r.b) <= tolIn)) {
         seen.add(o.id);
         todo.push(o.id);
@@ -150,6 +153,8 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
   for (let i = 0; i < rs.length; i++) {
     for (let j = i + 1; j < rs.length; j++) {
       const A = rs[i]!, B = rs[j]!;
+      // gutters on different storeys never meet (founder 09.11: a 2nd and a 3rd storey were joined into a corner)
+      if (!sameStory(A, B)) continue;
       for (const ea of [0, 1] as const) {
         for (const eb of [0, 1] as const) {
           const pa = ea ? A.b : A.a, pb = eb ? B.b : B.a;
@@ -213,7 +218,7 @@ export function runEnds(d: Pick<Drawing, "runs">, corners: FoundCorner[], tolIn 
       const corner = corners.find((c) => c.runs.some((x) => x.id === r.id && x.end === e));
       if (corner) return { kind: "corner", cornerId: corner.id };
       const p = e ? r.b : r.a;
-      const joined = d.runs.some((o) => o.id !== r.id && (dist(o.a, p) <= tolIn || dist(o.b, p) <= tolIn));
+      const joined = d.runs.some((o) => o.id !== r.id && sameStory(o, r) && (dist(o.a, p) <= tolIn || dist(o.b, p) <= tolIn));
       if (joined || r.noCap?.[e]) return { kind: "join" };
       return { kind: "cap" };
     }) as [RunEnd, RunEnd];
