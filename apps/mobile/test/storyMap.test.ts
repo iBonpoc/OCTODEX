@@ -27,7 +27,7 @@ const rows = (sec: string) =>
     .map((l) => l.split("|").slice(1, -1).map((c) => c.trim()));
 
 /* ---------- §4 handoffs ---------- */
-const handoffs = rows(section(4)).filter((r) => /^S\d+[ab]?$/.test(r[0] ?? ""));
+const handoffs = rows(section(4)).filter((r) => /^S\d+[a-z]?$/.test(r[0] ?? ""));
 const dbTests = read("supabase/tests/core_rls.sql");
 
 function refExists(ref: string): boolean {
@@ -35,7 +35,8 @@ function refExists(ref: string): boolean {
   if (kind === "e2e") return fs.existsSync(path.join(ROOT, "apps/mobile/e2e/specs", `${name}.cjs`));
   if (kind === "unit") return fs.existsSync(path.join(ROOT, "apps/mobile/test", `${name}.test.ts`));
   if (kind === "engine") return fs.existsSync(path.join(ROOT, "packages/estimating-engine/test", `${name}.test.ts`));
-  if (kind === "db") return new RegExp(`\\\\echo '${name} [^']* ok'`).test(dbTests);
+  // the message may hold a quote doubled for SQL («the server''s») — T123
+  if (kind === "db") return new RegExp(`\\\\echo '${name} (?:[^']|'')* ok'`).test(dbTests);
   return false;
 }
 

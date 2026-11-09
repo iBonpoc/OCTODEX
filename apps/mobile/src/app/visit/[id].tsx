@@ -1,3 +1,4 @@
+import { ModulePlaces } from "@/modules/ModulePlaces";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
@@ -196,6 +197,8 @@ export default function VisitScreen() {
       ) : null}
 
       <TechLocation v={v} geo={property?.geo} />
+      {/* add-on modules' place (spec 33 П24 А7): nothing unless a module is switched on */}
+      <ModulePlaces place="visit" ctx={{ visitId: v.id, leadId: v.leadId, customerId: servable ? customer?.id : undefined, propertyId: property?.id }} />
       {consent.sheet}
 
       {/* Step actions */}

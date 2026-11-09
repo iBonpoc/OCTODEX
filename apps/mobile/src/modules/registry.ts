@@ -12,8 +12,9 @@ import type { DictKey } from "@/i18n";
 
 /** where a module may add its own actions in the core screens (estimate and job — with their first content, П15.3) */
 /** `tab` (founder 09.11): a section of the module in the bottom tabs (phone, before «Ещё») and in the side menu (820/1280) —
- *  only while the module is usable; the core's own 5 tabs stay as they are */
-export type ModulePlace = "lead" | "property" | "home" | "estimate" | "job" | "settings" | "tab";
+ *  only while the module is usable; the core's own 5 tabs stay as they are. `client` and `visit` (09.11, spec 33 П24 А3,
+ *  А7): the client's card and a visit's screen — the module decides what its buttons do there */
+export type ModulePlace = "lead" | "property" | "client" | "visit" | "home" | "estimate" | "job" | "settings" | "tab";
 
 /** a row of public.company_modules as the phone keeps it (Company.modules[key]) */
 export interface CompanyModule {
@@ -33,6 +34,11 @@ export interface PlaceCtx {
   leadId?: string;
   customerId?: string;
   propertyId?: string;
+  /** a visit's screen: the visit (its lead, client and property come in the fields above) */
+  visitId?: string;
+  /** the leads of this address or client (a lead that got the address: what was made on the lead shows here too —
+   *  spec 33 П24 Б4, S4h) */
+  leadIds?: string[];
 }
 /** one action of a module in a core screen: a button (lead, property) or an item of «＋» (home) */
 export interface ModuleAction {
