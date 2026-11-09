@@ -36,6 +36,8 @@ export const ru = {
   "nav.home": "Главная",
   "nav.plan": "План",
   "nav.messages": "Сообщения",
+  // the bottom tab only (six with a module's tab — founder 09.11 via the director)
+  "tab.messages.short": "Чаты",
   "nav.calls": "Звонки",
   "nav.clients": "Клиенты",
   "nav.leads": "Лиды",
@@ -2578,6 +2580,7 @@ export const ru = {
   "mod.gutters.list.new": "Новый замер",
   "mod.gutters.list.empty": "Замеров пока нет. «Новый замер» — нарисуйте желоба; всё сохраняется само, черновик без клиента тоже.",
   "mod.gutters.list.action": "Замеры",
+  "mod.gutters.list.tab": "Замеры",
   "mod.gutters.link.title": "Привязать замер",
   "mod.gutters.link.new": "Новая заявка",
   "mod.gutters.link.newHint": "Завести лид с этим замером",

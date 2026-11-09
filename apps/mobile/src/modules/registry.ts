@@ -11,7 +11,9 @@ import type { Company } from "@/data/types";
 import type { DictKey } from "@/i18n";
 
 /** where a module may add its own actions in the core screens (estimate and job — with their first content, П15.3) */
-export type ModulePlace = "lead" | "property" | "home" | "estimate" | "job" | "settings";
+/** `tab` (founder 09.11): a section of the module in the bottom tabs (phone, before «Ещё») and in the side menu (820/1280) —
+ *  only while the module is usable; the core's own 5 tabs stay as they are */
+export type ModulePlace = "lead" | "property" | "home" | "estimate" | "job" | "settings" | "tab";
 
 /** a row of public.company_modules as the phone keeps it (Company.modules[key]) */
 export interface CompanyModule {
@@ -271,6 +273,11 @@ export const activeModules = (company: Pick<Company, "modules"> | null | undefin
 /** the actions the company's usable modules add to a place (a module not active adds nothing — founder О2) */
 export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now(), moduleData?: Record<string, unknown>): (ModuleAction & { module: string })[] {
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx, moduleData?.[d.key]) ?? []).map((a) => ({ ...a, module: d.key })));
+}
+
+/** the usable modules' sections in the tabs and the side menu (place «tab»): id `module-<key>-<id>` */
+export function moduleTabs(company: Pick<Company, "modules"> | null | undefined, role: import("@/data/types").Role, now = Date.now()) {
+  return placeActions("tab", company, { role }, now).map((a) => ({ ...a, tabId: `module-${a.module}-${a.id}` }));
 }
 
 /** the usable modules' words on an estimate; only an open one (draft / sent) — a signed one is a copy, more is a change order */

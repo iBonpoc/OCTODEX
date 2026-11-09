@@ -37,6 +37,8 @@ export const es: Dict = {
   "nav.home": "Inicio",
   "nav.plan": "Plan",
   "nav.messages": "Mensajes",
+  // the bottom tab only (six with a module's tab — founder 09.11 via the director)
+  "tab.messages.short": "Chats",
   "nav.calls": "Llamadas",
   "nav.clients": "Clientes",
   "nav.leads": "Prospectos",
@@ -2578,6 +2580,7 @@ export const es: Dict = {
   "mod.gutters.list.new": "Nueva medición",
   "mod.gutters.list.empty": "Aún no hay mediciones. «Nueva medición»: dibuje las canaletas; todo se guarda solo, también un borrador sin cliente.",
   "mod.gutters.list.action": "Mediciones",
+  "mod.gutters.list.tab": "Medidas",
   "mod.gutters.link.title": "Vincular la medición",
   "mod.gutters.link.new": "Nuevo prospecto",
   "mod.gutters.link.newHint": "Crear un prospecto con esta medición",

@@ -1,6 +1,6 @@
 /**
  * Wave 2c-1б — variant Б of the navigation (founder 06.11; docs/specs/13 v2 §2.1, §2.3, §2.4, §2.5):
- * - phone: 5 tabs Главная · План · Сообщения · Клиенты · Ещё; no «Звонки» tab, no ☰ in the header;
+ * - phone: 5 tabs Главная · План · Чаты · Клиенты · Ещё; no «Звонки» tab, no ☰ in the header;
  * - «Ещё»: the profile card with the connection status, then the tiles of the sections by rights;
  *   a tile opens its section, «Ещё» stays lit, «‹ Ещё» comes back; Звонки is a tile;
  * - the floating «＋» never covers the last card of a list;
@@ -22,7 +22,7 @@ exports.run = async (h) => {
   await h.go("/today");
 
   if (!wide) {
-    for (const name of ["Главная", "План", "Сообщения", "Клиенты", "Ещё"]) h.expect((await p.getByRole("tab", { name, exact: true }).count()) === 1, `tab «${name}»`);
+    for (const name of ["Главная", "План", "Чаты", "Клиенты", "Ещё"]) h.expect((await p.getByRole("tab", { name, exact: true }).count()) === 1, `tab «${name}»`);
     h.expect((await p.getByRole("tab", { name: "Звонки", exact: true }).count()) === 0, "no «Звонки» tab");
     h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0, "no ☰ in the header");
     await p.getByRole("tab", { name: "Ещё", exact: true }).click();

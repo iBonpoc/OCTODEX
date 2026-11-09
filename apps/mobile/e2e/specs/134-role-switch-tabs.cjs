@@ -18,7 +18,7 @@ exports.run = async (h) => {
   };
   // every tab, in an order that leaves each screen for another; «Главная» is the role's home
   const walk = async (home, label) => {
-    for (const [name, want] of [["План", "/plan"], ["Сообщения", "/messages"], ["Клиенты", "/clients"], ["Главная", home], ["Ещё", "/more"], ["План", "/plan"]]) {
+    for (const [name, want] of [["План", "/plan"], ["Чаты", "/messages"], ["Клиенты", "/clients"], ["Главная", home], ["Ещё", "/more"], ["План", "/plan"]]) {
       await p.getByRole("tab", { name, exact: true }).click();
       await p.waitForTimeout(600);
       h.expect(path() === want, `${label}: «${name}» → ${want} (${path()})`);
