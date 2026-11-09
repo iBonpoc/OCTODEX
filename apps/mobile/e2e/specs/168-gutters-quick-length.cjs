@@ -94,9 +94,18 @@ exports.run = async (h) => {
   h.expect(/6½″/.test(await tid("quick-length-tape-value").innerText()), "the big value says 6½″");
   await tid("quick-length-tape-less").getByRole("button").click();
   await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "⅜", "← one mark shorter: ⅜");
+  // a tap on a number: the tape comes to it — the whole inch, no eighths (the sample's click on a page)
+  const eight = await tid("quick-length-tape").locator("text").filter({ hasText: /^8$/ }).first().boundingBox();
+  await p.mouse.click(eight.x + eight.width / 2, eight.y + eight.height / 2);
+  await waitFor(async () => (await field("quick-length-in").inputValue()) === "8" && (await tid("quick-length-frac").count()) === 0, "a tap on «8»: 8″, no eighths");
+  // the keyboard on a computer: → three times → ⅜
+  await tid("quick-length-tape").focus();
+  for (let i = 0; i < 3; i++) await p.keyboard.press("ArrowRight");
+  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "→ → →: 8⅜″");
   // a whole inch more: eight marks
+  const in1 = Number(await field("quick-length-in").inputValue());
   await pull(8);
-  await waitFor(async () => (await field("quick-length-in").inputValue()) === String((Number(in0) + 1) % 12), "eight marks more: an inch more");
+  await waitFor(async () => (await field("quick-length-in").inputValue()) === String((in1 + 1) % 12), "eight marks more: an inch more");
 
   // 25′ 6⅜″ → «Применить»
   await field("quick-length-in").fill("6");
