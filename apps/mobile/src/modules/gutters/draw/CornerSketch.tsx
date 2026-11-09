@@ -170,7 +170,8 @@ export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; 
     setRes(deg);
     onAngle(deg);
   };
-  // the keyboard put away after typing C counts too (#696: the first tap on iPhone only hid the keyboard)
+  // the keyboard put away after typing C counts too (#696: the first tap on iPhone only hid the keyboard) — a fallback:
+  // only lengths not counted yet, so an angle set by hand («90°») after them is not overwritten
   const live = useRef(count);
   live.current = () => {
     if (countOnKeyboardHide(a, b, c3, counted.current)) count();
@@ -188,7 +189,7 @@ export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; 
       <Len label={t("mod.gutters.draw.triC")} value={c3} onChange={setC} testID="tri-c" />
       <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
         <View testID="tri-count"><Button label={t("mod.gutters.draw.triCount")} size="sm" onPress={count} /></View>
-        <View testID="tri-90"><Button label={t("mod.gutters.draw.tri90")} size="sm" variant="secondary" onPress={() => { setRes(90); onAngle(90); }} /></View>
+        <View testID="tri-90"><Button label={t("mod.gutters.draw.tri90")} size="sm" variant="secondary" onPress={() => { counted.current = triKey(a, b, c3); setRes(90); onAngle(90); }} /></View>
         {res === "bad" ? <View testID="tri-bad"><StatusChip status="warn" label={t("mod.gutters.draw.triBad")} soft /></View> : null}
         {typeof res === "number" ? <View testID="tri-result"><StatusChip status="ok" label={t("mod.gutters.draw.cutAngle", { deg: res })} soft /></View> : null}
       </RowView>
