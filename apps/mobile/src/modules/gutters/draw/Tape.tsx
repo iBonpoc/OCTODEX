@@ -39,12 +39,19 @@ export const coastEnd = (at: number, speed: number) => (Math.abs(speed) < STOP ?
 export interface Mark { h: number; text?: string; bold?: boolean }
 export type Scale = (k: number) => Mark;
 
-/** 1/8″: the inches longer and numbered (within the foot), the feet bold «12′» */
+/**
+ * 1/8″: every inch with the whole length «25′ 6″» (founder 09.11: «на рулетке видно 25 фит 6 инчей, потом тонкая
+ * настройка»), the feet bold «26′», the eighths between them shorter
+ */
 export const EIGHTHS_SCALE: Scale = (k) =>
-  k % 96 === 0 ? { h: 0.45, text: k ? `${k / 96}′` : undefined, bold: true } : k % 8 === 0 ? { h: 0.45, text: String((k / 8) % 12) } : { h: k % 4 === 0 ? 0.32 : k % 2 === 0 ? 0.24 : 0.16 };
-/** millimetres: the centimetres longer and numbered, every 10 cm bold */
+  k % 96 === 0
+    ? { h: 0.45, text: k ? `${k / 96}′` : undefined, bold: true }
+    : k % 8 === 0
+      ? { h: 0.45, text: `${Math.floor(k / 96)}′ ${(k / 8) % 12}″` }
+      : { h: k % 4 === 0 ? 0.32 : k % 2 === 0 ? 0.24 : 0.16 };
+/** millimetres: every centimetre with the whole length «102 cm», every 10 cm bold «1.1 m», the millimetres between */
 export const MM_SCALE: Scale = (k) =>
-  k % 100 === 0 ? { h: 0.45, text: k ? `${k / 10}` : undefined, bold: true } : k % 10 === 0 ? { h: 0.45, text: String(k / 10) } : { h: k % 5 === 0 ? 0.3 : 0.18 };
+  k % 100 === 0 ? { h: 0.45, text: k ? `${k / 1000} m` : undefined, bold: true } : k % 10 === 0 ? { h: 0.45, text: `${k / 10} cm` } : { h: k % 5 === 0 ? 0.3 : 0.18 };
 
 export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepLabels }: {
   /** the value in marks (1/8″ or mm) */
@@ -186,7 +193,8 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
             e.preventDefault();
           },
         } as object)}
-        style={{ height: H, borderRadius: radius.field, overflow: "hidden", backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}
+        // a drag with a mouse must not select the numbers (the web)
+        style={{ height: H, borderRadius: radius.field, overflow: "hidden", backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, ...({ userSelect: "none" } as object) }}
         {...pan.panHandlers}
       >
         {w > 0 ? (
@@ -203,7 +211,8 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
             {/* the tape runs into the dark at both sides (the sample's shade) */}
             <Rect x={0} y={0} width={w} height={H} fill={`url(#${testID}-fade)`} />
             {/* the mark the length is read at */}
-            <Line x1={cx} y1={0} x2={cx} y2={H} stroke={c.ink} strokeWidth={dt.runW} />
+            {/* down to the marks only: the length written under them stays readable («25′ 6″») */}
+            <Line x1={cx} y1={0} x2={cx} y2={H * 0.5} stroke={c.ink} strokeWidth={dt.runW} />
             <Path d={`M${cx - space[2]} 0L${cx + space[2]} 0L${cx} ${space[2]}Z`} fill={c.ink} />
           </Svg>
         ) : null}
