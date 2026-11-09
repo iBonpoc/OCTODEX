@@ -4,8 +4,8 @@
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
 import { dsCode } from "./attrs";
-import { capSide, centre, findCorners, houseSide, runEnds, runLengthIn, type Drawing, type P } from "../geometry";
-import { ftIn } from "./format";
+import { capSide, centre, findCorners, houseSide, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
+import { fmtLen } from "./format";
 import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./labels";
 
 /** the view: screen = (x·k + ox, −y·k + oy) — north up */
@@ -129,7 +129,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   }
   const corners: SceneCorner[] = found.map((f) => ({
     id: f.id, runId: f.runs[0].id, at: toScreen(o.view, f.at), kind: f.kind,
-    splash: d.corners?.[f.id]?.splashGuard ?? f.kind === "in",
+    splash: d.corners?.[f.id]?.splashGuard ?? (f.kind === "in" && !splashOff(d, f)),
   }));
   const ds: SceneDs[] = [];
   for (const s of d.downspouts) {
@@ -149,7 +149,8 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
-    add(`len:${r.id}`, s.a, s.b, o.lenWithStory ? `${ftIn(runLengthIn(r))} · ${o.storyText(s.story)}` : ftIn(runLengthIn(r)), "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
+    const len = fmtLen(runLengthIn(r), r.unit);
+    add(`len:${r.id}`, s.a, s.b, o.lenWithStory ? `${len} · ${o.storyText(s.story)}` : len, "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
   });
   // over the mark: its fittings in one word («AABO⁴», founder 08.11); the number is inside the mark
   const dsById = new Map(d.downspouts.map((x) => [x.id, x]));

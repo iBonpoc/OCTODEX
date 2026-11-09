@@ -7,8 +7,8 @@ import { DRAFT_KEY } from "./draftStore";
 
 const TOOLBAR = "octo.mod.gutters.toolbar.v1";
 
-export type ToolbarPlace = "bottom" | "right" | "left";
-export const TOOLBAR_PLACES: ToolbarPlace[] = ["bottom", "right", "left"];
+export type ToolbarPlace = "bottom" | "right" | "left" | "top";
+export const TOOLBAR_PLACES: ToolbarPlace[] = ["bottom", "right", "left", "top"];
 
 export const forgetOldDraft = () => AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
 
@@ -22,8 +22,8 @@ export async function loadToolbarPlace(): Promise<ToolbarPlace> {
 }
 export const saveToolbarPlace = (p: ToolbarPlace) => AsyncStorage.setItem(TOOLBAR, p).catch(() => {});
 
-/** the toolbar dropped by its grip (founder 08.11): it sticks to the nearest of the bottom, left and right edges */
+/** the toolbar dropped by its grip (founder 08.11, 09.11): it sticks to the nearest edge — bottom, left, right or top */
 export function placeAt(x: number, y: number, w: number, h: number): ToolbarPlace {
-  const d = { left: x, right: w - x, bottom: h - y };
+  const d = { left: x, right: w - x, bottom: h - y, top: y };
   return (Object.entries(d) as [ToolbarPlace, number][]).sort((a, b) => a[1] - b[1])[0]![0];
 }

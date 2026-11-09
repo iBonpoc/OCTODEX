@@ -453,6 +453,7 @@ export function TextField({
   multiline,
   onSubmit,
   autoFocus,
+  selectOnFocus,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -467,6 +468,8 @@ export function TextField({
   onSubmit?: () => void;
   /** focus (and the keyboard) as soon as the field appears — a sheet opened for one value */
   autoFocus?: boolean;
+  /** the text is selected when the field gets the focus: a typed digit replaces a prefilled value */
+  selectOnFocus?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -510,6 +513,7 @@ export function TextField({
         returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
         autoFocus={autoFocus && !ro}
+        selectTextOnFocus={selectOnFocus}
         submitBehavior={multi ? "newline" : "blurAndSubmit"}
         accessibilityLabel={label ?? placeholder}
         style={{

@@ -384,3 +384,30 @@ export function setCornerAngle(d: Drawing, f: Pick<FoundCorner, "runs" | "at">, 
     }),
   };
 }
+
+/** how a gutter's length is shown on the drawing (founder 09.11): a view only — the length stays in inches */
+export function setRunUnit(d: Drawing, id: string, unit: "ftin" | "in" | "m" | "cm" | "mm"): Drawing {
+  const r = d.runs.find((x) => x.id === id);
+  if (!r || (r.unit ?? "ftin") === unit) return d;
+  const { unit: _u, ...rest } = r;
+  return { ...d, runs: d.runs.map((x) => (x.id === id ? (unit === "ftin" ? rest : { ...rest, unit }) : x)) };
+}
+
+/** the inside corner's splash guard on / off (founder 09.11): written on both runs at their meeting ends */
+export function setCornerSplash(d: Drawing, corner: Pick<FoundCorner, "runs">, on: boolean): Drawing {
+  let changed = false;
+  const runs = d.runs.map((r) => {
+    const end = corner.runs.find((x) => x.id === r.id);
+    if (!end) return r;
+    const key = end.end ? "b" : "a";
+    const cur = r.attrs.noSplash ?? {};
+    if (!!cur[key] === !on) return r;
+    changed = true;
+    const next = { ...cur };
+    if (on) delete next[key];
+    else next[key] = true;
+    const { noSplash: _old, ...rest } = r.attrs;
+    return { ...r, attrs: Object.keys(next).length ? { ...rest, noSplash: next } : rest };
+  });
+  return changed ? { ...d, runs } : d;
+}

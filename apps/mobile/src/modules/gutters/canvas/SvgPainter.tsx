@@ -58,7 +58,14 @@ const CapMark = memo(function CapMark({ k, color, fill }: { k: SceneCap; color: 
 const CornerMark = memo(function CornerMark({ k, color, fill }: { k: SceneCorner; color: string; fill: string }) {
   const [x, y] = k.at;
   const r = drawing.dsR;
-  return <Path id={k.id} d={`M${x} ${y - r}L${x + r} ${y}L${x} ${y + r}L${x - r} ${y}Z`} fill={k.kind === "in" ? color : fill} stroke={color} strokeWidth={drawing.runW / 2} />;
+  const R = r * 2;
+  return (
+    <G id={k.id}>
+      {/* a splash guard (founder 09.11: seen on the drawing): a dashed square round the corner's mark */}
+      {k.splash ? <Path id={`splash-${k.id}`} d={`M${x} ${y - R}L${x + R} ${y}L${x} ${y + R}L${x - R} ${y}Z`} fill="none" stroke={color} strokeWidth={drawing.runW / 2} strokeDasharray={`${drawing.runW} ${drawing.runW}`} /> : null}
+      <Path d={`M${x} ${y - r}L${x + r} ${y}L${x} ${y + r}L${x - r} ${y}Z`} fill={k.kind === "in" ? color : fill} stroke={color} strokeWidth={drawing.runW / 2} />
+    </G>
+  );
 });
 
 const Label = memo(function Label({ l, bg, ink }: { l: SceneLabel; bg: string; ink: string }) {

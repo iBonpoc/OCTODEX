@@ -73,6 +73,21 @@ exports.run = async (h) => {
   await waitFor(async () => (await runs()).length === 1, "straight on from the end cap: still one gutter");
   await waitFor(async () => (await runs())[0].geom.lengthIn > 540, `its length grew: the sum (${JSON.stringify((await runs()).map((r) => r.geom.lengthIn))})`);
   h.expect((await lines()).length === 1, "one line on the canvas");
+  // grown again, then «Отменить» in its length sheet: back to the length before — the gutter stays (part 1 × #479)
+  const before = (await runs())[0].geom.lengthIn;
+  // grown, its end may run under the properties panel beside the canvas (820/1280): the whole drawing in view first
+  await tid("draw-fit").getByRole("button").click();
+  await p.waitForTimeout(300);
+  const caps3 = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+  const r3 = caps3.sort((a, c) => c[0] - a[0])[0];
+  await canvasAt(p, r3[0], r3[1]);
+  await p.mouse.move(r3[0], r3[1]);
+  await p.mouse.down();
+  for (let i = 1; i <= 12; i++) await p.mouse.move(r3[0] + ((x1 - x0) * 0.2 * i) / 12, r3[1]);
+  await p.mouse.up();
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  await tid("quick-length-cancel").getByRole("button").click();
+  await waitFor(async () => { const rs = await runs(); return rs.length === 1 && rs[0].geom.lengthIn === before; }, `«Отменить» after growing: one gutter, ${before}″ again`);
 
   // 1) a pinch after a long length and a moved view: smaller, and smaller again
   await tid("draw-fit").getByRole("button").click();
