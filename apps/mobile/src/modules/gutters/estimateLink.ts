@@ -30,6 +30,9 @@ export const ofMeasurement = (l: { source?: unknown }, measurementId: string) =>
 const hasLinesOf = (e: Estimate, measurementId: string) => !!e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, measurementId)));
 
 /** the measurement's estimate: the newest open one with its lines, else the newest signed one; a declined one never */
+/** a signed estimate (awaiting countersign or approved) stands on this measurement — it can not be deleted (П24 Б6) */
+export const signedOn = (db: Pick<DB, "estimates">, measurementId: string) => db.estimates.some((e) => SIGNED.has(e.status) && hasLinesOf(e, measurementId));
+
 export function estimateOfMeasurement(db: Pick<DB, "estimates">, measurementId: string): Estimate | undefined {
   const mine = db.estimates.filter((e) => e.status !== "declined" && hasLinesOf(e, measurementId));
   const open = mine.filter((e) => !SIGNED.has(e.status));

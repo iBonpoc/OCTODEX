@@ -118,6 +118,36 @@ export function linkProperty(store: ModuleStore, ref: string, propertyId: string
   return typeof undo === "function" ? (undo as () => void) : null;
 }
 
+/**
+ * «Привязать к другому» / «Отвязать» (founder 09.11, #692; spec 33 П24 Б5): a measurement linked by mistake goes to
+ * another lead or address, or back to the drafts (`null`). Unlike linkLead / linkProperty an existing link is replaced:
+ * a lead → the lead only, an address → the address only. Returns the store's «Отменить».
+ */
+export function relink(store: ModuleStore, ref: string, to: { leadId: string } | { propertyId: string } | null): (() => void) | null {
+  const m = gutterData(store.db).measurements.find((x) => x.id === ref);
+  if (!m) return null;
+  const next: MeasurementRow = { ...m, leadId: to && "leadId" in to ? to.leadId : null, propertyId: to && "propertyId" in to ? to.propertyId : null };
+  if (next.leadId === m.leadId && next.propertyId === m.propertyId) return null;
+  const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(next) }, apply: (d) => withGutterData(d, putMeasurement(next)), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/**
+ * «Удалить замер» (founder 09.11, #690; П24 Б6): soft (the server sets deleted_at), its elements go with it on the
+ * phone. Not when a signed estimate stands on it — the caller checks (estimateLink.signedOn); the server refuses too.
+ */
+export function removeMeasurement(store: ModuleStore, ref: string): (() => void) | null {
+  const g = gutterData(store.db);
+  if (!g.measurements.some((x) => x.id === ref)) return null;
+  const undo = store.moduleOp(KEY, {
+    kind: K.mRemove,
+    payload: { id: ref },
+    apply: (d) => withGutterData(d, (x) => ({ ...x, measurements: x.measurements.filter((m) => m.id !== ref), elements: x.elements.filter((e) => e.measurementId !== ref) })),
+    coalesceKey: ref,
+  });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
 /** what «Привязать» offers for a typed text: open leads and clients by name (and a lead's address), the first few */
 export function linkChoices(db: Pick<DB, "leads" | "customers" | "properties">, q: string, max = 8) {
   const s = q.trim().toLowerCase();
@@ -200,7 +230,7 @@ export function removePhoto(store: ModuleStore, id: string) {
 
 /* ---------- module.op → the server ---------- */
 export const measurementToDb = (m: MeasurementRow, companyId: string) => ({
-  id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, ...(m.accuracy ? { accuracy: m.accuracy } : {}), deleted_at: null,
+  id: m.id, company_id: companyId, property_id: m.propertyId ?? null, lead_id: m.leadId ?? null, label: m.label, status: m.status, ...(m.accuracy ? { accuracy: m.accuracy } : {}), deleted_at: null,
 });
 export const elementToDb = (e: ElementRow, companyId: string) => ({
   id: e.id, company_id: companyId, measurement_id: e.measurementId, kind: e.kind, geom: e.geom, attrs: e.attrs, confidence: e.confidence, deleted_at: null,

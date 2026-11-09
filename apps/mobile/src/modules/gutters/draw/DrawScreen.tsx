@@ -25,7 +25,7 @@ import { moduleState } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
@@ -37,7 +37,7 @@ import { MeasurePhotos } from "./Photos";
 import { fmtLen, ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
-import { gutterData, measurementOf, photosOf } from "../data";
+import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
@@ -46,7 +46,7 @@ import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from 
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate } from "../estimateLink";
+import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
@@ -579,10 +579,26 @@ export default function DrawScreen() {
   /** S1b: a saved draft without a lead → the core's new-lead form; the new lead takes the draft (ModuleDef.leadCreated) */
   // «Сделать заявкой» → a new lead, an open lead or a client's address (founder 09.11, LinkSheet)
   const [linkSheet, setLinkSheet] = useState(false);
-  const toLead = () => {
-    if (timer.current) clearTimeout(timer.current);
+  // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
+  const whoRef = useRef<React.ComponentRef<typeof View>>(null);
+  const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  type WhoKey = "relink" | "unlink" | "delete";
+  const linked = !!leadId || !!placeId;
+  const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
+    ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
+    { key: "delete", label: t("mod.gutters.draw.mDelete"), destructive: true },
+  ];
+  const onWho = (k: WhoKey) => {
+    if (!m) return;
     flush();
-    if (m) router.push(`/lead/new?module=gutters&ref=${encodeURIComponent(m.id)}`);
+    if (k === "relink") setLinkSheet(true);
+    else if (k === "unlink") toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
+    else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
+    else {
+      const undo = removeMeasurement(store, m.id);
+      back();
+      toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
+    }
   };
   const back = () => {
     flush();
@@ -757,6 +773,11 @@ export default function DrawScreen() {
                 <Button label={t("mod.gutters.photo.open")} icon="camera" size="sm" variant="ghost" onPress={() => setPhotoSheet(true)} />
               </View>
             ) : null}
+            {inStore ? (
+              <View ref={whoRef} collapsable={false} testID="draw-who">
+                <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
+              </View>
+            ) : null}
           </RowView>
         ) : (
           <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
@@ -892,7 +913,8 @@ export default function DrawScreen() {
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
         <AttrBody>{attrs}</AttrBody>
       </Sheet>
-      {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} onNew={toLead} /> : null}
+      {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
+      <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
       <Sheet visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
         {editRun ? <QuickLength key={editRun.id} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
       </Sheet>
