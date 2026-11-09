@@ -101,7 +101,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
   const core = tabs(role);
   const mods = moduleTabs(db.company, role);
   const items: { id: string; label: string; icon: (typeof core)[number]["icon"]; onPress: () => void }[] = [
-    ...core.filter((s) => s.id !== "more").map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) })),
+    ...core.filter((s) => s.id !== "more").map((s) => ({ id: s.id as string, label: (s.tabLabel ?? s.label) as string, icon: s.icon, onPress: () => onGo(s.id) })),
     ...mods.map((m) => ({ id: m.tabId, label: m.labelKey as string, icon: m.icon, onPress: () => onGoHref(m.href as Href) })),
     ...core.filter((s) => s.id === "more").map((s) => ({ id: s.id as string, label: s.label as string, icon: s.icon, onPress: () => onGo(s.id) })),
   ];

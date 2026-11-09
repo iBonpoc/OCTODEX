@@ -37,6 +37,8 @@ export const en: Dict = {
   "nav.home": "Home",
   "nav.plan": "Plan",
   "nav.messages": "Messages",
+  // the bottom tab only (six with a module's tab — founder 09.11 via the director)
+  "tab.messages.short": "Messages",
   "nav.calls": "Calls",
   "nav.clients": "Clients",
   "nav.leads": "Leads",
@@ -2573,6 +2575,7 @@ export const en: Dict = {
   "mod.gutters.list.new": "New measurement",
   "mod.gutters.list.empty": "No measurements yet. «New measurement» — draw the gutters; everything saves by itself, a draft without a client too.",
   "mod.gutters.list.action": "Measurements",
+  "mod.gutters.list.tab": "Measures",
   "mod.gutters.link.title": "Link the measurement",
   "mod.gutters.link.new": "New lead",
   "mod.gutters.link.newHint": "Make a lead with this measurement",

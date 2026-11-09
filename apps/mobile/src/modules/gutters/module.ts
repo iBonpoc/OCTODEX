@@ -41,7 +41,7 @@ const gutters: ModuleDef = {
       { id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") },
     ],
     // «Замеры» in the bottom tabs and the side menu (founder 09.11: «делай»): every measurement, the drafts too
-    tab: () => [{ id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") }],
+    tab: () => [{ id: "list", labelKey: "mod.gutters.list.tab", icon: "note", href: moduleHref("gutters", "list") }],
     // the module's own card in «Компания → Модули»: the speed check saves nothing, so it is there even when off
     // the canvas draws even when off: it says at once that nothing will be saved (§6, founder О2)
     // «Настройки» (M7b, spec 33 П22): the director changes them, the office reads them; a tech or a seller never needs the page

@@ -328,7 +328,7 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
   it("«Замеры» is a tab (bottom tabs, side menu) only while the module is usable — for every role", async () => {
     const { moduleTabs } = await import("../src/modules/registry");
     for (const role of ["director", "dispatcher", "sales", "tech"] as const) {
-      expect(moduleTabs(on, role)).toEqual([expect.objectContaining({ tabId: "module-gutters-list", labelKey: "mod.gutters.list.action", href: "/module/gutters/list" })]);
+      expect(moduleTabs(on, role)).toEqual([expect.objectContaining({ tabId: "module-gutters-list", labelKey: "mod.gutters.list.tab", href: "/module/gutters/list" })]);
     }
     expect(moduleTabs({ modules: {} }, "director")).toEqual([]);
     expect(moduleTabs({ modules: { gutters: { ...on.modules.gutters, enabled: false } } }, "director")).toEqual([]);

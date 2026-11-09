@@ -1,9 +1,9 @@
 /**
  * Wave 2a of the app shell, variant Б since 06.11 (docs/specs/13 v2 §2.1–§2.3, §4; 13а): the same 5 tabs for every role
- * (Главная · План · Сообщения · Клиенты · Ещё), «Ещё» (phone) / the side menu (820/1280) by rights,
+ * (Главная · План · Чаты · Клиенты · Ещё), «Ещё» (phone) / the side menu (820/1280) by rights,
  * the old «Продажи» and «Ещё» addresses, Calls and Messages from what the app recorded, the company crumb.
  */
-const TABS = ["Главная", "План", "Сообщения", "Клиенты", "Ещё"];
+const TABS = ["Главная", "План", "Чаты", "Клиенты", "Ещё"];
 /** 820/1280: no bottom tabs — the same places (and Звонки) on the side rail; «Ещё» is not there */
 const WIDE_PLACES = ["Главная", "План", "Сообщения", "Клиенты", "Звонки"];
 const HOME = { director: "/today", dispatcher: "/triage", sales: "/leads", tech: "/visits" };

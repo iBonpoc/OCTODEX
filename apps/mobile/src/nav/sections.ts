@@ -40,6 +40,9 @@ export interface Section {
   group: MenuGroup;
   /** a bottom tab (phone) — the same 5 for every role; a tab is not repeated in «Ещё» */
   tab?: boolean;
+  /** a shorter name under the bottom tab (a module's tab makes six: «Сообщения» did not fit at 390); the side menu and
+   *  the screen keep `label` */
+  tabLabel?: DictKey;
   /** the phone's «Ещё» tab itself: never a section in «Ещё» or in the side menu */
   phoneOnly?: boolean;
   /** who sees it (13 §4); undefined = everyone */
@@ -55,7 +58,7 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
   { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
-  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
+  { id: "messages", label: "nav.messages", tabLabel: "tab.messages.short", icon: "sms", group: "top", tab: true },
   // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
   // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
   { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: [...OFFICE, "tech"], noSub: true },

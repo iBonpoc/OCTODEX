@@ -28,6 +28,27 @@ exports.run = async (h) => {
     const ids = await tid("tab-bar").locator('[data-testid^="tab-"]').evaluateAll((xs) => xs.map((x) => x.getAttribute("data-testid")));
     h.expect(JSON.stringify(ids) === JSON.stringify(["tab-home", "tab-plan", "tab-messages", "tab-clients", "tab-module-gutters-list", "tab-more"]), `the core's tabs stay, «Замеры» before «Ещё» (${ids.join(", ")})`);
   }
+  // six tabs at 390: no name cut short, in RU, EN, ES («Сообщения» → «Чаты» under the tab; the director 09.11)
+  if (!wide) {
+    for (const lang of ["ru", "en", "es"]) {
+      if (lang !== "ru") {
+        await p.evaluate((l) => localStorage.setItem("octo.lang.v1", JSON.stringify(l)), lang);
+        await p.reload();
+        await tid("tab-bar").waitFor({ timeout: 8000 });
+      }
+      await waitFor(async () => (await tid("tab-bar").locator('[data-testid^="tab-"]').count()) === 6, `${lang}: six tabs`);
+      const cut = await tid("tab-bar").evaluate((bar) =>
+        [...bar.querySelectorAll('[data-testid^="tab-"] div[dir="auto"], [data-testid^="tab-"] [class*="Text"]')]
+          .filter((t) => t.textContent && t.scrollWidth > t.clientWidth + 1)
+          .map((t) => t.textContent),
+      );
+      h.expect(cut.length === 0, `${lang}: no tab name cut short (${cut.join(", ")})`);
+      if (lang === "ru") await h.shot("tabs-ru");
+    }
+    await p.evaluate(() => localStorage.setItem("octo.lang.v1", JSON.stringify("ru")));
+    await p.reload();
+    await tid("tab-bar").waitFor({ timeout: 8000 });
+  }
   await item().click();
   await p.waitForURL(/\/module\/gutters\/list/, { timeout: 5000 });
   // the tab: aria-selected; the side menu: aria-current="page" (on the item or the element that carries the testID)
