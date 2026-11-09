@@ -40,6 +40,7 @@ import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
+import { LinkSheet } from "./LinkSheet";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
@@ -512,7 +513,11 @@ export default function DrawScreen() {
   const inStore = m ? gutterData(store.db).measurements.find((x) => x.id === m.id) : undefined;
   const leadId = inStore?.leadId ?? m?.leadId ?? null;
   const lead = leadId ? store.db.leads.find((l) => l.id === leadId) : undefined;
+  const placeId = inStore?.propertyId ?? m?.propertyId ?? null;
+  const addr = placeId ? store.db.properties.find((p) => p.id === placeId) : undefined;
   /** S1b: a saved draft without a lead → the core's new-lead form; the new lead takes the draft (ModuleDef.leadCreated) */
+  // «Сделать заявкой» → a new lead, an open lead or a client's address (founder 09.11, LinkSheet)
+  const [linkSheet, setLinkSheet] = useState(false);
   const toLead = () => {
     if (timer.current) clearTimeout(timer.current);
     flush();
@@ -666,9 +671,14 @@ export default function DrawScreen() {
               <View testID="draw-lead">
                 <Button label={lead.name} icon="user" size="sm" variant="ghost" onPress={() => router.push(`/lead/${lead.id}`)} />
               </View>
-            ) : inStore && !leadId ? (
+            ) : addr ? (
+              // linked to a client's address (LinkSheet): that address, it opens the property
+              <View testID="draw-place">
+                <Button label={addr.address} icon="pin" size="sm" variant="ghost" onPress={() => router.push(`/property/${addr.id}`)} />
+              </View>
+            ) : inStore && !leadId && !inStore.propertyId ? (
               <View testID="draw-to-lead">
-                <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={toLead} />
+                <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={() => setLinkSheet(true)} />
               </View>
             ) : null}
             {mPhotos && !wide ? (
@@ -787,6 +797,7 @@ export default function DrawScreen() {
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
         <AttrBody>{attrs}</AttrBody>
       </Sheet>
+      {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} onNew={toLead} /> : null}
       <Sheet visible={canSave && !!quick} onClose={() => setQuickRun(null)}>
         {quick ? <QuickLength run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} /> : null}
       </Sheet>

@@ -2,7 +2,7 @@
  * e2e 147 — «Замерить здесь» → «Сделать заявкой» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
  * - the home «＋» has «Замерить здесь» only while the module is active;
  * - it opens a new draft without a lead; before the first save there is no «Сделать заявкой»; after it — there is;
- * - «Сделать заявкой» → the core's own new-lead form; saved → the new lead's card has «Открыть замер», and the draft
+ * - «Сделать заявкой» → «Привязать замер» → «Новая заявка» → the core's own new-lead form; saved → the new lead's card has «Открыть замер», and the draft
  *   is now the lead's; the canvas shows the lead.
  * Finds things by testID; waits on what it checks.
  */
@@ -58,6 +58,9 @@ exports.run = async (h) => {
 
   // «Сделать заявкой» → the core's new-lead form
   await tid("draw-to-lead").getByRole("button").click();
+  // «Привязать замер» (founder 09.11): a new lead, an open lead or a client — here «Новая заявка»
+  await tid("link-sheet").waitFor({ timeout: 5000 });
+  await tid("link-new").getByRole("button").first().click();
   await p.waitForURL(/\/lead\/new\?module=gutters&ref=/, { timeout: 5000 });
   const name = `Measure ${h.layout.width}`;
   await p.getByPlaceholder("(555) 555-0100").last().pressSequentially(`626555${String(2000 + h.layout.width).slice(-4)}`);
