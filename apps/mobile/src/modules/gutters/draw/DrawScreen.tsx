@@ -39,6 +39,7 @@ import { forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PL
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
+import { onAppLeave } from "@/data/appActive";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
@@ -170,7 +171,7 @@ export default function DrawScreen() {
         const d = fromElements(v.elements);
         // «saved» is what the screen would write for this drawing: only a real change is sent — opening the canvas
         // never turns a ready measurement into a draft (review M8b №7, e2e 154)
-        saver.seed(toElements(d, mid));
+        saver.seed(toElements(d, mid), v.m);
         setDrawing(d);
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
@@ -189,6 +190,13 @@ export default function DrawScreen() {
   }, [view, m, size, drawing, fit]);
 
   const later = useRef<() => void>(() => {});
+  /** the address gets the measurement's id at its first edit (a reload opens it again) — only while this screen is shown */
+  const nameIt = () => {
+    const mm = cur.current.m;
+    if (named.current || !mm || !cur.current.canSave || !shown.current) return;
+    named.current = true;
+    router.setParams({ m: mm.id });
+  };
   const flush = useCallback(() => {
     const { drawing: d, m: mm, canSave: ok } = cur.current;
     if (!mm || !ok) return;
@@ -216,6 +224,8 @@ export default function DrawScreen() {
     flush();
     shown.current = false;
   }, [flush]);
+  // the app leaves (sent to the background, the tab hidden, the page left): what is unsent is written right then
+  useEffect(() => onAppLeave(flush), [flush]);
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
@@ -224,7 +234,12 @@ export default function DrawScreen() {
       setHint(null);
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
-      later.current();
+      // written at once, not a second later (founder 09.11: «отвлёкся, смахнул, обновилось — чертёж пропал»; e2e 213):
+      // the drawing goes into the phone's copy of the data on every finished edit, and the address names the
+      // measurement now — a reload, an update or a killed app opens this one, not a new empty one
+      cur.current = { ...cur.current, drawing: next };
+      nameIt();
+      flush();
     },
     [],
   );
