@@ -1,3 +1,4 @@
+import { ModulePlaces } from "@/modules/ModulePlaces";
 import { useRef, useState } from "react";
 import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
@@ -151,6 +152,9 @@ export function ClientCardBody({ c }: { c: Customer }) {
         ) : null}
         {lateCalls ? <StatusChip status="warn" label={t("client.lateCalls")} /> : null}
       </RowView>
+
+      {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
+      <ModulePlaces place="client" ctx={{ customerId: c.id }} />
 
       {canSeeClientMoney(role) ? (
         // money only, three equal tiles on one line — unslop 05.11
