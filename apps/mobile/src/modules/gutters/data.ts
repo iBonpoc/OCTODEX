@@ -58,10 +58,37 @@ export function measurementOf(g: GutterData, id: string): { m: MeasurementRow; e
 /** the module's data as a place gets it (DB.moduleData.gutters, unknown to the core) */
 export const asGutterData = (data: unknown): GutterData => gutterData({ moduleData: { [KEY]: data } });
 
-/** the newest measurement of a lead or a property (the place's «Открыть замер»), or undefined */
-export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: string }): MeasurementRow | undefined {
-  const of = g.measurements.filter((m) => (by.leadId ? m.leadId === by.leadId : !!by.propertyId && m.propertyId === by.propertyId));
+/**
+ * the newest measurement of a lead or a property (the place's «Открыть замер»), or undefined. A property also finds the
+ * measurements of its leads (`leadIds`): a lead that got the address (S3, conversion, S8b, merge) keeps its measurement
+ * with an empty property — it shows on the address without a write (spec 33 П24 Б4, S4h, #704)
+ */
+export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): MeasurementRow | undefined {
+  const of = g.measurements.filter((m) =>
+    by.leadId ? m.leadId === by.leadId : (!!by.propertyId && m.propertyId === by.propertyId) || (!!m.leadId && !!by.leadIds?.includes(m.leadId)),
+  );
   return of.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+}
+
+/** where «Замер желобов» goes for a lead / an address: its newest measurement, else a new one linked to it */
+export function measureHref(draw: string, g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): { href: string; open?: MeasurementRow } {
+  const m = latestFor(g, by);
+  if (m) return { href: `${draw}?m=${encodeURIComponent(m.id)}`, open: m };
+  const q = [by.leadId ? `lead=${encodeURIComponent(by.leadId)}` : "", by.propertyId ? `property=${encodeURIComponent(by.propertyId)}` : ""].filter(Boolean).join("&");
+  return { href: `${draw}?${q}` };
+}
+
+/**
+ * «Замер желобов» on a client's card (spec 33 П24 А3, #697): the measurement is always an address's — one address →
+ * straight to it; several → pick; none → the client's card says to add one first
+ */
+export function clientStart(draw: string, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
+  const g = gutterData(db);
+  const places = db.properties.filter((p) => p.customerId === customerId);
+  const go = (propertyId: string) => measureHref(draw, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
+  if (!places.length) return { kind: "none" as const };
+  if (places.length === 1) return { kind: "go" as const, href: go(places[0]!.id) };
+  return { kind: "pick" as const, places: places.map((p) => ({ id: p.id, address: p.address, city: p.city, href: go(p.id) })) };
 }
 
 /** the measurement's own fields (what measurement.save writes) */
@@ -88,6 +115,36 @@ export function linkProperty(store: ModuleStore, ref: string, propertyId: string
   if (!m || m.leadId || m.propertyId) return null;
   const row = { ...ownFields(m), propertyId };
   const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...m, propertyId })), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/**
+ * «Привязать к другому» / «Отвязать» (founder 09.11, #692; spec 33 П24 Б5): a measurement linked by mistake goes to
+ * another lead or address, or back to the drafts (`null`). Unlike linkLead / linkProperty an existing link is replaced:
+ * a lead → the lead only, an address → the address only. Returns the store's «Отменить».
+ */
+export function relink(store: ModuleStore, ref: string, to: { leadId: string } | { propertyId: string } | null): (() => void) | null {
+  const m = gutterData(store.db).measurements.find((x) => x.id === ref);
+  if (!m) return null;
+  const next: MeasurementRow = { ...m, leadId: to && "leadId" in to ? to.leadId : null, propertyId: to && "propertyId" in to ? to.propertyId : null };
+  if (next.leadId === m.leadId && next.propertyId === m.propertyId) return null;
+  const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(next) }, apply: (d) => withGutterData(d, putMeasurement(next)), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/**
+ * «Удалить замер» (founder 09.11, #690; П24 Б6): soft (the server sets deleted_at), its elements go with it on the
+ * phone. Not when a signed estimate stands on it — the caller checks (estimateLink.signedOn); the server refuses too.
+ */
+export function removeMeasurement(store: ModuleStore, ref: string): (() => void) | null {
+  const g = gutterData(store.db);
+  if (!g.measurements.some((x) => x.id === ref)) return null;
+  const undo = store.moduleOp(KEY, {
+    kind: K.mRemove,
+    payload: { id: ref },
+    apply: (d) => withGutterData(d, (x) => ({ ...x, measurements: x.measurements.filter((m) => m.id !== ref), elements: x.elements.filter((e) => e.measurementId !== ref) })),
+    coalesceKey: ref,
+  });
   return typeof undo === "function" ? (undo as () => void) : null;
 }
 
@@ -173,7 +230,7 @@ export function removePhoto(store: ModuleStore, id: string) {
 
 /* ---------- module.op → the server ---------- */
 export const measurementToDb = (m: MeasurementRow, companyId: string) => ({
-  id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, ...(m.accuracy ? { accuracy: m.accuracy } : {}), deleted_at: null,
+  id: m.id, company_id: companyId, property_id: m.propertyId ?? null, lead_id: m.leadId ?? null, label: m.label, status: m.status, ...(m.accuracy ? { accuracy: m.accuracy } : {}), deleted_at: null,
 });
 export const elementToDb = (e: ElementRow, companyId: string) => ({
   id: e.id, company_id: companyId, measurement_id: e.measurementId, kind: e.kind, geom: e.geom, attrs: e.attrs, confidence: e.confidence, deleted_at: null,

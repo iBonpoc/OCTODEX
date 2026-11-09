@@ -1,8 +1,8 @@
 /**
- * e2e 147 — «Замерить здесь» → «Сделать заявкой» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
- * - the home «＋» has «Замерить здесь» only while the module is active;
+ * e2e 147 — «Замер желобов» (было «Замерить здесь») → «Сделать заявкой» (docs/specs/33-gutters-screens.md П21 M5b; стык S1b). Every view.
+ * - the home «＋» has «Замер желобов» (было «Замерить здесь») only while the module is active;
  * - it opens a new draft without a lead; before the first save there is no «Сделать заявкой»; after it — there is;
- * - «Сделать заявкой» → «Привязать замер» → «Новая заявка» → the core's own new-lead form; saved → the new lead's card has «Открыть замер», and the draft
+ * - «Сделать заявкой» → «Привязать замер» → a new lead by its phone right in the sheet (founder 09.11, #688); saved → the new lead's card has «Открыть замер», and the draft
  *   is now the lead's; the canvas shows the lead.
  * Finds things by testID; waits on what it checks.
  */
@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await h.go("/today");
   await plus().first().click();
   await tid("fab-lead").or(tid("fab-module.gutters.here")).first().waitFor({ timeout: 5000 }).catch(() => {});
-  h.expect((await here().count()) === 0, "off: no «Замерить здесь»");
+  h.expect((await here().count()) === 0, "off: no «Замер желобов» (было «Замерить здесь»)");
   await p.keyboard.press("Escape");
 
   await h.go("/company/modules");
@@ -60,15 +60,17 @@ exports.run = async (h) => {
   await tid("draw-to-lead").getByRole("button").click();
   // «Привязать замер» (founder 09.11): a new lead, an open lead or a client — here «Новая заявка»
   await tid("link-sheet").waitFor({ timeout: 5000 });
-  await tid("link-new").getByRole("button").first().click();
-  await p.waitForURL(/\/lead\/new\?module=gutters&ref=/, { timeout: 5000 });
+  // a new lead by its phone right here (#688; before: the core's form)
   const name = `Measure ${h.layout.width}`;
-  await p.getByPlaceholder("(555) 555-0100").last().pressSequentially(`626555${String(2000 + h.layout.width).slice(-4)}`);
-  await p.getByPlaceholder("Имя", { exact: true }).last().fill(name);
-  await p.getByRole("button", { name: "Сохранить лид", exact: true }).last().click();
-  await p.waitForURL(/\/lead\/(?!new)[^/?]+$/, { timeout: 5000 });
-  const leadId = new URL(p.url()).pathname.split("/").pop();
+  await tid("link-new-phone").locator("input").pressSequentially(`626555${String(2000 + h.layout.width).slice(-4)}`);
+  await tid("link-new-name").locator("input").fill(name);
+  await tid("link-new-save").getByRole("button").click();
+  await waitFor(async () => (await tid("link-sheet").count()) === 0, "the sheet closes");
+  let leadId;
+  await waitFor(async () => { leadId = await p.evaluate(([k, n]) => (((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.leads || []).find((l) => l.name === n) || {}).id, ["octo.db.v5", name]); return !!leadId; }, "the new lead is in the store");
+  await waitFor(async () => (await tid("draw-lead").count()) === 1 && (await tid("draw-lead").innerText()).includes(name), "the canvas shows the new lead");
   await waitFor(async () => (await data()).measurements.some((m) => m.id === mid && m.leadId === leadId), "the draft is the new lead's");
+  await h.go(`/lead/${leadId}`);
   await tid("module-gutters-measure").waitFor({ timeout: 8000 });
   h.expect(/Открыть замер/.test(await tid("module-gutters-measure").innerText()), "the lead card: «Открыть замер»");
   await h.shot("lead");

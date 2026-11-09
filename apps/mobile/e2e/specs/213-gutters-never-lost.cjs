@@ -1,7 +1,7 @@
 /**
  * e2e 213 — чертёж не теряется (страх основателя 09.11, версия 475: «отвлёкся, смахнул приложение, обновилось — чертёж
  * пропал»; docs/specs/33-gutters-canvas.md П20.21). Every view.
- * - «Замерить здесь» without a client: three gutters drawn one after another, the page reloaded AT ONCE (no pause after
+ * - «Замер желобов» (было «Замерить здесь») without a client: three gutters drawn one after another, the page reloaded AT ONCE (no pause after
  *   the last stroke) → the same three on the canvas, and in the phone's copy of the data;
  * - one more, then the app left at once (another page — pagehide) and the measurement opened by its address → four.
  * Finds things by testID; waits on what it checks.
@@ -36,7 +36,7 @@ exports.run = async (h) => {
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitFor(async () => (await tid("module-gutters-status").count()) === 1, "the module's status");
-  // «Замерить здесь» — no client, no lead
+  // «Замер желобов» (было «Замерить здесь») — no client, no lead
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();

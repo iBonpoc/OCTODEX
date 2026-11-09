@@ -7732,6 +7732,85 @@ select tst.ok((select count(*) from u) = 0, 'T160 another company changes nothin
 update public.gutter_measurements set accuracy = 'rough' where id = '9e920000-0000-4000-8000-000000000001';
 \echo 'T160 measurement accuracy ok'
 
+-- ---------------------------------------------------------------- T161: no deleting a measurement a signed estimate stands on (docs/specs/33-gutters-workflow.md П24 Б6, #690)
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_e uuid; v_v uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'T161 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '161 Guard St', 'Burbank') returning id into v_prop;
+  insert into public.gutter_measurements (id, company_id, property_id) values ('9e161000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', v_prop);
+  insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T161 signed on a measurement') returning id into v_e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no, calc_inputs) values ('ca000000-0000-0000-0000-000000000000', v_e, 1, $j${
+    "options": [{"id": "o1", "name": "Option", "lines": [
+      {"id": "m1", "name": "K-style 5in", "group": "material", "quantity": "10", "unit": "ft", "unitPriceCents": 1200,
+       "source": {"module": "gutters", "key": "part=gutter", "qty": "10", "priceCents": 1200, "name": "Gutter 5in", "unit": "ft", "measurementId": "9e161000-0000-4000-8000-000000000001"}}
+    ]}],
+    "settings": {"tax": {"enabled": false, "rateBps": 0, "groups": {}}, "deposit": {"kind": "none"}, "discount": null}
+  }$j$::jsonb) returning id into v_v;
+  update public.estimates set current_version_id = v_v where id = v_e;
+end $$;
+-- a draft estimate on it: deleting is allowed (the guard is only for a signed one) — then back
+update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001';
+select tst.ok((select deleted_at is not null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 a draft estimate does not hold the measurement');
+:as_super
+update public.gutter_measurements set deleted_at = null where id = '9e161000-0000-4000-8000-000000000001';
+set session_replication_role = replica;  -- straight to «approved» (the flow itself is S8/S8b's tests)
+update public.estimates set status = 'approved' where title = 'T161 signed on a measurement';
+set session_replication_role = origin;
+:as_owner_a
+select tst.fails_like($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
+  'a signed estimate stands on this measurement', 'T161 an approved estimate stands on it: the server refuses to delete (the guard, not RLS)');
+:as_super
+set session_replication_role = replica;
+update public.estimates set status = 'awaiting_countersign' where title = 'T161 signed on a measurement';
+set session_replication_role = origin;
+:as_owner_a
+select tst.fails_like($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
+  'a signed estimate stands on this measurement', 'T161 signed by the client, waiting for the company: refused too');
+select tst.ok((select deleted_at is null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 the measurement stays');
+-- the id written in capitals (an old phone, a hand edit) is the same measurement
+:as_super
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,source,measurementId}', '"9E161000-0000-4000-8000-000000000001"')
+ where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+:as_owner_a
+select tst.fails_like($q$update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001'$q$,
+  'a signed estimate stands on this measurement', 'T161 the id in capitals holds it too');
+-- another company's signed estimate naming A's measurement does not hold it; a deleted estimate does not either
+:as_super
+set session_replication_role = replica;
+update public.estimates set company_id = 'cb000000-0000-0000-0000-000000000000' where title = 'T161 signed on a measurement';
+update public.estimate_versions set company_id = 'cb000000-0000-0000-0000-000000000000' where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+set session_replication_role = origin;
+:as_owner_a
+update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001';
+select tst.ok((select deleted_at is not null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 another company''s signed estimate does not hold A''s measurement');
+:as_super
+update public.gutter_measurements set deleted_at = null where id = '9e161000-0000-4000-8000-000000000001';
+set session_replication_role = replica;
+update public.estimate_versions set company_id = 'ca000000-0000-0000-0000-000000000000' where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+update public.estimates set company_id = 'ca000000-0000-0000-0000-000000000000', deleted_at = now() where title = 'T161 signed on a measurement';
+set session_replication_role = origin;
+:as_owner_a
+update public.gutter_measurements set deleted_at = now() where id = '9e161000-0000-4000-8000-000000000001';
+select tst.ok((select deleted_at is not null from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001'), 'T161 a deleted estimate does not hold it');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_gutter_measurement_delete_guard()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.tg_gutter_measurement_delete_guard()', 'EXECUTE'), 'T161 the guard is nobody''s to call');
+set session_replication_role = replica;
+delete from public.estimate_versions where estimate_id in (select id from public.estimates where title = 'T161 signed on a measurement');
+delete from public.estimates where title = 'T161 signed on a measurement';
+delete from public.gutter_measurements where id = '9e161000-0000-4000-8000-000000000001';
+delete from public.properties where address_line1 = '161 Guard St';
+delete from public.customers where display_name = 'T161 Client';
+set session_replication_role = origin;
+-- a change of session_replication_role drops the cached plans: warm uuid_generate_v7 as the owner again (the next
+-- test inserts as a tech — the schema check of its first plan would fail otherwise)
+select public.uuid_generate_v7() is not null as warm \gset
+:as_owner_a
+\echo 'T161 a signed estimate holds its measurement ok'
+
+
 -- ---------------------------------------------------------------- T93: gutter measurements after the trial; revisions never change (founder О2, spec 33 §4)
 :as_tech92
 insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, parts, engine_version) values

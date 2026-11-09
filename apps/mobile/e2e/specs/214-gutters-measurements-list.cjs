@@ -1,7 +1,7 @@
 /**
  * e2e 214 — «Замеры»: где мои замеры (основатель 09.11, версия 475: «из замера вышел — замеры никуда не сохраняются,
  * черновиков нет»; docs/specs/33-gutters-canvas.md П20.22). Every view.
- * - «＋» → «Замерить здесь» → two gutters → back home; «＋» → «Замеры» → a card «Черновик без клиента», «Желобов: 2»,
+ * - «＋» → «Замер желобов» (было «Замерить здесь») → two gutters → back home; «＋» → «Замеры» → a card «Черновик без клиента», «Желобов: 2»,
  *   «Черновик»; it opens the same drawing (two lines);
  * - «Новый замер» opens an empty canvas; a second drawing makes a second card, the newest first.
  * Finds things by testID; waits on what it checks.
