@@ -56,8 +56,14 @@ exports.run = async (h) => {
   await p.locator('[aria-modal="true"]').first().waitFor();
   // the sheet takes Esc only once it has opened (its key handler mounts with the content) — CHECKS §9 п.3
   await h.sheet().getByRole("button").first().waitFor();
-  await p.keyboard.press("Escape");
-  await p.locator('[aria-modal="true"]').first().waitFor({ state: "detached" });
+  // react-native-web's Modal listens for Esc only once it is the active modal (after its open animation); a press in the
+  // first frames is lost on a slow runner (1280-dark, 09.11). Press until it closes — at most 3 tries, each waited for.
+  const sheetEl = p.locator('[aria-modal="true"]').first();
+  for (let i = 0; i < 3; i++) {
+    await p.keyboard.press("Escape");
+    if (await sheetEl.waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false)) break;
+  }
+  await sheetEl.waitFor({ state: "detached" });
   h.expect(await openIs(h, l0.id), `Esc closed the sheet, the panel stays (${p.url()})`);
   await p.keyboard.press("Escape");
   h.expect(await openIs(h, ""), `Esc closes the panel (${p.url()})`);
