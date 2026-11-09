@@ -21,12 +21,16 @@ exports.run = async (h) => {
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
     h.expect(!!v, what);
   };
+  // one gutter, and it is there before the next (a slow machine: GitHub 09.11 drew two of three)
   const stroke = async (a, b) => {
+    const n = await lines();
     await p.mouse.move(a[0], a[1]);
     await p.mouse.down();
-    for (let i = 1; i <= 8; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 8, a[1] + ((b[1] - a[1]) * i) / 8);
+    for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
+    await tid("quick-length").waitFor({ timeout: 5000 });
     await skipLength(p);
+    await waitFor(async () => (await lines()) === n + 1, `gutter ${n + 1} drawn`);
   };
 
   await h.go("/company/modules");

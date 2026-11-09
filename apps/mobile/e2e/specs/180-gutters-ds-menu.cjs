@@ -9,7 +9,7 @@
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -55,7 +55,12 @@ exports.run = async (h) => {
   // storey 2, then storey 3 from its end: they do not meet
   await tid("draw-story").getByRole("button").click(); // 1 → 2
   await stroke([x0, y1], [x0, y0]);
-  await p.mouse.click(b.x + b.width * 0.8, b.y + b.height * 0.15); // nothing picked: «Этаж» changes only the next gutter
+  // nothing picked: «Этаж» changes only the next gutter — the tap on the canvas, not on the leaving length sheet (GitHub
+  // 09.11, #481: it landed on the sheet, the gutter stayed picked and went to the 3rd storey with the next one)
+  const empty = [b.x + b.width * 0.8, b.y + b.height * 0.42]; // an empty place of the canvas, clear of the header
+  await canvasAt(p, empty[0], empty[1]);
+  await p.mouse.click(empty[0], empty[1]);
+  await waitFor(async () => (await tid("draw-selected").count()) === 0, "nothing picked");
   await tid("draw-story").getByRole("button").click(); // 2 → 3
   await stroke([x0, y0], [x1, y0]);
   await waitFor(async () => (await els()).filter((e) => e.kind === "run").length === 2, "two gutters");
