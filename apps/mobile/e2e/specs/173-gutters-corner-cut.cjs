@@ -21,6 +21,8 @@ exports.run = async (h) => {
     h.expect(!!v, what);
   };
   const stroke = async (a, b) => {
+    // the length sheet of the last gutter may still be leaving: draw on the canvas, not on it (GitHub 09.11, #479)
+    await canvasAt(p, a[0], a[1]);
     await p.mouse.move(a[0], a[1]);
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
@@ -83,6 +85,10 @@ exports.run = async (h) => {
 
   // the other kind → the face follows
   await tid("corner-kind").getByRole("radio", { name: kind === "наружный" ? "внутренний" : "наружный", exact: true }).click();
+  // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
+  const kind1 = kind === "наружный" ? "внутренний" : "наружный";
+  await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === kind1), `${kind1} picked`);
+  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
   await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // …and has gone off the canvas
   await p.mouse.click(corner.x + corner.width / 2, corner.y + corner.height / 2);
