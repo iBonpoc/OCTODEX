@@ -5,6 +5,7 @@ import { tapeIn } from "../src/modules/gutters/canvas/attrs";
 import { setCornerAngle, setLength } from "../src/modules/gutters/canvas/edit";
 import { fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { fmtLen } from "../src/modules/gutters/canvas/format";
+import { oneIn } from "../src/modules/gutters/canvas/attrs";
 import { setCornerSplash, setRunUnit } from "../src/modules/gutters/canvas/edit";
 import { splashOff, toMeasurement } from "../src/modules/gutters/geometry";
 import { placeAt } from "../src/modules/gutters/canvas/localStore";
@@ -120,6 +121,15 @@ describe("part 1 of 09.11: units, the splash guard, the toolbar on top", () => {
     expect(fmtLen(306.5, "in")).toBe("306½″");
     expect(fmtLen(0.5, "in")).toBe("½″");
     expect(fmtLen(39.375, "mm")).toBe("1000 mm");
+    // metres and centimetres too (founder 09.11)
+    expect(fmtLen(118.125, "m")).toBe("3 m");
+    expect(fmtLen(39.375, "cm")).toBe("100 cm");
+    expect(oneIn("3", "m")).toBe(118.125);
+    expect(oneIn("250,5", "cm")).toBe(98.625);
+    expect(oneIn("1000", "mm")).toBe(39.375);
+    expect(oneIn("260", "in")).toBe(260);
+    expect(oneIn("0", "m")).toBeNull();
+    expect(oneIn("x", "cm")).toBeNull();
     const d = setRunUnit({ runs: [r("a", [0, 0], [ft(10), 0])], downspouts: [] }, "a", "mm");
     expect(d.runs[0]!.unit).toBe("mm");
     expect("unit" in setRunUnit(d, "a", "ftin").runs[0]!).toBe(false);

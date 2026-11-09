@@ -2585,6 +2585,8 @@ export const ru = {
   "mod.gutters.attr.unit.ftin": "фут + дюйм",
   "mod.gutters.attr.unit.in": "дюймы",
   "mod.gutters.attr.unit.mm": "мм",
+  "mod.gutters.attr.unit.m": "м",
+  "mod.gutters.attr.unit.cm": "см",
   "mod.gutters.attr.unitShow": "Показывать длину в",
   "mod.gutters.attr.colorAsRun": "Как у желоба ({c})",
   "mod.gutters.attr.offsetOwn": "Свой",

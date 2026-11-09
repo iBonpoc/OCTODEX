@@ -81,7 +81,7 @@ export function fromElements(rows: readonly ElementRow[]): Drawing {
   for (const e of rows) {
     if (e.kind === "run" && isPt(e.geom.a) && isPt(e.geom.b)) {
       const g = e.geom as { a: P; b: P; lengthIn?: number; houseSide?: "L" | "R"; noCap?: [boolean, boolean]; unit?: unknown };
-      runs.push({ id: e.id, a: g.a, b: g.b, ...(typeof g.lengthIn === "number" ? { lengthIn: g.lengthIn } : {}), ...(g.houseSide ? { houseSide: g.houseSide } : {}), ...(g.noCap ? { noCap: g.noCap } : {}), ...(g.unit === "in" || g.unit === "mm" ? { unit: g.unit } : {}), attrs: { ...RUN_BASE, ...(e.attrs as Partial<DrawnRun["attrs"]>) } });
+      runs.push({ id: e.id, a: g.a, b: g.b, ...(typeof g.lengthIn === "number" ? { lengthIn: g.lengthIn } : {}), ...(g.houseSide ? { houseSide: g.houseSide } : {}), ...(g.noCap ? { noCap: g.noCap } : {}), ...(g.unit === "in" || g.unit === "m" || g.unit === "cm" || g.unit === "mm" ? { unit: g.unit } : {}), attrs: { ...RUN_BASE, ...(e.attrs as Partial<DrawnRun["attrs"]>) } });
     }
   }
   const runIds = new Set(runs.map((r) => r.id));

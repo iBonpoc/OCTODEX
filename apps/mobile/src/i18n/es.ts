@@ -2585,6 +2585,8 @@ export const es: Dict = {
   "mod.gutters.attr.unit.ftin": "pies + pulg",
   "mod.gutters.attr.unit.in": "pulgadas",
   "mod.gutters.attr.unit.mm": "mm",
+  "mod.gutters.attr.unit.m": "m",
+  "mod.gutters.attr.unit.cm": "cm",
   "mod.gutters.attr.unitShow": "Mostrar el largo en",
   "mod.gutters.attr.colorAsRun": "Igual que la canaleta ({c})",
   "mod.gutters.attr.offsetOwn": "Propio",

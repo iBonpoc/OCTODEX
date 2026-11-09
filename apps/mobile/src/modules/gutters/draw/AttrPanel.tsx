@@ -15,10 +15,10 @@ import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/u
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { Tape as TapeStrip } from "./Tape";
-import { eighthLabel, ftIn, LEN_UNITS, MM_PER_IN, type LenUnit } from "../canvas/format";
+import { eighthLabel, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -127,13 +127,6 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   );
 }
 
-/** one number typed in inches or mm → inches to 1/8″; nothing sensible → null (the same limits as the tape) */
-export function oneIn(v: string, unit: LenUnit): number | null {
-  const x = Number(v.replace(",", "."));
-  if (!Number.isFinite(x) || x <= 0) return null;
-  const r = Math.round((unit === "mm" ? x / MM_PER_IN : x) * 8) / 8;
-  return r > 0 && r <= MAX_RUN_IN ? r : null;
-}
 
 /**
  * Right after a gutter is drawn (founder 08.11, 09.11): its length by hand at once. The fields hold the drawn length,
@@ -154,7 +147,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
     setUnit(u);
     setBad(false);
     if (u === "in") setOne(String(drawn));
-    if (u === "mm") setOne(String(Math.round(drawn * MM_PER_IN)));
+    if (u === "m" || u === "cm" || u === "mm") setOne(String(Math.round(drawn * MM_PER_IN) / MM_OF[u]));
   };
   const apply = () => {
     const n = unit === "ftin" ? tapeIn(ft, inc, e8) : oneIn(one, unit);
@@ -189,7 +182,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
           <View style={{ width: component.qtyFieldW * 2 }} testID="quick-length-one">
             <TextField type="number" value={one} onChangeText={setOne} label={t(k(`unit.${unit}`))} onSubmit={apply} autoFocus selectOnFocus />
           </View>
-          <T v="body" tone="mut">{unit === "mm" ? "mm" : t(k("in"))}</T>
+          <T v="body" tone="mut">{unit === "in" ? t(k("in")) : unit}</T>
         </RowView>
       )}
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>

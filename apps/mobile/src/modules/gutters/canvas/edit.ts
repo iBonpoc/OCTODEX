@@ -311,7 +311,7 @@ export function setCornerAngle(d: Drawing, f: Pick<FoundCorner, "runs" | "at">, 
 }
 
 /** how a gutter's length is shown on the drawing (founder 09.11): a view only — the length stays in inches */
-export function setRunUnit(d: Drawing, id: string, unit: "ftin" | "in" | "mm"): Drawing {
+export function setRunUnit(d: Drawing, id: string, unit: "ftin" | "in" | "m" | "cm" | "mm"): Drawing {
   const r = d.runs.find((x) => x.id === id);
   if (!r || (r.unit ?? "ftin") === unit) return d;
   const { unit: _u, ...rest } = r;

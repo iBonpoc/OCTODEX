@@ -2585,6 +2585,8 @@ export const en: Dict = {
   "mod.gutters.attr.unit.ftin": "ft + in",
   "mod.gutters.attr.unit.in": "inches",
   "mod.gutters.attr.unit.mm": "mm",
+  "mod.gutters.attr.unit.m": "m",
+  "mod.gutters.attr.unit.cm": "cm",
   "mod.gutters.attr.unitShow": "Show the length in",
   "mod.gutters.attr.colorAsRun": "Same as the gutter ({c})",
   "mod.gutters.attr.offsetOwn": "Custom",

@@ -7,7 +7,8 @@
  *   is gone; in the store too;
  * - a bad length (inches 12) says so and keeps the sheet;
  * - the next gutter → «Применить» untouched keeps the drawn length (no tape);
- * - inches alone: 260 → 21′ 8″; mm: 1000 → 39⅜″;
+ * - only the inches changed → the feet stay (version 475: they were reset); the inches field is selected when reached;
+ * - inches alone: 260 → 21′ 8″; mm: 1000 → 39⅜″; m: 3 → 118⅛″;
  * - a gutter, then «Отменить» → it is gone; another, then a tap outside the sheet → gone too (a stray line);
  * - a length label tapped → the length sheet of that gutter («Отменить» there changes nothing);
  * - nothing drawn (a tap) → no sheet.
@@ -104,6 +105,19 @@ exports.run = async (h) => {
   const rs = await runs();
   h.expect(rs.filter((r) => r.geom?.lengthIn === undefined).length === 1, `untouched: one run keeps the drawn length (${JSON.stringify(rs.map((r) => r.geom?.lengthIn))})`);
 
+  // only the inches changed (founder 09.11, version 475: the feet were a grey hint, not a value — typed inches alone made
+  // the gutter 9″): the feet and the eighths stay; the inches field is selected when it is reached
+  const y5 = y + b.height * 0.3;
+  await stroke([x0, y5], [x1, y5]);
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  const feet = Number(await field("quick-length-ft").inputValue());
+  h.expect(feet > 0, `the feet field holds the drawn feet as a value (${feet})`);
+  await field("quick-length-in").click();
+  await waitFor(() => field("quick-length-in").evaluate((el) => el === document.activeElement && el.selectionStart === 0 && el.selectionEnd === el.value.length), "the inches field: its value selected");
+  await p.keyboard.type("9");
+  await tid("quick-length-apply").getByRole("button").click();
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === feet * 12 + 9), `only the inches changed: ${feet}′ 9″ — the feet kept`);
+
   // inches alone, then mm
   const y3 = y - b.height * 0.17;
   await stroke([x0, y3], [x1, y3]);
@@ -122,23 +136,31 @@ exports.run = async (h) => {
   await field("quick-length-one").fill("1000");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 39.375), "1000 mm → 39⅜″");
+  // metres too (founder 09.11): 3 m → 118⅛″
+  const lab3 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "3′ 3⅜″" }).first().boundingBox();
+  await p.mouse.click(lab3.x + lab3.width / 2, lab3.y + lab3.height / 2);
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  await tid("quick-length-unit").getByRole("radio", { name: "м", exact: true }).click();
+  await field("quick-length-one").fill("3");
+  await tid("quick-length-apply").getByRole("button").click();
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 118.125), "3 m → 118⅛″");
   // the label again, «Отменить» there changes nothing
-  const lab2 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "3′ 3⅜″" }).first().boundingBox();
+  const lab2 = await p.getByTestId("draw-svg").first().locator('[id^="lbl-len:"]').filter({ hasText: "9′ 10⅛″" }).first().boundingBox();
   await p.mouse.click(lab2.x + lab2.width / 2, lab2.y + lab2.height / 2);
   await tid("quick-length").waitFor({ timeout: 5000 });
   await tid("quick-length-cancel").getByRole("button").click();
   await waitFor(async () => (await tid("quick-length").count()) === 0, "closed");
-  h.expect((await runs()).length === 3 && (await runs()).some((r) => r.geom?.lengthIn === 39.375), "«Отменить» on a label's sheet keeps the gutter");
+  h.expect((await runs()).length === 4 && (await runs()).some((r) => r.geom?.lengthIn === 118.125), "«Отменить» on a label's sheet keeps the gutter");
 
   // a stray line: «Отменить» → gone; a tap outside → gone
   const y4 = y - b.height * 0.27;
   await stroke([x0, y4], [x1, y4]);
   await tid("quick-length").waitFor({ timeout: 5000 });
   await tid("quick-length-cancel").getByRole("button").click();
-  await waitFor(async () => (await runs()).length === 3, "«Отменить»: the new gutter is gone");
+  await waitFor(async () => (await runs()).length === 4, "«Отменить»: the new gutter is gone");
   await stroke([x0, y4], [x1, y4]);
   await tid("quick-length").waitFor({ timeout: 5000 });
   await p.getByRole("button", { name: "Закрыть", exact: true }).last().click({ position: { x: 10, y: 10 } });
-  await waitFor(async () => (await runs()).length === 3, "a tap outside: the new gutter is gone too");
-  await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 3, "three lines on the canvas");
+  await waitFor(async () => (await runs()).length === 4, "a tap outside: the new gutter is gone too");
+  await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 4, "four lines on the canvas");
 };

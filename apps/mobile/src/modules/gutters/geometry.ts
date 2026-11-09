@@ -25,7 +25,7 @@ export interface DrawnRun {
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
   /** how its length is shown on the drawing (founder 09.11): feet + inches (none), inches, mm — a view, not a size */
-  unit?: "in" | "mm";
+  unit?: "in" | "m" | "cm" | "mm";
 }
 
 export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
