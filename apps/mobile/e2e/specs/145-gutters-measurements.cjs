@@ -7,7 +7,7 @@
  * - a draft the previous version kept on the phone (M4b, device-wide, no owner) is forgotten, never moved in.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, closeDsMenu } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 const OLD = "octo.mod.gutters.draft.v1";
 
@@ -53,6 +53,7 @@ exports.run = async (h) => {
   const { b, y } = await drawRun();
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click(b.x + b.width * 0.47, y + 3);
+  await closeDsMenu(p);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout");
   await tid("draw-saved").waitFor({ timeout: 5000 });
   await waitFor(() => !!idInUrl(), "the address names the measurement");

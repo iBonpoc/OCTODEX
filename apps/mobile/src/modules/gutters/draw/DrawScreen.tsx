@@ -294,6 +294,13 @@ export default function DrawScreen() {
     onActivate: (e) => {
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
+      // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
+      // in a tap on the web)
+      const onDs = hitTest(d, p, tolIn());
+      if (tl === "ds" && onDs?.kind === "ds") {
+        setSelected(onDs.id);
+        return;
+      }
       if (tl === "ds") {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch));
@@ -301,6 +308,8 @@ export default function DrawScreen() {
           commit(next);
           setSelected(id);
           setFresh(id);
+          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open
+          setSheet(true);
         }
         return;
       }
@@ -419,7 +428,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );
@@ -459,11 +468,16 @@ export default function DrawScreen() {
   };
   /** how far the toolbar is dragged by its grip, px */
   const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
+  /** the toolbar is being dragged by its grip: it stands out and says where to let go (founder 09.11) */
+  const [gripping, setGripping] = useState(false);
   const gripPan = usePanGesture({
     runOnJS: true,
+    onActivate: () => setGripping(true),
     onUpdate: (e) => setGripAt([e.translationX, e.translationY]),
+    onFinalize: () => setGripping(false),
     onDeactivate: (e) => {
       setGripAt([0, 0]);
+      setGripping(false);
       if (e.canceled) return;
       const p = placeAt(e.absoluteX, e.absoluteY, win.width, win.height);
       setPlace(p);
@@ -569,14 +583,14 @@ export default function DrawScreen() {
   const grip = (
     <GestureDetector gesture={gripPan}>
       <View testID="draw-grip" accessibilityRole="adjustable" accessibilityLabel={t("mod.gutters.draw.grip")} style={{ minWidth: side ? sizes.hitMin : sizes.iconMd, minHeight: side ? sizes.iconMd : sizes.hitMin, alignItems: "center", justifyContent: "center" }}>
-        <Icon name="grip" s={sizes.iconMd} color={c.mut} />
+        <Icon name="grip" s={sizes.iconMd} color={c.ink} />
       </View>
     </GestureDetector>
   );
   /** 390 at the bottom: the row takes the width, six cells share it */
   const grow = !side && !wide;
   const tools = (
-    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
+    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
       <View testID="draw-tool-line" style={grow ? { flex: 1 } : undefined}><ToolCell icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
       <View testID="draw-tool-ds" style={grow ? { flex: 1 } : undefined}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
@@ -678,7 +692,12 @@ export default function DrawScreen() {
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
-        {hintText ? (
+        {gripping ? (
+          <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+            <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
+          </View>
+        ) : null}
+        {hintText && !gripping ? (
           <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
@@ -715,6 +734,7 @@ export default function DrawScreen() {
           ) : null}
           <RowView style={{ justifyContent: "space-between" }}>
             <View testID="draw-money">
+              <T v="micro" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
               <T v="title" w="bold" tabular>{money(preview.totalCents)}</T>
             </View>
             {preview.test ? <View testID="draw-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}

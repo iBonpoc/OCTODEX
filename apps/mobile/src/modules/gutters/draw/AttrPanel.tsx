@@ -8,11 +8,12 @@
  */
 import { useEffect, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { component, space } from "@octo/design-tokens";
+import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
-import { T } from "@/ui/primitives";
+import { Icon, Press, T } from "@/ui/primitives";
+import { useTheme } from "@/theme/ThemeProvider";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
@@ -160,28 +161,71 @@ export function QuickLength({ run, onLength, onDone }: { run: DrawnRun; onLength
   );
 }
 
-/** stock shared by runs and downspouts: material → gauge; paint → colour (copper and zinc are bare) */
-function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, part = "all" }: { a: A; set: (p: Partial<A>) => void; ch: Choices; /** 390 (П20.9): finish and colour on top, the rest under «Ещё» */ part?: "all" | "color" | "rest" }) {
+/**
+ * A choice folded into one row (founder 09.11: «выпадающее меню»): the field's name and what is picked; a tap opens the
+ * choices, a pick closes them. For the long lists — the size and the colour.
+ */
+function Select<K extends string>({ label, testID, items, value, onChange, offered }: { label: string; testID: string; items: { key: K; label: string }[]; value: K; onChange: (v: K) => void; offered?: readonly string[] }) {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const [open, setOpen] = useState(false);
+  const off = (it: { key: K; label: string }) => (offered && !offered.includes(it.key) ? { ...it, label: `${it.label} · ${t(k("notOffered"))}` } : it);
+  const cur = items.find((it) => it.key === value);
+  return (
+    <Field label={label} testID={testID}>
+      <Press testID={`${testID}-open`} onPress={() => setOpen((x) => !x)} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }}>
+        <RowView style={{ justifyContent: "space-between", minHeight: sizes.hitMin, paddingHorizontal: space[3], borderRadius: radius.field, borderWidth: 1, borderColor: c.bd, backgroundColor: c.in }}>
+          <View testID={`${testID}-value`} style={{ flex: 1 }}><T v="body">{cur ? off(cur).label : value}</T></View>
+          <Icon name="chevronDown" s={sizes.iconSm} color={c.mut} />
+        </RowView>
+      </Press>
+      {open ? <ChoiceChips items={items.map(off)} value={value} onChange={(v) => { setOpen(false); onChange(v); }} /> : null}
+    </Field>
+  );
+}
+
+/**
+ * The colour (founder 09.11): one choice — «Без покраски» is one of them (no separate painted / bare buttons: a colour
+ * picked is painted). A downspout also has «Как у желоба» — its gutter's colour, the default, and it follows the gutter.
+ * Copper and zinc are bare only.
+ */
+function ColorPick<A extends { material: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, run }: { a: A; set: (p: Partial<A>) => void; ch: Choices; run?: { finish?: "mill" | "painted"; color?: string; material: string } }) {
   const { t } = useI18n();
   const colorLabel = useColorLabel();
+  if (MILL_ONLY.has(a.material)) return null;
+  const palette = withCurrent(ch.palette, a.color);
+  const bare = (a.finish ?? (a.color ? "painted" : "mill")) === "mill";
+  const runBare = run ? (run.finish ?? (run.color ? "painted" : "mill")) === "mill" : false;
+  const sameAsRun = !!run && !MILL_ONLY.has(run.material) && (bare ? runBare : !runBare && run.color === a.color);
+  const value = sameAsRun ? "@run" : bare ? "@mill" : (a.color ?? palette[0]!);
+  const items = [
+    ...(run && !MILL_ONLY.has(run.material) ? [{ key: "@run", label: t(k("colorAsRun"), { c: runBare ? t(k("f.mill")) : colorLabel(run.color ?? "") }) }] : []),
+    { key: "@mill", label: t(k("f.mill")) },
+    ...palette.map((c) => ({ key: c, label: colorLabel(c) })),
+  ];
+  return (
+    <Select label={t(k("color"))} testID="attr-color" offered={["@run", "@mill", ...ch.palette]} items={items} value={value} onChange={(v) => {
+      if (v === "@run" && run) set((runBare ? { finish: "mill" } : { finish: "painted", color: run.color }) as Partial<A>);
+      else if (v === "@mill") set({ finish: "mill" } as Partial<A>);
+      else set({ finish: "painted", color: v } as Partial<A>);
+    }} />
+  );
+}
+
+/** stock shared by runs and downspouts: material → gauge; paint → colour (copper and zinc are bare) */
+function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, part = "all", run }: { a: A; set: (p: Partial<A>) => void; ch: Choices; /** 390 (П20.9): finish and colour on top, the rest under «Ещё» */ part?: "all" | "color" | "rest"; /** a downspout: its gutter (the colour «Как у желоба») */ run?: { finish?: "mill" | "painted"; color?: string; material: string } }) {
+  const { t } = useI18n();
   const materials = withCurrent(ch.offer.materials, a.material);
   const gauges = withCurrent(ch.offer.gauges[a.material] ?? [], a.gauge);
-  const palette = withCurrent(ch.palette, a.color);
   const mill = MILL_ONLY.has(a.material);
-  const finish = a.finish ?? (a.color ? "painted" : "mill");
   const rest = part !== "color";
   const color = part !== "rest";
   return (
     <>
       {rest ? <Pick label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} /> : null}
       {rest && gauges.length ? <Pick label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
-      {/* the finish goes with the colour (390 on top): «Без покраски» hides the colour, so the way back stands beside it */}
-      {color && !mill ? (
-        <Pick label={t(k("finish"))} testID="attr-finish" items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(k(`f.${f}`)) }))} value={finish} onChange={(f) => set({ finish: f } as Partial<A>)} />
-      ) : null}
-      {color && !mill && finish === "painted" ? (
-        <Pick label={t(k("color"))} testID="attr-color" offered={ch.palette} items={palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={a.color ?? palette[0]!} onChange={(color) => set({ color } as Partial<A>)} />
-      ) : null}
+      {/* the colour: one folded choice with «Без покраски» among them (founder 09.11) */}
+      {color && !mill ? <ColorPick a={a} set={set} ch={ch} run={run} /> : null}
     </>
   );
 }
@@ -235,7 +279,7 @@ export function RunAttrsView({
       {compact ? (
         <>
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
-      <Pick label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
+      <Select label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
         <Stock a={a} set={onAttrs} ch={ch} part="color" />
       <Tape run={run} onLength={onLength} />
           <More open0={false} id={run.id} label={t(k("moreRun"))}>
@@ -251,7 +295,7 @@ export function RunAttrsView({
       <Tape run={run} onLength={onLength} />
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
       <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
-      <Pick label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
+      <Select label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={a} set={onAttrs} ch={ch} />
       <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
       <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
@@ -277,7 +321,7 @@ function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
   );
 }
 
-export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; compact?: boolean }) {
+export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; compact?: boolean; /** its gutter: «Как у желоба» */ run?: DrawnRun["attrs"] }) {
   const { t } = useI18n();
   const w = wallOf(ds.shape, ds.wall);
   const sizes = withCurrent(ch.offer.dsSizes[ds.shape], ds.size);
@@ -289,9 +333,10 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds:
       <T v="heading" w="semibold">{t(k("ds"))}</T>
       {compact ? (
         <>
-      <Pick label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
-          <Stock a={ds} set={onAttrs} ch={ch} part="color" />
+      <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+          <Stock a={ds} set={onAttrs} ch={ch} part="color" run={run} />
       <Elbows ds={ds} onAttrs={onAttrs} />
+      <Offsets ds={ds} onAttrs={onAttrs} />
           <More open0={rareSet(ds)} id={ds.id} label={t(k("moreDs"))}>
       <Pick label={t(k("shape"))} testID="attr-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(k(`sh.${s}`)) }))} value={ds.shape} onChange={(shape) => onAttrs({ shape })} />
       <Pick label={t(k("dsStyle"))} testID="attr-ds-style" offered={ch.offer.dsStyles} items={styles.map((s) => ({ key: s, label: t(k(`st.${s}`)) }))} value={ds.dsStyle ?? "plain"} onChange={(dsStyle) => onAttrs({ dsStyle: dsStyle as DsAttrs["dsStyle"] })} />
@@ -305,10 +350,11 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds:
       ) : (
         <>
       <Pick label={t(k("shape"))} testID="attr-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(k(`sh.${s}`)) }))} value={ds.shape} onChange={(shape) => onAttrs({ shape })} />
-      <Pick label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+      <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
       <Pick label={t(k("dsStyle"))} testID="attr-ds-style" offered={ch.offer.dsStyles} items={styles.map((s) => ({ key: s, label: t(k(`st.${s}`)) }))} value={ds.dsStyle ?? "plain"} onChange={(dsStyle) => onAttrs({ dsStyle: dsStyle as DsAttrs["dsStyle"] })} />
-      <Stock a={ds} set={onAttrs} ch={ch} />
+      <Stock a={ds} set={onAttrs} ch={ch} run={run} />
       <Elbows ds={ds} onAttrs={onAttrs} />
+      <Offsets ds={ds} onAttrs={onAttrs} />
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Pick label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
       <Pick label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)) }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
@@ -322,6 +368,50 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds:
 }
 
 /**
+ * Offsets (founder 09.11: the fittings in the downspout's own menu): how many, then the length — 1″ to 5″ or its own
+ * (a custom part; the engine marks lengths it does not stock as custom).
+ */
+function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
+  const { t } = useI18n();
+  const off = ds.offsets?.[0];
+  const len = off?.lengthIn ?? OFFSETS_IN[0];
+  const std = (OFFSETS_IN as readonly number[]).includes(len);
+  const [own, setOwn] = useState(std ? "" : String(len));
+  const [ownOpen, setOwnOpen] = useState(!std);
+  const put = (lengthIn: number) => onAttrs({ offsets: [{ lengthIn, qty: off?.qty ?? 1 }] });
+  return (
+    <Field label={t(k("offsets"))} testID="attr-offsets">
+      {/* the count makes offsets; the length is picked only once there are some (review M7c №6) */}
+      <View testID="attr-offset-qty">
+        <Stepper label={t(k("offsetQty"))} value={off?.qty ?? 0} min={0} max={8} onChange={(qty) => onAttrs({ offsets: qty ? [{ lengthIn: len, qty }] : undefined })} />
+      </View>
+      {off?.qty ? (
+        <View testID="attr-offset-len" style={{ gap: space[2] }}>
+          <ChoiceChips
+            items={[...OFFSETS_IN.map((n) => ({ key: String(n), label: inch(String(n)) })), { key: "own", label: t(k("offsetOwn")) }]}
+            value={ownOpen ? "own" : String(len)}
+            onChange={(v) => {
+              if (v === "own") return setOwnOpen(true);
+              setOwnOpen(false);
+              put(Number(v));
+            }}
+          />
+          {ownOpen ? (
+            <RowView style={{ gap: space[2] }}>
+              <View style={{ width: component.qtyFieldW }} testID="attr-offset-own">
+                <TextField type="number" value={own} onChangeText={setOwn} label={t(k("offsetOwn"))} onSubmit={() => { const n = Number(own); if (n > 0 && n <= 24) put(Math.round(n * 8) / 8); }} />
+              </View>
+              <T v="body" tone="mut">{t(k("in"))}</T>
+              <View testID="attr-offset-own-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={() => { const n = Number(own); if (n > 0 && n <= 24) put(Math.round(n * 8) / 8); }} /></View>
+            </RowView>
+          ) : null}
+        </View>
+      ) : null}
+    </Field>
+  );
+}
+
+/**
  * The rare fields of a downspout behind «Ещё» (M7c, debt of M5c №9): its own height, offsets, a size change on the way
  * down, what sits on top, a rain-barrel diverter, an outlet screen. «Ещё» opens by itself when one of them is set.
  */
@@ -329,8 +419,6 @@ const rareSet = (ds: DrawnDownspout) => !!(ds.heightIn || ds.offsets?.length || 
 
 function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const off = ds.offsets?.[0];
-  const offLen = String(off?.lengthIn ?? OFFSETS_IN[0]) as `${(typeof OFFSETS_IN)[number]}`;
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
   const smaller = smallerSizes(ds.shape, ds.size);
   return (
@@ -339,13 +427,6 @@ function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
         <Stepper label={t(k("height"))} unit={t(k("ft"))} value={Math.round((ds.heightIn ?? 0) / 12)} min={0} max={MAX_DS_HEIGHT_FT} onChange={(ft) => onAttrs({ heightIn: ft ? ft * 12 : undefined })} />
         <T v="caption" tone="mut">{t(k("heightHint"))}</T>
       </View>
-      {/* the count makes offsets; the length is picked only once there are some (review M7c №6) */}
-      <View testID="attr-offset-qty">
-        <Stepper label={t(k("offsetQty"))} value={off?.qty ?? 0} min={0} max={8} onChange={(qty) => onAttrs({ offsets: qty ? [{ lengthIn: Number(offLen), qty }] : undefined })} />
-      </View>
-      {off?.qty ? (
-        <Pick label={t(k("offsets"))} testID="attr-offset-len" items={OFFSETS_IN.map((n) => ({ key: String(n) as typeof offLen, label: inch(String(n)) }))} value={offLen} onChange={(v) => onAttrs({ offsets: [{ lengthIn: Number(v), qty: off.qty }] })} />
-      ) : null}
       <Pick label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")) }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={ds.reducers?.[0]?.to ?? ""} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} />
       <Pick label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
       <Switch testID="attr-diverter" on={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} />

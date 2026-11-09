@@ -40,7 +40,8 @@ exports.run = async (h) => {
   const svg = () => p.getByTestId("draw-svg").first();
   const panel = () => tid("attr-panel");
   const openAttrs = async () => {
-    if (!wide) await tid("draw-props").getByRole("button").click();
+    // a downspout just put opens its menu by itself (founder 09.11)
+    if (!wide && !(await panel().count())) await tid("draw-props").getByRole("button").click();
     await panel().waitFor({ timeout: 5000 });
   };
   const closeAttrs = async () => {
