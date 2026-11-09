@@ -36,6 +36,9 @@ export interface PlaceCtx {
   propertyId?: string;
   /** a visit's screen: the visit (its lead, client and property come in the fields above) */
   visitId?: string;
+  /** the leads of this address or client (a lead that got the address: what was made on the lead shows here too —
+   *  spec 33 П24 Б4, S4h) */
+  leadIds?: string[];
 }
 /** one action of a module in a core screen: a button (lead, property) or an item of «＋» (home) */
 export interface ModuleAction {

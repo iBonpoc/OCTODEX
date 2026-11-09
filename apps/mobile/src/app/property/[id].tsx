@@ -191,7 +191,7 @@ export default function PropertyScreen() {
       </Card>
 
       {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
-      <ModulePlaces place="property" ctx={{ customerId: p.customerId, propertyId: p.id }} />
+      <ModulePlaces place="property" ctx={{ customerId: p.customerId, propertyId: p.id, leadIds: db.leads.filter((l) => l.propertyId === p.id).map((l) => l.id) }} />
 
       {/* rows with counters (13 §3.3): details of this one property, each opens its own list */}
       <View testID="property-rows">

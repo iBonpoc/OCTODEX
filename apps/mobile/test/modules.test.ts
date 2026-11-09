@@ -332,7 +332,7 @@ describe("unit:modules — places in core screens (C2b)", () => {
       lead: (c: { leadId?: string }) => (c.leadId ? [{ id: "measure", labelKey: "mod.title" as const, icon: "pencil" as const, href: `/x?lead=${c.leadId}` }] : []),
       home: (c: { role: string }) => (c.role === "tech" ? [] : [{ id: "here", labelKey: "mod.title" as const, icon: "pin" as const, href: "/x" }]),
       // spec 33 П24 А3, А7: the client's card and a visit's screen give their object
-      client: (c: { customerId?: string }) => (c.customerId ? [{ id: "c", labelKey: "mod.title" as const, icon: "pencil" as const, href: `/x?customer=${c.customerId}` }] : []),
+      client: (c: { customerId?: string; leadIds?: string[] }) => (c.customerId ? [{ id: "c", labelKey: "mod.title" as const, icon: "pencil" as const, href: `/x?customer=${c.customerId}&leads=${(c.leadIds ?? []).join(",")}` }] : []),
       visit: (c: { visitId?: string; propertyId?: string }) => (c.visitId ? [{ id: "v", labelKey: "mod.title" as const, icon: "pencil" as const, href: `/x?visit=${c.visitId}&property=${c.propertyId ?? ""}` }] : []),
     },
   };
@@ -346,7 +346,9 @@ describe("unit:modules — places in core screens (C2b)", () => {
     expect(placeActions("property", on, { role: "director" }, NOW)).toEqual([]);
   });
   it("the client's card and a visit's screen (П24 А3, А7): the module gets the client, the visit and its address", () => {
-    expect(placeActions("client", on, { role: "director", customerId: "c1" }, NOW).map((a) => a.href)).toEqual(["/x?customer=c1"]);
+    expect(placeActions("client", on, { role: "director", customerId: "c1" }, NOW).map((a) => a.href)).toEqual(["/x?customer=c1&leads="]);
+    // S4h: the leads of the client / address come too (a lead that got the address)
+    expect(placeActions("client", on, { role: "director", customerId: "c1", leadIds: ["l1", "l2"] }, NOW).map((a) => a.href)).toEqual(["/x?customer=c1&leads=l1,l2"]);
     expect(placeActions("visit", on, { role: "tech", visitId: "v1", propertyId: "p1" }, NOW).map((a) => a.href)).toEqual(["/x?visit=v1&property=p1"]);
     expect(placeActions("client", { modules: { place_demo: cm({ trialEndsAt: iso(NOW - DAY) }) } }, { role: "director", customerId: "c1" }, NOW)).toEqual([]);
   });

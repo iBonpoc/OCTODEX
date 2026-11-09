@@ -154,7 +154,7 @@ export function ClientCardBody({ c }: { c: Customer }) {
       </RowView>
 
       {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
-      <ModulePlaces place="client" ctx={{ customerId: c.id }} />
+      <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id) }} />
 
       {canSeeClientMoney(role) ? (
         // money only, three equal tiles on one line — unslop 05.11
