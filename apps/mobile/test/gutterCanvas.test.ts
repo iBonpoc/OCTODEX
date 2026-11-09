@@ -10,7 +10,7 @@ const box = (l: { x: number; y: number; w: number; h: number }) => ({ x0: l.x - 
 const opts = (vp = { w: 390, h: 700 }) => ({ viewport: vp, fontSize: 11, padX: 4, gap: 4, dsText: (n: number) => `DS ${n}`, storyText: (n: number) => `эт ${n}` });
 
 describe("ftIn: US feet and inches", () => {
-  it.each([[0, "0″"], [9, "9″"], [96, "8′"], [150, "12′ 6″"], [149.6, "12′ 6″"]])("%s → %s", (i, s) => expect(ftIn(i)).toBe(s));
+  it.each([[0, "0″"], [9, "9″"], [96, "8′"], [150, "12′ 6″"], [149.6, "12′ 5⅝″"], [149.95, "12′ 6″"]])("%s → %s", (i, s) => expect(ftIn(i)).toBe(s));
 });
 
 describe("labels never overlap", () => {

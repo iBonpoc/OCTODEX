@@ -65,7 +65,7 @@ export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: str
 }
 
 /** the measurement's own fields (what measurement.save writes) */
-export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId });
+export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId, ...(m.accuracy ? { accuracy: m.accuracy } : {}) });
 
 /**
  * S1b «Сделать заявкой»: the new lead made from a draft takes it (ModuleDef.leadCreated). A measurement the store does
@@ -92,6 +92,7 @@ export function measurementFromRow(r: Record<string, unknown>): MeasurementRow |
     status: r.status === "ready" ? "ready" : "draft",
     propertyId: str(r.property_id),
     leadId: str(r.lead_id),
+    accuracy: r.accuracy === "tape" ? "tape" : "rough",
     ...(str(r.updated_at) ? { updatedAt: str(r.updated_at)! } : {}),
   };
 }
@@ -113,7 +114,7 @@ export function elementFromRow(r: Record<string, unknown>): ElementRow | null {
 /** ModuleDef.load: the company's live measurements and their live elements (RLS: what this person sees) */
 export async function loadGutters(read: ModuleRead): Promise<GutterData> {
   const [ms, es] = await Promise.all([
-    read.live("gutter_measurements", "id, property_id, lead_id, label, status, updated_at"),
+    read.live("gutter_measurements", "id, property_id, lead_id, label, status, accuracy, updated_at"),
     read.live("gutter_measurement_elements", "id, measurement_id, kind, geom, attrs, confidence"),
   ]);
   const measurements = ms.map(measurementFromRow).filter((x): x is MeasurementRow => !!x);
@@ -148,7 +149,7 @@ export function removePhoto(store: ModuleStore, id: string) {
 
 /* ---------- module.op → the server ---------- */
 export const measurementToDb = (m: MeasurementRow, companyId: string) => ({
-  id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, deleted_at: null,
+  id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, ...(m.accuracy ? { accuracy: m.accuracy } : {}), deleted_at: null,
 });
 export const elementToDb = (e: ElementRow, companyId: string) => ({
   id: e.id, company_id: companyId, measurement_id: e.measurementId, kind: e.kind, geom: e.geom, attrs: e.attrs, confidence: e.confidence, deleted_at: null,

@@ -234,13 +234,14 @@ export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string
 const same = (a: object, b: object) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const sorted = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).sort(([x], [y]) => (x < y ? -1 : 1)));
 
-/** feet and inches typed on the tape → whole inches; nothing sensible (empty, 0, negative, too long) → null */
+/** feet, inches and eighths typed on the tape → inches (to 1/8″); nothing sensible (empty, 0, negative, too long) → null */
 export const MAX_RUN_IN = 12 * 500;
-export function tapeIn(ft: string, inch: string): number | null {
+export function tapeIn(ft: string, inch: string, eighths = 0): number | null {
   const f = ft.trim() === "" ? 0 : Number(ft);
   const i = inch.trim() === "" ? 0 : Number(inch);
   if (!Number.isFinite(f) || !Number.isFinite(i) || f < 0 || i < 0 || i >= 12 || !Number.isInteger(f)) return null;
-  const n = Math.round(f * 12 + i);
+  // 1/8″ (founder 08.11: re-measured 8′ 9¼″)
+  const n = Math.round((f * 12 + i + Math.max(0, Math.min(7, Math.round(eighths))) / 8) * 8) / 8;
   return n > 0 && n <= MAX_RUN_IN ? n : null;
 }
 

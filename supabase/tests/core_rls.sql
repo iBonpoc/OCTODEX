@@ -7714,6 +7714,24 @@ select tst.ok((select bool_and(relrowsecurity and relforcerowsecurity) from pg_c
           'T92 RLS on and forced on all three tables');
 \echo 'T92 gutter measurements: staff and techs write, subcontractors and other companies nothing, same company, no deletes ok'
 
+-- ---------------------------------------------------------------- T160: how a measurement was taken (docs/specs/33 П20.16; here, while the module is on)
+:as_owner_a
+select tst.ok((select accuracy = 'rough' from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000001'),
+  'T160 a measurement written without accuracy (an old phone) is rough');
+update public.gutter_measurements set accuracy = 'tape' where id = '9e920000-0000-4000-8000-000000000001';
+select tst.ok((select accuracy = 'tape' from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000001'),
+  'T160 the office marks it measured with a tape');
+select tst.fails($q$update public.gutter_measurements set accuracy = 'laser' where id = '9e920000-0000-4000-8000-000000000001'$q$,
+  'T160 only rough / tape');
+select tst.fails($q$update public.gutter_measurements set accuracy = null where id = '9e920000-0000-4000-8000-000000000001'$q$,
+  'T160 never empty');
+:as_owner_b
+with u as (update public.gutter_measurements set accuracy = 'rough' where id = '9e920000-0000-4000-8000-000000000001' returning 1)
+select tst.ok((select count(*) from u) = 0, 'T160 another company changes nothing');
+:as_owner_a
+update public.gutter_measurements set accuracy = 'rough' where id = '9e920000-0000-4000-8000-000000000001';
+\echo 'T160 measurement accuracy ok'
+
 -- ---------------------------------------------------------------- T93: gutter measurements after the trial; revisions never change (founder О2, spec 33 §4)
 :as_tech92
 insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, parts, engine_version) values

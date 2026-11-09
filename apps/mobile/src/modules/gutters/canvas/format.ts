@@ -1,8 +1,14 @@
-/** A length in whole inches as a contractor in the US writes it: 12′ 6″, 8′, 9″ (rule 7: US formats). */
+const EIGHTHS = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"] as const;
+export const eighthLabel = (k: number) => EIGHTHS[k] || "0";
+
+/** A length in inches as a contractor in the US writes it, to 1/8″: 12′ 6″, 8′, 9″, 8′ 9¼″ (rule 7: US formats). */
 export function ftIn(inches: number): string {
-  const n = Math.max(0, Math.round(inches));
+  const e = Math.max(0, Math.round(inches * 8));
+  const n = Math.floor(e / 8);
+  const frac = EIGHTHS[e % 8]!;
   const ft = Math.floor(n / 12);
   const i = n % 12;
-  if (ft === 0) return `${i}″`;
-  return i === 0 ? `${ft}′` : `${ft}′ ${i}″`;
+  const ins = i ? `${i}${frac}` : frac;
+  if (ft === 0) return `${ins || "0"}″`;
+  return ins ? `${ft}′ ${ins}″` : `${ft}′`;
 }

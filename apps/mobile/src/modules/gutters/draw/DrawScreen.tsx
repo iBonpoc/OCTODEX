@@ -29,8 +29,9 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, flipFace, moveDs, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
+import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
@@ -45,7 +46,7 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, findCorners, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds" | "select";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -163,7 +164,7 @@ export default function DrawScreen() {
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
       const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
-      setM(v?.m ?? { id: mid, label: null, status: "draft", propertyId: one(params.property), leadId: one(params.lead) });
+      setM(v?.m ?? { id: mid, label: null, status: "draft", accuracy: "rough", propertyId: one(params.property), leadId: one(params.lead) });
     });
     void loadToolbarPlace().then((p) => on && setPlace(p));
     return () => {
@@ -394,7 +395,14 @@ export default function DrawScreen() {
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
   };
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
+  const tape = m?.accuracy === "tape";
+  const setAccuracy = (a: "rough" | "tape") => {
+    setM((x) => (x ? { ...x, accuracy: a } : x));
+    later.current();
+  };
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
+  const cut = corner ? cornerCut(drawing, corner) : null;
+  const [sketchW, setSketchW] = useState(0);
   const cornerKind = (kind: "in" | "out") => {
     if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
     setCornerSheet(null);
@@ -615,6 +623,11 @@ export default function DrawScreen() {
         </RowView>
         {flat && canSave ? null : canSave ? (
           <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
+            <View testID="draw-accuracy">
+              <Press onPress={() => setMoreSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.accTitle")}>
+                <StatusChip status={tape ? "ok" : "warn"} label={t(tape ? "mod.gutters.draw.accTapeShort" : "mod.gutters.draw.accRoughShort")} soft />
+              </Press>
+            </View>
             {savedOnce ? (
               <View testID="draw-saved">
                 <StatusChip status="ok" label={t("mod.gutters.draw.saved")} soft />
@@ -755,11 +768,50 @@ export default function DrawScreen() {
               />
             </View>
             <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
+            {/* the cut (founder 08.11): each run along the wall and along the face, to 1/8″ */}
+            {cut ? (
+              <View testID="corner-cut" style={{ gap: space[2] }}>
+                <RowView style={{ justifyContent: "space-between" }}>
+                  <T v="body" w="semibold">{t("mod.gutters.draw.cutTitle")}</T>
+                  <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>
+                </RowView>
+                {cut.runs.map((r) => (
+                  <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[1], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: c.bd }}>
+                    <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: drawing.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
+                    <RowView style={{ justifyContent: "space-between" }}>
+                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutBack")}</T>
+                      <View testID="cut-back"><T v="body" tabular>{ftIn(r.backIn)}</T></View>
+                    </RowView>
+                    <RowView style={{ justifyContent: "space-between" }}>
+                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutFront")}</T>
+                      <View testID="cut-front"><T v="body" w="semibold" tabular>{ftIn(r.frontIn)}</T></View>
+                    </RowView>
+                  </View>
+                ))}
+                {!tape ? <View testID="corner-cut-rough"><StatusChip status="warn" label={t("mod.gutters.draw.accRoughCut")} soft /></View> : null}
+                <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
+                  {sketchW > 0 ? <CornerSketch d={drawing} f={corner} cut={cut.runs} w={sketchW} /> : null}
+                </View>
+                <T v="caption" tone="mut">{t("mod.gutters.draw.cutNote", { off: cut.runs[0]!.offsetIn })}</T>
+              </View>
+            ) : null}
+            {<CornerTriangle key={corner.id} d={drawing} f={corner} onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))} />}
           </View>
         ) : null}
       </Sheet>
       <Sheet visible={moreSheet} onClose={() => setMoreSheet(false)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
+          {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
+          {canSave && m ? (
+            <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
+              <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
+              <ChoiceChips
+                items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
+                value={tape ? "tape" : "rough"}
+                onChange={(a) => setAccuracy(a)}
+              />
+            </View>
+          ) : null}
           <View testID="draw-redo">
             <ListRow title={t("mod.gutters.draw.redo")} left={<Icon name="redo" s={sizes.iconMd} color={c.ink} />} onPress={() => { setMoreSheet(false); doRedo(); }} />
           </View>

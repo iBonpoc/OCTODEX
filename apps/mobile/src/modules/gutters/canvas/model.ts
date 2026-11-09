@@ -12,6 +12,9 @@ export interface MeasurementRow {
   status: "draft" | "ready";
   propertyId: string | null;
   leadId: string | null;
+  /** how it was measured, for the whole drawing (founder 08.11, П20.16): a tape — good to cut by; rough — a satellite,
+   *  a wheel or by eye. Old drafts on a phone have none: rough. */
+  accuracy?: "rough" | "tape";
   /** the server's (or the phone's last) change time: the newest measurement of a lead opens first (M5b) */
   updatedAt?: string;
 }
@@ -53,7 +56,7 @@ export function toElements(d: Drawing, measurementId: string): ElementRow[] {
     id: r.id,
     measurementId,
     kind: "run",
-    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: int(r.lengthIn) } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}) },
+    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: Math.round(r.lengthIn * 8) / 8 } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}) },
     attrs: { ...r.attrs },
     confidence: r.lengthIn !== undefined ? "taped" : "drawn",
   }));

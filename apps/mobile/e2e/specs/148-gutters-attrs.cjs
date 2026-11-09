@@ -2,8 +2,8 @@
  * e2e 148 — панель атрибутов холста Gutters (docs/specs/33-gutters-screens.md П21.8 M5c; спека 33 §7). Every view.
  * - 390: «Свойства» in the picked bar opens the sheet; 820/1280: the panel is a column right of the canvas (not over
  *   it: drawing goes on beside it), says how to pick when nothing is picked, no «Свойства» button, «Закрыть» unpicks;
- * - a run: «нарисовано» → profile «Полукруглый» (size 5″, hanger Shank #10 follow), colour «Коричневый», the tape
- *   25′ 6″ → «рулетка» (icon + word), the label and the $ follow; a bad tape (12 in) says so and changes nothing;
+ * - a run: drawn → profile «Полукруглый» (size 5″, hanger Shank #10 follow), colour «Коричневый», the tape
+ *   25′ 6″ → «По рисунку» offered, the label and the $ follow; a bad tape (12 in) says so and changes nothing;
  *   «Назад» on the canvas takes the tape back;
  * - a downspout: «Круглый» → size 3″; wall «Кирпич» → its default wall kit;
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
@@ -91,7 +91,7 @@ exports.run = async (h) => {
     await h.shot("props");
   } else h.expect((await tid("attr-profile").count()) === 1 && (await tid("attr-more").count()) === 0, "820/1280: every field of the gutter, no «Ещё»");
   await more();
-  h.expect(/нарисовано/.test(await tid("attr-confidence").innerText()), "a drawn length says «нарисовано»");
+  h.expect((await tid("attr-length-reset").count()) === 0, "a drawn length: no «По рисунку» (П20.16: the accuracy is the drawing's, not a line's)");
   h.expect((await chosen("attr-profile")) === "K", "K-style by default");
   const m0 = await money();
   await choose("attr-profile", "Полукруглый");
@@ -107,11 +107,11 @@ exports.run = async (h) => {
   await tid("attr-length-in").locator("input").fill("12");
   await tid("attr-length-apply").getByRole("button").click();
   await tid("attr-length-bad").waitFor({ timeout: 3000 });
-  h.expect(/нарисовано/.test(await tid("attr-confidence").innerText()), "a bad tape keeps the drawn length");
+  h.expect((await tid("attr-length-reset").count()) === 0, "a bad tape keeps the drawn length");
   // the tape
   await tid("attr-length-in").locator("input").fill("6");
   await tid("attr-length-apply").getByRole("button").click();
-  await waitFor(async () => /рулетка/.test(await tid("attr-confidence").innerText()), "taped: «рулетка»");
+  await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back");
   h.expect((await tid("attr-length-bad").count()) === 0, "the warning is gone");
   await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length");
   await waitFor(async () => (await money()) !== m0, "the $ follows");
@@ -168,6 +168,6 @@ exports.run = async (h) => {
   await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
   await more();
-  h.expect(/рулетка/.test(await tid("attr-confidence").innerText()), "after a reload: «рулетка»");
+  h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped");
   h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
 };

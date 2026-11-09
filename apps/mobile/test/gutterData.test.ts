@@ -75,7 +75,7 @@ describe("unit:gutterData — the read (ModuleDef.load)", () => {
           : [{ id: "e1", measurement_id: "m1", kind: "run", geom: { a: [0, 0], b: [1, 0] }, attrs: {}, confidence: "taped" }, { id: "e9", measurement_id: "gone", kind: "run", geom: {}, attrs: {} }],
     };
     const g = await loadGutters(read);
-    expect(g.measurements).toEqual([{ id: "m1", label: "Front", status: "ready", propertyId: null, leadId: "l1", updatedAt: "2026-11-08T00:00:00Z" }]);
+    expect(g.measurements).toEqual([{ id: "m1", label: "Front", status: "ready", propertyId: null, leadId: "l1", accuracy: "rough", updatedAt: "2026-11-08T00:00:00Z" }]);
     expect(g.elements.map((e) => [e.id, e.confidence])).toEqual([["e1", "taped"]]);
   });
   it("the core: loads a module only when the company has its row; a failed read keeps the phone's copy", async () => {
@@ -403,5 +403,17 @@ describe("unit:gutterData — M5d: photos of a measurement and its element (spec
     expect(coalesceAt([it_("a", save(10)), it_("p", photo)] as never[], save(20), ME, null)).toBe(-1);
     // without a photo after it, it merges as before
     expect(coalesceAt([it_("a", save(10))] as never[], save(20), ME, null)).toBe(0);
+  });
+});
+
+describe("how the drawing was measured (docs/specs/33-gutters-canvas.md П20.16)", () => {
+  it("a row without accuracy (an old phone, an old server row) is rough; tape stays tape; written only when the phone has it", async () => {
+    const { measurementFromRow, measurementToDb } = await import("../src/modules/gutters/data");
+    expect(measurementFromRow({ id: "m1", status: "draft" })!.accuracy).toBe("rough");
+    expect(measurementFromRow({ id: "m1", status: "draft", accuracy: "tape" })!.accuracy).toBe("tape");
+    expect(measurementFromRow({ id: "m1", status: "draft", accuracy: "laser" })!.accuracy).toBe("rough");
+    // an old local copy without the field never overwrites the server's 'tape' (security review #474 №1): no column at all
+    expect("accuracy" in measurementToDb({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null }, "c1")).toBe(false);
+    expect(measurementToDb({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null, accuracy: "tape" }, "c1").accuracy).toBe("tape");
   });
 });
