@@ -4,8 +4,8 @@
  * each; and three tape lengths (along each gutter from the corner, and straight between the marks) that give the
  * angle between the walls.
  */
-import { useMemo, useState } from "react";
-import { View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Keyboard, View } from "react-native";
 import Svg, { G, Path, Rect, Text as SvgText } from "react-native-svg";
 import { drawing as dt, font, radius, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
@@ -16,6 +16,7 @@ import { RowView } from "@/ui/surfaces";
 import { tapeIn } from "../canvas/attrs";
 import { ftIn } from "../canvas/format";
 import { labelWidth } from "../canvas/labels";
+import { countOnKeyboardHide, triKey } from "./triangleCount";
 import { angleFromTriangle, centre, houseSide, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
 
 /**
@@ -160,13 +161,25 @@ export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; 
   const [b, setB] = useState(asFields(runLengthIn(r2!)));
   const [c3, setC] = useState({ ft: "", inch: "" });
   const [res, setRes] = useState<number | null | "bad">(null);
+  const counted = useRef<string | null>(null);
   const count = () => {
+    counted.current = triKey(a, b, c3);
     const A = tapeIn(a.ft, a.inch), B = tapeIn(b.ft, b.inch), C = tapeIn(c3.ft, c3.inch);
     const deg = A && B && C ? angleFromTriangle(A, B, C) : null;
     if (deg === null) return setRes("bad");
     setRes(deg);
     onAngle(deg);
   };
+  // the keyboard put away after typing C counts too (#696: the first tap on iPhone only hid the keyboard) — a fallback:
+  // only lengths not counted yet, so an angle set by hand («90°») after them is not overwritten
+  const live = useRef(count);
+  live.current = () => {
+    if (countOnKeyboardHide(a, b, c3, counted.current)) count();
+  };
+  useEffect(() => {
+    const sub = Keyboard.addListener("keyboardDidHide", () => live.current());
+    return () => sub.remove();
+  }, []);
   return (
     <View testID="corner-triangle" style={{ gap: space[2] }}>
       <T v="body" w="semibold">{t("mod.gutters.draw.triTitle")}</T>
@@ -176,7 +189,7 @@ export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; 
       <Len label={t("mod.gutters.draw.triC")} value={c3} onChange={setC} testID="tri-c" />
       <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
         <View testID="tri-count"><Button label={t("mod.gutters.draw.triCount")} size="sm" onPress={count} /></View>
-        <View testID="tri-90"><Button label={t("mod.gutters.draw.tri90")} size="sm" variant="secondary" onPress={() => { setRes(90); onAngle(90); }} /></View>
+        <View testID="tri-90"><Button label={t("mod.gutters.draw.tri90")} size="sm" variant="secondary" onPress={() => { counted.current = triKey(a, b, c3); setRes(90); onAngle(90); }} /></View>
         {res === "bad" ? <View testID="tri-bad"><StatusChip status="warn" label={t("mod.gutters.draw.triBad")} soft /></View> : null}
         {typeof res === "number" ? <View testID="tri-result"><StatusChip status="ok" label={t("mod.gutters.draw.cutAngle", { deg: res })} soft /></View> : null}
       </RowView>

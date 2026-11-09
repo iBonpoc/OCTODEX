@@ -32,6 +32,7 @@ import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
+import { ghostChipAt } from "./ghostChip";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen, ftIn } from "../canvas/format";
@@ -106,6 +107,7 @@ export default function DrawScreen() {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<PlanView | null>(null);
   const [ghost, setGhost] = useState<{ a: P; b: P } | null>(null);
+  const [ghostChip, setGhostChip] = useState({ w: 0, h: 0 });
   /** 390: the attribute sheet is open (820/1280 show the panel whenever something is picked) */
   const [sheet, setSheet] = useState(false);
   /** 390: the sheet of the measurement's photos */
@@ -803,8 +805,17 @@ export default function DrawScreen() {
           <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
         </View>
       ) : null}
-      {ghost ? (
-        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: panelSide, top: ins.top + space[8] + space[6], alignItems: "center" }}>
+      {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
+      {gA && gB ? (
+        <View
+          pointerEvents="none"
+          testID="draw-ghost-len"
+          onLayout={(e) => {
+            const { width, height } = e.nativeEvent.layout;
+            if (width !== ghostChip.w || height !== ghostChip.h) setGhostChip({ w: width, h: height });
+          }}
+          style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gA, gB, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
+        >
           <StatusChip status="neutral" label={ftIn(ghostLen)} />
         </View>
       ) : null}
