@@ -8,7 +8,7 @@
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -21,6 +21,8 @@ exports.run = async (h) => {
     h.expect(!!v, what);
   };
   const stroke = async (a, b, len) => {
+    // the length sheet of the last gutter may still be leaving: draw on the canvas, not on it (GitHub 09.11, #479)
+    await canvasAt(p, a[0], a[1]);
     await p.mouse.move(a[0], a[1]);
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
