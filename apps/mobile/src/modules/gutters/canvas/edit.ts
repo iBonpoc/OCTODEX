@@ -26,7 +26,44 @@ export function endAt(d: Drawing, a: P, p: P, tolIn: number, except?: string): P
 
 export function addRun(d: Drawing, id: string, a: P, b: P, attrs: DrawnRun["attrs"]): Drawing {
   if (Math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_RUN_IN) return d;
-  return { ...d, runs: [...d.runs, { id, a, b, attrs: { ...attrs } }] };
+  const next: Drawing = { ...d, runs: [...d.runs, { id, a, b, attrs: { ...attrs } }] };
+  // joined to a line whose face side was set by hand: the new gutter takes the same face (founder 09.11: «две левые
+  // заглушки» — it took its own side from the drawing's centre, the line had two faces)
+  const chain = chainOf(next, id);
+  const set = next.runs.find((r) => r.id !== id && chain.has(r.id) && r.houseSide);
+  return set ? alongChain(next, set.id, set.houseSide!) : next;
+}
+
+const near1 = (p: P, q: P) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1;
+const otherSide = (s: "L" | "R"): "L" | "R" => (s === "L" ? "R" : "L");
+
+/**
+ * One face along a joined line: from `runId` (face side `side`) out through the joins, each gutter takes the side that
+ * keeps the face on the same side of the line — the same when it goes on the same way (an end to a start), the other
+ * when it is drawn the other way (start to start, end to end).
+ */
+export function alongChain(d: Drawing, runId: string, side: "L" | "R"): Drawing {
+  const sides = new Map<string, "L" | "R">([[runId, side]]);
+  const todo = [runId];
+  while (todo.length) {
+    const id = todo.pop()!;
+    const r = d.runs.find((x) => x.id === id);
+    if (!r) continue;
+    const s = sides.get(id)!;
+    for (const o of d.runs) {
+      if (sides.has(o.id) || !sameStory(o, r)) continue;
+      join: for (const theirs of [0, 1] as const) {
+        for (const mine of [0, 1] as const) {
+          if (near1(theirs ? r.b : r.a, mine ? o.b : o.a)) {
+            sides.set(o.id, theirs !== mine ? s : otherSide(s));
+            todo.push(o.id);
+            break join;
+          }
+        }
+      }
+    }
+  }
+  return { ...d, runs: d.runs.map((r) => (sides.has(r.id) ? { ...r, houseSide: sides.get(r.id)! } : r)) };
 }
 
 export type Hit = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "run"; id: string };
@@ -205,7 +242,45 @@ export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, cancele
   if (g.kind === "end") return canceled ? g.before : moveEnd(g.before, g.id, g.end, p, tolIn);
   if (g.kind === "ds") return canceled ? g.before : moveDs(g.before, g.id, p);
   if (canceled) return d;
-  return addRun(d, newRun.id, g.a, endAt(d, g.a, p, tolIn), newRun.attrs);
+  const b = endAt(d, g.a, p, tolIn);
+  return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);
+}
+
+/** a turn under this (degrees) from a gutter's free end is the same gutter going on, not a new one with a corner */
+export const STRAIGHT_ON_DEG = 10;
+
+/**
+ * Drawn on from a gutter's free end (an end cap), straight on (founder 09.11: «45 ft and 10 ft — two lines; must be one,
+ * 55 ft»): that gutter grows — one line. Its end moves to the new point along its own line; a taped length grows by
+ * the drawn bit. Another storey, a turn, a joined end or a short bit → null (a new gutter, a corner as before).
+ */
+export function extendRun(d: Drawing, a: P, b: P, attrs: DrawnRun["attrs"]): Drawing | null {
+  const add = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (add < MIN_RUN_IN) return null;
+  const near = (p: P, q: P) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1;
+  const at = d.runs.filter((r) => near(r.a, a) || near(r.b, a));
+  if (at.length !== 1) return null; // a corner or a join there already
+  const r = at[0]!;
+  if ((Number(r.attrs.story) || 1) !== (Number(attrs.story) || 1)) return null;
+  const end: 0 | 1 = near(r.b, a) ? 1 : 0;
+  const from = end ? r.a : r.b;
+  const ux = a[0] - from[0], uy = a[1] - from[1];
+  const L = Math.hypot(ux, uy) || 1;
+  const cos = (ux * (b[0] - a[0]) + uy * (b[1] - a[1])) / (L * add);
+  if (cos < Math.cos((STRAIGHT_ON_DEG * Math.PI) / 180)) return null;
+  const nb: P = [Math.round(a[0] + (ux / L) * add), Math.round(a[1] + (uy / L) * add)];
+  const grown: DrawnRun = {
+    ...(end ? { ...r, b: nb } : { ...r, a: nb }),
+    ...(r.lengthIn !== undefined ? { lengthIn: Math.round((r.lengthIn + add) * 8) / 8 } : {}),
+  };
+  const was = runLengthIn(r) || 1;
+  const now = runLengthIn(grown);
+  return {
+    ...d,
+    runs: d.runs.map((x) => (x.id === r.id ? grown : x)),
+    // downspouts stay where they are on the wall: from the start they keep their distance; grown at the start, they shift
+    downspouts: d.downspouts.map((s) => (s.runId === r.id && end === 0 ? { ...s, atIn: Math.min(now, Math.round(s.atIn + (now - was))) } : s)),
+  };
 }
 
 /** the own «назад» of the canvas (П14.2 №5): snapshots, at most `max` back */
@@ -250,9 +325,9 @@ export function setCornerMethod(d: Drawing, corner: Pick<FoundCorner, "runs">, m
  */
 export function flipFace(d: Drawing, runId: string): Drawing {
   if (!d.runs.some((r) => r.id === runId)) return d;
-  const c = centre(d.runs);
-  const chain = chainOf(d, runId);
-  return { ...d, runs: d.runs.map((r) => (chain.has(r.id) ? { ...r, houseSide: houseSide(r, c) === "L" ? "R" : "L" } : r)) };
+  // the whole line turns with this gutter: one face along it (each flipped on its own could keep two faces)
+  const r = d.runs.find((x) => x.id === runId)!;
+  return alongChain(d, runId, otherSide(houseSide(r, centre(d.runs))));
 }
 
 /**
