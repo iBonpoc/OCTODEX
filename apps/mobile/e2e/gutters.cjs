@@ -1,7 +1,7 @@
-// Gutters canvas: right after a gutter is drawn the «Длина желоба» sheet opens (feet focused). Tests that do not
-// check the length close it with «Пропустить» — the drawn length stays.
+// Gutters canvas: right after a gutter is drawn the «Длина желоба» sheet opens (feet focused, the drawn length in the
+// fields). Tests that do not check the length press «Применить» — the drawn length stays («Отменить» takes the gutter away).
 async function skipLength(p) {
-  const skip = p.getByTestId("quick-length-skip").locator("visible=true").first();
+  const skip = p.getByTestId("quick-length-apply").locator("visible=true").first();
   try {
     await skip.waitFor({ timeout: 2000 });
   } catch {

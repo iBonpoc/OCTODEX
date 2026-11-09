@@ -10,6 +10,7 @@
 import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultHangerKit, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
+import { MM_OF, MM_PER_IN, type LenUnit } from "./format";
 
 export type RunAttrs = DrawnRun["attrs"];
 export type DsAttrs = Omit<DrawnDownspout, "id" | "runId" | "atIn">;
@@ -243,6 +244,17 @@ export function tapeIn(ft: string, inch: string, eighths = 0): number | null {
   // 1/8″ (founder 08.11: re-measured 8′ 9¼″)
   const n = Math.round((f * 12 + i + Math.max(0, Math.min(7, Math.round(eighths))) / 8) * 8) / 8;
   return n > 0 && n <= MAX_RUN_IN ? n : null;
+}
+
+/**
+ * one number typed in inches, metres, centimetres or millimetres → inches to 1/8″; nothing sensible → null (the same
+ * limits as the tape). «,» is a decimal point too.
+ */
+export function oneIn(v: string, unit: LenUnit): number | null {
+  const x = Number(v.replace(",", "."));
+  if (!Number.isFinite(x) || x <= 0) return null;
+  const r = Math.round((unit === "in" || unit === "ftin" ? x : (x * MM_OF[unit]) / MM_PER_IN) * 8) / 8;
+  return r > 0 && r <= MAX_RUN_IN ? r : null;
 }
 
 /** the sizes a downspout can reduce to: the smaller ones of its shape (DS_SIZES lists go small to large) */

@@ -6,7 +6,7 @@
  * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
@@ -15,9 +15,10 @@ import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/u
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
-import { eighthLabel, ftIn } from "../canvas/format";
+import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
+import { eighthLabel, fmtLen, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -63,14 +64,60 @@ function Pick<K extends string>({ label, testID, items, value, onChange, offered
   );
 }
 
-/** 1/8″ of the tape (founder 08.11): 0, ⅛ … ⅞ */
-function Eighths({ value, onChange, testID }: { value: number; onChange: (k: number) => void; testID: string }) {
+/** the eighths typed by the tape, beside the inches: ⅜ (nothing at 0) */
+function EighthsText({ value, testID }: { value: number; testID: string }) {
+  return value ? <View testID={testID}><T v="title" w="semibold">{eighthLabel(value)}</T></View> : null;
+}
+/**
+ * A tape to pull (founder 09.11: «как рулетка, бегунком проматывать длину»): it shows the length in the fields and sets
+ * them — feet, inches and eighths — as it is dragged, to 1/8″.
+ */
+function Pull({ ft, inc, e8, onPull, testID }: { ft: string; inc: string; e8: number; onPull: (x: { ft: number; inch: number; eighths: number }) => void; testID: string }) {
+  const { t } = useI18n();
+  const typed = tapeIn(ft, inc, e8);
+  const last = useRef(typed ?? 12);
+  if (typed !== null) last.current = typed;
   return (
-    <View testID={testID}>
-      <ChoiceChips items={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ key: String(n), label: eighthLabel(n) }))} value={String(value)} onChange={(v) => onChange(Number(v))} />
-    </View>
+    <TapeStrip
+      marks={Math.round(last.current * 8)}
+      max={Math.round(MAX_RUN_IN * 8)}
+      scale={EIGHTHS_SCALE}
+      readout={ftIn(last.current)}
+      onMarks={(m) => onPull(split(m / 8))}
+      testID={testID}
+      label={t(k("pull"))}
+      stepLabels={{ less: t(k("pullLess"), { step: "⅛″" }), more: t(k("pullMore"), { step: "⅛″" }) }}
+    />
   );
 }
+/** the same tape for one number: inches (1/8″ marks) or metric (millimetre marks); it writes the field in its unit */
+function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenUnit, "ftin">; onOne: (v: string) => void; testID: string }) {
+  const { t } = useI18n();
+  const typed = oneIn(one, unit);
+  const last = useRef(typed ?? 12);
+  if (typed !== null) last.current = typed;
+  const metric = unit !== "in";
+  // metric: the field's own number, to the millimetre (it is kept to 1/8″ only when applied)
+  const x = Number(one.replace(",", "."));
+  const lastMm = useRef(Math.round(last.current * MM_PER_IN));
+  if (metric && Number.isFinite(x) && x > 0) lastMm.current = Math.round(x * MM_OF[unit]);
+  const mm = lastMm.current;
+  return (
+    <TapeStrip
+      marks={metric ? mm : Math.round(last.current * 8)}
+      max={metric ? Math.floor(MAX_RUN_IN * MM_PER_IN) : Math.round(MAX_RUN_IN * 8)}
+      scale={metric ? MM_SCALE : EIGHTHS_SCALE_IN}
+      readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
+      onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / 8))}
+      testID={testID}
+      label={t(k("pull"))}
+      stepLabels={{ less: t(k("pullLess"), { step: metric ? "1 mm" : "⅛″" }), more: t(k("pullMore"), { step: metric ? "1 mm" : "⅛″" }) }}
+    />
+  );
+}
+/** inches alone: every inch numbered as it is (no feet) */
+const EIGHTHS_SCALE_IN = (k: number) =>
+  k % 8 === 0 ? { h: 0.45, text: k ? `${k / 8}″` : undefined, bold: k % 96 === 0 } : { h: k % 4 === 0 ? 0.36 : k % 2 === 0 ? 0.28 : 0.2, frac: eighthLabel(k % 8), big: k % 8 === 4 };
 const split = (n: number) => {
   const e = Math.round(n * 8);
   return { ft: Math.floor(e / 96), inch: Math.floor((e % 96) / 8), eighths: e % 8 };
@@ -100,7 +147,7 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   const taped = run.lengthIn !== undefined;
   return (
     <Field label={t(k("length"))} testID="attr-length">
-      <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+      <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-ft">
           <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} />
         </View>
@@ -108,53 +155,80 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
           <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
         </View>
+        <EighthsText value={e8} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
         <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
         {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
-      <Eighths value={e8} onChange={setE8} testID="attr-length-frac" />
+      <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="attr-length-tape" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
 }
 
+
 /**
- * Right after a gutter is drawn (просьба основателя 08.11): the length by hand at once — feet focused, the number
- * keyboard up. Empty fields keep the drawn length (it is the placeholder); «Пропустить» does the same.
+ * Right after a gutter is drawn (founder 08.11, 09.11): its length by hand at once. The fields hold the drawn length,
+ * selected — a digit typed replaces it. Feet + inches (+ ⅛), inches alone (260″ → 21′ 8″) or mm; kept in inches.
+ * «Применить» keeps what is there; «Отменить» (or a tap outside) takes the gutter away — a stray line from a zoom.
  */
-export function QuickLength({ run, onLength, onDone }: { run: DrawnRun; onLength: (lengthIn: number) => void; onDone: () => void }) {
+export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: DrawnRun; onLength: (lengthIn: number) => void; onDone: () => void; onCancel: () => void; /** the length the fields start from (a label tapped: its length now); none — the drawn one */ start?: number }) {
   const { t } = useI18n();
-  const drawn = drawnLengthIn(run);
-  const [ft, setFt] = useState("");
-  const [inc, setInc] = useState("");
-  const [e8, setE8] = useState(0);
+  const drawn = start ?? drawnLengthIn(run);
+  const [unit, setUnit] = useState<LenUnit>("ftin");
+  const d0 = split(drawn);
+  const [ft, setFt] = useState(String(d0.ft));
+  const [inc, setInc] = useState(String(d0.inch));
+  const [e8, setE8] = useState(d0.eighths);
+  const [one, setOne] = useState(String(drawn));
   const [bad, setBad] = useState(false);
+  const pickUnit = (u: LenUnit) => {
+    setUnit(u);
+    setBad(false);
+    if (u === "in") setOne(String(drawn));
+    if (u === "m" || u === "cm" || u === "mm") setOne(String(Math.round(drawn * MM_PER_IN) / MM_OF[u]));
+  };
   const apply = () => {
-    if (ft.trim() === "" && inc.trim() === "" && !e8) return onDone();
-    const n = tapeIn(ft, inc, e8);
+    const n = unit === "ftin" ? tapeIn(ft, inc, e8) : oneIn(one, unit);
     setBad(n === null);
     if (n === null) return;
-    onLength(n);
+    if (n !== drawn) onLength(n);
     onDone();
   };
   return (
     <View testID="quick-length" style={{ gap: space[3] }}>
       <T v="heading" w="semibold">{t(k("quickTitle"))}</T>
-      <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-        <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
-          <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} placeholder={String(Math.floor(drawn / 12))} onSubmit={apply} autoFocus />
-        </View>
-        <T v="body" tone="mut">{t(k("ft"))}</T>
-        <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
-          <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} placeholder={String(drawn % 12)} onSubmit={apply} />
-        </View>
-        <T v="body" tone="mut">{t(k("in"))}</T>
-      </RowView>
-      <Eighths value={e8} onChange={setE8} testID="quick-length-frac" />
+      <View testID="quick-length-unit">
+        <ChoiceChips items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)) }))} value={unit} onChange={pickUnit} />
+      </View>
+      {unit === "ftin" ? (
+        <>
+          <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
+            <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
+              <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} autoFocus selectOnFocus />
+            </View>
+            <T v="body" tone="mut">{t(k("ft"))}</T>
+            <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
+              <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} selectOnFocus />
+            </View>
+            <EighthsText value={e8} testID="quick-length-frac" />
+            <T v="body" tone="mut">{t(k("in"))}</T>
+          </RowView>
+          <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="quick-length-tape" />
+        </>
+      ) : (
+        <RowView style={{ gap: space[2] }}>
+          <View style={{ width: component.qtyFieldW * 2 }} testID="quick-length-one">
+            <TextField type="number" value={one} onChangeText={setOne} label={t(k(`unit.${unit}`))} onSubmit={apply} autoFocus selectOnFocus />
+          </View>
+          <T v="body" tone="mut">{unit === "in" ? t(k("in")) : unit}</T>
+        </RowView>
+      )}
+      {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
-        <View testID="quick-length-skip"><Button label={t(k("quickSkip"))} size="sm" variant="ghost" onPress={onDone} /></View>
+        <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>
         <View testID="quick-length-apply"><Button label={t(k("apply"))} size="sm" onPress={apply} /></View>
       </RowView>
     </View>
@@ -263,8 +337,8 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
 }
 
 export function RunAttrsView({
-  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact,
-}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean }) {
+  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact, onUnit,
+}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean; /** how its length is shown on the drawing (founder 09.11) */ onUnit?: (u: LenUnit) => void }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
@@ -281,6 +355,7 @@ export function RunAttrsView({
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
       <Select label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
         <Stock a={a} set={onAttrs} ch={ch} part="color" />
+      {onUnit ? <Pick label={t(k("unitShow"))} testID="attr-unit" items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)) }))} value={run.unit ?? "ftin"} onChange={onUnit} /> : null}
       <Tape run={run} onLength={onLength} />
           <More open0={false} id={run.id} label={t(k("moreRun"))}>
       <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
@@ -292,6 +367,7 @@ export function RunAttrsView({
         </>
       ) : (
         <>
+      {onUnit ? <Pick label={t(k("unitShow"))} testID="attr-unit" items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)) }))} value={run.unit ?? "ftin"} onChange={onUnit} /> : null}
       <Tape run={run} onLength={onLength} />
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
       <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />

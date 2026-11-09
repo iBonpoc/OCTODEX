@@ -38,7 +38,16 @@ exports.run = async (h) => {
     await tid("quick-length").waitFor({ timeout: 5000 });
     await tid("quick-length-ft").locator("input").fill(String(ftv));
     await tid("quick-length-in").locator("input").fill(String(inv));
-    if (eighths) await tid("quick-length-frac").getByRole("radio", { name: eighths, exact: true }).click();
+    if (eighths) {
+      // ⅛: the tape pulled one mark (16 px) to the left
+      const tb = await tid("quick-length-tape").boundingBox();
+      await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2);
+      await p.mouse.down();
+      for (let i = 1; i <= 4; i++) await p.mouse.move(tb.x + tb.width / 2 - 4 * i, tb.y + tb.height / 2); // one mark: 16 px
+      await p.waitForTimeout(200); // stopped, then lifted: no flick
+      await p.mouse.up();
+      await tid("quick-length-frac").filter({ hasText: eighths }).waitFor({ timeout: 3000 });
+    }
     await tid("quick-length-apply").getByRole("button").click();
     await waitFor(async () => (await tid("quick-length").count()) === 0, "the length sheet closes");
   };
