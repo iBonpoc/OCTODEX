@@ -109,6 +109,9 @@ export function Menu<K extends string>({
 
 /* ---------- Sheet: iOS-style bottom sheet on phone, centered modal on tablet/desktop ----------
  * Phone: grabber; drag the top of the sheet down to close, up to open it full height; tap outside or Android back closes.
+ * Swipe down anywhere on the body closes too, as on iPhone (#505), while the content is scrolled to the top: the body asks
+ * for the finger in the bubbling phase, so a child that keeps it (signature pad, tape — termination refused) still draws,
+ * a sideways drag stays a slider, and an upward drag or a scrolled list stays a scroll.
  * `dirty` (unsaved changes): any way of closing asks "Save / Don't save / Cancel" first (DS rule 10).
  */
 export function Sheet({
@@ -174,6 +177,28 @@ export function Sheet({
       }),
     [drag, requestClose],
   );
+  const scrollTop = useRef(0);
+  const bodyPan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) =>
+          scrollTop.current <= 0 && g.dy > component.sheetBodySlop && g.dy > Math.abs(g.dx) * 2,
+        onPanResponderMove: (_, g) => {
+          drag.value = Math.max(0, g.dy);
+        },
+        onPanResponderRelease: (_, g) => {
+          if (g.dy > component.sheetDismissDrag || g.vy > component.sheetDismissVelocity) requestClose();
+          else drag.value = withSpring(0, motion.spring);
+        },
+        onPanResponderTerminate: () => {
+          drag.value = withSpring(0, motion.spring);
+        },
+      }),
+    [drag, requestClose],
+  );
+  useEffect(() => {
+    if (visible) scrollTop.current = 0;
+  }, [visible]);
   const follow = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
   const maxH = full ? winH - insets.top - space[2] : winH * component.sheetHeightRatio;
   return (
@@ -286,9 +311,20 @@ export function Sheet({
               </View>
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */
-              <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space[3] }} keyboardShouldPersistTaps="handled" bounces={false}>
-                {children}
-              </ScrollView>
+              <View {...(wide ? {} : bodyPan.panHandlers)} style={{ flexShrink: 1 }} testID="sheet-body">
+                <ScrollView
+                  style={{ flexGrow: 0 }}
+                  contentContainerStyle={{ gap: space[3] }}
+                  keyboardShouldPersistTaps="handled"
+                  bounces={false}
+                  scrollEventThrottle={16}
+                  onScroll={(e) => {
+                    scrollTop.current = e.nativeEvent.contentOffset.y;
+                  }}
+                >
+                  {children}
+                </ScrollView>
+              </View>
             )}
           </Glass>
         </Animated.View>
