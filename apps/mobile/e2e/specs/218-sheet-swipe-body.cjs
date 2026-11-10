@@ -92,7 +92,8 @@ exports.run = async (h) => {
   await p.setViewportSize({ width: vp.width, height: 260 });
   await p.waitForTimeout(400);
   await openContact();
-  const scroller = body().locator("> div").first();
+  // the list inside the body: the first element that scrolls (the gesture's wrappers may stand between)
+  const scroller = { evaluate: (f) => body().evaluate((el, src) => (0, eval)(src)(([el, ...el.querySelectorAll("div")].find((d) => /(auto|scroll)/.test(getComputedStyle(d).overflowY)))), f.toString()) };
   const can = await scroller.evaluate((e) => e.scrollHeight > e.clientHeight + 20);
   h.expect(can, "the form scrolls on a short screen");
   const bb = await body().boundingBox();

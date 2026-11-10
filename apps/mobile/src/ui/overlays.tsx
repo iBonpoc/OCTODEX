@@ -2,6 +2,8 @@ import { toastArmed } from "./toastArm";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { avoidBehavior } from "./keyboard";
+import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
+import { swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -107,11 +109,18 @@ export function Menu<K extends string>({
   );
 }
 
+/**
+ * A child of a sheet that keeps its finger (the tape, a signature): it says so while it holds it, and the sheet's
+ * swipe to close never takes the finger over (#714). Outside a sheet — a ref nobody reads.
+ */
+const SheetHold = createContext<{ current: boolean }>({ current: false });
+export const useSheetHold = () => useContext(SheetHold);
+
 /* ---------- Sheet: iOS-style bottom sheet on phone, centered modal on tablet/desktop ----------
  * Phone: grabber; drag the top of the sheet down to close, up to open it full height; tap outside or Android back closes.
- * Swipe down anywhere on the body closes too, as on iPhone (#505), while the content is scrolled to the top: the body asks
- * for the finger in the bubbling phase, so a child that keeps it (signature pad, tape — termination refused) still draws,
- * a sideways drag stays a slider, and an upward drag or a scrolled list stays a scroll.
+ * Swipe down anywhere on the body closes too, as on iPhone (#505, #714): a Gesture Handler pan alongside the list's own
+ * scroll — the list scrolls back to its top first, then the sheet follows; a sideways drag stays a slider (the tape),
+ * an upward drag stays a scroll.
  * `dirty` (unsaved changes): any way of closing asks "Save / Don't save / Cancel" first (DS rule 10).
  */
 export function Sheet({
@@ -178,24 +187,46 @@ export function Sheet({
     [drag, requestClose],
   );
   const scrollTop = useRef(0);
-  const bodyPan = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, g) =>
-          scrollTop.current <= 0 && g.dy > component.sheetBodySlop && g.dy > Math.abs(g.dx) * 2,
-        onPanResponderMove: (_, g) => {
-          drag.value = Math.max(0, g.dy);
-        },
-        onPanResponderRelease: (_, g) => {
-          if (g.dy > component.sheetDismissDrag || g.vy > component.sheetDismissVelocity) requestClose();
-          else drag.value = withSpring(0, motion.spring);
-        },
-        onPanResponderTerminate: () => {
-          drag.value = withSpring(0, motion.spring);
-        },
-      }),
-    [drag, requestClose],
-  );
+  const held = useRef(false);
+  // the body (#505, #714): a native gesture together with the list's own scroll — on iPhone the list's scroll takes the
+  // finger from a JS responder, so the swipe is a Gesture Handler pan that runs alongside it: down only (activeOffsetY),
+  // not sideways (a slider, the tape), and the sheet follows only while the list is at its top (sheetSwipe.ts)
+  const swipe = useRef<SwipeState>({ base: null });
+  const scrollNative = useNativeGesture({});
+  // activated by hand: a child that keeps its finger (the tape, a signature — useSheetHold) is never taken over
+  const touchAt = useRef<[number, number] | null>(null);
+  const bodyPan = usePanGesture({
+    runOnJS: true,
+    enabled: !wide,
+    manualActivation: true,
+    simultaneousWith: [scrollNative],
+    onTouchesDown: (e) => {
+      const t0 = e.allTouches[0];
+      touchAt.current = t0 ? [t0.absoluteX, t0.absoluteY] : null;
+    },
+    onTouchesMove: (e) => {
+      const t0 = e.allTouches[0];
+      if (!t0 || !touchAt.current || e.state === State.ACTIVE) return;
+      const go = swipeStart(t0.absoluteX - touchAt.current[0], t0.absoluteY - touchAt.current[1], component.sheetBodySlop, held.current);
+      if (go === "activate") GestureStateManager.activate(e.handlerTag);
+      else if (go === "fail") GestureStateManager.fail(e.handlerTag);
+    },
+    onActivate: () => {
+      swipe.current = { base: null };
+    },
+    onUpdate: (e) => {
+      const r = swipeStep(swipe.current, scrollTop.current, e.translationY);
+      swipe.current = r.state;
+      drag.value = r.drag;
+    },
+    onDeactivate: (e) => {
+      const r = swipeStep(swipe.current, scrollTop.current, e.translationY);
+      swipe.current = { base: null };
+      // Gesture Handler counts pt per second, the grabber pt per ms
+      if (swipeCloses(r.drag, e.velocityY / 1000, component.sheetDismissDrag, component.sheetDismissVelocity)) requestClose();
+      else drag.value = withSpring(0, motion.spring);
+    },
+  });
   useEffect(() => {
     if (visible) scrollTop.current = 0;
   }, [visible]);
@@ -203,6 +234,8 @@ export function Sheet({
   const maxH = full ? winH - insets.top - space[2] : winH * component.sheetHeightRatio;
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+      {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
         behavior={avoidBehavior}
         // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32) — without one, as before;
@@ -311,7 +344,9 @@ export function Sheet({
               </View>
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */
-              <View {...(wide ? {} : bodyPan.panHandlers)} style={{ flexShrink: 1 }} testID="sheet-body">
+              <GestureDetector gesture={bodyPan}>
+              <View style={{ flexShrink: 1 }} testID="sheet-body">
+                <GestureDetector gesture={scrollNative}>
                 <ScrollView
                   style={{ flexGrow: 0 }}
                   contentContainerStyle={{ gap: space[3] }}
@@ -322,13 +357,16 @@ export function Sheet({
                     scrollTop.current = e.nativeEvent.contentOffset.y;
                   }}
                 >
-                  {children}
+                  <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
                 </ScrollView>
+                </GestureDetector>
               </View>
+              </GestureDetector>
             )}
           </Glass>
         </Animated.View>
       </KeyboardAvoidingView>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
