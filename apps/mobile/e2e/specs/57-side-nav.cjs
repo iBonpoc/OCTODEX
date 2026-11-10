@@ -6,6 +6,7 @@
  *   ☰ again folds it back;
  * - a rail item opens its section and is marked; no top pill; no horizontal scroll; no menu on the client page /p.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const w = h.layout.width;
@@ -81,8 +82,7 @@ exports.run = async (h) => {
   // «＋ Создать» on the rail opens the quick actions
   await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").first().click();
   await h.expectText(/Быстрые действия/, "«＋ Создать» on the rail");
-  await p.keyboard.press("Escape");
-  await p.waitForTimeout(400);
+  await pressEscUntilClosed(p);
 
   // the client page and sign-in: no staff menu
   await h.go("/p/demo0handyman0estimate0000000001");

@@ -5,6 +5,7 @@
  * - a person (a subcontractor too): «Отключить» (asks first) → «Отключён», last in the list, out of the pickers; «Включить снова» brings them back;
  * - the invitation link page /auth/invite: no link → «не найдена»; signed out → «Войдите…» (demo explains).
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
 
@@ -86,8 +87,7 @@ exports.run = async (h) => {
     await h.expectText(new RegExp(`Субподрядчик: ${sub.name}`), "the subcontractor's own sheet");
     h.expect((await sheet("member-sheet").getByRole("button", { name: "Отключить" }).count()) === 1, "a subcontractor can be switched off");
     h.expect((await sheet("member-sheet").getByPlaceholder("Должность (под подписью)").count()) === 0, "no signing fields for a subcontractor");
-    await p.keyboard.press("Escape");
-    await p.waitForTimeout(400);
+    await pressEscUntilClosed(p);
   }
 
   // the invitation link page
