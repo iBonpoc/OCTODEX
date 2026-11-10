@@ -76,6 +76,13 @@ describe("e2e: no old label after an i18n change (#621)", () => {
     expect(found, "fix these specs in this PR (or mark a line that names the old text on purpose: // i18n-old: ok)").toEqual([]);
   });
 
+  it("GitHub gives the guard its base (checks.yml)", () => {
+    const yml = readFileSync(join(app, "../../.github/workflows/checks.yml"), "utf8");
+    const base = yml.indexOf("I18N_BASE=");
+    expect(base, "checks.yml writes I18N_BASE").toBeGreaterThan(0);
+    expect(base, "…before the unit tests run").toBeLessThan(yml.indexOf("npm run typecheck && npm test"));
+  });
+
   it("reads the dictionaries whole", () => {
     for (const l of LANGS) {
       const src = readFileSync(join(app, `src/i18n/${l}.ts`), "utf8");
