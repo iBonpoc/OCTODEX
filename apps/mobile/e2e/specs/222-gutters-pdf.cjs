@@ -38,16 +38,40 @@ exports.run = async (h) => {
         return r;
       };
     });
-  const printed = async () => {
-    await p.waitForFunction(
-      () => {
-        const f = [...document.querySelectorAll("iframe:not([data-seen])")].find((x) => x.contentDocument?.body?.innerHTML.includes("<svg"));
-        if (f) window.__pdf = f.contentDocument.documentElement.outerHTML;
-        return !!window.__pdf;
-      },
-      null,
-      { timeout: 8000 },
-    );
+  /** a new frame with the drawing in it, within `ms` */
+  const framed = (ms) =>
+    p
+      .waitForFunction(
+        () => {
+          const f = [...document.querySelectorAll("iframe:not([data-seen])")].find((x) => x.contentDocument?.body?.innerHTML.includes("<svg"));
+          if (f) window.__pdf = f.contentDocument.documentElement.outerHTML;
+          return !!window.__pdf;
+        },
+        null,
+        { timeout: ms },
+      )
+      .then(() => true, () => false);
+  /** the button where it stays: the review slides in, and a press on a button still moving is cancelled (no frame at all,
+   *  1 run in ~40 under load: «no frames») — so wait for it to stand, press, and press again only if nothing was printed */
+  const printVia = async (id, what) => {
+    const btn = tid(id).getByRole("button");
+    let box = null;
+    for (let i = 0; i < 40; i++) {
+      const now = await btn.boundingBox();
+      if (now && box && now.x === box.x && now.y === box.y) break;
+      box = now;
+      await p.waitForTimeout(100);
+    }
+    await catchPrint();
+    let ok = false;
+    for (let i = 0; i < 3 && !ok; i++) {
+      await btn.click();
+      ok = await framed(i < 2 ? 3000 : 8000);
+    }
+    if (!ok) {
+      const seen = await p.evaluate(() => [...document.querySelectorAll("iframe")].map((f) => `${f.dataset.seen ? "old" : "new"}:${(f.contentDocument?.body?.innerHTML ?? "-").length}`).join(","));
+      throw new Error(`${what}: no printed frame after 3 presses (${seen || "no frames"})`);
+    }
     return p.evaluate(() => window.__pdf);
   };
 
@@ -66,18 +90,14 @@ exports.run = async (h) => {
   await openView(p);
 
   // for the client
-  await catchPrint();
-  await tid("view-pdf-client").getByRole("button").click();
-  const c = await printed();
+  const c = await printVia("view-pdf-client", "client");
   h.expect(c.includes("<svg"), "the client's PDF has the drawing");
   h.expect(c.includes("Gutter drawing") && c.includes("Length"), "in the client's language (the company's: en)");
   h.expect(!/\$\s?\d/.test(c), "no prices for the client");
   h.expect(!c.includes("At the face") && !c.includes("По лицевой"), "no cut for the client");
 
   // for the crew
-  await catchPrint();
-  await tid("view-pdf-crew").getByRole("button").click();
-  const w = await printed();
+  const w = await printVia("view-pdf-crew", "crew");
   h.expect(w.includes("Раскрой для бригады"), "the crew's PDF in the app's language");
   h.expect(w.includes("По стене") && w.includes("По лицевой"), "along the wall and along the face");
   h.expect(w.includes("Углы") && w.includes("Детали"), "the corner's cut and the parts");
