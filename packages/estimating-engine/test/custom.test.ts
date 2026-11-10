@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeCustomOption, catalogCost, catalogPrice, depositAmount, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
+  computeCustomOption, catalogCost, catalogPrice, depositAmount, depositSettingFromRule, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
   DEFAULT_TAX, type CustomLine, type CustomSettings,
 } from "../src/custom.js";
 
@@ -132,5 +132,29 @@ describe("catalog card: kit cost and margin % (test prices)", () => {
     expect(marginPctOf(9000, 10000)).toBe("-11.1");
     expect(marginPctOf(0, 500)).toBeNull();
     expect(marginPctOf(10000, null)).toBeNull();
+  });
+});
+
+// #544: the quick estimate's rule {"kind":"pct","value":"0.1"} is 10 %, as app.estimate_option_totals (T162)
+describe("depositSettingFromRule — the server's deposit rule", () => {
+  it("the quick estimate's share 0.1 is 10 %: $99.99 → $10.00", () => {
+    const r = depositSettingFromRule({ kind: "pct", value: "0.1", contractType: "ca_hic" });
+    expect(r).toEqual({ kind: "pct", bps: 1000 });
+    expect(depositAmount(9999, r)).toBe(1000);
+    expect(depositAmount(123456, depositSettingFromRule({ kind: "pct", value: 0.1 }))).toBe(12346);
+  });
+  it("the share counts as whole bps, round half up; above 1 — the whole total", () => {
+    expect(depositSettingFromRule({ kind: "pct", value: "0.12345" })).toEqual({ kind: "pct", bps: 1235 });
+    expect(depositSettingFromRule({ kind: "pct", value: ".25" })).toEqual({ kind: "pct", bps: 2500 });
+    expect(depositAmount(10000, depositSettingFromRule({ kind: "pct", value: "2" }))).toBe(10000);
+  });
+  it("bps wins over value; fixed by cents; anything else — no deposit", () => {
+    expect(depositSettingFromRule({ kind: "pct", bps: 500, value: "0.1" })).toEqual({ kind: "pct", bps: 500 });
+    expect(depositSettingFromRule({ kind: "pct", bps: "1000" })).toEqual({ kind: "pct", bps: 1000 });
+    expect(depositSettingFromRule({ kind: "fixed", cents: 5000 })).toEqual({ kind: "fixed", cents: 5000 });
+    for (const bad of [null, undefined, "x", [], {}, { kind: "pct", value: "ten" }, { kind: "pct", value: "-0.1" }, { kind: "pct" }, { kind: "none" }]) {
+      expect(depositAmount(10000, depositSettingFromRule(bad))).toBe(0);
+    }
+    expect(depositSettingFromRule({ kind: "pct", bps: "ten" })).toEqual({ kind: "none" });
   });
 });
