@@ -19,6 +19,7 @@ import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
 import { MODULE_INACTIVE } from "@/data/outboxRetry";
+import { withSendablePages } from "@/features/docPages";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -1205,19 +1206,30 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   }
   const s = op.doc.settings;
   const taxOn = s.tax.enabled && Object.values(s.tax.groups).some(Boolean);
-  await run(
-    supabase
-      .from("estimate_versions")
-      .update({
-        calc_inputs: op.doc, engine_version: ENGINE_VERSION,
-        // E3: the server counts a use on version 1 (estimate_template_uses); every save keeps the same source
-        source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
-        totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
-        tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
-        contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
-      })
-      .eq("id", versionId),
-  );
+  const saveVersion = (doc: unknown) =>
+    run(
+      supabase
+        .from("estimate_versions")
+        .update({
+          calc_inputs: doc, engine_version: ENGINE_VERSION,
+          // E3: the server counts a use on version 1 (estimate_template_uses); every save keeps the same source
+          source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
+          totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
+          tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
+          contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
+        })
+        .eq("id", versionId),
+    );
+  // pages the server would refuse are left out, the estimate itself goes (spec 33 П24.7; trigger t07_doc_pages). The
+  // server measures its own text (a number as it keeps it): when it still says no to the pages, the estimate goes without them.
+  const sendable = withSendablePages(op.doc);
+  try {
+    await saveVersion(sendable);
+  } catch (e) {
+    if (!(e instanceof PermanentError) || !/doc_pages:/.test(e.message) || sendable.pages === undefined) throw e;
+    const { pages: _refused, ...bare } = op.doc;
+    await saveVersion(bare);
+  }
   await run(supabase.from("estimates").update({ title: op.title, current_version_id: versionId }).eq("id", op.id));
 
   // Replace options and lines of this (unlocked) version.
