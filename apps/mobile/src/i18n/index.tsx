@@ -80,8 +80,13 @@ export function I18nOverride({ lang, children }: { lang: DocLang; children: Reac
 
 /** The context inside I18nOverride: the client's language for t / lang / day; money as is; setLang does nothing. Pure. */
 export function overrideI18n(parent: I18nCtx, lang: DocLang): I18nCtx {
-  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), day: (iso) => zonedFormat(getZone(), DOC_DAY_OPTS).format(new Date(iso)), dayOf: (k) => formatDayKey(k, DOC_DAY_OPTS) };
+  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), day: docDayOf, dayOf: (k) => formatDayKey(k, DOC_DAY_OPTS) };
 }
+/** A calendar day «YYYY-MM-DD» (invoices.due_date, estimates.valid_until) is that day as it is — `new Date()` of it is UTC
+ *  midnight, the day before in Los Angeles (#605; the same rule as docPdf.docDay and zone.dayLabel); a moment — the
+ *  company's day */
+const docDayOf = (iso: string): string =>
+  /^\d{4}-\d{2}-\d{2}$/.test(iso) ? formatDayKey(iso, DOC_DAY_OPTS) : zonedFormat(getZone(), DOC_DAY_OPTS).format(new Date(iso));
 
 export function useI18n(): I18nCtx {
   const v = useContext(Ctx);
