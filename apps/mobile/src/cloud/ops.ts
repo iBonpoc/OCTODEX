@@ -19,6 +19,7 @@ import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
 import { MODULE_INACTIVE } from "@/data/outboxRetry";
+import { withSendablePages } from "@/features/docPages";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -1209,7 +1210,8 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     supabase
       .from("estimate_versions")
       .update({
-        calc_inputs: op.doc, engine_version: ENGINE_VERSION,
+        // pages the server would refuse are left out, the estimate itself goes (spec 33 П24.7; the trigger on estimate_versions)
+        calc_inputs: withSendablePages(op.doc), engine_version: ENGINE_VERSION,
         // E3: the server counts a use on version 1 (estimate_template_uses); every save keeps the same source
         source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
         totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },

@@ -11782,4 +11782,80 @@ with u as (update public.estimate_templates set name = 'T149 B' where id = 'e3c0
 select tst.ok((select count(*) from u) = 0, 'T149 another company edits no template of A');
 \echo 'T149 template edits over row_version ok'
 
+-- ---------------------------------------------------------------- T165: the attached pages of an estimate (spec 33 П24.7, S6g; #705)
+-- One rule on the phone and on the server: apps/mobile/test/fixtures/docPages.json, read by test/docPages.test.ts too.
+\set pages_json `cat :doc_pages`
+:as_super
+select tst.ok(coalesce(string_agg(x ->> 'name', '; '), '') = '', format('T165 the page shows what the app shows: %s', coalesce(string_agg((x ->> 'name') || ' → ' || app.doc_pages(x -> 'in')::text, '; '), '')))
+  from jsonb_array_elements((:'pages_json')::jsonb -> 'cases') x where app.doc_pages(x -> 'in') is distinct from x -> 'out';
+select tst.ok(coalesce(string_agg(x ->> 'name', '; '), '') = '', format('T165 writing refused as in the app: %s', coalesce(string_agg((x ->> 'name') || ' → ' || coalesce(app.doc_pages_problem(x -> 'in'), 'null'), '; '), '')))
+  from jsonb_array_elements((:'pages_json')::jsonb -> 'cases') x where app.doc_pages_problem(x -> 'in') is distinct from x ->> 'problem';
+-- 3001 shapes (built here and in the unit test: too long for the file)
+select tst.ok(jsonb_array_length(app.doc_pages(p) -> 0 -> 'items') = 3000 and app.doc_pages_problem(p) = 'shape', 'T165 3001 shapes: 3000 drawn, writing refused')
+  from (select jsonb_build_array(jsonb_build_object('id', 'p', 'title', 'P', 'w', 10, 'h', 10,
+          'items', (select jsonb_agg(jsonb_build_object('t', 'r', 'x', g % 100, 'y', 0, 'w', 1, 'h', 1)) from generate_series(0, 3000) g))) p) q;
+-- more than 512 KB of text: refused (the app stops at 384 KB of its compact JSON, before)
+select tst.ok(app.doc_pages_problem(p) = 'size', 'T165 more than 512 KB of pages: refused')
+  from (select jsonb_build_array(jsonb_build_object('id', 'p', 'title', 'P', 'w', 10, 'h', 10,
+          'items', (select jsonb_agg(jsonb_build_object('t', 'x', 'x', 1, 'y', 1, 's', repeat('w', 200), 'fs', 11)) from generate_series(1, 3000) g))) p) q;
+-- the helpers are nobody's (rule 18, T52)
+select tst.ok(not has_function_privilege(r, f, 'execute'), format('T165 %s cannot call %s', r, f))
+  from unnest(array['anon', 'authenticated']) r,
+       unnest(array['app.doc_num(jsonb, numeric, numeric)', 'app.doc_prim(jsonb)', 'app.doc_cells(jsonb)', 'app.doc_pages(jsonb)',
+                    'app.doc_pages_problem(jsonb)', 'app.tg_doc_pages()', 'app.client_doc(jsonb)']) f;
+select tst.ok(not exists (select 1 from pg_proc pr, aclexplode(coalesce(pr.proacl, acldefault('f', pr.proowner))) a
+                           where pr.oid in ('app.doc_num(jsonb, numeric, numeric)'::regprocedure, 'app.doc_prim(jsonb)'::regprocedure, 'app.doc_cells(jsonb)'::regprocedure,
+                                            'app.doc_pages(jsonb)'::regprocedure, 'app.doc_pages_problem(jsonb)'::regprocedure, 'app.tg_doc_pages()'::regprocedure)
+                             and a.grantee = 0 and a.privilege_type = 'EXECUTE'), 'T165 PUBLIC calls none of the helpers');
+
+-- an estimate with a page, sent: what the client gets through the page
+insert into public.customers (id, company_id, display_name) values ('c1650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T165 client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1650000-0000-4000-8000-000000000001', '165 Page St', 'Pasadena');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e1650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1650000-0000-4000-8000-000000000001', 'd1650000-0000-4000-8000-000000000001', 'T165');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e1650000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e1650000-0000-4000-8000-000000000001', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e1650000-0000-4000-8000-0000000000a1' where id = 'e1650000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name) values ('e1650000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'e1650000-0000-4000-8000-0000000000a1', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+  ('e1650000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'e1650000-0000-4000-8000-0000000000b1', 'labor', 'Work', 1, 40000, false);
+:as_owner_a
+-- an old phone: a document without pages saves as before (rule 16)
+update public.estimate_versions set calc_inputs = $j${"options": [{"id": "e1650000-0000-4000-8000-0000000000b1", "name": "Only", "lines": [
+    {"id": "e1650000-0000-4000-8000-0000000000c1", "name": "Work", "group": "labor", "quantity": "1", "unit": "ea", "unitPriceCents": 40000}]}],
+  "settings": {"tax": {"enabled": false, "rateBps": 0, "groups": {}}, "deposit": {"kind": "none"}}}$j$::jsonb
+ where id = 'e1650000-0000-4000-8000-0000000000a1';
+select tst.ok((select calc_inputs ? 'options' and not calc_inputs ? 'pages' from public.estimate_versions where id = 'e1650000-0000-4000-8000-0000000000a1'),
+  'T165 an old phone''s document without pages saves (rule 16)');
+update public.estimate_versions set calc_inputs = calc_inputs || '{"pages": null}'::jsonb where id = 'e1650000-0000-4000-8000-0000000000a1';
+select tst.ok((select calc_inputs -> 'pages' = 'null'::jsonb from public.estimate_versions where id = 'e1650000-0000-4000-8000-0000000000a1'), 'T165 a null pages key saves too');
+-- refused on writing, the version keeps what it had
+select tst.fails_like($q$update public.estimate_versions set calc_inputs = calc_inputs || jsonb_build_object('pages', (select jsonb_agg(jsonb_build_object('id', 'p' || g, 'title', 'P', 'w', 1, 'h', 1, 'items', '[]'::jsonb)) from generate_series(1, 5) g))
+                         where id = 'e1650000-0000-4000-8000-0000000000a1'$q$, '%doc_pages: count%', 'T165 five pages: refused on writing');
+select tst.fails_like($q$update public.estimate_versions set calc_inputs = calc_inputs || jsonb_build_object('pages', jsonb_build_array(jsonb_build_object('id', 'p', 'title', repeat('t', 201), 'w', 1, 'h', 1, 'items', '[]'::jsonb)))
+                         where id = 'e1650000-0000-4000-8000-0000000000a1'$q$, '%doc_pages: long%', 'T165 a 201-letter title: refused, not cut');
+select tst.fails_like($q$insert into public.estimate_versions (company_id, estimate_id, version_no, calc_inputs) values ('ca000000-0000-0000-0000-000000000000', 'e1650000-0000-4000-8000-000000000001', 9,
+                         '{"options": [], "pages": "<svg onload=alert(1)>"}')$q$, '%doc_pages: pages%', 'T165 a new version with pages that are not a list: refused');
+-- the page the module sends: good shapes, a broken one, a colour that is not a token
+update public.estimate_versions set calc_inputs = calc_inputs || $j${"pages": [{"id": "mod:1", "title": "Drawing", "note": "Measured roughly", "w": 600, "h": 400,
+    "items": [{"t": "l", "x1": 10, "y1": 20, "x2": 300, "y2": 20, "sw": 4, "ink": "ink"},
+              {"t": "l", "x1": 0, "y1": 0, "x2": 1, "y2": 1, "sw": 1, "ink": "<script>alert(1)</script>"},
+              {"t": "c", "cx": {"nested": 1}, "cy": 0, "r": 1, "sw": 1, "fill": "ink"},
+              {"t": "image", "href": "javascript:alert(1)"},
+              {"t": "x", "x": 160, "y": 12, "s": "12′ 4″", "fs": 11, "onload": "alert(1)"}],
+    "head": ["#", "Length"], "rows": [["1", "12′ 4″"]]}]}$j$::jsonb
+ where id = 'e1650000-0000-4000-8000-0000000000a1';
+select tst.ok((select calc_inputs -> 'pages' -> 0 ->> 'id' = 'mod:1' from public.estimate_versions where id = 'e1650000-0000-4000-8000-0000000000a1'), 'T165 the office''s good page saves');
+-- sent: the lines still match the document (lock_lines_match reads options only)
+select public.send_estimate('e1650000-0000-4000-8000-000000000001', 'T165pageTokenOfTheOffice0123456789abc') as t165_tok \gset
+select tst.ok((select locked_at is not null from public.estimate_versions where id = 'e1650000-0000-4000-8000-0000000000a1'), 'T165 the estimate with a page sends: lock_lines_match passes');
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_estimate(:'t165_tok') -> 'doc' -> 'pages' as t165_pages \gset
+select tst.ok(jsonb_array_length((:'t165_pages')::jsonb) = 1 and jsonb_array_length((:'t165_pages')::jsonb -> 0 -> 'items') = 2, 'T165 the client gets the page with the two good shapes: ' || :'t165_pages');
+select tst.ok((:'t165_pages')::text !~* '(script|alert|onload|href|nested|image)', 'T165 nothing but the drawing reaches the client');
+select tst.ok(((:'t165_pages')::jsonb -> 0 ->> 'note') = 'Measured roughly' and ((:'t165_pages')::jsonb -> 0 -> 'rows' -> 0 ->> 1) = '12′ 4″', 'T165 the note and the table reach the client');
+:as_super
+\echo 'T165 the attached pages: the same rule as the app, refused on writing, the client sees only the drawing ok'
+
 \echo 'ALL TESTS PASSED'

@@ -1,0 +1,715 @@
+{
+ "_": "One rule on the phone and on the server (spec 33 П24.7): test/docPages.test.ts (clientPages, pagesProblem) and T165 in supabase/tests/core_rls.sql (app.doc_pages, app.doc_pages_problem) read this same file. out = what the client may see; problem = why writing is refused (null = it is not). The 3001-shape case is built in both tests (too long for the file).",
+ "cases": [
+  {
+   "name": "a good page goes whole",
+   "in": [
+    {
+     "id": "m:1",
+     "title": "Drawing",
+     "note": "Measured roughly",
+     "w": 600,
+     "h": 400,
+     "items": [
+      {
+       "t": "l",
+       "x1": 10,
+       "y1": 20,
+       "x2": 300,
+       "y2": 20,
+       "sw": 4,
+       "ink": "ink"
+      },
+      {
+       "t": "l",
+       "x1": 10,
+       "y1": 26,
+       "x2": 300,
+       "y2": 26,
+       "sw": 1,
+       "ink": "mut",
+       "dash": 4
+      },
+      {
+       "t": "c",
+       "cx": 300,
+       "cy": 20,
+       "r": 7,
+       "sw": 2,
+       "fill": "paper"
+      },
+      {
+       "t": "d",
+       "cx": 10,
+       "cy": 20,
+       "r": 7,
+       "sw": 2,
+       "fill": "ink"
+      },
+      {
+       "t": "r",
+       "x": 140,
+       "y": 2,
+       "w": 40,
+       "h": 14
+      },
+      {
+       "t": "x",
+       "x": 160,
+       "y": 12,
+       "s": "12′ 4″",
+       "fs": 11
+      },
+      {
+       "t": "x",
+       "x": 5,
+       "y": 390,
+       "s": "st 2",
+       "fs": 11,
+       "anchor": "start"
+      }
+     ],
+     "head": [
+      "#",
+      "Length"
+     ],
+     "rows": [
+      [
+       "1",
+       "12′ 4″"
+      ],
+      [
+       "2",
+       "8′"
+      ]
+     ]
+    }
+   ],
+   "problem": null,
+   "out": [
+    {
+     "id": "m:1",
+     "title": "Drawing",
+     "w": 600,
+     "h": 400,
+     "items": [
+      {
+       "t": "l",
+       "x1": 10,
+       "y1": 20,
+       "x2": 300,
+       "y2": 20,
+       "sw": 4,
+       "ink": "ink"
+      },
+      {
+       "t": "l",
+       "x1": 10,
+       "y1": 26,
+       "x2": 300,
+       "y2": 26,
+       "sw": 1,
+       "ink": "mut",
+       "dash": 4
+      },
+      {
+       "t": "c",
+       "cx": 300,
+       "cy": 20,
+       "r": 7,
+       "sw": 2,
+       "fill": "paper"
+      },
+      {
+       "t": "d",
+       "cx": 10,
+       "cy": 20,
+       "r": 7,
+       "sw": 2,
+       "fill": "ink"
+      },
+      {
+       "t": "r",
+       "x": 140,
+       "y": 2,
+       "w": 40,
+       "h": 14
+      },
+      {
+       "t": "x",
+       "x": 160,
+       "y": 12,
+       "s": "12′ 4″",
+       "fs": 11
+      },
+      {
+       "t": "x",
+       "x": 5,
+       "y": 390,
+       "s": "st 2",
+       "fs": 11,
+       "anchor": "start"
+      }
+     ],
+     "note": "Measured roughly",
+     "head": [
+      "#",
+      "Length"
+     ],
+     "rows": [
+      [
+       "1",
+       "12′ 4″"
+      ],
+      [
+       "2",
+       "8′"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "not a list",
+   "in": {
+    "a": 1
+   },
+   "problem": "pages",
+   "out": []
+  },
+  {
+   "name": "broken shapes drop, extra keys go",
+   "in": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [
+      {
+       "t": "l",
+       "x1": "10",
+       "y1": 0,
+       "x2": 1,
+       "y2": 1,
+       "sw": 1,
+       "ink": "ink"
+      },
+      {
+       "t": "l",
+       "x1": 0,
+       "y1": 0,
+       "x2": 1,
+       "y2": 1,
+       "sw": 1,
+       "ink": "<script>alert(1)</script>"
+      },
+      {
+       "t": "img",
+       "x": 0,
+       "y": 0
+      },
+      {
+       "t": "c",
+       "cx": {
+        "a": 1
+       },
+       "cy": 0,
+       "r": 1,
+       "sw": 1,
+       "fill": "ink"
+      },
+      {
+       "t": "c",
+       "cx": 1,
+       "cy": 2,
+       "r": 3,
+       "sw": 1,
+       "fill": "paper",
+       "onload": "alert(1)",
+       "style": "x"
+      },
+      "a string",
+      null,
+      {
+       "t": "x",
+       "x": 1,
+       "y": 2,
+       "s": 5,
+       "fs": 11
+      },
+      {
+       "t": "x",
+       "x": 1,
+       "y": 2,
+       "s": "<b>ok</b>",
+       "fs": 11,
+       "href": "javascript:x"
+      }
+     ]
+    }
+   ],
+   "problem": null,
+   "out": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [
+      {
+       "t": "c",
+       "cx": 1,
+       "cy": 2,
+       "r": 3,
+       "sw": 1,
+       "fill": "paper"
+      },
+      {
+       "t": "x",
+       "x": 1,
+       "y": 2,
+       "s": "<b>ok</b>",
+       "fs": 11
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "numbers out of range drop",
+   "in": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [
+      {
+       "t": "l",
+       "x1": 200000,
+       "y1": 0,
+       "x2": 1,
+       "y2": 1,
+       "sw": 1,
+       "ink": "ink"
+      },
+      {
+       "t": "c",
+       "cx": 1,
+       "cy": 1,
+       "r": 0,
+       "sw": 1,
+       "fill": "ink"
+      },
+      {
+       "t": "x",
+       "x": 1,
+       "y": 1,
+       "s": "a",
+       "fs": 500
+      },
+      {
+       "t": "l",
+       "x1": 0,
+       "y1": 0,
+       "x2": 1,
+       "y2": 1,
+       "sw": -1,
+       "ink": "ink"
+      },
+      {
+       "t": "r",
+       "x": 0,
+       "y": 0,
+       "w": -5,
+       "h": 1
+      },
+      {
+       "t": "d",
+       "cx": -100000,
+       "cy": 100000,
+       "r": 1000,
+       "sw": 0,
+       "fill": "ink"
+      }
+     ]
+    }
+   ],
+   "problem": null,
+   "out": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [
+      {
+       "t": "d",
+       "cx": -100000,
+       "cy": 100000,
+       "r": 1000,
+       "sw": 0,
+       "fill": "ink"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "optional keys out of rule are left out",
+   "in": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [
+      {
+       "t": "l",
+       "x1": 0,
+       "y1": 0,
+       "x2": 1,
+       "y2": 1,
+       "sw": 1,
+       "ink": "mut",
+       "dash": "4"
+      },
+      {
+       "t": "x",
+       "x": 1,
+       "y": 1,
+       "s": "a",
+       "fs": 11,
+       "anchor": "top"
+      }
+     ]
+    }
+   ],
+   "problem": null,
+   "out": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [
+      {
+       "t": "l",
+       "x1": 0,
+       "y1": 0,
+       "x2": 1,
+       "y2": 1,
+       "sw": 1,
+       "ink": "mut"
+      },
+      {
+       "t": "x",
+       "x": 1,
+       "y": 1,
+       "s": "a",
+       "fs": 11
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "the same id twice: the first wins, writing refused",
+   "in": [
+    {
+     "id": "p1",
+     "title": "first",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p1",
+     "title": "second",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ],
+   "problem": "id",
+   "out": [
+    {
+     "id": "p1",
+     "title": "first",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ]
+  },
+  {
+   "name": "a page without its box drops",
+   "in": [
+    {
+     "id": "x",
+     "title": "T",
+     "items": []
+    },
+    {
+     "id": "p2",
+     "title": "P2",
+     "w": 0,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": 5,
+     "title": "P3",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p4",
+     "title": null,
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ],
+   "problem": null,
+   "out": []
+  },
+  {
+   "name": "five pages: four shown, writing refused",
+   "in": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p2",
+     "title": "P2",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p3",
+     "title": "P3",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p4",
+     "title": "P4",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p5",
+     "title": "P5",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ],
+   "problem": "count",
+   "out": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p2",
+     "title": "P2",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p3",
+     "title": "P3",
+     "w": 10,
+     "h": 10,
+     "items": []
+    },
+    {
+     "id": "p4",
+     "title": "P4",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ]
+  },
+  {
+   "name": "a long title is cut on reading, refused on writing",
+   "in": [
+    {
+     "id": "p1",
+     "title": "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ],
+   "problem": "long",
+   "out": [
+    {
+     "id": "p1",
+     "title": "яяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяяя",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ]
+  },
+  {
+   "name": "a long id drops the page, refused on writing",
+   "in": [
+    {
+     "id": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ],
+   "problem": "long",
+   "out": []
+  },
+  {
+   "name": "a 200-letter text and a 64-letter id pass",
+   "in": [
+    {
+     "id": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+     "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+     "w": 10,
+     "h": 10,
+     "items": [],
+     "note": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+    }
+   ],
+   "problem": null,
+   "out": [
+    {
+     "id": "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii",
+     "title": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+     "w": 10,
+     "h": 10,
+     "items": [],
+     "note": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+    }
+   ]
+  },
+  {
+   "name": "table: a broken row drops, a number cell is empty, 12 columns",
+   "in": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [],
+     "head": [
+      "a",
+      1,
+      null
+     ],
+     "rows": [
+      [
+       "1",
+       2
+      ],
+      "x",
+      [
+       "0",
+       "1",
+       "2",
+       "3",
+       "4",
+       "5",
+       "6",
+       "7",
+       "8",
+       "9",
+       "10",
+       "11",
+       "12"
+      ]
+     ]
+    }
+   ],
+   "problem": "shape",
+   "out": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": [],
+     "head": [
+      "a",
+      "",
+      ""
+     ],
+     "rows": [
+      [
+       "1",
+       ""
+      ],
+      [
+       "0",
+       "1",
+       "2",
+       "3",
+       "4",
+       "5",
+       "6",
+       "7",
+       "8",
+       "9",
+       "10",
+       "11"
+      ]
+     ]
+    }
+   ]
+  },
+  {
+   "name": "items not a list: none drawn, refused",
+   "in": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": {
+      "t": "l"
+     }
+    }
+   ],
+   "problem": "shape",
+   "out": [
+    {
+     "id": "p1",
+     "title": "P1",
+     "w": 10,
+     "h": 10,
+     "items": []
+    }
+   ]
+  },
+  {
+   "name": "no pages",
+   "in": [],
+   "problem": null,
+   "out": []
+  }
+ ]
+}

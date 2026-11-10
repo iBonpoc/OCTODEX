@@ -1,3 +1,4 @@
+import type { DocAttachPage } from "@/features/docPages";
 import type { CustomOption, CustomSettings, LineGroup } from "@octo/estimating-engine";
 
 /**
@@ -588,6 +589,9 @@ export interface EstimateDoc {
   settings: CustomSettings;
   /** note to the client (scope, terms) */
   note?: string;
+  /** «страницы-вложения» a module adds (a drawing of shapes, a table of words) — after the lines on /p/ and in the PDF;
+   *  drawn only through features/docPages (clientPages), the server passes them through app.doc_pages (spec 33 П24.7) */
+  pages?: DocAttachPage[];
 }
 
 /** What the client chose and signed (on site or on the client page). */

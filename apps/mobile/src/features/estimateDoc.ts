@@ -17,6 +17,7 @@ import {
   type LineSource,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
+import { clientPages } from "./docPages";
 import { taxModeFor } from "@octo/estimating-engine";
 
 /** UUID: Web Crypto when present (web, Node tests), expo-crypto on the phone. */
@@ -137,8 +138,12 @@ export const withAddons = (o: CustomOption, addonIds: string[]): CustomOption =>
  * from the app (the page /p/ on this device, PDF, letters). The server cuts the same on its side (app.client_doc).
  */
 export function clientDoc(doc: EstimateDoc): EstimateDoc {
+  const { pages: raw, ...rest } = doc;
+  const pages = clientPages(raw);
   return {
-    ...doc,
+    ...rest,
+    // the attached pages as app.client_doc passes them (spec 33 П24.7): a broken shape or page never reaches the client
+    ...(pages.length ? { pages } : {}),
     // a line with quantity 0 bills nothing and is how a part is left out (spec 33 П23.8а №4, П23.9): never shown as a $0 row
     options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !zeroQty(l)).map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
   };
