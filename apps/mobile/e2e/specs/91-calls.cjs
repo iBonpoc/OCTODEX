@@ -67,7 +67,7 @@ exports.run = async (h) => {
 
   // chips by outcome, the card opens the lead
   // the phone: the toast covers the chips for its 5 s — wait until it is gone
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().waitFor({ state: "hidden", timeout: 8000 }).catch(() => {});
+  await p.getByRole("button", { name: "Отменить", exact: true }).last().waitFor({ state: "hidden", timeout: 8000 });
   await p.getByText("Не ответил · 1", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(350);
   h.expect((await p.getByText("Поговорили", { exact: true }).locator("visible=true").count()) === 0, "the chip shows only missed calls");
   await h.shot("list");

@@ -3,6 +3,7 @@
  * date / time / tech (S4: no second client when the lead already has one), status sheet → snooze, "lost or wait?", tabs.
  */
 // a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
@@ -86,7 +87,7 @@ exports.run = async (h) => {
   await h.go(`/lead/${angela.id}`);
   // closing "did you get through?" without an answer still counts the call as an attempt
   await p.getByRole("button", { name: "Позвонить" }).first().click(); await p.waitForTimeout(400);
-  await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+  await pressEscUntilClosed(p);
   angela = await lead("Angela Rossi");
   if ((await p.locator('[aria-modal="true"]').count()) > 0) await h.sheet().getByRole("button", { name: "Не ответил" }).click();
   angela = await lead("Angela Rossi");

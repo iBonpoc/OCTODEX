@@ -2,6 +2,7 @@
  * S26 «кто» в задаче (docs/specs/23 §5; db T78–T79, migration 20261107060000): in the task sheet the office chooses
  * anyone on the team in «Кто»; the technician sees only himself — the server gives his task to nobody else.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
@@ -27,7 +28,7 @@ exports.run = async (h) => {
   const office = await who(sheet);
   h.expect(office.length === others.length + 1, `the office sees everyone in «Кто» (${office.join(", ")})`);
   await h.shot("office");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  await pressEscUntilClosed(p);
 
   // the technician: only himself
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));

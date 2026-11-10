@@ -6,6 +6,7 @@
  * - «Требует внимания» has it first in «Разобрать» (by testID) and on «Главная»; «Открыть» opens the record;
  * - «Понятно» in «Разобрать» takes it away from both.
  */
+const { waited } = require("../../sheet.cjs");
 const { signIn, seedOutbox } = require("../signIn.cjs");
 
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
@@ -61,8 +62,7 @@ exports.run = async (h, { seed }) => {
   await h.go("/triage");
   for (let i = 0; i < 20 && (await p.getByTestId("triage-top-rej-q-rej").count()) === 0; i++) await p.waitForTimeout(500);
   await p.getByRole("button", { name: "Открыть" }).first().click();
-  await p.waitForURL(/\/settings\/profile/, { timeout: 10_000 }).catch(() => {});
-  h.expect(/\/settings\/profile/.test(p.url()) && (await p.getByTestId("rejected-q-rej").count()) > 0, `«Открыть»: the record (${p.url()})`);
+  h.expect((await waited(p.waitForURL(/\/settings\/profile/, { timeout: 10_000 }))) && (await p.getByTestId("rejected-q-rej").count()) > 0, `«Открыть»: the record (${p.url()})`);
 
   // «Понятно» in «Разобрать»: gone from both
   await h.go("/triage");

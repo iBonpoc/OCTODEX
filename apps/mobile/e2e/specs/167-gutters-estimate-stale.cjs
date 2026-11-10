@@ -7,6 +7,7 @@
  * - «Обновить из замера» → the canvas's «Обновить смету» → the same estimate, the quantity grew, the word is gone.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const { skipLength } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -94,7 +95,7 @@ exports.run = async (h) => {
   await h.shot("send-check");
   await tid("send-check-force").getByRole("button").click();
   await waitFor(async () => (await tid("send-copy").getByRole("button").getAttribute("aria-disabled")) !== "true", "«Всё равно отправить» opens the send");
-  await p.keyboard.press("Escape");
+  await pressEscUntilClosed(p);
   await h.go(`/estimate/${eid}`);
   await tid("est-pdf").getByRole("button").click();
   await tid("pdf-check-module").waitFor({ timeout: 8000 });
