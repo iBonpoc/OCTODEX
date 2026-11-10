@@ -43,6 +43,9 @@ export const isBackFromSnooze = (l: Lead, now = Date.now()) =>
 /* ---------- sources ---------- */
 export const sourceOf = (db: DB, id: string | undefined): Source | undefined => db.sources.find((s) => s.id === id);
 export const sourceName = (db: DB, id: string | undefined): string => sourceOf(db, id)?.name ?? "—";
+/** the source a new lead starts with: Thumbtack if the company has it, else the first active one; "" while none is loaded */
+export const defaultSourceId = (db: DB): string =>
+  db.sources.find((s) => s.active && s.name === "Thumbtack")?.id ?? db.sources.find((s) => s.active)?.id ?? "";
 /** Picker list: active sources grouped by kind (marketplace, ads, person, own); the current one stays even if hidden. */
 export function sourceGroups(db: DB, keepId?: string): { kind: SourceKind; items: Source[] }[] {
   const order: SourceKind[] = ["marketplace", "ads", "person", "own"];
