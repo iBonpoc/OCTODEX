@@ -5,7 +5,7 @@
  */
 import { View } from "react-native";
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from "react-native-svg";
-import { print as P, radius, space } from "@octo/design-tokens";
+import { font, print as P, radius, space } from "@octo/design-tokens";
 import { clientPages, diamondPath, fillOf, inkOf, type DocPrim } from "./docPages";
 import { T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
@@ -33,11 +33,27 @@ function Prim({ p }: { p: DocPrim }) {
       return <Rect x={p.x} y={p.y} width={p.w} height={p.h} fill={P.paper} />;
     case "x":
       return (
-        <SvgText x={p.x} y={p.y} fontSize={p.fs} textAnchor={p.anchor ?? "middle"} fill={P.ink}>
+<SvgText x={p.x} y={p.y} fontSize={p.fs} fontFamily={font.families.regular} textAnchor={p.anchor ?? "middle"} fill={P.ink}>
           {p.s}
         </SvgText>
       );
   }
+}
+
+/** one sheet of shapes on white paper in both themes (a page's drawing; a module's own screen shows it too) — only what
+ *  passes the rules is drawn */
+export function DocSheet({ sheet, testID }: { sheet: { w: number; h: number; items: unknown[] }; testID?: string }) {
+  const page = clientPages([{ id: "s", title: "", w: sheet.w, h: sheet.h, items: sheet.items }])[0];
+  if (!page) return null;
+  return (
+    <View testID={testID} style={{ backgroundColor: P.paper, borderRadius: radius.tip, overflow: "hidden" }}>
+      <Svg viewBox={`0 0 ${page.w} ${page.h}`} width="100%" style={{ aspectRatio: page.w / page.h }}>
+        {page.items.map((p, i) => (
+          <Prim key={i} p={p} />
+        ))}
+      </Svg>
+    </View>
+  );
 }
 
 export function DocPagesView({ pages: raw }: { pages: unknown }) {
@@ -51,21 +67,7 @@ export function DocPagesView({ pages: raw }: { pages: unknown }) {
             <T v="heading" w="semibold">
               {pg.title}
             </T>
-            {pg.items.length ? (
-              <View
-                style={{
-                  backgroundColor: P.paper,
-                  borderRadius: radius.tip,
-                  overflow: "hidden",
-                }}
-              >
-                <Svg viewBox={`0 0 ${pg.w} ${pg.h}`} width="100%" style={{ aspectRatio: pg.w / pg.h }}>
-                  {pg.items.map((p, i) => (
-                    <Prim key={i} p={p} />
-                  ))}
-                </Svg>
-              </View>
-            ) : null}
+            {pg.items.length ? <DocSheet sheet={pg} /> : null}
             {pg.note ? (
               <T v="body" w="semibold">
                 {pg.note}

@@ -1,9 +1,9 @@
 /**
- * e2e 174 — как мерили, один выбор на весь чертёж (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.16).
+ * e2e 174 — точность замера (#739; было «как мерили»), один выбор на весь чертёж (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.16).
  * Every view.
- * - a new drawing is «Примерно» (the choice in «⋯ → Как мерили, панель»; no words at the top, #681); a corner's cut
+ * - a new drawing is «Примерно» (the choice in «⋯ → Точность замера»; no words at the top, #681); a corner's cut
  *   says to re-measure with a tape;
- * - «⋯» → «Как мерили, панель» → «Рулетка» → in the store, the cut has no warning; after a reload too; the attribute
+ * - «⋯» → «Точность замера» → «Рулетка» → in the store, the cut has no warning; after a reload too; the attribute
  *   panel has no «рулетка / нарисовано» per line.
  * Finds things by testID; waits on what it checks.
  */
@@ -50,13 +50,15 @@ exports.run = async (h) => {
   await stroke([x0, y0], [x1, y0]);
   await stroke([x1, y0], [x1, y1]);
 
-  // «⋯» → «Как мерили, панель»: the sheet with the choice (#681: no «Примерно — не для резки» at the top)
+  // «⋯» → «Точность замера»: the sheet with the choice (#681: no «Примерно — не для резки» at the top)
   const openMore = async () => {
     await tid("draw-who").getByRole("button").click();
-    const item = p.getByRole("menuitem", { name: "Как мерили, панель", exact: true });
+    const item = p.getByRole("menuitem", { name: "Точность замера", exact: true });
     await item.waitFor({ timeout: 3000 });
     await item.click();
     await tid("draw-accuracy-pick").waitFor({ timeout: 5000 });
+    h.expect(/перед резкой промерьте рулеткой/.test(await tid("draw-accuracy-hint").innerText()), "the hint says what «Примерно» means");
+    h.expect((await p.locator('[data-testid^="draw-place-"]').count()) === 0, "the toolbar place is its own item now");
   };
   const picked = async () => (await tid("draw-accuracy-pick").getByRole("radio", { checked: true }).first().innerText()).trim();
   h.expect((await tid("draw-accuracy").count()) === 0, "no accuracy words at the top (#681)");
@@ -70,7 +72,7 @@ exports.run = async (h) => {
   h.expect((await tid("corner-cut-rough").count()) === 1, "a rough measure: the cut says to re-measure with a tape");
   await closeSheet();
 
-  // «⋯» → «Как мерили, панель» → tape
+  // «⋯» → «Точность замера» → tape
   await openMore();
   await tid("draw-accuracy-pick").getByRole("radio", { name: /^Рулетка/ }).click();
   await waitFor(async () => /^Рулетка/.test(await picked()), "«Рулетка» picked");

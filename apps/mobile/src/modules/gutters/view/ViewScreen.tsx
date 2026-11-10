@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
-import { drawing as dt, space } from "@octo/design-tokens";
+import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
@@ -21,8 +21,8 @@ import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, RowView, Screen } from "@/ui/surfaces";
-import { buildScene, fitView } from "../canvas/scene";
-import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
+import { blueprint } from "./blueprint";
+import { DocSheet } from "@/features/DocPagesView";
 import { ftIn } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, measurementOf } from "../data";
@@ -38,7 +38,6 @@ import { docDay } from "@/features/docPdf";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 
 /** the drawing's box: as tall as three quarters of its width */
-const DRAWING_RATIO = 0.75;
 
 export default function ViewScreen() {
   const store = useStore();
@@ -60,7 +59,6 @@ export default function ViewScreen() {
   const action = m ? estimateAction(store.db, m, drawing.runs.length > 0) : ({ kind: "none" } as const);
   const estimates = m ? store.db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id)))) : [];
   const [linkOpen, setLinkOpen] = useState(false);
-  const [w, setW] = useState(0);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
   // «Править чертёж»: back to the canvas it came from; from a lead or an estimate — the canvas opens
@@ -94,29 +92,20 @@ export default function ViewScreen() {
     if (action.kind === "make" || action.kind === "update" || action.kind === "open") doEstimate();
   });
 
-  const scene = useMemo(() => {
-    if (!w || !drawing.runs.length) return null;
-    const size = { w, h: Math.round(w * DRAWING_RATIO) };
-    return {
-      size,
-      scene: buildScene(drawing, {
-        view: fitView(drawing.runs.flatMap((r) => [r.a, r.b]), size, space[6]),
-        viewport: size,
-        fontSize: LABEL_FONT,
-        padX: space[1],
-        gap: dt.labelGap,
-        lenWithStory: true,
-        dsPad: DS_MARK_R,
-        dsText: (n) => t("mod.gutters.ds", { n }),
-        storyText: (n) => t("mod.gutters.story", { n }),
-        cornerText: (kind, splash) => {
-          const k = t(kind === "in" ? "mod.gutters.draw.cornerIn" : kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
-          return splash ? t("mod.gutters.draw.cornerSplash", { k }) : k;
-        },
-        faceOff: dt.runW * 2,
-      }),
-    };
-  }, [w, drawing, t]);
+  // «чертёж как на бумаге» (founder 10.11, #739): a drawing sheet, not the canvas — the same one the PDFs carry
+  const [w, setW] = useState(0);
+  const sheet = useMemo(() => {
+    if (!drawing.runs.length || !w) return null;
+    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const placeAddr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
+    const placeLead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
+    return blueprint(drawing, t, {
+      company: company.name,
+      address: placeAddr ? [placeAddr.address, placeAddr.city].filter(Boolean).join(", ") : placeLead?.name,
+      date: docDay(new Date().toISOString(), company.timezone),
+      rough: m?.accuracy !== "tape",
+    }, w);
+  }, [drawing, t, m, store.db, store.companyName, w]);
 
   /** a word of the dictionary, or the value itself when the company named it its own way (a colour of its own) */
   const word = (key: string, raw: string) => {
@@ -162,7 +151,7 @@ export default function ViewScreen() {
       <View testID="view-screen" style={{ gap: space[4] }}>
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
-          {scene ? <SvgPainter scene={scene.scene} w={scene.size.w} h={scene.size.h} testID="view-svg" /> : null}
+          {sheet ? <DocSheet sheet={sheet} testID="view-svg" /> : null}
         </View>
         {!drawing.runs.length ? (
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>

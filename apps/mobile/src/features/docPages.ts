@@ -257,12 +257,18 @@ function primSvg(p: DocPrim): string {
 }
 
 /** the pages for the PDF: each from a new sheet — the title, the drawing, the note, the table; nothing when there are none */
+/** one sheet of shapes as an SVG element (the page's drawing; a module's own PDF uses it too) — only what passes the
+ *  rules is drawn: the shapes go through docPrim again here */
+export function sheetSvg(sheet: { w: number; h: number; items: unknown[] }): string {
+  const w = num(sheet.w, 1, C) ? sheet.w : 1, h = num(sheet.h, 1, C) ? sheet.h : 1;
+  const items = sheet.items.slice(0, PAGE_LIMITS.items).map(docPrim).filter((p): p is DocPrim => p !== null);
+  return `<svg viewBox="0 0 ${n(w)} ${n(h)}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto">${items.map(primSvg).join("")}</svg>`;
+}
+
 export function pagesHtml(raw: unknown): string {
   return clientPages(raw)
     .map((pg) => {
-      const svg = pg.items.length
-        ? `<svg viewBox="0 0 ${n(pg.w)} ${n(pg.h)}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;border:1px solid ${P.rule}">${pg.items.map(primSvg).join("")}</svg>`
-        : "";
+      const svg = pg.items.length ? sheetSvg(pg) : "";
       const head = pg.head?.length ? `<thead><tr>${pg.head.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>` : "";
       const rows = pg.rows?.length ? `<tbody>${pg.rows.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`).join("")}</tbody>` : "";
       const table = head || rows ? `<table>${head}${rows}</table>` : "";
