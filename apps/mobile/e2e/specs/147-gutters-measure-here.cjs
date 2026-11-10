@@ -27,7 +27,7 @@ exports.run = async (h) => {
   await h.go("/today");
   await plus().first().click();
   h.expect(await waited(tid("fab-lead").or(tid("fab-module.gutters.here")).first().waitFor({ timeout: 5000 })), "«＋» opened");
-  h.expect((await here().count()) === 0, "off: no «Замер желобов» (было «Замерить здесь»)");
+  h.expect((await here().count()) === 0, "off: no «Замер желобов» (было «Замерить здесь»)"); // i18n-old: ok — the old name on purpose
   await pressEscUntilClosed(p);
 
   await h.go("/company/modules");
