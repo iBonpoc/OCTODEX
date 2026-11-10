@@ -58,7 +58,7 @@ exports.run = async (h) => {
     await clean("the canvas with gutters and a corner", lang);
 
     // a gutter's properties
-    await tid("draw-tool-select").getByRole("button").click();
+    await tid("draw-tool-line").getByRole("button").click();
     await p.mouse.click(x0 + (x1 - x0) * 0.3, y0);
     if (!wide) await tid("draw-props").getByRole("button").click();
     await tid("attr-panel").waitFor({ timeout: 5000 });
@@ -75,7 +75,7 @@ exports.run = async (h) => {
     await closePanel();
 
     // a corner's sheet
-    await tid("draw-tool-select").getByRole("button").click();
+    await tid("draw-tool-line").getByRole("button").click();
     const k = await svg().locator('[id^="c:"]').boundingBox();
     await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
     await tid("corner-sheet").waitFor({ timeout: 5000 });

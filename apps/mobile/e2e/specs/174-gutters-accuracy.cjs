@@ -1,12 +1,13 @@
 /**
  * e2e 174 — как мерили, один выбор на весь чертёж (просьба основателя 08.11; docs/specs/33-gutters-canvas.md П20.16).
- * Every view (the phone on its side hides the top row — the choice is in «Ещё» there too).
- * - a new drawing is «Примерно — не для резки» (warn); a corner's cut says to re-measure with a tape;
- * - «Ещё» → «Рулетка: точно, для монтажа» → «Рулетка — для монтажа» (ok), the cut has no warning; in the store; after
- *   a reload too; the attribute panel has no «рулетка / нарисовано» per line.
+ * Every view.
+ * - a new drawing is «Примерно» (the choice in «⋯ → Как мерили, панель»; no words at the top, #681); a corner's cut
+ *   says to re-measure with a tape;
+ * - «⋯» → «Как мерили, панель» → «Рулетка» → in the store, the cut has no warning; after a reload too; the attribute
+ *   panel has no «рулетка / нарисовано» per line.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, sheetGone } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -31,9 +32,13 @@ exports.run = async (h) => {
     await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
     await tid("corner-cut").waitFor({ timeout: 5000 });
   };
+  // Esc until the sheet is gone (CHECKS §9 №8: not once blindly), then its layer gone too
   const closeSheet = async () => {
-    await p.keyboard.press("Escape");
-    await p.waitForTimeout(300);
+    for (let i = 0; i < 3 && (await p.locator('[aria-modal="true"]').count()); i++) {
+      await p.keyboard.press("Escape");
+      await p.waitForTimeout(300);
+    }
+    await sheetGone(p);
   };
 
   await h.go("/company/modules");
@@ -47,17 +52,30 @@ exports.run = async (h) => {
   await stroke([x0, y0], [x1, y0]);
   await stroke([x1, y0], [x1, y1]);
 
+  // «⋯» → «Как мерили, панель»: the sheet with the choice (#681: no «Примерно — не для резки» at the top)
+  const openMore = async () => {
+    await tid("draw-who").getByRole("button").click();
+    const item = p.getByRole("menuitem", { name: "Как мерили, панель", exact: true });
+    await item.waitFor({ timeout: 3000 });
+    await item.click();
+    await tid("draw-accuracy-pick").waitFor({ timeout: 5000 });
+  };
+  const picked = async () => (await tid("draw-accuracy-pick").getByRole("radio", { checked: true }).first().innerText()).trim();
+  h.expect((await tid("draw-accuracy").count()) === 0, "no accuracy words at the top (#681)");
+
   // rough by default
-  await waitFor(async () => /Примерно/.test(await tid("draw-accuracy").innerText()), "a new drawing: «Примерно — не для резки»");
+  await openMore();
+  h.expect(/^Примерно/.test(await picked()), "a new drawing: «Примерно»");
+  await closeSheet();
   h.expect((await tid("attr-confidence").count()) === 0, "no «рулетка / нарисовано» per line");
   await openCorner();
   h.expect((await tid("corner-cut-rough").count()) === 1, "a rough measure: the cut says to re-measure with a tape");
   await closeSheet();
 
-  // the accuracy mark at the top → tape («Ещё» is gone, founder 09.11)
-  await tid("draw-accuracy").click();
+  // «⋯» → «Как мерили, панель» → tape
+  await openMore();
   await tid("draw-accuracy-pick").getByRole("radio", { name: /^Рулетка/ }).click();
-  await waitFor(async () => /Рулетка — для монтажа/.test(await tid("draw-accuracy").innerText()), "the top says «Рулетка — для монтажа»");
+  await waitFor(async () => /^Рулетка/.test(await picked()), "«Рулетка» picked");
   await closeSheet();
   await waitFor(async () => (await accuracy()) === "tape", "the store: tape");
   await openCorner();
@@ -66,6 +84,8 @@ exports.run = async (h) => {
   await closeSheet();
 
   await p.reload();
-  await tid("draw-accuracy").waitFor({ timeout: 8000 });
-  h.expect(/Рулетка/.test(await tid("draw-accuracy").innerText()), "after a reload: still a tape");
+  await tid("draw-surface").waitFor({ timeout: 8000 });
+  await openMore();
+  h.expect(/^Рулетка/.test(await picked()), "after a reload: still a tape");
+  await closeSheet();
 };
