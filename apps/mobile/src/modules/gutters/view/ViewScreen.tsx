@@ -1,0 +1,251 @@
+/**
+ * «Просмотр замера» (founder 09.11, #698 #699 #700 #707; spec 33 П20.25): after «Готово» on the canvas — the drawing whole
+ * (only to look at), what it is made of (gutters, corners, downspouts, parts), the total with «тестовые цены», the
+ * «примерно — промерьте» note (only here and in the PDF), the estimates of this measurement and one main action by its
+ * state: link it → make the estimate → open it / move the drawing's changes into it. «Править чертёж» goes back to the
+ * canvas. Reads the store only (offline: the same). A technician sees the drawing and the list, never money (the
+ * total, the estimates, the estimate action — canSeeClientMoney).
+ */
+import { useEffect, useMemo, useRef, useState } from "react";
+import { View } from "react-native";
+import { router, useLocalSearchParams, type Href } from "expo-router";
+import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
+import { drawing as dt, space } from "@octo/design-tokens";
+import { useStore } from "@/data/store";
+import { useI18n, type DictKey } from "@/i18n";
+import { tFor } from "@/i18n/translate";
+import { canSeeClientMoney } from "@/features/clients";
+import { EstimateListCard } from "@/features/listCards";
+import { moduleHref } from "@/modules/registry";
+import { Button, StatusChip } from "@/ui/controls";
+import { T } from "@/ui/primitives";
+import { useToast } from "@/ui/overlays";
+import { Card, CardList, RowView, Screen } from "@/ui/surfaces";
+import { buildScene, fitView } from "../canvas/scene";
+import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
+import { ftIn } from "../canvas/format";
+import { fromElements } from "../canvas/model";
+import { gutterData, measurementOf } from "../data";
+import { clientLangOf, estimateAction, makeEstimate, ofMeasurement } from "../estimateLink";
+import { toMeasurement } from "../geometry";
+import { listPreview, partName } from "../prices";
+import { readRules, toRulesOverride } from "../settings";
+import { LinkSheet } from "../draw/LinkSheet";
+import { measureSpec } from "./spec";
+
+/** the drawing's box: as tall as three quarters of its width */
+const DRAWING_RATIO = 0.75;
+
+export default function ViewScreen() {
+  const store = useStore();
+  const { t, money } = useI18n();
+  const toast = useToast();
+  const params = useLocalSearchParams<{ m?: string; estimate?: string; from?: string }>();
+  const mid = typeof params.m === "string" ? params.m : "";
+  const g = gutterData(store.db);
+  const found = mid ? measurementOf(g, mid) : null;
+  const m = found?.m ?? null;
+  const elements = found?.elements;
+  const drawing = useMemo(() => fromElements(elements ?? []), [elements]);
+  const settings = store.db.company?.modules?.gutters?.settings;
+  const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
+  const parts = useMemo<PartQty[]>(() => (drawing.runs.length ? computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts : []), [drawing, rules]);
+  const spec = useMemo(() => measureSpec(drawing, parts), [drawing, parts]);
+  const preview = useMemo(() => (parts.length ? listPreview(parts, store.db.catalog) : null), [parts, store.db.catalog]);
+  const money$ = canSeeClientMoney(store.role);
+  const action = m ? estimateAction(store.db, m, drawing.runs.length > 0) : ({ kind: "none" } as const);
+  const estimates = m ? store.db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id)))) : [];
+  const [linkOpen, setLinkOpen] = useState(false);
+  const [w, setW] = useState(0);
+
+  const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
+  // «Править чертёж»: back to the canvas it came from; from a lead or an estimate — the canvas opens
+  const edit = () => {
+    if (!m) return;
+    if (params.from === "draw" && router.canGoBack()) router.back();
+    else router.push(`${moduleHref("gutters", "draw")}?m=${encodeURIComponent(m.id)}` as Href);
+  };
+
+  /** one press at a time; the screen is left after a made estimate (a second press would make a second one) */
+  const busy = useRef(false);
+  const doEstimate = () => {
+    if (!m || busy.current) return;
+    if (action.kind === "open") return router.push(`/estimate/${action.estimateId}` as Href);
+    busy.current = true;
+    const tc = tFor(clientLangOf(store.db, m));
+    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p), fallbackTitle: tc("mod.gutters.title") });
+    if (!r.ok) {
+      busy.current = false;
+      toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : "mod.gutters.est.off"));
+      return;
+    }
+    toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
+    router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
+  };
+  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1: done once
+  const auto = useRef(params.estimate === "1");
+  useEffect(() => {
+    if (!auto.current || !m || !money$) return;
+    auto.current = false;
+    if (action.kind === "make" || action.kind === "update" || action.kind === "open") doEstimate();
+  });
+
+  const scene = useMemo(() => {
+    if (!w || !drawing.runs.length) return null;
+    const size = { w, h: Math.round(w * DRAWING_RATIO) };
+    return {
+      size,
+      scene: buildScene(drawing, {
+        view: fitView(drawing.runs.flatMap((r) => [r.a, r.b]), size, space[6]),
+        viewport: size,
+        fontSize: LABEL_FONT,
+        padX: space[1],
+        gap: dt.labelGap,
+        lenWithStory: true,
+        dsPad: DS_MARK_R,
+        dsText: (n) => t("mod.gutters.ds", { n }),
+        storyText: (n) => t("mod.gutters.story", { n }),
+        cornerText: (kind, splash) => {
+          const k = t(kind === "in" ? "mod.gutters.draw.cornerIn" : kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
+          return splash ? t("mod.gutters.draw.cornerSplash", { k }) : k;
+        },
+        faceOff: dt.runW * 2,
+      }),
+    };
+  }, [w, drawing, t]);
+
+  /** a word of the dictionary, or the value itself when the company named it its own way (a colour of its own) */
+  const word = (key: string, raw: string) => {
+    const v = t(key as DictKey);
+    return v === key ? raw : v;
+  };
+  const unit = (u: string) => word(`mod.gutters.view.u.${u}`, u);
+  const kindWord = (k: string) => t(k === "in" ? "mod.gutters.draw.cornerIn" : k === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
+
+  if (!m) {
+    return (
+      <Screen title={t("mod.gutters.view.title")} back={back}>
+        <View testID="view-not-found"><T tone="mut">{t("mod.gutters.view.notFound")}</T></View>
+      </Screen>
+    );
+  }
+  const lead = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
+  const addr = m.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
+  const rough = m.accuracy !== "tape";
+
+  return (
+    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
+      <View testID="view-screen" style={{ gap: space[4] }}>
+        {/* the drawing whole — to look at only: no gestures, nothing to tap */}
+        <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
+          {scene ? <SvgPainter scene={scene.scene} w={scene.size.w} h={scene.size.h} testID="view-svg" /> : null}
+        </View>
+        {!drawing.runs.length ? (
+          <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
+        ) : null}
+        {rough && drawing.runs.length ? (
+          <View testID="view-rough"><StatusChip status="warn" label={t("mod.gutters.view.rough")} soft /></View>
+        ) : null}
+
+        {/* the main action by the state (#699) and «Править чертёж» */}
+        <View style={{ gap: space[2] }}>
+          {money$ && action.kind === "needLead" ? (
+            <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>
+          ) : null}
+          {money$ && (action.kind === "make" || action.kind === "update" || action.kind === "open") ? (
+            <View testID={`view-action-${action.kind === "open" && action.signed ? "signed" : action.kind}`} style={{ gap: space[2] }}>
+              <Button
+                label={t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : "mod.gutters.est.open")}
+                icon={action.kind === "open" ? "chevronRight" : "plus"}
+                onPress={doEstimate}
+              />
+              {action.kind === "update" ? (
+                <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
+              ) : null}
+            </View>
+          ) : null}
+          <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
+        </View>
+
+        {money$ && preview ? (
+          <Card style={{ gap: space[1] }}>
+            <View testID="view-total" style={{ flexDirection: "row", alignItems: "baseline", justifyContent: "space-between", gap: space[2] }}>
+              <T v="caption" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
+              <T v="heading" w="bold" tabular>{money(preview.totalCents)}</T>
+            </View>
+            {preview.test ? <View testID="view-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
+            <T v="micro" tone="mut">{t("mod.gutters.draw.totalNote")}</T>
+          </Card>
+        ) : null}
+
+        {spec.runs.length ? (
+          <Card style={{ gap: space[2] }}>
+            <T v="heading" w="semibold">{t("mod.gutters.view.runs")}</T>
+            {spec.runs.map((r) => (
+              <View key={r.id} testID={`view-run-${r.n}`} style={{ gap: space[1] }}>
+                <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+                  <T v="body" w="semibold">{t("mod.gutters.draw.cutRun", { n: r.n })}</T>
+                  <T v="caption" tone="mut">{[t("mod.gutters.story", { n: r.story }), `${word(`mod.gutters.attr.p.${r.profile}`, r.profile)} ${r.size}″`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
+                </RowView>
+                <T v="body" tabular>{t("mod.gutters.view.runLine", { back: ftIn(r.backIn), front: ftIn(r.frontIn) })}</T>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
+        {spec.corners.length ? (
+          <Card style={{ gap: space[2] }}>
+            <T v="heading" w="semibold">{t("mod.gutters.view.corners")}</T>
+            {spec.corners.map((c) => (
+              <View key={c.id} testID={`view-corner-${c.id}`} style={{ gap: space[1] }}>
+                <T v="body" w="semibold">{t("mod.gutters.view.cornerTitle", { k: kindWord(c.kind), deg: c.angleDeg })}</T>
+                {c.runs.map((x) => (
+                  <T key={x.n} v="caption" tabular>{t("mod.gutters.view.cornerRun", { n: x.n, back: ftIn(x.backIn), front: ftIn(x.frontIn) })}</T>
+                ))}
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
+        {spec.ds.length ? (
+          <Card style={{ gap: space[2] }}>
+            <T v="heading" w="semibold">{t("mod.gutters.view.ds")}</T>
+            {spec.ds.map((d) => (
+              <View key={d.id} testID={`view-ds-${d.n}`}>
+                <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+                  <T v="body" w="semibold">{`${t("mod.gutters.ds", { n: d.n })} · ${t("mod.gutters.story", { n: d.story })} · ${d.size}`}</T>
+                  <T v="caption" tone="mut">{t("mod.gutters.view.dsLine", { e: d.elbows, o: d.offsets })}</T>
+                </RowView>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
+        {spec.parts.length ? (
+          <Card style={{ gap: space[1] }}>
+            <View testID="view-parts"><T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T></View>
+            {spec.parts.map((p) => (
+              <RowView key={p.key} style={{ justifyContent: "space-between", gap: space[2] }}>
+                <T v="caption" style={{ flexShrink: 1 }}>{partName(t, p)}</T>
+                <T v="caption" tabular>{`${Number(p.qty)} ${unit(p.unit)}`}</T>
+              </RowView>
+            ))}
+          </Card>
+        ) : null}
+
+        {/* the estimates of this measurement (#707): compact cards */}
+        {money$ && estimates.length ? (
+          <View testID="view-estimates" style={{ gap: space[2] }}>
+            <T v="heading" w="semibold">{t("mod.gutters.view.estimates")}</T>
+            <CardList>
+              {estimates.map((e) => (
+                <EstimateListCard key={e.id} e={e} density="compact" />
+              ))}
+            </CardList>
+          </View>
+        ) : null}
+      </View>
+      <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
+    </Screen>
+  );
+}
