@@ -3,7 +3,8 @@
 # миграции → тесты RLS (ON_ERROR_STOP) → остановка и удаление.
 # Использование: supabase/tests/run.sh   (PGBIN, PGPORT, PG_RUN_USER можно переопределить;
 #                VERBOSE=1 — печатать текст каждой ожидаемой ошибки;
-#                CATALOG_OUT=<файл> — записать каталог public после миграций, docs/specs/21 §5)
+#                CATALOG_OUT=<файл> — записать каталог public после миграций, docs/specs/21 §5;
+#                DB_NOW=la-2340|la-0020|"<YYYY-MM-DD HH:MM:SS UTC>" — часы базы с этого момента, #620)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,6 +15,23 @@ PGUSER_DB="postgres"
 
 if [[ ! -x "$PGBIN/initdb" ]]; then
   echo "initdb not found in $PGBIN (set PGBIN)" >&2; exit 1
+fi
+
+# DB_NOW: the database's clock starts at that moment (libfaketime, apt package «faketime»; only the server and psql of
+# this run) — the tests at a risky hour (#620, docs/ai/CHECKS.md §5, §9 п.7). la-2340 = 23:40 in Los Angeles: the UTC date
+# is tomorrow already, a test that takes «today» from current_date goes red (T147, #476); la-0020 = 00:20 LA, right after
+# the company's midnight. Without DB_NOW — the real clock, as before.
+FAKE=()
+if [[ -n "${DB_NOW:-}" ]]; then
+  case "$DB_NOW" in
+    la-2340) AT="$(date -u -d "TZ=\"America/Los_Angeles\" $(TZ=America/Los_Angeles date +%F) 23:40" '+%F %T')" ;;
+    la-0020) AT="$(date -u -d "TZ=\"America/Los_Angeles\" $(TZ=America/Los_Angeles date -d tomorrow +%F) 00:20" '+%F %T')" ;;
+    *) AT="$(date -u -d "$DB_NOW UTC" '+%F %T')" ;;
+  esac
+  LIB="${FAKETIME_LIB:-$(ls /usr/lib/*/faketime/libfaketime.so.1 2>/dev/null | head -1)}"
+  [[ -n "$LIB" && -f "$LIB" ]] || { echo "DB_NOW needs libfaketime (apt-get install faketime) or FAKETIME_LIB" >&2; exit 1; }
+  FAKE=(env LD_PRELOAD="$LIB" FAKETIME="@$AT")
+  echo "== clock: the database starts at $AT UTC (DB_NOW=$DB_NOW)"
 fi
 
 # Postgres не запускается от root: под root работаем через системного пользователя postgres.
@@ -44,10 +62,15 @@ cleanup() {
 trap cleanup EXIT
 
 "${RUN_AS[@]}" "$PGBIN/initdb" -D "$DATA" -U "$PGUSER_DB" -A trust -E UTF8 --locale=C >/dev/null
-"${RUN_AS[@]}" "$PGBIN/pg_ctl" -D "$DATA" -l "$TMP/server.log" -w \
+"${RUN_AS[@]}" "${FAKE[@]}" "$PGBIN/pg_ctl" -D "$DATA" -l "$TMP/server.log" -w \
   -o "-p $PGPORT -k $SOCK -c listen_addresses=''" start >/dev/null
 
 PSQL=("${RUN_AS[@]}" psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PGPORT" -U "$PGUSER_DB" -d postgres)
+# the clock really moved (a missing preload would run the tests at the real hour and look green)
+if [[ -n "${DB_NOW:-}" ]]; then
+  GOT="$("${PSQL[@]}" -At -c "select to_char(now() at time zone 'UTC', 'YYYY-MM-DD HH24:MI')")"
+  [[ "$GOT" == "${AT:0:16}" ]] || { echo "DB_NOW: the database says $GOT UTC, not ${AT:0:16}" >&2; exit 1; }
+fi
 
 echo "== auth stub"
 "${PSQL[@]}" -f "$WORK/auth_stub.sql"
