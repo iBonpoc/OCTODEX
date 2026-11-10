@@ -6,6 +6,7 @@
  * The panel draws the same body as the card's screen: the technician sees no money there (role check).
  * 390/820: no panel — a tap opens the card's screen, and a link with ?open= goes to that screen.
  */
+const { escOnPage, pressEscUntilClosed } = require("../sheet.cjs");
 const role = (h, r) => h.page.evaluate((v) => localStorage.setItem("octo.role.v1", JSON.stringify(v)), r);
 const panel = (h) => h.page.getByTestId("list-panel").locator("visible=true");
 const openIs = (h, id) => h.page.waitForFunction((w) => (new URLSearchParams(location.search).get("open") ?? "") === w, id, { timeout: 4000 }).then(() => true, () => false);
@@ -50,7 +51,7 @@ exports.run = async (h) => {
   await p.keyboard.press("ArrowUp");
   h.expect(await openIs(h, id0), `↑ → back to the first (${p.url()})`);
   h.expect((await p.evaluate(() => history.length)) === startLen, "open, ↓, ↑ replace the address, history does not grow");
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   h.expect(await openIs(h, ""), `Esc closes the panel (${p.url()})`);
   await panel(h).waitFor({ state: "detached" });
   // Esc with the status menu open inside the panel closes the menu only, the panel stays
@@ -58,7 +59,7 @@ exports.run = async (h) => {
   h.expect(await openIs(h, id0), "the panel again");
   await panel(h).getByRole("button", { name: /^Статус клиента/ }).first().click();
   await p.locator('[aria-modal="true"]').first().waitFor();
-  await p.keyboard.press("Escape");
+  await pressEscUntilClosed(p);
   await p.locator('[aria-modal="true"]').first().waitFor({ state: "detached" });
   h.expect(await openIs(h, id0), `Esc closed the menu, the panel stays (${p.url()})`);
   // ↓ with the focus in the side menu is the menu's, not the list's
@@ -80,7 +81,7 @@ exports.run = async (h) => {
   await p.getByText(/^Все · \d+$/).last().click();
   await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().waitFor();
   h.expect((await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().getAttribute("aria-current")) === "true", "back to «Все»: its row is marked again");
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   // «✕» closes too
   await cards.nth(1).click();
   await panel(h).waitFor();

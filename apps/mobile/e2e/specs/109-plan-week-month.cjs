@@ -1,3 +1,4 @@
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const { planMaster, planShowDone } = require("../planFilters.cjs");
 const { addDays, atMinute, minuteOf, todayKey, weekday } = require("../companyTime.cjs");
 /**
@@ -96,7 +97,7 @@ exports.run = async (h) => {
   const form = await h.sheet().innerText();
   h.expect(/ · 8:00 AM–8:45 AM/.test(form), "the form opens at the first free time of that day (8:00), not a fixed 9:00");
   h.expect((await p.getByRole("button", { name: "Записать на оценку" }).locator("visible=true").last().getAttribute("aria-disabled")) !== "true", "«Записать на оценку» is on");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  await pressEscUntilClosed(p);
   await h.go("/plan"); await p.waitForTimeout(300);
 
   // 24 §B, the cut names: a late visit's chip says only «Опаздывает» (the detail is a tag); a job number is a whole

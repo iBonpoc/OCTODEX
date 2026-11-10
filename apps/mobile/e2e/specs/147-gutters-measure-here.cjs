@@ -6,6 +6,7 @@
  *   is now the lead's; the canvas shows the lead.
  * Finds things by testID; waits on what it checks.
  */
+const { pressEscUntilClosed, waited } = require("../sheet.cjs");
 const { skipLength } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -25,9 +26,9 @@ exports.run = async (h) => {
   // off: not in «＋»
   await h.go("/today");
   await plus().first().click();
-  await tid("fab-lead").or(tid("fab-module.gutters.here")).first().waitFor({ timeout: 5000 }).catch(() => {});
+  h.expect(await waited(tid("fab-lead").or(tid("fab-module.gutters.here")).first().waitFor({ timeout: 5000 })), "«＋» opened");
   h.expect((await here().count()) === 0, "off: no «Замер желобов» (было «Замерить здесь»)");
-  await p.keyboard.press("Escape");
+  await pressEscUntilClosed(p);
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();

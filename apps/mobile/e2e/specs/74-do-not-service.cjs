@@ -6,6 +6,7 @@
  * is sent without tax (re-saved before the send). Only the director and the office set or lift the mark: sales
  * get archive only and cannot lift a mark (db T58).
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
@@ -67,7 +68,7 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: /^Статус клиента:/ }).first().click(); await p.waitForTimeout(300);
   await h.expectText(/В архиве/, "sales: the status menu opens with «В архиве»");
   h.expect((await p.getByText("Не обслуживаем", { exact: true }).count()) === 0, "sales: no «Не обслуживаем» in the menu");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(200);
+  await pressEscUntilClosed(p);
   // a client marked by the director: sales see the mark but cannot lift it
   await p.evaluate(() => {
     const k = "octo.db.v5";

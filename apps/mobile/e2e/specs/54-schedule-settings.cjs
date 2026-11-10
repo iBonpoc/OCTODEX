@@ -5,6 +5,7 @@
  * The time zone moved here: the address section shows a line to it. A dispatcher does not open the screen (only the director).
  * Own visits on a free client (no reliance on the demo time).
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/company");
@@ -35,7 +36,7 @@ exports.run = async (h) => {
   h.expect(/Длительность\s*[\s\S]{0,20}?60\s*мин/.test(form), `the inspection is 60 min by default: ${form.slice(0, 300)}`);
   h.expect(/Клиент увидит окно \d{1,2}:\d{2}[\s ]?[AP]M–\d{1,2}:\d{2}[\s ]?[AP]M/.test(form), "the form says the client's window");
   await h.shot("form");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  await pressEscUntilClosed(p);
 
   // «late» after 30 min: 16 min past the start is not late, 31 min is
   db = await h.db();

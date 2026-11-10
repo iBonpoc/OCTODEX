@@ -1,4 +1,5 @@
 /** A phone that still holds data saved by an older build (no sources / tasks / history) opens Leads and a lead card without crashing. */
+const { waited } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -20,8 +21,7 @@ exports.run = async (h) => {
   await p.getByText("Kevin Brooks", { exact: true }).first().click();
   // on 1280 a list row opens the side panel (#434); «Открыть» takes it to the lead screen
   if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").click();
-  await p.getByRole("button", { name: "Назад: Лиды" }).first().waitFor({ timeout: 5000 }).catch(() => {});
-  h.expect((await p.getByRole("button", { name: "Назад: Лиды" }).count()) > 0, "lead card opens (trail ⌂ › Лиды › Лид)");
+  h.expect(await waited(p.getByRole("button", { name: "Назад: Лиды" }).first().waitFor({ timeout: 5000 })), "lead card opens (trail ⌂ › Лиды › Лид)");
   await h.clickText("Переписка");
   await h.expectText(/Лид пришёл: Thumbtack/, "history works");
 };

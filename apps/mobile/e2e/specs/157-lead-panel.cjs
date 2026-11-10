@@ -6,6 +6,7 @@
  * lead cost and no estimate sums there (role check).
  * 390/820: no panel — a tap opens the lead's screen, and a link with ?open= goes to that screen.
  */
+const { escOnPage, pressEscUntilClosed } = require("../sheet.cjs");
 const role = (h, r) => h.page.evaluate((v) => localStorage.setItem("octo.role.v1", JSON.stringify(v)), r);
 const panel = (h) => h.page.getByTestId("list-panel").locator("visible=true");
 const openIs = (h, id) => h.page.waitForFunction((w) => (new URLSearchParams(location.search).get("open") ?? "") === w, id, { timeout: 4000 }).then(() => true, () => false);
@@ -59,13 +60,10 @@ exports.run = async (h) => {
   // react-native-web's Modal listens for Esc only once it is the active modal (after its open animation); a press in the
   // first frames is lost on a slow runner (1280-dark, 09.11). Press until it closes — at most 3 tries, each waited for.
   const sheetEl = p.locator('[aria-modal="true"]').first();
-  for (let i = 0; i < 3; i++) {
-    await p.keyboard.press("Escape");
-    if (await sheetEl.waitFor({ state: "detached", timeout: 3000 }).then(() => true, () => false)) break;
-  }
+  await pressEscUntilClosed(p);
   await sheetEl.waitFor({ state: "detached" });
   h.expect(await openIs(h, l0.id), `Esc closed the sheet, the panel stays (${p.url()})`);
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   h.expect(await openIs(h, ""), `Esc closes the panel (${p.url()})`);
   await panel(h).waitFor({ state: "detached" });
 

@@ -3,6 +3,7 @@
  * marked (it replaced the top pill, wave 2b); a round «‹» goes one level up; Esc goes one level up (an open menu
  * closes first). Phone: the bottom bar is on inner screens too (rule А, docs/specs/28) with the card's section lit; no «‹».
  */
+const { escOnPage, pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width >= 820;
@@ -84,7 +85,7 @@ exports.run = async (h) => {
   // Н3: Esc — one level up; an open menu closes first
   if (h.layout.width >= 1280) await h.expectText(/Esc/, "Esc hint on desktop");
   await h.go(`/job/${job.id}`);
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/client/${owner}`), `Esc job → client (${p.url()})`);
   const status = p.getByRole("button", { name: /^Статус клиента/ }).locator("visible=true").first();
@@ -92,12 +93,12 @@ exports.run = async (h) => {
     await status.click();
     await p.waitForTimeout(300);
     h.expect((await p.getByRole("menu").locator("visible=true").count()) > 0, "status menu open");
-    await p.keyboard.press("Escape");
+    await pressEscUntilClosed(p, p.getByRole("menu").locator("visible=true").first());
     await p.waitForTimeout(500);
     h.expect((await p.getByRole("menu").locator("visible=true").count()) === 0, "Esc closed the menu");
     h.expect(p.url().includes(`/client/${owner}`), `…and stayed on the client (${p.url()})`);
   }
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   await p.waitForTimeout(600);
   h.expect(/\/clients$/.test(p.url()), `Esc client → clients (${p.url()})`);
 
@@ -105,7 +106,7 @@ exports.run = async (h) => {
   await h.go(`/client/edit?id=${cust.id}`);
   const field = p.locator("input:visible").first();
   await field.click();
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   await p.waitForTimeout(600);
   h.expect(p.url().includes("/client/edit"), `Esc in a field stays (${p.url()})`);
 
@@ -120,7 +121,7 @@ exports.run = async (h) => {
   if (h.layout.width >= 1280) {
     // 1280: Enter opens the panel beside the list, the focus stays on the card; Esc closes it (spec 06 «Панель 1280»)
     h.expect(p.url().includes(`open=${cust.id}`), `1280: Enter opens the panel (${p.url()})`);
-    await p.keyboard.press("Escape");
+    await escOnPage(p);
     await p.waitForTimeout(500);
     f = await focused();
     h.expect(/\/clients$/.test(p.url()) && f.includes(cardLabel || cust.name), `1280: Esc closes the panel, focus on the card (${f})`);
@@ -134,14 +135,14 @@ exports.run = async (h) => {
   h.expect(f.startsWith("heading|") && f.includes(cust.name), `focus on the new title (${f})`);
   const ring = await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
   h.expect(ring === "none", `the title has no focus ring (${ring})`);
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   await p.waitForTimeout(700);
   f = await focused();
   // 1280: back to the list with the same card open in the panel (spec 06 «Панель 1280»)
   h.expect(/\/clients(\?open=[\w-]+)?$/.test(p.url()) && f.includes(cardLabel || cust.name), `Esc back → focus on the card left (${f})`);
   // nothing remembered (opened by a link): back up lands on the title
   await h.go(`/job/${job.id}`);
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   await p.waitForTimeout(700);
   f = await focused();
   h.expect(f.startsWith("heading|") && f.includes(ownerName), `no memory → title (${f})`);

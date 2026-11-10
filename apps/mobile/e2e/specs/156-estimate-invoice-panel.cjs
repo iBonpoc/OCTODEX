@@ -6,6 +6,7 @@
  * The panel draws the same body as the card's screen: the technician sees no margin in an estimate.
  * 390/820: no panel — a tap opens the card's screen, a link with ?open= goes to that screen.
  */
+const { escOnPage } = require("../sheet.cjs");
 const role = (h, r) => h.page.evaluate((v) => localStorage.setItem("octo.role.v1", JSON.stringify(v)), r);
 const panel = (h) => h.page.getByTestId("list-panel").locator("visible=true");
 const openIs = (h, id) => h.page.waitForFunction((w) => (new URLSearchParams(location.search).get("open") ?? "") === w, id, { timeout: 4000 }).then(() => true, () => false);
@@ -44,7 +45,7 @@ async function check(h, { list, card, query = "" }) {
   h.expect((await cards.nth(1).getAttribute("aria-current")) === "true", `${list}: ↓ → the next row`);
   const id1 = new URLSearchParams(new URL(p.url()).search).get("open");
   h.expect(kept(), `${list}: ?f= kept with ?open= (${p.url()})`);
-  await p.keyboard.press("Escape");
+  await escOnPage(p);
   h.expect(await openIs(h, ""), `${list}: Esc closes the panel (${p.url()})`);
   h.expect(kept(), `${list}: ?f= kept after Esc (${p.url()})`);
   // the link after a full reload, then «Открыть»

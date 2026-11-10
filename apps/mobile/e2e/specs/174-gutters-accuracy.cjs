@@ -7,6 +7,7 @@
  *   panel has no «рулетка / нарисовано» per line.
  * Finds things by testID; waits on what it checks.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const { skipLength, sheetGone } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
@@ -34,10 +35,7 @@ exports.run = async (h) => {
   };
   // Esc until the sheet is gone (CHECKS §9 №8: not once blindly), then its layer gone too
   const closeSheet = async () => {
-    for (let i = 0; i < 3 && (await p.locator('[aria-modal="true"]').count()); i++) {
-      await p.keyboard.press("Escape");
-      await p.waitForTimeout(300);
-    }
+    await pressEscUntilClosed(p);
     await sheetGone(p);
   };
 
