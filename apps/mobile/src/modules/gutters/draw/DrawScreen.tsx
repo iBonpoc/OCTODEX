@@ -114,7 +114,8 @@ export default function DrawScreen() {
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
-  const [moreSheet, setMoreSheet] = useState(false);
+  // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
+  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | null>(null);
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
   const [quickRun, setQuickRun] = useState<string | null>(null);
   /** a length label tapped (founder 09.11): the length of that gutter, without its properties */
@@ -553,7 +554,7 @@ export default function DrawScreen() {
   });
   const pickPlace = (p: ToolbarPlace) => {
     setPlace(p);
-    setMoreSheet(false);
+    setMoreSheet(null);
     void saveToolbarPlace(p);
   };
   const pick = (tl: Tool) => {
@@ -572,16 +573,18 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "more" | "relink" | "unlink" | "delete";
+  type WhoKey = "acc" | "place" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
-    // how it was measured and where the toolbar sits (the top's «Примерно — не для резки» is gone, #681)
-    { key: "more", label: t("mod.gutters.draw.moreOpen") },
+    // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
+    // «Как мерили, панель» the founder did not understand)
+    ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
+    { key: "place", label: t("mod.gutters.draw.placeItem") },
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
-    if (k === "more") return setMoreSheet(true);
+    if (k === "acc" || k === "place") return setMoreSheet(k);
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -901,10 +904,10 @@ export default function DrawScreen() {
           </View>
         ) : null}
       </Sheet>
-      <Sheet visible={moreSheet} onClose={() => setMoreSheet(false)}>
+      <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
           {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
-          {canSave && m ? (
+          {moreSheet === "acc" && canSave && m ? (
             <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
               <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
               <ChoiceChips
@@ -912,14 +915,19 @@ export default function DrawScreen() {
                 value={tape ? "tape" : "rough"}
                 onChange={(a) => setAccuracy(a)}
               />
+              <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
             </View>
           ) : null}
-          <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
-          {TOOLBAR_PLACES.map((p) => (
-            <View key={p} testID={`draw-place-${p}`}>
-              <ListRow title={t(`mod.gutters.draw.place.${p}`)} left={<Icon name={p === place ? "check" : "sliders"} s={sizes.iconMd} color={p === place ? c.ink : c.mut} />} onPress={() => pickPlace(p)} />
-            </View>
-          ))}
+          {moreSheet === "place" ? (
+            <>
+              <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
+              {TOOLBAR_PLACES.map((p) => (
+                <View key={p} testID={`draw-place-${p}`}>
+                  <ListRow title={t(`mod.gutters.draw.place.${p}`)} left={<Icon name={p === place ? "check" : "sliders"} s={sizes.iconMd} color={p === place ? c.ink : c.mut} />} onPress={() => pickPlace(p)} />
+                </View>
+              ))}
+            </>
+          ) : null}
         </View>
       </Sheet>
       <Sheet visible={!wide && photoSheet && !!mPhotos} onClose={() => setPhotoSheet(false)}>

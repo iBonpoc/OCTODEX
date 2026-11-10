@@ -1,3 +1,4 @@
+import { print } from "@octo/design-tokens";
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 vi.mock("expo-print", () => ({}));
@@ -58,8 +59,11 @@ describe("the drawing as a PDF", () => {
   it("the storey is a word on the drawing, never a colour (rule 2): one ink for every line", () => {
     const h = make("crew", "ru");
     expect(h).toContain("эт 2");
-    const strokes = new Set([...h.matchAll(/<line[^>]*stroke="([^"]+)"[^>]*stroke-linecap/g)].map((m) => m[1]));
-    expect(strokes.size).toBe(1);
+    // only print inks (the sheet's extension lines are grey — a drawing convention, not a storey), every gutter one ink
+    const strokes = new Set([...h.matchAll(/<line[^>]*stroke="([^"]+)"/g)].map((m) => m[1]));
+    expect([...strokes].every((c) => c === print.ink || c === print.mut)).toBe(true);
+    const gutters = new Set([...h.matchAll(/<line[^>]*stroke="([^"]+)" stroke-width="2.5"/g)].map((m) => m[1]));
+    expect([...gutters]).toEqual([print.ink]);
   });
   it("rough → «measure again before cutting»; by tape → no such note", () => {
     expect(make("crew", "en", true)).toContain("measure again before cutting");
