@@ -95,6 +95,26 @@ export function depositAmount(totalCents: number, rule: DepositSetting): number 
   return Math.max(0, Math.min(rule.cents, totalCents));
 }
 
+/**
+ * The deposit rule as the server stores it (estimate_versions.deposit_rule) → the setting app.estimate_option_totals counts
+ * (migration 20261110140000, #544): pct by whole bps when the rule has bps; otherwise pct by the share in value (0..1,
+ * the quick estimate writes "0.1" = 10 %) as whole bps, round half up; fixed by cents; anything else — none.
+ */
+export function depositSettingFromRule(rule: unknown): DepositSetting {
+  if (!rule || typeof rule !== "object" || Array.isArray(rule)) return { kind: "none" };
+  const r = rule as { kind?: unknown; bps?: unknown; value?: unknown; cents?: unknown };
+  const scalar = (v: unknown) => typeof v === "number" || typeof v === "string";
+  const num = (v: unknown) => (scalar(v) && /^\s*-?\d+(\.\d+)?\s*$/.test(String(v)) ? Number(v) : NaN);
+  if (r.kind === "pct") {
+    if (scalar(r.bps)) return Number.isFinite(num(r.bps)) ? { kind: "pct", bps: num(r.bps) } : { kind: "none" };
+    const v = scalar(r.value) ? String(r.value).trim() : "";
+    if (/^(\d+(\.\d+)?|\.\d+)$/.test(v)) return { kind: "pct", bps: roundCents(dec(v).mul(10000)) };
+    return { kind: "pct", bps: 0 };
+  }
+  if (r.kind === "fixed" && Number.isFinite(num(r.cents))) return { kind: "fixed", cents: num(r.cents) };
+  return { kind: "none" };
+}
+
 // The quantity as the server keeps it (estimate_line_items.quantity numeric(14,4), half away from zero): the page,
 // the PDF and the server's totals count the same number (Н1, spec 33 П23.9)
 const toLine = (l: CustomLine, tax: TaxSettings): Line => ({
