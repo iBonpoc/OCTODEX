@@ -17,7 +17,7 @@ import {
   type LineSource,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
-import { clientPages } from "./docPages";
+import { clientPages, pagesProblem } from "./docPages";
 import { taxModeFor } from "@octo/estimating-engine";
 
 /** UUID: Web Crypto when present (web, Node tests), expo-crypto on the phone. */
@@ -139,7 +139,8 @@ export const withAddons = (o: CustomOption, addonIds: string[]): CustomOption =>
  */
 export function clientDoc(doc: EstimateDoc): EstimateDoc {
   const { pages: raw, ...rest } = doc;
-  const pages = clientPages(raw);
+  // pages the server would refuse never go (ops.ts withSendablePages): the client's PDF shows them neither
+  const pages = pagesProblem(raw) === null ? clientPages(raw) : [];
   return {
     ...rest,
     // the attached pages as app.client_doc passes them (spec 33 П24.7): a broken shape or page never reaches the client

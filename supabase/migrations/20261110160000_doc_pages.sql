@@ -18,29 +18,37 @@ returns boolean language sql immutable set search_path = '' as $$
   select case when jsonb_typeof(v) = 'number' then (v #>> '{}')::numeric between lo and hi else false end;
 $$;
 
--- one shape as the page may draw it, else null
+-- one shape as the page may draw it, else null. The page /p/ runs this for every shape on every view (security-check
+-- of the diff): the checks are written out here, not through app.doc_num, and app.doc_pages calls it once per shape.
 create or replace function app.doc_prim(p jsonb)
-returns jsonb language sql immutable set search_path = '' as $$
-  select case
+returns jsonb language plpgsql immutable set search_path = '' as $$
+-- plpgsql: its expression is planned once per session — about 4× faster per shape than a sql function here
+begin
+  return case
     when jsonb_typeof(p) is distinct from 'object' or jsonb_typeof(p -> 't') is distinct from 'string' then null
     when p ->> 't' = 'l' then case
-      when app.doc_num(p -> 'x1', -1e5, 1e5) and app.doc_num(p -> 'y1', -1e5, 1e5) and app.doc_num(p -> 'x2', -1e5, 1e5) and app.doc_num(p -> 'y2', -1e5, 1e5)
-       and app.doc_num(p -> 'sw', 0.01, 100) and jsonb_typeof(p -> 'ink') = 'string' and p ->> 'ink' in ('ink', 'mut')
+      when (case when jsonb_typeof(p -> 'x1') = 'number' then (p ->> 'x1')::numeric between -1e5 and 1e5 else false end) and (case when jsonb_typeof(p -> 'y1') = 'number' then (p ->> 'y1')::numeric between -1e5 and 1e5 else false end)
+       and (case when jsonb_typeof(p -> 'x2') = 'number' then (p ->> 'x2')::numeric between -1e5 and 1e5 else false end) and (case when jsonb_typeof(p -> 'y2') = 'number' then (p ->> 'y2')::numeric between -1e5 and 1e5 else false end)
+       and (case when jsonb_typeof(p -> 'sw') = 'number' then (p ->> 'sw')::numeric between 0.01 and 100 else false end) and jsonb_typeof(p -> 'ink') = 'string' and p ->> 'ink' in ('ink', 'mut')
       then jsonb_build_object('t', 'l', 'x1', p -> 'x1', 'y1', p -> 'y1', 'x2', p -> 'x2', 'y2', p -> 'y2', 'sw', p -> 'sw', 'ink', p -> 'ink')
-           || case when app.doc_num(p -> 'dash', 0.01, 1000) then jsonb_build_object('dash', p -> 'dash') else '{}'::jsonb end end
+           || case when (case when jsonb_typeof(p -> 'dash') = 'number' then (p ->> 'dash')::numeric between 0.01 and 1000 else false end) then jsonb_build_object('dash', p -> 'dash') else '{}'::jsonb end end
     when p ->> 't' in ('c', 'd') then case
-      when app.doc_num(p -> 'cx', -1e5, 1e5) and app.doc_num(p -> 'cy', -1e5, 1e5) and app.doc_num(p -> 'r', 0.01, 1000) and app.doc_num(p -> 'sw', 0, 100)
+      when (case when jsonb_typeof(p -> 'cx') = 'number' then (p ->> 'cx')::numeric between -1e5 and 1e5 else false end) and (case when jsonb_typeof(p -> 'cy') = 'number' then (p ->> 'cy')::numeric between -1e5 and 1e5 else false end)
+       and (case when jsonb_typeof(p -> 'r') = 'number' then (p ->> 'r')::numeric between 0.01 and 1000 else false end) and (case when jsonb_typeof(p -> 'sw') = 'number' then (p ->> 'sw')::numeric between 0 and 100 else false end)
        and jsonb_typeof(p -> 'fill') = 'string' and p ->> 'fill' in ('paper', 'ink')
       then jsonb_build_object('t', p -> 't', 'cx', p -> 'cx', 'cy', p -> 'cy', 'r', p -> 'r', 'sw', p -> 'sw', 'fill', p -> 'fill') end
     when p ->> 't' = 'r' then case
-      when app.doc_num(p -> 'x', -1e5, 1e5) and app.doc_num(p -> 'y', -1e5, 1e5) and app.doc_num(p -> 'w', 0, 1e5) and app.doc_num(p -> 'h', 0, 1e5)
+      when (case when jsonb_typeof(p -> 'x') = 'number' then (p ->> 'x')::numeric between -1e5 and 1e5 else false end) and (case when jsonb_typeof(p -> 'y') = 'number' then (p ->> 'y')::numeric between -1e5 and 1e5 else false end)
+       and (case when jsonb_typeof(p -> 'w') = 'number' then (p ->> 'w')::numeric between 0 and 1e5 else false end) and (case when jsonb_typeof(p -> 'h') = 'number' then (p ->> 'h')::numeric between 0 and 1e5 else false end)
       then jsonb_build_object('t', 'r', 'x', p -> 'x', 'y', p -> 'y', 'w', p -> 'w', 'h', p -> 'h') end
     when p ->> 't' = 'x' then case
-      when app.doc_num(p -> 'x', -1e5, 1e5) and app.doc_num(p -> 'y', -1e5, 1e5) and jsonb_typeof(p -> 's') = 'string' and app.doc_num(p -> 'fs', 1, 200)
+      when (case when jsonb_typeof(p -> 'x') = 'number' then (p ->> 'x')::numeric between -1e5 and 1e5 else false end) and (case when jsonb_typeof(p -> 'y') = 'number' then (p ->> 'y')::numeric between -1e5 and 1e5 else false end)
+       and jsonb_typeof(p -> 's') = 'string' and (case when jsonb_typeof(p -> 'fs') = 'number' then (p ->> 'fs')::numeric between 1 and 200 else false end)
       then jsonb_build_object('t', 'x', 'x', p -> 'x', 'y', p -> 'y', 's', left(p ->> 's', 200), 'fs', p -> 'fs')
            || case when jsonb_typeof(p -> 'anchor') = 'string' and p ->> 'anchor' in ('start', 'middle', 'end')
                    then jsonb_build_object('anchor', p -> 'anchor') else '{}'::jsonb end end
   end;
+end;
 $$;
 
 -- a table row: the first 12 cells, a cell that is not a text is empty
@@ -57,10 +65,11 @@ returns jsonb language sql immutable set search_path = '' as $$
   select coalesce(jsonb_agg(x.page order by x.ord), '[]'::jsonb) from (
     select g.ord, row_number() over (partition by g.value ->> 'id' order by g.ord) as k,
       jsonb_build_object('id', g.value -> 'id', 'title', left(g.value ->> 'title', 200), 'w', g.value -> 'w', 'h', g.value -> 'h',
-        'items', coalesce((select jsonb_agg(app.doc_prim(i.value) order by i.ord)
+        'items', coalesce((select jsonb_agg(q.v order by i.ord)
                              from jsonb_array_elements(case when jsonb_typeof(g.value -> 'items') = 'array' then g.value -> 'items' else '[]'::jsonb end)
                                   with ordinality i(value, ord)
-                            where i.ord <= 3000 and app.doc_prim(i.value) is not null), '[]'::jsonb))
+                                  cross join lateral (select app.doc_prim(i.value) as v) q   -- once per shape
+                            where i.ord <= 3000 and q.v is not null), '[]'::jsonb))
       || case when jsonb_typeof(g.value -> 'note') = 'string' then jsonb_build_object('note', left(g.value ->> 'note', 200)) else '{}'::jsonb end
       || case when jsonb_typeof(g.value -> 'head') = 'array' then jsonb_build_object('head', app.doc_cells(g.value -> 'head')) else '{}'::jsonb end
       || case when jsonb_typeof(g.value -> 'rows') = 'array' then jsonb_build_object('rows', coalesce((
@@ -81,6 +90,8 @@ returns text language sql immutable set search_path = '' as $$
   select case
     when p is null or jsonb_typeof(p) = 'null' then null
     when jsonb_typeof(p) <> 'array' then 'pages'
+    -- the size first: nothing below walks a huge value (security-check of the diff)
+    when octet_length(p::text) > 524288 then 'size'
     when jsonb_array_length(p) > 4 then 'count'
     when exists (select 1 from jsonb_array_elements(p) g where
            case when jsonb_typeof(g) <> 'object' or jsonb_typeof(g -> 'items') is distinct from 'array' then true
@@ -94,7 +105,6 @@ returns text language sql immutable set search_path = '' as $$
     when exists (select 1 from jsonb_path_query(p, 'strict $.**') v where jsonb_typeof(v) = 'string' and length(v #>> '{}') > 200) then 'long'
     when exists (select 1 from jsonb_array_elements(p) g where jsonb_typeof(g -> 'id') = 'string' and length(g ->> 'id') > 64) then 'long'
     when (select count(*) <> count(distinct g ->> 'id') from jsonb_array_elements(p) g where jsonb_typeof(g -> 'id') = 'string') then 'id'
-    when octet_length(p::text) > 524288 then 'size'
   end;
 $$;
 

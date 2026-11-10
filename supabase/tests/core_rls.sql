@@ -11798,6 +11798,13 @@ select tst.ok(jsonb_array_length(app.doc_pages(p) -> 0 -> 'items') = 3000 and ap
 select tst.ok(app.doc_pages_problem(p) = 'size', 'T165 more than 512 KB of pages: refused')
   from (select jsonb_build_array(jsonb_build_object('id', 'p', 'title', 'P', 'w', 10, 'h', 10,
           'items', (select jsonb_agg(jsonb_build_object('t', 'x', 'x', 1, 'y', 1, 's', repeat('w', 200), 'fs', 11)) from generate_series(1, 3000) g))) p) q;
+-- the anon page reads it on every view: 4 × 3000 shapes stay cheap (security-check of the diff: 1–3 s before; ~0.2 s now)
+select clock_timestamp() as t165_t0 \gset
+select jsonb_array_length(app.doc_pages(p)) as t165_n from (select jsonb_agg(jsonb_build_object('id', 'p' || k, 'title', 'P', 'w', 10, 'h', 10,
+          'items', (select jsonb_agg(jsonb_build_object('t', 'l', 'x1', g, 'y1', 1, 'x2', 2, 'y2', 3, 'sw', 1, 'ink', 'ink')) from generate_series(1, 3000) g))) p
+        from generate_series(1, 4) k) q \gset
+select tst.ok(:t165_n = 4 and clock_timestamp() - :'t165_t0'::timestamptz < interval '1.5 seconds',
+  format('T165 4 × 3000 shapes read in %s (limit 1.5 s)', clock_timestamp() - :'t165_t0'::timestamptz));
 -- the helpers are nobody's (rule 18, T52)
 select tst.ok(not has_function_privilege(r, f, 'execute'), format('T165 %s cannot call %s', r, f))
   from unnest(array['anon', 'authenticated']) r,

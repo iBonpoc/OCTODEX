@@ -173,6 +173,8 @@ export type PagesProblem = "pages" | "count" | "shape" | "long" | "id" | "size";
 export function pagesProblem(raw: unknown): PagesProblem | null {
   if (raw === undefined || raw === null) return null;
   if (!Array.isArray(raw)) return "pages";
+  // the size first, as the server: nothing below walks a huge value
+  if (new TextEncoder().encode(JSON.stringify(raw)).length > PAGE_LIMITS.bytes) return "size";
   if (raw.length > PAGE_LIMITS.pages) return "count";
   for (const p of raw) {
     if (!isObj(p) || !Array.isArray(p.items) || p.items.length > PAGE_LIMITS.items) return "shape";
@@ -187,7 +189,6 @@ export function pagesProblem(raw: unknown): PagesProblem | null {
   const ids = raw.map((p) => (p as Record<string, unknown>).id).filter((id): id is string => typeof id === "string");
   if (ids.some((id) => len(id) > PAGE_LIMITS.id)) return "long";
   if (new Set(ids).size !== ids.length) return "id";
-  if (new TextEncoder().encode(JSON.stringify(raw)).length > PAGE_LIMITS.bytes) return "size";
   return null;
 }
 

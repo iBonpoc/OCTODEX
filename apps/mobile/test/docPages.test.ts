@@ -92,6 +92,9 @@ describe("the estimate and its pages", () => {
     expect(clientDoc(doc(good)).pages).toEqual(fx.cases[0]!.out);
     expect("pages" in clientDoc(doc())).toBe(false);
     expect("pages" in clientDoc(doc([{ id: "bad" }]))).toBe(false);
+    // pages the server would refuse never go (withSendablePages): the client's PDF does not show them either
+    const five = Array.from({ length: 5 }, (_, i) => ({ id: `p${i}`, title: "P", w: 1, h: 1, items: [] }));
+    expect("pages" in clientDoc(doc(five))).toBe(false);
   });
   it("the estimate PDF has the page after the signatures; an old estimate without pages — as before", () => {
     const db = makeSeed();
