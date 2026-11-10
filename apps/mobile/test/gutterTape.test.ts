@@ -7,6 +7,7 @@ vi.mock("@/theme/ThemeProvider", () => ({ useTheme: () => ({ c: {} }) }));
 vi.mock("@/ui/controls", () => ({ IconButton: () => null }));
 vi.mock("@/ui/primitives", () => ({ T: () => null }));
 vi.mock("@/ui/surfaces", () => ({ RowView: () => null }));
+vi.mock("@/ui/overlays", () => ({ useSheetHold: () => ({ current: false }) }));
 
 describe("the tape", () => {
   it("1/8″ scale: every inch with the whole length «25′ 6″», the feet bold, the eighths shorter", async () => {
