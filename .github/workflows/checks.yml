@@ -67,12 +67,27 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # #621: the base the old-labels guard (apps/mobile/test/i18nStale.test.ts) compares src/i18n with — the PR's base,
+      # the commit before a push to main; the night and a run by hand compare the commit with itself (nothing changed)
+      - name: The base for the old-labels guard
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git fetch -q --no-tags --depth=1 origin "$BASE"; then
+            echo "I18N_BASE=$BASE" >> "$GITHUB_ENV"
+          else
+            echo "I18N_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          fi
       - name: Types + unit tests
         run: npm run typecheck && npm test
       - name: Database tests (PostgreSQL 16)
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 faketime >/dev/null
           sudo CATALOG_OUT="$RUNNER_TEMP/catalog.json" bash supabase/tests/run.sh
+      # #620: the same tests with the database's clock at 23:40 in Los Angeles — the UTC date is tomorrow already, so a
+      # test taking «today» from current_date goes red here, not on main for 8 hours in the company's evening (T147, #476)
+      - name: Database tests at 23:40 Los Angeles (UTC is a day ahead)
+        run: sudo DB_NOW=la-2340 bash supabase/tests/run.sh
       # docs/specs/21 §5: the app's calls against the LIVE catalog the run above wrote (pg_proc, EXECUTE rights).
       # CATALOG_REQUIRED=1: without the file the test fails instead of skipping.
       - name: The app's server calls against the live catalog

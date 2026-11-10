@@ -88,7 +88,7 @@ exports.run = async (h) => {
   await closePanel();
 
   // the gutter turns black → the downspout follows
-  await tid("draw-tool-select").getByRole("button").click();
+  await tid("draw-tool-line").getByRole("button").click(); // a tap picks with any tool but «Водосток» (#687)
   await p.mouse.click(x0 + 1, y1 - (y1 - y0) * 0.15);
   if (!wide) await tid("draw-props").getByRole("button").click();
   await panel().waitFor({ timeout: 5000 });

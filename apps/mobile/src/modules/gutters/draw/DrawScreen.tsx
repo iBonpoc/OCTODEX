@@ -33,6 +33,7 @@ import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, se
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
+import { SAVE_ICON, saveMark } from "./saveMark";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen, ftIn } from "../canvas/format";
@@ -51,7 +52,7 @@ import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, sign
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
-type Tool = "line" | "ds" | "select";
+type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
 const SAVE_AFTER_MS = 1000;
@@ -142,7 +143,7 @@ export default function DrawScreen() {
     return () => clearInterval(iv);
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
-  const [hint, setHint] = useState<Tool | null>(null);
+  const [hint, setHint] = useState<Tool | "select" | null>(null);
   const live = useLive();
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
@@ -275,13 +276,9 @@ export default function DrawScreen() {
         setSelected(h.id);
         return;
       }
-      // «Линия» from an end continues the gutter (a corner); so does a long press on an end with any tool;
-      // a quick drag of an end with «Выбрать» moves it
-      if (tl === "select" && h?.kind === "end" && !held) {
-        dragRef.current = { kind: "end", id: h.id, end: h.end, before: d };
-        setSelected(h.id);
-        return;
-      }
+      // «Желоб» from an end continues the gutter (a corner, or the same gutter grown straight on); so does a long press
+      // on an end with «Водосток». «Выбрать» (a quick drag that moved an end) is gone (#687): the length is changed by
+      // its label or «Свойства»; handles on the ends of the picked gutter come with #682
       if (tl === "line" || (held && h?.kind === "end")) {
         const a = startAt(d, p0, tolIn());
         dragRef.current = { kind: "line", a };
@@ -575,13 +572,16 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "relink" | "unlink" | "delete";
+  type WhoKey = "more" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
+    // how it was measured and where the toolbar sits (the top's «Примерно — не для резки» is gone, #681)
+    { key: "more", label: t("mod.gutters.draw.moreOpen") },
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
-    { key: "delete", label: t("mod.gutters.draw.mDelete"), destructive: true },
+    ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
+    if (k === "more") return setMoreSheet(true);
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -598,6 +598,9 @@ export default function DrawScreen() {
     if (router.canGoBack()) router.back();
     else router.replace("/company/modules");
   };
+
+  // the save mark (#507): saved at all, and whether something still waits to go out
+  const mark = saveMark({ saved: savedOnce, online: store.online, pending: store.queue.length });
 
   // «Готово» (founder 09.11, #698; spec 33 П20.25): the drawing saved, then «Просмотр замера» — the total, the estimate
   // and the list live there now, not under the drawing (#700)
@@ -633,9 +636,13 @@ export default function DrawScreen() {
   const tools = (
     <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
-      <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
+      <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="channel" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
       <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
-      <View testID="draw-tool-select" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="cursor" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => pick("select")} grow={grow} /></View>
+      {/* «Выбрать» is gone (founder 09.11, #687): a tap picks with any tool; in its place «Свойства» of what is picked —
+          on the phone (820/1280 show them in the side panel) */}
+      {!wide ? (
+        <View testID="draw-props" style={[grow ? { flex: 1 } : { flexShrink: 0 }, sel ? null : { opacity: component.dimOpacity }]}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} /></View>
+      ) : null}
       <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
       <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
       {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
@@ -678,10 +685,6 @@ export default function DrawScreen() {
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
           <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
           <View style={{ flex: 1 }} />
-          {/* «Удалить» at the top beside «Весь рисунок» (founder 09.11) — only while something is picked */}
-          {selText ? (
-            <View testID="draw-delete"><IconButton icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} /></View>
-          ) : null}
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
           {inStore ? (
             <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
@@ -689,16 +692,10 @@ export default function DrawScreen() {
         </RowView>
         {flat && canSave ? null : canSave ? (
           <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
-            <View testID="draw-accuracy">
-              <Press onPress={() => setMoreSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.accTitle")}>
-                <StatusChip status={tape ? "ok" : "warn"} label={t(tape ? "mod.gutters.draw.accTapeShort" : "mod.gutters.draw.accRoughShort")} soft />
-              </Press>
-            </View>
-            {savedOnce ? (
-              // a small mark, not a button (founder 09.11: «слишком большая»)
-              <View testID="draw-saved" style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
-                <Icon name="check" s={sizes.iconSm} color={c.mut} />
-                <T v="micro" tone="mut">{t("mod.gutters.draw.saved")}</T>
+            {/* the save mark (#507): an icon of three states, a tap says it in words; how it was measured is in «⋯» (#681) */}
+            {mark !== "none" ? (
+              <View testID="draw-saved">
+                <IconButton icon={SAVE_ICON[mark]} label={t(`mod.gutters.draw.save.${mark}`)} onPress={() => toast.show(t(`mod.gutters.draw.save.${mark}`))} />
               </View>
             ) : null}
             {lead ? (
@@ -720,7 +717,7 @@ export default function DrawScreen() {
                 <Button label={t("mod.gutters.photo.open")} icon="camera" size="sm" variant="ghost" onPress={() => setPhotoSheet(true)} />
               </View>
             ) : null}
-            {inStore ? (
+            {canSave ? (
               <View ref={whoRef} collapsable={false} testID="draw-who">
                 <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
               </View>
@@ -812,11 +809,10 @@ export default function DrawScreen() {
               <View testID="draw-selected" style={{ flex: 1 }}>
                 <T v="caption" w="semibold" numberOfLines={2}>{selText}</T>
               </View>
-              {!wide ? (
-                <View testID="draw-props">
-                  <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
-                </View>
-              ) : null}
+              {/* «Удалить» where «Свойства» was (founder 09.11, #687); «Свойства» is on the toolbar */}
+              <View testID="draw-delete">
+                <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="secondary" onPress={doDelete} />
+              </View>
             </RowView>
         </View>
         ) : null}
