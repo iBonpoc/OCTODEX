@@ -328,7 +328,7 @@ export const print = {
 /** sizes on the drawing canvas (design/naryad-ds/tokens/foundation.css --draw-*): line widths, a downspout, a node,
  *  the gap between a length label and its line; colours are themes[t].drawing */
 export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4 } as const;
-/** the drawing on paper (foundation.css --draw-print-*; Gutters «Просмотр замера», the PDFs, the estimate's page, #739):
+/** the drawing on paper (foundation.css --draw-print-*; a module's measurement sheet, its PDFs, the estimate's page, #739):
  *  sizes in sheet units — the sheet is `sheetW` wide and scales to the screen or the page; colours are `print` */
 export const drawingPrint = {
   sheetW: 800, margin: 24, runW: 2.5, thinW: 1, dimOff: 30, dimStep: 18, extGap: 4, tick: 5, numR: 10, dsR: 6, font: 13, fontSm: 11, stampH: 76, scalePx: 120,
