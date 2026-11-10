@@ -9531,11 +9531,59 @@ select tst.ok(public.send_estimate('a1120000-0000-4000-8000-0000000000e1') is no
 select tst.ok(public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e1', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign'
               and public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e2', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign', 'T121 both signed on site');
 :as_super
-select tst.ok((select (selection ->> 'total')::bigint = 9999 and (selection ->> 'deposit')::bigint = 0 from public.estimate_approvals
-                where estimate_id = 'a1120000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T121 signed $99.99, no deposit — what the phone shows (not totals $100.00 / $10.00)');
+select tst.ok((select (selection ->> 'total')::bigint = 9999 and (selection ->> 'deposit')::bigint = 1000 from public.estimate_approvals
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T121 signed $99.99, deposit $10.00 (value 0.1 = 10 %, #544) — what the phone shows (not totals $100.00)');
 select tst.ok((select (selection ->> 'total')::bigint = 14641 and (selection ->> 'deposit')::bigint = 1464 from public.estimate_approvals
                 where estimate_id = 'a1120000-0000-4000-8000-0000000000e2' and party = 'customer'), 'T121 with discount, tax and a bps deposit: $146.41 / $14.64, as legacyTotals');
 \echo 'T121 the old quick estimate: the client signs what the phone shows ok'
+
+-- ---------------------------------------------------------------- T162: the quick estimate's deposit — the share in value (#544)
+-- estimate.add writes {"kind":"pct","value":"0.1"}: 10 %, not none (решение основателя 10.11.2026). The server counts it
+-- as whole bps, round half up, the same as depositSettingFromRule of @octo/estimating-engine (test/custom.test.ts).
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_via) values
+  ('a1620000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T162 quick', 'drawing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, totals, deposit_rule, tax_enabled) values
+  ('a1620000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'a1620000-0000-4000-8000-0000000000e1', 1, 'drawing', '{"total":15000,"deposit":1500}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', false);
+insert into public.estimate_options (id, company_id, version_id, name, position) values
+  ('a1620000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1620000-0000-4000-8000-0000000000d1', 'Quick', 0);
+insert into public.estimate_line_items (company_id, option_id, position, name, quantity, unit_price_cents, taxable, is_optional) values
+  ('ca000000-0000-0000-0000-000000000000', 'a1620000-0000-4000-8000-0000000000a1', 0, 'Gutters', 1, 15000, false, false);
+create temp table t162 (rule jsonb, want bigint, what text);
+insert into t162 values
+  ('{"kind":"pct","value":"0.1","contractType":"ca_hic"}', 1500, 'estimate.add''s "0.1" is 10 %: $15.00 of $150.00'),
+  ('{"kind":"pct","value":0.1}', 1500, 'a number 0.1 too'),
+  ('{"kind":"pct","value":" 0.1 "}', 1500, 'spaces around the share'),
+  ('{"kind":"pct","bps":null,"value":"0.1"}', 1500, 'a null bps reads the share'),
+  ('{"kind":"pct","value":"0.12345"}', 1853, 'the share as whole bps, half up: 1235 bps → $18.53'),
+  ('{"kind":"pct","value":".25"}', 3750, '".25" is 25 %'),
+  ('{"kind":"pct","value":"2"}', 15000, 'above 1 — the whole total'),
+  ('{"kind":"pct","bps":500,"value":"0.1"}', 750, 'bps wins over value'),
+  ('{"kind":"pct","bps":1000}', 1500, 'bps as before'),
+  ('{"kind":"pct","value":"ten"}', 0, 'not a number — no deposit'),
+  ('{"kind":"pct","value":"-0.1"}', 0, 'a negative share — no deposit'),
+  ('{"kind":"pct"}', 0, 'no share — no deposit'),
+  ('{"kind":"none"}', 0, 'none'),
+  ('"0.1"', 0, 'not an object — no deposit');
+do $$ declare r record; begin
+  for r in select * from t162 loop
+    update public.estimate_versions set deposit_rule = r.rule where id = 'a1620000-0000-4000-8000-0000000000d1';
+    perform tst.ok((select deposit = r.want and total = 15000
+                      from app.estimate_option_totals('a1620000-0000-4000-8000-0000000000d1', 'a1620000-0000-4000-8000-0000000000a1', null)),
+                   'T162 ' || r.what);
+  end loop;
+end $$;
+drop table t162;
+-- the client signs the quick estimate with the 10 % the phone shows (legacyTotals)
+update public.estimate_versions set deposit_rule = '{"kind":"pct","value":"0.1","contractType":"ca_hic"}' where id = 'a1620000-0000-4000-8000-0000000000d1';
+update public.estimates set current_version_id = 'a1620000-0000-4000-8000-0000000000d1' where id = 'a1620000-0000-4000-8000-0000000000e1';
+:as_owner_a
+select tst.ok(public.send_estimate('a1620000-0000-4000-8000-0000000000e1') is not null
+              and public.sign_estimate_on_site('a1620000-0000-4000-8000-0000000000e1', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign', 'T162 sent and signed on site');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = 15000 and (selection ->> 'deposit')::bigint = 1500 from public.estimate_approvals
+                where estimate_id = 'a1620000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T162 signed $150.00 with deposit $15.00');
+\echo 'T162 the quick estimate''s deposit: value 0.1 = 10 % ok'
 -- ---------------------------------------------------------------- T120: the doors of the Edge Function lead-intake (docs/specs/34 PR 2)
 :as_super
 select tst.ok(has_function_privilege('service_role', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
