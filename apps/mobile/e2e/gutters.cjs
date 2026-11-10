@@ -45,4 +45,27 @@ async function canvasAt(p, x, y, timeout = 5000) {
   );
 }
 
-module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone };
+// «Готово» (#698): the drawing saved → «Просмотр замера»; waits until the review is up
+async function openView(p) {
+  await p.getByTestId("draw-done").locator("visible=true").first().getByRole("button").click();
+  await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ timeout: 8000 });
+}
+
+// «Править чертёж» on the review → back on the canvas
+async function backToCanvas(p) {
+  await p.getByTestId("view-edit").locator("visible=true").first().getByRole("button").click();
+  await p.getByTestId("draw-surface").locator("visible=true").first().waitFor({ timeout: 8000 });
+  await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ state: "detached", timeout: 8000 });
+}
+
+// the total is on the review now, not under the drawing (#700): «Готово», read it, «Править чертёж» — the canvas again
+async function viewTotal(p) {
+  await openView(p);
+  const tot = p.getByTestId("view-total").locator("visible=true");
+  const total = (await tot.count()) ? Number((await tot.first().innerText()).replace(/[^\d.]/g, "")) : 0;
+  const test = (await p.getByTestId("view-test-prices").locator("visible=true").count()) > 0;
+  await backToCanvas(p);
+  return { total, test };
+}
+
+module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal };

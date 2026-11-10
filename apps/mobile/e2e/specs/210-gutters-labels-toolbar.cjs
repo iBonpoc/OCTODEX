@@ -44,12 +44,8 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
   h.expect((await tid("draw-more").count()) === 0 && (await tid("draw-redo").count()) === 1, "«Вперёд» on the toolbar, no «Ещё»");
   h.expect((await tid("draw-delete").count()) === 0, "nothing picked: no «Удалить» at the top");
-  // the total folded: «Итого по замеру $…»; a tap shows what it is made of, again — folds
-  h.expect(/Итого по замеру/.test(await tid("draw-money").innerText()) && (await tid("draw-total-more").count()) === 0, "the total is folded, says what it is");
-  await tid("draw-total-toggle").click();
-  await tid("draw-total-more").waitFor({ timeout: 3000 });
-  await tid("draw-total-toggle").click();
-  await waitFor(async () => (await tid("draw-total-more").count()) === 0, "folded again");
+  // the total is on «Просмотр замера» now (#700): nothing under the drawing
+  h.expect((await tid("draw-money").count()) === 0 && (await tid("draw-total").count()) === 0, "no total under the drawing");
   const b = await p.getByTestId("draw-surface").boundingBox();
   const x0 = b.x + b.width * 0.15, x1 = b.x + b.width * 0.45;
   const y0 = b.y + b.height * 0.25, y1 = b.y + b.height * 0.45;
