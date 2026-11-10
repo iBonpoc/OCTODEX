@@ -45,23 +45,32 @@ async function canvasAt(p, x, y, timeout = 5000) {
   );
 }
 
-// «Готово» (#698): the drawing saved → «Просмотр замера»; waits until the review is up
+
+/** an element where it stays: the same box twice in a row */
+async function stands(el) {
+  let box = null;
+  for (let i = 0; i < 40; i++) {
+    const now = await el.boundingBox();
+    if (now && box && now.x === box.x && now.y === box.y && now.width === box.width && now.height === box.height) return;
+    box = now;
+    await el.page().waitForTimeout(100);
+  }
+}
+
+// «Готово» (#698): the drawing saved → «Просмотр замера»; waits until the review is up AND has stopped sliding in — the
+// next press on it (a «Сделать смету», a «PDF», «Править чертёж») is cancelled while it moves (167, 152, 222; CHECKS §9 п.11)
 async function openView(p) {
   await p.getByTestId("draw-done").locator("visible=true").first().getByRole("button").click();
-  await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ timeout: 8000 });
+  const view = p.getByTestId("view-screen").locator("visible=true").first();
+  await view.waitFor({ timeout: 8000 });
+  await stands(view);
 }
 
 // a button where it stays: a screen that has just come in can still be sliding, and a press on a button that moves under
 // the finger is cancelled (no press at all — 152 / 222 on GitHub and under load, about 1 run in 40). Wait for two equal
 // boxes in a row, then press.
 async function pressWhenStill(btn) {
-  let box = null;
-  for (let i = 0; i < 40; i++) {
-    const now = await btn.boundingBox();
-    if (now && box && now.x === box.x && now.y === box.y && now.width === box.width) break;
-    box = now;
-    await btn.page().waitForTimeout(100);
-  }
+  await stands(btn);
   await btn.click();
 }
 
@@ -82,4 +91,4 @@ async function viewTotal(p) {
   return { total, test };
 }
 
-module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill };
+module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
