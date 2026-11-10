@@ -4,7 +4,7 @@
  * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (default 3 × A → «AAA»);
  * - elbows by style in the panel: B +1 → «AAAB», A −1 → «AAB»;
  * - dragged by the finger, it slides along its run (the store's atIn changes, it stays on the run);
- * - «Выбрать», a long press on a free end, then a drag → a new gutter from that end (a corner), not a moved end.
+ * - a long press on a free end, then a drag → a new gutter from that end (a corner), not a moved end.
  * Finds things by id / testID; waits on what it checks.
  */
 const { skipLength, canvasAt } = require("../gutters.cjs");
@@ -83,8 +83,8 @@ exports.run = async (h) => {
   const mark2 = await svg().locator("circle").first().boundingBox();
   h.expect(Math.abs(mark2.y + mark2.height / 2 - y) < 6, "it stays on the run (not where the finger went)");
 
-  // «Выбрать»: a long press on the free right end, then a drag → a new gutter from it
-  await tid("draw-tool-select").getByRole("button").click();
+  // a long press on the free right end, then a drag → a new gutter from it (with «Желоб»; «Выбрать» is gone, #687)
+  await tid("draw-tool-line").getByRole("button").click();
   await drag([x1, y], [x1, y + b.height * 0.25], 600);
   await waitFor(async () => (await live("run")).length === 2, "a long press on an end: a new gutter from it");
   await waitFor(async () => (await svg().locator('[id^="c:"]').count()) === 1, "a corner where it starts");

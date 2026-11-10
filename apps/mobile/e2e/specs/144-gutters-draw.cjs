@@ -5,7 +5,7 @@
  * - one finger draws a run → a line with «… · эт 1»; a second run from
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button turns the picked run
  *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
- * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Выбрать, Эт 1 / Этаж, Назад, Ещё);
+ * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Свойства on the phone — «Выбрать» is gone, #687 — Эт 1 / Этаж, Назад, Вперёд);
  *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «D1» on the canvas;
  *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
  * - П20.9: after the first gutter «Дальше: поставьте водостоки» + «Водосток» turns the tool on;
@@ -60,7 +60,9 @@ exports.run = async (h) => {
   await h.shot("empty");
   // П20.8: the words under the icons, whole
   const bar = await tid("draw-toolbar").innerText();
-  for (const w of ["Желоб", "Водосток", "Выбрать", "Эт 1", "Этаж", "Назад", "Вперёд"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
+  const phone = (h.layout?.width ?? 390) < 600;
+  for (const w of ["Желоб", "Водосток", ...(phone ? ["Свойства"] : []), "Эт 1", "Этаж", "Назад", "Вперёд"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
+  h.expect(!bar.includes("Выбрать"), "no «Выбрать» (#687): a tap picks with any tool");
   const cut = await p.getByTestId("draw-toolbar").locator("visible=true").first().evaluate((el) => [...el.querySelectorAll("div")].filter((d) => d.childElementCount === 0 && d.textContent && d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent));
   h.expect(cut.length === 0, `no word is cut off (${cut.join(", ")})`);
   h.expect((await tid("draw-delete").count()) === 0, "«Удалить» only by what is picked: nothing picked — no button");
@@ -97,12 +99,10 @@ exports.run = async (h) => {
   await h.shot("drawn");
 
   // pick the first run, storey 2
-  await tid("draw-tool-select").getByRole("button").click();
-  await tid("draw-hint").waitFor({ timeout: 3000 });
-  h.expect(/Нажмите на желоб или водосток/.test(await tid("draw-hint").innerText()), "«Выбрать» says what to tap");
+  // a tap with «Желоб» picks (#687: no «Выбрать»)
+  await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y);
   await waitFor(async () => /Желоб/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
-  await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once something is picked");
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
   await waitFor(async () => (await labels()).some((t) => / · эт 2$/.test(t)), "storey 2 on its label");
@@ -122,15 +122,8 @@ exports.run = async (h) => {
   await tid("draw-redo").getByRole("button").click();
   await waitFor(async () => (await count("circle")) === 1, "«Вперёд» beside «Назад» (founder 09.11)");
 
-  // «Выбрать»: drag the free end of the second run — it grows
-  const ends = await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => ["x1", "y1", "x2", "y2"].map((k) => Number(l.getAttribute(k)))));
-  const sb = await box();
-  const second = ends.find((l) => Math.abs(l[0] - l[2]) < 1); // the vertical one
-  const lenOf = async () => (await labels()).filter((t) => / · эт /.test(t)).sort().join("|");
-  const was = await lenOf();
-  await stroke([sb.x + second[2], sb.y + second[3]], [sb.x + second[2], sb.y + second[3] + 60]);
-  await waitFor(async () => (await lenOf()) !== was, `dragging the end changes the length (${was})`);
-  h.expect((await count("line")) === 2, "dragging an end draws no new run");
+  // «Выбрать» is gone (#687): an end is no longer moved by a quick drag (handles on the picked gutter's ends — #682);
+  // a drag on from a free end grows the gutter — e2e 212
 
   // the toolbar: bottom → right hand → left hand → bottom
   const tx = async () => { const r = await tid("draw-toolbar").boundingBox(); return { cx: r.x + r.width / 2, w: r.width, h: r.height }; };

@@ -2,7 +2,7 @@
  * e2e 219 — живая длина штриха рядом с линией (основатель 09.11, #689: «размер пишется вверху, в левом углу, и
  * накладывается на надпись "примерно — не для резки"»). Every view.
  * - while a gutter is drawn (the finger still down) its length stands beside the line: the chip's centre is near the
- *   stroke's middle, off the line (it does not cover it), below the top bar and not over «Примерно — не для резки»;
+ *   stroke's middle, off the line (it does not cover it), below the top bar and not over the save mark at the top;
  * - level and slanted strokes; the finger let go → the live chip is gone (the run's own label stays).
  * Finds things by testID; waits on what it checks.
  */
@@ -30,7 +30,8 @@ exports.run = async (h) => {
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const s = await p.getByTestId("draw-surface").boundingBox();
-  const acc = await tid("draw-accuracy").first().boundingBox();
+  // «Примерно — не для резки» is gone from the top (#681); the save mark is there instead
+  const acc = (await tid("draw-saved").count()) ? await tid("draw-saved").first().boundingBox() : null;
 
   /** a stroke from a to b, the finger kept down; checks the chip; lets go */
   const strokeAndCheck = async (a, b, what) => {
@@ -46,7 +47,7 @@ exports.run = async (h) => {
     const off = Math.abs((b[0] - a[0]) * (a[1] - cy) - (a[0] - cx) * (b[1] - a[1])) / len;
     h.expect(Math.hypot(cx - mx, cy - my) < box.width + box.height, `${what}: the chip is at the middle of the line (${Math.round(cx)},${Math.round(cy)} vs ${Math.round(mx)},${Math.round(my)})`);
     h.expect(off >= box.height / 2, `${what}: the chip is beside the line, not on it (${Math.round(off)})`);
-    if (acc) h.expect(!overlap(box, acc), `${what}: not over «Примерно — не для резки»`);
+    if (acc) h.expect(!overlap(box, acc), `${what}: not over the save mark at the top`);
     await p.mouse.up();
     await skipLength(p);
     await waitFor(async () => (await chipBox()) === null, `${what}: the finger let go — the live chip is gone`);
