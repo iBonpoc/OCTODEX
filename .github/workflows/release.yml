@@ -128,6 +128,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write   # moves the tag `released`
+      pull-requests: read   # which PR this commit of main came from (the build number, #733)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -147,6 +148,16 @@ jobs:
       - name: Who publishes
         working-directory: apps/mobile
         run: npx eas-cli@27.4.1 whoami
+      # #733: the build number in every screen's header is the merged PR's number, written here — PRs never change
+      # version.ts (that made every open PR conflict after each merge). No number found → the release stops, nothing goes out.
+      - name: Build number (the merged PR)
+        working-directory: apps/mobile
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq "[.[] | select(.merge_commit_sha == \"$SHA\")][0].number // empty" 2>/dev/null || true)"
+          node scripts/setBuild.cjs "$pr" --message "$(git log -1 --format=%s "$SHA")"
       - name: Publish the Expo Go update (channel preview)
         working-directory: apps/mobile
         env:
