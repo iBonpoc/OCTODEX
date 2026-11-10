@@ -8,7 +8,7 @@
 # Both builds take Expo updates from the channel `preview`, like Expo Go now (release.yml publishes there).
 # The only secret: EXPO_TOKEN (repo → Settings → Secrets and variables → Actions). No Apple key lives in GitHub.
 # Android's FCM key and google-services.json live in expo.dev (Credentials; Environment variables → GOOGLE_SERVICES_JSON), not here.
-# The build number (BUILD in src/config/version.ts) is not touched; the store build number is EAS's own (autoIncrement).
+# Our BUILD (src/config/version.ts, the header's number) is written before the build (#733); the store build number is EAS's own (autoIncrement).
 # --no-wait: the build runs on EAS (its page is on expo.dev); with ios_submit the TestFlight submission is queued on EAS at start.
 # eas-cli pinned as in release.yml (27.4.1).
 name: EAS build
@@ -28,6 +28,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read   # which PR main's last commit came from (our BUILD, #733)
 
 concurrency:
   group: eas-build-${{ inputs.platform }}
@@ -58,6 +59,15 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # #733: our BUILD (the header's number) = the PR of the commit being built; the store's own build number stays EAS's
+      - name: Build number (the PR of this commit)
+        working-directory: apps/mobile
+        env:
+          SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/pulls" --jq "[.[] | select(.merge_commit_sha == \"$SHA\")][0].number // empty" 2>/dev/null || true)"
+          node scripts/setBuild.cjs "$pr" --message "$(git log -1 --format=%s "$SHA")"
       - name: Expo account
         working-directory: apps/mobile
         run: npx eas-cli@27.4.1 whoami

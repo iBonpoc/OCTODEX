@@ -38,6 +38,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Build number (this PR, #733)
+        working-directory: apps/mobile
+        run: node scripts/setBuild.cjs "$PR"
       - name: Build the web app
         working-directory: apps/mobile
         run: npx expo export --platform web
