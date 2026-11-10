@@ -22,19 +22,32 @@ exports.run = async (h) => {
     await p.mouse.up();
     await skipLength(p);
   };
-  /** the next frame printed: its HTML (the print dialog itself is not opened) */
+  /** the next frame printed: its HTML. The print dialog is not opened (print is replaced as the frame comes in), and the
+   *  HTML is read from the new frame itself — the frame's window can be replaced after it is added (about:blank), so
+   *  a replaced print alone sometimes never fired (820 light under load, merge of #726) */
   const catchPrint = () =>
     p.evaluate(() => {
       window.__pdf = null;
+      for (const f of document.querySelectorAll("iframe")) f.dataset.seen = "1";
+      if (window.__printHooked) return;
+      window.__printHooked = true;
       const add = document.body.appendChild.bind(document.body);
       document.body.appendChild = (el) => {
         const r = add(el);
-        if (el.tagName === "IFRAME") el.contentWindow.print = () => { window.__pdf = el.contentDocument.documentElement.outerHTML; };
+        if (el.tagName === "IFRAME") el.contentWindow.print = () => {};
         return r;
       };
     });
   const printed = async () => {
-    await p.waitForFunction(() => !!window.__pdf, null, { timeout: 8000 });
+    await p.waitForFunction(
+      () => {
+        const f = [...document.querySelectorAll("iframe:not([data-seen])")].find((x) => x.contentDocument?.body?.innerHTML.includes("<svg"));
+        if (f) window.__pdf = f.contentDocument.documentElement.outerHTML;
+        return !!window.__pdf;
+      },
+      null,
+      { timeout: 8000 },
+    );
     return p.evaluate(() => window.__pdf);
   };
 
