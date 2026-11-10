@@ -32,13 +32,17 @@ import { listPreview, partName } from "../prices";
 import { readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
 import { measureSpec } from "./spec";
+import { drawingPdfHtml, drawingPdfName } from "./drawingPdf";
+import { companyForPortal } from "@/cloud/portal";
+import { docDay } from "@/features/docPdf";
+import { saveEstimatePdf } from "@/features/estimatePdf";
 
 /** the drawing's box: as tall as three quarters of its width */
 const DRAWING_RATIO = 0.75;
 
 export default function ViewScreen() {
   const store = useStore();
-  const { t, money } = useI18n();
+  const { t, money, lang } = useI18n();
   const toast = useToast();
   const params = useLocalSearchParams<{ m?: string; estimate?: string; from?: string }>();
   const mid = typeof params.m === "string" ? params.m : "";
@@ -132,6 +136,26 @@ export default function ViewScreen() {
   const lead = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
   const addr = m.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const rough = m.accuracy !== "tape";
+  // «Чертёж в PDF» (#509): the client's — no prices, in the client's language; the crew's — the cut, in the app's
+  const who = lead?.name ?? (addr ? store.db.customers.find((c) => c.id === addr.customerId)?.name : undefined);
+  const pdf = (kind: "client" | "crew") => {
+    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const docLang = kind === "client" ? clientLangOf(store.db, m) : lang;
+    const tt = kind === "client" ? tFor(docLang) : t;
+    const html = drawingPdfHtml({
+      kind,
+      drawing,
+      spec,
+      t: tt,
+      opts: { lang: docLang },
+      company,
+      who,
+      address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined,
+      rough,
+      date: docDay(new Date().toISOString(), company.timezone),
+    });
+    saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+  };
 
   return (
     <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
@@ -163,6 +187,12 @@ export default function ViewScreen() {
                 <View testID="view-stale"><T v="caption" tone="mut">{t("mod.gutters.view.stale")}</T></View>
               ) : null}
             </View>
+          ) : null}
+          {drawing.runs.length ? (
+            <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+              <View testID="view-pdf-client"><Button label={t("mod.gutters.view.pdfClient")} icon="invoice" variant="secondary" onPress={() => pdf("client")} /></View>
+              <View testID="view-pdf-crew"><Button label={t("mod.gutters.view.pdfCrew")} icon="invoice" variant="secondary" onPress={() => pdf("crew")} /></View>
+            </RowView>
           ) : null}
           <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
         </View>
