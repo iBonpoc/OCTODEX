@@ -11869,4 +11869,61 @@ select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 0, 'T164 another company sees none');
 \echo 'T164 a subcontractor sees his own files and his visit''s ok'
 
+-- ---------------------------------------------------------------- T166: a note / task / feed line after «Отменить импорт» lands taken away (#597, spec 04 §14.11 №4)
+:as_office_a
+select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1660000-0000-4000-8000-000000000001', 't166.csv', repeat('6', 64), 1, '1a000000-0000-0000-0000-000000000001') is not null as t166_s \gset
+select public.import_customers('f1660000-0000-4000-8000-000000000001', '[{"line":2,"name":"T166 Undone","phone":"909 166 0001","address":"166 Undo Way","city":"Pasadena"}]') is not null as t166_b \gset
+select public.import_customers_finish('f1660000-0000-4000-8000-000000000001') is not null as t166_f \gset
+:as_super
+select c.id as card, p.id as prop from public.customers c join public.properties p on p.customer_id = c.id where c.display_name = 'T166 Undone' \gset t166_
+-- a live card and a card deleted the ordinary way (not by an import's undo)
+insert into public.customers (id, company_id, display_name) values
+  ('c1660000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T166 Live'),
+  ('c1660000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T166 Deleted');
+update public.customers set deleted_at = now() where id = 'c1660000-0000-4000-8000-000000000002';
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 1
+                 from (select public.undo_customer_import('f1660000-0000-4000-8000-000000000001') j) x), 'T166 the import is undone, its card taken away');
+-- an old phone's queue after the undo: a note on the card and on its property, a task, a call in the feed
+insert into public.notes (id, company_id, subject_type, subject_id, body) values
+  ('a1660000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'customer', :'t166_card', 'T166 late note'),
+  ('a1660000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'property', :'t166_prop', 'T166 late property note'),
+  ('a1660000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c1660000-0000-4000-8000-000000000001', 'T166 live note'),
+  ('a1660000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c1660000-0000-4000-8000-000000000002', 'T166 deleted-card note')
+returning 1 as t166_ret;
+insert into public.tasks (id, company_id, subject_type, subject_id, title) values
+  ('a1660000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'customer', :'t166_card', 'T166 late task'),
+  ('a1660000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'property', :'t166_prop', 'T166 late property task'),
+  ('a1660000-0000-4000-8000-000000000013', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c1660000-0000-4000-8000-000000000001', 'T166 live task');
+insert into public.activities (id, company_id, subject_type, subject_id, kind, direction) values
+  ('a1660000-0000-4000-8000-000000000021', 'ca000000-0000-0000-0000-000000000000', 'customer', :'t166_card', 'call', 'out'),
+  ('a1660000-0000-4000-8000-000000000022', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c1660000-0000-4000-8000-000000000001', 'call', 'out');
+-- the phone's own way: upsert of the same task again (a retry) does not bring it back
+insert into public.tasks (id, company_id, subject_type, subject_id, title) values
+  ('a1660000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'customer', :'t166_card', 'T166 late task')
+on conflict (id) do update set title = excluded.title;
+:as_super
+select tst.ok((select bool_and(deleted_at is not null) from public.notes where id in ('a1660000-0000-4000-8000-000000000001', 'a1660000-0000-4000-8000-000000000002')),
+              'T166 a late note on the taken-away card and on its property lands taken away (the insert is accepted — no «not accepted» on the phone)');
+select tst.ok((select bool_and(deleted_at is not null) from public.tasks where id in ('a1660000-0000-4000-8000-000000000011', 'a1660000-0000-4000-8000-000000000012')),
+              'T166 a late task on the card and on its property — taken away; its retry (upsert) does not bring it back');
+select tst.ok((select deleted_at is not null from public.activities where id = 'a1660000-0000-4000-8000-000000000021'), 'T166 a late feed line — taken away');
+select tst.ok((select bool_and(deleted_at is null) from (
+                 select deleted_at from public.notes where id in ('a1660000-0000-4000-8000-000000000003', 'a1660000-0000-4000-8000-000000000004')
+                 union all select deleted_at from public.tasks where id = 'a1660000-0000-4000-8000-000000000013'
+                 union all select deleted_at from public.activities where id = 'a1660000-0000-4000-8000-000000000022') x),
+              'T166 a live card and a card deleted the ordinary way — as before');
+select tst.ok((select count(*) = 0 from public.notes where subject_id = :'t166_card' and deleted_at is null)
+          and (select count(*) = 0 from public.tasks where subject_id in (:'t166_card', :'t166_prop') and deleted_at is null),
+              'T166 no orphan: nothing live points to the taken-away card');
+-- another company: a row naming A's card in B is B's own business (the card is not B's) — untouched
+:as_owner_b
+insert into public.notes (id, company_id, subject_type, subject_id, body) values
+  ('a1660000-0000-4000-8000-000000000031', 'cb000000-0000-0000-0000-000000000000', 'customer', :'t166_card', 'T166 B note');
+:as_super
+select tst.ok((select deleted_at is null from public.notes where id = 'a1660000-0000-4000-8000-000000000031'), 'T166 another company''s row is not touched by A''s undo');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_import_undone_subject()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.tg_import_undone_subject()', 'EXECUTE'), 'T166 the trigger function is nobody''s to call');
+\echo 'T166 a late note / task / feed line on a card taken away by an import''s undo lands taken away ok'
+
 \echo 'ALL TESTS PASSED'
