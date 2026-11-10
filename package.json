@@ -9,6 +9,7 @@
     "test": "npm test --workspaces --if-present && npm test --prefix design/naryad-ds",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check": "npm run typecheck && npm test && bash supabase/tests/run.sh",
+    "check:db:night": "DB_NOW=la-2340 bash supabase/tests/run.sh && DB_NOW=la-0020 bash supabase/tests/run.sh",
     "check:e2e": "cd apps/mobile && node e2e/run.cjs",
     "check:all": "npm run check && npm run check:e2e"
   }

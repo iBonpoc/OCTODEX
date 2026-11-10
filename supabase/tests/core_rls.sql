@@ -88,6 +88,12 @@ begin
   perform set_config('app.signing_estimate', '', true);
 end;
 $$;
+-- «today» in the company's own day (CHECKS §9 п.7, #620): current_date is UTC, and from 00:00 UTC to midnight in LA the
+-- UTC date is already tomorrow there (T147, #476). Tests take dates from here; apps/mobile/test/dbDateGuard.test.ts
+-- forbids current_date and now()::date in supabase/tests.
+create function tst.today(p_company uuid default 'ca000000-0000-0000-0000-000000000000') returns date language sql stable security definer set search_path = '' as $$
+  select (now() at time zone c.timezone)::date from public.companies c where c.id = p_company;
+$$;
 -- the client link of an estimate: since 20261110030000 the links live in app.estimate_tokens (spec 35 §4е), never in the row
 create function tst.set_token(p_id uuid, p_token text) returns void language plpgsql security definer set search_path = '' as $$
 begin
@@ -1850,10 +1856,10 @@ values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-0000000
 select tst.set_token((select id from public.estimates where title = 'T24 client signed'), 'tok_await_0123456789abcd');
 update public.estimates set status = 'sent' where id = tst.est_of('tok_await_0123456789abcd');
 select set_config('app.signing_estimate', (select id::text from public.estimates where id = tst.est_of('tok_await_0123456789abcd')), false);
-update public.estimates set status = 'awaiting_countersign', expires_at = current_date - 2 where id = tst.est_of('tok_await_0123456789abcd');
+update public.estimates set status = 'awaiting_countersign', expires_at = tst.today() - 2 where id = tst.est_of('tok_await_0123456789abcd');
 select set_config('app.signing_estimate', '', false);
-select tst.set_expires((select id from public.estimates where id = tst.est_of('tok_exp_0123456789abcdef')), current_date - 2);
-select tst.set_expires('0e1a0000-0000-0000-0000-000000000023', current_date - 2);
+select tst.set_expires((select id from public.estimates where id = tst.est_of('tok_exp_0123456789abcdef')), tst.today() - 2);
+select tst.set_expires('0e1a0000-0000-0000-0000-000000000023', tst.today() - 2);
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
   perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') ->> 'status' = 'expired'
@@ -1873,7 +1879,7 @@ do $$
 declare e uuid := current_setting('tst.exp_id')::uuid; v_tok text; v_other uuid; v_ver uuid;
 begin
   perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'a signed estimate keeps its link (copy promised to the client)');
-  perform tst.fails(format($q$update public.estimates set link_revoked_at = null, expires_at = current_date + 99 where id = %L$q$, e), 'expiry / revoke only through the functions');
+  perform tst.fails(format($q$update public.estimates set link_revoked_at = null, expires_at = tst.today() + 99 where id = %L$q$, e), 'expiry / revoke only through the functions');
   perform public.revoke_estimate_link(e);
   perform public.revoke_estimate_link(e);  -- again: nothing happens
   perform tst.ok((select not tst.has_link(e) and link_revoked_at is not null from public.estimates where id = e), 'revoked: token dropped');
@@ -1923,7 +1929,7 @@ begin
   insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Fix', 1, 15000);
   update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
-  update public.estimates set status = 'sent', sent_version_id = v, expires_at = current_date - 3 where id = e;
+  update public.estimates set status = 'sent', sent_version_id = v, expires_at = tst.today() - 3 where id = e;
   perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'on site: the client signs a quick estimate even past the date');
   perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'repeat: nothing doubles');
   perform tst.fails(format($q$update public.estimates set status = 'sent' where id = %L$q$, e), 'awaiting_countersign -> sent is not allowed (T18)');
@@ -2224,7 +2230,7 @@ begin
   perform tst.ok(public.portal_estimate(split_part(current_setting('tst.e2b_2'), ',', 3)) -> 'company' ->> 'timezone' = 'America/Los_Angeles', 'the page has the company time zone');
 end $$;
 :as_super
-select tst.set_expires(split_part(current_setting('tst.e2b_1'), ',', 1)::uuid, current_date - 3);
+select tst.set_expires(split_part(current_setting('tst.e2b_1'), ',', 1)::uuid, tst.today() - 3);
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$
 declare r jsonb;
@@ -3439,7 +3445,7 @@ select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-00000000
 :as_super
 insert into public.customers (id, company_id, display_name) values ('c4500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45 Kim');
 insert into public.invoices (id, company_id, number, customer_id, kind, status, due_date, subtotal_cents, total_cents) values
-  ('14500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45-0001', 'c4500000-0000-4000-8000-000000000001', 'standalone', 'sent', current_date - 9, 30000, 30000);
+  ('14500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45-0001', 'c4500000-0000-4000-8000-000000000001', 'standalone', 'sent', tst.today() - 9, 30000, 30000);
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by) values
   ('94500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'zelle', 10000, 'succeeded', 't45-1', 'a0000000-0000-0000-0000-000000000001'),
   ('94500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'cash', 5000, 'succeeded', 't45-2', 'a0000000-0000-0000-0000-000000000002'),
@@ -3912,7 +3918,7 @@ select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id,
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, cancelled_at) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', now())$q$, 'directly: a job is not born with a cancel time');
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, estimate_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', '0e470000-0000-4000-8000-000000000002')$q$, 'directly: the estimate of another client is refused');
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, contract_total_cents) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', 100)$q$, 'directly: the app does not set the total of a job');
-select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, recurring_plan_id, occurrence_date) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', gen_random_uuid(), current_date)$q$, 'directly: no recurring plan slot');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, recurring_plan_id, occurrence_date) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', gen_random_uuid(), tst.today())$q$, 'directly: no recurring plan slot');
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, deleted_at) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', now())$q$, 'directly: a job is not born deleted');
 -- a replay with the same id (offline queue, upsert … do nothing) passes and changes nothing, even after the client is gone
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, type) values
@@ -4098,7 +4104,7 @@ do $$ begin
   perform set_config('app.invoice_recalc', '', true);
 end $$;
 -- what still changes on a sent invoice
-update public.invoices set title = 'T53 renamed', due_date = current_date + 30, reminders_paused = true where id = '15300000-0000-4000-8000-000000000001';
+update public.invoices set title = 'T53 renamed', due_date = tst.today() + 30, reminders_paused = true where id = '15300000-0000-4000-8000-000000000001';
 select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
 update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
@@ -4129,8 +4135,8 @@ do $$ begin
   perform set_config('app.invoice_recalc', '', true);
 end $$;
 :as_sales_a
-update public.invoices set due_date = current_date + 7 where id = '15300000-0000-4000-8000-000000000002';
-select tst.ok((select due_date = current_date + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
+update public.invoices set due_date = tst.today() + 7 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select due_date = tst.today() + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
               'an old invoice with total below paid still takes a new due date');
 -- void still works for the owner (no payments)
 :as_owner_a
@@ -6086,7 +6092,7 @@ reset role; reset request.jwt.claim.sub; set role anon;
 select tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true)$q$, 'company closed', 'a repeat of the signature (awaiting countersign): refused before the repeat branch');
 :as_super
 -- «closed» wins over «expired» and «declined» (they give the phone)
-select tst.set_expires('0e1a7600-0000-4000-8000-000000000001', (now() - interval '3 days')::date);
+select tst.set_expires('0e1a7600-0000-4000-8000-000000000001', tst.today() - 3);
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') ->> 'status' = 'closed' and public.portal_estimate('tok_t76_closed_0123456789ab')::text not like '%3235557676%',
               'past «valid until»: still «closed», no phone');
