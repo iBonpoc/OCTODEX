@@ -11,7 +11,7 @@ vi.mock("expo-sharing", () => ({}));
 vi.mock("expo-clipboard", () => ({}));
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
-import { clientPages, pagesHtml, pagesProblem, withSendablePages, PAGE_LIMITS } from "../src/features/docPages";
+import { clientPages, jsonbTextBytes, numericText, pagesHtml, pagesProblem, withSendablePages, PAGE_LIMITS } from "../src/features/docPages";
 import { clientDoc, DEFAULT_SETTINGS } from "../src/features/estimateDoc";
 import { estimateHtml } from "../src/features/estimatePdf";
 import { portalFromEstimate } from "../src/cloud/portal";
@@ -23,6 +23,21 @@ describe("pages = the server's (T165)", () => {
   it.each(fx.cases)("$name", (c) => {
     expect(clientPages(c.in)).toEqual(c.out);
     expect(pagesProblem(c.in)).toBe(c.problem);
+    // the size as the server measures it (T165 checks octet_length(in::text) against the same number)
+    expect(jsonbTextBytes(c.in)).toBe(c.textBytes);
+  });
+  it("numbers as the server prints them: no exponent", () => {
+    expect([1e-7, 1e300, -2.5e-5, 1.5e21, 123.456, -0, 100000].map(numericText)).toEqual(["0.0000001", "1" + "0".repeat(300), "-0.000025", "1500000000000000000000", "123.456", "0", "100000"]);
+  });
+  it("review #727: small in the phone's JSON, over the limit in the server's text — refused here too, never sent", () => {
+    // 1e-7 is 4 characters in JSON and 9 in the server's text: the compact JSON fits 512 KB, the server's text does not
+    const items = Array.from({ length: 1600 }, () => ({ t: "l", x1: 1e-7, y1: 1e-7, x2: 1e-7, y2: 1e-7, sw: 1, ink: "ink" }));
+    const pages = ["a", "b", "c", "d"].map((id) => ({ id, title: "P", w: 10, h: 10, items }));
+    expect(new TextEncoder().encode(JSON.stringify(pages)).length).toBeLessThan(PAGE_LIMITS.bytes);
+    expect(jsonbTextBytes(pages)).toBeGreaterThan(PAGE_LIMITS.bytes);
+    expect(pagesProblem(pages)).toBe("size");
+    expect("pages" in withSendablePages(doc(pages))).toBe(false);
+    expect("pages" in clientDoc(doc(pages))).toBe(false);
   });
   it("3001 shapes: the first 3000 drawn, writing refused (built here and in T165, too long for the file)", () => {
     const items = Array.from({ length: 3001 }, (_, i) => ({ t: "r", x: i % 100, y: 0, w: 1, h: 1 }));

@@ -64,8 +64,8 @@ export const PAGE_LIMITS = {
   str: 200,
   id: 64,
   coord: 1e5,
-  /** the app's own write limit, of the compact JSON (the server's is 512 KB of its own, wider, text) */
-  bytes: 384 * 1024,
+  /** the write limit: bytes of the text the server keeps (jsonb::text), measured the same way here — `jsonbTextBytes` */
+  bytes: 512 * 1024,
 } as const;
 
 const num = (v: unknown, lo: number, hi: number): v is number => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
@@ -160,6 +160,36 @@ export function clientPages(raw: unknown): DocAttachPage[] {
   return out;
 }
 
+/** a JSON number as Postgres prints its numeric: no exponent ("1e-7" → "0.0000001", "1e+300" → 1 and 300 zeros) */
+export function numericText(x: number): string {
+  const j = JSON.stringify(x);
+  const m = /^(-?)(\d+)(?:\.(\d+))?e([+-]\d+)$/.exec(j);
+  if (!m) return j;
+  const [, sign, int, frac = "", e] = m;
+  const digits = int! + frac;
+  const point = int!.length + Number(e);
+  const plain =
+    point <= 0 ? `0.${"0".repeat(-point)}${digits}` : point >= digits.length ? digits + "0".repeat(point - digits.length) : `${digits.slice(0, point)}.${digits.slice(point)}`;
+  return sign + plain;
+}
+
+const utf8 = (s: string) => new TextEncoder().encode(s).length;
+
+/** the bytes of the server's own text of a JSON value (jsonb::text: «, » and «: » between items, numbers as numeric) —
+ *  the size the trigger t07_doc_pages measures, so the phone never sends what the server refuses (#727 review) */
+export function jsonbTextBytes(v: unknown): number {
+  if (v === null || v === undefined) return 4;
+  if (typeof v === "boolean") return v ? 4 : 5;
+  if (typeof v === "number") return Number.isFinite(v) ? numericText(v).length : 4;
+  if (typeof v === "string") return utf8(JSON.stringify(v));
+  if (Array.isArray(v)) return v.length ? 2 + v.reduce((n: number, x) => n + jsonbTextBytes(x), 0) + 2 * (v.length - 1) : 2;
+  if (typeof v === "object") {
+    const e = Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined);
+    return e.length ? 2 + e.reduce((n, [k, x]) => n + utf8(JSON.stringify(k)) + 2 + jsonbTextBytes(x), 0) + 2 * (e.length - 1) : 2;
+  }
+  return 4;
+}
+
 /** every text anywhere inside */
 function* texts(v: unknown): Generator<string> {
   if (typeof v === "string") yield v;
@@ -169,12 +199,12 @@ function* texts(v: unknown): Generator<string> {
 
 export type PagesProblem = "pages" | "count" | "shape" | "long" | "id" | "size";
 
-/** why the server would refuse these pages, or null (the same as app.doc_pages_problem; the size is the app's own, narrower) */
+/** why the server would refuse these pages, or null (the same as app.doc_pages_problem, the size measured as the server does) */
 export function pagesProblem(raw: unknown): PagesProblem | null {
   if (raw === undefined || raw === null) return null;
   if (!Array.isArray(raw)) return "pages";
   // the size first, as the server: nothing below walks a huge value
-  if (new TextEncoder().encode(JSON.stringify(raw)).length > PAGE_LIMITS.bytes) return "size";
+  if (jsonbTextBytes(raw) > PAGE_LIMITS.bytes) return "size";
   if (raw.length > PAGE_LIMITS.pages) return "count";
   for (const p of raw) {
     if (!isObj(p) || !Array.isArray(p.items) || p.items.length > PAGE_LIMITS.items) return "shape";

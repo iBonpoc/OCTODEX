@@ -11871,6 +11871,10 @@ select tst.ok(coalesce(string_agg(x ->> 'name', '; '), '') = '', format('T165 th
   from jsonb_array_elements((:'pages_json')::jsonb -> 'cases') x where app.doc_pages(x -> 'in') is distinct from x -> 'out';
 select tst.ok(coalesce(string_agg(x ->> 'name', '; '), '') = '', format('T165 writing refused as in the app: %s', coalesce(string_agg((x ->> 'name') || ' → ' || coalesce(app.doc_pages_problem(x -> 'in'), 'null'), '; '), '')))
   from jsonb_array_elements((:'pages_json')::jsonb -> 'cases') x where app.doc_pages_problem(x -> 'in') is distinct from x ->> 'problem';
+-- the size: the phone measures the server's own text (jsonbTextBytes), the same bytes (review #727: else the phone sends
+-- pages the server refuses, and the client could sign on the phone a page the server's fingerprint has not)
+select tst.ok(coalesce(string_agg(x ->> 'name', '; '), '') = '', format('T165 the server''s text is as long as the app measures: %s', coalesce(string_agg((x ->> 'name') || ' → ' || octet_length((x -> 'in')::text), '; '), '')))
+  from jsonb_array_elements((:'pages_json')::jsonb -> 'cases') x where octet_length((x -> 'in')::text) is distinct from (x ->> 'textBytes')::int;
 -- 3001 shapes (built here and in the unit test: too long for the file)
 select tst.ok(jsonb_array_length(app.doc_pages(p) -> 0 -> 'items') = 3000 and app.doc_pages_problem(p) = 'shape', 'T165 3001 shapes: 3000 drawn, writing refused')
   from (select jsonb_build_array(jsonb_build_object('id', 'p', 'title', 'P', 'w', 10, 'h', 10,
