@@ -1,5 +1,5 @@
 /** Leads wave L1 rules (docs/14-leads-spec.md §3.2, §6.1, §13 Р8–Р13): whose turn, snooze, settings, what is missing. */
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Lead } from "../src/data/types";
 import { filterLeads, isBackFromSnooze, isSnoozed, leadTurn, missingForEstimate, waitStatus } from "../src/features/leads";
@@ -111,6 +111,42 @@ describe("review findings of wave L1", () => {
     expect(r(days(10))).toMatchObject({ kind: "step", status: "bad" });
     expect(r(min(120))).toMatchObject({ kind: "step", status: "warn" });
     expect(r(new Date(NOW + 2 * 86_400_000).toISOString())).toMatchObject({ kind: "step", status: "neutral" });
+  });
+  // #603: one rule with «Осмотр прошёл — сметы нет» (attention.ts, inspectionsNoEstimate): overdue from the start of business
+  // on the N-th working day (inspectionNoEstimateDays) after the inspection ended, in the COMPANY's zone — not 24 h
+  describe("booked: overdue by the company's working days, whatever the phone's zone (#603)", () => {
+    const d0 = makeSeed();
+    const insp = (start: string, durationMin = 60) => ({ ...d0.visits[0]!, id: "vx", jobId: undefined, leadId: "L", propertyId: "px", kind: "inspection" as const, start, durationMin, step: "scheduled" as const });
+    const turn = (tz: string, start: string, now: number) => {
+      const { d, l } = db({ status: "booked", propertyId: "px" }, { jobs: [], visits: [insp(start)], company: { ...d0.company!, timezone: tz } });
+      return leadTurn(d, l, LEAD_SETTINGS_DEFAULT, now).status;
+    };
+    const machine = process.env.TZ;
+    afterAll(() => { if (machine === undefined) delete process.env.TZ; else process.env.TZ = machine; });
+    for (const phone of ["UTC", "Pacific/Honolulu", "Asia/Tokyo", "America/New_York", "America/Los_Angeles"]) {
+      it(`phone in ${phone}`, () => {
+        process.env.TZ = phone;
+        // LA company: Tue 11-03 9:00 PM – 10:00 PM. Next working day Wed 11-04 opens 8:00 AM LA = 16:00Z
+        const lateTue = "2026-11-04T05:00:00.000Z";
+        expect(turn("America/Los_Angeles", lateTue, Date.parse("2026-11-04T15:59:00Z"))).toBe("warn");
+        // 13 h after the start (the old 24 h rule said «not yet»): the next working morning has come → overdue
+        expect(turn("America/Los_Angeles", lateTue, Date.parse("2026-11-04T16:00:00Z"))).toBe("bad");
+        // the same inspection in a New York company ended Wed 1:00 AM ET: its next working morning is Thu 8:00 AM ET (13:00Z)
+        expect(turn("America/New_York", lateTue, Date.parse("2026-11-04T16:00:00Z"))).toBe("warn");
+        expect(turn("America/New_York", lateTue, Date.parse("2026-11-05T13:00:00Z"))).toBe("bad");
+        // Saturday inspection, Sunday closed: overdue only on Monday morning (8:00 AM LA = 16:00Z), 40 h later
+        const sat = "2026-11-07T18:00:00.000Z"; // Sat 10:00 AM LA
+        expect(turn("America/Los_Angeles", sat, Date.parse("2026-11-09T15:00:00Z"))).toBe("warn");
+        expect(turn("America/Los_Angeles", sat, Date.parse("2026-11-09T16:00:00Z"))).toBe("bad");
+        // the lead card and «Требует внимания» agree: the card goes red exactly when the attention item appears
+        const atAttention = (now: number) => {
+          const { d } = db({ status: "booked", propertyId: "px" }, { jobs: [], visits: [insp(sat)], company: { ...d0.company!, timezone: "America/Los_Angeles" } });
+          return buildAttention(d, "director", now).some((a) => a.kind === "inspectionNoEstimate" && a.refId === "L");
+        };
+        expect(atAttention(Date.parse("2026-11-09T15:00:00Z"))).toBe(false);
+        expect(atAttention(Date.parse("2026-11-09T16:00:00Z"))).toBe(true);
+      });
+    }
   });
   it("in touch: after an SMS we wait for the client; after a real conversation we need a step", () => {
     const sms = db({ status: "replied", lastOutboundAt: min(60) }, { activities: [act("sms", min(60))] });

@@ -23,6 +23,8 @@ import { contractStatement } from "@octo/estimating-engine";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { JobLinesBlock, canEditJobLines } from "@/features/JobLinesBlock";
 import { JobTypeTags } from "@/features/JobTypeTags";
+import { jobChecklistVisit } from "@/features/checklist";
+import { ChecklistEditor } from "@/features/VisitChecklist";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { smsWithBody } from "@/features/sms";
 import { useToast } from "@/ui/overlays";
@@ -60,6 +62,7 @@ export default function JobScreen() {
   const c = db.customers.find((x) => x.id === (j.customerId ?? p?.customerId));
   const visits = db.visits.filter((v) => v.jobId === j.id).sort((a, b) => a.start.localeCompare(b.start));
   const next = nextOpenVisit(db, j.id);
+  const chkVisit = jobChecklistVisit(db, store.role, j.id);
   const expenses = db.expenses.filter((x) => x.jobId === j.id);
   const pr = jobProfit(db, j.id);
   const st = jobStatusView[j.status];
@@ -231,6 +234,8 @@ export default function JobScreen() {
           {t("job3.noVisit")}
         </T>
       )}
+      {/* #606: the office edits the checklist of the job's first visit not started yet — the same editor as on the visit */}
+      {chkVisit ? <ChecklistEditor key={chkVisit.id} v={chkVisit} title={t("chk4.jobVisit", { date: `${day(chkVisit.start)} · ${visitWhen(chkVisit, time, t("plan5.allDay"), false)}` })} /> : null}
 
       {/* spec 37: the job's supplier orders (the office makes them; the tech sees where to pick up, no prices) */}
       <JobOrdersBlock job={j} />
