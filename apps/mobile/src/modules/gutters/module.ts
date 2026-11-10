@@ -10,15 +10,17 @@ import { asGutterData, guttersOps, linkLead, loadGutters, measureHref } from "./
 import { staleMeasurements } from "./estimateLink";
 
 const draw = moduleHref("gutters", "draw");
+/** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
+const view = moduleHref("gutters", "view");
 /** «Замер желобов» on a lead, an address or a visit: its newest measurement opens, else a new one linked to it (S4g, П24) */
 function measure(data: unknown, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }) {
   const g = asGutterData(data);
   const { href, open: m } = measureHref(draw, g, by);
   if (m) {
     const open = { id: "measure", labelKey: "mod.gutters.measureOpen" as const, icon: "pencil" as const, href };
-    // M8b (S5g): something is drawn → «Смета из замера»: the canvas opens and makes or updates it (П23.8)
+    // M8b (S5g): something is drawn → «Смета из замера»: the measurement's review opens and makes or updates it (П23.8, П20.25)
     const drawn = g.elements.some((e) => e.measurementId === m.id && e.kind === "run");
-    return drawn ? [open, { id: "estimate", labelKey: "mod.gutters.est.fromLead" as const, icon: "plus" as const, href: `${draw}?m=${encodeURIComponent(m.id)}&estimate=1` }] : [open];
+    return drawn ? [open, { id: "estimate", labelKey: "mod.gutters.est.fromLead" as const, icon: "plus" as const, href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` }] : [open];
   }
   return [{ id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const, href }];
 }
@@ -95,16 +97,17 @@ const gutters: ModuleDef = {
     },
   ],
   rejectedKey: "mod.gutters.rejected",
-  // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the canvas's «Обновить смету»)
+  // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the review's «Перенести изменения в смету»)
   estimateNotes: (e, db) => {
     const m = staleMeasurements(db, e)[0];
     return m
-      ? [{ id: "stale", labelKey: "mod.gutters.est.stale", hintKey: "mod.gutters.est.staleHint", action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate", icon: "pencil", href: `${draw}?m=${encodeURIComponent(m.id)}&estimate=1` } }]
+      ? [{ id: "stale", labelKey: "mod.gutters.est.stale", hintKey: "mod.gutters.est.staleHint", action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate", icon: "pencil", href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` } }]
       : [];
   },
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
   screens: {
     draw: () => require("./draw/DrawScreen").default,
+    view: () => require("./view/ViewScreen").default,
     list: () => require("./list/MeasurementsScreen").default,
     start: () => require("./list/StartScreen").default,
     bench: () => require("./bench/BenchScreen").default,

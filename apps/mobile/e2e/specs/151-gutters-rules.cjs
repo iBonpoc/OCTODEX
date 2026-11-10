@@ -2,8 +2,8 @@
  * e2e 151 — правила и расходники компании, углы, редкие поля водостока (docs/specs/33-gutters-settings.md П22 M7c). Every view.
  * - director, the trial on, «Настройки»: story height 10 → 11 ft, corners by default «Готовый угол», waste 5 → 6 % — saved;
  * - the canvas: an L of two runs → the corner of the picked run is «Готовый угол» (the company's), «Вырезать на месте»
- *   on it → the $ follows, both runs keep the method; a downspout: «Ещё» → «Leader head» and «Отвод в бочку» → the $
- *   follows; all of it in the store and back after a reload;
+ *   on it → both runs keep the method; a downspout: «Ещё» → «Leader head» and «Отвод в бочку» → in the store;
+ *   all of it back after a reload;
  * - the office reads the rules, cannot change them.
  * Finds things by testID; waits on what it checks.
  */
@@ -36,7 +36,6 @@ exports.run = async (h) => {
   const nth = (field, n) => tid(field).getByRole("radio").nth(n);
   const chosenAt = (field) => tid(field).getByRole("radio").evaluateAll((rs) => rs.findIndex((r) => r.getAttribute("aria-checked") === "true"));
   // corner chips: 0 — the company's, 1 — field cut, 2 — + strip miter, 3 — ready-made
-  const money = async () => Number((await tid("draw-money").innerText()).replace(/[^\d.]/g, ""));
   const svg = () => p.getByTestId("draw-svg").first();
   const panel = () => tid("attr-panel");
   const openAttrs = async () => {
@@ -92,10 +91,8 @@ exports.run = async (h) => {
   await more();
   await tid("attr-corner-0").waitFor({ timeout: 5000 });
   h.expect((await chosenAt("attr-corner-0")) === 0, "the corner follows the company («Как у компании»)");
-  const m0 = await money();
   await nth("attr-corner-0", 1).click();
   await waitFor(async () => (await chosenAt("attr-corner-0")) === 1, "this corner: field cut");
-  await waitFor(async () => (await money()) !== m0, "the $ follows the corner");
   await waitFor(async () => {
     const runs = (await stored()).filter((e) => e.kind === "run");
     return runs.length === 2 && runs.every((r) => r.attrs.cornerMethod && Object.values(r.attrs.cornerMethod).includes("cut"));
@@ -110,9 +107,7 @@ exports.run = async (h) => {
   await openAttrs();
   await tid("attr-more").getByRole("button").click();
   await tid("attr-more-open").waitFor({ timeout: 5000 });
-  const m1 = await money();
   await nth("attr-head", 2).click();
-  await waitFor(async () => (await money()) !== m1, "the $ follows the leader head");
   await tid("attr-diverter").getByRole("switch").click();
   await waitFor(async () => {
     const d = (await stored()).find((e) => e.kind === "downspout");

@@ -6,11 +6,11 @@
  * - «Создать с тестовой ценой» on one row: one item, marked test;
  * - «Создать позиции сразу»: all the missing ones, each a TEST price (placeholder), «Отменить» takes them back; again → made;
  *   a second press is not offered, the catalog has no duplicates (one item per id and per properties);
- * - the $ under the drawing: with every item at a real price — no «тестовые цены», and the $ follows the install price;
+ * - the $ on «Просмотр замера» (#700): with every item at a real price — no «тестовые цены», and the $ follows the install price;
  * - the office and sales change prices; a tech reads only; the trial over: read only.
  * Finds things by testID and the store; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, viewTotal } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -32,7 +32,8 @@ exports.run = async (h) => {
     s.db = new Function("db", `return (${src})(db)`)(s.db);
     localStorage.setItem(k, JSON.stringify(s));
   }, [KEY, fn.toString()]);
-  const money = async () => Number((await tid("draw-money").innerText()).replace(/[^\d.]/g, ""));
+  // the total is on «Просмотр замера» (#700): «Готово», read it, back to the canvas
+  const money = async () => (await viewTotal(p)).total;
   // a card's testID says its state: gpr-miss-<part> (not in the list), gpr-test-<part> (a test price), gpr-found-<part>
   const card = (state, key) => tid(`gpr-${state}-${key}`);
   const missingCards = () => p.locator("[data-testid^=gpr-miss-]").locator("visible=true").count();
@@ -108,9 +109,10 @@ exports.run = async (h) => {
   await p.mouse.up();
   await skipLength(p);
   await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run");
-  await waitFor(async () => (await money()) > 0, "a $ under the drawing");
-  h.expect((await tid("draw-test-prices").count()) === 0, "every part from the price list at a real price: no «тестовые цены»");
-  const m0 = await money();
+  const v0 = await viewTotal(p);
+  h.expect(v0.total > 0, "a $ on the review");
+  h.expect(!v0.test, "every part from the price list at a real price: no «тестовые цены»");
+  const m0 = v0.total;
   await p.waitForTimeout(1300); // the canvas writes the drawing as it leaves
   const drawUrl = new URL(p.url()).pathname + new URL(p.url()).search; // the same measurement again (?m=…)
   await h.go("/today");

@@ -70,6 +70,18 @@ describe("which estimate is the measurement's, what the button does", () => {
     expect(estimateAction({ estimates: [est("e1", "sent", mine)] }, { ...M, status: "ready" }, true)).toEqual({ kind: "open", estimateId: "e1" });
     expect(estimateAction({ estimates: [est("e1", "awaiting_countersign", mine)] }, M, true)).toEqual({ kind: "open", estimateId: "e1", signed: true });
   });
+  it("#699: the review's one action by the state — and no «Перенести изменения» when nothing changed", () => {
+    const ready = { ...M, status: "ready" as const };
+    // not linked → link it; no estimate → make it
+    expect(estimateAction({ estimates: [] }, { ...M, leadId: null, propertyId: null }, true).kind).toBe("needLead");
+    expect(estimateAction({ estimates: [] }, M, true).kind).toBe("make");
+    // an estimate, the drawing as estimated (ready) → open it, never «update»; even a sent or a draft one
+    for (const st of ["draft", "sent"] as const) expect(estimateAction({ estimates: [est("e1", st, mine)] }, ready, true)).toEqual({ kind: "open", estimateId: "e1" });
+    // the drawing changed after it (draft again) → move the changes
+    expect(estimateAction({ estimates: [est("e1", "sent", mine)] }, M, true)).toEqual({ kind: "update", estimateId: "e1" });
+    // signed → only open, changed or not
+    for (const m of [M, ready]) expect(estimateAction({ estimates: [est("e1", "approved", mine)] }, m, true)).toEqual({ kind: "open", estimateId: "e1", signed: true });
+  });
 });
 
 describe("the document after «Обновить смету»", () => {

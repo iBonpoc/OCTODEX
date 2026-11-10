@@ -45,7 +45,7 @@ describe("C5b: the measurement changed after the estimate", () => {
     const notes = estimateNotes(db, db.estimates[0]!);
     expect(notes).toHaveLength(1);
     expect(notes[0]).toMatchObject({ module: "gutters", id: "stale", labelKey: "mod.gutters.est.stale" });
-    expect(notes[0]!.action?.href).toBe("/module/gutters/draw?m=m1&estimate=1");
+    expect(notes[0]!.action?.href).toBe("/module/gutters/view?m=m1&estimate=1");
   });
   it("a sent estimate too (the client may not have signed yet)", () => {
     const db = dbWith([est("e1", "sent", lines("m1"))], [M("m1", "draft")], [run("m1")]);
