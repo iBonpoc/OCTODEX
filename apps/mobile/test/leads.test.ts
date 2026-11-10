@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Lead } from "../src/data/types";
 import {
-  canSeeLead, filterLeads, findDuplicates, isOpenLead, leadTimeline, needsNextStep, nextStep, phoneKey, reasonsFor, sourceGroups, sourceInUse,
+  canSeeLead, defaultSourceId, filterLeads, findDuplicates, isOpenLead, leadTimeline, needsNextStep, nextStep, phoneKey, reasonsFor, sourceGroups, sourceInUse,
   waitingMinutes,
 } from "../src/features/leads";
 import { leadCols } from "../src/cloud/leadCols";
@@ -152,5 +152,19 @@ describe("lead fields → database columns", () => {
     });
     expect(leadCols({ service: "" })).toEqual({ service_requested: null });
     expect(leadCols({ name: "" })).toEqual({});
+  });
+});
+
+describe("leads: the source a new lead starts with", () => {
+  it("Thumbtack if the company has it active, else the first active one, else nothing", () => {
+    const db = makeSeed();
+    const thumb = db.sources.find((s) => s.name === "Thumbtack");
+    expect(thumb).toBeTruthy();
+    expect(defaultSourceId(db)).toBe(thumb!.id);
+    const noThumb: DB = { ...db, sources: db.sources.map((s) => (s.name === "Thumbtack" ? { ...s, active: false } : s)) };
+    expect(defaultSourceId(noThumb)).toBe(noThumb.sources.find((s) => s.active)!.id);
+  });
+  it("nothing while the sources are not loaded yet (the form takes them when they arrive)", () => {
+    expect(defaultSourceId({ ...makeSeed(), sources: [] })).toBe("");
   });
 });
