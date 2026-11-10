@@ -3057,6 +3057,7 @@ export const es: Dict = {
   "chk3.requiredShort": "obligatorio",
   "chk3.starters": "Plantillas de módulos",
   "chk3.starterAdded": "Plantilla agregada",
+  "chk4.jobVisit": "Lista de control de la visita · {date}",
   "chk3.optional": "opcional",
   /* ---- Сметы: шаблоны (E3, docs/specs/07 §11) ---- */
   "est.tpl.title": "Plantillas de presupuesto",

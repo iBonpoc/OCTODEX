@@ -4,6 +4,7 @@
  * turn it back to a time. Kept as the company's midnight to midnight (server t03_visit_all_day, db T70–T71).
  */
 
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   // no midnight in this spec (CHECKS §5): at 00:21 LA a demo notice read «в пути с 12:00 AM» (another demo visit,
@@ -30,7 +31,7 @@ exports.run = async (h) => {
   await h.expectText(/durante el día/, "«Сообщить клиенту?»: the date, no hour, in Spanish");
   const sheetText = await h.sheet().innerText();
   h.expect(!/during the day|в течение дня|\d{1,2}:\d{2}/.test(sheetText.split("durante el día")[0].slice(-200)), "no English, no Russian, no hour in the message");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(400);
+  await pressEscUntilClosed(p);
 
   await h.go("/job/j3");
   await h.expectText(/Весь день/, "the job's visit card says «Весь день»");

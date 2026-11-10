@@ -1,6 +1,7 @@
 /** unit:checklistGate, unit:checklistFor (docs/specs/08 §4, §5, §10.1; step 14 CH1b): warnings, never a lock. */
 import { describe, expect, it } from "vitest";
 import {
+  jobChecklistVisit,
   canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, visitClosed,
   checklistFor, checklistGate, jobServices, snapshotPhotoMins, checklistKindOf, itemDone, itemKind, itemRequired, itemSkipped, missedCount, photoMinimums, photoStageOf,
   VISIT_SETTINGS_DEFAULT, visitMissed, visitSettings, visitSettingsOf, canEditVisitItems, canSetRequired, moveItem, templatesForVisit, itemsFromTemplate,
@@ -284,5 +285,19 @@ describe("unit:checklistText — what the server's [[:cntrl:]] may refuse (CH3 r
     const emoji = "🙂".repeat(3);
     expect(cleanText(emoji, 2)).toBe("🙂🙂");
     expect(Array.from(cleanText("x".repeat(299) + "🙂🙂"))).toHaveLength(300);
+  });
+});
+
+// #606: the job card edits the checklist of the job's first visit not started yet
+describe("jobChecklistVisit", () => {
+  const mk = (id: string, start: string, step: Visit["step"], x: Partial<Visit> = {}) => ({ id, jobId: "j", start, step, checklist: [], photos: [], ...x }) as unknown as Visit;
+  it("the first visit by start that the office may edit; started, closed, other jobs and the tech — none", () => {
+    const visits = [mk("late", "2026-11-12T09:00:00Z", "scheduled"), mk("started", "2026-11-09T09:00:00Z", "working"), mk("first", "2026-11-11T09:00:00Z", "en_route"), mk("other", "2026-11-01T09:00:00Z", "scheduled", { jobId: "k" } as Partial<Visit>)];
+    expect(jobChecklistVisit({ visits }, "dispatcher", "j")?.id).toBe("first");
+    expect(jobChecklistVisit({ visits }, "director", "j")?.id).toBe("first");
+    expect(jobChecklistVisit({ visits }, "tech", "j")).toBeUndefined();
+    expect(jobChecklistVisit({ visits }, "sales", "j")).toBeUndefined();
+    expect(jobChecklistVisit({ visits: [mk("started", "2026-11-09T09:00:00Z", "working"), mk("done", "2026-11-10T09:00:00Z", "paid")] }, "director", "j")).toBeUndefined();
+    expect(jobChecklistVisit({ visits }, "director", "none")).toBeUndefined();
   });
 });

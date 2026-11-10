@@ -3057,6 +3057,7 @@ export const ru = {
   "chk3.requiredShort": "обязательный",
   "chk3.starters": "Шаблоны модулей",
   "chk3.starterAdded": "Шаблон добавлен",
+  "chk4.jobVisit": "Чек-лист выезда · {date}",
   "chk3.optional": "необязательный",
   /* ---- Сметы: шаблоны (E3, docs/specs/07 §11) ---- */
   "est.tpl.title": "Шаблоны смет",

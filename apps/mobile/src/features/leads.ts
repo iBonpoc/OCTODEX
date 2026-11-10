@@ -5,8 +5,8 @@
  *   Reply timer runs around the clock until the first answered call / SMS / email / "I replied".
  *   "Whose turn" (leadTurn) — the one question the card answers: reply / do the step / wait for the client / snoozed.
  */
-import { isInspectionOf, isOpenVisit, sameDayIn, visitPropertyId } from "@/features/schedule";
-import { getZone } from "@/features/zone";
+import { isInspectionOf, isOpenVisit, sameDayIn, visitPropertyId, workDaysAfter } from "@/features/schedule";
+import { businessHoursOf, companyTz } from "@/features/scheduleSettings";
 import type { StatusName } from "@octo/design-tokens";
 import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
@@ -43,6 +43,9 @@ export const isBackFromSnooze = (l: Lead, now = Date.now()) =>
 /* ---------- sources ---------- */
 export const sourceOf = (db: DB, id: string | undefined): Source | undefined => db.sources.find((s) => s.id === id);
 export const sourceName = (db: DB, id: string | undefined): string => sourceOf(db, id)?.name ?? "—";
+/** the source a new lead starts with: Thumbtack if the company has it, else the first active one; "" while none is loaded */
+export const defaultSourceId = (db: DB): string =>
+  db.sources.find((s) => s.active && s.name === "Thumbtack")?.id ?? db.sources.find((s) => s.active)?.id ?? "";
 /** Picker list: active sources grouped by kind (marketplace, ads, person, own); the current one stays even if hidden. */
 export function sourceGroups(db: DB, keepId?: string): { kind: SourceKind; items: Source[] }[] {
   const order: SourceKind[] = ["marketplace", "ads", "person", "own"];
@@ -149,20 +152,25 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
     const minutes = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
     return { kind: "reply", minutes, attempts: l.callAttempts ?? 0, status: waitStatus(minutes, st) };
   }
+  // «today» and «overdue» are the company's (its zone and working hours), not the phone's (#603)
+  const tz = companyTz(db.company);
   const task = openTasks(db, l.id)[0];
   if (task) {
     const due = task.dueAt ? new Date(task.dueAt).getTime() : null;
-    const today = due !== null && sameDayIn(due, now, getZone());
+    const today = due !== null && sameDayIn(due, now, tz);
     return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now ? "bad" : today ? "info" : "neutral" };
   }
   // the estimate visit is the step: a planned one for any open lead (also a second visit after the estimate went out);
-  // once it has passed with no estimate yet ("booked"), it is overdue after a day of grace
+  // once it has passed with no estimate yet ("booked"), it is overdue by the same rule as «Осмотр прошёл — сметы нет»
+  // (schedule.inspectionsNoEstimate): from the start of business on the N-th working day after it ended (#603)
   const visit = db.visits.filter((v) => isInspectionOf(db, v, l)).sort((a, b) => b.start.localeCompare(a.start))[0];
   const vStart = visit ? new Date(visit.start).getTime() : null;
-  if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: sameDayIn(vStart!, now, getZone()) ? "info" : "neutral" };
+  if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: sameDayIn(vStart!, now, tz) ? "info" : "neutral" };
   if (l.status === "booked") {
     if (!visit) return { kind: "step", status: "info" };
-    return { kind: "step", dueAt: visit.start, status: now - vStart! >= DAY ? "bad" : "warn" };
+    const ended = new Date(vStart! + visit.durationMin * 60_000).toISOString();
+    const overdue = workDaysAfter(ended, st.inspectionNoEstimateDays, businessHoursOf(db.company), tz) <= now;
+    return { kind: "step", dueAt: visit.start, status: overdue ? "bad" : "warn" };
   }
   const sentAt = db.estimates.filter((e) => e.leadId === l.id && e.status === "sent" && e.sentAt).map((e) => e.sentAt!).sort().pop();
   // we wrote last: the last thing we did was a message (SMS / email / marketplace / "I replied"), not a conversation

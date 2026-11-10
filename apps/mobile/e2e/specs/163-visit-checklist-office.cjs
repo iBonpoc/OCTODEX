@@ -5,6 +5,7 @@
  * An item's text (a new line is cleaned), «Обязательный» off (the director), «Ниже» with «Отменить», a new required item.
  * The dispatcher may not turn «Обязательный» off; sales and the tech do not edit. Found by testID and the db.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const ID = "v6";
@@ -94,7 +95,7 @@ exports.run = async (h) => {
   await h.sheet().getByText("Снять «Обязательный» может только директор").waitFor();
   h.expect((await h.sheet().getByRole("switch", { name: "Обязательный" }).count()) === 0, "no switch for a required item");
   await h.shot("dispatcher");
-  await p.keyboard.press("Escape");
+  await pressEscUntilClosed(p);
 
   // sales and the tech: no editor (the server would refuse their edits)
   for (const role of ["sales", "tech"]) {

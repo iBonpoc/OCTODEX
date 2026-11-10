@@ -6,6 +6,7 @@
  * - debt 1: a quantity typed as 1.23455 is shown as 1.2346 — the number the sum counts — on the client page /p/.
  * Seeded estimates, no module. By testID; waits on what it checks.
  */
+const { waited } = require("../sheet.cjs");
 const DB_KEY = "octo.db.v5";
 const FULL = "e-e2e-175a";
 const PART = "e-e2e-175b";
@@ -16,8 +17,7 @@ exports.run = async (h) => {
   const p = h.page;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   const seen = async (id, what) => {
-    await tid(id).first().waitFor({ timeout: 8000 }).catch(() => {});
-    h.expect((await tid(id).count()) >= 1, what);
+    h.expect(await waited(tid(id).first().waitFor({ timeout: 8000 })), what);
   };
 
   await h.go("/today");

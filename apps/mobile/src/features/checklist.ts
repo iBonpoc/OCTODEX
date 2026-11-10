@@ -222,6 +222,9 @@ export const canEditVisitSettings = (role: Role): boolean => role === "director"
 /** the office edits the items (text, «Обязательный», order, «Добавить из шаблона») only before the visit starts */
 export const canEditVisitItems = (role: Role, v: Pick<Visit, "step" | "closed" | "signature">): boolean =>
   office(role) && (v.step === "scheduled" || v.step === "en_route") && !visitClosed(v);
+/** the job's visit whose checklist the office edits from the job card (#606): its first visit (by start) not started yet */
+export const jobChecklistVisit = (db: Pick<DB, "visits">, role: Role, jobId: ID): Visit | undefined =>
+  db.visits.filter((v) => v.jobId === jobId && canEditVisitItems(role, v)).sort((a, b) => a.start.localeCompare(b.start))[0];
 /** «Обязательный» on: the office; off — the director only (the company's rule; the server's guard says the same) */
 export const canSetRequired = (role: Role, required: boolean): boolean => (required ? office(role) : role === "director");
 

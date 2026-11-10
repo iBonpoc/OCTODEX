@@ -6,6 +6,7 @@
  * - Client: «Смета» tied to the client; Job: «Выезд» to this job; tech visit: Фото · Лид · Расход;
  * - «Главная»: the bell with the unread count → /notifications → a card opens its estimate; the profile → My settings.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
 
@@ -25,8 +26,7 @@ exports.run = async (h) => {
     return t;
   };
   const closeSheet = async () => {
-    await p.keyboard.press("Escape");
-    await p.waitForTimeout(400);
+    await pressEscUntilClosed(p);
   };
   const box = async (l) => (await l.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
 

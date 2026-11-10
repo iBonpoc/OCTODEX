@@ -3,6 +3,7 @@
  * date / time / tech (S4: no second client when the lead already has one), status sheet → snooze, "lost or wait?", tabs.
  */
 // a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
+const { pressEscUntilClosed, waited } = require("../sheet.cjs");
 const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
@@ -86,11 +87,12 @@ exports.run = async (h) => {
   await h.go(`/lead/${angela.id}`);
   // closing "did you get through?" without an answer still counts the call as an attempt
   await p.getByRole("button", { name: "Позвонить" }).first().click(); await p.waitForTimeout(400);
-  await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+  await pressEscUntilClosed(p);
+  // the store saves a moment later: wait for the attempt itself (before: a fixed 500 ms, and «Не ответил» pressed when
+  // the Esc was lost — that hid whether Esc counts)
+  const counted = await waited(p.waitForFunction((id) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.leads ?? []).some((x) => x.id === id && (x.callAttempts ?? 0) >= 1), angela.id, { timeout: 4000 }));
   angela = await lead("Angela Rossi");
-  if ((await p.locator('[aria-modal="true"]').count()) > 0) await h.sheet().getByRole("button", { name: "Не ответил" }).click();
-  angela = await lead("Angela Rossi");
-  h.expect(angela.status === "new" && (angela.callAttempts ?? 0) >= 1, "a dismissed call is an attempt, not lost");
+  h.expect(counted && angela.status === "new", "a dismissed call is an attempt, not lost");
   const bookAngela = async () => {
     await h.clickText("Задачи");
     await h.click("Что дальше?");

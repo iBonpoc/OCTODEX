@@ -6,6 +6,7 @@
  * A drag on the filter lane is the lane's. A lead card's «‹ Лиды» brings Leads back with «‹ Ещё» and the swipe (nav/go.ts).
  * The swipe is dragged with the mouse (the gesture handler reads pointer events on the web).
  */
+const { waited } = require("../sheet.cjs");
 const path = (h) => new URL(h.page.url()).pathname;
 const role = (h, r) => h.page.evaluate((v) => localStorage.setItem("octo.role.v1", JSON.stringify(v)), r);
 const atPath = (h, want) => h.page.waitForFunction((w) => location.pathname === w, want, { timeout: 4000 }).then(() => true, () => false);
@@ -64,7 +65,7 @@ exports.run = async (h) => {
     h.expect(await p.waitForFunction(() => location.pathname.startsWith("/lead/"), null, { timeout: 4000 }).then(() => true, () => false), `a lead card (${p.url()})`);
     await p.getByRole("button", { name: /Лиды/ }).locator("visible=true").first().click();
     h.expect(await atPath(h, "/leads"), `«‹ Лиды» → /leads (${p.url()})`);
-    await p.getByTestId("back-more").locator("visible=true").waitFor({ timeout: 4000 }).catch(() => {});
+    h.expect(await waited(p.getByTestId("back-more").locator("visible=true").waitFor({ timeout: 4000 })), "Leads after the card: «‹ Ещё» shows");
     h.expect(new URL(p.url()).searchParams.get("from") === "more", `Leads keeps from=more (${p.url()})`);
     h.expect((await p.getByTestId("back-more").locator("visible=true").count()) === 1, "Leads after the card: «‹ Ещё» is there");
     await drag(h, h.layout.width * 0.7);

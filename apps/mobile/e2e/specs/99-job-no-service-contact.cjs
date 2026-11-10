@@ -4,6 +4,7 @@
  * as usual. «Позвонить» on a job writes the call on the job; «Написать» opens «Новое сообщение» to the client;
  * «В пути» of a visit is a line in the job's «История».
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
@@ -49,7 +50,7 @@ exports.run = async (h) => {
   await h.expectText(/Новое сообщение/, "«Написать» opens the messages sheet");
   await h.expectText(/Sarah Mitchell/, "to the client");
   await h.shot("message");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  await pressEscUntilClosed(p);
 
   // «В пути» in «История»
   await patch(() => {
