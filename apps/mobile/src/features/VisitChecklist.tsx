@@ -187,7 +187,8 @@ export function MissingSheet({ v, missing, open, onFill, onSkip, step }: {
  * (a sheet), «Выше» / «Ниже», «Убрать»; a new item; «Добавить из шаблона» — also for an inspection sales booked (it came
  * without a snapshot, §11.8 №8). Every change is one row's op with «Отменить».
  */
-export function ChecklistEditor({ v }: { v: Visit }) {
+/** `title` — the heading (the job card names the visit, #606); the visit screen keeps «Чек-лист» */
+export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -206,7 +207,7 @@ export function ChecklistEditor({ v }: { v: Visit }) {
     <View testID="chk-editor">
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
-          <T v="heading">{t("visit.checklist")}</T>
+          <T v="heading">{title ?? t("visit.checklist")}</T>
           <T v="caption" tone="mut">
             {t("check.preview", { n: v.checklist.length })}
           </T>

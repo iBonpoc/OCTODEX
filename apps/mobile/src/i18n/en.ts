@@ -3044,6 +3044,7 @@ export const en: Dict = {
   "chk3.requiredShort": "required",
   "chk3.starters": "Module templates",
   "chk3.starterAdded": "Template added",
+  "chk4.jobVisit": "Visit checklist · {date}",
   "chk3.optional": "optional",
   /* ---- Сметы: шаблоны (E3, docs/specs/07 §11) ---- */
   "est.tpl.title": "Estimate templates",
