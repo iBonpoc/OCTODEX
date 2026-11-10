@@ -1,5 +1,5 @@
 /**
- * e2e 221 — «Чертёж в PDF» (основатель 09.11, #509; docs/specs/33-gutters-canvas.md П20.25 п.4). Every view.
+ * e2e 222 — «Чертёж в PDF» (основатель 09.11, #509; docs/specs/33-gutters-canvas.md П20.25 п.4). Every view.
  * - «Просмотр замера» → «PDF клиенту»: the drawing (an SVG), the gutters with their lengths — no $, no cut, in the
  *   client's language (a draft for nobody: the company's language, en in the US);
  * - «PDF бригаде»: the drawing, «По стене» / «По лицевой», the corner, the parts — in the app's language (ru), no $.
