@@ -11782,4 +11782,85 @@ with u as (update public.estimate_templates set name = 'T149 B' where id = 'e3c0
 select tst.ok((select count(*) from u) = 0, 'T149 another company edits no template of A');
 \echo 'T149 template edits over row_version ok'
 
+-- ---------------------------------------------------------------- T163: updated_at of a new row is the server's hour (#608)
+-- a row made offline a week ago arrives with its created_at; before the fix updated_at = created_at (a week ago),
+-- so whatever reads changes by updated_at would never pick it up
+:as_owner_a
+insert into public.customers (id, company_id, display_name, created_at) values
+  ('c1630000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T163 Offline', now() - interval '7 days');
+select tst.ok((select created_at < now() - interval '6 days' from public.customers where id = 'c1630000-0000-4000-8000-000000000001'),
+              'T163 the phone''s created_at stays (the hour it was made)');
+select tst.ok((select updated_at > now() - interval '1 minute' from public.customers where id = 'c1630000-0000-4000-8000-000000000001'),
+              'T163 updated_at of a new row is the server''s now(), not the phone''s created_at');
+select tst.ok((select row_version = 1 and updated_by = 'a0000000-0000-0000-0000-000000000001' from public.customers where id = 'c1630000-0000-4000-8000-000000000001'),
+              'T163 the rest of the service fields as before');
+-- a row without created_at: both now()
+insert into public.customers (id, company_id, display_name) values ('c1630000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T163 Online');
+select tst.ok((select created_at > now() - interval '1 minute' and updated_at > now() - interval '1 minute' from public.customers where id = 'c1630000-0000-4000-8000-000000000002'),
+              'T163 a row without created_at: both are the server''s hour');
+\echo 'T163 updated_at of a new row is the server''s ok'
+
+-- ---------------------------------------------------------------- T164: a subcontractor sees his own files and his visit's files (#610)
+\set as_sub164 'reset role; set request.jwt.claim.sub = ''a1640000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a1640000-0000-4000-8000-000000000001', 'sub164@a.test', '{"full_name":"Sid Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a1640000-0000-4000-8000-000000000001', 'subcontractor', 'active');
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f1640000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1640000-0000-4000-8000-000000000001', 'a1640000-0000-4000-8000-000000000001');
+:as_owner_a
+-- the office: a photo on his visit, a photo on someone else's visit, a document of the company
+insert into public.files (id, company_id, kind, visit_id) values
+  ('f1640000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1640000-0000-4000-8000-000000000001'),
+  ('f1640000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000002');
+insert into public.files (id, company_id, kind) values ('f1640000-0000-4000-8000-000000000013', 'ca000000-0000-0000-0000-000000000000', 'document');
+-- a document of his visit (the rights matrix: not for a subcontractor)
+insert into public.files (id, company_id, kind, visit_id) values
+  ('f1640000-0000-4000-8000-000000000014', 'ca000000-0000-0000-0000-000000000000', 'document', 'f1640000-0000-4000-8000-000000000001');
+:as_super
+-- a photo of the office's gutter measurement
+insert into public.gutter_measurements (id, company_id, label) values ('9e164000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T164 office');
+insert into public.files (id, company_id, kind, measurement_id) values
+  ('f1640000-0000-4000-8000-000000000015', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e164000-0000-4000-8000-000000000001');
+:as_sub164
+-- the app's upload: insert … returning (before the fix the row came back empty / refused: storage_key never written)
+insert into public.files (id, company_id, kind) values ('f1640000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo') returning id \gset t164_
+insert into public.files (id, company_id, kind, visit_id) values
+  ('f1640000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1640000-0000-4000-8000-000000000001') returning id \gset t164v_
+select tst.ok(:'t164_id' = 'f1640000-0000-4000-8000-000000000001' and :'t164v_id' = 'f1640000-0000-4000-8000-000000000002', 'T164 his photo comes back on upload');
+with u as (update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000001.jpg'
+            where id = 'f1640000-0000-4000-8000-000000000001' returning 1)
+select tst.ok((select count(*) from u) = 1, 'T164 he writes storage_key of his photo (it no longer hangs «sending»)');
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 3, 'T164 he sees his two photos and the office''s photo of his visit');
+select tst.ok(tst.cnt($q$select 1 from public.files where id in ('f1640000-0000-4000-8000-000000000012', 'f1640000-0000-4000-8000-000000000013')$q$) = 0,
+              'T164 not a photo of someone else''s visit, not the office''s document');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f1640000-0000-4000-8000-000000000014'$q$) = 0,
+              'T164 not a document of his own visit (photos only)');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f1640000-0000-4000-8000-000000000015'$q$) = 0,
+              'T164 not a photo of a gutter measurement');
+:as_super
+insert into storage.objects (bucket_id, name) values
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000001.jpg'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000011.jpg'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000012.jpg'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000013.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000014.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000015.jpg');
+:as_sub164
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f1640000-%'$q$) = 2,
+              'T164 Storage: he reads his photo and his visit''s photo, nothing else');
+-- taken off the visit: its photos close, his own stays
+:as_super
+update public.visit_assignees set deleted_at = now() where visit_id = 'f1640000-0000-4000-8000-000000000001' and user_id = 'a1640000-0000-4000-8000-000000000001';
+:as_sub164
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 2, 'T164 off the visit: only the two he made');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f1640000-%'$q$) = 1,
+              'T164 Storage off the visit: only his own object');
+-- another company's owner sees none of them
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 0, 'T164 another company sees none');
+\echo 'T164 a subcontractor sees his own files and his visit''s ok'
+
 \echo 'ALL TESTS PASSED'

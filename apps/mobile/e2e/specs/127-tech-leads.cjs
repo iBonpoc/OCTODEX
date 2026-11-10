@@ -7,6 +7,7 @@
  * - /inbox (the office's old address) stays closed to him.
  * The subcontractor (no «Лиды») is the unit test sections.test.ts: in the demo «me» is never a subcontractor.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
 const { menuApi } = require("../menu.cjs");
@@ -61,8 +62,7 @@ exports.run = async (h) => {
     await p.waitForTimeout(300);
     const sheet = await h.text();
     h.expect(!/Ответственный/.test(sheet) && !/Источник/.test(sheet), "no «Ответственный» / «Источник» for the tech");
-    await p.keyboard.press("Escape");
-    await p.waitForTimeout(300);
+    await pressEscUntilClosed(p);
   }
 
   // his lead goes up to «Лиды»

@@ -10,6 +10,7 @@
  * tab, field and text lies in the safe rectangle (sideways always; up and down — what does not scroll:
  * the tab bar, «＋», the side menu, sheets, the signature; the scrolling content at its top).
  */
+const { pressEscUntilClosed, waited } = require("../sheet.cjs");
 const CASES = {
   390: [
     { w: 390, h: 844, t: 59, b: 34, l: 0, r: 0, name: "portrait" },
@@ -41,8 +42,8 @@ async function insets(page, c) {
  * left padding (the notch), the tab bar's distance from the bottom. Not seen in time: the check below says what is wrong.
  */
 const applied = (page, c) =>
-  page
-    .waitForFunction(
+  waited(
+    page.waitForFunction(
       (c) => {
         if (window.innerWidth !== c.w) return false;
         // the layout holds still (the insets are read after a short CSS transition; a sheet opening): the same edges
@@ -64,8 +65,8 @@ const applied = (page, c) =>
       },
       c,
       { timeout: 3000 },
-    )
-    .catch(() => {});
+    ),
+  );
 
 /**
  * The left edge of the screen's content: 16 after the side menu (820/1280 — not the notch again), max(notch, 16) on a
@@ -217,7 +218,7 @@ exports.run = async (h) => {
     await applied(p, c);
     await clear(h, c, "the «＋» sheet", '[aria-modal="true"]');
     await h.shot(`${c.name}-create`);
-    await p.keyboard.press("Escape");
+    await pressEscUntilClosed(p);
     await p.waitForFunction(() => !document.querySelector('[aria-modal="true"] [data-testid^="fab-"]'), null, { timeout: 3000 });
 
     // the menu: the phone has the «Ещё» tab (a screen); 820 — ☰ opens the drawer; 1280 — the side menu opens in place

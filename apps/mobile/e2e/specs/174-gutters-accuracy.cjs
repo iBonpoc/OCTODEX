@@ -6,6 +6,7 @@
  *   a reload too; the attribute panel has no «рулетка / нарисовано» per line.
  * Finds things by testID; waits on what it checks.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const { skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
@@ -32,8 +33,7 @@ exports.run = async (h) => {
     await tid("corner-cut").waitFor({ timeout: 5000 });
   };
   const closeSheet = async () => {
-    await p.keyboard.press("Escape");
-    await p.waitForTimeout(300);
+    await pressEscUntilClosed(p);
   };
 
   await h.go("/company/modules");
