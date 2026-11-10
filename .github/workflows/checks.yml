@@ -67,6 +67,17 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # #621: the base the old-labels guard (apps/mobile/test/i18nStale.test.ts) compares src/i18n with — the PR's base,
+      # the commit before a push to main; the night and a run by hand compare the commit with itself (nothing changed)
+      - name: The base for the old-labels guard
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git fetch -q --no-tags --depth=1 origin "$BASE"; then
+            echo "I18N_BASE=$BASE" >> "$GITHUB_ENV"
+          else
+            echo "I18N_BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          fi
       - name: Types + unit tests
         run: npm run typecheck && npm test
       - name: Database tests (PostgreSQL 16)
