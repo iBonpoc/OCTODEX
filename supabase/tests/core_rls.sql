@@ -11768,6 +11768,14 @@ insert into public.files (id, company_id, kind, visit_id) values
   ('f1640000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1640000-0000-4000-8000-000000000001'),
   ('f1640000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000002');
 insert into public.files (id, company_id, kind) values ('f1640000-0000-4000-8000-000000000013', 'ca000000-0000-0000-0000-000000000000', 'document');
+-- a document of his visit (the rights matrix: not for a subcontractor)
+insert into public.files (id, company_id, kind, visit_id) values
+  ('f1640000-0000-4000-8000-000000000014', 'ca000000-0000-0000-0000-000000000000', 'document', 'f1640000-0000-4000-8000-000000000001');
+:as_super
+-- a photo of the office's gutter measurement
+insert into public.gutter_measurements (id, company_id, label) values ('9e164000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T164 office');
+insert into public.files (id, company_id, kind, measurement_id) values
+  ('f1640000-0000-4000-8000-000000000015', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e164000-0000-4000-8000-000000000001');
 :as_sub164
 -- the app's upload: insert … returning (before the fix the row came back empty / refused: storage_key never written)
 insert into public.files (id, company_id, kind) values ('f1640000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo') returning id \gset t164_
@@ -11780,12 +11788,18 @@ select tst.ok((select count(*) from u) = 1, 'T164 he writes storage_key of his p
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 3, 'T164 he sees his two photos and the office''s photo of his visit');
 select tst.ok(tst.cnt($q$select 1 from public.files where id in ('f1640000-0000-4000-8000-000000000012', 'f1640000-0000-4000-8000-000000000013')$q$) = 0,
               'T164 not a photo of someone else''s visit, not the office''s document');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f1640000-0000-4000-8000-000000000014'$q$) = 0,
+              'T164 not a document of his own visit (photos only)');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f1640000-0000-4000-8000-000000000015'$q$) = 0,
+              'T164 not a photo of a gutter measurement');
 :as_super
 insert into storage.objects (bucket_id, name) values
   ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000001.jpg'),
   ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000011.jpg'),
   ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000012.jpg'),
-  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000013.pdf');
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000013.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000014.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f1640000-0000-4000-8000-000000000015.jpg');
 :as_sub164
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f1640000-%'$q$) = 2,
               'T164 Storage: he reads his photo and his visit''s photo, nothing else');
@@ -11794,6 +11808,8 @@ select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000
 update public.visit_assignees set deleted_at = now() where visit_id = 'f1640000-0000-4000-8000-000000000001' and user_id = 'a1640000-0000-4000-8000-000000000001';
 :as_sub164
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 2, 'T164 off the visit: only the two he made');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f1640000-%'$q$) = 1,
+              'T164 Storage off the visit: only his own object');
 -- another company's owner sees none of them
 :as_owner_b
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f1640000-%'$q$) = 0, 'T164 another company sees none');

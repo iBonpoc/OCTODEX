@@ -30,18 +30,21 @@ revoke all on function app.tg_service_fields() from public, anon, authenticated;
 -- #610. files_select (and the Storage read rule) let in only the office and a «tech». A subcontractor (server role
 -- subcontractor; in the app he works as a tech) did not see even the row of his own photo: the app's insert … select
 -- came back empty, storage_key was never written, the photo hung «sending». Now any member sees the files he made
--- himself, and a tech or a subcontractor the files of a visit he is on. A measurement's photos: as before (a tech,
--- by the gutters module's rule). Test T164.
+-- himself; a tech the files of a visit he is on; a subcontractor only the photos of a visit he is on (the rights
+-- matrix: no documents, receipts or signatures of the visit for him). A measurement's photos: as before (a tech, by
+-- the gutters module's rule). Test T164.
 drop policy if exists files_select on public.files;
 create policy files_select on public.files for select to authenticated
   using (app.is_staff(company_id)
          or (app.is_member(company_id) and created_by = (select auth.uid()))
-         or (app.has_role(company_id, array['tech', 'subcontractor'])
+         or (app.has_role(company_id, array['tech'])
              and visit_id is not null and app.is_visit_assignee(visit_id))
+         or (app.has_role(company_id, array['subcontractor'])
+             and kind = 'photo' and visit_id is not null and app.is_visit_assignee(visit_id))
          or (app.has_role(company_id, array['tech'])
              and measurement_id is not null and app.gutter_sees_measurement(measurement_id)));
 
--- the Storage object: by the same rule as the row (20261107190000, plus the subcontractor on his visit)
+-- the Storage object: by the same rule as the row (20261107190000, plus the subcontractor: photos of his visit)
 create or replace function app.can_read_file_object(p_name text)
 returns boolean language plpgsql stable security definer set search_path = '' as $$
 declare p record;
@@ -52,8 +55,10 @@ begin
       or exists (select 1 from public.files f
                   where f.id = p.file_id and f.company_id = p.company_id
                     and ((app.is_member(f.company_id) and f.created_by = auth.uid())
-                         or (app.has_role(f.company_id, array['tech', 'subcontractor'])
+                         or (app.has_role(f.company_id, array['tech'])
                              and f.visit_id is not null and app.is_visit_assignee(f.visit_id))
+                         or (app.has_role(f.company_id, array['subcontractor'])
+                             and f.kind = 'photo' and f.visit_id is not null and app.is_visit_assignee(f.visit_id))
                          or (app.has_role(f.company_id, array['tech'])
                              and f.measurement_id is not null and app.gutter_sees_measurement(f.measurement_id))));
 end;
