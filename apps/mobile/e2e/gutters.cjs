@@ -51,9 +51,23 @@ async function openView(p) {
   await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ timeout: 8000 });
 }
 
+// a button where it stays: a screen that has just come in can still be sliding, and a press on a button that moves under
+// the finger is cancelled (no press at all — 152 / 222 on GitHub and under load, about 1 run in 40). Wait for two equal
+// boxes in a row, then press.
+async function pressWhenStill(btn) {
+  let box = null;
+  for (let i = 0; i < 40; i++) {
+    const now = await btn.boundingBox();
+    if (now && box && now.x === box.x && now.y === box.y && now.width === box.width) break;
+    box = now;
+    await btn.page().waitForTimeout(100);
+  }
+  await btn.click();
+}
+
 // «Править чертёж» on the review → back on the canvas
 async function backToCanvas(p) {
-  await p.getByTestId("view-edit").locator("visible=true").first().getByRole("button").click();
+  await pressWhenStill(p.getByTestId("view-edit").locator("visible=true").first().getByRole("button"));
   await p.getByTestId("draw-surface").locator("visible=true").first().waitFor({ timeout: 8000 });
   await p.getByTestId("view-screen").locator("visible=true").first().waitFor({ state: "detached", timeout: 8000 });
 }
@@ -68,4 +82,4 @@ async function viewTotal(p) {
   return { total, test };
 }
 
-module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal };
+module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill };
