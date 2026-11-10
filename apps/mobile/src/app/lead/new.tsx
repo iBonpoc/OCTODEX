@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Clipboard from "expo-clipboard";
@@ -6,7 +6,7 @@ import { space, statusIcon } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Labeled } from "@/features/fields";
-import { findDuplicates, phoneKey } from "@/features/leads";
+import { defaultSourceId, findDuplicates, phoneKey } from "@/features/leads";
 import { statusOf } from "@/features/clients";
 import { SourceField } from "@/features/lead/SourcePicker";
 import { Button, TextField } from "@/ui/controls";
@@ -32,7 +32,13 @@ export default function NewLead() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
-  const [sourceId, setSourceId] = useState(db.sources.find((s) => s.active && s.name === "Thumbtack")?.id ?? db.sources.find((s) => s.active)?.id ?? "");
+  const [sourceId, setSourceId] = useState(() => defaultSourceId(db));
+  // the form opened before the company's sources arrived (right after sign-in, the first load from the server):
+  // take the default as soon as they are here, else «Save» stays off with «Choose a source» (cloud e2e 103, PR #720)
+  const fallbackSource = defaultSourceId(db);
+  useEffect(() => {
+    if (!sourceId && fallbackSource) setSourceId(fallbackSource);
+  }, [sourceId, fallbackSource]);
   const [message, setMessage] = useState("");
   const dup = phoneKey(phone).length === 10 ? findDuplicates(db, { phone }) : { customers: [], leads: [] };
   const ok = name.trim().length > 1 && phoneKey(phone).length === 10 && !!sourceId;

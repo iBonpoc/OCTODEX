@@ -5,6 +5,7 @@
  * - «Первые шаги» on the owner's Главная: профиль компании · первая работа · пригласить команду · установить на телефон
  *   (browser); each step opens its screen, «Установить» shows how; «Скрыть» hides it for good; the office does not see it.
  */
+const { pressEscUntilClosed } = require("../sheet.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
 const RU = { handyman: "Хендимен", plumbing: "Сантехника", electrical: "Электрика", painting: "Покраска", cleaning: "Уборка", flooring: "Полы", roofing: "Кровля", gutters: "Водостоки", landscaping: "Ландшафт", fencing: "Заборы" };
@@ -47,8 +48,7 @@ exports.run = async (h) => {
   await vis("first-install").getByRole("button", { name: "Начать" }).click();
   await h.expectText(/На экран „Домой“/, "the iPhone way");
   await h.expectText(/Установить приложение/, "the Android way");
-  await p.keyboard.press("Escape");
-  await p.waitForTimeout(400);
+  await pressEscUntilClosed(p);
 
   // the office has no first steps
   await setRole(h, "dispatcher");

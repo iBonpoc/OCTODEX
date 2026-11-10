@@ -4,6 +4,7 @@
  * client's screen; the open card out of the filter is marked «Нет в списке — другой фильтр».
  * All widths: the lead's five tabs stay inside the screen (and inside the 360 panel) — they scroll sideways.
  */
+const { waited } = require("../sheet.cjs");
 const role = (h, r) => h.page.evaluate((v) => localStorage.setItem("octo.role.v1", JSON.stringify(v)), r);
 const panel = (h) => h.page.getByTestId("list-panel").locator("visible=true");
 const openIs = (h, id) => h.page.waitForFunction((w) => (new URLSearchParams(location.search).get("open") ?? "") === w, id, { timeout: 4000 }).then(() => true, () => false);
@@ -63,12 +64,12 @@ exports.run = async (h) => {
     await p.keyboard.press("ArrowDown");
     h.expect(await openIs(h, idOf(ids[i])), `↓ ${i} → ${ids[i].slice(0, 30)}`);
   }
-  await p.waitForFunction(() => {
+  h.expect(await waited(p.waitForFunction(() => {
     const r = [...document.querySelectorAll('[data-testid="list-card"][aria-current="true"]')].find((x) => x.offsetParent !== null);
     if (!r) return false;
     const b = r.getBoundingClientRect();
     return b.top >= 0 && b.bottom <= window.innerHeight;
-  }, null, { timeout: 4000 }).catch(() => {});
+  }, null, { timeout: 4000 })), "the current row is scrolled into view");
   h.expect((await last.getAttribute("aria-current")) === "true", "↓ reached the last client");
   const lb = await last.boundingBox();
   h.expect(lb && lb.y >= 0 && lb.y + lb.height <= 420 + 1, `the last row is scrolled into view (${JSON.stringify(lb)})`);
