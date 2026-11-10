@@ -9,6 +9,8 @@
  * nothing changed (ready) → «Открыть смету». No lead and no property → «Сделать заявкой» first (an estimate needs a client).
  */
 import { ENGINE_VERSION, type PartQty } from "@octo/estimating-engine";
+import type { DocAttachPage } from "@/features/docPages";
+import { pagesProblem } from "@/features/docPages";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { estimateTitle, newDoc, uid } from "@/features/estimateDoc";
 import { moduleActive, type ModuleEstimateStore } from "../registry";
@@ -107,6 +109,21 @@ export function docWithLines(prev: EstimateDoc | undefined, next: readonly Modul
   };
 }
 
+/** the measurement's drawing as the estimate's attached page (spec 33 П24.7, S6g; #705): this measurement's page is
+ *  put in (or replaced), other pages stay; a page the server would refuse is left out — the estimate itself goes */
+export const pageIdOf = (measurementId: string) => `${KEY}:${measurementId}`;
+export function withMeasurementPage(doc: EstimateDoc, measurementId: string, page: DocAttachPage | undefined): EstimateDoc {
+  const id = pageIdOf(measurementId);
+  const others = (Array.isArray(doc.pages) ? doc.pages : []).filter((p) => p?.id !== id);
+  const next = page ? [...others, { ...page, id }] : others;
+  if (page && pagesProblem(next) !== null) return others.length ? { ...doc, pages: others } : withoutPages(doc);
+  return next.length ? { ...doc, pages: next } : withoutPages(doc);
+}
+const withoutPages = (doc: EstimateDoc): EstimateDoc => {
+  const { pages: _p, ...rest } = doc;
+  return rest;
+};
+
 /** what «Смета» / «Обновить смету» needs from the canvas */
 export interface MakeInput {
   m: MeasurementRow;
@@ -119,6 +136,9 @@ export interface MakeInput {
   fallbackTitle: string;
   /** the clock (tests) */
   now?: () => string;
+  /** the drawing as the client sees it (the sheet, #739) — in the CLIENT's language, no prices; none — the estimate's
+   *  page of this measurement is left as it is */
+  page?: DocAttachPage;
 }
 
 export type MakeResult =
@@ -168,7 +188,9 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
   const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))());
-  const doc = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
+  const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
+  // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
+  const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;
   const estimateId = e?.id ?? uid();
   const t = target;
   const undoSave = store.saveEstimate({
