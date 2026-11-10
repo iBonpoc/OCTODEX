@@ -16,6 +16,7 @@ import { tFor } from "@/i18n/translate";
 import type { PortalData } from "@/cloud/portal";
 import { optionTotals, shownQty, withAddons } from "./estimateDoc";
 import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf";
+import { pagesHtml } from "./docPages";
 
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
@@ -103,7 +104,8 @@ ${p.company.terms ? `<div class="note mut">${esc(p.company.terms)}</div>` : ""}
 <p class="mut">${esc(t("est.rescission"))}</p>
 ${a ? `<p class="ok">✓ ${esc(t("portal.approved"))}</p>` : ""}
 ${signatures}
-${record}`;
+${record}
+${pagesHtml(doc?.pages)}`;
   return docPage({
     title,
     // «Valid until» only while it matters: the client has not signed yet (founder 05.11)

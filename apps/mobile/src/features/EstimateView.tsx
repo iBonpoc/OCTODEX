@@ -9,6 +9,7 @@ import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { optionTotals, shownQty, withAddons } from "./estimateDoc";
+import { DocPagesView } from "./DocPagesView";
 import { StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
@@ -151,6 +152,7 @@ export function EstimateView({
           {doc.note}
         </T>
       ) : null}
+      <DocPagesView pages={doc.pages} />
     </View>
   );
 }

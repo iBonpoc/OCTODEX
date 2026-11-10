@@ -113,8 +113,18 @@ exports.run = async (h) => {
   h.expect(v0.total > 0, "a $ on the review");
   h.expect(!v0.test, "every part from the price list at a real price: no «тестовые цены»");
   const m0 = v0.total;
-  await p.waitForTimeout(1300); // the canvas writes the drawing as it leaves
-  const drawUrl = new URL(p.url()).pathname + new URL(p.url()).search; // the same measurement again (?m=…)
+  // the same measurement again (?m=…): «Править чертёж» goes back in history, and the address changes after the screen
+  // does — wait for the canvas's own address, not the review's (1280 dark on GitHub took the review's: no canvas, #727)
+  await p.waitForURL(/\/module\/gutters\/draw\?(.*&)?m=/, { timeout: 8000 });
+  const drawUrl = new URL(p.url()).pathname + new URL(p.url()).search;
+  h.expect(!drawUrl.includes("/view"), `the canvas's address: ${drawUrl}`);
+  // the measurement and its run are in the phone's store before the page is left (was: a fixed 1.3 s)
+  const mid = new URL(p.url()).searchParams.get("m");
+  const saved = async () => {
+    const g = (await db()).moduleData?.gutters ?? { measurements: [], elements: [] };
+    return g.measurements.some((x) => x.id === mid) && g.elements.some((e) => e.measurementId === mid && e.kind === "run");
+  };
+  await waitFor(saved, "the drawing is saved on the phone before it is opened again");
   await h.go("/today");
   await editDb((d) => ({ ...d, catalog: d.catalog.map((x) => (x.attributes && x.attributes.work === "install" && x.attributes.story === "1" ? { ...x, priceCents: x.priceCents + 1000 } : x)) }));
   await h.go(drawUrl);
