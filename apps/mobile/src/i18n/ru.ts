@@ -2732,7 +2732,7 @@ export const ru = {
   "mod.gutters.set.rulesHint": "Так приложение считает детали и запас для каждого замера. Числа по умолчанию — обычная практика; поменяйте под себя.",
   "mod.gutters.set.r.storyFt": "Высота этажа",
   "mod.gutters.set.r.hangerSpacingIn": "Шаг креплений",
-  "mod.gutters.set.r.hangerExtra": "+1 крепление на желоб (по краям)",
+  "mod.gutters.set.r.hangerExtra": "Крюк и по краям желоба (каждые 2 фута + 1)",
   "mod.gutters.set.r.wastePct": "Запас на отход",
   "mod.gutters.set.r.cutCornerIn": "Вырезанный угол берёт желоба",
   "mod.gutters.set.r.corner": "Углы по умолчанию",

@@ -55,6 +55,6 @@ describe("company kits merge with the defaults", () => {
       { runs: [{ id: "1", profile: "k", size: "6", material: "aluminum", story: 1, lengthIn: 480, hanger: "own", ends: [{ kind: "cap" }, { kind: "cap" }], houseSide: "R" }], corners: [], downspouts: [] },
       { hangerKits: rules.hangerKits },
     );
-    expect(parts.find((p) => p.key === "hanger.own.aluminum.k.6")?.qty).toBe("16");
+    expect(parts.find((p) => p.key === "hanger.own.aluminum.k.6")?.qty).toBe("17");
   });
 });
