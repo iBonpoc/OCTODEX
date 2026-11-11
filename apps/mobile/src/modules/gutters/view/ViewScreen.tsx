@@ -39,12 +39,34 @@ import { saveEstimatePdf } from "@/features/estimatePdf";
 
 /** the drawing's box: as tall as three quarters of its width */
 
+/**
+ * «Просмотр замера» on its own route (390, 820, «⤢ Открыть»): the screen around the body. On 1280 «Замеры» shows the
+ * same body in its ListPanel (spec 33 П25.3 А).
+ */
 export default function ViewScreen() {
+  const store = useStore();
+  const { t } = useI18n();
+  const params = useLocalSearchParams<{ m?: string; estimate?: string; from?: string }>();
+  const mid = typeof params.m === "string" ? params.m : "";
+  const m = mid ? measurementOf(gutterData(store.db), mid)?.m : undefined;
+  const lead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
+  const addr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
+  const back = () => (router.canGoBack() ? router.back() : router.replace(moduleHref("gutters", "list") as Href));
+  return (
+    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
+      <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} />
+    </Screen>
+  );
+}
+
+/**
+ * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
+ * «Обновить из замера» came with estimate=1: done once; `from` — "draw": «Править чертёж» goes back to that canvas.
+ */
+export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: string; estimate?: boolean; from?: string }) {
   const store = useStore();
   const { t, money, lang } = useI18n();
   const toast = useToast();
-  const params = useLocalSearchParams<{ m?: string; estimate?: string; from?: string }>();
-  const mid = typeof params.m === "string" ? params.m : "";
   const g = gutterData(store.db);
   const found = mid ? measurementOf(g, mid) : null;
   const m = found?.m ?? null;
@@ -60,11 +82,10 @@ export default function ViewScreen() {
   const estimates = m ? store.db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id)))) : [];
   const [linkOpen, setLinkOpen] = useState(false);
 
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
   // «Править чертёж»: back to the canvas it came from; from a lead or an estimate — the canvas opens
   const edit = () => {
     if (!m) return;
-    if (params.from === "draw" && router.canGoBack()) router.back();
+    if (from === "draw" && router.canGoBack()) router.back();
     else router.push(`${moduleHref("gutters", "draw")}?m=${encodeURIComponent(m.id)}` as Href);
   };
 
@@ -101,7 +122,7 @@ export default function ViewScreen() {
     router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
   };
   // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1: done once
-  const auto = useRef(params.estimate === "1");
+  const auto = useRef(!!autoEstimate);
   useEffect(() => {
     if (!auto.current || !m || !money$) return;
     auto.current = false;
@@ -129,13 +150,7 @@ export default function ViewScreen() {
   const unit = (u: string) => word(`mod.gutters.view.u.${u}`, u);
   const kindWord = (k: string) => t(k === "in" ? "mod.gutters.draw.cornerIn" : k === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
 
-  if (!m) {
-    return (
-      <Screen title={t("mod.gutters.view.title")} back={back}>
-        <View testID="view-not-found"><T tone="mut">{t("mod.gutters.view.notFound")}</T></View>
-      </Screen>
-    );
-  }
+  if (!m) return <View testID="view-not-found"><T tone="mut">{t("mod.gutters.view.notFound")}</T></View>;
   const lead = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
   const addr = m.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const rough = m.accuracy !== "tape";
@@ -161,7 +176,7 @@ export default function ViewScreen() {
   };
 
   return (
-    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
+    <>
       <View testID="view-screen" style={{ gap: space[4] }}>
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
@@ -279,6 +294,6 @@ export default function ViewScreen() {
         ) : null}
       </View>
       <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
-    </Screen>
+    </>
   );
 }

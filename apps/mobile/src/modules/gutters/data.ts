@@ -70,10 +70,20 @@ export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: str
   return of.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
 }
 
-/** where «Замер желобов» goes for a lead / an address: its newest measurement, else a new one linked to it */
-export function measureHref(draw: string, g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): { href: string; open?: MeasurementRow } {
+/** the module's two doors of a measurement: the canvas (a new one is drawn there) and its card («Просмотр замера») */
+export interface MeasureDoors {
+  draw: string;
+  view: string;
+}
+
+/**
+ * where «Замер желобов» goes for a lead / an address (spec 33 П25.3 В): its newest measurement's card, else the canvas
+ * of a new one linked to it (nothing to look at yet; «Готово» → the card)
+ */
+export function measureHref(to: MeasureDoors, g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): { href: string; open?: MeasurementRow } {
   const m = latestFor(g, by);
-  if (m) return { href: `${draw}?m=${encodeURIComponent(m.id)}`, open: m };
+  if (m) return { href: `${to.view}?m=${encodeURIComponent(m.id)}`, open: m };
+  const draw = to.draw;
   const q = [by.leadId ? `lead=${encodeURIComponent(by.leadId)}` : "", by.propertyId ? `property=${encodeURIComponent(by.propertyId)}` : ""].filter(Boolean).join("&");
   return { href: `${draw}?${q}` };
 }
@@ -82,10 +92,10 @@ export function measureHref(draw: string, g: GutterData, by: { leadId?: string; 
  * «Замер желобов» on a client's card (spec 33 П24 А3, #697): the measurement is always an address's — one address →
  * straight to it; several → pick; none → the client's card says to add one first
  */
-export function clientStart(draw: string, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
+export function clientStart(to: MeasureDoors, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
   const g = gutterData(db);
   const places = db.properties.filter((p) => p.customerId === customerId);
-  const go = (propertyId: string) => measureHref(draw, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
+  const go = (propertyId: string) => measureHref(to, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
   if (!places.length) return { kind: "none" as const };
   if (places.length === 1) return { kind: "go" as const, href: go(places[0]!.id) };
   return { kind: "pick" as const, places: places.map((p) => ({ id: p.id, address: p.address, city: p.city, href: go(p.id) })) };
