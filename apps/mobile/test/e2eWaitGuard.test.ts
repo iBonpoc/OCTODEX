@@ -1,48 +1,36 @@
 /**
  * No fixed sleeps in e2e (#906 п.4, #1034; audit D-07; playbook §4). A fixed pause is too long on a fast machine and too short
  * on a slow one: wait for what you check (expect.poll / waitFor / waitForFunction / `settle` from e2e/settle.cjs).
- * What exists is counted per file in e2e/waitForTimeoutBaseline.json — a sleep is `waitForTimeout(` or
- * `new Promise(… setTimeout(…))`, in any .cjs/.mjs/.js under e2e/ (nested folders too). The count must EQUAL the baseline:
+ * What exists is counted per file in e2e/waitForTimeoutBaseline.json (counter and command: e2e/waitBaseline.cjs) — a sleep is
+ * `waitForTimeout(` or `new Promise(… setTimeout(…))`, in any .cjs/.mjs/.js under e2e/ (nested folders too). The count must EQUAL the baseline:
  * more = a new sleep (red); fewer = you removed some — lower the number, so the freed sleep cannot be taken again.
  * The two escape hatches (a spec's `exports.fixedWaits`, the helper option `legacyWaits`) are allowed only in the lists below.
  */
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+
+const require = createRequire(import.meta.url);
 
 const root = join(__dirname, "..");
 const e2e = join(root, "e2e");
-const baseline = JSON.parse(readFileSync(join(e2e, "waitForTimeoutBaseline.json"), "utf8")) as Record<string, number>;
+// the counter and the baseline command are one module (e2e/waitBaseline.cjs), so the test and the command cannot disagree
+const wb = require("../e2e/waitBaseline.cjs") as {
+  sleepsIn: (src: string) => number;
+  counts: () => Record<string, number>;
+  diff: () => { more: string[]; fewer: string[] };
+  files: (dir: string) => string[];
+  rel: (p: string) => string;
+  COMMAND: string;
+};
+const { sleepsIn, files, rel } = wb;
+const read = (p: string) => readFileSync(p, "utf8");
 
 /** specs that keep the fixed waits of h.go / h.click on purpose (each needs an issue to move it off) */
 const FIXED_WAITS_SPECS = ["e2e/specs/12-tech-day.cjs"]; // #1020
 /** files that pass `legacyWaits: true` to the helper (the cloud runner: a live server keeps the page busy) */
 const LEGACY_WAITS_FILES = ["e2e/cloud/cloud.cjs", "e2e/cloud/specs/103-cloud-lead-to-payment.cjs", "e2e/h.cjs", "e2e/run.cjs"];
-
-function files(dir: string, out: string[] = []): string[] {
-  for (const f of readdirSync(dir)) {
-    if (f === "out" || f === "node_modules") continue;
-    const p = join(dir, f);
-    if (statSync(p).isDirectory()) files(p, out);
-    else if (/\.(cjs|mjs|js)$/.test(f)) out.push(p);
-  }
-  return out;
-}
-const rel = (p: string) => relative(root, p).split("\\").join("/");
-const read = (p: string) => readFileSync(p, "utf8");
-
-/** sleeps in a source text */
-export function sleepsIn(src: string): number {
-  return (src.match(/waitForTimeout\(/g) ?? []).length + (src.match(/new Promise\([\s\S]{0,80}?setTimeout\(/g) ?? []).length;
-}
-export function counts(): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const p of files(e2e)) {
-    const n = sleepsIn(read(p));
-    if (n) out[rel(p)] = n;
-  }
-  return out;
-}
 
 describe("e2e: no fixed sleeps beyond the baseline", () => {
   it("the counter sees both kinds of sleep", () => {
@@ -50,13 +38,12 @@ describe("e2e: no fixed sleeps beyond the baseline", () => {
     expect(sleepsIn("await p.waitForFunction(() => true)")).toBe(0);
   });
   it("no file has more sleeps than the baseline (a new file: none)", () => {
-    const more = Object.entries(counts()).filter(([f, n]) => n > (baseline[f] ?? 0)).map(([f, n]) => `${f}: ${n} > ${baseline[f] ?? 0}`);
-    expect(more, `new fixed sleep — wait for a sign instead (e2e/settle.cjs, expect.poll, waitFor):\n${more.join("\n")}`).toEqual([]);
+    const { more } = wb.diff();
+    expect(more, `new fixed sleep — wait for a sign instead (e2e/settle.cjs, expect.poll, waitFor); do NOT raise the baseline:\n${more.join("\n")}`).toEqual([]);
   });
-  it("the baseline is exact: a file with fewer sleeps (or gone) is lowered in e2e/waitForTimeoutBaseline.json", () => {
-    const now = counts();
-    const stale = Object.entries(baseline).filter(([f, n]) => (now[f] ?? 0) < n).map(([f, n]) => `${f}: baseline ${n}, now ${now[f] ?? 0}`);
-    expect(stale, `lower the numbers (or delete the entries) in e2e/waitForTimeoutBaseline.json:\n${stale.join("\n")}`).toEqual([]);
+  it("the baseline is exact: a file with fewer sleeps (or gone) is lowered", () => {
+    const { fewer } = wb.diff();
+    expect(fewer, `you removed sleeps — lower the baseline with one command:  ${wb.COMMAND}\n${fewer.join("\n")}`).toEqual([]);
   });
 });
 
