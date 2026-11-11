@@ -3308,6 +3308,8 @@ export const en: Dict = {
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "The client's signature was not saved on the server",
+  // visit payment refused by the server (#857 О1) — the tech hands it to the office
+  "visit.rej.moneyInHand": "The money in hand was not recorded — hand the payment to the office",
   "est.signOnSite.afterSend": "The client can sign on site once the office has sent the estimate.",
   "portal.offline": "No connection. Check the internet and reload the page.",
   "portal.failed": "That didn't work. Please try again.",

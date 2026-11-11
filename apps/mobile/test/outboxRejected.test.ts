@@ -26,7 +26,7 @@ describe("unit:outboxRejected — what is kept of a refused money change", () =>
     expect(of({ k: "invoice.issue", id: "i1", jobId: "j1", customerId: "c", kind: "final", title: "F", totalCents: 500 })).toMatchObject({ what: "invoice", href: "/job/j1", amountCents: 500 });
     expect(of({ k: "invoice.pay", invoiceId: "i1", paymentId: "p", customerId: "c", amountCents: 300, method: "cash" })).toMatchObject({ what: "payment", href: "/invoice/i1", amountCents: 300 });
     expect(of({ k: "payment.record", id: "p", invoiceId: "i2", customerId: "c", amountCents: 200, method: "check" })).toMatchObject({ what: "payment", href: "/invoice/i2" });
-    expect(of({ k: "visit.pay", visitId: "v1", jobId: "j", customerId: "c", invoiceId: "i", paymentId: "p", amountCents: 100, method: "card" })).toMatchObject({ what: "payment", href: "/visit/v1" });
+    expect(of({ k: "visit.pay", visitId: "v1", jobId: "j", customerId: "c", invoiceId: "i", paymentId: "p", amountCents: 100, method: "card" })).toMatchObject({ what: "payment", href: "/visit/v1", labelKey: "visit.rej.moneyInHand" });
     expect(of({ k: "expense.add", id: "x", jobId: "j9", vendor: "HD", category: "materials", amountCents: 50 })).toMatchObject({ what: "expense", href: "/job/j9" });
     expect(of({ k: "expense.add", id: "x", jobId: null, vendor: "HD", category: "materials", amountCents: 50 })).toMatchObject({ href: "/settings/profile" });
   });
