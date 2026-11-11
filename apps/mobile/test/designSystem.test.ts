@@ -54,6 +54,11 @@ describe("design system: components", () => {
     // ds-allow: visit/[id].tsx is held by #868 — moves to haptics in a small follow-up PR after it lands
     expect(hits.filter((f) => f !== join("app", "visit", "[id].tsx"))).toEqual([]);
   });
+  it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
+    const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");
+    expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
+    expect(src).toMatch(/onDeactivate:[\s\S]*?haptics\.medium\(\)/);
+  });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>
       readFileSync(f, "utf8")
