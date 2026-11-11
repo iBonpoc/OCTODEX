@@ -473,6 +473,8 @@ export function StoreProvider({
     {
       validate: (v) =>
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+      // an empty start shows an empty company: tried longer before it (#926)
+      patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
       // theirs — an empty list without the network otherwise (#864, review); another person's is never taken
       ...(mode === "cloud" ? { adopt: { from: `octo.cloud.v1.${company!.companyId}`, ok: (v: { db: DB }) => v.db.me === auth.userId } } : {}),

@@ -20,7 +20,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 import { render, settle } from "./support/miniReact";
-import { flushAllWriters, forgetDeviceState, usePersistentState } from "../src/data/persist";
+import { CACHE_READ_TRIES, flushAllWriters, forgetDeviceState, READ_TRIES, usePersistentState } from "../src/data/persist";
 
 type Out = ReturnType<typeof usePersistentState<string>>;
 const Comp = ({ k }: { k: string }) => usePersistentState<string>(k, "init");
@@ -141,11 +141,13 @@ describe("unit:persistHook — a change in the last 250 ms is not lost (rule 6, 
 type Ops = { id: string }[];
 type OutOps = ReturnType<typeof usePersistentState<Ops>>;
 const Outbox = ({ k }: { k: string }) => usePersistentState<Ops>(k, [], { immediate: true, strict: true });
-const Cache = ({ k }: { k: string }) => usePersistentState<Ops>(k, []);
+const Cache = ({ k }: { k: string }) => usePersistentState<Ops>(k, [], { patient: true });
+/** a key that is not the company's data (the theme, the language, a filter): not `patient` */
+const Plain = ({ k }: { k: string }) => usePersistentState<Ops>(k, []);
 const TWO = JSON.stringify([{ id: "op1" }, { id: "op2" }]);
 /** every read the hook makes fails, through all its tries (with their pauses) */
-const failReads = async () => {
-  for (let i = 0; i < 3; i++) {
+const failReads = async (tries = 3) => {
+  for (let i = 0; i < tries; i++) {
     for (let n = 0; n < 50 && !reads.length; n++) await wait(50);
     while (reads.length) reads.shift()!.fail(new Error("SQLITE_BUSY"));
     await settle();
@@ -344,16 +346,111 @@ describe("unit:persistHook — a broken outbox: keep its copy and go on (review 
   }, 10_000);
 });
 
-describe("unit:persistHook — a cache the device cannot read (review of #910, round 2 №2)", () => {
-  it("after every try fails, a cache starts fresh and is loaded — it never locks the app", async () => {
-    storage.set("octo.cloud.v1.c1", TWO);
-    const root = render(Cache, { k: "octo.cloud.v1.c1" });
-    await failReads();
+describe("unit:persistHook — a cache the device cannot read (review of #910, round 2 №2; #926)", () => {
+  const K = "octo.cloud.v1.c1";
+  /** the next read the hook makes (one of its tries) */
+  const nextRead = async () => {
+    for (let n = 0; n < 100 && !reads.length; n++) await wait(50);
+    return reads.shift()!;
+  };
+  const started = async () => {
+    await failReads(CACHE_READ_TRIES);
     await wait(50);
     await settle();
+  };
+
+  it("after every try fails, a cache starts fresh and is loaded — it never locks the app", async () => {
+    storage.set(K, TWO);
+    const root = render(Cache, { k: K });
+    await started();
     expect((root.out as OutOps)[2]).toBe(true);
     expect((root.out as OutOps)[3].readError).toBeNull();
     expect((root.out as OutOps)[0]).toEqual([]);
     root.unmount();
+  }, 15_000);
+
+  it("#926: while it is tried the cache is not loaded (nothing can be changed on an empty base); a later try gives the copy", async () => {
+    storage.set(K, TWO);
+    const root = render(Cache, { k: K });
+    await failReads(3); // what a strict key gives up after
+    await wait(50);
+    await settle();
+    expect((root.out as OutOps)[2]).toBe(false); // before: loaded empty — the store showed an empty company
+    (await nextRead()).answer(TWO);
+    await settle();
+    expect((root.out as OutOps)[2]).toBe(true);
+    expect((root.out as OutOps)[0]).toEqual([{ id: "op1" }, { id: "op2" }]);
+    root.unmount();
+  }, 15_000);
+
+  it("#926 (review, round 2): a key that is not patient (the theme, the language) gives up after 3 tries, as before", async () => {
+    storage.set("octo.theme.v1", TWO);
+    const root = render(Plain, { k: "octo.theme.v1" });
+    await failReads(READ_TRIES);
+    await wait(50);
+    await settle();
+    expect((root.out as OutOps)[2]).toBe(true); // before: ~8 s more, the providers one after the other — a white screen
+    expect(reads).toHaveLength(0);
+    await wait(300);
+    expect(storage.get("octo.theme.v1")).toBe(TWO); // its empty start is not written either
+    root.unmount();
   }, 10_000);
+
+  it("#926: the empty start is never written over the copy; the next real change (the server's data) is", async () => {
+    storage.set(K, TWO);
+    const root = render(Cache, { k: K });
+    await started();
+    await wait(300); // the 250-ms writer has had its time
+    expect(storage.get(K)).toBe(TWO); // before: «[]» — the company's data gone until the network
+    (root.out as OutOps)[1]([{ id: "server" }]);
+    await settle();
+    await wait(300);
+    expect(JSON.parse(storage.get(K)!)).toEqual([{ id: "server" }]);
+    root.unmount();
+  }, 15_000);
+
+  it("#926: the app leaves right after the empty start: nothing waits to be written", async () => {
+    storage.set(K, TWO);
+    const root = render(Cache, { k: K });
+    await started();
+    root.unmount();
+    flushAllWriters();
+    await wait(50);
+    expect(storage.get(K)).toBe(TWO);
+  }, 15_000);
+
+  it("#926: the device is wiped while it is tried — the old copy a late try gives lands neither in the state nor on the disk", async () => {
+    storage.set(K, TWO);
+    const root = render(Cache, { k: K });
+    await failReads(2);
+    const r = await nextRead();
+    storage.delete(K); // the account deletion wipes the device
+    forgetDeviceState((k) => k === K);
+    await settle();
+    r.answer(TWO); // the try started before the wipe answers with the old copy
+    await settle();
+    await wait(300);
+    expect((root.out as OutOps)[0]).toEqual([]);
+    expect(storage.has(K)).toBe(false);
+    root.unmount();
+    expect(storage.has(K)).toBe(false);
+  }, 15_000);
+
+  it("#926: the key changes while it is tried — the old key's copy lands neither in the new state nor on its key", async () => {
+    storage.set(K, TWO);
+    const root = render(Cache, { k: K });
+    await failReads(2);
+    const r = await nextRead();
+    root.rerender({ k: "octo.cloud.v1.c2" }); // another company
+    await settle();
+    answerAll(); // the new key: nothing stored
+    await settle();
+    r.answer(TWO); // the old key's try answers late, after the new key is read
+    await settle();
+    await wait(300);
+    expect((root.out as OutOps)[0]).toEqual([]);
+    expect(storage.get("octo.cloud.v1.c2") ?? "[]").toBe("[]");
+    expect(storage.get(K)).toBe(TWO);
+    root.unmount();
+  }, 15_000);
 });
