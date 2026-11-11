@@ -75,14 +75,30 @@ describe("effective role (bug: «/» opened My visits for the owner and the offi
 });
 
 describe("«Прибыль» by right (docs/specs/13 §3.4, §4)", () => {
-  it("the technician never sees a job's profit; the office does", () => {
+  it("the technician and sales never see a job's profit; owner, admin and office do (#868)", () => {
     expect(canSeeProfit("tech")).toBe(false);
-    for (const r of ["dispatcher", "director", "sales"] as Role[]) expect(canSeeProfit(r)).toBe(true);
+    expect(canSeeProfit("sales")).toBe(false); // before: true — sales saw «Прибыль» from the company's expenses
+    for (const r of ["dispatcher", "director"] as Role[]) expect(canSeeProfit(r)).toBe(true);
   });
   it("job and visit screens both ask canSeeProfit before showing jobProfit (failed before: the visit showed it to the tech)", () => {
     for (const f of ["job/[id].tsx", "visit/[id].tsx"]) {
       const src = fs.readFileSync(path.join(APP, f), "utf8");
       expect(src, f).toMatch(/canSeeProfit\(store\.role\)/);
     }
+  });
+});
+
+describe("the payment buttons ask the role (#868, #1061: the screens are wired to the rules)", () => {
+  const src = (f: string) => fs.readFileSync(path.join(__dirname, "..", f), "utf8");
+  it("the visit's payment card shows only when canTakeVisitPayment(store.role)", () => {
+    expect(src("src/app/visit/[id].tsx")).toMatch(/v\.step === "signed" && canTakeVisitPayment\(store\.role\)/);
+  });
+  it("«Принять оплату» on an invoice shows only when paymentRight is not «none»", () => {
+    const f = src("src/features/invoice/InvoiceCard.tsx");
+    expect(f).toMatch(/const right = paymentRight\(store\.role, inv,/);
+    expect(f).toMatch(/balance > 0 && right !== "none"/);
+  });
+  it("«Записать оплату» on an invoice card asks paymentRight too", () => {
+    expect(src("src/features/listCards.tsx")).toMatch(/action=\{open && paymentRight\(role, i,/);
   });
 });
