@@ -844,7 +844,7 @@ export default function DrawScreen() {
         </View>
       ) : null}
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
-        <AttrBody>{attrs}</AttrBody>
+        <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />

@@ -547,8 +547,18 @@ function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
   );
 }
 
-/** the panel's body: scrolls on its own (the sheet and the side column both hold it) */
-export function AttrBody({ children }: { children: React.ReactNode }) {
+/**
+ * The panel's body. In the side column (820/1280) it scrolls on its own. In the sheet (390) it does not (#745): the
+ * sheet scrolls it — a list of its own inside the sheet's list took the finger, and a swipe down past the middle never
+ * closed the downspout's or the gutter's sheet (the sheet's swipe runs only beside its own scroll, overlays.tsx).
+ */
+export function AttrBody({ children, inSheet }: { children: React.ReactNode; inSheet?: boolean }) {
+  if (inSheet)
+    return (
+      <View style={{ gap: space[4], paddingBottom: space[4] }} testID="attr-panel">
+        {children}
+      </View>
+    );
   return (
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[4], paddingBottom: space[4] }} testID="attr-panel">
       {children}
