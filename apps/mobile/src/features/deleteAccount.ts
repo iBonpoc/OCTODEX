@@ -190,11 +190,14 @@ export interface WipeStore {
  * deleted person's: filter them, and never wipe again (the next person's cache and drafts live there by now).
  */
 export const FILTER_PENDING = "filter:";
-export function pendingOf(v: string): { userId: string | null; filterOnly: boolean } {
+const idOf = (s: string) => (s && s !== "1" ? s : null);
+/** `userIds`: every person whose ops are still to filter — «filter:u0,u1» when a later deletion came before the repeat */
+export function pendingOf(v: string): { userId: string | null; userIds: (string | null)[]; filterOnly: boolean } {
   const filterOnly = v.startsWith(FILTER_PENDING);
-  const id = filterOnly ? v.slice(FILTER_PENDING.length) : v;
-  return { userId: id && id !== "1" ? id : null, filterOnly };
+  const ids = (filterOnly ? v.slice(FILTER_PENDING.length) : v).split(",").map(idOf);
+  return { userId: ids[0] ?? null, userIds: ids, filterOnly };
 }
+export const filterMark = (ids: readonly (string | null)[]) => `${FILTER_PENDING}${[...new Set(ids.map((x) => x ?? "1"))].join(",")}`;
 /**
  * true — wiped; false — it failed (logged, and marked for the next start). `keep`: device keys that are not removed —
  * the shared outbox and the refused changes are filtered in place by the caller, never removed and written back (#911)

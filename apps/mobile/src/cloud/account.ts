@@ -6,11 +6,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
 import {
-  deleteWithRepeat, FILTER_PENDING, lastOwnerCompanies, pendingOf, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
+  deleteWithRepeat, filterMark, lastOwnerCompanies, pendingOf, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
 import { forgetDeviceState } from "@/data/persist";
-import { OUTBOX_KEY, othersOf, REJECTED_KEY, wipedOnDelete, type OwnedItem } from "@/data/outboxOwner";
+import { forgetSharedOps, OUTBOX_KEY, othersOf, REJECTED_KEY, wipedOnDelete, type OwnedItem } from "@/data/outboxOwner";
 import { rejectedOthers, type RejectedOp } from "@/data/outboxRejected";
 import { supabase } from "./client";
 
@@ -138,10 +138,12 @@ export async function wipeIfPending(): Promise<void> {
   if (!pending) return;
   // the deleted person's id was kept with the mark ("1" — an older version: whose is not known)
   // never the session signed in now: after a failed wipe another person may have signed in (review #244, rule 6)
-  const { userId, filterOnly } = pendingOf(pending);
-  // only the outbox was not filtered last time: the device keys are another person's by now — never wiped again (#911)
+  const { userId, userIds, filterOnly } = pendingOf(pending);
+  // only the outbox was not filtered last time: the device keys are another person's by now — never wiped again (#911).
+  // The store in memory first (it may hold what the disk has, and would write it back), then the disk
   if (filterOnly) {
-    if ((await filterShared(userId)) === "done") await AsyncStorage.removeItem(WIPE_PENDING_KEY).catch(() => {});
+    userIds.forEach(forgetSharedOps);
+    if ((await filterShared(userIds)) === "done") await AsyncStorage.removeItem(WIPE_PENDING_KEY).catch(() => {});
     return;
   }
   await wipeKeepingOthers(userId, false);
@@ -168,7 +170,7 @@ async function readKey(key: string): Promise<string | null | undefined> {
  * offers «Сохранить копию и продолжить», #910) and never repeated.
  */
 type Filtered = "done" | "again" | "broken";
-async function filterKey<T>(key: string, others: (items: T[], me: string | null) => T[], me: string | null): Promise<Filtered> {
+async function filterKey<T>(key: string, others: (items: T[], me: string | null) => T[], ids: readonly (string | null)[]): Promise<Filtered> {
   const raw = await readKey(key);
   if (raw === undefined) return "again";
   if (raw === null) return "done";
@@ -180,7 +182,7 @@ async function filterKey<T>(key: string, others: (items: T[], me: string | null)
   } catch {
     return "broken";
   }
-  const kept = others(items, me);
+  const kept = ids.reduce((l, id) => others(l, id), items);
   if (kept.length === items.length && kept.length) return "done";
   try {
     // nothing of anyone else: the key goes (what was read is known, nothing can be lost)
@@ -190,10 +192,10 @@ async function filterKey<T>(key: string, others: (items: T[], me: string | null)
     return "again";
   }
 }
-async function filterShared(me: string | null): Promise<Filtered> {
-  const out = await filterKey<OwnedItem>(OUTBOX_KEY, othersOf, me);
+async function filterShared(ids: readonly (string | null)[]): Promise<Filtered> {
+  const out = await filterKey<OwnedItem>(OUTBOX_KEY, othersOf, ids);
   // the money changes the server refused: other people's stay too (review #263 №2)
-  const rej = await filterKey<RejectedOp>(REJECTED_KEY, rejectedOthers, me);
+  const rej = await filterKey<RejectedOp>(REJECTED_KEY, rejectedOthers, ids);
   if (out === "again" || rej === "again") {
     warn(`the shared outbox was not filtered (${out}, ${rej}): again on the next start`);
     return "again";
@@ -211,13 +213,20 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   // the deletion only — the session; unknown → null: only ops without an owner go
   const session = orSession ? (await supabase.auth.getSession().catch(() => ({ data: { session: null } }))).data.session : null;
   const me = userId || session?.user.id || null;
+  // an older deletion whose shared outbox is still to filter («filter:u0»): its person goes too, never forgotten (#911)
+  const prior = (await readKey(WIPE_PENDING_KEY)) ?? null;
+  const before = prior ? pendingOf(prior) : null;
+  const ids = before?.filterOnly ? [...before.userIds, me] : [me];
+  // no mark yet: set before the slow part, so an app killed here wipes again on the next start (review of #911 №3)
+  if (!prior) await AsyncStorage.setItem(WIPE_PENDING_KEY, me ?? "1").catch(() => {});
   forgetDeviceState(wipedOnDelete, { userId: me });
+  ids.filter((x) => x !== me).forEach(forgetSharedOps);
   // the shared keys are filtered in place, never removed and written back: a failed read or write keeps other
   // people's ops (#911: a read that failed was taken for «empty» and the outbox removed)
-  const shared = await filterShared(me);
+  const shared = await filterShared(ids);
   const wiped = await wipeDevice(deviceStore, warn, me, [OUTBOX_KEY, REJECTED_KEY]);
   // the rest is gone: the next start only filters the shared keys again (never the next person's cache and drafts)
-  if (wiped && shared === "again") await AsyncStorage.setItem(WIPE_PENDING_KEY, `${FILTER_PENDING}${me ?? "1"}`).catch(() => {});
+  if (wiped && shared === "again") await AsyncStorage.setItem(WIPE_PENDING_KEY, filterMark(ids)).catch(() => {});
 }
 
 /**

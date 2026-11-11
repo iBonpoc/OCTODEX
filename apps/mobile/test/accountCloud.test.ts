@@ -237,3 +237,71 @@ describe("unit:accountCloud — the shared outbox when the device fails (#911)",
     expect(ids("octo.cloud.v1.rejected")).toEqual(["r9"]);
   }, 10_000);
 });
+
+describe("unit:accountCloud — the repeat that only filters (review of #911)", () => {
+  const at = new Date().toISOString();
+  const op = (id: string, userId: string) => ({ id, op: { k: "x", id }, at, tries: 0, owner: { userId, companyId: "c1" } });
+  const ids = (k: string) => JSON.parse(storage.get(k)!).map((o: { id: string }) => o.id);
+
+  it("«filter:» never wipes the device in memory (the person signed in now keeps sending); only the shared ops are told", async () => {
+    const { onSharedForget } = await import("../src/data/outboxOwner");
+    let wiped = 0;
+    const told: (string | null)[] = [];
+    const off = onDeviceForgotten(() => void (wiped += 1));
+    const offShared = onSharedForget((id) => void told.push(id));
+    storage.set("octo.outbox.v1", JSON.stringify([op("old", "u1"), op("theirs", "u9")]));
+    storage.set("octo.wipe.pending.v1", "filter:u1");
+    await wipeIfPending();
+    off();
+    offShared();
+    expect(wiped).toBe(0);
+    expect(told).toEqual(["u1"]);
+    expect(ids("octo.outbox.v1")).toEqual(["theirs"]);
+  });
+
+  it("a later deletion before the repeat: the earlier person's ops go too, never forgotten in the mark", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([op("u0op", "u0"), op("u1op", "u1"), op("theirs", "u9")]));
+    storage.set("octo.wipe.pending.v1", "filter:u0");
+    failGet.add("octo.outbox.v1");
+    await finishOnDevice(); // u1 deleted, the outbox still not read
+    expect(storage.get("octo.wipe.pending.v1")).toBe("filter:u0,u1");
+    failGet.clear();
+    await wipeIfPending();
+    expect(ids("octo.outbox.v1")).toEqual(["theirs"]);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  }, 15_000);
+
+  it("the mark is set before the slow part: an app killed while it filters wipes again on the next start", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([op("theirs", "u9")]));
+    let markWhileReading: string | undefined;
+    const real = storage.get.bind(storage);
+    storage.get = (k: string) => {
+      if (k === "octo.outbox.v1") markWhileReading = real("octo.wipe.pending.v1");
+      return real(k);
+    };
+    await finishOnDevice();
+    storage.get = real;
+    expect(markWhileReading).toBe("u1");
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false); // all done: the wipe takes it away
+  });
+
+  it("the wipe itself fails while the outbox was not read: the whole wipe is repeated («u1»), not only the filter", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine", "u1"), op("theirs", "u9")]));
+    failGet.add("octo.outbox.v1");
+    const { default: AS } = await import("@react-native-async-storage/async-storage");
+    const realRemove = AS.multiRemove;
+    AS.multiRemove = async () => {
+      throw new Error("disk");
+    };
+    await finishOnDevice();
+    AS.multiRemove = realRemove;
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1");
+  }, 10_000);
+
+  it("a broken refused-changes record is left as it is, no mark", async () => {
+    storage.set("octo.cloud.v1.rejected", "{broken");
+    await finishOnDevice();
+    expect(storage.get("octo.cloud.v1.rejected")).toBe("{broken");
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+});

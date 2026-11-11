@@ -1321,3 +1321,26 @@ describe("unit:storeSync — the device does not give the outbox back (A-01, #75
     expect(valueOf(r).queue).toBeDefined();
   });
 });
+
+describe("unit:storeSync — the repeat on start that only filters the shared outbox (review of #911 №1)", () => {
+  it("the deleted person's and ownerless ops never come back from memory, never adopted, never sent", { timeout: 15_000 }, async () => {
+    const { wipeIfPending } = await import("../src/cloud/account");
+    const u9 = { userId: "u9", companyId: "c1" };
+    seedOutbox(owned({ userId: "u1", companyId: "c1" }, 1), owned(null, 2), owned(u9, 3));
+    storage.set("octo.wipe.pending.v1", "filter:u1");
+    signIn("u9", "c1");
+    root = render(StoreProvider as (p: P) => unknown, { children: null });
+    void wipeIfPending(); // AuthProvider's effect, after the store's (a child's) effects
+    await settle();
+    answerLoads();
+    await settle();
+    await wait(1700);
+    await settle();
+    for (const s of server.sends) s.d.resolve();
+    await settle();
+    await wait(300);
+    expect(server.sends.map((x) => (x.op as { id: string }).id)).toEqual(["u9@c1#3"]); // before: «nobody#2» adopted and sent as u9's
+    expect(stored().map((x) => x.id)).toEqual([]); // u9's went out; nothing of u1 or ownerless written back
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+});
