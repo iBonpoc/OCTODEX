@@ -1,12 +1,13 @@
 /**
  * e2e 214 — «Замеры»: где мои замеры (основатель 09.11, версия 475: «из замера вышел — замеры никуда не сохраняются,
  * черновиков нет»; docs/specs/33-gutters-canvas.md П20.22). Every view.
- * - «＋» → «Замер желобов» (было «Замерить здесь») → two gutters → back home; «＋» → «Замеры» → a card «Черновик без клиента», «Желобов: 2»,
- *   «Черновик»; it opens the same drawing (two lines);
+ * - «＋» → «Замер желобов» (было «Замерить здесь») → two gutters → back home; «＋» → «Замеры» → a card «Без клиента», «Желобов: 2»,
+ *   «Черновик»; it opens the measurement's card (spec 33 П25.3 А; 1280 — beside the list), «Править чертёж» — the same
+ *   drawing (two lines);
  * - «Новый замер» opens an empty canvas; a second drawing makes a second card, the newest first.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, pressWhenStill } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -55,9 +56,11 @@ exports.run = async (h) => {
   await fab("list");
   await waitFor(async () => (await cards().count()) === 1, "one card in «Замеры»");
   const text = await cards().first().innerText();
-  h.expect(/Черновик без клиента/.test(text) && /Желобов: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
+  h.expect(/Без клиента/.test(text) && /Желобов: 2/.test(text) && /Черновик/.test(text), `the draft's card (${text.replace(/\n/g, " | ")})`);
   await h.shot("list");
   await cards().first().click();
+  await tid("view-screen").waitFor({ timeout: 8000 });
+  await pressWhenStill(tid("view-edit").getByRole("button"));
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await waitFor(async () => (await lines()) === 2, "it opens the same drawing");
 

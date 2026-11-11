@@ -1,4 +1,5 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
+import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { component, size, space, type StatusName } from "@octo/design-tokens";
@@ -73,9 +74,9 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
         <T v="body" numberOfLines={1} style={{ flex: 1 }}>
           {job?.title}
         </T>
-        {v.amountDueCents > 0 ? (
+        {visitDueCents(db, v) > 0 ? (
           <T v="body" w="semibold" tabular>
-            {money(v.amountDueCents)}
+            {money(visitDueCents(db, v))}
           </T>
         ) : null}
       </RowView>

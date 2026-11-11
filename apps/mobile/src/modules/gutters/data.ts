@@ -70,10 +70,20 @@ export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: str
   return of.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
 }
 
-/** where «Замер желобов» goes for a lead / an address: its newest measurement, else a new one linked to it */
-export function measureHref(draw: string, g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): { href: string; open?: MeasurementRow } {
+/** the module's two doors of a measurement: the canvas (a new one is drawn there) and its card («Просмотр замера») */
+export interface MeasureDoors {
+  draw: string;
+  view: string;
+}
+
+/**
+ * where «Замер желобов» goes for a lead / an address (spec 33 П25.3 В): its newest measurement's card, else the canvas
+ * of a new one linked to it (nothing to look at yet; «Готово» → the card)
+ */
+export function measureHref(to: MeasureDoors, g: GutterData, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }): { href: string; open?: MeasurementRow } {
   const m = latestFor(g, by);
-  if (m) return { href: `${draw}?m=${encodeURIComponent(m.id)}`, open: m };
+  if (m) return { href: `${to.view}?m=${encodeURIComponent(m.id)}`, open: m };
+  const draw = to.draw;
   const q = [by.leadId ? `lead=${encodeURIComponent(by.leadId)}` : "", by.propertyId ? `property=${encodeURIComponent(by.propertyId)}` : ""].filter(Boolean).join("&");
   return { href: `${draw}?${q}` };
 }
@@ -82,10 +92,10 @@ export function measureHref(draw: string, g: GutterData, by: { leadId?: string; 
  * «Замер желобов» on a client's card (spec 33 П24 А3, #697): the measurement is always an address's — one address →
  * straight to it; several → pick; none → the client's card says to add one first
  */
-export function clientStart(draw: string, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
+export function clientStart(to: MeasureDoors, db: Pick<DB, "moduleData" | "leads" | "properties">, customerId: string) {
   const g = gutterData(db);
   const places = db.properties.filter((p) => p.customerId === customerId);
-  const go = (propertyId: string) => measureHref(draw, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
+  const go = (propertyId: string) => measureHref(to, g, { propertyId, leadIds: db.leads.filter((l) => l.propertyId === propertyId).map((l) => l.id) }).href;
   if (!places.length) return { kind: "none" as const };
   if (places.length === 1) return { kind: "go" as const, href: go(places[0]!.id) };
   return { kind: "pick" as const, places: places.map((p) => ({ id: p.id, address: p.address, city: p.city, href: go(p.id) })) };
@@ -146,6 +156,56 @@ export function removeMeasurement(store: ModuleStore, ref: string): (() => void)
     coalesceKey: ref,
   });
   return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/**
+ * «Точность замера» from the measurement's card (spec 33 П25.3 Б1; the same choice as the canvas's «⋯», #739): only the
+ * measurement's own field — the drawing is not changed, so its status (made into an estimate or not) stays.
+ */
+export function setAccuracy(store: ModuleStore, ref: string, accuracy: "rough" | "tape"): (() => void) | null {
+  const m = gutterData(store.db).measurements.find((x) => x.id === ref);
+  if (!m || (m.accuracy ?? "rough") === accuracy) return null;
+  const next: MeasurementRow = { ...m, accuracy };
+  const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(next) }, apply: (d) => withGutterData(d, putMeasurement(next)), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/**
+ * The rows of a copy (pure): a new measurement with the same link and accuracy, a draft (no estimate of it yet); every
+ * element with a new id — a downspout follows its gutter's new id. No estimates, sends or photos (spec 33 П25.3 Г).
+ */
+export function copyRows(m: MeasurementRow, elements: readonly ElementRow[], newId: () => string): { m: MeasurementRow; elements: ElementRow[] } {
+  const id = newId();
+  const ids = new Map(elements.map((e) => [e.id, newId()]));
+  const copy: MeasurementRow = { id, label: m.label, status: "draft", propertyId: m.propertyId, leadId: m.leadId, ...(m.accuracy ? { accuracy: m.accuracy } : {}) };
+  return {
+    m: copy,
+    elements: elements.map((e) => {
+      const runId = (e.geom as { runId?: unknown }).runId;
+      const geom = e.kind === "downspout" && typeof runId === "string" ? { ...e.geom, runId: ids.get(runId) ?? runId } : { ...e.geom };
+      return { ...e, id: ids.get(e.id)!, measurementId: id, geom, attrs: { ...e.attrs } };
+    }),
+  };
+}
+
+/**
+ * «Дублировать» (spec 33 П25.3 Г): the copy is written as the canvas writes a new one — the measurement first (its
+ * elements refer to it), then each element. One «Отменить» takes all of it back. The module not active → nothing.
+ */
+export function duplicateMeasurement(store: ModuleStore, ref: string, newId: () => string, now = () => new Date().toISOString()): { id: string; undo: () => void } | null {
+  const v = measurementOf(gutterData(store.db), ref);
+  if (!v) return null;
+  const c = copyRows(v.m, v.elements, newId);
+  const at = now();
+  const undos: (() => void)[] = [];
+  const put = (u: unknown) => {
+    if (typeof u === "function") undos.push(u as () => void);
+    return u != null;
+  };
+  const row: MeasurementRow = { ...c.m, updatedAt: at };
+  if (!put(store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(c.m) }, apply: (d) => withGutterData(d, putMeasurement(row)), coalesceKey: c.m.id, made: [c.m.id] }))) return null;
+  for (const e of c.elements) put(store.moduleOp(KEY, { kind: K.eSave, payload: { e: e as ElementRow & Record<string, unknown> }, apply: (d) => withGutterData(d, putElement(e)), coalesceKey: e.id, made: [e.id] }));
+  return { id: c.m.id, undo: () => [...undos].reverse().forEach((u) => u()) };
 }
 
 /** what «Привязать» offers for a typed text: open leads and clients by name (and a lead's address), the first few */

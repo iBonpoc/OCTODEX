@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { centre, chainOf, houseSide, sameStory, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -327,7 +327,7 @@ export function flipFace(d: Drawing, runId: string): Drawing {
   if (!d.runs.some((r) => r.id === runId)) return d;
   // the whole line turns with this gutter: one face along it (each flipped on its own could keep two faces)
   const r = d.runs.find((x) => x.id === runId)!;
-  return alongChain(d, runId, otherSide(houseSide(r, centre(d.runs))));
+  return alongChain(d, runId, otherSide(houseSides(d)(r)));
 }
 
 /**
