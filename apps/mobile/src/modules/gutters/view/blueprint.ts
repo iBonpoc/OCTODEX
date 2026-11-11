@@ -9,7 +9,7 @@
 import { drawingPrint as DP } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import type { DocAttachPage, DocPrim } from "@/features/docPages";
-import { centre, cornerCut, findCorners, houseSide, runEnds, runLengthIn, type Drawing, type P } from "../geometry";
+import { cornerCut, findCorners, houseSides, runEnds, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen } from "../canvas/format";
 import { fitView, storyOf, toScreen } from "../canvas/scene";
 
@@ -95,7 +95,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   const stampY = H - m / 2 - stampH;
   line([m / 2, stampY], [W - m / 2, stampY], DP.thinW);
 
-  const c = centre(d.runs);
+  const sideOf = houseSides(d);
   const stories = new Set(d.runs.map((r) => storyOf(r.attrs.story)));
   const many = stories.size > 1;
   const found = findCorners(d);
@@ -107,7 +107,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     const u: [number, number] = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
     // away from the house on the sheet: plan «right of a→b» is (vy, −vx); y is flipped on the sheet
-    const sgn = houseSide(r, c) === "L" ? 1 : -1;
+    const sgn = sideOf(r) === "L" ? 1 : -1;
     const out: [number, number] = [-u[1] * sgn, u[0] * sgn];
     line(a, b, DP.runW);
     return { r, n: i + 1, a, b, u, out, L };

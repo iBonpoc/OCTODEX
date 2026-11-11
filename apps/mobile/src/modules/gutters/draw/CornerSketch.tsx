@@ -17,7 +17,7 @@ import { tapeIn } from "../canvas/attrs";
 import { ftIn } from "../canvas/format";
 import { labelWidth } from "../canvas/labels";
 import { countOnKeyboardHide, triKey } from "./triangleCount";
-import { angleFromTriangle, centre, houseSide, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
+import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
 
 /**
  * The sketch (founder 09.11: «too small, the numbers overlap»): a scheme, not to scale — both gutters drawn the same
@@ -31,14 +31,14 @@ export function CornerSketch({ d, f, cut, w }: { d: Drawing; f: FoundCorner; cut
   const FS = font.size.caption;
   const H = Math.round(Math.min(w * 0.8, space[8] * 9));
   const geo = useMemo(() => {
-    const ctr = centre(d.runs);
+    const sideOf = houseSides(d);
     // unit directions from the corner along each gutter, on the screen (y down)
     const legs = f.runs.map(({ id, end }) => {
       const r = d.runs.find((x) => x.id === id)!;
       const far: P = end ? r.a : r.b;
       const vx = far[0] - f.at[0], vy = -(far[1] - f.at[1]);
       const L = Math.hypot(vx, vy) || 1;
-      return { id, u: [vx / L, vy / L] as [number, number], side: houseSide(r, ctr), lead: end ? 1 : 0 };
+      return { id, u: [vx / L, vy / L] as [number, number], side: sideOf(r), lead: end ? 1 : 0 };
     });
     // the face side of each leg: away from the house (the run's right of a→b when the house is on its left)
     const off = space[4];
