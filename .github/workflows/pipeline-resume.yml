@@ -25,7 +25,7 @@ jobs:
          github.event.action == 'unlabeled' && github.event.label.name == 'остановка')) ||
       (github.event_name == 'pull_request' && github.event.label.name == 'починка')
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - name: Re-run

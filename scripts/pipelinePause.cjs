@@ -22,7 +22,12 @@ function stopsFrom(list) {
   return (Array.isArray(list) ? list : []).filter((i) => i && !i.pull_request).map((i) => ({ number: i.number, title: i.title }));
 }
 
-module.exports = { STOP_LABEL, FIX_LABEL, decide, stopsFrom };
+/** the live label list when it is an array of {name}; otherwise the fallback (a broken answer must not drop «починка») */
+function liveLabels(list, fallback) {
+  return Array.isArray(list) ? list.map((l) => (typeof l === "string" ? l : l && l.name)).filter(Boolean) : fallback;
+}
+
+module.exports = { STOP_LABEL, FIX_LABEL, decide, stopsFrom, liveLabels };
 
 if (require.main === module) {
   const { execFileSync } = require("node:child_process");
@@ -30,7 +35,15 @@ if (require.main === module) {
   try {
     const out = execFileSync("gh", ["api", "-X", "GET", `repos/${repo}/issues`, "-f", `labels=${STOP_LABEL}`, "-f", "state=open", "-f", "per_page=100"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
     const stops = stopsFrom(JSON.parse(out || "[]"));
-    const prLabels = (process.env.PR_LABELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    // The labels are read LIVE: the event carries the labels of the moment the PR was opened/pushed, but «починка» is often added
+    // a minute later, while the run waits for a runner (probe #1129: the run stayed red after the label). PR_LABELS is the fallback.
+    let prLabels = (process.env.PR_LABELS || "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (process.env.PR_NUMBER) {
+      try {
+        const live = JSON.parse(execFileSync("gh", ["api", `repos/${repo}/issues/${process.env.PR_NUMBER}/labels`], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) || "[]");
+        prLabels = liveLabels(live, prLabels);
+      } catch { /* keep the event's labels */ }
+    }
     const res = decide({ event: process.env.EVENT_NAME || "", prLabels, stops });
     if (!res.pause) { console.log(res.message); process.exit(0); }
     console.log(`::error::${res.message}`);
