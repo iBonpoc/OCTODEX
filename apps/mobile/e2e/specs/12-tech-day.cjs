@@ -3,6 +3,9 @@ const { dayKey, todayKey } = require("../companyTime.cjs");
 /** Technician day: summary → open next visit → en route → on site → photo (view, delete, undo) → own checklist item → all checked → sign → pay → progress grows. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
+// The photo viewer's delete/undo toast comes after an async step with no screen change to wait for: this spec still uses the
+// fixed waits of h.go / h.click (#906 п.4 follow-up: move it to waiting for the saved state).
+exports.fixedWaits = true;
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
