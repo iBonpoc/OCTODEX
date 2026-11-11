@@ -12,12 +12,19 @@ vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID()
 const storage = new Map<string, string>();
 /** keys the device fails to read (A-01) */
 const failGet = new Set<string>();
+/** keys whose next N reads fail (#926: a passing SQLITE_BUSY) */
+const failGetN = new Map<string, number>();
 /** key prefixes the device refuses to write (full storage) */
 const failSetPrefix: string[] = [];
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: async (k: string) => {
       if (failGet.has(k)) throw new Error("SQLITE_BUSY");
+      const n = failGetN.get(k) ?? 0;
+      if (n > 0) {
+        failGetN.set(k, n - 1);
+        throw new Error("SQLITE_BUSY");
+      }
       return storage.get(k) ?? null;
     },
     setItem: async (k: string, v: string) => {
@@ -125,6 +132,7 @@ let root: Root<P> | null = null;
 beforeEach(() => {
   storage.clear();
   failGet.clear();
+  failGetN.clear();
   failSetPrefix.length = 0;
   server.loads.length = 0;
   server.sends.length = 0;
@@ -1307,14 +1315,14 @@ describe("unit:storeSync — the device does not give the outbox back (A-01, #75
     expect(seen.at(-1)!.notSaved).toBe(true);
     expect(storage.get("octo.outbox.v1")).toBe('[{"id":"o1"},');
   });
-  it("a cache the device cannot read: the app opens (the cache starts fresh, round 2 №2)", { timeout: 15_000 }, async () => {
+  it("a cache the device cannot read: the app opens (the cache starts fresh, round 2 №2)", { timeout: 20_000 }, async () => {
     storage.set("octo.db.v5", JSON.stringify({ day: "x", db: {} }));
     failGet.add("octo.db.v5");
     let called = false;
     const readError = () => ((called = true), "READ_ERROR");
     const r = (root = render(StoreProvider as unknown as (p: P) => unknown, { children: null, readError } as unknown as P));
     await settle();
-    await wait(1200);
+    await wait(8800); // a cache is tried ~8 s before it starts fresh (#926)
     await settle();
     failGet.clear();
     expect(called).toBe(false);
@@ -1343,6 +1351,29 @@ describe("unit:storeSync — the repeat on start that only filters the shared ou
     expect(stored().map((x) => x.id)).toEqual([]); // u9's went out; nothing of u1 or ownerless written back
     expect(storage.has("octo.wipe.pending.v1")).toBe(false);
   });
+});
+
+describe("unit:storeSync — the cache the device did not give at first (#926, review of #1037 №1)", () => {
+  it("every first try fails, the next read gives it: the company's data is shown, a change offline goes onto it", async () => {
+    const company = makeSeed();
+    company.customers = company.customers.map((c) => ({ ...c, name: `KEPT ${c.name}` }));
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: company }));
+    failGetN.set("octo.cloud.v1.c1.u1", 5); // SQLITE_BUSY through all the first tries
+    signIn("u1", "c1"); // no network: the reload never answers
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    for (let n = 0; n < 100; n++) {
+      await wait(100);
+      await settle();
+      if (r.out && valueOf(r).db.customers.some((c) => c.name.startsWith("KEPT"))) break;
+    }
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("KEPT"))).toBe(true); // before: an empty company
+    valueOf(r).saveCompany({ name: "New name" }); // a change without the network
+    await wait(400);
+    await settle();
+    const disk = storage.get("octo.cloud.v1.c1.u1") ?? "";
+    expect(disk).toContain("KEPT"); // before: «empty + the change»
+    expect(disk).toContain("New name");
+  }, 20_000);
 });
 
 describe("unit:storeSync — two people one after the other on one phone (#864, X-04)", () => {
@@ -1418,5 +1449,46 @@ describe("unit:storeSync — two people one after the other on one phone (#864, 
     await settle();
     expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
     expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+  });
+});
+
+describe("unit:storeSync — sales take the deposit through the server's deposit function (#868, 17, T73)", () => {
+  const withDeposit = () => {
+    const d = makeSeed();
+    const e = d.estimates.find((x) => x.id === "e5")!;
+    e.depositPaidAt = undefined;
+    // the seed's own job of e5 (its deposit paid) leaves: one job, one unpaid deposit invoice
+    const old = d.jobs.filter((j) => j.estimateId === e.id).map((j) => j.id);
+    d.invoices = d.invoices.filter((i) => !old.includes(i.jobId ?? ""));
+    d.jobs = [...d.jobs.filter((j) => !old.includes(j.id)), { id: "j-dep", customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: e.id }];
+    d.invoices = [...d.invoices, { id: "i-dep", customerId: e.customerId, jobId: "j-dep", totalCents: 34200, paidCents: 0, dueDate: new Date().toISOString(), kind: "deposit", title: "Deposit" }];
+    return d;
+  };
+  const sentAs = async (dbRole: string) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: dbRole });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(withDeposit()));
+    await settle();
+    (valueOf(r) as unknown as { payDeposit: (id: string, m: string) => void }).payDeposit("e5", "cash");
+    await wait(1700); // the outbox tick
+    await settle();
+    return server.sends.map((x) => x.op as { k: string; paymentId?: string; method?: string; amountCents?: number; invoiceId?: string });
+  };
+  it("sales: the deposit invoice is on the phone already — sent as estimate.deposit (the database refuses sales a payment)", async () => {
+    const ops = await sentAs("sales");
+    expect(ops.map((o) => o.k)).toEqual(["estimate.deposit"]); // before: payment.record → 42501
+    const op = ops[0]!;
+    // the payment on the phone is the one the server writes (the same id), the method as chosen, no sum from the phone
+    const local = (valueOf(root!) as unknown as { db: { payments: { id: string; invoiceId: string; method: string }[] } }).db.payments.filter((x) => x.invoiceId === "i-dep");
+    expect(local).toHaveLength(1);
+    expect(op.paymentId).toBe(local[0]!.id);
+    expect(op.method).toBe("cash");
+    expect(op.invoiceId).toBe("i-dep");
+    expect(op.amountCents).toBeUndefined();
+  });
+  it("the office: as before, payment.record", async () => {
+    expect((await sentAs("office")).map((o) => o.k)).toEqual(["payment.record"]);
   });
 });
