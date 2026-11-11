@@ -101,12 +101,86 @@ export function centre(runs: Pick<DrawnRun, "a" | "b">[]): P {
 /** two runs on the same storey (none set — the 1st): only they join at their ends */
 export const sameStory = (a: Pick<DrawnRun, "attrs">, b: Pick<DrawnRun, "attrs">) => (Number(a.attrs.story) || 1) === (Number(b.attrs.story) || 1);
 
-/** Which side of the run (looking a→b) the house is on. */
+/** Which side of the run (looking a→b) the point `c` is on (the old guess: the centre of all points, #758). */
 export function autoHouseSide(r: Pick<DrawnRun, "a" | "b">, c: P): "L" | "R" {
   return cross(sub(r.b, r.a), sub(c, r.a)) > 0 ? "L" : "R";
 }
 
-export const houseSide = (r: DrawnRun, c: P) => r.houseSide ?? autoHouseSide(r, c);
+/**
+ * The house's side of every run, guessed (#758, audit G-01): one gutter line round the house (runs joined end to end on
+ * one storey) has the house on ONE side all along it. The line is walked end to end; its signed area says that side —
+ * a closed outline exactly, an open line as if its two free ends were joined (round an outside corner or three sides of
+ * a house the house is inside). The centre of all points (the old guess) was outside an L-shaped (Г) house: corners
+ * swapped inside ↔ outside, both caps the same hand, the face lengths of the crew's sheet off by the gutter's size.
+ * A line with no area (one straight run, straight joins) or a branching one keeps the old guess. A run's own
+ * `houseSide` (flipFace) always wins — `houseSides` below.
+ */
+export function autoHouseSides(runs: readonly DrawnRun[], tolIn = 1): Map<string, "L" | "R"> {
+  const out = new Map<string, "L" | "R">();
+  const c = centre([...runs]);
+  const near = (p: P, q: P) => dist(p, q) <= tolIn;
+  for (const r of runs) {
+    if (out.has(r.id)) continue;
+    const ids = chainOf({ runs: [...runs] }, r.id, tolIn);
+    const chain = runs.filter((x) => ids.has(x.id));
+    const walk = walkChain(chain, near);
+    const area = walk ? signedArea(walk.points) : 0;
+    // less than a sliver (1 in² per inch of line): a straight line — no side from its shape
+    const lineIn = chain.reduce((n, x) => n + dist(x.a, x.b), 0);
+    if (!walk || Math.abs(area) < lineIn) {
+      for (const x of chain) out.set(x.id, autoHouseSide(x, c));
+      continue;
+    }
+    const inside: "L" | "R" = area > 0 ? "L" : "R";
+    for (const s of walk.steps) out.set(s.id, s.forward ? inside : inside === "L" ? "R" : "L");
+  }
+  return out;
+}
+
+/** the side of every run: its own (turned by hand), else the guess of its line */
+export function houseSides(d: Pick<Drawing, "runs">): (r: DrawnRun) => "L" | "R" {
+  const auto = autoHouseSides(d.runs);
+  return (r) => r.houseSide ?? auto.get(r.id) ?? "R";
+}
+
+/** twice the signed area of a polygon (shoelace); > 0 — its inside is on the left of the walk (the same `cross` as above) */
+function signedArea(ps: readonly P[]): number {
+  let s = 0;
+  for (let i = 0; i < ps.length; i++) s += cross(ps[i]!, ps[(i + 1) % ps.length]!);
+  return s;
+}
+
+/**
+ * One line walked end to end: from a free end (an open line) or from any run (a closed one), each run once, `forward`
+ * when walked a→b. Null when the runs branch (an end shared by three) or do not make one line.
+ */
+function walkChain(chain: readonly DrawnRun[], near: (p: P, q: P) => boolean): { points: P[]; steps: { id: string; forward: boolean }[] } | null {
+  const ends = chain.flatMap((r) => [r.a, r.b]);
+  const degree = (p: P) => ends.filter((q) => near(p, q)).length;
+  if (ends.some((p) => degree(p) > 2)) return null;
+  const free = chain.find((r) => degree(r.a) === 1 || degree(r.b) === 1);
+  const first = free ?? chain[0]!;
+  let forward = free ? degree(first.a) === 1 : true;
+  const steps: { id: string; forward: boolean }[] = [{ id: first.id, forward }];
+  const points: P[] = [forward ? first.a : first.b];
+  let at = forward ? first.b : first.a;
+  const used = new Set([first.id]);
+  while (used.size < chain.length) {
+    const next = chain.find((r) => !used.has(r.id) && (near(r.a, at) || near(r.b, at)));
+    if (!next) return null;
+    forward = near(next.a, at);
+    points.push(at);
+    steps.push({ id: next.id, forward });
+    used.add(next.id);
+    at = forward ? next.b : next.a;
+  }
+  points.push(at);
+  // a closed outline ends where it began: that point once
+  if (!free && points.length > 1 && near(points[0]!, points[points.length - 1]!)) points.pop();
+  return { points, steps };
+}
+
+
 
 /**
  * The end cap at a run's start (0) / end (1): left or right, looking at the gutter's face (from outside the house).
@@ -151,7 +225,7 @@ export interface FoundCorner {
  * Turns under 20° are a straight join (no corner).
  */
 export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] {
-  const c = centre(d.runs);
+  const side = houseSides(d);
   const out: FoundCorner[] = [];
   const rs = d.runs;
   for (let i = 0; i < rs.length; i++) {
@@ -170,7 +244,7 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
           const t = Math.abs(turn);
           if (t < MIN_TURN_DEG) continue;
           // house side of A in the direction we walk (towards the point)
-          const sideA = houseSide(A, c);
+          const sideA = side(A);
           const walkSide = ea ? sideA : (sideA === "L" ? "R" : "L");
           const towardHouse = (turn > 0 && walkSide === "L") || (turn < 0 && walkSide === "R");
           const kind = t < 70 ? "bay" : towardHouse ? "out" : "in";
@@ -266,13 +340,13 @@ export function splashOff(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">
 }
 
 export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
-  const c = centre(d.runs);
+  const side = houseSides(d);
   const found = findCorners(d);
   const ends = runEnds(d, found);
   const runs: MeasuredRun[] = d.runs.map((r) => {
     // the corner methods are the drawing's, not the engine's run input
     const { cornerMethod: _cm, noSplash: _ns, ...attrs } = r.attrs;
-    return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: houseSide(r, c), ends: ends[r.id]! };
+    return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: side(r), ends: ends[r.id]! };
   });
   const byId = new Map(d.runs.map((r) => [r.id, r]));
   const corners: MeasuredCorner[] = found.map((f) => {
