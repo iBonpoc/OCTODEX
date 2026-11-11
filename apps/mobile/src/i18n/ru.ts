@@ -27,6 +27,11 @@ export const ru = {
 
   "quick.title": "Быстрые действия",
   "quick.lead": "Новый лид",
+  "quick.estimateNew": "Составить смету",
+  "quick.estimateHint": "Цена для клиента: позиции и итог",
+  "quick.jobNew": "Создать работу",
+  "quick.jobHint": "Когда уже договорились: адрес, тип, расписание",
+  "client.makeEstimate": "Составить смету",
   "quick.estimate": "Смета",
   "quick.photo": "Фото",
   "quick.receipt": "Расход по чеку",

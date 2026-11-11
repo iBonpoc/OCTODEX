@@ -28,6 +28,11 @@ export const en: Dict = {
 
   "quick.title": "Quick actions",
   "quick.lead": "New lead",
+  "quick.estimateNew": "Make an estimate",
+  "quick.estimateHint": "The price for the client: items and total",
+  "quick.jobNew": "Create a job",
+  "quick.jobHint": "When it is agreed: address, type, schedule",
+  "client.makeEstimate": "Make an estimate",
   "quick.estimate": "Estimate",
   "quick.photo": "Photo",
   "quick.receipt": "Receipt expense",

@@ -171,6 +171,8 @@ export interface FabItem {
   id: FabId | `module.${string}`;
   label: DictKey;
   icon: IconKey;
+  /** one line under the label in the «＋» sheet: what this makes and when (#1094: the estimate and the job look alike) */
+  hint?: DictKey;
   /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
   href?: string;
   act?: "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call" | "message";
@@ -196,11 +198,11 @@ const q = (o: Record<string, string | undefined>) => {
   return s ? `?${s}` : "";
 };
 
-const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
+const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey; hint?: DictKey }> = {
   lead: { label: "quick.lead", icon: "user" },
   client: { label: "clients.new", icon: "users" },
-  job: { label: "job3.newJob", icon: "wrench" },
-  estimate: { label: "quick.estimate", icon: "invoice" },
+  job: { label: "quick.jobNew", icon: "wrench", hint: "quick.jobHint" },
+  estimate: { label: "quick.estimateNew", icon: "invoice", hint: "quick.estimateHint" },
   expense: { label: "quick.receipt", icon: "wallet" },
   visit: { label: "sch.title", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },
@@ -229,7 +231,7 @@ const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): 
  * Property, «Record a call», «New message» come with waves 3–6. «Lead» from a client — when lead/new takes customerId.
  */
 export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
-  home: [lead, client, job, estimate(OFFICE), expense()],
+  home: [lead, client, estimate(OFFICE), job, expense()],
   // the schedule is the planners' (docs/specs/03 Р7): no «＋» on Plan for the technician
   // wave 5 (#187/#188): an event and a day off open the Plan's own EventSheet; the planners' only (Р7)
   plan: [
@@ -246,7 +248,8 @@ export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
   // wave 6: the task form asks «к чему» itself (13 §2.4: nothing loose)
   tasks: [{ id: "task", act: "task" }],
   clients: [client],
-  client: [{ ...job, needs: (c) => !!c.customerId }, estimate(OFFICE, (c) => !!c.customerId)],
+  // #1094: the estimate first — it is what a client's card is opened for; the job is «when already agreed»
+  client: [estimate(OFFICE, (c) => !!c.customerId), { ...job, needs: (c) => !!c.customerId }],
   job: [
     { id: "visit", roles: PLANNERS, needs: (c) => !!c.jobId, href: (c) => `/job/schedule${q({ jobId: c.jobId })}` },
     estimate(OFFICE, (c) => !!c.customerId),

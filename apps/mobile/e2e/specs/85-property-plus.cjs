@@ -15,11 +15,11 @@ exports.run = async (h) => {
   h.expect((await p.getByRole("button", { name: "Осмотр", exact: true }).count()) === 1, "«Осмотр» stays on the card");
   await plus().click(); await p.waitForTimeout(400);
   await h.shot("plus");
-  await p.getByText("Новая работа", { exact: true }).last().click(); await p.waitForTimeout(600);
+  await p.getByText("Создать работу", { exact: true }).last().click(); await p.waitForTimeout(600);
   h.expect(p.url().includes(`/job/new`) && p.url().includes(`customerId=${prop.customerId}`) && p.url().includes("propertyId=p1"), `«Новая работа» is tied to the client and the property (${p.url()})`);
   await h.go("/property/p1");
   await plus().click(); await p.waitForTimeout(400);
-  await p.getByText("Смета", { exact: true }).last().click(); await p.waitForTimeout(600);
+  await p.getByText("Составить смету", { exact: true }).last().click(); await p.waitForTimeout(600);
   h.expect(p.url().includes("/estimate/new") && p.url().includes("propertyId=p1"), `«Смета» is tied to the property (${p.url()})`);
 
   // «do not service»: nothing new for this property

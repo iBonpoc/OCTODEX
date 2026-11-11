@@ -80,9 +80,16 @@ export function FabSheet({ visible, onClose, ...p }: FabProps & { visible: boole
             <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
               <Icon name={a.icon} s={size.iconMd} color={c.ink} />
             </View>
-            <T v="body" w="semibold" style={{ flex: 1 }}>
-              {t(a.label)}
-            </T>
+            <View style={{ flex: 1 }}>
+              <T v="body" w="semibold">
+                {t(a.label)}
+              </T>
+              {a.hint ? (
+                <T v="caption" tone="mut">
+                  {t(a.hint)}
+                </T>
+              ) : null}
+            </View>
           </Press>
         ))}
       </View>
