@@ -68,6 +68,8 @@ export interface Choices {
   wallKitByWall: Record<DsShape, Record<Wall, string>>;
   run: RunDefaults;
   ds: DsDefaults;
+  /** the company chose a downspout size itself (the key is stored): it stays on a 6″ gutter too (#767) */
+  dsSizeSet: boolean;
 }
 
 /** the supplier palettes from the founder's reference (docs/prototypes/gutters-ref/README.md): names, no prices */
@@ -219,7 +221,7 @@ export function choicesFor(raw: unknown): Choices {
     bottom: one(dr.bottom, offer.bottoms, "extension"),
     wall: one(dr.wall, WALLS, "wood"),
   };
-  return { offer, palette, hangerByMount, wallKitByWall, run, ds };
+  return { offer, palette, hangerByMount, wallKitByWall, run, ds, dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
 }
 
 /** the module's choices: what the canvas offered before the company's settings (M5c) */
@@ -364,7 +366,7 @@ export function readRules(raw: unknown): Rules {
   return {
     storyFt: num(r.storyFt, RULE_NUMS.storyFt),
     hangerSpacingIn: num(r.hangerSpacingIn, RULE_NUMS.hangerSpacingIn),
-    hangerExtra: bool(r.hangerExtra, d.hangerExtraPerRun > 0),
+    hangerExtra: bool(r.hangerExtra, d.hangerAtEnds),
     wastePct: num(r.wastePct, RULE_NUMS.wastePct),
     cutCornerIn: num(r.cutCornerIn, RULE_NUMS.cutCornerIn),
     runPerDsFt: num(r.runPerDsFt, RULE_NUMS.runPerDsFt),
@@ -419,7 +421,7 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
   return {
     storyHeightIn: r.storyFt * 12,
     hangerSpacingIn: Object.fromEntries(Object.keys(DEFAULT_HANGER_KITS).map((id) => [id, r.hangerSpacingIn])),
-    hangerExtraPerRun: r.hangerExtra ? 1 : 0,
+    hangerAtEnds: r.hangerExtra,
     wastePct: (r.wastePct / 100).toFixed(2),
     cutCornerAllowanceIn: r.cutCornerIn,
     maxRunPerDownspoutIn: r.runPerDsFt * 12,

@@ -176,8 +176,8 @@ export interface GutterRules {
   hangerKits: Record<string, HangerKit>;
   /** company spacing by kit id; a run's own spacing wins */
   hangerSpacingIn: Record<string, number>;
-  /** hangers per run = ceil(length / spacing) + this (1 = a hanger at both ends) */
-  hangerExtraPerRun: number;
+  /** a hanger at both ends of every run: floor(length / spacing) + 1 (40 ft at 2 ft → 21); off: ceil(length / spacing) */
+  hangerAtEnds: boolean;
   wallKits: Record<string, WallKit>;
   /** wall kit by downspout shape and wall */
   wallKitByWall: Record<string, Record<string, string>>;
@@ -232,7 +232,7 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   coilBlankIn: { "k.5": "11.875", "k.6": "15" },
   hangerKits: DEFAULT_HANGER_KITS,
   hangerSpacingIn: {},
-  hangerExtraPerRun: 0,
+  hangerAtEnds: true,
   wallKits: DEFAULT_WALL_KITS,
   wallKitByWall: DEFAULT_WALL_KIT_BY_WALL,
   defaultWall: "wood",
@@ -295,7 +295,7 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   if (typeof r.woodScrew.screw !== "string" || !r.woodScrew.screw.trim()) r.woodScrew = { ...r.woodScrew, screw: d.woodScrew.screw };
   if (typeof r.anchor !== "string" || !r.anchor.trim()) r.anchor = d.anchor;
   for (const k of POSITIVE) if (!okPos(r[k])) (r as unknown as Record<string, unknown>)[k] = d[k];
-  if (!Number.isInteger(r.hangerExtraPerRun) || r.hangerExtraPerRun < 0) r.hangerExtraPerRun = 0;
+  if (typeof r.hangerAtEnds !== "boolean") r.hangerAtEnds = d.hangerAtEnds;
   if (!Number.isInteger(r.dsExtensionIn) || r.dsExtensionIn < 0) r.dsExtensionIn = 0;
   if (!Number.isInteger(r.cutCornerAllowanceIn) || r.cutCornerAllowanceIn < 0) r.cutCornerAllowanceIn = d.cutCornerAllowanceIn;
   return r;
@@ -567,10 +567,10 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
       joint("endcap", r);
     });
 
-    // hangers: the kit's parts × ceil(length / spacing) (+ one per run if the company wants hangers at both ends)
+    // hangers: the kit's parts × (a hanger every `spacing` and one at each end: floor(length / spacing) + 1; company can switch to ceil)
     const kit = rules.hangerKits[r.hanger];
     const spacing = [r.hangerSpacingIn, rules.hangerSpacingIn[r.hanger], kit?.spacingIn].find(okPos) ?? 24;
-    const hangers = len.div(spacing).ceil().add(rules.hangerExtraPerRun);
+    const hangers = len.gt(0) ? (rules.hangerAtEnds ? len.div(spacing).floor().add(1) : len.div(spacing).ceil()) : dec(0);
     if (kit) kitParts(kit.parts, "fasteners", hangers, { gutter: r, kitId: r.hanger });
     else {
       advice.push({ code: "hanger_kit_unknown", runId: r.id, hanger: r.hanger });

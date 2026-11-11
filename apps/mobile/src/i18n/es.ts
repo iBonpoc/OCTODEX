@@ -2738,7 +2738,7 @@ export const es: Dict = {
   "mod.gutters.set.rulesHint": "Así la app cuenta piezas y desperdicio en cada medición. Los valores por defecto son la práctica habitual; cámbielos a los suyos.",
   "mod.gutters.set.r.storyFt": "Altura del piso",
   "mod.gutters.set.r.hangerSpacingIn": "Separación de soportes",
-  "mod.gutters.set.r.hangerExtra": "+1 soporte por tramo (en los extremos)",
+  "mod.gutters.set.r.hangerExtra": "Soporte también en ambos extremos del tramo",
   "mod.gutters.set.r.wastePct": "Desperdicio",
   "mod.gutters.set.r.cutCornerIn": "Una esquina cortada usa canaleta",
   "mod.gutters.set.r.corner": "Esquinas por defecto",

@@ -110,10 +110,12 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
 }
 
 /** a downspout on the nearest line under the finger (none if no line is near) */
-export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs: Omit<DrawnDownspout, "id" | "runId" | "atIn">): Drawing {
+export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs: Omit<DrawnDownspout, "id" | "runId" | "atIn">, ch?: Choices): Drawing {
   const n = nearestRun(d, p, tolIn);
   if (!n) return d;
   const r = d.runs.find((x) => x.id === n.runId)!;
+  // a 6″ gutter takes a 3×4 downspout by default (founder 11.11, #767); the default 2×3 only — a size the company set itself (even 2×3) stays; 5″ is the company's size
+  if (r.attrs.size === "6" && attrs.shape === "rect" && attrs.size === "2x3" && (!ch || (!ch.dsSizeSet && ch.offer.dsSizes.rect.includes("3x4")))) attrs = { ...attrs, size: "3x4" };
   const L = runLengthIn(r);
   const atIn = Math.min(L, Math.max(0, Math.round(projectOnRun(r, p).atIn)));
   // the colour of its gutter by default (founder 09.11), unless it is copper or zinc
