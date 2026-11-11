@@ -243,6 +243,12 @@ export const es: Dict = {
   "offline.badge": "Sin conexión · en cola: {n}",
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Servidor no disponible · en cola: {n}",
+  /* core: data safety — the estimate draft (#760) */
+  "est.draft.restored": "Borrador retomado: este presupuesto no se guardó",
+  "est.draft.restart": "Empezar de nuevo",
+  "est.draft.ask": "¿Eliminar el borrador?",
+  "est.draft.askHint": "Este presupuesto no está guardado: se perderán su cliente, título y líneas.",
+  "est.draft.delete": "Eliminar",
   "sync.stuck.badge": "No enviado: {n}",
   "sync.stuck.title": "No enviado: el servidor responde con un error",
   "sync.stuck.since": "Falla desde {when}",
