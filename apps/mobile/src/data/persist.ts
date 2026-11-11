@@ -157,7 +157,14 @@ export function usePersistentState<T>(
   key: string,
   initial: T | (() => T),
   /** `strict`: a stored value that is not JSON is an error, not «start fresh» — for what the phone has only there (the outbox) */
-  opts?: { validate?: (v: T) => boolean; immediate?: boolean; strict?: boolean },
+  opts?: {
+    validate?: (v: T) => boolean;
+    immediate?: boolean;
+    strict?: boolean;
+    /** nothing under `key` yet: an older key's value is taken if `ok` says it is this state's (#864: the person-less
+     *  cloud cache of an older version — the same person's only), written under `key` at once (the old one stays) */
+    adopt?: { from: string; ok: (v: T) => boolean };
+  },
 ) {
   const init = () => (typeof initial === "function" ? (initial as () => T)() : initial);
   const [state, setState] = useState<Slot<T>>(() => ({ key, value: init(), loaded: false }));
@@ -181,6 +188,8 @@ export function usePersistentState<T>(
   }, []);
   const validate = useRef(opts?.validate);
   validate.current = opts?.validate;
+  const adopt = useRef(opts?.adopt);
+  adopt.current = opts?.adopt;
   const initRef = useRef(init);
   initRef.current = init;
   const keyRef = useRef(key);
@@ -199,7 +208,20 @@ export function usePersistentState<T>(
     const read = async (): Promise<string | null> => {
       for (let i = 1; ; i++) {
         try {
-          return await AsyncStorage.getItem(key);
+          const raw = await AsyncStorage.getItem(key);
+          const a = adopt.current;
+          if (raw != null || !a) return raw;
+          // an older key's copy (#864): taken only when it is this state's, and stored under the new key first
+          const old = await AsyncStorage.getItem(a.from);
+          if (old == null) return null;
+          try {
+            const v = JSON.parse(old) as T;
+            if ((validate.current && !validate.current(v)) || !a.ok(v)) return null;
+          } catch {
+            return null;
+          }
+          await AsyncStorage.setItem(key, old).catch(() => {});
+          return old;
         } catch (e) {
           if (i >= READ_TRIES) throw e;
           await new Promise((r) => setTimeout(r, READ_PAUSE_MS * i));

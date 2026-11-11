@@ -48,7 +48,7 @@ export default function Profile() {
             />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
-              <Button label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
             </RowView>
           </>
         ) : auth.session ? (
@@ -60,7 +60,7 @@ export default function Profile() {
             <ClosedCompanies />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("company.create")} icon="plus" onPress={() => router.push("/auth/company")} />
-              <Button label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
             </RowView>
           </>
         ) : (
