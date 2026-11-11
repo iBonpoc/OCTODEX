@@ -16,7 +16,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
 import { eighthLabel, fmtLen, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
@@ -221,14 +221,29 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
   const [e8, setE8] = useState(d0.eighths);
   const [one, setOne] = useState(String(drawn));
   const [bad, setBad] = useState(false);
+  // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
+  const canon = useRef(drawn);
+  const edited = useRef(false);
+  const typedIn = () => (unit === "ftin" ? tapeIn(ft, inc, e8) : oneIn(one, unit));
+  const edit = <A,>(set: (v: A) => void) => (v: A) => {
+    edited.current = true;
+    set(v);
+  };
   const pickUnit = (u: LenUnit) => {
+    // an edited field is read first; a half-typed or empty one keeps the length it had
+    const n = edited.current ? typedIn() ?? canon.current : canon.current;
+    canon.current = n;
+    edited.current = false;
     setUnit(u);
     setBad(false);
-    if (u === "in") setOne(String(drawn));
-    if (u === "m" || u === "cm" || u === "mm") setOne(String(Math.round(drawn * MM_PER_IN) / MM_OF[u]));
+    const f = unitFields(n, u);
+    setFt(f.ft);
+    setInc(f.inc);
+    setE8(f.e8);
+    setOne(f.one);
   };
   const apply = () => {
-    const n = unit === "ftin" ? tapeIn(ft, inc, e8) : oneIn(one, unit);
+    const n = edited.current ? typedIn() : canon.current;
     setBad(n === null);
     if (n === null) return;
     if (n !== drawn) onLength(n);
@@ -241,26 +256,26 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
         <>
           <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
-              <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} onSubmit={apply} autoFocus selectOnFocus />
+              <TextField type="integer" value={ft} onChangeText={edit(setFt)} label={t(k("ft"))} onSubmit={apply} autoFocus selectOnFocus />
             </View>
             <T v="body" tone="mut">{t(k("ft"))}</T>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
-              <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} selectOnFocus />
+              <TextField type="number" value={inc} onChangeText={edit(setInc)} label={t(k("in"))} onSubmit={apply} selectOnFocus />
             </View>
             <EighthsText value={e8} testID="quick-length-frac" />
             <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
           </RowView>
-          <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="quick-length-tape" />
+          <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { edited.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="quick-length-tape" />
         </>
       ) : (
         <RowView style={{ gap: space[2], alignItems: "center" }}>
           <View style={{ width: component.qtyFieldW * 2 }} testID="quick-length-one">
-            <TextField type="number" value={one} onChangeText={setOne} label={t(k(`unit.${unit}`))} onSubmit={apply} autoFocus selectOnFocus />
+            <TextField type="number" value={one} onChangeText={edit(setOne)} label={t(k(`unit.${unit}`))} onSubmit={apply} autoFocus selectOnFocus />
           </View>
           <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
         </RowView>
       )}
-      {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
+      {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { edited.current = true; setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
