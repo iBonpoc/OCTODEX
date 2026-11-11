@@ -76,10 +76,7 @@ exports.run = async (h) => {
   await h.shot("view");
 
   // only to look at: a tap on the drawing changes nothing
-  // the review has finished saving what it opens with (two equal reads in a row) — only then is "before" the baseline
-  const snap = async () => JSON.stringify((await g()).elements.filter((e) => e.measurementId === m));
-  let before = await snap();
-  for (let i = 0; i < 25; i++) { await p.waitForTimeout(200); const now = await snap(); if (now === before) break; before = now; }
+  const before = JSON.stringify((await g()).elements.filter((e) => e.measurementId === m));
   const sv = await tid("view-svg").boundingBox();
   await p.mouse.click(sv.x + sv.width / 2, sv.y + sv.height / 2);
   await p.mouse.move(sv.x + sv.width * 0.3, sv.y + sv.height * 0.3);
@@ -87,10 +84,7 @@ exports.run = async (h) => {
   await p.mouse.move(sv.x + sv.width * 0.6, sv.y + sv.height * 0.6, { steps: 8 });
   await p.mouse.up();
   await p.waitForTimeout(500);
-  // on a failure say WHICH element and field moved (#806: red 5 times on CI at 390 dark, never locally)
-  const after = await snap();
-  const moved = after === before ? "" : JSON.parse(after).flatMap((e, i) => { const o = JSON.parse(before)[i] ?? {}; return Object.keys(e).filter((k) => JSON.stringify(e[k]) !== JSON.stringify(o[k])).map((k) => `${e.kind}.${k}: ${JSON.stringify(o[k])} -> ${JSON.stringify(e[k])}`); }).join("; ") || `element count ${JSON.parse(before).length} -> ${JSON.parse(after).length}`;
-  h.expect(after === before, `the review's drawing changes nothing (${moved})`);
+  h.expect(JSON.stringify((await g()).elements.filter((e) => e.measurementId === m)) === before, "the review's drawing changes nothing");
 
   // «Править чертёж» → the canvas, the drawing as it was
   await backToCanvas(p);
