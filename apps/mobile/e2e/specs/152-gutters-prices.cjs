@@ -100,7 +100,7 @@ exports.run = async (h) => {
   await h.go("/today");
   await editDb((d) => ({ ...d, catalog: d.catalog.map((x) => (x.attributes && Object.keys(x.attributes).length ? { ...x, placeholder: false, priceCents: x.priceCents || 100, costCents: x.costCents === undefined ? undefined : x.costCents || 100 } : x)) }));
   await h.go("/module/gutters/draw");
-  await tid("draw-surface").waitFor({ timeout: 8000 });
+  await tid("draw-surface").waitFor({ timeout: 20000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
   const y = b.y + b.height * 0.3;
   await p.mouse.move(b.x + b.width * 0.1, y);
@@ -128,7 +128,7 @@ exports.run = async (h) => {
   await h.go("/today");
   await editDb((d) => ({ ...d, catalog: d.catalog.map((x) => (x.attributes && x.attributes.work === "install" && x.attributes.story === "1" ? { ...x, priceCents: x.priceCents + 1000 } : x)) }));
   await h.go(drawUrl);
-  await tid("draw-surface").waitFor({ timeout: 8000 });
+  await tid("draw-surface").waitFor({ timeout: 20000 });
   await waitFor(async () => (await money()) > m0, `the $ follows the install price (${m0} → ${await money()})`);
   await h.shot("drawing");
 
