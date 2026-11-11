@@ -52,7 +52,8 @@ jobs:
           supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL|MAILPIT_URL)=' | tr -d '"' >> "$GITHUB_ENV"
       - name: cat — the auth stub's catalog equals Supabase's
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null
+          bash scripts/aptRetries.sh
+          bash scripts/retry.sh "apt: postgresql-16" bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null'
           sudo CATALOG_OUT="$RUNNER_TEMP/catalog.stub.json" bash supabase/tests/run.sh > /dev/null
           psql "$DB_URL" -X -q -At -v ON_ERROR_STOP=1 -f supabase/tests/catalog.sql > "$RUNNER_TEMP/catalog.live.json"
           node apps/mobile/e2e/cloud/api/catalog-diff.mjs "$RUNNER_TEMP/catalog.stub.json" "$RUNNER_TEMP/catalog.live.json"
@@ -63,7 +64,8 @@ jobs:
       - name: e2e — the app in a browser against the local Supabase
         working-directory: apps/mobile
         run: |
-          npx playwright install --with-deps chromium >/dev/null
+          bash ../../scripts/aptRetries.sh
+          bash ../../scripts/retry.sh "playwright install chromium (browser + system libraries)" bash -c 'npx playwright install --with-deps chromium >/dev/null'
           node e2e/cloud/cloud.cjs "$RUNNER_TEMP/seed.json"
       - name: api-2 — delete the account (edge function, S22)
         run: node apps/mobile/e2e/cloud/api/delete-account.mjs "$RUNNER_TEMP/seed.json"
