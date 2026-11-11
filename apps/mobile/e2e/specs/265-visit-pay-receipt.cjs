@@ -43,7 +43,7 @@ exports.run = async (h) => {
 
   await h.go(`/visit/${visit.id}`);
   await p.getByTestId("visit-amount-due").last().waitFor({ state: "visible", timeout: 15000 });
-  await h.clickText("Наличные");
+  await p.getByTestId("visit-method-cash").last().click();
   await p.getByTestId("visit-record-payment").last().getByRole("button").click();
   // wait for what is checked: the visit is paid in the store (CHECKS §9 п.3)
   await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", visit.id);
@@ -51,7 +51,7 @@ exports.run = async (h) => {
   const after = await h.db();
   const inv = after.invoices.filter((i) => i.jobId === job.id);
   const pays = after.payments.filter((x) => inv.some((i) => i.id === x.invoiceId));
-  h.expect(pays.length === 1 && pays[0].amountCents === 50000, `one payment of $500 on the job (before: none): ${JSON.stringify(pays)}`);
+  h.expect(pays.length === 1 && pays[0].amountCents === 50000 && pays[0].method === "cash", `one payment of $500 on the job (before: none): ${JSON.stringify(pays)}`);
   h.expect(/^RCT-/.test(pays[0].receiptNumber ?? ""), `its receipt (${pays[0].receiptNumber})`);
   h.expect(inv.reduce((s, i) => s + i.paidCents, 0) === 50000, `the invoice says $500 paid: ${JSON.stringify(inv)}`);
 

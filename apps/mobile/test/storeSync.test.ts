@@ -1491,14 +1491,20 @@ describe("unit:storeSync — the payment on a visit is a payment with its receip
     // «Оплатил» (by payments) = what the invoices say paid
     expect(pays.reduce((s, x) => s + x.amountCents, 0)).toBe(paidOn(d, visit.jobId!));
   });
-  it("the demo: the job has its final invoice — the payment goes into that invoice, on its client; no second final (review №1, №3)", async () => {
+  it("the job has its final invoice — the payment goes into that invoice, on THE INVOICE's client (not the job's); no second final (review №1, №3; director's review of #1123 №1)", async () => {
+    signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
+    // v2 on j2 (client c2): its final i1 is owed and billed to another client (c4) — the two must not be mixed up
+    const seed = makeSeed();
+    seed.invoices.find((i) => i.id === "i1")!.customerId = "c4";
+    server.loads.splice(0).forEach((x) => x.resolve(seed));
+    await settle();
     const v0 = valueOf(r) as unknown as V;
-    // v2 on j2: the seed's final i1 is owed; its client is the invoice's
     const visit = v0.db.visits.find((x) => x.id === "v2")!;
     const fin = v0.db.invoices.find((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final")!;
-    expect(fin).toBeTruthy();
+    expect((fin as unknown as { customerId: string }).customerId).toBe("c4");
+    expect((v0.db.jobs.find((j) => j.id === visit.jobId) as unknown as { customerId: string }).customerId).toBe("c2");
     const due = visitDueCents(v0.db as never, visit);
     expect(due).toBe(fin.totalCents - fin.paidCents);
     const finals = v0.db.invoices.filter((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final").length;
@@ -1507,9 +1513,27 @@ describe("unit:storeSync — the payment on a visit is a payment with its receip
     const d = (valueOf(r) as unknown as V).db;
     const p = d.payments.find((x) => x.invoiceId === fin.id && x.amountCents === due)!;
     expect(p).toBeTruthy(); // into the final invoice itself
-    expect((p as unknown as { customerId: string }).customerId).toBe((fin as unknown as { customerId: string }).customerId);
+    expect((p as unknown as { customerId: string }).customerId).toBe("c4");
     expect(d.invoices.find((i) => i.id === fin.id)!.paidCents).toBe(fin.totalCents);
     expect(d.invoices.filter((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final")).toHaveLength(finals);
+  });
+  it("«paid» (paidAt) only once the whole invoice is paid: a part leaves it as it was, the rest sets it (director's review of #1123 №2)", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    type R = { db: { invoices: { id: string; paidCents: number; totalCents: number; paidAt?: string }[] }; recordPayment: (id: string, cents: number, m: string) => () => void };
+    const inv0 = (valueOf(r) as unknown as R).db.invoices.find((i) => i.id === "i1")!;
+    expect(inv0.paidCents).toBe(0);
+    expect(inv0.paidAt).toBeUndefined();
+    (valueOf(r) as unknown as R).recordPayment("i1", 50000, "cash");
+    await settle();
+    const part = (valueOf(r) as unknown as R).db.invoices.find((i) => i.id === "i1")!;
+    expect(part.paidCents).toBe(50000);
+    expect(part.paidAt).toBeUndefined(); // a part: not «paid»
+    (valueOf(r) as unknown as R).recordPayment("i1", inv0.totalCents - 50000, "cash");
+    await settle();
+    const all = (valueOf(r) as unknown as R).db.invoices.find((i) => i.id === "i1")!;
+    expect(all.paidCents).toBe(inv0.totalCents);
+    expect(all.paidAt).toBeTruthy(); // the rest: «paid»
   });
   it("«Отменить» takes the payment back with the invoice's sum (and a new final invoice with it)", async () => {
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
