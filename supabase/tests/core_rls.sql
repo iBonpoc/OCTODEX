@@ -4077,8 +4077,11 @@ insert into public.invoices (id, company_id, number, customer_id, kind, status, 
   ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
 select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', -100, -100)$q$, 'an invoice is not born with a negative total');
 select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', -1, 0)$q$, 'an invoice is not born with a negative subtotal');
+-- the payment is the office's: sales take none on an invoice (T191, #868)
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
+:as_sales_a
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
 select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
 select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
@@ -4108,8 +4111,10 @@ update public.invoices set title = 'T53 renamed', due_date = tst.today() + 30, r
 select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
 update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
+:as_sales_a
 select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
 -- a draft still changes, but not below what is paid; once sent it is frozen
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
@@ -4118,8 +4123,10 @@ update public.invoices set subtotal_cents = 6000, total_cents = 6000 where id = 
 select tst.ok((select total_cents = 6000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'), 'a draft invoice still changes its amounts');
 select tst.fails($q$update public.invoices set total_cents = -1 where id = '15300000-0000-4000-8000-000000000002'$q$, 'a draft does not go negative');
 -- a paid draft: the total does not go below what is paid (check_violation, not the freeze)
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
+:as_sales_a
 do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   raise exception 'FAILED: a draft went below what is paid';
@@ -12557,5 +12564,31 @@ select tst.ok((select status = 'sent' and paid_cents = 50000 from public.invoice
 select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.payments where id = '21820000-0000-4000-8000-0000000000a2'), 'T181 the payment''s client is the invoice''s, not the job''s (С4)');
 select tst.ok((select paid_cents = 0 from public.invoices where id = '01820000-0000-4000-8000-000000000001'), 'T181 the unpaid deposit is untouched');
 \echo 'T181 visit payment: who may, one answer to another company or tech ok'
+
+-- T191 (#868, Q-42): sales take no payment on an invoice (13 §4) and see only their own expenses (#1042, default «no»);
+-- the deposit at the signing stays theirs (17, T73 — a security-definer function), the office's rights are unchanged
+:as_super
+insert into public.expenses (id, company_id, vendor, amount_cents, category, created_by) values
+  ('e1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T191 owner vendor', 1000, 'materials', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T191 sales vendor', 2000, 'materials', 'a0000000-0000-0000-0000-000000000005');
+:as_sales_a
+select tst.fails($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+                    values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
+                            'cash', 100, 'succeeded', 't191-sales-pay')$q$, 'T191 sales cannot take a payment on an invoice (payments_insert_staff)');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'$q$) = 0, 'T191 sales do not see another person''s expense');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where created_by <> 'a0000000-0000-0000-0000-000000000005'$q$) = 0, 'T191 sales see no expense of the company but their own');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'$q$) = 1, 'T191 sales see their own expense');
+select tst.blocked($q$update public.expenses set amount_cents = 1 where id = 'e1910000-0000-4000-8000-000000000001'$q$, 'T191 sales cannot change another person''s expense');
+update public.expenses set amount_cents = 2500 where id = 'e1910000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select amount_cents = 2500 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'), 'T191 sales change their own expense');
+select tst.ok((select amount_cents = 1000 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'), 'T191 another person''s expense is untouched');
+:as_office_a
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 100, 'succeeded', 't191-office-pay');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id in ('e1910000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-000000000002')$q$) = 2, 'T191 the office sees every expense');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = 't191-office-pay'$q$) = 1, 'T191 the office still takes a payment on an invoice');
+\echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
 \echo 'ALL TESTS PASSED'
