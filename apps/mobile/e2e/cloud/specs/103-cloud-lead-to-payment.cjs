@@ -80,7 +80,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   cp.on("pageerror", (e) => clientErrors.push(e.message));
   await cp.goto(`${BASE}/p/${link}`);
   await cp.waitForTimeout(1500);
-  const ch = helpers(cp, BASE, path.join(__dirname, "../../out"), "cloud-103-client");
+  const ch = helpers(cp, BASE, path.join(__dirname, "../../out"), "cloud-103-client", { legacyWaits: true });
   const body = async () => (await cp.locator("body").innerText()).split("\n").join(" | ");
   for (let i = 0; i < 25 && !(await body()).includes(LINE); i++) await cp.waitForTimeout(200);
   h.expect((await body()).includes(LINE), `S7: the client page shows the line from the server\n${(await body()).slice(0, 300)}`);

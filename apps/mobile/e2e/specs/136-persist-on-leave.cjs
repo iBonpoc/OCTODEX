@@ -13,7 +13,8 @@ exports.run = async (h) => {
   await p.getByPlaceholder("Имя", { exact: true }).last().fill(name);
   await p.getByPlaceholder("Улица, дом, офис").last().fill("136 Leave St");
   await p.getByPlaceholder("Pasadena").last().fill("Glendale");
-  // no helper here: h.click waits 350 ms — longer than the pause this test is about
+  // no h.click / h.go between the edit and leaving the page: their settle sends «the page is being left» (pagehide) itself, which
+  // makes the store and the drawing write at once — exactly what this test checks happens by itself within 250 ms (CHECKS §9 №15)
   await p.getByRole("button", { name: "Сохранить лид", exact: true }).last().click();
   // the change is on the screen (the lead's card opened) — and the page is left at once, well within 250 ms
   await p.waitForURL(/\/lead\/(?!new)[^/?]+/, { timeout: 5000 });

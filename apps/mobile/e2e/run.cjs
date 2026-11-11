@@ -14,6 +14,7 @@ const path = require("node:path");
 const { chromium } = require("playwright");
 const { serveDist } = require("./serve.cjs");
 const { helpers } = require("./h.cjs");
+const settleStats = require("./settle.cjs").stats;
 
 // The clock (e2e/clock.cjs): before each spec the specs' Date is moved to the spec's start (noon of the company's day by
 // default); installClock puts a browser context on the same clock. `shift` is 0 for a spec on the real time.
@@ -116,6 +117,7 @@ async function waitPastCompanyMidnight() {
   }
   await browser.close();
   server.close();
+  if (settleStats.capped) console.log(`\n⚠ settle was ended by its real-time cap ${settleStats.capped} time(s): a page that never went quiet`);
   if (!runs) { console.error("no spec ran — check the spec filter / --shard"); process.exit(2); }
   console.log(failed ? `\n${failed} of ${runs} spec runs FAILED` : `\nALL ${runs} E2E SPEC RUNS PASSED (${layouts.map((l) => `${l.width} ${l.theme}`).join(", ")})`);
   process.exit(failed ? 1 : 0);
