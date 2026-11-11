@@ -1474,7 +1474,9 @@ export function StoreProvider({
         const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
         // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
         const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
-        const finalId = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final")!.id : invoiceId;
+        // the final invoice the engine counted (void ones never reach the phone: repo.ts loads live invoices only)
+        const finalInv = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final") : undefined;
+        const finalId = finalInv?.id ?? invoiceId;
         // the op always carries a new invoice id: the server uses it only when it makes the final invoice (no final yet)
         return mutate(
           "visit.pay",
@@ -1490,7 +1492,8 @@ export function StoreProvider({
                 : { ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] };
             return withPayment(
               billed,
-              { id: paymentId, invoiceId: finalId, customerId, amountCents: plan.amountCents, method, at: now, receivedBy: d.me },
+              // the invoice's client, as the server writes it (record_visit_payment, #857 С4) — review of #1103 №3
+              { id: paymentId, invoiceId: finalId, customerId: finalInv?.customerId ?? customerId, amountCents: plan.amountCents, method, at: now, receivedBy: d.me },
               modeRef.current === "demo",
             );
           },

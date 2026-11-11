@@ -1491,6 +1491,42 @@ describe("unit:storeSync — the payment on a visit is a payment with its receip
     // «Оплатил» (by payments) = what the invoices say paid
     expect(pays.reduce((s, x) => s + x.amountCents, 0)).toBe(paidOn(d, visit.jobId!));
   });
+  it("the demo: the job has its final invoice — the payment goes into that invoice, on its client; no second final (review №1, №3)", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    // v2 on j2: the seed's final i1 is owed; its client is the invoice's
+    const visit = v0.db.visits.find((x) => x.id === "v2")!;
+    const fin = v0.db.invoices.find((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final")!;
+    expect(fin).toBeTruthy();
+    const due = visitDueCents(v0.db as never, visit);
+    expect(due).toBe(fin.totalCents - fin.paidCents);
+    const finals = v0.db.invoices.filter((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final").length;
+    v0.payVisit(visit.id, "check");
+    await settle();
+    const d = (valueOf(r) as unknown as V).db;
+    const p = d.payments.find((x) => x.invoiceId === fin.id && x.amountCents === due)!;
+    expect(p).toBeTruthy(); // into the final invoice itself
+    expect((p as unknown as { customerId: string }).customerId).toBe((fin as unknown as { customerId: string }).customerId);
+    expect(d.invoices.find((i) => i.id === fin.id)!.paidCents).toBe(fin.totalCents);
+    expect(d.invoices.filter((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final")).toHaveLength(finals);
+  });
+  it("«Отменить» takes the payment back with the invoice's sum (and a new final invoice with it)", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    const visit = v0.db.visits.find((x) => x.jobId && visitDueCents(v0.db as never, x) > 0)!;
+    const payments0 = v0.db.payments.length;
+    const invoices0 = JSON.stringify(v0.db.invoices);
+    const undo = v0.payVisit(visit.id, "cash");
+    await settle();
+    expect((valueOf(r) as unknown as V).db.payments.length).toBe(payments0 + 1);
+    undo();
+    await settle();
+    const d = (valueOf(r) as unknown as V).db;
+    expect(d.payments.length).toBe(payments0);
+    expect(JSON.stringify(d.invoices)).toBe(invoices0);
+  });
   it("the cloud: the payment on the phone is the one the server writes (the op's paymentId), one payment, no receipt number from the phone", async () => {
     signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
