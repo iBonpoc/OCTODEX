@@ -28,6 +28,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
+import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
 import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
@@ -1405,7 +1406,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // invoice takes its balance; with none, a new final invoice bills what is not yet billed (a deposit off)
         const job = v.jobId ? findJob(d0, v.jobId) : undefined;
         const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
-        const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const };
+        // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
+        const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, extraCents: 0 };
         const finalId = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final")!.id : invoiceId;
         // the op always carries a new invoice id: the server uses it only when it makes the final invoice (no final yet)
         return mutate(
@@ -2331,8 +2333,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // the note for the tech is its own field (visits.notes, wave П3b)
         const scope = scope0;
         const note = sch.note?.trim() || undefined;
-        const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
-        const due = Math.max(0, job.amountCents - paidDeposit);
+        // what the visit takes — the one rule of the screens and the server (features/visitDue.ts, #857 №1); the screens
+        // read it live, the stored field is only a first value
+        const due = visitDueCents(d0, { jobId });
         const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();
         const snap = snapshotFor("work", jobServices(opt, e?.approval?.addonIds ?? [], (d0.jobLines ?? []).filter((l) => l.jobId === jobId)));
         const undo0 = mutate(

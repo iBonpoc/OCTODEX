@@ -66,20 +66,22 @@ export function clientMoney(
 
 /**
  * What a payment on a visit takes (#757, audit B-02 / B-05 / A-17) — the same rule as the server's
- * public.record_visit_payment (migration 20261111060000, test T180): the job's live final invoice with a balance takes the
- * payment for its balance; with no final invoice, a new final one bills what is not yet billed (contract − every live
- * invoice of the job, a deposit included). Nothing left — amount 0, no payment.
+ * public.record_visit_payment (migration 20261111060000, tests T180–T181): the job's live final invoice with a balance takes
+ * the payment for its balance; with no final invoice, a new final one bills what is not yet billed (contract − every live
+ * invoice of the job, a deposit included — billed, paid or not). Nothing left — 0, no payment into an invoice.
+ * `expectedCents` — the money in the tech's hand (what the phone showed): less than due → a partial payment of it; more
+ * → due into the invoice and the rest `extraCents` kept as the client's money for the office to check (never lost).
  */
 export function visitPayment(
   contractCents: number,
   invoices: (InvoiceLike & { kind?: string })[],
-): { amountCents: number; into: "final" | "new" | "none" } {
+  expectedCents?: number,
+): { amountCents: number; into: "final" | "new" | "none"; extraCents: number } {
   const live = invoices.filter((i) => !i.void);
   const fin = live.find((i) => i.kind === "final");
-  if (fin) {
-    const left = Math.max(0, fin.totalCents - fin.paidCents);
-    return { amountCents: left, into: left > 0 ? "final" : "none" };
-  }
-  const left = contractStatement(contractCents, live).toInvoice;
-  return { amountCents: left, into: left > 0 ? "new" : "none" };
+  const due = fin ? Math.max(0, fin.totalCents - fin.paidCents) : contractStatement(contractCents, live).toInvoice;
+  const into = due > 0 ? (fin ? "final" : "new") : "none";
+  if (expectedCents == null || expectedCents <= 0) return { amountCents: due, into, extraCents: 0 };
+  if (expectedCents < due) return { amountCents: expectedCents, into, extraCents: 0 };
+  return { amountCents: due, into, extraCents: expectedCents - due };
 }

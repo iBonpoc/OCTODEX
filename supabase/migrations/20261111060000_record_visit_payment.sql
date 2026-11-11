@@ -9,8 +9,8 @@
 --   * сумму считает сервер (как движок: @octo/estimating-engine visitPayment): живой final-счёт работы с остатком — платёж
 --     идёт в него на остаток; final-счёта нет — создаётся на «ещё не выставлено» (контракт − все живые счета работы);
 --     платить нечего — платежа нет, выезд просто завершается;
---   * сумма в руке — та, что показал телефон (p_expected_cents): меньше остатка — частичная оплата, больше — остаток и
---     needs_review (лишнее у мастера); мастер — только активный и на месте; отменённый выезд не платится;
+--   * сумма в руке — та, что показал телефон (p_expected_cents): меньше остатка — частичная оплата, больше — остаток в
+--     счёт и лишнее отдельным платежом без счёта с needs_review (и когда остатка нет); мастер — только активный и на месте; отменённый выезд не платится;
 --   * повтор с тем же id платежа ничего не меняет (очередь телефона);
 --   * выезд → completed (если он на месте).
 -- Срок нового счёта — день компании, когда телефон принял оплату (p_due_date; не будущий и не старше 30 дней).
@@ -31,7 +31,7 @@ declare
   v_amount   bigint;
   v_invoiced bigint;
   v_today    date;
-  v_review   boolean := false;
+  v_extra    bigint := 0;
 begin
   if v_uid is null then raise exception 'visit payment: sign in' using errcode = '42501'; end if;
   if p_visit_id is null or p_invoice_id is null or p_payment_id is null then
@@ -78,7 +78,7 @@ begin
     v_amount := greatest(0, inv.total_cents - inv.paid_cents);
   else
     select coalesce(sum(i.total_cents), 0) into v_invoiced
-      from public.invoices i where i.company_id = j.company_id and i.job_id = j.id and i.status <> 'void';
+      from public.invoices i where i.company_id = j.company_id and i.job_id = j.id and i.status = 'sent';   -- a draft is not billed (as the app reads them, repo.ts)
     v_amount := greatest(0, coalesce(j.contract_total_cents, 0) - v_invoiced);
     if v_amount > 0 then
       -- the due date is the company's day the phone took the payment (made offline at 11:50 PM, sent after midnight —
@@ -96,25 +96,33 @@ begin
     end if;
   end if;
 
-  -- деньги в руке мастера — то, что показал телефон (p_expected_cents): меньше остатка — частичная оплата; больше —
-  -- записываем остаток и ставим needs_review: лишнее у мастера, владелец разберётся (не молча другая сумма)
-  if v_amount > 0 and p_expected_cents is not null and p_expected_cents > 0 then
+  -- деньги в руке мастера — то, что показал телефон (p_expected_cents; движок visitPayment с expectedCents): меньше
+  -- остатка — частичная оплата; больше (или остатка нет: офис закрыл счёт, пока мастер был без сети) — остаток в счёт, а
+  -- лишнее — отдельным платежом без счёта с needs_review: деньги клиента у мастера, владелец решит (вернуть или зачесть).
+  -- Молча другая сумма или «нечего брать» с деньгами на руках — никогда (ревью #857 №3)
+  if p_expected_cents is not null and p_expected_cents > 0 then
     if p_expected_cents < v_amount then
       v_amount := p_expected_cents;
     elsif p_expected_cents > v_amount then
-      v_review := true;
+      v_extra := p_expected_cents - v_amount;
     end if;
   end if;
   if v_amount > 0 then
+    insert into public.payments (id, company_id, invoice_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by)
+    values (p_payment_id, j.company_id, inv.id, j.customer_id, v.id, p_method, v_amount, 'succeeded', p_payment_id::text, v_uid);
+  end if;
+  if v_extra > 0 then
+    -- the first payment of the call carries p_payment_id (a replay finds it); the extra one with nothing due takes it too
     insert into public.payments (id, company_id, invoice_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by, needs_review)
-    values (p_payment_id, j.company_id, inv.id, j.customer_id, v.id, p_method, v_amount, 'succeeded', p_payment_id::text, v_uid, v_review);
+    values (case when v_amount > 0 then public.uuid_generate_v7() else p_payment_id end, j.company_id, null, j.customer_id, v.id,
+            p_method, v_extra, 'succeeded', p_payment_id::text || case when v_amount > 0 then ':extra' else '' end, v_uid, true);
   end if;
   if v.status = 'on_site' then
     update public.visits set status = 'completed' where id = v.id;
   end if;
-  return jsonb_build_object('status', case when v_amount > 0 then 'paid' else 'nothing' end,
-                            'invoice_id', inv.id, 'payment_id', case when v_amount > 0 then p_payment_id end, 'amount_cents', v_amount,
-                            'needs_review', v_review);
+  return jsonb_build_object('status', case when v_amount > 0 or v_extra > 0 then 'paid' else 'nothing' end,
+                            'invoice_id', case when v_amount > 0 then inv.id end, 'payment_id', case when v_amount > 0 or v_extra > 0 then p_payment_id end,
+                            'amount_cents', v_amount, 'extra_cents', v_extra);
 end;
 $$;
 revoke all on function public.record_visit_payment(uuid, uuid, uuid, text, date, bigint) from public, anon;

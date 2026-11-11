@@ -425,9 +425,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
           .filter((f) => f.visit_id === v.id && f.kind === "photo")
           .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),
         // what a payment on this visit takes — the server's rule (record_visit_payment, #757 A-17): the final invoice's
-        // balance, or what is not yet billed (a deposit off); not the whole contract
+        // balance, or what is not yet billed (a deposit off); not the whole contract. Sent invoices only, as the server and the
+        // invoice list read them (a draft is not billed)
         amountDueCents: job
-          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id).map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents), void: i.status === "void" }))).amountCents
+          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id && i.status === "sent").map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents) }))).amountCents
           : 0,
         signature: (v.signature_svg as string | null) ?? undefined,
         closed: v.status === "completed" || v.status === "no_show" || undefined,
