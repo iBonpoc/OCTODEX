@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { canSeeClientLink } from "@/features/estimateSign";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -174,7 +175,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // is closed by then, so its content does not come back as a draft (#860)
     dropDraft();
     toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);
-    router.replace(`/estimate/${estimateId}${send ? "?send=1" : ""}`);
+    router.replace(`/estimate/${estimateId}${send && canSeeClientLink(store.role) ? "?send=1" : ""}`);
   };
 
   const saveTemplate = () => {
@@ -367,9 +368,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   {customer ? t("ue.empty") : t("ue.pickClient")}
                 </T>
               ) : null}
-              <Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} />
+              {/* #1113: sending is the office side's — a tech saves only (the main action then is «Сохранить») */}
+              {canSeeClientLink(store.role) ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} /></View> : null}
               <View testID="ue-save">
-                <Button label={t("ue.save")} icon="check" variant="secondary" full disabled={!ok} onPress={() => save(false)} />
+                <Button label={t("ue.save")} icon="check" variant={canSeeClientLink(store.role) ? "secondary" : "primary"} full disabled={!ok} onPress={() => save(false)} />
               </View>
             </>
           )}

@@ -32,11 +32,18 @@ exports.run = async (h) => {
   await shows(h, "/job/j1", /Bathroom remodel/, "the tech: his own job");
   await shows(h, "/invoice/i5", /Счёт/, "the tech: the invoice of his own job");
 
-  // #1113 (П-23/П-44): the send sheet by its address (?send=1) does not open for the tech — «the office sends it»
+  // #1113 (П-23/П-44): the tech's own draft (e6 made a draft here, from a page without the app) — the send sheet by its
+  // address (?send=1) does not open for him, «the office sends it» instead of the button; the builder saves only
+  const raw = await h.page.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  Object.assign(raw.db.estimates.find((x) => x.id === "e6"), { status: "draft", token: undefined, sentAt: undefined });
+  await h.seed("octo.db.v5", raw);
   await h.go("/estimate/e6?send=1");
   await h.page.getByTestId("est-send-office").first().waitFor({ state: "visible", timeout: 15000 });
   h.expect((await h.page.getByTestId("send-buttons").count()) === 0, "the tech: ?send=1 opens no send sheet");
   h.expect((await h.page.getByTestId("est-send").count()) === 0, "the tech: no «Отправить» button");
+  await h.go("/estimate/new?id=e6");
+  await h.page.getByTestId("ue-save").first().waitFor({ state: "visible", timeout: 15000 });
+  h.expect((await h.page.getByTestId("ue-save-send").count()) === 0, "the tech: the builder has no «Сохранить и отправить»");
 
   // the lists: only his own
   await h.go("/jobs");

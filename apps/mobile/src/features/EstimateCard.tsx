@@ -142,7 +142,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
             {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
             {/* sending (and its «Copy link») is the office side's: a tech with the link could sign as the client (spec 35 §4д п.10) */}
             {(e.status === "draft" || e.status === "sent") && maySend ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
-            {(e.status === "draft" || e.status === "sent") && store.role === "tech" ? <View testID="est-send-office"><T v="caption" tone="mut">{t("est.tech.officeSends")}</T></View> : null}
+            {e.status === "draft" && store.role === "tech" && canServe(db, e.customerId) ? <View testID="est-send-office"><T v="caption" tone="mut">{t("est.tech.officeSends")}</T></View> : null}
             {/* the client's page only for the office side: a tech with the link could sign as the client (spec 35 §4д п.10) */}
             {e.token && canSeeClientLink(store.role) ? <View testID="est-open-client"><Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /></View> : null}
             {/* E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued) */}

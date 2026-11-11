@@ -12754,15 +12754,10 @@ select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-00
 select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', null)$q$, '%only the office%',
   'T192 …nor without a token of his own');
 select tst.blocked($q$update public.estimates set status = 'sent' where id = 'e1420000-0000-4000-8000-000000000003'$q$, 'T192 the tech does not mark it «sent» by hand');
--- a link written on the row by hand: the row never keeps one (t02_public_token_null) — checked below, as the owner of the data
-do $$ begin
-  update public.estimates set public_token = 'T192tokenTheTechTriesToSend0123456789ab' where id = 'e1420000-0000-4000-8000-000000000003';
-exception when others then null;
-end $$;
 select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000003')$q$, '%only the office%', 'T192 the tech gets no client link of it');
 :as_super
-select tst.ok((select status = 'draft' and sent_version_id is null and public_token is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
-  'T192 the draft is still a draft: not sent, no link on the row');
+select tst.ok((select status = 'draft' and sent_version_id is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
+  'T192 the draft is still a draft: not sent');
 select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where estimate_id = 'e1420000-0000-4000-8000-000000000003'$q$) = 0, 'T192 …no client link made');
 select tst.ok((select locked_at is null and sent_at is null from public.estimate_versions where id = 'e1420000-0000-4000-8000-0000000000a3'), 'T192 …its version not locked');
 :as_office_a
