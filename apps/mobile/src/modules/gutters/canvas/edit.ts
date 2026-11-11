@@ -66,6 +66,16 @@ export function alongChain(d: Drawing, runId: string, side: "L" | "R"): Drawing 
   return { ...d, runs: d.runs.map((r) => (sides.has(r.id) ? { ...r, houseSide: sides.get(r.id)! } : r)) };
 }
 
+/**
+ * The answer to «is the house on this side?» (#854): yes keeps the side the canvas drew and writes it on the whole line
+ * (never asked again); no turns the whole line (`flipFace`, which also writes it).
+ */
+export function answerHouse(d: Drawing, runId: string, yes: boolean): Drawing {
+  const r = d.runs.find((x) => x.id === runId);
+  if (!r) return d;
+  return yes ? alongChain(d, runId, houseSides(d)(r)) : flipFace(d, runId);
+}
+
 export type Hit = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "run"; id: string };
 
 /** what is under the finger: a downspout, then a line's end (to drag), then a line */

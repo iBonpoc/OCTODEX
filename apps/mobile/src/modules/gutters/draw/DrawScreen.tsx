@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, answerHouse, endAt, finishStroke, flipFace, moveDs, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -50,7 +50,7 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, houseQuestion, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -145,6 +145,8 @@ export default function DrawScreen() {
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
   const [hint, setHint] = useState<Tool | "select" | null>(null);
+  /** a stroke gave an open line its first corner and nobody said where the house is: ask once (#854) */
+  const [askHouse, setAskHouse] = useState(false);
   const live = useLive();
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
@@ -254,6 +256,8 @@ export default function DrawScreen() {
 
   // one finger: draw a run, or drag an end of the picked run
   const dragRef = useRef<Stroke | null>(null);
+  /** a stroke just ended and no finger has touched down since: on the web the lift of a drag is also a tap on the spot — not a tap on an end cap (it turned the new line's face, #854) */
+  const liftTap = useRef(false);
   // where the finger touched down: the pan activates only after it has moved a little
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
@@ -310,6 +314,7 @@ export default function DrawScreen() {
         return;
       }
       if (next !== d) {
+        liftTap.current = true;
         commit(next, d);
         // a new gutter, or one that grew straight on from its free end (founder 09.11): its length sheet
         const grown = next.runs.length === d.runs.length ? next.runs.find((r, i) => r !== d.runs[i])?.id : undefined;
@@ -317,6 +322,7 @@ export default function DrawScreen() {
         setSelected(got ?? id);
         if (got) setQuickRun(got);
         quickGrew.current = !!grown && got === grown;
+        if (cur.current.canSave && houseQuestion(next) && !houseQuestion(d)) setAskHouse(true);
       }
     },
   });
@@ -324,6 +330,9 @@ export default function DrawScreen() {
   const tap = useTapGesture({
     runOnJS: true,
     simultaneousWith: [canvas.pinch, canvas.pan],
+    onBegin: () => {
+      liftTap.current = false;
+    },
     onActivate: (e) => {
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
@@ -367,7 +376,7 @@ export default function DrawScreen() {
       const h = hitTest(d, p, tolIn());
       if (h) setHint(null);
       // an end (founder 08.11): an end cap swaps left ↔ right (the whole line's face); a corner asks inside / outside
-      if (h?.kind === "end" && cur.current.canSave) {
+      if (h?.kind === "end" && cur.current.canSave && !liftTap.current) {
         const found = findCorners(d);
         const corner = found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end));
         if (corner) {
@@ -653,7 +662,14 @@ export default function DrawScreen() {
       <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} /></View>
     </View>
   );
-  const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
+  const houseAskRun = canSave && askHouse && !ghost ? houseQuestion(drawing) : null;
+  const answerHouseSide = (yes: boolean) => {
+    const d = cur.current.drawing;
+    const id = houseQuestion(d);
+    setAskHouse(false);
+    if (id) commit(answerHouse(d, id, yes));
+  };
+  const nextDs = !houseAskRun && canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
@@ -788,6 +804,14 @@ export default function DrawScreen() {
         {gripping ? (
           <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
+          </View>
+        ) : null}
+        {/* where the house is (#854): once, when an open line gets its first corner; yes keeps the side drawn, no turns the line */}
+        {houseAskRun && !gripping ? (
+          <View testID="draw-house-ask" style={{ alignSelf: "center", flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: space[2], paddingVertical: space[1], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+            <T v="caption" w="semibold">{t("mod.gutters.draw.houseAsk")}</T>
+            <View testID="draw-house-yes"><Button label={t("mod.gutters.draw.houseYes")} size="sm" variant="secondary" onPress={() => answerHouseSide(true)} /></View>
+            <View testID="draw-house-no"><Button label={t("mod.gutters.draw.houseNo")} size="sm" variant="secondary" onPress={() => answerHouseSide(false)} /></View>
           </View>
         ) : null}
         {/* what next (П20.9): gutters drawn, no downspout yet → put them — a bubble, not a row of the total (09.11) */}

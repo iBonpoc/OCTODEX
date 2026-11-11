@@ -143,6 +143,32 @@ export function houseSides(d: Pick<Drawing, "runs">): (r: DrawnRun) => "L" | "R"
   return (r) => r.houseSide ?? auto.get(r.id) ?? "R";
 }
 
+/**
+ * The line to ask «is the house on this side?» about (#854, audit G-01): an OPEN line of two or more runs with a corner
+ * in it whose side nobody has set by hand. Its side is guessed from the shape (`autoHouseSides`) — right for most, but a
+ * line round the inside corner of an L-shaped house comes out the other way, so the canvas asks once. The first run
+ * of the line (from a free end) or null. A closed outline (the area says the side exactly), a straight single run, a
+ * branching line and a line already answered / turned (`houseSide` on any of its runs) are never asked.
+ */
+export function houseQuestion(d: Pick<Drawing, "runs">, tolIn = 1): string | null {
+  const asked = new Set<string>();
+  const found = findCorners(d, tolIn);
+  const near = (p: P, q: P) => dist(p, q) <= tolIn;
+  for (const r of d.runs) {
+    if (asked.has(r.id)) continue;
+    const ids = chainOf(d, r.id, tolIn);
+    for (const id of ids) asked.add(id);
+    const chain = d.runs.filter((x) => ids.has(x.id));
+    if (chain.length < 2 || chain.some((x) => x.houseSide)) continue;
+    if (!found.some((f) => ids.has(f.runs[0].id))) continue;
+    const ends = chain.flatMap((x) => [x.a, x.b]);
+    if (!ends.some((p) => ends.filter((q) => near(p, q)).length === 1)) continue; // closed: the area is exact
+    const walk = walkChain(chain, near);
+    if (walk) return walk.steps[0]!.id;
+  }
+  return null;
+}
+
 /** twice the signed area of a polygon (shoelace); > 0 — its inside is on the left of the walk (the same `cross` as above) */
 function signedArea(ps: readonly P[]): number {
   let s = 0;
