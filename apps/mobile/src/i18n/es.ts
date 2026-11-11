@@ -2320,6 +2320,8 @@ export const es: Dict = {
   "ds.sec.motion": "Movimiento y tiempo",
   "ds.sec.print": "Impresión",
   "ds.rowHint": "Tokens, botones, ventanas, vibración: muestras en vivo",
+  "haptics.title": "Vibración",
+  "haptics.hint": "Un toque breve al guardar, arrastrar o marcar. Este ajuste es de este dispositivo; también puedes desactivar la vibración en los ajustes del teléfono.",
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
   // wave 6-2 «Лиды и клиенты» (docs/specs/20): calls

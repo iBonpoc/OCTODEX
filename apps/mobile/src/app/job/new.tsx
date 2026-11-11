@@ -2,7 +2,7 @@ import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { ID } from "@/data/types";
@@ -88,7 +88,7 @@ export default function NewJob() {
   const save = () => {
     if (!ok) return;
     setSaved(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    haptics.success();
     const undos: (() => void)[] = [];
     let cid = client?.id;
     let pid = newAddress ? undefined : (propertyId as ID);

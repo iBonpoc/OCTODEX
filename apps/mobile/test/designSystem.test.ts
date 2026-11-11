@@ -49,6 +49,11 @@ describe("design system: components", () => {
     );
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
+  it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
+    const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
+    // ds-allow: visit/[id].tsx is held by #868 — moves to haptics in a small follow-up PR after it lands
+    expect(hits.filter((f) => f !== join("app", "visit", "[id].tsx"))).toEqual([]);
+  });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>
       readFileSync(f, "utf8")

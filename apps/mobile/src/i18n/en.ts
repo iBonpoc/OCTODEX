@@ -2320,6 +2320,8 @@ export const en: Dict = {
   "ds.sec.motion": "Motion and time",
   "ds.sec.print": "Print",
   "ds.rowHint": "Tokens, buttons, windows, haptics — live samples",
+  "haptics.title": "Haptics",
+  "haptics.hint": "A short tap when you save, drag or tick something. This setting is for this device; you can also turn haptics off in your phone settings.",
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
   // wave 6-2 «Лиды и клиенты» (docs/specs/20): calls
