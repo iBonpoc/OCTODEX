@@ -53,7 +53,7 @@ jobs:
       - name: cat — the auth stub's catalog equals Supabase's
         run: |
           bash scripts/aptRetries.sh
-          bash scripts/retry.sh "apt: postgresql-16" bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null'
+          bash scripts/dbTools.sh postgres
           sudo CATALOG_OUT="$RUNNER_TEMP/catalog.stub.json" bash supabase/tests/run.sh > /dev/null
           psql "$DB_URL" -X -q -At -v ON_ERROR_STOP=1 -f supabase/tests/catalog.sql > "$RUNNER_TEMP/catalog.live.json"
           node apps/mobile/e2e/cloud/api/catalog-diff.mjs "$RUNNER_TEMP/catalog.stub.json" "$RUNNER_TEMP/catalog.live.json"
@@ -65,7 +65,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           bash ../../scripts/aptRetries.sh
-          bash ../../scripts/retry.sh "playwright install chromium (browser + system libraries)" bash -c 'npx playwright install --with-deps chromium >/dev/null'
+          bash ../../scripts/playwrightInstall.sh
           node e2e/cloud/cloud.cjs "$RUNNER_TEMP/seed.json"
       - name: api-2 — delete the account (edge function, S22)
         run: node apps/mobile/e2e/cloud/api/delete-account.mjs "$RUNNER_TEMP/seed.json"

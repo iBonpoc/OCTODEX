@@ -92,22 +92,143 @@ describe("scripts/aptRetries.sh: the runner's apt avoids the azure mirror", () =
   });
 });
 
-describe("workflows: every apt / Playwright-deps call is wrapped", () => {
+/** a stub runner dir: `initdb`/`postgres` of a fake PostgreSQL, a fake apt that logs its calls and may fail */
+function toolbox(opts: { pg: boolean; faketime: boolean; aptWorks: boolean }) {
+  const dir = mkdtempSync(join(tmpdir(), "dbtools-"));
+  const bin = join(dir, "pgbin");
+  const libroot = join(dir, "lib");
+  mkdirSync(bin);
+  mkdirSync(join(libroot, "x86_64-linux-gnu", "faketime"), { recursive: true });
+  if (opts.pg) {
+    writeFileSync(join(bin, "initdb"), "#!/usr/bin/env bash\n");
+    writeFileSync(join(bin, "postgres"), "#!/usr/bin/env bash\necho 'postgres (PostgreSQL) 16.4'\n");
+    for (const f of ["initdb", "postgres"]) spawnSync("chmod", ["+x", join(bin, f)]);
+  }
+  if (opts.faketime) writeFileSync(join(libroot, "x86_64-linux-gnu", "faketime", "libfaketime.so.1"), "");
+  const calls = join(dir, "calls.log");
+  writeFileSync(join(dir, "apt.sh"), `#!/usr/bin/env bash\necho "apt $*" >> ${calls}\n${opts.aptWorks ? "exit 0" : "exit 100"}\n`);
+  const src = join(dir, "libfaketime");
+  const SHA = "d475b925943ad404c6c728ac868dc73949e7281c";
+  const ghEnv = join(dir, "github_env");
+  writeFileSync(ghEnv, "");
+  const env: Record<string, string> = {
+    ...process.env, RETRY_DELAYS: "0 0", HOME: dir,
+    DBTOOLS_PGBIN: bin, DBTOOLS_LIBROOT: libroot,
+    DBTOOLS_APT_UPDATE: `bash ${join(dir, "apt.sh")} update`, DBTOOLS_APT_INSTALL: `bash ${join(dir, "apt.sh")} install`,
+    DBTOOLS_FAKETIME_SRC: src, GITHUB_ENV: ghEnv,
+    // «git clone» and «make» are stubs that leave what the real ones leave
+    DBTOOLS_CLONE: `mkdir -p ${src}/src && echo ${SHA} > ${src}/.sha && echo clone >> ${calls}`,
+    DBTOOLS_SHA_CMD: `cat ${src}/.sha`,
+    DBTOOLS_BUILD: `touch ${src}/src/libfaketime.so.1 && echo make >> ${calls}`,
+  };
+  const run = (...args: string[]) => spawnSync("bash", [join(repo, "scripts/dbTools.sh"), ...args], { env, encoding: "utf8" });
+  return { dir, env, run, calls: () => (existsSync(calls) ? readFileSync(calls, "utf8") : ""), ghEnv: () => readFileSync(ghEnv, "utf8"), src, SHA };
+}
+
+describe("scripts/dbTools.sh: the database tools without Ubuntu's mirrors", () => {
+  it("PostgreSQL and libfaketime already there: apt is not called, the choice is printed", () => {
+    const t = toolbox({ pg: true, faketime: true, aptWorks: false });
+    const r = t.run();
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("postgresql-16: preinstalled on the image (postgres (PostgreSQL) 16.4)");
+    expect(r.stdout).toContain("faketime: system package");
+    expect(t.calls()).toBe("");
+  });
+  it("no PostgreSQL on the image: apt installs it", () => {
+    const t = toolbox({ pg: false, faketime: true, aptWorks: true });
+    const r = t.run("postgres");
+    expect(r.status).toBe(0);
+    expect(t.calls()).toMatch(/apt install postgresql-16/);
+  });
+  it("no PostgreSQL and apt does not work: the job fails with the plain note (there is no other way)", () => {
+    const t = toolbox({ pg: false, faketime: true, aptWorks: false });
+    const r = t.run("postgres");
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toMatch(/runner's network/);
+  });
+  it("faketime: apt works → the package is used and nothing is built", () => {
+    const t = toolbox({ pg: true, faketime: false, aptWorks: true });
+    // the stub apt «installs» nothing, so the package still is not there afterwards — the build takes over; with a real apt the lib appears
+    const r = t.run("faketime");
+    expect(r.status).toBe(0);
+    expect(t.calls()).toMatch(/apt update[\s\S]*apt install/);
+  });
+  it("faketime: apt does not work → built from the source, the commit is checked, FAKETIME_LIB goes to GITHUB_ENV", () => {
+    const t = toolbox({ pg: true, faketime: false, aptWorks: false });
+    const r = t.run("faketime");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("apt did not work — from the source (libfaketime v0.9.10)");
+    expect(r.stdout).toContain("built from the source, commit d475b92");
+    expect(t.calls()).toMatch(/clone[\s\S]*make/);
+    expect(t.ghEnv()).toContain(`FAKETIME_LIB=${t.src}/src/libfaketime.so.1`);
+    // apt was tried ONCE (not four times): a dead mirror must not eat minutes — and it is a warning, not an error, for it has a fallback
+    expect((t.calls().match(/apt update/g) ?? []).length).toBe(1);
+    expect(r.stdout).toContain("::warning::apt: faketime (one quick try)");
+    expect(r.stdout).not.toContain("::error::");
+  });
+  it("faketime: a source built earlier (the cache) is used without cloning again", () => {
+    const t = toolbox({ pg: true, faketime: false, aptWorks: false });
+    t.run("faketime");
+    writeFileSync(join(t.dir, "calls.log"), "");
+    const again = t.run("faketime");
+    expect(again.status).toBe(0);
+    expect(again.stdout).toContain("built earlier (cache)");
+    expect(t.calls()).not.toMatch(/clone|make/);
+  });
+  it("faketime: the tag now points at another commit → not built (rule 17)", () => {
+    const t = toolbox({ pg: true, faketime: false, aptWorks: false });
+    t.env.DBTOOLS_CLONE = `mkdir -p ${t.src}/src && echo ${"0".repeat(40)} > ${t.src}/.sha`;
+    const r = spawnSync("bash", [join(repo, "scripts/dbTools.sh"), "faketime"], { env: t.env, encoding: "utf8" });
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toMatch(/not the pinned d475b925943ad404c6c728ac868dc73949e7281c/);
+    expect(t.ghEnv()).toBe("");
+  });
+});
+
+describe("scripts/playwrightInstall.sh: Chromium without apt when apt is down", () => {
+  function pw(depsWork: boolean) {
+    const dir = mkdtempSync(join(tmpdir(), "pw-"));
+    const log = join(dir, "log");
+    const stub = join(dir, "pw.sh");
+    writeFileSync(stub, `#!/usr/bin/env bash\necho "$*" >> ${log}\nif [[ "$*" == *--with-deps* ]]; then ${depsWork ? "exit 0" : "exit 100"}; fi\nexit 0\n`);
+    const r = spawnSync("bash", [join(repo, "scripts/playwrightInstall.sh")], { env: { ...process.env, PW_INSTALL: `bash ${stub}`, RETRY_DELAYS: "0 0" }, encoding: "utf8" });
+    return { r, log: readFileSync(log, "utf8") };
+  }
+  it("with dependencies when apt works (one call)", () => {
+    const { r, log } = pw(true);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("chromium with system dependencies");
+    expect(log.trim().split("\n")).toEqual(["--with-deps chromium"]);
+  });
+  it("without dependencies when apt does not work, and says so", () => {
+    const { r, log } = pw(false);
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("WITHOUT system dependencies");
+    expect(r.stdout).not.toContain("::error::"); // the failed first try has a fallback: a warning
+    expect(log.trim().split("\n")).toEqual(["--with-deps chromium", "chromium"]); // one quick try, then the plain install
+  });
+});
+
+describe("workflows: no raw apt and no raw Playwright install", () => {
   const dir = join(repo, ".github/workflows");
   const lines = readdirSync(dir)
     .filter((f) => f.endsWith(".yml"))
     .flatMap((f) => readFileSync(join(dir, f), "utf8").split("\n").map((l, i) => ({ f, n: i + 1, l })))
     .filter(({ l }) => !/^\s*#/.test(l));
-  it("no bare apt-get install or `playwright install --with-deps` outside scripts/retry.sh", () => {
-    const bare = lines.filter(({ l }) => /apt-get install|playwright install --with-deps/.test(l) && !/retry\.sh/.test(l)).map(({ f, n, l }) => `${f}:${n} ${l.trim().slice(0, 90)}`);
-    expect(bare, `wrap it: bash scripts/retry.sh "<what>" bash -c '<command>' (and scripts/aptRetries.sh once before):\n${bare.join("\n")}`).toEqual([]);
+  it("no apt-get and no `playwright install` in a workflow — the scripts do it (mirror-proof, with retries)", () => {
+    const bare = lines.filter(({ l }) => /apt-get|playwright install/.test(l)).map(({ f, n, l }) => `${f}:${n} ${l.trim().slice(0, 90)}`);
+    expect(bare, `use scripts/dbTools.sh (postgres, faketime) or scripts/playwrightInstall.sh:\n${bare.join("\n")}`).toEqual([]);
   });
-  it("the steps that wrap them also set apt's own retries first", () => {
-    const wrapped = lines.filter(({ l }) => /retry\.sh/.test(l) && /apt-get|playwright/.test(l));
-    expect(wrapped.length).toBeGreaterThanOrEqual(4);
-    for (const w of wrapped) {
-      const before = lines.filter((x) => x.f === w.f && x.n < w.n && x.n >= w.n - 3).map((x) => x.l).join("\n");
-      expect(before, `${w.f}:${w.n}`).toContain("aptRetries.sh");
+  it("the database and browser steps call the scripts, after apt's own settings", () => {
+    const calls = lines.filter(({ l }) => /dbTools\.sh|playwrightInstall\.sh/.test(l));
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+    for (const c of calls) {
+      const before = lines.filter((x) => x.f === c.f && x.n < c.n && x.n >= c.n - 3).map((x) => x.l).join("\n");
+      expect(before, `${c.f}:${c.n}`).toContain("aptRetries.sh");
     }
+  });
+  it("the 23:40 run passes FAKETIME_LIB through sudo (sudo drops the environment)", () => {
+    const yml = readFileSync(join(dir, "checks.yml"), "utf8");
+    expect(yml).toMatch(/sudo DB_NOW=la-2340 FAKETIME_LIB="\$\{FAKETIME_LIB:-\}" bash supabase\/tests\/run\.sh/);
   });
 });

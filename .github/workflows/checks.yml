@@ -85,15 +85,20 @@ jobs:
           fi
       - name: Types + unit tests
         run: npm run typecheck && npm test
+      # the built libfaketime (when Ubuntu's mirrors do not resolve) is kept between runs; scripts/dbTools.sh decides what is needed
+      - uses: actions/cache@v4
+        with:
+          path: ~/libfaketime
+          key: libfaketime-v0.9.10-d475b92
       - name: Database tests (PostgreSQL 16)
         run: |
           bash scripts/aptRetries.sh
-          bash scripts/retry.sh "apt: postgresql-16, faketime" bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 faketime >/dev/null'
+          bash scripts/dbTools.sh postgres faketime
           sudo CATALOG_OUT="$RUNNER_TEMP/catalog.json" bash supabase/tests/run.sh
       # #620: the same tests with the database's clock at 23:40 in Los Angeles — the UTC date is tomorrow already, so a
       # test taking «today» from current_date goes red here, not on main for 8 hours in the company's evening (T147, #476)
       - name: Database tests at 23:40 Los Angeles (UTC is a day ahead)
-        run: sudo DB_NOW=la-2340 bash supabase/tests/run.sh
+        run: sudo DB_NOW=la-2340 FAKETIME_LIB="${FAKETIME_LIB:-}" bash supabase/tests/run.sh
       # docs/specs/21 §5: the app's calls against the LIVE catalog the run above wrote (pg_proc, EXECUTE rights).
       # CATALOG_REQUIRED=1: without the file the test fails instead of skipping.
       - name: The app's server calls against the live catalog
@@ -188,7 +193,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           bash ../../scripts/aptRetries.sh
-          bash ../../scripts/retry.sh "playwright install chromium (browser + system libraries)" bash -c 'npx playwright install --with-deps chromium >/dev/null'
+          bash ../../scripts/playwrightInstall.sh
           view="${{ matrix.view }}"
           # 08-layouts checks all 6 views by itself: run it in one view only
           [ "$view" = "390-dark" ] || export E2E_OWN_LAYOUTS=0
