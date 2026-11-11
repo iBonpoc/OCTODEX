@@ -1,4 +1,6 @@
 import { View } from "react-native";
+import { Redirect } from "expo-router";
+import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 import { Screen } from "@/ui/surfaces";
@@ -11,6 +13,9 @@ import { WindowsSection } from "@/features/showcase/Windows";
  */
 export default function DesignSystemShowcase() {
   const { t } = useI18n();
+  const { mode, role } = useStore();
+  // the showcase is the company owner's (and the demo's): the Settings row is hidden for others, the address checks too
+  if (mode !== "demo" && role !== "director") return <Redirect href="/settings" />;
   return (
     <Screen title={t("ds.title")}>
       <View testID="showcase-intro">
