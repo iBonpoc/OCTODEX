@@ -4,7 +4,7 @@
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
 import { dsCode } from "./attrs";
-import { capSide, findCorners, houseSides, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
+import { capSide, cornerCut, findCorners, houseSides, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen } from "./format";
 import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./labels";
 
@@ -36,9 +36,9 @@ export interface SceneRun {
   face: [[number, number], [number, number]];
 }
 /** an end cap (founder 08.11): left or right, looking at the face; a tap swaps both caps of the line */
-export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story }
+export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean }
 /** a corner: outside / inside (a tap swaps); an inside one gets a splash guard by itself */
-export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean }
+export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number }
 export interface SceneDs {
   id: string; at: [number, number]; story: Story; selected: boolean;
   /** «D1» inside the mark (founder 08.11) */
@@ -89,7 +89,7 @@ export interface SceneOpts {
   dsText: (n: number) => string;
   storyText: (n: Story) => string;
   /** a corner's chip (i18n: «наруж.», «внутр. · брызги»); none — no chip (the speed bench) */
-  cornerText?: (kind: SceneCorner["kind"], splash: boolean) => string;
+  cornerText?: (kind: SceneCorner["kind"], splash: boolean, angleDeg: number) => string;
   /** how far the face line stands off the run, px */
   faceOff?: number;
   /** extra labels (the bench: up to 150 in all) — anchored at a plan point */
@@ -124,12 +124,13 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
     const side = sideOf(r);
     ([0, 1] as const).forEach((e) => {
       if (ends[r.id]?.[e]?.kind !== "cap") return;
-      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at: toScreen(o.view, e ? r.b : r.a), side: capSide(e, side), story: storyOf(r.attrs.story) });
+      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at: toScreen(o.view, e ? r.b : r.a), side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected });
     });
   }
   const corners: SceneCorner[] = found.map((f) => ({
     id: f.id, runId: f.runs[0].id, at: toScreen(o.view, f.at), kind: f.kind,
     splash: d.corners?.[f.id]?.splashGuard ?? (f.kind === "in" && !splashOff(d, f)),
+    angleDeg: Math.round(cornerCut(d, f, found).angleDeg),
   }));
   const ds: SceneDs[] = [];
   for (const s of d.downspouts) {
@@ -158,7 +159,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
     const code = dsCode(dsById.get(s.id)!);
     if (code) add(`ds:${s.id}`, s.at, s.at, code, "ds", -1, o.dsPad);
   });
-  if (o.cornerText) for (const k of corners) add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash), "corner", -1, o.dsPad);
+  if (o.cornerText) for (const k of corners) add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", -1, o.dsPad);
   for (const x of o.extra ?? []) {
     const p = toScreen(o.view, x.at);
     add(`x:${x.id}`, p, p, x.text, x.kind, -2);

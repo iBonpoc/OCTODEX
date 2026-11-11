@@ -42,10 +42,12 @@ const DsMark = memo(function DsMark({ d, color, fill, halo }: { d: SceneDs; colo
 
 /** an end cap: a square of its storey's colour with «L» / «R» (a rect, not a circle — e2e counts downspout circles) */
 export const CAP_HALF = drawing.dsR;
-const CapMark = memo(function CapMark({ k, color, fill }: { k: SceneCap; color: string; fill: string }) {
+const CapMark = memo(function CapMark({ k, color, fill, halo }: { k: SceneCap; color: string; fill: string; halo: string }) {
   const [x, y] = k.at;
   return (
     <G id={k.id}>
+      {/* a picked gutter's free end is a handle (#504): a ring round the cap — a rect, not a circle (e2e counts circles) */}
+      {k.selected ? <Rect id={`handle-${k.id}`} x={x - CAP_HALF - drawing.nodeR} y={y - CAP_HALF - drawing.nodeR} width={(CAP_HALF + drawing.nodeR) * 2} height={(CAP_HALF + drawing.nodeR) * 2} rx={radius.chip} fill="none" stroke={halo} strokeWidth={drawing.labelGap} /> : null}
       <Rect x={x - CAP_HALF} y={y - CAP_HALF} width={CAP_HALF * 2} height={CAP_HALF * 2} rx={radius.chip} fill={color} stroke={fill} strokeWidth={drawing.runW / 2} />
       <SvgText x={x} y={y + FS * 0.35} fontSize={FS} fontFamily={font.families.semibold} fill={fill} textAnchor="middle">
         {k.side}
@@ -96,7 +98,7 @@ export function SvgPainter({ scene, w, h, testID }: { scene: Scene; w: number; h
         <CornerMark key={k.id} k={k} color={c.drawing.node} fill={c.bg} />
       ))}
       {scene.caps.map((k) => (
-        <CapMark key={k.id} k={k} color={story[k.story - 1]!} fill={c.bg} />
+        <CapMark key={k.id} k={k} color={story[k.story - 1]!} fill={c.bg} halo={c.drawing.node} />
       ))}
       {scene.ds.map((d) => (
         <DsMark key={d.id} d={d} color={story[d.story - 1]!} fill={c.bg} halo={c.drawing.node} />

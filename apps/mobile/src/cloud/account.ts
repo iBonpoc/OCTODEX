@@ -6,7 +6,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
 import {
-  deleteWithRepeat, filterMark, lastOwnerCompanies, wipeMark, pendingOf, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
+  deleteWithRepeat, filterMark, lastOwnerCompanies, pendingOf, RETRY_CODES, WIPE_DONE_KEY, WIPE_PENDING_KEY, wipeDevice, wipedAlready, wipeMark,
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
 import { forgetDeviceState } from "@/data/persist";
@@ -128,28 +128,70 @@ const warn = (m: string) => console.warn(`delete-account: ${m}`);
 
 /** the account is gone: nothing of it stays on this phone (a failed wipe is repeated on the next start) */
 export async function finishOnDevice(userId?: string | null): Promise<void> {
-  await wipeKeepingOthers(userId);
+  await oneAtATime(() => wipeKeepingOthers(userId));
   // the session is closed on the server already: only forget it here
   await supabase.auth.signOut({ scope: "local" }).catch(() => {});
 }
 /** a wipe failed last time: once more (AuthProvider, on start) */
-export async function wipeIfPending(): Promise<void> {
+export function wipeIfPending(): Promise<void> {
+  return oneAtATime(repeatPending);
+}
+/**
+ * One wipe at a time (#1013 №4): the repeat on start and a deletion finished on start (goneChecker) read and write the
+ * same mark and the same shared keys — one runs after the other, never in between.
+ */
+let running: Promise<void> | null = null;
+function oneAtATime(run: () => Promise<void>): Promise<void> {
+  // nothing running: started now, in this turn — the repeat tells the store before it adopts ownerless ops (#911)
+  const next = running ? running.then(run, run) : run();
+  const settled = next.catch(() => {});
+  running = settled;
+  void settled.then(() => {
+    if (running === settled) running = null;
+  });
+  return next;
+}
+async function repeatPending(): Promise<void> {
   const pending = await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null);
   if (!pending) return;
   // the deleted person's id was kept with the mark ("1" — an older version: whose is not known)
   // never the session signed in now: after a failed wipe another person may have signed in (review #244, rule 6)
   const { userId, userIds, filterOnly } = pendingOf(pending);
+  // the device was wiped already, only the mark could not be changed then (#1013 №1): never wiped again — the next
+  // person's cache, drafts and role live there by now
+  const done = filterOnly ? null : await readKey(WIPE_DONE_KEY);
+  // «wiped» could not be read: neither wiped nor changed now — the next start asks again (review of #1013 №2)
+  if (done === undefined) return warn("«wiped» not read: the repeat waits for the next start");
+  const wiped = !filterOnly && wipedAlready(pending, done);
   // only the outbox was not filtered last time: the device keys are another person's by now — never wiped again (#911).
   // The store in memory first (it may hold what the disk has, and would write it back), then the disk
-  if (filterOnly) {
+  if (filterOnly || wiped) {
     userIds.forEach(forgetSharedOps);
-    if ((await filterShared(userIds)) === "done") await AsyncStorage.removeItem(WIPE_PENDING_KEY).catch(() => {});
+    const filtered = await filterShared(userIds);
+    // «wiped» goes only once the whole-wipe mark it answers is gone for sure (review of #1013 №1): else the start after
+    // the next would wipe the next person's data
+    const markGone = await tries(() =>
+      filtered === "done" ? AsyncStorage.removeItem(WIPE_PENDING_KEY) : wiped ? AsyncStorage.setItem(WIPE_PENDING_KEY, filterMark(userIds)) : Promise.resolve(),
+    );
+    if (markGone && (filtered === "done" || wiped)) await AsyncStorage.removeItem(WIPE_DONE_KEY).catch(() => {});
     return;
   }
   await wipeKeepingOthers(userId, false);
 }
 
 /* ---------- the shared outbox and the refused changes: filtered in place, never lost (#911) ---------- */
+/** a write that must land (the mark): tried again with a pause */
+async function tries(write: () => Promise<void>): Promise<boolean> {
+  for (let i = 1; i <= READ_TRIES; i++) {
+    try {
+      await write();
+      return true;
+    } catch {
+      if (i < READ_TRIES) await new Promise((r) => setTimeout(r, READ_PAUSE_MS * i));
+    }
+  }
+  return false;
+}
 const READ_TRIES = 3;
 const READ_PAUSE_MS = 300;
 /** the stored text; null — nothing stored; `undefined` — the device did not give it after every try */
@@ -211,22 +253,53 @@ async function filterShared(ids: readonly (string | null)[]): Promise<Filtered> 
 async function wipeKeepingOthers(userId: string | null | undefined, orSession = true): Promise<void> {
   // whose account: told by the caller (the start check knows it; the session may be gone already), else — right after
   // the deletion only — the session; unknown → null: only ops without an owner go
-  const session = orSession ? (await supabase.auth.getSession().catch(() => ({ data: { session: null } }))).data.session : null;
+  // never waits for ever (a refresh of the sign-in without network): every later wipe waits for this one (#1013 №4)
+  const noSession = { data: { session: null } };
+  const session = orSession
+    ? (
+        await Promise.race([
+          supabase.auth.getSession().catch(() => noSession),
+          new Promise<typeof noSession>((r) => setTimeout(() => r(noSession), START_CHECK_MS)),
+        ])
+      ).data.session
+    : null;
   const me = userId || session?.user.id || null;
   // an older deletion still to finish («filter:u0», or «u0» whose wipe failed): its people go too, never forgotten
-  const prior = (await readKey(WIPE_PENDING_KEY)) ?? null;
+  const prior = await readKey(WIPE_PENDING_KEY);
+  // the mark could not be read (#1013 №2): what it holds is not known — it is not overwritten unless it must be
+  let unknown = prior === undefined;
   const ids = [...new Set([me, ...(prior ? pendingOf(prior).userIds : [])])];
   // one mark for all of them, set before the slow part: an app killed (or a wipe that fails) anywhere below wipes
   // again for every person on the next start (reviews of #911 №3, #1010 №3)
-  await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark(ids)).catch(() => {});
+  if (!unknown) await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark(ids)).catch(() => {});
   forgetDeviceState(wipedOnDelete, { userId: me });
   ids.filter((x) => x !== me).forEach(forgetSharedOps);
   // the shared keys are filtered in place, never removed and written back: a failed read or write keeps other
   // people's ops (#911: a read that failed was taken for «empty» and the outbox removed)
-  const shared = await filterShared(ids);
+  let shared = await filterShared(ids);
+  // the mark was not read at first: read once more before the wipe — known now, its people are finished too (review
+  // of #1013 №3: an older «u0» left in place would wipe the next person's data)
+  if (unknown) {
+    const late = await readKey(WIPE_PENDING_KEY);
+    if (late !== undefined) {
+      unknown = false;
+      await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark([...new Set([...ids, ...(late ? pendingOf(late).userIds : [])])])).catch(() => {});
+      const more = (late ? pendingOf(late).userIds : []).filter((x) => !ids.includes(x));
+      if (more.length) {
+        ids.push(...more);
+        more.forEach(forgetSharedOps);
+        shared = await filterShared(ids);
+      }
+    }
+  }
   // the rest is gone: the next start only filters the shared keys again (never the next person's cache and drafts) —
   // the whole-wipe mark becomes «filter:» in one write, never taken away first (review of #1010 №4)
-  await wipeDevice(deviceStore, warn, me, [OUTBOX_KEY, REJECTED_KEY], { failed: wipeMark(ids), done: shared === "again" ? filterMark(ids) : null });
+  await wipeDevice(deviceStore, warn, me, [OUTBOX_KEY, REJECTED_KEY], {
+    failed: wipeMark(ids),
+    done: shared === "again" ? filterMark(ids) : null,
+    leave: unknown,
+    wiped: wipeMark(ids),
+  });
 }
 
 /**

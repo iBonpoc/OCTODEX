@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  accountErrorKey, afterDelete, filterMark, pendingOf, wipeMark, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
+  accountErrorKey, afterDelete, filterMark, pendingOf, wipedAlready, wipeMark, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
 } from "../src/features/deleteAccount";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -317,5 +317,16 @@ describe("unit:deleteAccount — the mark of a wipe to repeat (#911)", () => {
     };
     expect(await wipeDevice(store, () => {}, "u1", ["octo.outbox.v1", "octo.cloud.v1.rejected"])).toBe(true);
     expect([...st.keys()].sort()).toEqual(["octo.cloud.v1.rejected", "octo.lang.v1", "octo.outbox.v1"]);
+  });
+});
+
+describe("unit:deleteAccount — «the device is wiped already» (#1013)", () => {
+  it("covers a whole-wipe mark only when it names every person in it; never a «filter:» mark", () => {
+    expect(wipedAlready("u1", "u1")).toBe(true);
+    expect(wipedAlready("u1,u0", "u0,u1")).toBe(true);
+    expect(wipedAlready("u1,u0", "u1")).toBe(false);
+    expect(wipedAlready("u1", null)).toBe(false);
+    expect(wipedAlready("filter:u1", "u1")).toBe(false);
+    expect(wipedAlready("1", "1")).toBe(true);
   });
 });

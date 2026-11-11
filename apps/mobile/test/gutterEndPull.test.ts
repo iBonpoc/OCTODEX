@@ -1,0 +1,77 @@
+import { describe, expect, it } from "vitest";
+import { MIN_RUN_IN, alongAxis, finishStroke, moveEndAlong, type Stroke } from "../src/modules/gutters/canvas/edit";
+import { MAX_RUN_IN } from "../src/modules/gutters/canvas/attrs";
+import { DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
+import type { Drawing, P } from "../src/modules/gutters/geometry";
+
+/** #504: a free end taken (long press on the cap) follows the finger ALONG its gutter — longer and shorter. */
+const run = (id: string, a: P, b: P, o = {}) => ({ id, a, b, attrs: { ...DEFAULT_RUN_ATTRS }, ...o });
+const d0: Drawing = { runs: [run("r1", [0, 0], [480, 0], { lengthIn: 480 })], downspouts: [{ id: "d1", runId: "r1", atIn: 450, shape: "rect", size: "2x3", material: "aluminum", color: "white", bottom: { kind: "extension" } } as never] };
+
+describe("moveEndAlong", () => {
+  it("pulls the far end out: 480″ → 600″, the other end and the direction stay", () => {
+    const m = moveEndAlong(d0, "r1", 1, [600, 40]);
+    expect(m.runs[0]).toMatchObject({ a: [0, 0], b: [600, 0] });
+  });
+  it("pulls it in: shorter than before, a taped length follows, a downspout past the end comes back onto the line", () => {
+    const m = moveEndAlong(d0, "r1", 1, [300, -50]);
+    expect(m.runs[0]!.b).toEqual([300, 0]);
+    expect(m.runs[0]!.lengthIn).toBe(300); // taped 480″ shrinks by the pulled 180″
+    expect(m.downspouts[0]!.atIn).toBe(300);
+  });
+  it("the near end the same way (end 0): the far end stays fixed", () => {
+    const m = moveEndAlong(d0, "r1", 0, [-120, 9]);
+    expect(m.runs[0]).toMatchObject({ a: [-120, 0], b: [480, 0] });
+  });
+  it("a slanted gutter keeps its slant", () => {
+    const d: Drawing = { runs: [run("r", [0, 0], [300, 400])], downspouts: [] };
+    const m = moveEndAlong(d, "r", 1, [600, 800]);
+    expect(m.runs[0]!.b).toEqual([600, 800]);
+  });
+  it("not shorter than 1 ft, not past the longest gutter, and the finger over the other end does not turn it round", () => {
+    expect(moveEndAlong(d0, "r1", 1, [5, 0]).runs[0]!.b).toEqual([MIN_RUN_IN, 0]);
+    expect(moveEndAlong(d0, "r1", 1, [-300, 0]).runs[0]!.b).toEqual([MIN_RUN_IN, 0]);
+    expect(moveEndAlong(d0, "r1", 1, [1e9, 0]).runs[0]!.b).toEqual([MAX_RUN_IN, 0]);
+  });
+  it("nothing moves → the same drawing back (no empty «Назад» step); an unknown gutter too", () => {
+    expect(moveEndAlong(d0, "r1", 1, [480, 77])).toBe(d0);
+    expect(moveEndAlong(d0, "nope", 1, [10, 0])).toBe(d0);
+  });
+  it("end 0: the start moves, so a downspout keeps its place on the house (atIn counted from the start)", () => {
+    const d: Drawing = { runs: [run("r1", [0, 0], [480, 0])], downspouts: [{ id: "d1", runId: "r1", atIn: 100 } as never] };
+    const out = moveEndAlong(d, "r1", 0, [-60, 0]); // 60″ longer at the start
+    expect(out.runs[0]).toMatchObject({ a: [-60, 0], b: [480, 0] });
+    expect(out.downspouts[0]!.atIn).toBe(160); // still 100″ from the old start = 160″ from the new one
+    const back = moveEndAlong(d, "r1", 0, [60, 0]); // 60″ shorter
+    expect(back.downspouts[0]!.atIn).toBe(40);
+    expect(moveEndAlong(d, "r1", 0, [300, 0]).downspouts[0]!.atIn).toBe(0); // the start passed it: at the start
+  });
+  it("an end pulled onto another gutter's end (by rounding) does not make a corner by itself", () => {
+    const d: Drawing = { runs: [run("r1", [0, 0], [480, 0]), run("r2", [600, 0], [600, 300])], downspouts: [] };
+    expect(moveEndAlong(d, "r1", 1, [600, 0])).toBe(d);
+    expect(moveEndAlong(d, "r1", 1, [599, 0])).toBe(d);
+    expect(moveEndAlong(d, "r1", 1, [590, 0]).runs[0]!.b).toEqual([590, 0]);
+  });
+  it("finishStroke: a pull ends where the finger lifted; cancelled — back to before", () => {
+    const g: Stroke = { kind: "pull", id: "r1", end: 1, before: d0 };
+    const nr = { id: "n", attrs: DEFAULT_RUN_ATTRS };
+    expect(finishStroke(g, d0, [720, 3], 18, false, nr).runs[0]!.b).toEqual([720, 0]);
+    expect(finishStroke(g, d0, [720, 3], 18, true, nr)).toBe(d0);
+  });
+});
+
+describe("alongAxis: «Желоб» held on a cap — along the gutter pulls, across draws a new one", () => {
+  const r = { a: [0, 0] as P, b: [480, 0] as P };
+  it("along the axis, out or in, within 30°: a pull", () => {
+    expect(alongAxis(r, [480, 0], [560, 10], 18)).toBe(true);
+    expect(alongAxis(r, [480, 0], [400, -20], 18)).toBe(true);
+    expect(alongAxis(r, [480, 0], [480 + 87, 50], 18)).toBe(true); // 30°
+  });
+  it("across, or in between over 30°: not a pull", () => {
+    expect(alongAxis(r, [480, 0], [480, 90], 18)).toBe(false);
+    expect(alongAxis(r, [480, 0], [480 + 50, 90], 18)).toBe(false); // 61°
+  });
+  it("not far enough from where it began: undecided (false)", () => {
+    expect(alongAxis(r, [480, 0], [490, 2], 18)).toBe(false);
+  });
+});
