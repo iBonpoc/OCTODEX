@@ -3,9 +3,6 @@ const { dayKey, todayKey } = require("../companyTime.cjs");
 /** Technician day: summary → open next visit → en route → on site → photo (view, delete, undo) → own checklist item → all checked → sign → pay → progress grows. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
-// The photo viewer's delete/undo toast comes after an async step with no screen change to wait for: this spec still uses the
-// fixed waits of h.go / h.click (#906 п.4 follow-up: move it to waiting for the saved state).
-exports.fixedWaits = true;
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -45,7 +42,14 @@ exports.run = async (h) => {
   await h.click("Удалить фото");
   v = (await h.db()).visits.find((x) => x.id === id);
   h.expect(v.photos.length === 0, "photo deleted");
-  await h.click("Отменить");
+  // The toast's «Отменить» is armed 300 ms after the toast shows (ui/toastArm.ts: a double tap must not undo what it just did):
+  // a press before that is ignored BY DESIGN and nothing on the screen says when it is armed. So press until the saved state
+  // shows the undo (a press on an unarmed button changes nothing, a press after the undo has nowhere to go) — no fixed pause.
+  let restored = false;
+  for (let i = 0; i < 8 && !restored; i++) {
+    await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+    restored = await p.waitForFunction((vid) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits ?? []).find((x) => x.id === vid)?.photos.length === 1, id, { timeout: 700 }).then(() => true, () => false);
+  }
   v = (await h.db()).visits.find((x) => x.id === id);
   h.expect(v.photos.length === 1, "undo restores the photo");
 

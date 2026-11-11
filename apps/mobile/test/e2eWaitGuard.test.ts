@@ -30,7 +30,7 @@ const { sleepsIn, files, rel } = wb;
 const read = (p: string) => readFileSync(p, "utf8");
 
 /** specs that keep the fixed waits of h.go / h.click on purpose (each needs an issue to move it off) */
-const FIXED_WAITS_SPECS = ["e2e/specs/12-tech-day.cjs"]; // #1020
+const FIXED_WAITS_SPECS: string[] = []; // #1020: 12-tech-day moved off the fixed waits — the list is empty, keep it empty
 /** files that pass `legacyWaits: true` to the helper (the cloud runner: a live server keeps the page busy) */
 const LEGACY_WAITS_FILES = ["e2e/cloud/cloud.cjs", "e2e/cloud/specs/103-cloud-lead-to-payment.cjs", "e2e/h.cjs", "e2e/run.cjs"];
 
