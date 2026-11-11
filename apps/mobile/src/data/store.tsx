@@ -472,6 +472,8 @@ export function StoreProvider({
     {
       validate: (v) =>
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+      // an empty start shows an empty company: tried longer before it (#926)
+      patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
       // theirs — an empty list without the network otherwise (#864, review); another person's is never taken
       ...(mode === "cloud" ? { adopt: { from: `octo.cloud.v1.${company!.companyId}`, ok: (v: { db: DB }) => v.db.me === auth.userId } } : {}),
@@ -1022,7 +1024,15 @@ export function StoreProvider({
         }
         return next;
       },
-      { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
+      // sales take no payment on an invoice (13 §4; the database since #868), but the whole deposit of an estimate — yes
+      // (17, T73): it goes through the server's deposit function, which pays the balance it knows. The office keeps
+      // payment.record (its reference, a part of the deposit)
+      est && fullyPaid && job && role === "sales"
+        ? {
+            k: "estimate.deposit", id: est.id, jobId: job.id, invoiceId, paymentId: payment.id, method, customerId: est.customerId, propertyId: est.propertyId,
+            title: est.title, totalCents: est.totalCents, depositCents: est.depositCents ?? inv.totalCents, dueDate: companyToday(Date.parse(now)),
+          }
+        : { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
     );
   };
 
