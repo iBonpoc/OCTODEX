@@ -1420,3 +1420,44 @@ describe("unit:storeSync — two people one after the other on one phone (#864, 
     expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
   });
 });
+
+describe("unit:storeSync — sales take the deposit through the server's deposit function (#868, 17, T73)", () => {
+  const withDeposit = () => {
+    const d = makeSeed();
+    const e = d.estimates.find((x) => x.id === "e5")!;
+    e.depositPaidAt = undefined;
+    // the seed's own job of e5 (its deposit paid) leaves: one job, one unpaid deposit invoice
+    const old = d.jobs.filter((j) => j.estimateId === e.id).map((j) => j.id);
+    d.invoices = d.invoices.filter((i) => !old.includes(i.jobId ?? ""));
+    d.jobs = [...d.jobs.filter((j) => !old.includes(j.id)), { id: "j-dep", customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: e.id }];
+    d.invoices = [...d.invoices, { id: "i-dep", customerId: e.customerId, jobId: "j-dep", totalCents: 34200, paidCents: 0, dueDate: new Date().toISOString(), kind: "deposit", title: "Deposit" }];
+    return d;
+  };
+  const sentAs = async (dbRole: string) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: dbRole });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(withDeposit()));
+    await settle();
+    (valueOf(r) as unknown as { payDeposit: (id: string, m: string) => void }).payDeposit("e5", "cash");
+    await wait(1700); // the outbox tick
+    await settle();
+    return server.sends.map((x) => x.op as { k: string; paymentId?: string; method?: string; amountCents?: number; invoiceId?: string });
+  };
+  it("sales: the deposit invoice is on the phone already — sent as estimate.deposit (the database refuses sales a payment)", async () => {
+    const ops = await sentAs("sales");
+    expect(ops.map((o) => o.k)).toEqual(["estimate.deposit"]); // before: payment.record → 42501
+    const op = ops[0]!;
+    // the payment on the phone is the one the server writes (the same id), the method as chosen, no sum from the phone
+    const local = (valueOf(root!) as unknown as { db: { payments: { id: string; invoiceId: string; method: string }[] } }).db.payments.filter((x) => x.invoiceId === "i-dep");
+    expect(local).toHaveLength(1);
+    expect(op.paymentId).toBe(local[0]!.id);
+    expect(op.method).toBe("cash");
+    expect(op.invoiceId).toBe("i-dep");
+    expect(op.amountCents).toBeUndefined();
+  });
+  it("the office: as before, payment.record", async () => {
+    expect((await sentAs("office")).map((o) => o.k)).toEqual(["payment.record"]);
+  });
+});
