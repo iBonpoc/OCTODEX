@@ -28,7 +28,7 @@ describe("spike length by gutter size (a company setting, off by default, «пр
   it("on, the table: K 5″ → 7″, 6″ → 8″, 7″ → 9″; the length is an attribute and a key segment", () => {
     for (const [size, len] of [["5", "7"], ["6", "8"], ["7", "9"]]) {
       const s = part(one({ size, hanger: "spike" }, [], LEN).parts, "spike");
-      expect(s.map((p) => [p.attrs.lengthIn, p.qty])).toEqual([[len, "20"]]);
+      expect(s.map((p) => [p.attrs.lengthIn, p.qty])).toEqual([[len, "21"]]);
       expect(s[0]!.key).toBe(`spike.${len}.aluminum.k.${size}`);
     }
     expect(DEFAULT_SPIKE_LENGTH_IN["8"]).toBe("10");
@@ -61,7 +61,7 @@ describe("the kits' wood screw and anchor (company choice)", () => {
     const wood = screws.filter((p) => p.attrs.screw === "10x2");
     expect(wood.length).toBe(1);
     expect(wood[0]!.attrs.washer).toBe("washer");
-    expect(Number(wood[0]!.qty)).toBe(20 * 2 + 2 * 2 + 0); // 20 straps × 2 + the wall straps' 2 × 2
+    expect(Number(wood[0]!.qty)).toBe(21 * 2 + 2 * 2 + 0); // 21 straps × 2 + the wall straps' 2 × 2
     expect(screws.find((p) => p.attrs.screw === "8x0.5")!.attrs.washer).toBeUndefined();
     expect(part(parts, "anchor").map((p) => p.attrs.anchor)).toEqual(["1/4x1"]);
   });
@@ -79,7 +79,7 @@ describe("the kits' wood screw and anchor (company choice)", () => {
 describe("speed-screw hidden hangers and the lock-on guard", () => {
   it("hidden_speed and hidden_speed_clip are their own price items", () => {
     expect(Object.keys(DEFAULT_HANGER_KITS)).toEqual(expect.arrayContaining(["hidden_speed", "hidden_speed_clip"]));
-    for (const id of ["hidden_speed", "hidden_speed_clip"]) expect(part(one({ hanger: id }).parts, "hanger").map((p) => [p.attrs.hanger, p.qty])).toEqual([[id, "20"]]);
+    for (const id of ["hidden_speed", "hidden_speed_clip"]) expect(part(one({ hanger: id }).parts, "hanger").map((p) => [p.attrs.hanger, p.qty])).toEqual([[id, "21"]]);
   });
   it("lock_screen: 4 ft pieces, 2 screws a piece", () => {
     expect(DEFAULT_GUARD_KITS.lock_screen!.pieceIn).toBe(48);
