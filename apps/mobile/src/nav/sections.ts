@@ -199,16 +199,16 @@ const q = (o: Record<string, string | undefined>) => {
 };
 
 const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey; hint?: DictKey }> = {
-  lead: { label: "quick.lead", icon: "user" },
-  client: { label: "clients.new", icon: "users" },
+  lead: { label: "path.leadNew", icon: "user" },
+  client: { label: "path.clientNew", icon: "users" },
   job: { label: "path.jobNew", icon: "wrench", hint: "path.jobHint" },
   estimate: { label: "path.estimateNew", icon: "invoice", hint: "path.estimateHint" },
-  expense: { label: "quick.receipt", icon: "wallet" },
-  visit: { label: "sch.title", icon: "calendar" },
+  expense: { label: "path.expenseNew", icon: "wallet" },
+  visit: { label: "path.visitAdd", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },
   planEvent: { label: "plan5.addEvent", icon: "clock" },
   planTimeOff: { label: "plan5.addTimeOff", icon: "sun" },
-  photo: { label: "quick.photo", icon: "camera" },
+  photo: { label: "path.photoAdd", icon: "camera" },
   task: { label: "task.new", icon: "check" },
   call: { label: "w6.call.title", icon: "phone" },
   message: { label: "w6.msg.new", icon: "sms" },

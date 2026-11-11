@@ -28,6 +28,11 @@ export const en: Dict = {
 
   "quick.title": "Quick actions",
   "quick.lead": "New lead",
+  "path.leadNew": "Create lead",
+  "path.clientNew": "Create client",
+  "path.expenseNew": "Create expense",
+  "path.visitAdd": "Add visit",
+  "path.photoAdd": "Add photo",
   "path.estimateNew": "Create estimate",
   "path.estimateHint": "The price for the client: items and total",
   "path.jobNew": "Job without an estimate",

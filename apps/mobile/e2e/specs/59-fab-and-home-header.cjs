@@ -47,8 +47,8 @@ exports.run = async (h) => {
   // Главная: only what works
   await plus().click();
   let body = await sheetText();
-  for (const it of ["Новый лид", "Новый клиент", "Создать смету", "Работа без сметы", "Расход по чеку"]) h.expect(body.includes(it), `Главная «＋» has «${it}»`);
-  for (const it of ["Фото", "Задача", "Голосовая"]) h.expect(!body.includes(it), `Главная «＋» has no «${it}» yet`);
+  for (const it of ["Создать лид", "Создать клиента", "Создать смету", "Работа без сметы", "Создать расход"]) h.expect(body.includes(it), `Главная «＋» has «${it}»`);
+  for (const it of ["Добавить фото", "Задача", "Голосовая"]) h.expect(!body.includes(it), `Главная «＋» has no «${it}» yet`);
   await h.shot("home-sheet");
   await sheet().getByTestId("fab-client").click();
   await p.waitForTimeout(700);
@@ -81,7 +81,7 @@ exports.run = async (h) => {
 
   // Clients: one item — straight to the new client form
   await h.go("/clients");
-  h.expect((await p.getByRole("button", { name: "Новый клиент", exact: true }).locator("visible=true").count()) === 1, "Clients: one «＋ Новый клиент»");
+  h.expect((await p.getByRole("button", { name: "Создать клиента", exact: true }).locator("visible=true").count()) === 1, "Clients: one «＋ Новый клиент»");
   await plus().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/client/edit", `Clients «＋» → /client/edit (${p.url()})`);
@@ -108,7 +108,7 @@ exports.run = async (h) => {
   await h.go("/job/j1");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Запланировать работу") && body.includes("Создать смету"), "job «＋»: visit and estimate");
+  h.expect(body.includes("Добавить выезд") && body.includes("Создать смету"), "job «＋»: visit and estimate");
   await sheet().getByTestId("fab-visit").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/job/schedule" && new URL(p.url()).searchParams.get("jobId") === "j1", `job «＋» → schedule j1 (${p.url()})`);
@@ -117,7 +117,7 @@ exports.run = async (h) => {
   await h.go("/plan");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Новый лид") && body.includes("Записать в план"), "Plan «＋»: lead and «Записать в план»");
+  h.expect(body.includes("Создать лид") && body.includes("Записать в план"), "Plan «＋»: lead and «Записать в план»");
   for (const it of ["Работа без сметы", "Событие", "Выходной"]) h.expect(body.includes(it), `Plan «＋» has «${it}»`);
   await sheet().getByTestId("fab-planAdd").click();
   await p.waitForTimeout(600);
@@ -143,7 +143,7 @@ exports.run = async (h) => {
   h.expect((await vis("home-bell").count()) === 0, "tech: no bell (client and money notices are the office's)");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Новый лид") && body.includes("Расход по чеку") && !body.includes("Новый клиент") && !body.includes("Создать смету") && !body.includes("Работа без сметы"), "tech Главная «＋»: Лид · Расход");
+  h.expect(body.includes("Создать лид") && body.includes("Создать расход") && !body.includes("Создать клиента") && !body.includes("Создать смету") && !body.includes("Работа без сметы"), "tech Главная «＋»: Лид · Расход");
   await closeSheet();
   const tdb = await h.db();
   const mine = tdb.visits.find((v) => v.kind !== "inspection" && ((v.assigneeIds ?? []).includes(tdb.me) || v.techId === tdb.me));
@@ -151,7 +151,7 @@ exports.run = async (h) => {
     await h.go(`/visit/${mine.id}`);
     await plus().click();
     body = await sheetText();
-    h.expect(body.includes("Фото") && body.includes("Новый лид") && body.includes("Расход по чеку"), "tech visit «＋»: Фото · Лид · Расход");
+    h.expect(body.includes("Добавить фото") && body.includes("Создать лид") && body.includes("Создать расход"), "tech visit «＋»: Фото · Лид · Расход");
     await h.shot("visit-sheet");
     await closeSheet();
   }

@@ -8,7 +8,7 @@ exports.run = async (h) => {
   const p = h.page;
   await p.emulateMedia({ reducedMotion: "reduce" });
   await h.go("/job/new");
-  await h.click("Новый клиент");
+  await h.click("Создать клиента");
   await p.getByPlaceholder("Имя", { exact: false }).first().fill("Quinn Double");
   await p.getByPlaceholder("(555) 555-0100").last().fill("(555) 555-0121");
   await p.getByPlaceholder("Улица, дом, офис").last().fill("121 Oak Ln");

@@ -27,6 +27,11 @@ export const ru = {
 
   "quick.title": "Быстрые действия",
   "quick.lead": "Новый лид",
+  "path.leadNew": "Создать лид",
+  "path.clientNew": "Создать клиента",
+  "path.expenseNew": "Создать расход",
+  "path.visitAdd": "Добавить выезд",
+  "path.photoAdd": "Добавить фото",
   "path.estimateNew": "Создать смету",
   "path.estimateHint": "Цена для клиента: позиции и итог",
   "path.jobNew": "Работа без сметы",

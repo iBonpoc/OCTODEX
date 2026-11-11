@@ -28,6 +28,11 @@ export const es: Dict = {
 
   "quick.title": "Acciones rápidas",
   "quick.lead": "Nuevo cliente potencial",
+  "path.leadNew": "Crear lead",
+  "path.clientNew": "Crear cliente",
+  "path.expenseNew": "Crear gasto",
+  "path.visitAdd": "Añadir visita",
+  "path.photoAdd": "Añadir foto",
   "path.estimateNew": "Crear presupuesto",
   "path.estimateHint": "El precio para el cliente: partidas y total",
   "path.jobNew": "Trabajo sin presupuesto",
