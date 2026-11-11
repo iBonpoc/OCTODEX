@@ -20,6 +20,7 @@ export interface ShowcaseSection {
 
 export const SECTIONS: ShowcaseSection[] = [
   { id: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet"] },
+  { id: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField"] },
   { id: "tokens-color", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
   { id: "tokens-text", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },

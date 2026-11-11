@@ -1682,7 +1682,7 @@ iOS «Уменьшение движения», Android «Убрать анима
 | Н-40 | `Sheet` + `footer`, высоты `fit / medium / large`, `SheetPage` | `ui/overlays.tsx` | Б1 | до ✅ (`footer`, `height`, `onBack` — страница внутри шторки; в витрине «Окна: шторки», e2e 265; перевод экранов на `footer` — по таблице замен) |
 | Н-41 | `ConfirmDialog` + `useConfirm()` | новый, `Glass strong` | Б3 | до |
 | Н-42 | `PickerSheet` (одиночный, множественный, поиск, создание) | `Sheet` + `ListRow` | А3 | до |
-| Н-43 | `SelectField` | `Menu` + строка | А2 | до |
+| Н-43 | `SelectField` | `Menu` + строка | А2 | до ✅ (`ui/selectField.tsx`; в витрине «Селекторы», e2e 266) |
 | Н-44 | `StatusPicker` — в `ui/`, единственный способ | `listCard.tsx:516` | А10 | до |
 | Н-45 | `DateField`, `TimeField` | `DatePick` + `datetimepicker` (правило 17) + `Menu` (веб) | А7, А8 | до |
 | Н-38 | `DurationField` | `Stepper` + чипы | А8 | после |
