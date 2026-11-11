@@ -1117,7 +1117,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // the balance of that invoice as the server knows it; a replay with the same payment id changes nothing. Not signed on
       // the server → P0001, a refusal: the op is dropped, the phone reloads and the estimate shows its deposit as due again
       // (never a silent «received»). The app inserts no job any more.
-      return run(supabase.rpc("record_estimate_deposit", { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: op.method, p_due_date: op.dueDate ?? null }));
+      return run(supabase.rpc("record_estimate_deposit", { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: op.method }));
     case "invoice.pay":
       return run(
         ins("payments", {
