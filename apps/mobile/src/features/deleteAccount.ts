@@ -184,16 +184,45 @@ export interface WipeStore {
   setItem: (k: string, v: string) => Promise<void>;
   removeItem: (k: string) => Promise<void>;
 }
-/** true — wiped; false — it failed (logged, and marked for the next start) */
-export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}, userId?: string | null): Promise<boolean> {
+/**
+ * What the mark asks for (#911): «<id>» (or "1", an older version: whose is not known) — the whole wipe failed, repeat
+ * it; «filter:<id>» — the device keys are gone already, only the shared outbox and the refused changes still hold the
+ * deleted person's: filter them, and never wipe again (the next person's cache and drafts live there by now).
+ */
+export const FILTER_PENDING = "filter:";
+const idOf = (s: string) => (s && s !== "1" ? s : null);
+/** `userIds`: every person whose ops are still to filter — «filter:u0,u1» when a later deletion came before the repeat */
+export function pendingOf(v: string): { userId: string | null; userIds: (string | null)[]; filterOnly: boolean } {
+  const filterOnly = v.startsWith(FILTER_PENDING);
+  const ids = (filterOnly ? v.slice(FILTER_PENDING.length) : v).split(",").map(idOf);
+  return { userId: ids[0] ?? null, userIds: ids, filterOnly };
+}
+const idList = (ids: readonly (string | null)[]) => [...new Set(ids.map((x) => x ?? "1"))].join(",");
+export const filterMark = (ids: readonly (string | null)[]) => `${FILTER_PENDING}${idList(ids)}`;
+/** the whole wipe is still to do for these people (the first is the one being deleted now) — «u1,u0» (review of #1010 №3) */
+export const wipeMark = (ids: readonly (string | null)[]) => idList(ids);
+/**
+ * true — wiped; false — it failed (logged, and marked for the next start). `keep`: device keys that are not removed —
+ * the shared outbox and the refused changes are filtered in place by the caller, never removed and written back (#911).
+ * `marks` (#1010): the mark when it failed (default: the person) and the one left when it is done (null — none; a
+ * «filter:» mark replaces the whole-wipe mark in one write, so the phone is never left without one)
+ */
+export async function wipeDevice(
+  store: WipeStore,
+  log: (m: string) => void = () => {},
+  userId?: string | null,
+  keep: readonly string[] = [],
+  marks: { failed?: string; done?: string | null } = {},
+): Promise<boolean> {
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
-    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])]);
-    await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
+    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !keep.includes(k)));
+    if (marks.done) await store.setItem(WIPE_PENDING_KEY, marks.done).catch((e) => log(`mark not written: ${(e as Error).message}`));
+    else await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
     return true;
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);
-    await store.setItem(WIPE_PENDING_KEY, userId || "1").catch(() => {});
+    await store.setItem(WIPE_PENDING_KEY, marks.failed ?? (userId || "1")).catch(() => {});
     return false;
   }
 }

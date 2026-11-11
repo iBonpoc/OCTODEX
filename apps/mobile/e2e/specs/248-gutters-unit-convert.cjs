@@ -51,6 +51,14 @@ exports.run = async (h) => {
   await pickUnit("дюймы");
   await waitFor(async () => (await field("quick-length-one").inputValue()) === "493", "in inches: 493");
 
+  // a wrong number typed, then another unit: the length it had comes back — and it says so
+  await field("quick-length-one").fill("abc");
+  await pickUnit("м");
+  await tid("quick-length-bad").waitFor({ timeout: 3000 });
+  await waitFor(async () => (await field("quick-length-one").inputValue()) === "12.522", "the length it had: 12.522 m");
+  await pickUnit("дюймы");
+  await waitFor(async () => (await tid("quick-length-bad").count()) === 0, "a good unit switch clears the warning");
+
   await tid("quick-length-apply").getByRole("button").click();
   await tid("quick-length").waitFor({ state: "detached", timeout: 5000 });
   await waitFor(async () => (await p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).map((e) => e.geom.lengthIn), KEY)).includes(493), "the gutter is 493″ in the store");

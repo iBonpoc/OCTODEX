@@ -55,6 +55,24 @@ export const unsentOf = (items: readonly OwnedItem[], userId: string | null): nu
 export const othersOf = (items: readonly OwnedItem[], userId: string | null): OwnedItem[] =>
   items.filter((o) => !!o.owner && o.owner.userId !== userId);
 
+/**
+ * The repeat on start of a deletion whose shared outbox was not filtered (#911, «filter:<id>»): the store drops that
+ * person's ops (and ownerless ones) from the outbox and the refused changes it holds in memory — nothing else. Never the
+ * device wipe (forgetDeviceState): the person signed in now keeps sending, their state stays. Synchronous: told before
+ * the disk is filtered, so a store that loads later filters on load, before ownerless ops are adopted.
+ */
+type SharedForget = (userId: string | null) => void;
+const sharedListeners = new Set<SharedForget>();
+export function onSharedForget(cb: SharedForget): () => void {
+  sharedListeners.add(cb);
+  return () => {
+    sharedListeners.delete(cb);
+  };
+}
+export function forgetSharedOps(userId: string | null): void {
+  for (const cb of [...sharedListeners]) cb(userId);
+}
+
 /** the keys the account deletion resets in memory: the device keys except the outbox, which is filtered (othersOf) */
 export const wipedOnDelete = (k: string) => isDeviceKey(k) && k !== OUTBOX_KEY && k !== REJECTED_KEY;
 /** the money changes the server refused (outboxRejected): by owner, like the outbox — an account deletion keeps others' */
