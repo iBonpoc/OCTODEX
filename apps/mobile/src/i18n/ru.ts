@@ -3158,6 +3158,7 @@ export const ru = {
   "mod.gutters.view.parts": "Детали",
   "mod.gutters.sheet.tape": "Рулетка — замер точный, можно резать",
   "mod.gutters.sheet.scale": "Масштаб: {len}",
+  "mod.gutters.sheet.panel": "Контур {n} · желоба {runs}",
   "mod.gutters.view.rough": "Замер примерный — перед резкой промерьте",
   "mod.gutters.view.estimates": "Сметы по замеру",
   "mod.gutters.view.stale": "Чертёж правили после сметы: количества обновятся, ваши ручные правки останутся",

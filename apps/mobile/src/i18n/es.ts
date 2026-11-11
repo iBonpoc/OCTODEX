@@ -3158,6 +3158,7 @@ export const es: Dict = {
   "mod.gutters.view.parts": "Piezas",
   "mod.gutters.sheet.tape": "Cinta — medida exacta, lista para cortar",
   "mod.gutters.sheet.scale": "Escala: {len}",
+  "mod.gutters.sheet.panel": "Contorno {n} · canaletas {runs}",
   "mod.gutters.view.rough": "Medición aproximada: vuelva a medir antes de cortar",
   "mod.gutters.view.estimates": "Presupuestos de esta medición",
   "mod.gutters.view.stale": "El dibujo cambió después del presupuesto: las cantidades se actualizarán, sus cambios manuales se quedan",
