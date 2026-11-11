@@ -554,7 +554,7 @@ describe("unit:accountCloud — «wiped» only after the wipe went through (#101
     const { default: AS } = await import("@react-native-async-storage/async-storage");
     const order: string[] = [];
     const realRemove = AS.multiRemove;
-    AS.multiRemove = async (ks: string[]) => {
+    AS.multiRemove = async (ks: readonly string[]) => {
       order.push("wiped device");
       await realRemove(ks);
     };
