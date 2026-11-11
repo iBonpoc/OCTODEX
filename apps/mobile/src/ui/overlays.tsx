@@ -1,8 +1,9 @@
 import { toastArmed } from "./toastArm";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
+import { menuPick } from "./menuPick";
 import { swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
@@ -60,16 +61,41 @@ export function Menu<K extends string>({
   const { width: winW, height: winH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
-  if (!visible || !anchor) return null;
+  // an item picked runs only once the menu's Modal is gone (#743: on iOS a sheet opened while it closes never shows,
+  // and its invisible layer takes every touch) — menuPick.ts
+  const live = useRef({ onSelect, onClose });
+  live.current = { onSelect, onClose };
+  const picker = useMemo(
+    () =>
+      menuPick<K>({
+        close: () => live.current.onClose(),
+        select: (k) => live.current.onSelect(k),
+        waitsForDismiss: Platform.OS === "ios",
+        nextFrame: (f) => requestAnimationFrame(f),
+        later: (f, ms) => {
+          const id = setTimeout(f, ms);
+          return () => clearTimeout(id);
+        },
+        // the net for a lost onDismiss: longer than any close of the menu (it has no animation on iOS)
+        waitMs: motion.durSlow + motion.durFast,
+      }),
+    [],
+  );
+  // the Modal stays mounted after it closes (visible false), so iOS can say when it is gone; it keeps where it stood
+  const last = useRef(anchor);
+  if (anchor) last.current = anchor;
+  const at = anchor ?? last.current;
+  if (!at) return null;
+  const open = visible && !!anchor;
   // the edges: 16 from the window, and clear of the notch and the home indicator (docs/specs/32)
   const e = { l: Math.max(insets.left, space[4]), r: Math.max(insets.right, space[4]), t: Math.max(insets.top, space[4]), b: Math.max(insets.bottom, space[4]) };
   const w = Math.min(component.menuW, winW - e.l - e.r);
-  const left = Math.max(e.l, Math.min(anchor.x, winW - w - e.r));
-  const below = anchor.y + anchor.h + space[1];
+  const left = Math.max(e.l, Math.min(at.x, winW - w - e.r));
+  const below = at.y + at.h + space[1];
   const estH = (items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2;
-  const top = below + estH > winH - e.b ? Math.max(e.t, anchor.y - estH - space[1]) : below;
+  const top = below + estH > winH - e.b ? Math.max(e.t, at.y - estH - space[1]) : below;
   return (
-    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? ""} />
       <Animated.View
         entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
@@ -86,10 +112,7 @@ export function Menu<K extends string>({
           {items.map((it) => (
             <Press
               key={it.key}
-              onPress={() => {
-                onClose();
-                onSelect(it.key);
-              }}
+              onPress={() => picker.pick(it.key)}
               visibleHeight={size.hitMin}
               accessibilityRole="menuitem"
               accessibilityState={{ selected: !!it.selected }}
