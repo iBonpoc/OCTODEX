@@ -31,12 +31,21 @@ vi.mock("../src/cloud/client", () => ({
   },
 }));
 const storage = new Map<string, string>();
+/** keys the device fails to read / to write (#911) */
+const failGet = new Set<string>();
+const failSet = new Set<string>();
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getAllKeys: async () => [...storage.keys()],
     multiRemove: async (k: string[]) => k.forEach((x) => storage.delete(x)),
-    getItem: async (k: string) => storage.get(k) ?? null,
-    setItem: async (k: string, v: string) => void storage.set(k, v),
+    getItem: async (k: string) => {
+      if (failGet.has(k)) throw new Error("SQLITE_BUSY");
+      return storage.get(k) ?? null;
+    },
+    setItem: async (k: string, v: string) => {
+      if (failSet.has(k)) throw new Error("QuotaExceededError");
+      storage.set(k, v);
+    },
     removeItem: async (k: string) => void storage.delete(k),
   },
 }));
@@ -46,6 +55,8 @@ import { onDeviceForgotten } from "../src/data/persist";
 beforeEach(() => {
   Object.assign(state, { hang: false, deletedAt: null, error: null, signedOut: 0, session: true });
   storage.clear();
+  failGet.clear();
+  failSet.clear();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -95,7 +106,8 @@ describe("unit:accountCloud — the edge function call", () => {
 
 describe("unit:accountCloud — the repeat on start finishes it and wipes the device", () => {
   it("«repeat» answer → wipe (cloud caches, outbox, role…) and a local sign-out", async () => {
-    for (const k of ["octo.cloud.v1.co-1", "octo.outbox.v1", "octo.role.v1", "octo.lang.v1"]) storage.set(k, "x");
+    for (const k of ["octo.cloud.v1.co-1", "octo.role.v1", "octo.lang.v1"]) storage.set(k, "x");
+    storage.set("octo.outbox.v1", "[]");
     vi.stubGlobal("fetch", async () => ({ status: 200, json: async () => ({ deleted: true, auth: "done", result: { repeat: true } }) }));
     await finishDeletion();
     expect([...storage.keys()]).toEqual(["octo.lang.v1"]);
@@ -165,4 +177,63 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     await finishOnDevice();
     expect(storage.has("octo.outbox.v1")).toBe(false);
   });
+});
+
+describe("unit:accountCloud — the shared outbox when the device fails (#911)", () => {
+  const at = new Date().toISOString();
+  const op = (id: string, userId: string) => ({ id, op: { k: "x", id }, at, tries: 0, owner: { userId, companyId: "c1" } });
+  const ids = (k: string) => JSON.parse(storage.get(k)!).map((o: { id: string }) => o.id);
+  const BOTH = JSON.stringify([op("mine", "u1"), op("theirs", "u9")]);
+
+  it("the outbox is not read: other people's ops stay (nothing removed), the next start filters it", async () => {
+    storage.set("octo.outbox.v1", BOTH);
+    storage.set("octo.cloud.v1.c1", "cache");
+    failGet.add("octo.outbox.v1");
+    await finishOnDevice(); // u1
+    expect(storage.get("octo.outbox.v1")).toBe(BOTH); // before: read failed → «empty» → the key removed
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.get("octo.wipe.pending.v1")).toBe("filter:u1");
+    failGet.clear();
+    await wipeIfPending();
+    expect(ids("octo.outbox.v1")).toEqual(["theirs"]);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  }, 10_000);
+
+  it("a read that keeps failing: the next start never wipes the next person's cache, drafts and role", async () => {
+    storage.set("octo.outbox.v1", BOTH);
+    failGet.add("octo.outbox.v1");
+    await finishOnDevice(); // u1 deleted
+    // u9 signs in and works: their cache, a draft, a role
+    for (const k of ["octo.cloud.v1.c9", "octo.drafts.v1.e1", "octo.role.v1"]) storage.set(k, "u9's");
+    await wipeIfPending(); // the read fails again
+    for (const k of ["octo.cloud.v1.c9", "octo.drafts.v1.e1", "octo.role.v1"]) expect(storage.get(k)).toBe("u9's");
+    expect(storage.get("octo.outbox.v1")).toBe(BOTH);
+    expect(storage.get("octo.wipe.pending.v1")).toBe("filter:u1");
+  }, 15_000);
+
+  it("the filtered outbox cannot be written: other people's ops stay (never removed first)", async () => {
+    storage.set("octo.outbox.v1", BOTH);
+    failSet.add("octo.outbox.v1");
+    await finishOnDevice();
+    expect(storage.get("octo.outbox.v1")).toBe(BOTH); // before: removed by the wipe, the write back failed
+    expect(storage.get("octo.wipe.pending.v1")).toBe("filter:u1");
+  });
+
+  it("a broken outbox record is left as it is and not repeated (the store offers «copy and go on»)", async () => {
+    storage.set("octo.outbox.v1", '[{"id":"theirs"},');
+    await finishOnDevice();
+    expect(storage.get("octo.outbox.v1")).toBe('[{"id":"theirs"},');
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+
+  it("the refused changes: the same — a failed read keeps other people's", async () => {
+    const rej = JSON.stringify([{ id: "r1", owner: { userId: "u1", companyId: "c1" } }, { id: "r9", owner: { userId: "u9", companyId: "c1" } }]);
+    storage.set("octo.cloud.v1.rejected", rej);
+    failGet.add("octo.cloud.v1.rejected");
+    await finishOnDevice();
+    expect(storage.get("octo.cloud.v1.rejected")).toBe(rej); // before: a device key — removed
+    failGet.clear();
+    await wipeIfPending();
+    expect(ids("octo.cloud.v1.rejected")).toEqual(["r9"]);
+  }, 10_000);
 });

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  accountErrorKey, afterDelete, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
+  accountErrorKey, afterDelete, pendingOf, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
 } from "../src/features/deleteAccount";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -292,5 +292,25 @@ describe("unit:deleteAccount — one tap, and what the screen does (review #220 
 describe("unit:deleteAccount — a broken outbox copy leaves with the account (review of #910 №1)", () => {
   it("octo.broken.* is a device key", () => {
     expect(isDeviceKey("octo.broken.octo.outbox.v1.1700000000000")).toBe(true);
+  });
+});
+
+describe("unit:deleteAccount — the mark of a wipe to repeat (#911)", () => {
+  it("«<id>» / «1»: the whole wipe; «filter:<id>»: only the shared outbox", () => {
+    expect(pendingOf("u1")).toEqual({ userId: "u1", filterOnly: false });
+    expect(pendingOf("1")).toEqual({ userId: null, filterOnly: false });
+    expect(pendingOf("filter:u1")).toEqual({ userId: "u1", filterOnly: true });
+    expect(pendingOf("filter:1")).toEqual({ userId: null, filterOnly: true });
+  });
+  it("wipeDevice never removes the keys it is told to keep", async () => {
+    const st = new Map([["octo.outbox.v1", "[]"], ["octo.cloud.v1.rejected", "[]"], ["octo.cloud.v1.c1", "x"], ["octo.lang.v1", "ru"]]);
+    const store = {
+      getAllKeys: async () => [...st.keys()],
+      multiRemove: async (ks: string[]) => ks.forEach((k) => st.delete(k)),
+      setItem: async (k: string, v: string) => void st.set(k, v),
+      removeItem: async (k: string) => void st.delete(k),
+    };
+    expect(await wipeDevice(store, () => {}, "u1", ["octo.outbox.v1", "octo.cloud.v1.rejected"])).toBe(true);
+    expect([...st.keys()].sort()).toEqual(["octo.cloud.v1.rejected", "octo.lang.v1", "octo.outbox.v1"]);
   });
 });

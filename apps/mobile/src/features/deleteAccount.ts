@@ -184,11 +184,30 @@ export interface WipeStore {
   setItem: (k: string, v: string) => Promise<void>;
   removeItem: (k: string) => Promise<void>;
 }
-/** true — wiped; false — it failed (logged, and marked for the next start) */
-export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}, userId?: string | null): Promise<boolean> {
+/**
+ * What the mark asks for (#911): «<id>» (or "1", an older version: whose is not known) — the whole wipe failed, repeat
+ * it; «filter:<id>» — the device keys are gone already, only the shared outbox and the refused changes still hold the
+ * deleted person's: filter them, and never wipe again (the next person's cache and drafts live there by now).
+ */
+export const FILTER_PENDING = "filter:";
+export function pendingOf(v: string): { userId: string | null; filterOnly: boolean } {
+  const filterOnly = v.startsWith(FILTER_PENDING);
+  const id = filterOnly ? v.slice(FILTER_PENDING.length) : v;
+  return { userId: id && id !== "1" ? id : null, filterOnly };
+}
+/**
+ * true — wiped; false — it failed (logged, and marked for the next start). `keep`: device keys that are not removed —
+ * the shared outbox and the refused changes are filtered in place by the caller, never removed and written back (#911)
+ */
+export async function wipeDevice(
+  store: WipeStore,
+  log: (m: string) => void = () => {},
+  userId?: string | null,
+  keep: readonly string[] = [],
+): Promise<boolean> {
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
-    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])]);
+    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !keep.includes(k)));
     await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
     return true;
   } catch (e) {
