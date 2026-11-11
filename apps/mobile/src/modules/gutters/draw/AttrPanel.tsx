@@ -177,6 +177,7 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
   const { t } = useI18n();
   const { c } = useTheme();
   const ref = useRef<React.ComponentRef<typeof View>>(null);
+  const waiting = useRef(false);
   const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const word = unit === "ftin" || unit === "in" ? t(k("in")) : t(k(`unit.${unit}`));
   return (
@@ -184,13 +185,19 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
       <View ref={ref} collapsable={false}>
         <Press
           testID={testID}
-          onPress={() =>
+          onPress={() => {
+            // one wait at a time: a second tap while the keyboard is going down adds no second listener
+            if (waiting.current) return;
+            waiting.current = true;
             measureAfterKeyboard(
               { isVisible: () => Keyboard.isVisible(), dismiss: () => Keyboard.dismiss(), onHidden: (fn) => { const s = Keyboard.addListener("keyboardDidHide", fn); return () => s.remove(); } },
-              () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h })),
+              () => {
+                waiting.current = false;
+                ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }));
+              },
               (fn, ms) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
-            )
-          }
+            );
+          }}
           visibleHeight={sizes.hitMin}
           accessibilityRole="button"
           accessibilityLabel={t(k("unitPick"), { u: t(k(`unit.${unit}`)) })}

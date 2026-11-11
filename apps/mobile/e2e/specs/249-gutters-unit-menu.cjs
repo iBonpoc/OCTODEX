@@ -45,8 +45,15 @@ exports.run = async (h) => {
   await tid("quick-length-unit").click();
   const items = p.getByRole("menuitem");
   await items.first().waitFor({ timeout: 3000 });
-  await p.waitForTimeout(300);
-  const first = await items.first().boundingBox();
+  // the menu fades in: wait for its first item to stand (two equal frames in a row), not for seconds
+  let first = await items.first().boundingBox();
+  for (let i = 0; i < 20; i++) {
+    await p.waitForTimeout(100);
+    const again = await items.first().boundingBox();
+    const still = again.x === first.x && again.y === first.y;
+    first = again;
+    if (still) break;
+  }
   const last = await items.last().boundingBox();
   h.expect(first.y >= 0 && last.y + last.height <= vp.height && first.x >= 0 && first.x + first.width <= vp.width, `the menu is whole on the screen (${JSON.stringify([first, last])})`);
   const gap = first.y >= ub.y + ub.height - 8 ? first.y - (ub.y + ub.height) : ub.y - (last.y + last.height);
