@@ -13,7 +13,7 @@ async function shows(h, path, open, what) {
   await h.go(path);
   if (!open) {
     await noAccess(h).waitFor({ state: "visible", timeout: 15000 });
-    h.expect(true, `${what}: no access`);
+    h.expect(await noAccess(h).isVisible(), `${what}: no access`);
   } else {
     await h.page.getByText(open).first().waitFor({ state: "visible", timeout: 15000 });
     h.expect((await h.page.getByTestId("no-access").count()) === 0, `${what}: opens`);
