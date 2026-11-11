@@ -1022,7 +1022,15 @@ export function StoreProvider({
         }
         return next;
       },
-      { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
+      // sales take no payment on an invoice (13 §4; the database since #868), but the whole deposit of an estimate — yes
+      // (17, T73): it goes through the server's deposit function, which pays the balance it knows. The office keeps
+      // payment.record (its reference, a part of the deposit)
+      est && fullyPaid && job && role === "sales"
+        ? {
+            k: "estimate.deposit", id: est.id, jobId: job.id, invoiceId, paymentId: payment.id, method, customerId: est.customerId, propertyId: est.propertyId,
+            title: est.title, totalCents: est.totalCents, depositCents: est.depositCents ?? inv.totalCents, dueDate: companyToday(Date.parse(now)),
+          }
+        : { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
     );
   };
 
