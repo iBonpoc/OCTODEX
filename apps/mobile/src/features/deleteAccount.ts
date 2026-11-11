@@ -212,7 +212,7 @@ export async function wipeDevice(
   log: (m: string) => void = () => {},
   userId?: string | null,
   keep: readonly string[] = [],
-  marks: { failed?: string; done?: string | null; leave?: boolean; wiped?: string } = {},
+  marks: { failed?: string | (() => Promise<string>); done?: string | null; leave?: boolean; wiped?: string } = {},
   pauseMs = MARK_PAUSE_MS,
 ): Promise<boolean> {
   try {
@@ -220,13 +220,22 @@ export async function wipeDevice(
     await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !keep.includes(k)));
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);
-    await store.setItem(WIPE_PENDING_KEY, marks.failed ?? (userId || "1")).catch(() => {});
-    // not wiped: an older «wiped» must never answer this mark (review of #1013 №5)
-    await store.removeItem(WIPE_DONE_KEY).catch(() => {});
+    // not wiped: an older «wiped» must never answer this mark (review of #1013 №5) — taken away before the mark is set
+    // not taken away: the mark carries NOT_ANY, so «*» never answers it (review of #1017 №2)
+    const doneGone = await tries(() => store.removeItem(WIPE_DONE_KEY), pauseMs);
+    // a function: the mark there was not read — it is read once more and kept in the new one, never overwritten blind (#1017 №3)
+    const failed = typeof marks.failed === "function" ? await marks.failed().catch(() => userId || "1") : marks.failed;
+    const mark = failed ?? (userId || "1");
+    await store.setItem(WIPE_PENDING_KEY, doneGone || pendingOf(mark).userIds.includes(NOT_ANY) ? mark : `${mark},${NOT_ANY}`).catch(() => {});
     return false;
   }
-  // `leave`: the mark that was there could not be read — it is not known, so it is not taken away (#1013 №2)
-  if (marks.leave && !marks.done) return true;
+  // `leave`: the mark that was there could not be read — it is not known, so it is not taken away (#1013 №2). The device
+  // is wiped all the same: «wiped for any mark there now» (#1017 №1) — else an older «u0» left in place would wipe the
+  // next person's data on the next start; the repeat then only filters the shared ops of the mark's people
+  if (marks.leave && !marks.done) {
+    if (!(await tries(() => store.setItem(WIPE_DONE_KEY, WIPE_DONE_ANY), pauseMs))) log("«wiped» not written");
+    return true;
+  }
   // the device is wiped: the whole-wipe mark must not stay — it would wipe the next person's data on the next start
   // (#1013 №1). Tried again; when the mark cannot be changed, «the device is wiped for them» is kept beside it
   const markOk = await tries(() => (marks.done ? store.setItem(WIPE_PENDING_KEY, marks.done) : store.removeItem(WIPE_PENDING_KEY)), pauseMs);
@@ -235,11 +244,26 @@ export async function wipeDevice(
     return true;
   }
   log("the mark was not changed after the wipe: «wiped» kept beside it");
-  if (!(await tries(() => store.setItem(WIPE_DONE_KEY, marks.wiped ?? (userId || "1")), pauseMs))) log("«wiped» not written either");
+  // the mark there was not read (`leave`): «wiped» names whatever mark it is — «*», never only these people (review of
+  // #1029 №1: «u0» unread, «filter:u1» not written, «wiped»=«u1» → the next start wiped the next person's data)
+  const wiped = marks.leave ? WIPE_DONE_ANY : (marks.wiped ?? (userId || "1"));
+  if (!(await tries(() => store.setItem(WIPE_DONE_KEY, wiped), pauseMs))) log("«wiped» not written either");
   return true;
 }
 /** «the device is wiped already» for these people («u1,u0»), when the mark could not be changed after the wipe (#1013) */
 export const WIPE_DONE_KEY = "octo.wipe.done.v1";
+/**
+ * «wiped» for whatever whole-wipe mark lies there now (#1017 №1): written when the mark could not be read. Safe because
+ * every new whole-wipe mark takes «wiped» away first (#1017 №2), so it only ever answers a mark older than the wipe;
+ * when that fails the new mark carries NOT_ANY.
+ */
+export const WIPE_DONE_ANY = "*";
+/**
+ * Put in a new mark when the older «wiped» could not be taken away first (condition of the director on #1017): a mark
+ * with it is never answered by «*» — only by «wiped» naming every person in it. Looks like one more id to older versions
+ * (no op has this owner: nothing more is filtered).
+ */
+export const NOT_ANY = "~";
 const MARK_TRIES = 3;
 const MARK_PAUSE_MS = 200;
 async function tries(write: () => Promise<void>, pauseMs: number): Promise<boolean> {
@@ -258,6 +282,7 @@ export function wipedAlready(mark: string, done: string | null): boolean {
   if (!done) return false;
   const p = pendingOf(mark);
   if (p.filterOnly) return false;
+  if (done === WIPE_DONE_ANY) return !p.userIds.includes(NOT_ANY);
   const wiped = new Set(pendingOf(done).userIds);
   return p.userIds.every((id) => wiped.has(id));
 }
