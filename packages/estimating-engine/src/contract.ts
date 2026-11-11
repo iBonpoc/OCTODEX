@@ -63,3 +63,23 @@ export function clientMoney(
   const paidTotalCents = Math.max(0, paymentsNetCents.reduce((s, p) => s + p, 0));
   return { owesCents, paidTotalCents, invoicedCents };
 }
+
+/**
+ * What a payment on a visit takes (#757, audit B-02 / B-05 / A-17) — the same rule as the server's
+ * public.record_visit_payment (migration 20261111060000, test T180): the job's live final invoice with a balance takes the
+ * payment for its balance; with no final invoice, a new final one bills what is not yet billed (contract − every live
+ * invoice of the job, a deposit included). Nothing left — amount 0, no payment.
+ */
+export function visitPayment(
+  contractCents: number,
+  invoices: (InvoiceLike & { kind?: string })[],
+): { amountCents: number; into: "final" | "new" | "none" } {
+  const live = invoices.filter((i) => !i.void);
+  const fin = live.find((i) => i.kind === "final");
+  if (fin) {
+    const left = Math.max(0, fin.totalCents - fin.paidCents);
+    return { amountCents: left, into: left > 0 ? "final" : "none" };
+  }
+  const left = contractStatement(contractCents, live).toInvoice;
+  return { amountCents: left, into: left > 0 ? "new" : "none" };
+}

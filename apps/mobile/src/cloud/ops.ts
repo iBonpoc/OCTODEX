@@ -602,23 +602,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("companies").update({ visit_settings: op.settings }).eq("id", c));
     case "visit.sign":
       return run(supabase.from("visits").update({ signed_at: new Date().toISOString(), signature_svg: op.svg }).eq("id", op.visitId));
-    case "visit.pay": {
-      // the job is not moved here: «На месте» starts it (visit trigger), the office closes it (complete_job) — S10
-      await run(
-        ins("invoices", {
-          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: realJob(op.jobId), kind: "final", status: "sent",
-          subtotal_cents: op.amountCents, total_cents: op.amountCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
-        }),
-      );
-      await run(
-        ins("payments", {
-          id: op.paymentId, company_id: c, invoice_id: op.invoiceId, customer_id: op.customerId, visit_id: op.visitId,
-          method: op.method, amount_cents: op.amountCents, status: "succeeded", idempotency_key: op.paymentId, received_by: userId,
-        }),
-      );
-      await run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId));
-      return;
-    }
+    case "visit.pay":
+      // one server function (#757, audit B-02 / B-05 / A-17): the tech may not insert an invoice himself, and the job may
+      // already have its final invoice — the server picks the invoice, counts the amount and completes the visit. An old
+      // queued visit.pay (it inserted the invoice and the payment itself) goes here too. The job is not moved: «На месте»
+      // starts it (visit trigger), the office closes it (complete_job) — S10
+      return run(supabase.rpc("record_visit_payment", { p_visit_id: op.visitId, p_invoice_id: op.invoiceId, p_payment_id: op.paymentId, p_method: op.method, p_due_date: op.dueDate ?? null }));
     case "lead.reply":
       // older queued op: "I replied" — the activity trigger records the first response
       return run(ins("activities", { company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "reply", direction: "out" }));
@@ -1128,7 +1117,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // the balance of that invoice as the server knows it; a replay with the same payment id changes nothing. Not signed on
       // the server → P0001, a refusal: the op is dropped, the phone reloads and the estimate shows its deposit as due again
       // (never a silent «received»). The app inserts no job any more.
-      return run(supabase.rpc("record_estimate_deposit", { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: op.method }));
+      return run(supabase.rpc("record_estimate_deposit", { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: op.method, p_due_date: op.dueDate ?? null }));
     case "invoice.pay":
       return run(
         ins("payments", {

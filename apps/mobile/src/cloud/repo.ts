@@ -11,6 +11,7 @@ import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type Catal
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
+import { visitPayment } from "@octo/estimating-engine";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
 import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry } from "@/data/types";
@@ -423,7 +424,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         photos: files
           .filter((f) => f.visit_id === v.id && f.kind === "photo")
           .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),
-        amountDueCents: n(job?.contract_total_cents),
+        // what a payment on this visit takes — the server's rule (record_visit_payment, #757 A-17): the final invoice's
+        // balance, or what is not yet billed (a deposit off); not the whole contract
+        amountDueCents: job
+          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id).map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents), void: i.status === "void" }))).amountCents
+          : 0,
         signature: (v.signature_svg as string | null) ?? undefined,
         closed: v.status === "completed" || v.status === "no_show" || undefined,
         payment: pay ? { method: paymentMethodFromDb(s(pay.method)), amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { acceptPayment, clientMoney, contractStatement, progressAmount } from "../src/contract.js";
+import { visitPayment, acceptPayment, clientMoney, contractStatement, progressAmount } from "../src/contract.js";
 
 describe("contract statement", () => {
   it("$3,400 contract, 10% deposit invoiced and paid", () => {
@@ -42,5 +42,24 @@ describe("clientMoney (client card: owes / paid total)", () => {
     expect(clientMoney([], [100_00, -30_00]).paidTotalCents).toBe(70_00);
     expect(clientMoney([], [-5_00]).paidTotalCents).toBe(0);
     expect(clientMoney([], [])).toEqual({ owesCents: 0, paidTotalCents: 0, invoicedCents: 0 });
+  });
+});
+
+// the same numbers as supabase/tests/core_rls.sql T179–T180 (test prices)
+describe("visitPayment (#757: B-02, B-05, A-17)", () => {
+  it("no invoice yet: a new final invoice for the whole contract", () => {
+    expect(visitPayment(50000, [])).toEqual({ amountCents: 50000, into: "new" });
+  });
+  it("a deposit billed: the new final invoice takes the rest, not the whole contract", () => {
+    expect(visitPayment(50000, [{ kind: "deposit", totalCents: 15000, paidCents: 15000 }])).toEqual({ amountCents: 35000, into: "new" });
+  });
+  it("a final invoice issued: the payment goes into it, for its balance (no second final)", () => {
+    expect(visitPayment(50000, [{ kind: "final", totalCents: 50000, paidCents: 20000 }])).toEqual({ amountCents: 30000, into: "final" });
+  });
+  it("all paid: nothing to take", () => {
+    expect(visitPayment(50000, [{ kind: "final", totalCents: 50000, paidCents: 50000 }])).toEqual({ amountCents: 0, into: "none" });
+  });
+  it("a voided final does not count", () => {
+    expect(visitPayment(50000, [{ kind: "final", totalCents: 50000, paidCents: 0, void: true }])).toEqual({ amountCents: 50000, into: "new" });
   });
 });
