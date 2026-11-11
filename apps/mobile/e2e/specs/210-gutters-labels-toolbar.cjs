@@ -108,13 +108,12 @@ exports.run = async (h) => {
   await tid("draw-redo").getByRole("button").click();
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "«Вперёд»: back");
 
-  // the first gutter in mm
+  // the first gutter picked (its unit is no longer a per-line choice: one format for the company, e2e 257)
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y0);
   if (!wide) await tid("draw-props").getByRole("button").click();
-  await tid("attr-unit").waitFor({ timeout: 5000 });
-  await tid("attr-unit").getByRole("radio", { name: "мм", exact: true }).click();
-  await waitFor(async () => (await svg().locator("text").evaluateAll((ts) => ts.map((t) => t.textContent || ""))).some((t) => / mm · эт 1$/.test(t)), "its label in mm");
+  await tid("attr-panel").waitFor({ timeout: 5000 });
+  h.expect((await tid("attr-unit").count()) === 0, "no unit choice per line any more");
   if (!wide) await closeSheet();
   else await tid("draw-panel-close").getByRole("button").click();
   await h.shot("labels");

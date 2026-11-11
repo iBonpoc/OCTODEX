@@ -43,3 +43,6 @@ export function fmtLen(inches: number, unit: LenFormat = "ftin"): string {
   }
   return ftIn(inches);
 }
+
+/** the unit a length is TYPED in when the company shows it as `f`: decimal feet are typed as feet and inches */
+export const inputUnitOf = (f: LenFormat): LenUnit => (f === "ft" ? "ftin" : f);

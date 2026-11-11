@@ -114,20 +114,15 @@ describe("the documents follow the format, in every language", () => {
   });
 });
 
-/** the guard: a length reaches a person only through fmtLen(…, the company's format). ftIn( stays inside format.ts and in
- *  the files the second PR of #1092 moves to the same entry (the canvas and the input window): the list only shrinks */
+/** the guard: a length reaches a person only through fmtLen(…, the company's format); ftIn( stays inside format.ts */
 describe("guard: no length of its own", () => {
   const MODULE = join(__dirname, "../src/modules/gutters");
-  const STILL = new Set(["draw/CornerSketch.tsx", "draw/DrawScreen.tsx", "draw/AttrPanel.tsx"]);
   const walk = (dir: string): string[] => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : /\.tsx?$/.test(n) ? [join(dir, n)] : []));
-  it("ftIn( is called only in format.ts and the listed files", () => {
+  it("ftIn( is called only in format.ts", () => {
     const bad = walk(MODULE)
       .map((f) => relative(MODULE, f))
-      .filter((f) => f !== "canvas/format.ts" && !STILL.has(f))
+      .filter((f) => f !== "canvas/format.ts")
       .filter((f) => /\bftIn\(/.test(readFileSync(join(MODULE, f), "utf8")));
     expect(bad).toEqual([]);
-  });
-  it("a listed file that no longer needs it leaves the list", () => {
-    for (const f of STILL) expect(/\bftIn\(/.test(readFileSync(join(MODULE, f), "utf8")), `${f} has no ftIn( — remove it from STILL`).toBe(true);
   });
 });
