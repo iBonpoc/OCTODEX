@@ -71,12 +71,13 @@ declare
   v_sent    uuid;
   v_parent  uuid;
   v_entry   timestamptz;
+  v_lead    uuid;
 begin
   if v_uid is null or p_id is null then return 'noRight'; end if;
   case p_kind
     when 'estimate' then
-      select company_id, created_by, deleted_at, status, sent_version_id, customer_id
-        into v_company, v_by, v_del, v_status, v_sent, v_parent from public.estimates where id = p_id;
+      select company_id, created_by, deleted_at, status, sent_version_id, customer_id, lead_id
+        into v_company, v_by, v_del, v_status, v_sent, v_parent, v_lead from public.estimates where id = p_id;
     when 'task' then
       select company_id, created_by, deleted_at into v_company, v_by, v_del from public.tasks where id = p_id;
     when 'expense' then
@@ -98,6 +99,12 @@ begin
   end if;
 
   if p_deleting then
+    -- уже удалённое: повтор своего удаления (запись Корзины есть) — можно; удалённое сервером (отмена импорта, склейка)
+    -- «удалить ещё раз» нельзя — иначе появилась бы запись Корзины и «Вернуть» обошло бы сервер (security-check PR-1 №1)
+    if v_del is not null then
+      return case when exists (select 1 from public.trash_entries t where t.company_id = v_company and t.kind = p_kind
+                                  and t.object_id = p_id and t.restored_at is null) then null else 'noRight' end;
+    end if;
     if p_kind = 'estimate' then
       if v_status in ('awaiting_countersign', 'approved') then return 'signed'; end if;
       -- черновик — это ни разу не отправленная смета: правка после отправки тоже draft (ход sent → draft)
@@ -130,6 +137,9 @@ begin
   if v_parent is not null and exists (select 1 from public.customers c where c.id = v_parent and c.deleted_at is not null) then
     return 'parentDeleted';
   end if;
+  if v_lead is not null and exists (select 1 from public.leads l where l.id = v_lead and l.deleted_at is not null) then
+    return 'parentDeleted';
+  end if;
   return null;
 end;
 $$;
@@ -140,7 +150,7 @@ grant execute on function app.trash_reason(text, uuid, boolean) to authenticated
 -- ---- 3. Записать удаление / возврат в Корзину ----------------------------------------------------------------------
 -- Читает строку как она есть и записывает правду: удалена — открытая запись (если её нет), возвращена — запись
 -- закрыта. Клиент: его объекты и люди уходят тем же временем и возвращаются только те, что ушли с ним.
-create or replace function app.trash_note(p_kind text, p_id uuid)
+create or replace function app.trash_note_row(p_kind text, p_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_company uuid;
@@ -176,6 +186,15 @@ begin
   end if;
 end;
 $$;
+revoke all on function app.trash_note_row(text, uuid) from public, anon, authenticated;
+-- the after-trigger runs as the phone (authenticated): this door opens only from inside a trigger
+create or replace function app.trash_note(p_kind text, p_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if pg_trigger_depth() < 1 then raise exception 'trash: only from a trigger' using errcode = '42501'; end if;
+  perform app.trash_note_row(p_kind, p_id);
+end;
+$$;
 revoke all on function app.trash_note(text, uuid) from public, anon;
 grant execute on function app.trash_note(text, uuid) to authenticated;
 
@@ -193,6 +212,12 @@ begin
     return new;
   end if;
   if new.deleted_at is not distinct from old.deleted_at then return new; end if;
+  -- the time of a deletion is the server's (a phone's date could keep a row in the Trash for ever, security-check №2);
+  -- a deleted row is not re-dated
+  if old.deleted_at is not null and new.deleted_at is not null then
+    raise exception 'trash:noRight (a deleted row keeps its time)' using errcode = '42501';
+  end if;
+  if new.deleted_at is not null then new.deleted_at := now(); end if;
   v_why := app.trash_reason(tg_argv[0], old.id, new.deleted_at is not null);
   if v_why is not null then
     raise exception 'trash:%', v_why using errcode = case when v_why in ('noRight', 'notYours') then '42501' else '23514' end;
@@ -265,6 +290,7 @@ returns table (id uuid, ok boolean, reason text) language plpgsql security defin
 declare
   v_id  uuid;
   v_why text;
+  n     int;
 begin
   if auth.uid() is null then raise exception 'trash: sign in' using errcode = '42501'; end if;
   if p_kind is null or p_kind not in ('estimate', 'task', 'expense', 'catalog_item', 'customer', 'lead') then
@@ -279,17 +305,26 @@ begin
     else
       begin
         case p_kind
-          when 'estimate' then update public.estimates x set deleted_at = now() where x.id = v_id and x.deleted_at is null;
+          -- the estimate's rule again in the write: sent at the same moment — not deleted (no lock window)
+          when 'estimate' then update public.estimates x set deleted_at = now() where x.id = v_id and x.deleted_at is null and x.status = 'draft' and x.sent_version_id is null;
           when 'task' then update public.tasks x set deleted_at = now() where x.id = v_id and x.deleted_at is null;
           when 'expense' then update public.expenses x set deleted_at = now() where x.id = v_id and x.deleted_at is null;
           when 'catalog_item' then update public.catalog_items x set deleted_at = now(), is_active = false where x.id = v_id and x.deleted_at is null;
           when 'customer' then update public.customers x set deleted_at = now() where x.id = v_id and x.deleted_at is null;
           when 'lead' then update public.leads x set deleted_at = now() where x.id = v_id and x.deleted_at is null;
         end case;
-        perform app.trash_note(p_kind, v_id);   -- definer: триггер записи сюда не доходит (current_user — владелец функции)
-        ok := true;
+        get diagnostics n = row_count;
+        if n = 1 then
+          perform app.trash_note_row(p_kind, v_id);   -- definer: the trigger of the entry does not fire here (current_user is the owner)
+          ok := true;
+        elsif exists (select 1 from public.trash_entries t where t.kind = p_kind and t.object_id = v_id and t.restored_at is null) then
+          ok := true;                                -- a replay: in the Trash already
+        else
+          reason := 'refused';                       -- changed meanwhile (sent at the same moment)
+        end if;
       exception when others then
-        reason := case when sqlstate = '42501' then 'notYours' else 'refused' end;
+        reason := case when sqlerrm like 'trash:%' then split_part(substr(sqlerrm, 7), ' ', 1)
+                       when sqlerrm like '%do_not_service%' then 'doNotService' else 'refused' end;
       end;
     end if;
     return next;
@@ -328,7 +363,7 @@ begin
           when 'customer' then update public.customers x set deleted_at = null where x.id = v_id and x.deleted_at is not null;
           when 'lead' then update public.leads x set deleted_at = null where x.id = v_id and x.deleted_at is not null;
         end case;
-        perform app.trash_note(p_kind, v_id);   -- definer: триггер записи сюда не доходит (current_user — владелец функции)
+        perform app.trash_note_row(p_kind, v_id);   -- definer: the trigger of the entry does not fire here
         ok := true;
       exception when others then
         reason := case when sqlerrm like '%do_not_service%' then 'doNotService' else 'refused' end;
@@ -343,7 +378,8 @@ grant execute on function public.trash_restore(text, uuid[]) to authenticated;
 
 -- ---- 8. Что лежит в Корзине -------------------------------------------------------------------------------------------
 -- Записи не старше 30 дней, объект всё ещё удалён. Владелец, админ, офис — вся компания; остальные — удалённое ими.
--- Имя объекта читается из таблицы сейчас и не копируется в Корзину (нет второй копии личных данных, CCPA).
+-- Имя объекта читается из таблицы сейчас и не копируется в Корзину (нет второй копии личных данных, CCPA); отдаётся
+-- только тому, кто видит объект: владелец, админ, офис — или его автор (офиса понизили до мастера — имён чужих нет).
 create or replace function public.trash_list(p_company uuid)
 returns table (kind text, object_id uuid, label text, deleted_by uuid, deleted_by_name text, deleted_at timestamptz, days_left int)
 language plpgsql stable security definer set search_path = '' as $$
@@ -355,12 +391,12 @@ begin
   return query
     select t.kind, t.object_id,
            case t.kind
-             when 'estimate' then (select coalesce(nullif(concat_ws(' · ', e.number, e.title), ''), e.number) from public.estimates e where e.id = t.object_id and e.deleted_at is not null)
-             when 'task' then (select k.title from public.tasks k where k.id = t.object_id and k.deleted_at is not null)
-             when 'expense' then (select concat_ws(' · ', x.vendor, x.category) from public.expenses x where x.id = t.object_id and x.deleted_at is not null)
-             when 'catalog_item' then (select c.name from public.catalog_items c where c.id = t.object_id and c.deleted_at is not null)
-             when 'customer' then (select c.display_name from public.customers c where c.id = t.object_id and c.deleted_at is not null)
-             when 'lead' then (select coalesce(l.contact_name, l.number) from public.leads l where l.id = t.object_id and l.deleted_at is not null)
+             when 'estimate' then (select coalesce(nullif(concat_ws(' · ', e.number, e.title), ''), e.number) from public.estimates e where e.id = t.object_id and e.deleted_at is not null and (v_all or e.created_by = auth.uid()))
+             when 'task' then (select k.title from public.tasks k where k.id = t.object_id and k.deleted_at is not null and (v_all or k.created_by = auth.uid()))
+             when 'expense' then (select concat_ws(' · ', x.vendor, x.category) from public.expenses x where x.id = t.object_id and x.deleted_at is not null and (v_all or x.created_by = auth.uid()))
+             when 'catalog_item' then (select c.name from public.catalog_items c where c.id = t.object_id and c.deleted_at is not null and (v_all or c.created_by = auth.uid()))
+             when 'customer' then (select c.display_name from public.customers c where c.id = t.object_id and c.deleted_at is not null and (v_all or c.created_by = auth.uid()))
+             when 'lead' then (select coalesce(l.contact_name, l.number) from public.leads l where l.id = t.object_id and l.deleted_at is not null and (v_all or l.created_by = auth.uid()))
            end,
            t.deleted_by, u.full_name, t.deleted_at,
            greatest(0, app.trash_days() - extract(day from now() - t.deleted_at)::int)
