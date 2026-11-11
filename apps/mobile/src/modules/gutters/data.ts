@@ -158,6 +158,56 @@ export function removeMeasurement(store: ModuleStore, ref: string): (() => void)
   return typeof undo === "function" ? (undo as () => void) : null;
 }
 
+/**
+ * «Точность замера» from the measurement's card (spec 33 П25.3 Б1; the same choice as the canvas's «⋯», #739): only the
+ * measurement's own field — the drawing is not changed, so its status (made into an estimate or not) stays.
+ */
+export function setAccuracy(store: ModuleStore, ref: string, accuracy: "rough" | "tape"): (() => void) | null {
+  const m = gutterData(store.db).measurements.find((x) => x.id === ref);
+  if (!m || (m.accuracy ?? "rough") === accuracy) return null;
+  const next: MeasurementRow = { ...m, accuracy };
+  const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(next) }, apply: (d) => withGutterData(d, putMeasurement(next)), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
+}
+
+/**
+ * The rows of a copy (pure): a new measurement with the same link and accuracy, a draft (no estimate of it yet); every
+ * element with a new id — a downspout follows its gutter's new id. No estimates, sends or photos (spec 33 П25.3 Г).
+ */
+export function copyRows(m: MeasurementRow, elements: readonly ElementRow[], newId: () => string): { m: MeasurementRow; elements: ElementRow[] } {
+  const id = newId();
+  const ids = new Map(elements.map((e) => [e.id, newId()]));
+  const copy: MeasurementRow = { id, label: m.label, status: "draft", propertyId: m.propertyId, leadId: m.leadId, ...(m.accuracy ? { accuracy: m.accuracy } : {}) };
+  return {
+    m: copy,
+    elements: elements.map((e) => {
+      const runId = (e.geom as { runId?: unknown }).runId;
+      const geom = e.kind === "downspout" && typeof runId === "string" ? { ...e.geom, runId: ids.get(runId) ?? runId } : { ...e.geom };
+      return { ...e, id: ids.get(e.id)!, measurementId: id, geom, attrs: { ...e.attrs } };
+    }),
+  };
+}
+
+/**
+ * «Дублировать» (spec 33 П25.3 Г): the copy is written as the canvas writes a new one — the measurement first (its
+ * elements refer to it), then each element. One «Отменить» takes all of it back. The module not active → nothing.
+ */
+export function duplicateMeasurement(store: ModuleStore, ref: string, newId: () => string, now = () => new Date().toISOString()): { id: string; undo: () => void } | null {
+  const v = measurementOf(gutterData(store.db), ref);
+  if (!v) return null;
+  const c = copyRows(v.m, v.elements, newId);
+  const at = now();
+  const undos: (() => void)[] = [];
+  const put = (u: unknown) => {
+    if (typeof u === "function") undos.push(u as () => void);
+    return u != null;
+  };
+  const row: MeasurementRow = { ...c.m, updatedAt: at };
+  if (!put(store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(c.m) }, apply: (d) => withGutterData(d, putMeasurement(row)), coalesceKey: c.m.id, made: [c.m.id] }))) return null;
+  for (const e of c.elements) put(store.moduleOp(KEY, { kind: K.eSave, payload: { e: e as ElementRow & Record<string, unknown> }, apply: (d) => withGutterData(d, putElement(e)), coalesceKey: e.id, made: [e.id] }));
+  return { id: c.m.id, undo: () => [...undos].reverse().forEach((u) => u()) };
+}
+
 /** what «Привязать» offers for a typed text: open leads and clients by name (and a lead's address), the first few */
 export function linkChoices(db: Pick<DB, "leads" | "customers" | "properties">, q: string, max = 8) {
   const s = q.trim().toLowerCase();
