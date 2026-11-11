@@ -7,7 +7,8 @@
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { useEffect, useRef, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { Keyboard, ScrollView, View } from "react-native";
+import { measureAfterKeyboard } from "./afterKeyboard";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import { useI18n } from "@/i18n";
@@ -183,7 +184,13 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
       <View ref={ref} collapsable={false}>
         <Press
           testID={testID}
-          onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))}
+          onPress={() =>
+            measureAfterKeyboard(
+              { isVisible: () => Keyboard.isVisible(), dismiss: () => Keyboard.dismiss(), onHidden: (fn) => { const s = Keyboard.addListener("keyboardDidHide", fn); return () => s.remove(); } },
+              () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h })),
+              (fn, ms) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
+            )
+          }
           visibleHeight={sizes.hitMin}
           accessibilityRole="button"
           accessibilityLabel={t(k("unitPick"), { u: t(k(`unit.${unit}`)) })}
