@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { component, space } from "@octo/design-tokens";
@@ -332,13 +333,13 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
     const late = st.label === "late.enRoute" ? t("plan5.lateEnRoute") : st.label === "late.notLeft" ? t("plan5.lateNotLeft") : null;
     const addr = property ? [property.address, property.city].filter(Boolean).join(", ") : undefined;
     // «к оплате» only to the office and only when there is a sum (06 §7.6; руководитель 07.11, В2)
-    const due = canPlan([role]) && v.amountDueCents > 0;
+    const due = canPlan([role]) && visitDueCents(db, v) > 0;
     return (
       <ListCard
         title={client || "—"}
         when={span}
         lead={lead}
-        value={due ? money(v.amountDueCents) : undefined}
+        value={due ? money(visitDueCents(db, v)) : undefined}
         valueLabel={due ? t("card.val.toPay") : undefined}
         status={{ tone: st.status, label: late ? t("st.late") : t(st.label) }}
         signs={overlapSigns(db, v).map((o) => ({ tone: o.tone, label: t(o.key, o.params) }))}

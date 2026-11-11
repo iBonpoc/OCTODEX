@@ -1,4 +1,5 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
+import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -45,8 +46,8 @@ export default function Visits() {
         title={customer?.name ?? lead?.name ?? "—"}
         when={`${later.includes(v) ? `${day(v.start)} · ` : ""}${visitWhen(v, time, t("plan5.allDay"))}`}
         lead={{ kind: "time", top: hm ?? "", bottom: ampm ?? "" }}
-        value={v.amountDueCents > 0 ? money(v.amountDueCents) : undefined}
-        valueLabel={v.amountDueCents > 0 ? t("card.val.toPay") : undefined}
+        value={visitDueCents(db, v) > 0 ? money(visitDueCents(db, v)) : undefined}
+        valueLabel={visitDueCents(db, v) > 0 ? t("card.val.toPay") : undefined}
         status={{ tone: st.status, label: t(st.label) }}
         signs={overlapSigns(db, v).map((s) => ({ tone: s.tone, label: t(s.key, s.params) }))}
         tags={[...(v.checklist.length ? [t("vcard.checks", { done, n: v.checklist.length })] : []), ...(v.photos.length ? [t("vcard.photos", { n: v.photos.length })] : [])]}

@@ -93,7 +93,9 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     case "invoice.issue": return { ...base, what: "invoice", href: `/job/${op.jobId}`, amountCents: op.totalCents };
     case "invoice.pay": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents };
     case "payment.record": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents };
-    case "visit.pay": return { ...base, what: "payment", href: `/visit/${op.visitId}`, amountCents: op.amountCents };
+    // the money in the tech's hand the server did not take (more than due, the visit cancelled meanwhile…): say it in
+    // the tech's words — the office records it (record_visit_payment, #857 О1)
+    case "visit.pay": return { ...base, what: "payment", href: `/visit/${op.visitId}`, amountCents: op.amountCents, labelKey: "visit.rej.moneyInHand" };
     case "expense.add": return { ...base, what: "expense", href: op.jobId ? `/job/${op.jobId}` : "/settings/profile", amountCents: op.amountCents };
     default: return null;
   }
