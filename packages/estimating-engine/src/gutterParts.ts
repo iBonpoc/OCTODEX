@@ -570,7 +570,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     // hangers: the kit's parts × (a hanger every `spacing` and one at each end: floor(length / spacing) + 1; company can switch to ceil)
     const kit = rules.hangerKits[r.hanger];
     const spacing = [r.hangerSpacingIn, rules.hangerSpacingIn[r.hanger], kit?.spacingIn].find(okPos) ?? 24;
-    const hangers = rules.hangerAtEnds ? len.div(spacing).floor().add(1) : len.div(spacing).ceil();
+    const hangers = len.gt(0) ? (rules.hangerAtEnds ? len.div(spacing).floor().add(1) : len.div(spacing).ceil()) : dec(0);
     if (kit) kitParts(kit.parts, "fasteners", hangers, { gutter: r, kitId: r.hanger });
     else {
       advice.push({ code: "hanger_kit_unknown", runId: r.id, hanger: r.hanger });

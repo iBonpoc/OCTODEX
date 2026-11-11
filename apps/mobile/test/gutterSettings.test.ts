@@ -229,6 +229,7 @@ describe("M7c: правила и расходники компании → дв�
   });
   it("высота этажа 12 ft — даунспот 12 ft; крюк по краям по умолчанию, выключается", () => {
     expect(qty(parts({ rules: { storyFt: 12 } }), (x) => x.section === "downspouts" && x.unit === "ft")).toBe(12);
+    expect(readRules({}).hangerExtra).toBe(true); // not set in the stored settings → the default: yes
     expect(qty(parts({}), (x) => x.attrs.part === "hanger")).toBe(2 * 21);
     expect(qty(parts({ rules: { hangerExtra: false } }), (x) => x.attrs.part === "hanger")).toBe(2 * 20);
   });

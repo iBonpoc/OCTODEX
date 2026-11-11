@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeGutterParts, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
+import { resolveGutterRules, computeGutterParts, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
 
 /** docs/specs/33-gutters-module.md §9 S5g — parts from a measurement, lengths in inches. */
 
@@ -280,6 +280,12 @@ describe("П18.6: hanger kits", () => {
     expect(n(468)).toBe("20"); // 39 ft
     expect(n(24)).toBe("2"); // 2 ft: one at each end
     expect(n(12)).toBe("1"); // shorter than the spacing: one
+  });
+  it("a run of length 0 has no hanger; the old rule key hangerExtraPerRun in stored rules is ignored without an error", () => {
+    const n = (lengthIn: number, rules = {}) => q(computeGutterParts({ runs: [run({ id: "1", lengthIn })], corners: [], downspouts: [] }, rules).parts, "hanger.hidden.aluminum.k.6");
+    expect(n(0)).toBeUndefined();
+    expect(resolveGutterRules({ hangerExtraPerRun: 1 } as never).hangerAtEnds).toBe(true);
+    expect(n(480, { hangerExtraPerRun: 0 })).toBe("21");
   });
   it("the company can switch the end hanger off (ceil(length / spacing)) and a run's own spacing wins (snow, wind)", () => {
     expect(q(one({}, [], { hangerAtEnds: false }).parts, "hanger.hidden.aluminum.k.6")).toBe("20");
