@@ -73,3 +73,7 @@
 
 ## Связи и очередь
 #676 (значки профиля) и #682 (шторка водостока компактно) — `после-1.0`; PR-2 #929 делается в текущей шторке и ничего из них не требует, но не должен их усложнять (плитки 2×2 вместо двух рядов чипов — не больше места). #504 и #678 — влиты / отдельные.
+
+## Сделано
+- **#933 PR-1 «Угол виден» (claude/gutters-corner-angle):** чип угла на холсте — слово и градус («наруж. 90°», «наруж. 135°»); `SceneCorner.angleDeg` (из `cornerCut`), `cornerText(kind, splash, angleDeg)`. Тесты: unit `gutterCornerAngle`, e2e 252. Было/стало: `docs/specs/img/33-p933-{before,after}-390-{dark,light}.png`.
+- **#929 PR-1 «Значки» (claude/gutters-ds-icons):** четыре своих значка вида водостока в «Наряде» — `dsRect`, `dsRectRibbed`, `dsRound`, `dsRoundRibbed` (вид сверху: прямоугольное / круглое сечение, у ребристого — рёбра); `design/naryad-ds/tokens/icons.json` → `packages/design-tokens/src/icons.ts`, `mirror.test` зелёный. Выбор «Вид» плитками — PR-2. Снимок: `docs/specs/img/33-p929-icons-{dark,light}.png`.
