@@ -5,7 +5,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => {} } }));
-import { applyUpdate, corruptKey, createWriter, deviceGeneration, flushAllWriters, forgetDeviceState, liveWriters, loadStored, onDeviceForgotten, recoverHeld, storageProblems } from "../src/data/persist";
+import { MAX_CORRUPT_COPY, applyUpdate, corruptKey, createWriter, deviceGeneration, flushAllWriters, forgetDeviceState, liveWriters, loadStored, onDeviceForgotten, recoverHeld, storageProblems } from "../src/data/persist";
 import { isDeviceKey } from "../src/features/deleteAccount";
 
 const written: [string, string][] = [];
@@ -193,5 +193,102 @@ describe("unit:persist — what the phone could not keep (#756, audit A-01/A-02)
   });
   it("the raw copies are wiped with the account (they may hold the outbox)", () => {
     expect(isDeviceKey(corruptKey("octo.outbox.v1"))).toBe(true);
+  });
+});
+
+describe("unit:persist — review of #763: the writer never writes an older value back (№1, №4, №5)", () => {
+  /** a storage whose writes the test settles by hand */
+  const manual = () => {
+    const calls: { k: string; v: string; ok: () => void; no: () => void }[] = [];
+    const set = (k: string, v: string) => new Promise<void>((ok, no) => calls.push({ k, v, ok, no: () => no(new Error("full")) }));
+    return { calls, set };
+  };
+  it("№1: the outbox [A,B] fails after [] landed — [A,B] is never retried (A would go to the server twice)", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 0);
+    w.schedule("octo.outbox.v1", "[A,B]");
+    w.schedule("octo.outbox.v1", "[]"); // A confirmed, the outbox is empty — both writes in flight
+    m.calls[1]!.ok();
+    await vi.advanceTimersByTimeAsync(0);
+    m.calls[0]!.no();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(m.calls.map((c) => c.v)).toEqual(["[A,B]", "[]"]); // before the fix: a third call «[A,B]» a second later
+    expect(storageProblems().has("octo.outbox.v1")).toBe(false);
+  });
+  it("№1: the older fails first, the newer then lands — still no retry of the older", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 0);
+    w.schedule("k1", "v1");
+    w.schedule("k1", "v2");
+    m.calls[0]!.no();
+    await vi.advanceTimersByTimeAsync(0);
+    m.calls[1]!.ok();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(m.calls.map((c) => c.v)).toEqual(["v1", "v2"]);
+  });
+  it("№1: both fail — only the newer is tried again (before: the older took its place and v2 was lost)", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 0);
+    w.schedule("k2", "v1");
+    w.schedule("k2", "v2");
+    m.calls[0]!.no();
+    m.calls[1]!.no();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(m.calls.map((c) => c.v)).toEqual(["v1", "v2", "v2"]);
+    m.calls[2]!.ok();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storageProblems().has("k2")).toBe(false);
+  });
+  it("№4: the key changes while the old key's write waits to be retried — the old one is still written, its mark goes", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 0);
+    w.schedule("octo.cloud.v1.c1", "A");
+    m.calls[0]!.no();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storageProblems().get("octo.cloud.v1.c1")).toBe("write");
+    w.keyChanged("octo.db.v5");
+    w.schedule("octo.db.v5", "B");
+    m.calls[1]!.ok();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(m.calls.map((c) => [c.k, c.v])).toEqual([["octo.cloud.v1.c1", "A"], ["octo.db.v5", "B"], ["octo.cloud.v1.c1", "A"]]);
+    m.calls[2]!.ok();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storageProblems().has("octo.cloud.v1.c1")).toBe(false); // before: the retry was dropped, the badge stayed for ever
+  });
+  it("№5: a wipe drops the retry and its mark; a write in flight that fails after the wipe leaves no mark", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 0);
+    w.schedule("octo.queue.v1", "q");
+    m.calls[0]!.no();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storageProblems().get("octo.queue.v1")).toBe("write");
+    w.forget();
+    expect(storageProblems().has("octo.queue.v1")).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(m.calls).toHaveLength(1);
+    w.schedule("octo.queue.v1", "q2");
+    forgetDeviceState(() => false); // the generation moves while the write is in flight
+    m.calls[1]!.no();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(storageProblems().has("octo.queue.v1")).toBe(false);
+    expect(m.calls).toHaveLength(2);
+  });
+});
+
+describe("unit:persist — review of #763: held changes and broken values (№6, №8)", () => {
+  it("№6: the same value set again while held is not a change (the role checked on start never wins over the stored)", () => {
+    const s = applyUpdate({ key: "octo.role.v1", value: "director", loaded: true, held: true }, "director");
+    expect(s.dirty).toBe(false);
+    expect(applyUpdate({ key: "k", value: [1], loaded: true, held: true }, [1]).dirty).toBe(false);
+    expect(applyUpdate(s, "tech").dirty).toBe(true);
+    expect(applyUpdate({ ...s, dirty: true }, "director").dirty).toBe(true); // once changed, stays changed
+  });
+  it("№8: a cache's broken value is not copied aside; a too big one is held, not written over", async () => {
+    const kv = { getItem: async () => "{broken", setItem };
+    expect(await loadStored(kv, "octo.cloud.v1.c1", undefined, false)).toEqual({ ok: true, value: undefined });
+    expect(written).toEqual([]);
+    const big = { getItem: async () => "{" + "x".repeat(MAX_CORRUPT_COPY), setItem };
+    expect(await loadStored(big, "octo.outbox.v1")).toEqual({ ok: false });
+    expect(written).toEqual([]);
   });
 });

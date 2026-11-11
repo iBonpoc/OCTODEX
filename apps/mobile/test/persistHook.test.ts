@@ -8,12 +8,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("react", () => import("./support/miniReact"));
 const storage = new Map<string, string>();
 const reads: { key: string; answer: (raw: string | null) => void }[] = [];
-/** #756: the next reads fail; `auto` — reads are answered at once from the map */
+/** #756: the next reads fail (of the values; a held copy reads — or fails with failHeld); `auto` — reads are answered
+ *  at once from the map */
 const io = { failReads: 0, failWrites: false, auto: false };
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: (key: string) => {
-      if (io.failReads > 0) {
+      if (io.failReads > 0 && !key.startsWith("octo.held.v1.")) {
         io.failReads -= 1;
         return Promise.reject(new Error("Row too big to fit into CursorWindow"));
       }
@@ -24,6 +25,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       if (io.failWrites) throw new Error("QuotaExceededError");
       storage.set(k, v);
     },
+    removeItem: async (k: string) => void storage.delete(k),
   },
 }));
 import { render, settle } from "./support/miniReact";
@@ -57,7 +59,7 @@ describe("unit:persistHook — the key changes while a write waits", () => {
     root.rerender({ k: "octo.db.v5" }); // memberships went empty without the network: the store fell back to the demo
     await settle();
     expect(storage.get("octo.cloud.v1.c1")).toBe(JSON.stringify("my last edit")); // at once, not 250 ms later
-    expect(reads.map((r) => r.key)).toEqual(["octo.db.v5"]);
+    expect(reads.map((r) => r.key)).toEqual(["octo.db.v5", "octo.held.v1.octo.db.v5"]); // the value and its held copy
     answerAll();
     await settle();
     expect((root.out as Out)[0]).toBe("init");
@@ -87,7 +89,7 @@ describe("unit:persistHook — the device is wiped (account deletion)", () => {
   it("a read still running when the device is wiped does not bring the wiped value back", async () => {
     storage.set("octo.role.v1", JSON.stringify("tech"));
     const root = render(Comp, { k: "octo.role.v1" });
-    expect(reads).toHaveLength(1);
+    expect(reads.map((r) => r.key)).toEqual(["octo.role.v1", "octo.held.v1.octo.role.v1"]);
     forgetDeviceState((k) => k === "octo.role.v1");
     await settle();
     answerAll(); // the late answer: the stored value from before the wipe
@@ -249,6 +251,58 @@ describe("unit:persistHook — the phone could not read or write (#756, audit A-
     await settle();
     expect(storage.get("octo.outbox.v1")).toBe(JSON.stringify([{ id: "op" }]));
     expect(storageProblems().has("octo.outbox.v1")).toBe(false);
+    root.unmount();
+  });
+  it("review №2: held → a new op → the app closed → opened again (still unreadable): the op is there; read at last — merged, the held copy goes", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    io.failReads = 100;
+    const first = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    (first.out as OutOps)[1]((ops) => [...ops, { id: "paid-offline" }]);
+    await settle();
+    expect(JSON.parse(storage.get("octo.held.v1.octo.outbox.v1")!)).toEqual([{ id: "paid-offline" }]); // kept aside at once
+    expect(JSON.parse(storage.get("octo.outbox.v1")!)).toEqual([{ id: "a" }]); // the stored value untouched
+    first.unmount();
+    await settle();
+    const again = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    expect((again.out as OutOps)[0]).toEqual([{ id: "paid-offline" }]); // before the fix: [] — the payment was lost
+    io.failReads = 0;
+    await wait(400);
+    await settle();
+    expect((again.out as OutOps)[0]).toEqual([{ id: "a" }, { id: "paid-offline" }]);
+    expect(JSON.parse(storage.get("octo.outbox.v1")!)).toEqual([{ id: "a" }, { id: "paid-offline" }]);
+    expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(false); // gone once the merged value landed
+    expect((again.out as unknown as unknown[])[3]).toBe(1); // a load the store adopts legacy ops after (№7)
+    again.unmount();
+  });
+  it("review №2: a held copy left by the last session is merged on a normal start and removed", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    storage.set("octo.held.v1.octo.outbox.v1", JSON.stringify([{ id: "b" }]));
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([{ id: "a" }, { id: "b" }]);
+    expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(false);
+    root.unmount();
+  });
+  it("review №6: the role set again to its start value while held does not overwrite the stored role", async () => {
+    const Role = ({ k }: { k: string }) => usePersistentState<string>(k, "director");
+    storage.set("octo.role.v1", JSON.stringify("tech"));
+    io.failReads = 5;
+    const root = render(Role, { k: "octo.role.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    (root.out as Out)[1]("director"); // effectiveRole on start
+    await settle();
+    await wait(650);
+    await settle();
+    expect((root.out as Out)[0]).toBe("tech");
+    expect(storage.get("octo.role.v1")).toBe(JSON.stringify("tech"));
     root.unmount();
   });
 });

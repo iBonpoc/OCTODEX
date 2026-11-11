@@ -243,12 +243,13 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
   const { online, link, queue, stuckOps } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();
-  // the phone could not keep something (full storage, a failed read — #756): said first, the rest can wait
+  // the phone could not keep something (full storage, a failed read — #756): said first, next to the sync chip — it never
+  // hides «Не отправлено: N» (review of #763 №9)
   const unsaved = useStorageTrouble();
-  if (unsaved) return <StorageBadge compact={compact} label={t("storage.unsaved.badge")} tone={c.status.bad} />;
+  const storage = unsaved ? <StorageBadge compact={compact} label={t("storage.unsaved.badge")} tone={c.status.bad} /> : null;
   // the network is there, the server answers «not now» (5xx, 429): not «no network» (docs/specs/23 §3)
   const state = badgeState(online, link, queue.length, stuckOps.length);
-  if (!state) return null;
+  if (!state) return storage;
   const tone = state === "sending" ? c.status.info : state === "stuck" ? c.status.bad : c.status.warn;
   const label =
     state === "offline" ? t("offline.badge", { n: queue.length }) : state === "server" ? t("sync.server.badge", { n: queue.length }) : state === "stuck" ? t("sync.stuck.badge", { n: stuckOps.length }) : t("nav.sync.sending", { n: queue.length });
@@ -274,12 +275,19 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
     </View>
   );
   // «Не отправлено»: the badge opens the cards with «Повторить» / «Отменить изменение…» (docs/specs/23 §3)
-  return state === "stuck" ? (
+  const sync = state === "stuck" ? (
     <Press accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.chip.h} onPress={() => router.push("/settings/profile")} containerStyle={{ alignSelf: compact ? "center" : "flex-start" }}>
       {chip}
     </Press>
   ) : (
     chip
+  );
+  if (!storage) return sync;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", alignSelf: compact ? "center" : "flex-start", gap: space[1] }}>
+      {storage}
+      {sync}
+    </View>
   );
 }
 /** «Не сохранено на устройстве»: what the phone holds may be lost when the app closes (#756) */

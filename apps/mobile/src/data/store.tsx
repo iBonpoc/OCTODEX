@@ -515,7 +515,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true });
-  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
+  const [outbox, setOutbox, outboxReady, outboxLoads] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
   // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
   const [rejected, setRejected, rejectedReady] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
   // the app is leaving (background, the tab hidden or closed): every state that waits to be written is written now
@@ -555,7 +555,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setOutbox((prev) => (outboxRef.current = othersOf(prev, userId)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outboxReady]);
-  // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3)
+  // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3) —
+  // and again when a held outbox is read at last (outboxLoads, review of #763 №7)
   useEffect(() => {
     if (!outboxReady || !who || forgetOnLoad.current) return;
     // a functional update: never over a filter of a wipe that is set but not yet rendered (review #244 №5)
@@ -564,7 +565,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return (outboxRef.current = adopted === prev ? prev : [...adopted]);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outboxReady, who?.userId, who?.companyId]);
+  }, [outboxReady, outboxLoads, who?.userId, who?.companyId]);
   const modeRef = useRef(mode);
   modeRef.current = mode;
 

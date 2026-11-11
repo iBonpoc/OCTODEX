@@ -73,72 +73,90 @@ export const persistTiming = {
 /* ---------- the debounced writer (pure, unit-tested: test/persist.test.ts) ---------- */
 export type SetItem = (key: string, raw: string) => Promise<void>;
 export interface Writer {
-  /** write `raw` to `key` after `ms` (a newer schedule replaces the pending one) */
+  /** write `raw` to `key` after `ms` (a newer schedule of the same key replaces its pending one) */
   schedule: (key: string, raw: string) => void;
-  /** the hook's key changed: a pending write of the OLD key is written now (the last change is never lost, e.g. the
+  /** the hook's key changed: a pending write of an OLD key is written now (the last change is never lost, e.g. the
    *  memberships went empty without the network and the store fell back to the demo) */
   keyChanged: (key: string) => void;
-  /** the device is being wiped: the pending write is dropped */
+  /** the device is being wiped: the pending writes and the retries are dropped (and their marks) */
   forget: () => void;
-  /** the app is leaving (background, the tab hidden or closed): the pending write is written now (rule 6) */
+  /** the app is leaving (background, the tab hidden or closed): the pending writes are written now (rule 6) */
   flush: () => void;
 }
 /**
  * `ms` — how long a change waits for the next one before it is written (one write for a burst of changes). 0 — written
  * at once, in the same turn (the outbox: a change the phone has only there must survive a crash, review #263).
- * A failed write (full storage, #756 A-02) is never dropped silently: the key is reported («write») and the same value
- * is tried again later, until it is written or a newer change takes its place.
+ * A failed write (full storage, #756 A-02) is never dropped silently: the key is reported («write») and the value is
+ * tried again later — only while it is the LATEST change of its key (review of #763 №1: two writes of the outbox in
+ * flight, the older fails after the newer landed — the older must never be written back over it, or a sent op is sent
+ * twice). Every key keeps its own pending write and retry (№4: a key change does not drop the old key's retry).
+ * `onWritten(key)` — the latest change of `key` is on the phone.
  */
-export function createWriter(setItem: SetItem, ms = 250, gen: () => number = deviceGeneration): Writer {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let pending: { key: string; raw: string; gen: number } | null = null;
-  let fails = 0;
-  const write = () => {
-    const p = pending;
-    if (timer) clearTimeout(timer);
-    timer = null;
-    pending = null;
-    // scheduled before a wipe: the old person's data never lands after it
-    if (!p || p.gen !== gen()) return;
+export function createWriter(setItem: SetItem, ms = 250, gen: () => number = deviceGeneration, onWritten?: (key: string) => void): Writer {
+  type Entry = { raw: string; gen: number; seq: number };
+  let seq = 0;
+  const pending = new Map<string, Entry>();
+  const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** the newest change of each key (written, in flight or pending) */
+  const latest = new Map<string, number>();
+  const fails = new Map<string, number>();
+  const stop = (key: string) => {
+    const t = timers.get(key);
+    if (t) clearTimeout(t);
+    timers.delete(key);
+  };
+  const write = (key: string) => {
+    const p = pending.get(key);
+    stop(key);
+    pending.delete(key);
+    if (!p) return;
+    // scheduled before a wipe: the old person's data never lands after it (nor its mark stays, №5)
+    if (p.gen !== gen()) return reportStorage(key, null, "write");
     let done: Promise<void>;
     try {
-      done = setItem(p.key, p.raw);
+      done = setItem(key, p.raw);
     } catch (e) {
       done = Promise.reject(e);
     }
     done.then(
       () => {
-        fails = 0;
-        reportStorage(p.key, null);
+        if (latest.get(key) !== p.seq) return; // a newer one is on its way: it speaks for the key
+        fails.delete(key);
+        reportStorage(key, null); // on the phone now: neither a failed write nor a read held over it (overwriteOnReadError)
+        onWritten?.(key);
       },
       () => {
-        if (p.gen !== gen()) return; // wiped meanwhile: nothing to keep
-        reportStorage(p.key, "write");
-        if (pending) return; // a newer change waits: it is written instead (and reports itself)
-        fails += 1;
-        pending = p;
-        timer = setTimeout(write, persistTiming.write(fails));
+        if (p.gen !== gen()) return reportStorage(key, null, "write"); // wiped meanwhile: nothing to keep
+        if (latest.get(key) !== p.seq) return; // a newer change exists: it is written (or retried) instead, never this
+        reportStorage(key, "write");
+        if (pending.has(key)) return;
+        const n = (fails.get(key) ?? 0) + 1;
+        fails.set(key, n);
+        pending.set(key, p);
+        timers.set(key, setTimeout(() => write(key), persistTiming.write(n)));
       },
     );
   };
   return {
     schedule: (key, raw) => {
-      if (timer) clearTimeout(timer);
-      pending = { key, raw, gen: gen() };
-      if (ms <= 0) write();
-      else timer = setTimeout(write, ms);
+      stop(key);
+      seq += 1;
+      latest.set(key, seq);
+      pending.set(key, { raw, gen: gen(), seq });
+      if (ms <= 0) write(key);
+      else timers.set(key, setTimeout(() => write(key), ms));
     },
     keyChanged: (key) => {
-      if (pending && pending.key !== key) write();
+      for (const k of [...pending.keys()]) if (k !== key && !fails.has(k)) write(k);
     },
     forget: () => {
-      if (timer) clearTimeout(timer);
-      timer = null;
-      pending = null;
-      fails = 0;
+      for (const k of [...timers.keys()]) stop(k);
+      for (const k of new Set([...pending.keys(), ...fails.keys()])) reportStorage(k, null, "write");
+      pending.clear();
+      fails.clear();
     },
     flush: () => {
-      if (pending) write();
+      for (const k of [...pending.keys()]) write(k);
     },
   };
 }
@@ -150,9 +168,15 @@ export interface KV {
 }
 /** where a value that is not JSON is kept before the state starts over (wiped with the account: deleteAccount.ts) */
 export const corruptKey = (key: string) => `octo.corrupt.v1.${key}`;
+/** where a held state keeps what the phone did meanwhile (review of #763 №2): a new op survives the app closed while
+ *  the stored value still cannot be read (Android «Row too big…» does not pass by itself); wiped with the account */
+export const heldKey = (key: string) => `octo.held.v1.${key}`;
+/** a broken value bigger than this is not copied aside (review №8): it is held, not written over */
+export const MAX_CORRUPT_COPY = 1_000_000;
 /** `ok: false` — not read (the storage failed, or a broken value could not be kept aside): never write over it */
 export type Loaded<T> = { ok: true; value: T | undefined } | { ok: false };
-export async function loadStored<T>(kv: KV, key: string, validate?: (v: T) => boolean): Promise<Loaded<T>> {
+/** `keepCorrupt: false` — a cache the server fills again: a broken one is not copied aside, it starts fresh (№8) */
+export async function loadStored<T>(kv: KV, key: string, validate?: (v: T) => boolean, keepCorrupt = true): Promise<Loaded<T>> {
   let raw: string | null;
   try {
     raw = await kv.getItem(key);
@@ -165,6 +189,8 @@ export async function loadStored<T>(kv: KV, key: string, validate?: (v: T) => bo
     parsed = JSON.parse(raw) as T;
   } catch {
     // broken (#756): its raw copy is kept first; only then the state starts fresh
+    if (!keepCorrupt) return { ok: true, value: undefined };
+    if (raw.length > MAX_CORRUPT_COPY) return { ok: false };
     try {
       await kv.setItem(corruptKey(key), raw);
     } catch {
@@ -210,13 +236,19 @@ export interface Slot<T> {
   forgotten?: boolean;
   held?: boolean;
   dirty?: boolean;
+  /** how many times a stored value came in (a read, a held one read at last): the store adopts what came (№7) */
+  loads?: number;
 }
 /** a setter's update, bound to the key it was meant for: an update for another key (a late answer for the company's
  *  cache once the hook holds «octo.db.v5») is dropped (19 §6.12) */
 export function applyUpdate<T>(s: Slot<T>, next: T | ((prev: T) => T), forKey?: string): Slot<T> {
   if (forKey !== undefined && s.key !== forKey) return s;
   const value = typeof next === "function" ? (next as (p: T) => T)(s.value) : next;
-  return s.held ? { key: s.key, loaded: s.loaded, value, held: true, dirty: true } : { key: s.key, loaded: s.loaded, value };
+  const base = { key: s.key, loaded: s.loaded, value, loads: s.loads };
+  if (!s.held) return base;
+  // the same value set again (the role checked on start) is not a change: it never wins over the stored one (№6)
+  const dirty = !!s.dirty || (value !== s.value && JSON.stringify(value) !== JSON.stringify(s.value));
+  return { ...base, held: true, dirty };
 }
 
 /**
@@ -238,7 +270,14 @@ export function usePersistentState<T>(
   const [state, setState] = useState<Slot<T>>(() => ({ key, value: init(), loaded: false }));
   const writer = useRef<Writer | null>(null);
   // `immediate`: written in the same turn — for small state the phone must not lose (the outbox); else after 250 ms
-  if (!writer.current) writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250);
+  /** the held copy goes once the merged value is on the phone under its own key (review №2) */
+  const dropHeldAfterWrite = useRef<string | null>(null);
+  if (!writer.current)
+    writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (k) => {
+      if (dropHeldAfterWrite.current !== k) return;
+      dropHeldAfterWrite.current = null;
+      AsyncStorage.removeItem(heldKey(k)).catch(() => {});
+    });
   useEffect(() => {
     const w = writer.current!;
     live.add(w);
@@ -269,14 +308,23 @@ export function usePersistentState<T>(
     setState({ key, value: init(), loaded: false });
     const attempt = () => {
       timer = null;
-      void loadStored<T>(AsyncStorage, key, validate.current).then((res) => {
+      const cache = !!overwrite.current;
+      void Promise.all([
+        loadStored<T>(AsyncStorage, key, validate.current, !cache),
+        // what a held state kept last time (a cache is never held)
+        cache ? Promise.resolve<Loaded<T>>({ ok: true, value: undefined }) : loadStored<T>(AsyncStorage, heldKey(key), validate.current),
+      ]).then(([res, kept]) => {
         if (!current()) return;
-        if (res.ok) {
+        if (res.ok && kept.ok) {
           reportStorage(key, null, "read");
+          // the held copy waiting to be written now (it lands before the merged value, then goes after it)
+          writer.current!.flush();
           setState((s) => {
             if (s.key !== key) return s;
-            const value = s.held ? recoverHeld(res.value, s.value, !!s.dirty) : res.value;
-            return { key, value: value === undefined ? initRef.current() : value, loaded: true };
+            const stored = kept.value === undefined ? res.value : recoverHeld(res.value, kept.value, true);
+            if (kept.value !== undefined || (s.held && s.dirty)) dropHeldAfterWrite.current = key;
+            const value = s.held ? recoverHeld(stored, s.value, !!s.dirty) : stored;
+            return { key, value: value === undefined ? initRef.current() : value, loaded: true, loads: (s.loads ?? 0) + 1 };
           });
           return;
         }
@@ -293,7 +341,12 @@ export function usePersistentState<T>(
           return;
         }
         reportStorage(key, "read");
-        setState((s) => (s.key !== key || s.held ? s : { key, value: initRef.current(), loaded: true, held: true }));
+        // held: in memory — from what the last held state kept, if it can be read — and kept aside, never over the key
+        setState((s) => {
+          if (s.key !== key || s.held) return s;
+          const was = kept.ok ? kept.value : undefined;
+          return was === undefined ? { key, value: initRef.current(), loaded: true, held: true } : { key, value: was, loaded: true, held: true, dirty: true };
+        });
         timer = setTimeout(attempt, persistTiming.held(failures - persistTiming.read.length));
       });
     };
@@ -314,6 +367,7 @@ export function usePersistentState<T>(
         wiped.current += 1;
         writer.current!.forget();
         reportStorage(k, null);
+        dropHeldAfterWrite.current = null;
         setState({ key: k, value: initRef.current(), loaded: true, forgotten: true });
       }),
     [],
@@ -321,7 +375,12 @@ export function usePersistentState<T>(
 
   const ready = state.loaded && state.key === key;
   useEffect(() => {
-    if (!ready || state.forgotten || state.held) return;
+    if (!ready || state.forgotten) return;
+    // held: a change goes to its own key, so the app closed loses nothing (review №2); the stored value is not touched
+    if (state.held) {
+      if (state.dirty) writer.current!.schedule(heldKey(state.key), JSON.stringify(state.value));
+      return;
+    }
     writer.current!.schedule(state.key, JSON.stringify(state.value));
   }, [state, ready]);
 
@@ -329,7 +388,7 @@ export function usePersistentState<T>(
     (next: T | ((prev: T) => T), forKey?: string) => setState((s) => applyUpdate(s, next, forKey)),
     [],
   );
-  return [state.value, setValue, ready] as const;
+  return [state.value, setValue, ready, state.loads ?? 0] as const;
 }
 
 /** the day the demo was seeded: the demo company's calendar day (its «today» is built from its midnight, seed.ts —

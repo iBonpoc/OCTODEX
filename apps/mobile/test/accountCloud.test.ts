@@ -31,11 +31,16 @@ vi.mock("../src/cloud/client", () => ({
   },
 }));
 const storage = new Map<string, string>();
+/** review of #763 №3: reads of these keys fail */
+const failGet = new Set<string>();
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getAllKeys: async () => [...storage.keys()],
     multiRemove: async (k: string[]) => k.forEach((x) => storage.delete(x)),
-    getItem: async (k: string) => storage.get(k) ?? null,
+    getItem: async (k: string) => {
+      if (failGet.has(k)) throw new Error("Row too big to fit into CursorWindow");
+      return storage.get(k) ?? null;
+    },
     setItem: async (k: string, v: string) => void storage.set(k, v),
     removeItem: async (k: string) => void storage.delete(k),
   },
@@ -46,6 +51,7 @@ import { onDeviceForgotten } from "../src/data/persist";
 beforeEach(() => {
   Object.assign(state, { hang: false, deletedAt: null, error: null, signedOut: 0, session: true });
   storage.clear();
+  failGet.clear();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -164,5 +170,30 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     storage.set("octo.outbox.v1", JSON.stringify([op("mine", { userId: "u1", companyId: "c1" })]));
     await finishOnDevice();
     expect(storage.has("octo.outbox.v1")).toBe(false);
+  });
+  it("the outbox cannot be read: it is not taken for empty — kept whole, the rest wiped, the wipe repeated later (#763 №3)", async () => {
+    const at = new Date().toISOString();
+    const op = (id: string, owner?: { userId: string; companyId: string }) => ({ id, op: { k: "x", id }, at, tries: 0, ...(owner ? { owner } : {}) });
+    const ops = JSON.stringify([op("mine", { userId: "u1", companyId: "c1" }), op("theirs", { userId: "u9", companyId: "c1" })]);
+    storage.set("octo.outbox.v1", ops);
+    storage.set("octo.role.v1", '"tech"');
+    failGet.add("octo.outbox.v1");
+    await finishOnDevice("u1");
+    expect(storage.get("octo.outbox.v1")).toBe(ops); // before the fix: read as «null» → wiped, «theirs» lost
+    expect(storage.has("octo.role.v1")).toBe(false);
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1");
+    failGet.clear();
+    await wipeIfPending();
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs"]);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+  it("what a held outbox kept (octo.held.v1.) is sorted too: other people's ops stay, the copy goes", async () => {
+    const at = new Date().toISOString();
+    const op = (id: string, owner?: { userId: string; companyId: string }) => ({ id, op: { k: "x", id }, at, tries: 0, ...(owner ? { owner } : {}) });
+    storage.set("octo.outbox.v1", JSON.stringify([op("theirs", { userId: "u9", companyId: "c1" })]));
+    storage.set("octo.held.v1.octo.outbox.v1", JSON.stringify([op("theirs", { userId: "u9", companyId: "c1" }), op("theirs-new", { userId: "u9", companyId: "c1" }), op("mine", { userId: "u1", companyId: "c1" })]));
+    await finishOnDevice("u1");
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs", "theirs-new"]);
+    expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(false);
   });
 });

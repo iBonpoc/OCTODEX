@@ -9,7 +9,7 @@ import {
   deleteWithRepeat, lastOwnerCompanies, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
-import { forgetDeviceState } from "@/data/persist";
+import { forgetDeviceState, heldKey } from "@/data/persist";
 import { OUTBOX_KEY, othersOf, parseOutbox, REJECTED_KEY, wipedOnDelete } from "@/data/outboxOwner";
 import { parseRejected, rejectedOthers } from "@/data/outboxRejected";
 import { supabase } from "./client";
@@ -150,14 +150,27 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   // the deletion only — the session; unknown → null: only ops without an owner go
   const session = orSession ? (await supabase.auth.getSession().catch(() => ({ data: { session: null } }))).data.session : null;
   const me = userId || session?.user.id || null;
-  const keep = othersOf(parseOutbox(await AsyncStorage.getItem(OUTBOX_KEY).catch(() => null)), me);
+  // read failed ≠ empty (review of #763 №3): another person's unsent ops could not be sorted out — those keys stay
+  // as they are and the wipe is repeated on the next start (WIPE_PENDING_KEY)
+  const [out, outHeld, rej, rejHeld] = await Promise.all([OUTBOX_KEY, heldKey(OUTBOX_KEY), REJECTED_KEY, heldKey(REJECTED_KEY)].map(readRaw));
+  const readable = [out, outHeld, rej, rejHeld].every((r) => r.ok);
+  // the outbox with what a held state kept (heldKey is wiped by its prefix): other people's ops stay
+  const keep = othersOf([...parseOutbox(out.raw), ...parseOutbox(outHeld.raw).filter((o) => !parseOutbox(out.raw).some((x) => x.id === o.id))], me);
   // the money changes the server refused: other people's stay too (review #263 №2)
-  const keepRejected = rejectedOthers(parseRejected(await AsyncStorage.getItem(REJECTED_KEY).catch(() => null)), me);
+  const keepRejected = rejectedOthers([...parseRejected(rej.raw), ...parseRejected(rejHeld.raw).filter((o) => !parseRejected(rej.raw).some((x) => x.id === o.id))], me);
   forgetDeviceState(wipedOnDelete, { userId: me });
+  if (!readable) {
+    await wipeDevice(deviceStore, warn, me, UNSORTED_KEYS);
+    await AsyncStorage.setItem(WIPE_PENDING_KEY, me || "1").catch(() => {});
+    return;
+  }
   await wipeDevice(deviceStore, warn, me);
   if (keep.length) await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(keep)).catch(() => {});
   if (keepRejected.length) await AsyncStorage.setItem(REJECTED_KEY, JSON.stringify(keepRejected)).catch(() => {});
 }
+/** the outbox and the refused changes with their held copies: kept whole when one of them cannot be read */
+const UNSORTED_KEYS = [OUTBOX_KEY, heldKey(OUTBOX_KEY), REJECTED_KEY, heldKey(REJECTED_KEY)];
+const readRaw = (k: string) => AsyncStorage.getItem(k).then((raw) => ({ ok: true, raw }), () => ({ ok: false, raw: null as string | null }));
 
 /**
  * The repeat on start / sign-in (§6.9, §6.11 п.4), after goneChecker said «deleted»: the sign-in was not closed

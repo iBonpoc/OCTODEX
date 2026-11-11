@@ -171,8 +171,9 @@ export async function deleteWithRepeat(
 /* ---------- what is wiped from the device ---------- */
 /** the keys of this person on this device (the cloud cache of every company, the outbox, the role, the Plan's person, …) */
 export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1"];
-// octo.corrupt.v1. — raw copies of broken stored values (persist.ts corruptKey, #756): the outbox's among them
-export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open.", "octo.corrupt.v1."];
+// octo.corrupt.v1. — raw copies of broken stored values (persist.ts corruptKey, #756); octo.held.v1. — what a held state
+// kept (heldKey, review of #763 №2): the outbox's among them
+export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open.", "octo.corrupt.v1.", "octo.held.v1."];
 export const isDeviceKey = (k: string) => DEVICE_KEYS.includes(k) || DEVICE_PREFIXES.some((p) => k.startsWith(p));
 /** set when a wipe failed: the next start wipes again (review #220 №6); its value is the deleted person's id (or "1"
  *  from older versions), so the repeat knows whose ops leave the shared outbox (review #240 №2) */
@@ -184,10 +185,11 @@ export interface WipeStore {
   removeItem: (k: string) => Promise<void>;
 }
 /** true — wiped; false — it failed (logged, and marked for the next start) */
-export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}, userId?: string | null): Promise<boolean> {
+/** `spare` — keys left as they are this time (the outbox could not be read: whose ops it holds is not known, #763 №3) */
+export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}, userId?: string | null, spare: readonly string[] = []): Promise<boolean> {
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
-    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])]);
+    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !spare.includes(k)));
     await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
     return true;
   } catch (e) {
