@@ -13,6 +13,10 @@ function referencedIssues(body) {
   const out = new Set();
   const re = /\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed)|refs?)\b\s*:?\s*((?:#\d+)(?:\s*(?:,|and|и|&)\s*#\d+)*)/gi;
   for (const m of String(body ?? "").matchAll(re)) for (const n of m[1].matchAll(/#(\d+)/g)) out.add(Number(n[1]));
+  // "Closes https://github.com/<this repository>/issues/N" counts for GitHub too
+  const repo = (process.env.GITHUB_REPOSITORY || "").toLowerCase();
+  const urlRe = /\b(?:clos(?:e|es|ed)|fix(?:es|ed)?|resolv(?:e|es|ed)|refs?)\b\s*:?\s*https:\/\/github\.com\/([\w.-]+\/[\w.-]+)\/issues\/(\d+)\b/gi;
+  for (const m of String(body ?? "").matchAll(urlRe)) if (repo && m[1].toLowerCase() === repo) out.add(Number(m[2]));
   return [...out];
 }
 
@@ -57,10 +61,10 @@ if (require.main === module) {
   const repo = process.env.GITHUB_REPOSITORY;
   const pr = process.env.PR_NUMBER;
   const api = (p, extra = []) => JSON.parse(execFileSync("gh", ["api", ...extra, p], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }) || "null");
-  const tryApi = (p) => { try { return api(p); } catch (e) { if (/404|Not Found/.test(String(e.stderr || e.message))) return null; throw e; } };
+  const tryApi = (p) => { try { return api(p); } catch (e) { if (/HTTP 404/.test(String(e.stderr || e.message))) return null; throw e; } };
   (async () => {
     const prData = api(`repos/${repo}/pulls/${pr}`);
-    const files = api(`repos/${repo}/pulls/${pr}/files?per_page=100`, ["--paginate", "--slurp"]).flat().map((f) => f.filename);
+    const files = api(`repos/${repo}/pulls/${pr}/files?per_page=100`, ["--paginate", "--slurp"]).flat().flatMap((f) => [f.filename, f.previous_filename].filter(Boolean));
     const res = await decide({
       body: prData.body,
       prLabels: prData.labels.map((l) => l.name),

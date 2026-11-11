@@ -56,6 +56,12 @@ describe("rule 22 guard", () => {
     expect(referencedIssues("see #451, related to #902")).toEqual([]);
     expect(referencedIssues("Closes other/repo#451")).toEqual([]);
   });
+  it("Fixes/Resolves, 'and' lists and a link to this repository's issue count", async () => {
+    expect(referencedIssues("Fixes #1 and resolves #2 & #3")).toEqual([1, 2, 3]);
+    process.env.GITHUB_REPOSITORY = "iBonpoc/OCTODEX";
+    expect(referencedIssues("Closes https://github.com/iBonpoc/OCTODEX/issues/451")).toEqual([451]);
+    expect(referencedIssues("Closes https://github.com/other/repo/issues/451")).toEqual([]);
+  });
   it("documents-only PR is skipped; one app file makes it count", async () => {
     expect(docsOnly(["docs/ai/BOARD.md", "README.md"])).toBe(true);
     expect((await run("без ссылки", { files: ["docs/10-build-plan.md", "CLAUDE.md"] })).skip).toBe("documents only");
