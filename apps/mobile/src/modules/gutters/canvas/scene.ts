@@ -4,7 +4,7 @@
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
 import { dsCode } from "./attrs";
-import { capSide, centre, findCorners, houseSide, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
+import { capSide, findCorners, houseSides, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen } from "./format";
 import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./labels";
 
@@ -106,13 +106,13 @@ export interface SceneOpts {
 
 export function buildScene(d: Drawing, o: SceneOpts): Scene {
   const byId = new Map(d.runs.map((r) => [r.id, r]));
-  const c = centre(d.runs);
+  const sideOf = houseSides(d);
   const off = (o.faceOff ?? 0) / (o.view.k || 1);
   const runs: SceneRun[] = d.runs.map((r) => {
     const vx = r.b[0] - r.a[0], vy = r.b[1] - r.a[1];
     const L = Math.hypot(vx, vy) || 1;
     // right of a→b in plan (north up) is (vy, −vx); the face is the side away from the house
-    const sgn = houseSide(r, c) === "L" ? 1 : -1;
+    const sgn = sideOf(r) === "L" ? 1 : -1;
     const n: P = [(vy / L) * off * sgn, (-vx / L) * off * sgn];
     const fa: P = [r.a[0] + n[0], r.a[1] + n[1]], fb: P = [r.b[0] + n[0], r.b[1] + n[1]];
     return { id: r.id, a: toScreen(o.view, r.a), b: toScreen(o.view, r.b), story: storyOf(r.attrs.story), selected: r.id === o.selected, face: [toScreen(o.view, fa), toScreen(o.view, fb)] };
@@ -121,7 +121,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   const ends = runEnds(d, found);
   const caps: SceneCap[] = [];
   for (const r of d.runs) {
-    const side = houseSide(r, c);
+    const side = sideOf(r);
     ([0, 1] as const).forEach((e) => {
       if (ends[r.id]?.[e]?.kind !== "cap") return;
       caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at: toScreen(o.view, e ? r.b : r.a), side: capSide(e, side), story: storyOf(r.attrs.story) });

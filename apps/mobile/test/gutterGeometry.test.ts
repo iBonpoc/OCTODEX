@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { computeGutterParts } from "@octo/estimating-engine";
 import {
-  autoHouseSide, centre, findCorners, nearestRun, projectOnRun, runEnds, snapDirection, snapPoint, toMeasurement, withLength,
+  autoHouseSide, capSide, centre, cornerCut, findCorners, nearestRun, projectOnRun, runEnds, snapDirection, snapPoint, toMeasurement, withLength,
   type DrawnRun, type Drawing, type P,
 } from "../src/modules/gutters/geometry";
 
@@ -41,6 +41,114 @@ describe("house side", () => {
   it("clockwise outline: the house is on the right of every run", () => {
     const c = centre(rect);
     expect(rect.map((x) => autoHouseSide(x, c))).toEqual(["R", "R", "R", "R"]);
+  });
+});
+
+/**
+ * #758 (audit G-01, G-11): the house's side came from the centre of all points — outside a thin L-shaped (Г) or a
+ * U-shaped (П) house. Each case below checks first that the centre is outside the house (the old guess would be wrong),
+ * then the kinds of corners, the caps and the face lengths of the crew's sheet.
+ */
+describe("#758: the house's side of a Г- and a П-shaped house", () => {
+  // Г: 40 × 40 ft with a 30 × 30 ft notch at the top-right — two arms 10 ft wide; drawn clockwise
+  const G: DrawnRun[] = [
+    r("g1", [0, ft(40)], [ft(10), ft(40)]),
+    r("g2", [ft(10), ft(40)], [ft(10), ft(10)]),
+    r("g3", [ft(10), ft(10)], [ft(40), ft(10)]),
+    r("g4", [ft(40), ft(10)], [ft(40), 0]),
+    r("g5", [ft(40), 0], [0, 0]),
+    r("g6", [0, 0], [0, ft(40)]),
+  ];
+  // П: 50 × 30 ft with a 30 × 20 ft courtyard open at the top; drawn counter-clockwise
+  const U: DrawnRun[] = [
+    r("u1", [0, 0], [ft(50), 0]),
+    r("u2", [ft(50), 0], [ft(50), ft(30)]),
+    r("u3", [ft(50), ft(30)], [ft(40), ft(30)]),
+    r("u4", [ft(40), ft(30)], [ft(40), ft(10)]),
+    r("u5", [ft(40), ft(10)], [ft(10), ft(10)]),
+    r("u6", [ft(10), ft(10)], [ft(10), ft(30)]),
+    r("u7", [ft(10), ft(30)], [0, ft(30)]),
+    r("u8", [0, ft(30)], [0, 0]),
+  ];
+  const inG = (p: P) => p[0] >= 0 && p[1] >= 0 && p[0] <= ft(40) && p[1] <= ft(40) && (p[0] <= ft(10) || p[1] <= ft(10));
+  const inU = (p: P) => p[0] >= 0 && p[1] >= 0 && p[0] <= ft(50) && p[1] <= ft(30) && !(p[0] > ft(10) && p[0] < ft(40) && p[1] > ft(10));
+  const kinds = (runs: DrawnRun[]) => findCorners({ runs }).map((c) => c.kind).sort();
+
+  it("the old guess was wrong here: the centre of the points is outside both houses", () => {
+    expect(inG(centre(G))).toBe(false);
+    expect(inU(centre(U))).toBe(false);
+  });
+  it("closed Г: five outside corners and one inside (was: inside ↔ outside mixed up)", () => {
+    expect(kinds(G)).toEqual(["in", "out", "out", "out", "out", "out"]);
+    expect(findCorners({ runs: G }).find((c) => c.runs.some((x) => x.id === "g2") && c.runs.some((x) => x.id === "g3"))?.kind).toBe("in");
+  });
+  it("closed П: six outside corners and two inside", () => {
+    expect(kinds(U)).toEqual(["in", "in", "out", "out", "out", "out", "out", "out"]);
+  });
+  it("the same Г drawn in mixed directions and from another run: the same corners", () => {
+    const mixed = G.map((x, i) => (i % 2 ? r(x.id, x.b, x.a) : x));
+    expect(kinds([...mixed.slice(3), ...mixed.slice(0, 3)])).toEqual(["in", "out", "out", "out", "out", "out"]);
+  });
+  it("an open line round the outside of the Г (all but its long side): caps of opposite hands, the house inside every corner", () => {
+    const open = G.slice(0, 5); // g6 (the west wall) has no gutter
+    expect(kinds(open)).toEqual(["in", "out", "out", "out"]);
+    const m = toMeasurement({ runs: open, downspouts: [] });
+    const caps = m.runs.flatMap((x) => x.ends.flatMap((e, i) => (e.kind === "cap" ? [capSide(i as 0 | 1, x.houseSide)] : [])));
+    // one cap at each free end, a right one and a left one (was: both right)
+    expect(caps.sort()).toEqual(["L", "R"]);
+    // walked g1 → g5 the house is on the right of every run
+    expect(m.runs.map((x) => x.houseSide)).toEqual(["R", "R", "R", "R", "R"]);
+  });
+  it("an open П round three sides: the house inside both corners", () => {
+    const open = [r("w", [0, ft(30)], [0, 0]), r("s", [0, 0], [ft(50), 0]), r("e", [ft(50), 0], [ft(50), ft(30)])];
+    expect(kinds(open)).toEqual(["out", "out"]);
+  });
+  it("the crew's face lengths: an inside corner is shorter on the face by the gutter's size, an outside one longer", () => {
+    const cs = findCorners({ runs: G });
+    const inner = cs.find((c) => c.kind === "in")!;
+    const cut = cornerCut({ runs: G }, inner, cs);
+    // g2 (30 ft) runs from an outside corner (+6″) to the inside one (−6″): the face is as long as the back;
+    // g3 (30 ft) the same; was: both ends counted the wrong way
+    const g2 = cut.runs.find((x) => x.id === "g2")!;
+    expect(g2.backIn).toBe(ft(30));
+    expect(g2.frontIn).toBe(ft(30));
+    const g1 = cornerCut({ runs: G }, cs.find((c) => c.runs.some((x) => x.id === "g1") && c.runs.some((x) => x.id === "g2"))!, cs).runs.find((x) => x.id === "g1")!;
+    // g1 (10 ft) between two outside corners: + 6″ + 6″
+    expect(g1.frontIn).toBe(ft(10) + 12);
+  });
+  it("reference: a straight gutter alone — no corners, a cap of each hand at its ends", () => {
+    const m = toMeasurement({ runs: [r("s", [0, 0], [ft(40), 0])], downspouts: [] });
+    expect(findCorners({ runs: m.runs.map((x) => r(x.id, [0, 0], [ft(40), 0])) })).toEqual([]);
+    expect(m.runs[0]!.ends.map((e, i) => (e.kind === "cap" ? capSide(i as 0 | 1, m.runs[0]!.houseSide) : null)).sort()).toEqual(["L", "R"]);
+  });
+  it("reference: two storeys — the Г on the 1st and a rectangle on the 2nd above it: each storey its own line, its own corners", () => {
+    const up = rect.map((x) => r(`2${x.id}`, x.a, x.b, { attrs: { ...attrs, story: 2 } }));
+    const cs = findCorners({ runs: [...G, ...up] });
+    const of = (s: string) => cs.filter((c) => c.runs[0]!.id.startsWith(s)).map((c) => c.kind).sort();
+    expect(of("g")).toEqual(["in", "out", "out", "out", "out", "out"]);
+    expect(of("2")).toEqual(["out", "out", "out", "out"]);
+  });
+  it("reference: a 45° bay on the front of a rectangle — four bay corners (two bending out, two in), four outside corners", () => {
+    // 40 × 30 clockwise; the bottom wall has a bay 3 ft deep between x = 10 and 30 ft, its sides at 45°
+    const bay: DrawnRun[] = [
+      rect[0]!, rect[1]!,
+      r("b1", [ft(40), 0], [ft(30), 0]),
+      r("b2", [ft(30), 0], [ft(27), -ft(3)]),
+      r("b3", [ft(27), -ft(3)], [ft(13), -ft(3)]),
+      r("b4", [ft(13), -ft(3)], [ft(10), 0]),
+      r("b5", [ft(10), 0], [0, 0]),
+      rect[3]!,
+    ];
+    const cs = findCorners({ runs: bay });
+    expect(cs.map((c) => c.kind).sort()).toEqual(["bay", "bay", "bay", "bay", "out", "out", "out", "out"]);
+    // at the bay's base the gutter bends away from the house, at its front towards it
+    expect(cs.filter((c) => c.kind === "bay").map((c) => c.outward).sort()).toEqual([false, false, true, true]);
+  });
+  it("a run turned by hand keeps its side; a straight line alone keeps the old guess", () => {
+    const flipped = G.map((x) => ({ ...x, houseSide: "L" as const }));
+    expect(kinds(flipped)).toEqual(["in", "in", "in", "in", "in", "out"]);
+    const one = [r("x", [0, 0], [ft(20), 0]), r("y", [0, ft(30)], [ft(20), ft(30)])];
+    expect(toMeasurement({ runs: one, downspouts: [] }).runs.map((x) => x.houseSide)).toEqual(["L", "R"]);
   });
 });
 
