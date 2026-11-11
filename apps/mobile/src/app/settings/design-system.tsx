@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 import { Screen } from "@/ui/surfaces";
 import { TokenSections } from "@/features/showcase/Tokens";
+import { SelectorsSection } from "@/features/showcase/Selectors";
 import { WindowsSection } from "@/features/showcase/Windows";
 
 /**
@@ -22,6 +23,7 @@ export default function DesignSystemShowcase() {
         <T v="caption" tone="mut">{t("ds.intro")}</T>
       </View>
       <WindowsSection />
+      <SelectorsSection />
       <TokenSections />
     </Screen>
   );
