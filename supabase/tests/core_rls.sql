@@ -12755,10 +12755,25 @@ select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-00
   'T192 …nor without a token of his own');
 select tst.blocked($q$update public.estimates set status = 'sent' where id = 'e1420000-0000-4000-8000-000000000003'$q$, 'T192 the tech does not mark it «sent» by hand');
 select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000003')$q$, '%only the office%', 'T192 the tech gets no client link of it');
+-- a new estimate made «sent» at once, or with a link of his own on it: not sent, no link (director's review of #1134 п.2)
+select tst.fails($q$insert into public.estimates (id, company_id, customer_id, property_id, title, status) values ('e1920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 sent at once', 'sent')$q$,
+  'T192 the tech does not insert an estimate «sent» at once');
+do $$ begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title, public_token) values ('e1920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 own link', 'T192tokenTheTechPutsOnHisDraft0123456789');
+exception when others then null;   -- refused, or kept without the link (t02_public_token_null) — both checked below
+end $$;
+do $$ begin
+  update public.estimates set public_token = 'T192tokenTheTechPutsOnHisDraft0123456789' where id = 'e1420000-0000-4000-8000-000000000003';
+exception when others then null;
+end $$;
 :as_super
 select tst.ok((select status = 'draft' and sent_version_id is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
   'T192 the draft is still a draft: not sent');
 select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where estimate_id = 'e1420000-0000-4000-8000-000000000003'$q$) = 0, 'T192 …no client link made');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = 'e1920000-0000-4000-8000-000000000001'$q$) = 0, 'T192 …no «sent» estimate inserted');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0
+          and tst.cnt($q$select 1 from public.estimates where public_token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0,
+  'T192 …a link the tech writes himself (on a new draft or his own) is kept nowhere');
 select tst.ok((select locked_at is null and sent_at is null from public.estimate_versions where id = 'e1420000-0000-4000-8000-0000000000a3'), 'T192 …its version not locked');
 :as_office_a
 select tst.ok(public.send_estimate('e1420000-0000-4000-8000-000000000003', null) is not null, 'T192 the office sends it as before');

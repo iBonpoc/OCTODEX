@@ -2,7 +2,8 @@
  * Whose work a technician may open (#868, Q-40, Q-41; 13 §4 «Мастер — только своё»). The mirror of the database's
  * row rules — keep them together when either changes:
  *   visits_select / is_visit_assignee — T22, T35;   jobs_select / is_job_assignee — T22, T35;
- *   invoices_select (the tech's job) — T22;          estimates_select (created by him or the property of his work) — T33;
+ *   invoices_select (the tech's job) — T22;
+ *   estimates_select (created_by = him, or app.is_property_assignee: a visit of his that counts at the property) — T33;
  *   catalog_items_update / insert — staff only — T99.
  * In the cloud the server already gave the phone only what the person may see (RLS): every rule here says «yes» there,
  * so nothing the tech made offline (his own draft, not on the server yet) is ever hidden by the phone. The rules matter
