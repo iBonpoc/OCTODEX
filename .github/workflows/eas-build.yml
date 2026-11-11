@@ -29,6 +29,7 @@ on:
 permissions:
   contents: read
   pull-requests: read   # which PR main's last commit came from (our BUILD, #733)
+  actions: read         # the store-build gate reads the Checks runs of this commit (#1004)
 
 concurrency:
   group: eas-build-${{ inputs.platform }}
@@ -43,6 +44,15 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      # #1004: a store build (iOS: TestFlight) only from a commit with a green FULL Checks run (nightly or a manual run, all 6
+      # views). A push to main runs only 390-dark and a PR three views (audit condition for #906 п.6); the Android «preview»
+      # APK is a test build for our own phones and is not gated. scripts/fullRunGate.cjs, test/fullRunGate.test.ts.
+      - name: Full Checks run is green on this commit (store builds)
+        if: inputs.platform == 'ios'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: node scripts/fullRunGate.cjs
       - name: Secrets are set
         run: |
           if [ -z "$EXPO_TOKEN" ]; then echo "::error::Add EXPO_TOKEN in Settings → Secrets and variables → Actions"; exit 1; fi
