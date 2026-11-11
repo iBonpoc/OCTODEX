@@ -1,6 +1,6 @@
 /** The sync badge: «no network» vs «server unavailable» (docs/specs/23 §3, review #244 №3). */
 import { describe, expect, it } from "vitest";
-import { badgeState, leavingSummary, MONEY_KINDS, stuckKindKey } from "../src/data/syncLink";
+import { badgeState, leavingSummary, MONEY_KINDS, showsSyncLine, stuckKindKey } from "../src/data/syncLink";
 import { ru } from "../src/i18n/ru";
 import { en } from "../src/i18n/en";
 import { es } from "../src/i18n/es";
@@ -64,5 +64,14 @@ describe("unit:syncLink — what leaves with a discarded change (review #259)", 
   it("no money: a job line, a note, a lead change", () => {
     expect(leavingSummary(["jobLine.save", "note.add", "lead.update"]).money).toBe(false);
     expect(leavingSummary([])).toEqual({ kinds: [], money: false });
+  });
+});
+
+describe("unit:syncLink — «Ещё»: the sync line or «всё сохранено» (A-02, #756)", () => {
+  it("the device refused a write: never «всё сохранено», also online with nothing to send", () => {
+    expect(showsSyncLine(true, 0, false)).toBe(false);
+    expect(showsSyncLine(true, 0, true)).toBe(true);
+    expect(showsSyncLine(false, 0, false)).toBe(true);
+    expect(showsSyncLine(true, 2, false)).toBe(true);
   });
 });

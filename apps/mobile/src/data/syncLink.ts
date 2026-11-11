@@ -14,6 +14,10 @@ export const badgeState = (online: boolean, link: Link, queued: number, stuck = 
   return stuck > 0 ? "stuck" : base; // the server keeps refusing «for now» some changes: not «sending»
 };
 
+/** «Ещё» shows the sync line, not «Онлайн · всё сохранено», also when the device refused a write (A-02, #756) */
+export const showsSyncLine = (online: boolean, queued: number, notSavedOnDevice: boolean): boolean =>
+  notSavedOnDevice || syncState(online, queued) !== null;
+
 /** what kind of change it is, from the op's kind */
 export function stuckKindKey(kind: string): DictKey {
   const head = kind.split(".")[0];

@@ -18,7 +18,7 @@ import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
-import { MODULE_INACTIVE } from "@/data/outboxRetry";
+import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
 
 export type Op =
@@ -1132,6 +1132,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           amount_cents: op.amountCents, idempotency_key: op.id,
         }),
       );
+    default:
+      // an op this build does not know (a newer build queued it) is never «sent»: it stays in the outbox (A-19, #784)
+      throw unknownOp((op as { k?: unknown }).k);
   }
 }
 

@@ -122,3 +122,35 @@ describe("unit:persist — a change in the last 250 ms is not lost (rule 6, revi
   });
 });
 
+
+describe("unit:persist — the write's answer (A-02, #756)", () => {
+  const manual = () => {
+    const calls: { ok: () => void; no: () => void }[] = [];
+    const set = () => new Promise<void>((ok, no) => void calls.push({ ok: () => ok(), no: () => no(new Error("QuotaExceededError")) }));
+    return { calls, set };
+  };
+  it("an older write refused after a newer one landed does not raise the flag; only the latest write tells", async () => {
+    vi.useRealTimers();
+    const m = manual();
+    const told: boolean[] = [];
+    const w = createWriter(m.set, 0, deviceGeneration, (ok) => told.push(ok));
+    w.schedule("octo.outbox.v1", "[1]");
+    w.schedule("octo.outbox.v1", "[1,2]");
+    m.calls[1]!.ok();
+    await Promise.resolve();
+    m.calls[0]!.no();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(told).toEqual([true]);
+  });
+  it("a write that fails after the wipe tells nothing", async () => {
+    vi.useRealTimers();
+    const m = manual();
+    const told: boolean[] = [];
+    const w = createWriter(m.set, 0, deviceGeneration, (ok) => told.push(ok));
+    w.schedule("octo.outbox.v1", "[1]");
+    w.forget();
+    m.calls[0]!.no();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(told).toEqual([]);
+  });
+});
