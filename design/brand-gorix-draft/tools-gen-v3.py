@@ -77,15 +77,15 @@ def intro(kind):
     tf = f'translate({round(TX,1)} {round(TY,1)}) scale({round(S,5)})'
     rest = ''.join(f'<path d="{d}"/>' for d in paths[1:])
     ease = 'keyTimes="0;1" calcMode="spline" keySplines=".4 0 .6 1"'
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {VB_W} 784" class="gx3"><title>GoRix splash v3.1 · 1200 ms, final frame = logo</title>'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {VB_W} 784" class="gx3"><title>GoRix splash v3.1 · 1600 ms, final frame = logo</title>'
             '<style>.gx3 .ink{fill:var(--i,#F2F3F5)}.gx3 .cover{fill:none;stroke:var(--bgc,#24272D);stroke-width:180;stroke-dasharray:1000 1000;'
-            'animation:gx3un 650ms cubic-bezier(.4,0,.6,1) forwards}.gx3 .word{clip-path:inset(0 100% 0 0);animation:gx3word 300ms cubic-bezier(.2,.8,.2,1) 700ms forwards}'
+            'animation:gx3un 650ms cubic-bezier(.4,0,.6,1) forwards}.gx3 .word{clip-path:inset(0 100% 0 0);animation:gx3word 450ms cubic-bezier(.2,.8,.2,1) 800ms forwards}'
             '@keyframes gx3un{to{stroke-dashoffset:-1000}}@keyframes gx3word{to{clip-path:inset(0 0 0 0)}}</style>'
             f'<g transform="translate(-36 768)"><g class="ink"><g transform="{tf}"><path d="{RING[kind]}"/><path class="cover" pathLength="1000" d="{COVER.format(x=endx)}"/></g>'
             f'<g class="word"><g transform="translate({DX} 0)">{rest}</g></g></g>'
             f'<g>{dot_live(r)}<animateMotion dur="650ms" fill="freeze" {ease} path="{head}"/>'
-            f'<animateMotion begin="750ms" dur="300ms" fill="freeze" keyTimes="0;1" calcMode="spline" keySplines=".2 .8 .2 1" path="{jump}"/>'
-            f'<animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.25;1" begin="1050ms" dur="150ms" fill="freeze"/></g></g></svg>')
+            f'<animateMotion begin="800ms" dur="600ms" fill="freeze" keyTimes="0;1" calcMode="spline" keySplines=".45 0 .35 1" path="{jump}"/>'
+            f'<animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.25;1" begin="1400ms" dur="200ms" fill="freeze"/></g></g></svg>')
 
 def loading(kind):
     """Waiting: the dot (with its ring, so it never melts into the letter) rides the contour of the G; the letter never rotates.
@@ -96,10 +96,10 @@ def loading(kind):
 
 def success(kind):
     """Done — the same start as the splash: the dot draws the same G (650 ms, same easing), rests inside it,
-    then grows, turns green «ok» and shows the check. Total 1200 = motion.durBrand. Always with the word."""
+    then grows, turns green «ok» and shows the check. Total 1200 ms. Always with the word."""
     cx, cy, r = DOT[kind]
     r = 72
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" class="gx3s"><title>GoRix done v3.1 · 1200 ms (durBrand); always with the word</title>'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" class="gx3s"><title>GoRix done v3.1 · 1200 ms; always with the word</title>'
             '<style>.gx3s .cover{fill:none;stroke:var(--bgc,#24272D);stroke-width:180;stroke-dasharray:1000 1000;animation:gx3sun 650ms cubic-bezier(.4,0,.6,1) forwards}'
             '@keyframes gx3sun{to{stroke-dashoffset:-1000}}</style>'
             f'<path fill="var(--i,#F2F3F5)" d="{RING[kind]}"/><path class="cover" pathLength="1000" d="{COVER.format(x=cx)}"/>'
