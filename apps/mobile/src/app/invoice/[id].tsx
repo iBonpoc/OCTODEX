@@ -27,7 +27,7 @@ export default function InvoiceScreen() {
     );
   const cust = db.customers.find((c) => c.id === inv.customerId);
   return (
-    <Screen title={`${t("inv.title")} ${inv.number ?? ""}`.trim()} back={back} subtitle={cust?.name}>
+    <Screen testID="invoice-screen" title={`${t("inv.title")} ${inv.number ?? ""}`.trim()} back={back} subtitle={cust?.name}>
       <InvoiceCardBody inv={inv} />
     </Screen>
   );

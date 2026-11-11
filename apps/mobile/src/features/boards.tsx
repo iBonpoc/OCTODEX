@@ -61,8 +61,10 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
   // the one estimate card (features/listCards.tsx), shared with the «Today» figures
   const groups = ESTIMATE_GROUPS.map((g) => [g, list.filter((x) => x.g === g)] as const).filter(([, xs]) => xs.length);
   // 1280: the open estimate beside the list, `/estimates?open=<id>`; the order of the rows on screen is the groups'
-  const panel = useListPanel(groups.flatMap(([, xs]) => xs.map((x) => x.e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id));
-  const openE = panel.openId ? db.estimates.find((x) => x.id === panel.openId) : undefined;
+  // the tech: only his own opens in the panel by `?open=` too (director's review of #1134 Б3; as invoice/index.tsx)
+  const mayOpen = (id: string) => canSeeEstimate(db, { role, mode, me: db.me }, id);
+  const panel = useListPanel(groups.flatMap(([, xs]) => xs.map((x) => x.e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id) && mayOpen(id));
+  const openE = panel.openId && mayOpen(panel.openId) ? db.estimates.find((x) => x.id === panel.openId) : undefined;
   const card = ({ e }: { e: Estimate; g: EstimateGroup }) => (
     <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
   );

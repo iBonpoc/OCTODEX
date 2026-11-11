@@ -6,6 +6,7 @@ import * as Haptics from "expo-haptics";
 import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
+import { canSeeEstimate } from "@/features/access";
 import type { EstimateDoc, EstimateTemplate } from "@/data/types";
 import { canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
@@ -17,7 +18,7 @@ import { Labeled, MoneyField, PctField } from "@/features/fields";
 import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
 
@@ -30,13 +31,21 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
 export default function EstimateBuilderScreen() {
-  const { mode } = useStore();
+  const { mode, db, role } = useStore();
   const auth = useAuth();
   const { t } = useI18n();
+  const { id } = useLocalSearchParams<{ id?: string }>();
   // the person's drafts (#760): read before the builder starts, so a draft is its first state, not a later jump. The
   // company from the sign-in, like the store's cache key — never from the cache, which may not have it yet (#859 №3)
   const key = draftsKey(mode === "cloud", auth.company?.companyId, auth.userId);
   const drafts = useEstimateDrafts(key ?? `${"octo.drafts.v1."}unknown`);
+  // not the tech's estimate (#868, director's review of #1134 Б2): no access, as on the estimate itself — not its lines
+  if (id && db.estimates.some((e) => e.id === id) && !canSeeEstimate(db, { role, mode, me: db.me }, id))
+    return (
+      <Screen title={t("ue.newTitle")}>
+        <Empty icon="invoice" title={t("mny.noAccess")} testID="no-access" />
+      </Screen>
+    );
   if (!key || !drafts.ready) return <Screen title={t("ue.newTitle")}>{null}</Screen>;
   return <EstimateBuilder key={key} drafts={drafts} />;
 }

@@ -65,7 +65,7 @@ export function ClientCardBody({ c }: { c: Customer }) {
   const chip = clientStatusChip[status];
   const tags = tagsOf(db, c);
   const [main] = peopleOf(c);
-  const r = clientRecords(db, c, role);
+  const r = clientRecords(db, c, role, store.mode);
   const counts = clientCounts(r);
   const props = r.properties;
   const openTasks = r.tasks.filter((x) => !x.doneAt);

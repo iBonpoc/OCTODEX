@@ -27,6 +27,7 @@ export default function EstimateScreen() {
     );
   return (
     <Screen
+      testID="estimate-screen"
       title={[e.number, e.title].filter(Boolean).join(" · ") || t("est.detail")}
       back={back}
       subtitle={estimateSubtitle(db, e)}

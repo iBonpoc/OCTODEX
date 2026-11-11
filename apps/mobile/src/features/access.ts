@@ -10,7 +10,7 @@
  */
 import type { DB, ID, Role } from "@/data/types";
 import type { Mode } from "@/data/store";
-import { canSeeLead } from "./leads";
+import { techVisitCounts } from "./comms/comms";
 import { isAssigned } from "./schedule";
 
 type Who = { role: Role; mode: Mode; me: ID };
@@ -32,14 +32,22 @@ export function canSeeInvoice(db: Pick<DB, "visits" | "invoices">, w: Who, invoi
   const inv = db.invoices.find((x) => x.id === invoiceId);
   return !!inv && canSeeJob(db, w, inv.jobId);
 }
-/** an estimate is the tech's when it is of his job, of a property he works at, or of his lead */
-export function canSeeEstimate(db: Pick<DB, "visits" | "jobs" | "estimates" | "leads">, w: Who, estimateId: ID): boolean {
+/** an estimate is the tech's as the server's estimates_select says (T33): on a property where he has a visit that counts
+ *  (app.is_property_assignee → tech_visit_counts: his, not cancelled / no-show, its job not done, within the last 14 days —
+ *  features/comms techVisitCounts), an inspection without a job included. Not through a lead assigned to him: the server
+ *  does not show it that way (director's review of #1134 Б1). The server's «created by him» the phone does not keep;
+ *  his own estimate is on his property anyway (estimates_insert). */
+export function canSeeEstimate(db: Pick<DB, "visits" | "jobs" | "estimates">, w: Who, estimateId: ID): boolean {
   if (free(w)) return true;
   const e = db.estimates.find((x) => x.id === estimateId);
-  if (!e) return false;
-  const lead = e.leadId ? db.leads.find((l) => l.id === e.leadId) : undefined;
-  if (lead && canSeeLead(w.role, w.me, lead)) return true;
-  return db.jobs.some((j) => (j.estimateId === e.id || j.propertyId === e.propertyId) && canSeeJob(db, w, j.id));
+  return !!e && isPropertyAssignee(db, w, e.propertyId);
+}
+/** the server's app.is_property_assignee: a visit of his that counts, at this property (the visit's own, else its job's) */
+export function isPropertyAssignee(db: Pick<DB, "visits" | "jobs">, w: Who, propertyId: ID | undefined, now = Date.now()): boolean {
+  if (!propertyId) return false;
+  return db.visits.some(
+    (v) => (v.propertyId ?? db.jobs.find((j) => j.id === v.jobId)?.propertyId) === propertyId && techVisitCounts({ me: w.me, jobs: db.jobs }, v, now),
+  );
 }
 /** the price list is the office's to change (catalog_items_update — staff); the tech only reads it */
 export const canEditCatalog = (role: Role) => role !== "tech";

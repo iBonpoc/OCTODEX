@@ -46,6 +46,28 @@ describe("unit:access — the demo tech sees only his own work (#868)", () => {
     expect(other).toBeTruthy();
     expect(canSeeEstimate(db, tech, other!.id)).toBe(false);
   });
+  describe("estimates — the server's rule: a visit of his that counts at the property (estimates_select, director's review of #1134 Б1)", () => {
+    const visit = (over: Partial<(typeof db.visits)[number]>) => ({ ...mine, id: "v-x", jobId: undefined, propertyId: "p-x", start: new Date().toISOString(), closed: false, step: "scheduled", ...over }) as (typeof db.visits)[number];
+    const est = { ...db.estimates[0]!, id: "e-x", propertyId: "p-x", leadId: "l-x" };
+    const lead = { ...db.leads[0]!, id: "l-x", assigneeId: "m-ivan" };
+    const at = (visits: (typeof db.visits)[number][], extra: Partial<typeof db> = {}) => ({ ...db, visits: [...db.visits, ...visits], estimates: [...db.estimates, est], leads: [...db.leads, lead], ...extra });
+    it("an inspection of mine (no job), the lead assigned to another: I see the estimate I make there (before: «нет доступа»)", () => {
+      expect(canSeeEstimate(at([visit({ kind: "inspection" as never, leadId: "l-x" })]), tech, "e-x")).toBe(true);
+    });
+    it("a lead assigned to me but no visit of mine at the property: not seen (the server does not show it)", () => {
+      expect(canSeeEstimate(at([], { leads: [...db.leads, { ...lead, assigneeId: db.me }] }), tech, "e-x")).toBe(false);
+    });
+    it("my visit there older than 14 days: not seen (tech_visit_counts)", () => {
+      expect(canSeeEstimate(at([visit({ start: new Date(Date.now() - 20 * 86400000).toISOString() })]), tech, "e-x")).toBe(false);
+    });
+    it("a visit there of another tech: not seen", () => {
+      expect(canSeeEstimate(at([visit({ techId: "m-ivan", assigneeIds: ["m-ivan"] })]), tech, "e-x")).toBe(false);
+    });
+    it("my visit of a done job there: not seen", () => {
+      const jobs = [...db.jobs, { ...db.jobs[0]!, id: "j-x", propertyId: "p-x", status: "done" as const }];
+      expect(canSeeEstimate(at([visit({ jobId: "j-x", propertyId: undefined })], { jobs }), tech, "e-x")).toBe(false);
+    });
+  });
   it("the price list: the tech does not change it (T99); the office does", () => {
     expect(canEditCatalog("tech")).toBe(false);
     for (const r of ["director", "dispatcher", "sales"] as const) expect(canEditCatalog(r)).toBe(true);
