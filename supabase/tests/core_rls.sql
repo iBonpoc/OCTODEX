@@ -12594,17 +12594,58 @@ insert into public.payments (company_id, invoice_id, customer_id, method, amount
 select tst.ok(tst.cnt($q$select 1 from public.expenses where id in ('e1910000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-000000000002')$q$) = 2, 'T191 the office sees every expense');
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = 't191-office-pay'$q$) = 1, 'T191 the office still takes a payment on an invoice');
--- the deposit at the signing stays sales' (17): the server's deposit function, a fresh deposit (T73 tries sales only on a replay)
+-- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
+-- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
+-- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
-  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed');
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed'),
+  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit'),
+  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', 1, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', '51910000-0000-4000-8000-000000000001', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', '51910000-0000-4000-8000-000000000002', 'customer', 'approved', 'Ann', '{"deposit": 0}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', '51910000-0000-4000-8000-000000000003', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;  -- straight to «approved» (the signing itself is S8's tests)
+update public.estimates set status = 'approved' where id in ('0e191000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002', '0e191000-0000-4000-8000-000000000003');
+set session_replication_role = origin;
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
-  ('e1910000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000001');
-insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
-  ('11910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f1', 'deposit', 'sent', 'Deposit', 2500, 2500, now());
+  ('e1910000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000001'),
+  ('e1910000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 2', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002'),
+  ('e1910000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000003');
+-- the deposit invoices as the signature leaves them (the signed version, the client's deposit) — and one of another sum
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f1', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000001'),
+  ('11910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f3', 'deposit', 'sent', 'Deposit', 9999900, 9999900, now(), '51910000-0000-4000-8000-000000000003');
 :as_sales_a
-select tst.ok((public.record_estimate_deposit('0e191000-0000-4000-8000-000000000001', 'a1910000-0000-4000-8000-000000000001', 'cash') ->> 'repeat') = 'false', 'T191 sales take the deposit at the signing (record_estimate_deposit)');
+-- В-1: sales put in a «deposit» of their own on a signed estimate without one — the database refuses the insert
+do $$ begin
+  insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id)
+  values ('11910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 9999900, 9999900, now(), '51910000-0000-4000-8000-000000000002');
+  raise exception 'FAILED: T191 sales inserted a deposit invoice';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales cannot insert a deposit invoice (invoices_insert, 42501)');
+-- a deposit invoice of another sum than the client signed: the function refuses sales
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000003', 'a1910000-0000-4000-8000-000000000003', 'cash');
+  raise exception 'FAILED: T191 the function paid sales a deposit of another sum';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 a deposit invoice of another sum than the signed deposit: refused to sales (42501)');
+select tst.ok((public.record_estimate_deposit('0e191000-0000-4000-8000-000000000001', 'a1910000-0000-4000-8000-000000000001', 'cash') ->> 'repeat') = 'false', 'T191 sales take the deposit the signature made (record_estimate_deposit)');
 :as_super
 select tst.ok((select balance_cents = 0 from public.invoices where id = '11910000-0000-4000-8000-000000000001'), 'T191 the deposit invoice is paid');
+select tst.ok((select balance_cents = 9999900 from public.invoices where id = '11910000-0000-4000-8000-000000000003'), 'T191 the deposit of another sum stays unpaid');
+-- the office: a deposit invoice by hand, as before
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+  values ('11910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 1000, 1000, now());
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id = '11910000-0000-4000-8000-000000000004'$q$) = 1, 'T191 the office still inserts a deposit invoice');
 \echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
 \echo 'ALL TESTS PASSED'
