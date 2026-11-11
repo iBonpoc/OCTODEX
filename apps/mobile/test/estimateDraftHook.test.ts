@@ -1,6 +1,6 @@
 /**
- * #859 second review: the drafts hook writes from the cleaned list (a stored [null, good] must not throw), and
- * «Отменить» after the builder is gone puts the draft back straight in storage. React's hooks run in miniReact.
+ * #859 second review: the drafts hook writes from the cleaned list (a stored [null, good] must not throw). React's hooks
+ * run in miniReact.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,7 +14,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 import { render, settle } from "./support/miniReact";
-import { putDraftBack, removeDraft, useEstimateDrafts, type EstimateDraft } from "../src/features/estimateDraft";
+import { removeDraft, useEstimateDrafts, type EstimateDraft } from "../src/features/estimateDraft";
 import { newDoc } from "../src/features/estimateDoc";
 
 const KEY = "octo.drafts.v1.demo";
@@ -38,13 +38,5 @@ describe("unit:estimateDraftHook — second review of #859", () => {
     await wait(300);
     expect(JSON.parse(storage.get(KEY)!).map((d: EstimateDraft) => d.ctx)).toEqual(["other"]);
     root.unmount();
-  });
-  it("putDraftBack: the draft goes back first, the others stay, a broken item or value does not stop it", async () => {
-    storage.set(KEY, JSON.stringify([null, draft("other")]));
-    await putDraftBack(KEY, draft("back"));
-    expect(JSON.parse(storage.get(KEY)!).map((d: EstimateDraft) => d.ctx)).toEqual(["back", "other"]);
-    storage.set(KEY, "{broken");
-    await putDraftBack(KEY, draft("back"));
-    expect(JSON.parse(storage.get(KEY)!).map((d: EstimateDraft) => d.ctx)).toEqual(["back"]);
   });
 });

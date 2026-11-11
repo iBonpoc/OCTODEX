@@ -5,7 +5,6 @@
  * One list per person and company (another person signing in on this phone never sees it); wiped with the account
  * (deleteAccount.ts DEVICE_PREFIXES). Pure parts unit-tested: test/estimateDraft.test.ts.
  */
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { EstimateDoc } from "@/data/types";
 import { useCallback } from "react";
 import { usePersistentState } from "@/data/persist";
@@ -98,21 +97,6 @@ export function cleanDraft(x: unknown): EstimateDraft | null {
   };
 }
 export const cleanDrafts = (v: unknown): EstimateDraft[] => (Array.isArray(v) ? v.map(cleanDraft).filter((d): d is EstimateDraft => !!d) : []);
-
-/**
- * A draft put back on the phone straight in storage — for «Отменить» on «Начать заново» once the builder is gone (the
- * toast outlives the screen; its setter would do nothing — second review of #859, rule 5).
- */
-export async function putDraftBack(key: string, d: EstimateDraft, now = Date.now()): Promise<void> {
-  const raw = await AsyncStorage.getItem(key);
-  let list: unknown = [];
-  try {
-    list = JSON.parse(raw ?? "[]");
-  } catch {
-    /* broken: the draft alone */
-  }
-  await AsyncStorage.setItem(key, JSON.stringify(upsertDraft(cleanDrafts(list), d, now)));
-}
 
 /** the person's drafts on this phone; `ready` — read */
 export function useEstimateDrafts(key: string) {

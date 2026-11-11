@@ -245,8 +245,9 @@ export const ru = {
   /* core: data safety — the estimate draft (#760) */
   "est.draft.restored": "Продолжен черновик: смета не была сохранена",
   "est.draft.restart": "Начать заново",
-  "est.draft.cleared": "Черновик удалён",
-  "est.draft.notRestored": "Черновик не удалось вернуть: память устройства недоступна",
+  "est.draft.ask": "Удалить черновик?",
+  "est.draft.askHint": "Смета не сохранена: её клиент, название и строки пропадут.",
+  "est.draft.delete": "Удалить",
   "sync.stuck.badge": "Не отправлено: {n}",
   "sync.stuck.title": "Не отправлено: сервер отвечает ошибкой",
   "sync.stuck.since": "Ошибка с {when}",

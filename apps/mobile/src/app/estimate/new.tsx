@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -17,7 +17,7 @@ import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/c
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { draftCtx, draftSnapshot, draftsKey, draftWorthKeeping, findDraft, nextDrafts, putDraftBack, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
@@ -79,13 +79,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const keyOfDrafts = drafts.key;
   const setDrafts = drafts.setList;
   const held = { estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
   const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
   useEffect(() => {
     if (!ctx) return;
@@ -95,9 +88,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const dropDraft = () => {
     if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
   };
-  /** «Начать заново»: the builder as if just opened from here; the draft goes — with «Отменить» for 5 s (rule 5, #859 №2) */
+  /** «Начать заново» (after «Удалить черновик?» — rule 5: a confirmation, no undo across screens, #859): the builder as
+   *  if just opened from here, the draft goes */
+  const [askRestart, setAskRestart] = useState(false);
   const restart = () => {
-    const was = { draft, opened, doc, cur, title, customerId, propertyId, templateId, checkPrice };
+    setAskRestart(false);
     const fromHere = fromTpl ? (JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps);
     const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: fromHere, templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
     setDraft(undefined);
@@ -112,29 +107,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const askStart = !given && templates.length > 0;
     setStartOpen(askStart);
     setClientPicker(!params.customerId && !askStart);
-    // «Отменить» may come after the builder is gone (the toast lives on across screens): then the draft goes back
-    // straight to storage, and the next «+ Смета» from here continues it (second review of #859, rule 5)
-    const back: EstimateDraft = { ctx: ctx!, at: was.draft?.at ?? new Date().toISOString(), estimateId, customerId: was.customerId, propertyId: was.propertyId, title: was.title, doc: was.doc, templateId: was.templateId, checkPrice: was.checkPrice };
-    toast.show(t("est.draft.cleared"), () => {
-      if (!ctx || !draftWorthKeeping(back)) return;
-      if (!mounted.current) {
-        putDraftBack(keyOfDrafts, back).catch(() => toast.show(t("est.draft.notRestored")));
-        return;
-      }
-      setStartOpen(false);
-      setClientPicker(false);
-      setDraft(was.draft);
-      setOpened(was.opened);
-      setDoc(was.doc);
-      setCur(was.cur);
-      setTitle(was.title);
-      setCustomerId(was.customerId);
-      setPropertyId(was.propertyId);
-      setTemplateId(was.templateId);
-      setCheckPrice(was.checkPrice);
-      // the draft back on the phone as it was (unchanged since it opened, the effect alone would not write it)
-      setDrafts((list) => upsertDraft(list, back, Date.now()), keyOfDrafts);
-    });
   };
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
@@ -255,7 +227,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 {t("est.draft.restored")}
               </T>
               <View testID="est-draft-restart">
-                <Button label={t("est.draft.restart")} variant="secondary" onPress={restart} />
+                <Button label={t("est.draft.restart")} variant="secondary" onPress={() => setAskRestart(true)} />
               </View>
             </RowView>
           </Card>
@@ -491,6 +463,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             </>
           ) : null}
           <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
+        </View>
+      </Sheet>
+      <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>
+        <View testID="est-draft-ask" style={{ gap: space[3] }}>
+          <T v="body" tone="mut">{t("est.draft.askHint")}</T>
+          <View testID="est-draft-delete">
+            <Button label={t("est.draft.delete")} icon="close" full onPress={restart} />
+          </View>
+          <View testID="est-draft-keep">
+            <Button label={t("common.cancel")} variant="secondary" full onPress={() => setAskRestart(false)} />
+          </View>
         </View>
       </Sheet>
       {/* «С чего начать?» (spec 07 §7.4): a choice menu in a sheet — rows (rule 12) */}

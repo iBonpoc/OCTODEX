@@ -2,7 +2,7 @@
  * e2e 246 — смета в конструкторе не пропадает (#760, audit Q-01, «Ядро: надёжность данных» №1; review of #859).
  * A new estimate is kept on the phone while it is built: «Назад» and opening «+ Смета» from the same place again,
  * a reload — the client, the title and the lines are there, with «Продолжен черновик». Another place — no draft.
- * «Начать заново» drops it with «Отменить» for 5 s (rule 5). A template opened and left untouched leaves no draft.
+ * «Начать заново» asks «Удалить черновик?» first (rule 5). A template opened and left untouched leaves no draft.
  * A saved estimate leaves no draft. Every view; finds by testID (rule 19), waits on what it checks.
  */
 const { sheetGone } = require("../sheet.cjs");
@@ -62,34 +62,26 @@ exports.run = async (h) => {
   h.expect((await titleValue()) === "Крыша, черновик", "reload: the title is there");
   await waitFor(hasLine, "reload: the line is there");
 
-  // «Начать заново» → empty, with «Отменить» (rule 5): undo brings the estimate and its draft back
+  // «Начать заново» asks first (rule 5: a confirmation): «Отмена» keeps everything
   await tid("est-draft-restart").getByRole("button").click();
-  await waitFor(async () => !(await draftShown()), "restart: the note goes");
-  await waitFor(async () => (await titleInput().inputValue()) === "" && !(await hasLine()), "restart: an empty builder");
-  await waitFor(async () => (await stored()).length === 0, "restart: no draft on the phone");
-  await p.waitForTimeout(500); // «Отменить» is armed after a moment (toastArm)
-  await tid("toast-undo").getByRole("button").click();
-  await waitFor(async () => (await titleInput().inputValue()) === "Крыша, черновик" && (await hasLine()), "undo: the estimate is back");
-  await waitFor(async () => (await stored()).some((d) => d.title === "Крыша, черновик"), "undo: the draft is back on the phone");
-  // «Начать заново» → the builder left → «Отменить» on the toast that lives on: the draft is back for the next «+ Смета»
+  await tid("est-draft-ask").waitFor({ timeout: 5000 });
+  await tid("est-draft-keep").getByRole("button").click();
+  await sheetGone(p);
+  h.expect(await draftShown(), "«Отмена»: the note stays");
+  h.expect((await titleInput().inputValue()) === "Крыша, черновик" && (await hasLine()), "«Отмена»: the estimate is there");
+  h.expect((await stored()).some((d) => d.title === "Крыша, черновик"), "«Отмена»: the draft is on the phone");
+  // «Удалить»: empty, the draft is gone for good
   await tid("est-draft-restart").getByRole("button").click();
-  await waitFor(async () => (await stored()).length === 0, "restart: no draft on the phone");
-  // in the app, no reload (the toast lives on across screens)
-  await p.evaluate(() => { window.history.pushState({}, "", "/today"); window.dispatchEvent(new PopStateEvent("popstate")); });
-  await waitFor(async () => !p.url().includes("/estimate/new"), "restart → left the builder");
-  await p.waitForTimeout(300);
-  await tid("toast-undo").getByRole("button").click();
-  await waitFor(async () => (await stored()).some((d) => d.title === "Крыша, черновик"), "undo after leaving: the draft is back on the phone");
-  await h.go(NEW);
-  await waitFor(draftShown, "undo after leaving: «+ Смета» continues it");
-  h.expect((await titleValue()) === "Крыша, черновик", "undo after leaving: the title is there");
-  // restart for good (the toast runs out)
-  await tid("est-draft-restart").getByRole("button").click();
-  await waitFor(async () => (await stored()).length === 0, "restart again: no draft on the phone");
-  await p.waitForTimeout(5600);
+  await tid("est-draft-ask").waitFor({ timeout: 5000 });
+  await h.shot("restart-ask");
+  await tid("est-draft-delete").getByRole("button").click();
+  await sheetGone(p);
+  await waitFor(async () => !(await draftShown()), "«Удалить»: the note goes");
+  await waitFor(async () => (await titleInput().inputValue()) === "" && !(await hasLine()), "«Удалить»: an empty builder");
+  await waitFor(async () => (await stored()).length === 0, "«Удалить»: no draft on the phone");
   await p.reload();
-  h.expect((await titleValue()) === "", "restart → reload: empty");
-  h.expect(!(await draftShown()), "restart → reload: no «Продолжен черновик»");
+  h.expect((await titleValue()) === "", "«Удалить» → reload: empty");
+  h.expect(!(await draftShown()), "«Удалить» → reload: no «Продолжен черновик»");
 
   // a template opened and left untouched: no draft (its name and lines are not a change, review №1)
   // the template is put in before the app starts on each load (a write from the running page would be overwritten)
