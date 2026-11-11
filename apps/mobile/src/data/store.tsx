@@ -1407,7 +1407,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const job = v.jobId ? findJob(d0, v.jobId) : undefined;
         const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
         // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
-        const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, extraCents: 0 };
+        const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
         const finalId = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final")!.id : invoiceId;
         // the op always carries a new invoice id: the server uses it only when it makes the final invoice (no final yet)
         return mutate(

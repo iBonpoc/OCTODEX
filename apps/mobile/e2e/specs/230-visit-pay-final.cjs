@@ -15,7 +15,8 @@ const pay = async (h, visitId) => {
   const shown = (await due.innerText()).trim();
   await h.clickText("Наличные");
   await p.getByTestId("visit-record-payment").last().getByRole("button").click();
-  await p.waitForTimeout(350);
+  // wait for what is checked: the visit is paid in the store (CHECKS §9 п.3 — no fixed seconds)
+  await p.waitForFunction((id) => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.visits?.find((x) => x.id === id)?.step === "paid", visitId);
   return shown;
 };
 
