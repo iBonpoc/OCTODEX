@@ -12743,4 +12743,30 @@ select tst.ok(true, 'T191 an ACH of the deposit on its way: the deposit is not p
 select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '11910000-0000-4000-8000-000000000009'$q$) = 1, 'T191 only the ACH on the deposit');
 \echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
+-- ======================================================================================================================
+-- T192 (#1113, П-23/П-44): a tech does not send an estimate to the client — not even his own draft. The app opened the send
+-- sheet by its address (?send=1) for him; the server's answer is the guard: no «sent», no locked version, no client link
+-- (a tech with the link could sign as the client, spec 35 §4д п.10). e1420000-…03 — the T142 draft the tech made.
+-- ======================================================================================================================
+:as_tech_a
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', 'T192tokenTheTechTriesToSend0123456789ab')$q$, '%only the office%',
+  'T192 the tech does not send his own draft');
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', null)$q$, '%only the office%',
+  'T192 …nor without a token of his own');
+select tst.blocked($q$update public.estimates set status = 'sent' where id = 'e1420000-0000-4000-8000-000000000003'$q$, 'T192 the tech does not mark it «sent» by hand');
+-- a link written on the row by hand: the row never keeps one (t02_public_token_null) — checked below, as the owner of the data
+do $$ begin
+  update public.estimates set public_token = 'T192tokenTheTechTriesToSend0123456789ab' where id = 'e1420000-0000-4000-8000-000000000003';
+exception when others then null;
+end $$;
+select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000003')$q$, '%only the office%', 'T192 the tech gets no client link of it');
+:as_super
+select tst.ok((select status = 'draft' and sent_version_id is null and public_token is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
+  'T192 the draft is still a draft: not sent, no link on the row');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where estimate_id = 'e1420000-0000-4000-8000-000000000003'$q$) = 0, 'T192 …no client link made');
+select tst.ok((select locked_at is null and sent_at is null from public.estimate_versions where id = 'e1420000-0000-4000-8000-0000000000a3'), 'T192 …its version not locked');
+:as_office_a
+select tst.ok(public.send_estimate('e1420000-0000-4000-8000-000000000003', null) is not null, 'T192 the office sends it as before');
+\echo 'T192 a tech does not send an estimate to the client (not his own draft either); the office as before'
+
 \echo 'ALL TESTS PASSED'

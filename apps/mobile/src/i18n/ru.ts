@@ -3507,6 +3507,8 @@ export const ru = {
   "sup.taxNotSet": "Налог не задан — у позиций остаётся их собственный",
   "sup.notFound": "Поставщик не найден — возможно, ещё загружается или удалён",
   "sup.vendorLocked": "Продавец: {name} (меняет офис)",
+  // «Данные и деньги» #1113: a tech does not send an estimate
+  "est.tech.officeSends": "Смету клиенту отправит офис",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -32,6 +32,12 @@ exports.run = async (h) => {
   await shows(h, "/job/j1", /Bathroom remodel/, "the tech: his own job");
   await shows(h, "/invoice/i5", /Счёт/, "the tech: the invoice of his own job");
 
+  // #1113 (П-23/П-44): the send sheet by its address (?send=1) does not open for the tech — «the office sends it»
+  await h.go("/estimate/e6?send=1");
+  await h.page.getByTestId("est-send-office").first().waitFor({ state: "visible", timeout: 15000 });
+  h.expect((await h.page.getByTestId("send-buttons").count()) === 0, "the tech: ?send=1 opens no send sheet");
+  h.expect((await h.page.getByTestId("est-send").count()) === 0, "the tech: no «Отправить» button");
+
   // the lists: only his own
   await h.go("/jobs");
   await h.page.getByText(/Bathroom remodel/).first().waitFor({ state: "visible", timeout: 15000 });
