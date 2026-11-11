@@ -1079,7 +1079,13 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "estimate.sign": {
       // a quick estimate signed on site: the server records the client's signature and the total (sign_estimate_on_site);
       // the app no longer writes the signature or the status directly (security-check 05.11)
-      await applyOp({ k: "estimate.send", id: op.id }, c, userId);
+      // #1126: a tech may not send — the office did (a sent estimate): that refusal is not the end, as estimate.approve
+      // on site; other refusals (changed lines) still stop it. A draft a tech never has signed (canSignDraftOnSite).
+      try {
+        await applyOp({ k: "estimate.send", id: op.id }, c, userId);
+      } catch (e) {
+        if (!(e instanceof PermanentError && e.code === "42501")) throw e;
+      }
       const { error, status } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
       return run(Promise.resolve({ error, status }));
     }

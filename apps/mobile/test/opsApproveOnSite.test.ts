@@ -81,6 +81,25 @@ import { canSeeClientLink, canSignDraftOnSite } from "../src/features/estimateSi
 import { tFor } from "../src/i18n/translate";
 import { rejectedOf } from "../src/data/outboxRejected";
 
+describe("estimate.sign — an older quick estimate signed on site (#1126)", () => {
+  const sign: Op = { k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann Client" };
+  it("a tech (the send is refused 42501): the client's signature still goes (before: the whole op refused, the signature lost)", async () => {
+    answers = { send_estimate: { error: { message: "only the office or the director sends an estimate", code: "42501" } } };
+    await applyOp(sign, "co-1", "u-tech");
+    const s = calls.find((c) => c.fn === "sign_estimate_on_site");
+    expect(s?.args).toEqual({ p_estimate_id: E, p_signer: "Ann Client", p_svg: "M0 0 L1 1" });
+  });
+  it("the office: sends first, then signs — as before", async () => {
+    await applyOp(sign, "co-1", "u-office");
+    expect(calls.map((c) => c.fn)).toEqual(["send_estimate", "sign_estimate_on_site"]);
+  });
+  it("another refusal of the send (changed lines, 22023) still stops it", async () => {
+    answers = { send_estimate: { error: { message: "lines do not match", code: "22023" } } };
+    await expect(applyOp(sign, "co-1", "u-office")).rejects.toBeTruthy();
+    expect(calls.some((c) => c.fn === "sign_estimate_on_site")).toBe(false);
+  });
+});
+
 describe("the client's page and a lost signature", () => {
   it("«Open as client» — the office side only, never a tech", () => {
     expect((["director", "sales", "dispatcher", "tech"] as const).map((r) => canSeeClientLink(r))).toEqual([true, true, true, false]);

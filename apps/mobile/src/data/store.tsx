@@ -38,7 +38,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
-import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -2491,7 +2491,8 @@ export function StoreProvider({
         mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
       },
       signEstimate: (id, path) =>
-        !canCountersign(dbRef.current, dbRef.current.me) ? () => {} : mutate(
+        // #1126: a draft only by someone who may send it (the server signs only a sent, locked version)
+        !canCountersign(dbRef.current, dbRef.current.me) || !canSignDraftOnSite(role, dbRef.current.estimates.find((x) => x.id === id)?.status ?? "draft") ? () => {} : mutate(
           "estimate.sign",
           (d) => ({
             ...d,
