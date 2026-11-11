@@ -6,7 +6,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
 import {
-  deleteWithRepeat, filterMark, lastOwnerCompanies, pendingOf, RETRY_CODES, WIPE_DONE_KEY, WIPE_PENDING_KEY, wipeDevice, wipedAlready, wipeMark,
+  deleteWithRepeat, filterMark, lastOwnerCompanies, NOT_ANY, pendingOf, RETRY_CODES, WIPE_DONE_KEY, WIPE_PENDING_KEY, wipeDevice, wipedAlready, wipeMark,
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
 import { forgetDeviceState } from "@/data/persist";
@@ -270,12 +270,19 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   // the mark could not be read (#1013 №2): what it holds is not known — it is not overwritten unless it must be
   let unknown = prior === undefined;
   const ids = [...new Set([me, ...(prior ? pendingOf(prior).userIds : [])])];
-  // an older «wiped» goes before the new mark (#1017 №2): it answered the older mark only — left beside the new one, an
-  // app killed before the wipe would take this person's data for wiped already
-  await tries(() => AsyncStorage.removeItem(WIPE_DONE_KEY));
+  // an older «wiped» goes right before a new mark is written (#1017 №2): it answered the older mark only — left beside
+  // the new one, an app killed before the wipe would take this person's data for wiped already. Not taken away: the
+  // new mark is still written, with NOT_ANY — «*» never answers it (condition of the director). No mark written (the
+  // one there not read) — «wiped» is left: it may still answer that mark (review of #1017 №4)
+  const clearDone = async () => {
+    if (!ids.includes(NOT_ANY) && !(await tries(() => AsyncStorage.removeItem(WIPE_DONE_KEY)))) ids.push(NOT_ANY);
+  };
   // one mark for all of them, set before the slow part: an app killed (or a wipe that fails) anywhere below wipes
   // again for every person on the next start (reviews of #911 №3, #1010 №3)
-  if (!unknown) await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark(ids)).catch(() => {});
+  if (!unknown) {
+    await clearDone();
+    await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark(ids)).catch(() => {});
+  }
   forgetDeviceState(wipedOnDelete, { userId: me });
   ids.filter((x) => x !== me).forEach(forgetSharedOps);
   // the shared keys are filtered in place, never removed and written back: a failed read or write keeps other
@@ -287,6 +294,7 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
     const late = await readKey(WIPE_PENDING_KEY);
     if (late !== undefined) {
       unknown = false;
+      await clearDone();
       await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark([...new Set([...ids, ...(late ? pendingOf(late).userIds : [])])])).catch(() => {});
       const more = (late ? pendingOf(late).userIds : []).filter((x) => !ids.includes(x));
       if (more.length) {
@@ -301,6 +309,8 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   // the mark still not read: a wipe that fails reads it once more and keeps its people in the new mark (#1017 №3)
   const failed = unknown
     ? async () => {
+        // read again; still not read — this person's mark all the same (a mark that wipes again beats none; the
+        // older people's ops then stay in the shared outbox — the rest of #1017 №3, four failed reads)
         const again = await readKey(WIPE_PENDING_KEY);
         return wipeMark([...new Set([...ids, ...(again ? pendingOf(again).userIds : [])])]);
       }

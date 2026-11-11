@@ -336,6 +336,9 @@ describe("unit:deleteAccount — «wiped» for a mark that was not read (#1017)"
     expect(wipedAlready("u0", WIPE_DONE_ANY)).toBe(true);
     expect(wipedAlready("u1,u0", WIPE_DONE_ANY)).toBe(true);
     expect(wipedAlready("filter:u0", WIPE_DONE_ANY)).toBe(false);
+    // a mark written when «wiped» could not be taken away first
+    expect(wipedAlready("u2,~", WIPE_DONE_ANY)).toBe(false);
+    expect(wipedAlready("u2,~", "u2,~")).toBe(true);
   });
   it("the mark not read (`leave`), the wipe goes through: the mark stays, «wiped»=«*» beside it", async () => {
     const kv = new Map([[WIPE_PENDING_KEY, "u0"], ["octo.cloud.v1.c1", "x"]]);
@@ -349,5 +352,33 @@ describe("unit:deleteAccount — «wiped» for a mark that was not read (#1017)"
     expect(kv.get(WIPE_PENDING_KEY)).toBe("u0");
     expect(kv.get(WIPE_DONE_KEY)).toBe(WIPE_DONE_ANY);
     expect(kv.has("octo.cloud.v1.c1")).toBe(false);
+  });
+});
+
+describe("unit:deleteAccount — a wipe that fails beside «*» (review of #1017 №2)", () => {
+  const storeOf = (kv: Map<string, string>, order: string[], failDone: boolean) => ({
+    getAllKeys: async () => [...kv.keys()],
+    multiRemove: async () => {
+      throw new Error("disk");
+    },
+    setItem: async (k: string, v: string) => void (order.push(`set ${k}`), kv.set(k, v)),
+    removeItem: async (k: string) => {
+      order.push(`remove ${k}`);
+      if (failDone && k === WIPE_DONE_KEY) throw new Error("disk");
+      kv.delete(k);
+    },
+  });
+  it("«wiped» goes before the mark is set", async () => {
+    const kv = new Map([[WIPE_DONE_KEY, WIPE_DONE_ANY]]);
+    const order: string[] = [];
+    expect(await wipeDevice(storeOf(kv, order, false), () => {}, "u9", [], { failed: "u9" }, 0)).toBe(false);
+    expect(order).toEqual([`remove ${WIPE_DONE_KEY}`, `set ${WIPE_PENDING_KEY}`]);
+    expect(kv.get(WIPE_PENDING_KEY)).toBe("u9");
+  });
+  it("«wiped» cannot go: the mark carries «~» — «*» never answers it", async () => {
+    const kv = new Map([[WIPE_DONE_KEY, WIPE_DONE_ANY]]);
+    expect(await wipeDevice(storeOf(kv, [], true), () => {}, "u9", [], { failed: "u9" }, 0)).toBe(false);
+    expect(kv.get(WIPE_PENDING_KEY)).toBe("u9,~");
+    expect(wipedAlready(kv.get(WIPE_PENDING_KEY)!, kv.get(WIPE_DONE_KEY)!)).toBe(false);
   });
 });

@@ -603,11 +603,7 @@ describe("unit:accountCloud — the rest after #1016 (#1017)", () => {
     expect(storage.has("octo.wipe.done.v1")).toBe(false);
   }, 20_000);
 
-  it("№2: a new deletion takes an older «wiped» away before its mark: killed before the wipe → the next start wipes", async () => {
-    storage.set("octo.wipe.pending.v1", "u1");
-    storage.set("octo.wipe.done.v1", "u1");
-    storage.set("octo.cloud.v1.c2", "u2's cache");
-    failSetIf.fn = (k, v) => k === "octo.wipe.pending.v1" && v === "u2,u1";
+  const killedBeforeWipe = async (run: () => Promise<void>) => {
     const { default: AS } = await import("@react-native-async-storage/async-storage");
     const realRemove = AS.multiRemove;
     let release!: () => void;
@@ -618,19 +614,53 @@ describe("unit:accountCloud — the rest after #1016 (#1017)", () => {
       await held;
       await realRemove(ks);
     };
-    const run = finishOnDevice("u2");
-    await vi.waitFor(() => expect(atWipe).not.toBeNull());
-    release();
-    await run;
-    AS.multiRemove = realRemove;
-    failSetIf.fn = null;
-    // the next start sees the phone as it was when the app was killed
+    try {
+      const p = run();
+      await vi.waitFor(() => expect(atWipe).not.toBeNull());
+      release();
+      await p;
+    } finally {
+      release();
+      AS.multiRemove = realRemove;
+      failSetIf.fn = null;
+      failRemove.clear();
+    }
     storage.clear();
     for (const [k, v] of atWipe!) storage.set(k, v);
+  };
+
+  it("№2: a new deletion takes an older «wiped» away before its mark: killed before the wipe → the next start wipes", async () => {
+    storage.set("octo.wipe.pending.v1", "u1");
+    storage.set("octo.wipe.done.v1", "u1");
+    storage.set("octo.cloud.v1.c2", "u2's cache");
+    failSetIf.fn = (k, v) => k === "octo.wipe.pending.v1" && v === "u2,u1";
+    await killedBeforeWipe(() => finishOnDevice("u2"));
     expect(storage.has("octo.wipe.done.v1")).toBe(false); // before: «wiped»=«u1» answered the mark «u1»
     await wipeIfPending();
     expect(storage.has("octo.cloud.v1.c2")).toBe(false);
   }, 10_000);
+
+  it("«*» lies beside «u0», u2 deletes, the mark is not written, killed before the wipe: the next start wipes u2 whole", async () => {
+    storage.set("octo.wipe.pending.v1", "u0");
+    storage.set("octo.wipe.done.v1", "*");
+    storage.set("octo.cloud.v1.c2", "u2's cache");
+    failSetIf.fn = (k) => k === "octo.wipe.pending.v1";
+    await killedBeforeWipe(() => finishOnDevice("u2"));
+    expect(storage.has("octo.wipe.done.v1")).toBe(false);
+    await wipeIfPending();
+    expect(storage.has("octo.cloud.v1.c2")).toBe(false);
+  }, 10_000);
+
+  it("«*» cannot be taken away: the new mark is written with «~» — «*» never answers it, the next start wipes u2 whole", async () => {
+    storage.set("octo.wipe.done.v1", "*");
+    storage.set("octo.cloud.v1.c2", "u2's cache");
+    failRemove.add("octo.wipe.done.v1");
+    await killedBeforeWipe(() => finishOnDevice("u2"));
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u2,~");
+    expect(storage.get("octo.wipe.done.v1")).toBe("*");
+    await wipeIfPending();
+    expect(storage.has("octo.cloud.v1.c2")).toBe(false);
+  }, 15_000);
 
   it("№3: the wipe fails while the mark was not read: read again and kept («u1,u0»), never overwritten blind", async () => {
     storage.set("octo.wipe.pending.v1", "filter:u0");
@@ -645,10 +675,48 @@ describe("unit:accountCloud — the rest after #1016 (#1017)", () => {
     AS.multiRemove = async () => {
       throw new Error("disk");
     };
-    await finishOnDevice(); // u1
-    AS.multiRemove = realRemove;
-    storage.get = real;
+    try {
+      await finishOnDevice(); // u1
+    } finally {
+      AS.multiRemove = realRemove;
+      storage.get = real;
+    }
     expect(storage.get("octo.wipe.pending.v1")).toBe("u1,u0"); // before: «u1» — u0's ops never filtered
+  }, 20_000);
+
+  it("review №4: the mark not read, «*» not written: an older «wiped» that answers «u0» stays — u9's data never wiped", async () => {
+    storage.set("octo.wipe.pending.v1", "u0");
+    storage.set("octo.wipe.done.v1", "u0");
+    failGet.add("octo.wipe.pending.v1");
+    failSetIf.fn = (k) => k === "octo.wipe.done.v1";
+    await finishOnDevice();
+    failGet.clear();
+    failSetIf.fn = null;
+    expect(storage.get("octo.wipe.done.v1")).toBe("u0");
+    nextPerson();
+    await wipeIfPending();
+    nextPersonKept();
+  }, 20_000);
+
+  it("review №2: «*» lies, u9's wipe fails and «wiped» cannot go: the mark carries «~», the next start wipes", async () => {
+    storage.set("octo.wipe.done.v1", "*");
+    storage.set("octo.cloud.v1.c9", "u9's cache");
+    failRemove.add("octo.wipe.done.v1");
+    const { default: AS } = await import("@react-native-async-storage/async-storage");
+    const realRemove = AS.multiRemove;
+    AS.multiRemove = async () => {
+      throw new Error("disk");
+    };
+    try {
+      await finishOnDevice("u9");
+    } finally {
+      AS.multiRemove = realRemove;
+      failRemove.clear();
+    }
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u9,~");
+    storage.set("octo.wipe.done.v1", "*");
+    await wipeIfPending();
+    expect(storage.has("octo.cloud.v1.c9")).toBe(false);
   }, 20_000);
 
   it("getSession hangs: the wipe goes on at START_CHECK_MS (only ops without an owner and the mark's people go)", async () => {

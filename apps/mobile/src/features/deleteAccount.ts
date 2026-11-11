@@ -221,10 +221,12 @@ export async function wipeDevice(
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);
     // not wiped: an older «wiped» must never answer this mark (review of #1013 №5) — taken away before the mark is set
-    await store.removeItem(WIPE_DONE_KEY).catch(() => {});
+    // not taken away: the mark carries NOT_ANY, so «*» never answers it (review of #1017 №2)
+    const doneGone = await tries(() => store.removeItem(WIPE_DONE_KEY), pauseMs);
     // a function: the mark there was not read — it is read once more and kept in the new one, never overwritten blind (#1017 №3)
     const failed = typeof marks.failed === "function" ? await marks.failed().catch(() => userId || "1") : marks.failed;
-    await store.setItem(WIPE_PENDING_KEY, failed ?? (userId || "1")).catch(() => {});
+    const mark = failed ?? (userId || "1");
+    await store.setItem(WIPE_PENDING_KEY, doneGone || pendingOf(mark).userIds.includes(NOT_ANY) ? mark : `${mark},${NOT_ANY}`).catch(() => {});
     return false;
   }
   // `leave`: the mark that was there could not be read — it is not known, so it is not taken away (#1013 №2). The device
@@ -249,9 +251,16 @@ export async function wipeDevice(
 export const WIPE_DONE_KEY = "octo.wipe.done.v1";
 /**
  * «wiped» for whatever whole-wipe mark lies there now (#1017 №1): written when the mark could not be read. Safe because
- * every new whole-wipe mark takes «wiped» away first (#1017 №2), so it only ever answers a mark older than the wipe.
+ * every new whole-wipe mark takes «wiped» away first (#1017 №2), so it only ever answers a mark older than the wipe;
+ * when that fails the new mark carries NOT_ANY.
  */
 export const WIPE_DONE_ANY = "*";
+/**
+ * Put in a new mark when the older «wiped» could not be taken away first (condition of the director on #1017): a mark
+ * with it is never answered by «*» — only by «wiped» naming every person in it. Looks like one more id to older versions
+ * (no op has this owner: nothing more is filtered).
+ */
+export const NOT_ANY = "~";
 const MARK_TRIES = 3;
 const MARK_PAUSE_MS = 200;
 async function tries(write: () => Promise<void>, pauseMs: number): Promise<boolean> {
@@ -270,7 +279,7 @@ export function wipedAlready(mark: string, done: string | null): boolean {
   if (!done) return false;
   const p = pendingOf(mark);
   if (p.filterOnly) return false;
-  if (done === WIPE_DONE_ANY) return true;
+  if (done === WIPE_DONE_ANY) return !p.userIds.includes(NOT_ANY);
   const wiped = new Set(pendingOf(done).userIds);
   return p.userIds.every((id) => wiped.has(id));
 }
