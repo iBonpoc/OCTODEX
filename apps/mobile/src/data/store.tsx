@@ -42,6 +42,8 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigne
 import { acceptPayment, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { cloudCacheKey, isNewCacheKey, othersCaches } from "./cacheKey";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
@@ -460,7 +462,8 @@ export function StoreProvider({
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
-  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v5";
+  // the cache is the person's in the company (#864): the next person on a shared phone never reads it
+  const cacheKey = mode === "cloud" ? cloudCacheKey(company!.companyId, auth.userId!) : "octo.db.v5";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
@@ -471,6 +474,9 @@ export function StoreProvider({
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
       // an empty start shows an empty company: tried longer before it (#926)
       patient: true,
+      // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
+      // theirs — an empty list without the network otherwise (#864, review); another person's is never taken
+      ...(mode === "cloud" ? { adopt: { from: `octo.cloud.v1.${company!.companyId}`, ok: (v: { db: DB }) => v.db.me === auth.userId } } : {}),
     },
   );
   // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)
@@ -487,6 +493,25 @@ export function StoreProvider({
     lastKey.current = cacheKey;
     wipedKey.current = null;
   }
+  // my cache is read: other people's copies (and the older person-less ones) leave the phone (#864). An older one only
+  // once my own key is on the device (taken over from it, or written): never before, or a phone killed now has neither
+  useEffect(() => {
+    if (!dbReady || mode !== "cloud" || !auth.userId) return;
+    const me = auth.userId;
+    const mine = cacheKey;
+    const myOld = async (k: string) => {
+      const raw = await AsyncStorage.getItem(k);
+      return raw != null && (JSON.parse(raw) as { db?: { me?: string } }).db?.me === me;
+    };
+    AsyncStorage.getAllKeys()
+      .then(async (ks) => {
+        const gone: string[] = [];
+        for (const k of othersCaches(ks, me)) if (ks.includes(mine) || isNewCacheKey(k) || !(await myOld(k).catch(() => true))) gone.push(k);
+        return gone;
+      })
+      .then((gone) => (gone.length ? AsyncStorage.multiRemove(gone) : undefined))
+      .catch(() => {}); // not removed now: the next sign-in tries again
+  }, [dbReady, mode, auth.userId, cacheKey]);
   const db = useMemo(() => {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
@@ -653,7 +678,7 @@ export function StoreProvider({
     try {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
-      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
+      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== cloudCacheKey(company.companyId, auth.userId)) return;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
         // spec 36: the history read on open stays (the full read has none)

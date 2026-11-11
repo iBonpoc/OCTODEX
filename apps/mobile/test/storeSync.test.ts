@@ -248,7 +248,7 @@ describe("unit:storeSync — a point answered «off» after the wipe (review #23
     await settle();
     await wait(300);
     await settle();
-    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
     expect(server.loads).toHaveLength(0); // and no reload of the wiped company either
   });
 });
@@ -1357,8 +1357,8 @@ describe("unit:storeSync — the cache the device did not give at first (#926, r
   it("every first try fails, the next read gives it: the company's data is shown, a change offline goes onto it", async () => {
     const company = makeSeed();
     company.customers = company.customers.map((c) => ({ ...c, name: `KEPT ${c.name}` }));
-    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: company }));
-    failGetN.set("octo.cloud.v1.c1", 5); // SQLITE_BUSY through all the first tries
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: company }));
+    failGetN.set("octo.cloud.v1.c1.u1", 5); // SQLITE_BUSY through all the first tries
     signIn("u1", "c1"); // no network: the reload never answers
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     for (let n = 0; n < 100; n++) {
@@ -1370,8 +1370,84 @@ describe("unit:storeSync — the cache the device did not give at first (#926, r
     valueOf(r).saveCompany({ name: "New name" }); // a change without the network
     await wait(400);
     await settle();
-    const disk = storage.get("octo.cloud.v1.c1") ?? "";
+    const disk = storage.get("octo.cloud.v1.c1.u1") ?? "";
     expect(disk).toContain("KEPT"); // before: «empty + the change»
     expect(disk).toContain("New name");
   }, 20_000);
+});
+
+describe("unit:storeSync — two people one after the other on one phone (#864, X-04)", () => {
+  const secret = () => {
+    const d = makeSeed();
+    d.customers = d.customers.map((c) => ({ ...c, name: `SECRET ${c.name}` }));
+    return d;
+  };
+  it("the next person in the same company never sees the previous one's cache — not on screen, not on the device", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: secret() })); // an older version's cache
+    storage.set("octo.cloud.v1.rejected", "[]");
+    signIn("u1", "c1"); // the director
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads[0]!.resolve(secret());
+    await settle();
+    await wait(300);
+    await settle();
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false); // the person-less copy left once u1's own was read
+    signOut();
+    r.rerender({ children: null });
+    await settle();
+    signIn("u2", "c1"); // the tech, without the network yet
+    r.rerender({ children: null });
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).mode).toBe("cloud");
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(false); // before: the director's cache
+    expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
+    expect(storage.get("octo.cloud.v1.rejected")).toBe("[]");
+  });
+  it("the first start of this version without the network: the older person-less cache is taken over when it is mine", async () => {
+    const mine = { ...secret(), me: "u1" };
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: mine }));
+    signIn("u1", "c1"); // no network: the reload never answers
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true); // before: an empty company
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false); // gone once mine is on the device
+  });
+  it("the older person-less cache of another person is never taken over — and leaves the device", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: { ...secret(), me: "u0" } }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(false);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+  });
+  it("my older cache is kept until my own key is on the device (a phone killed right then has one of them)", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: { ...secret(), me: "u1" } }));
+    failSetPrefix.push("octo.cloud.v1.c1.u1"); // the new key cannot be written
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(true); // before the check: removed, the phone kept neither
+  });
+  it("the same person back without the network keeps their copy", async () => {
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: secret() }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+  });
 });

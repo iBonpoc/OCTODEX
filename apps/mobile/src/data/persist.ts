@@ -171,6 +171,9 @@ export function usePersistentState<T>(
     /** a cache whose empty start would show an empty company: tried ~8 s before it starts empty (#926). Not for the
      *  theme, the language, filters: the providers wait for them one after the other (review of #1037, round 2) */
     patient?: boolean;
+    /** nothing under `key` yet: an older key's value is taken if `ok` says it is this state's (#864: the person-less
+     *  cloud cache of an older version — the same person's only), written under `key` at once (the old one stays) */
+    adopt?: { from: string; ok: (v: T) => boolean };
   },
 ) {
   const init = () => (typeof initial === "function" ? (initial as () => T)() : initial);
@@ -196,6 +199,8 @@ export function usePersistentState<T>(
   }, []);
   const validate = useRef(opts?.validate);
   validate.current = opts?.validate;
+  const adopt = useRef(opts?.adopt);
+  adopt.current = opts?.adopt;
   const initRef = useRef(init);
   initRef.current = init;
   const keyRef = useRef(key);
@@ -214,7 +219,20 @@ export function usePersistentState<T>(
     const read = async (): Promise<string | null> => {
       for (let i = 1; ; i++) {
         try {
-          return await AsyncStorage.getItem(key);
+          const raw = await AsyncStorage.getItem(key);
+          const a = adopt.current;
+          if (raw != null || !a) return raw;
+          // an older key's copy (#864): taken only when it is this state's, and stored under the new key first
+          const old = await AsyncStorage.getItem(a.from);
+          if (old == null) return null;
+          try {
+            const v = JSON.parse(old) as T;
+            if ((validate.current && !validate.current(v)) || !a.ok(v)) return null;
+          } catch {
+            return null;
+          }
+          await AsyncStorage.setItem(key, old).catch(() => {});
+          return old;
         } catch (e) {
           if (i >= (patient ? CACHE_READ_TRIES : READ_TRIES)) throw e;
           await new Promise((r) => setTimeout(r, pauseOf(patient, i)));

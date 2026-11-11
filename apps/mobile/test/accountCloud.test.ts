@@ -133,7 +133,7 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
   it("after the wipe every device key held in memory is reset; a key of the phone itself is not", async () => {
     const heard: string[] = [];
     const off = onDeviceForgotten((wiped) => {
-      for (const k of ["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1", "octo.lang.v1"]) if (wiped(k)) heard.push(k);
+      for (const k of ["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1.u1", "octo.lang.v1"]) if (wiped(k)) heard.push(k);
     });
     storage.set("octo.outbox.v1", "[]");
     let before = false;
@@ -141,7 +141,7 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     await finishOnDevice();
     offOrder();
     // the outbox is filtered, not reset (another person's unsent ops stay, rule 6): the store drops only its own
-    expect(heard).toEqual(["octo.role.v1", "octo.cloud.v1.c1"]);
+    expect(heard).toEqual(["octo.role.v1", "octo.cloud.v1.c1.u1"]);
     expect(before).toBe(true); // forgotten BEFORE the wipe (review #231 №4): no write can land after it
     expect(storage.has("octo.outbox.v1")).toBe(false);
     heard.length = 0;

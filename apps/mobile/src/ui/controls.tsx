@@ -40,6 +40,7 @@ export function Button({
   full,
   style,
   accessibilityLabel,
+  testID,
 }: {
   label: string;
   onPress?: () => void;
@@ -50,6 +51,7 @@ export function Button({
   full?: boolean;
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
+  testID?: string;
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
@@ -59,6 +61,7 @@ export function Button({
   const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : c.ink;
   return (
     <Press
+      testID={testID}
       onPress={onPress}
       disabled={disabled}
       visibleHeight={h}
