@@ -24,6 +24,10 @@ describe("checks.yml: e2e views per event", () => {
     const v = pick("pull_request");
     expect(v).toEqual(["390-dark", "820-light", "1280-dark"]);
   });
+  it("08-layouts (all 6 views by itself) still runs on the one push view: other views set E2E_OWN_LAYOUTS=0 except 390-dark", () => {
+    expect(yml).toMatch(/\[ "\$view" = "390-dark" \] \|\| export E2E_OWN_LAYOUTS=0/);
+    expect(pick("push")).toContain("390-dark");
+  });
   it("release.yml still waits for a successful Checks run of that commit", () => {
     const rel = readFileSync(join(__dirname, "../../../.github/workflows/release.yml"), "utf8");
     expect(rel).toMatch(/workflows: \[Checks\]/);
