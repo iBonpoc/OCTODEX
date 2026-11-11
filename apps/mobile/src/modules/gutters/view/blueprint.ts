@@ -10,7 +10,7 @@ import { drawingPrint as DP } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import type { DocAttachPage, DocPrim } from "@/features/docPages";
 import { cornerCut, findCorners, houseSides, runEnds, runLengthIn, type Drawing, type P } from "../geometry";
-import { fmtLen } from "../canvas/format";
+import { fmtLen, MM_PER_IN, type LenFormat } from "../canvas/format";
 import { fitView, storyOf, toScreen } from "../canvas/scene";
 
 type Tr = (key: DictKey, params?: Record<string, string | number>) => string;
@@ -23,6 +23,8 @@ export interface SheetStamp {
   date?: string;
   /** measured roughly (no tape) */
   rough: boolean;
+  /** the company's format of lengths (#1092): every length on the sheet is shown in it; feet-inches when not said */
+  fmt?: LenFormat;
 }
 
 export interface Sheet {
@@ -44,10 +46,22 @@ export function scaleBarFt(k: number): number {
   return steps.reduce((best, s) => (Math.abs(Math.log(s / want)) < Math.abs(Math.log(best / want)) ? s : best), steps[0]!);
 }
 
+/** the scale bar in the company's format (#1092): feet in the US formats, metres (half to a hundred) in the metric ones — inches */
+export function scaleBarIn(k: number, fmt: LenFormat = "ftin"): number {
+  if (fmt === "m" || fmt === "cm" || fmt === "mm") {
+    const want = DP.scalePx / (k * (1000 / MM_PER_IN));
+    const steps = [0.5, 1, 2, 5, 10, 20, 50, 100];
+    const m = steps.reduce((best, s) => (Math.abs(Math.log(s / want)) < Math.abs(Math.log(best / want)) ? s : best), steps[0]!);
+    return (m * 1000) / MM_PER_IN;
+  }
+  return scaleBarFt(k) * 12;
+}
+
 /** `width`: the sheet's width in its own units — the screen's width on «Просмотр» (the text stays its true size on a
  *  phone), the paper's (sheetW) in a PDF */
 export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = DP.sheetW): Sheet {
   const W = Math.max(width, DP.sheetW / 3);
+  const fmt = stamp.fmt ?? "ftin";
   const m = DP.margin;
   const items: DocPrim[] = [];
   const boxes: Box[] = [];
@@ -125,7 +139,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
 
   // dimension lines outside the house: extension lines, slash ticks, the length over the line
   for (const g of geo) {
-    const len = fmtLen(runLengthIn(g.r), g.r.unit);
+    const len = fmtLen(runLengthIn(g.r), fmt);
     const s = many ? `${len} · ${t("mod.gutters.story", { n: storyOf(g.r.attrs.story) })}` : len;
     let off = DP.dimOff;
     let tp: [number, number] = [0, 0];
@@ -200,12 +214,12 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   }
   if (stamp.date) text(m, y, stamp.date, DP.fontSm, "start");
   // the scale bar on the date's row, right: a nice length near scalePx, its ends and middle ticked
-  const ft = scaleBarFt(view.k);
-  const bw = ft * 12 * view.k;
+  const barIn = scaleBarIn(view.k, fmt);
+  const bw = barIn * view.k;
   const bx1 = W - m, bx0 = bx1 - bw, by = y - DP.fontSm * 0.3;
   line([bx0, by], [bx1, by], DP.thinW * 1.5);
   for (const x of [bx0, (bx0 + bx1) / 2, bx1]) line([x, by - DP.tick], [x, by + DP.tick], DP.thinW);
-  text(bx0 - DP.extGap * 2, by + DP.fontSm * 0.35, t("mod.gutters.sheet.scale", { len: fmtLen(ft * 12) }), DP.fontSm, "end");
+  text(bx0 - DP.extGap * 2, by + DP.fontSm * 0.35, t("mod.gutters.sheet.scale", { len: fmtLen(barIn, fmt) }), DP.fontSm, "end");
 
   return { w: W, h: Math.round(H), items };
 }

@@ -21,12 +21,15 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
+import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
   choicesFor, colorName, notSavedKey, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
+/** the sample under the choice: 73′ 2½″ */
+const LEN_SAMPLE_IN = 73 * 12 + 2.5;
 const a = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const k = (s: string) => `mod.gutters.set.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
@@ -220,6 +223,13 @@ export default function GutterSettingsScreen() {
         </View>
 
         <ReadOnly value={ro}>
+          {/* #1092: one format for every length — the drawing, the review, the documents, the parts */}
+          <Part title={t(k("len"))} hint={t(k("lenHint"))} testID="gset-len">
+            <Field label={t(k("lenFormat"))} testID="gset-len-format">
+              <ChoiceChips items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
+              <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
+            </Field>
+          </Part>
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">
               <MultiChips items={PROFILES.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={offer.profiles} testID="gset-profiles" onToggle={(x) => toggle("gset-profiles", "profiles", null, x)} />

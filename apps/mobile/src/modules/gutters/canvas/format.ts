@@ -22,7 +22,17 @@ export const MM_PER_IN = 25.4;
 /** millimetres in one of each metric unit */
 export const MM_OF: Record<"m" | "cm" | "mm", number> = { m: 1000, cm: 10, mm: 1 };
 
-export function fmtLen(inches: number, unit: LenUnit = "ftin"): string {
+/**
+ * The company's format of every length shown (#1092, founder 12.11: «везде так, как выбрано в настройках»): the typed units
+ * plus decimal feet. One setting of the module, like the date format; the length is kept in inches to 1/8″ whatever is chosen.
+ */
+export type LenFormat = LenUnit | "ft";
+export const LEN_FORMATS: readonly LenFormat[] = ["ftin", "ft", "in", "m", "cm", "mm"];
+export const isLenFormat = (v: unknown): v is LenFormat => (LEN_FORMATS as readonly unknown[]).includes(v);
+
+/** a length in the format; US notation, the decimal point is «.» in every language (rule 7) */
+export function fmtLen(inches: number, unit: LenFormat = "ftin"): string {
+  if (unit === "ft") return `${Math.round((Math.max(0, inches) / 12) * 100) / 100}′`;
   if (unit === "mm") return `${Math.round(inches * MM_PER_IN)} mm`;
   if (unit === "cm") return `${Math.round(inches * MM_PER_IN) / 10} cm`;
   if (unit === "m") return `${Math.round(inches * MM_PER_IN) / 1000} m`;

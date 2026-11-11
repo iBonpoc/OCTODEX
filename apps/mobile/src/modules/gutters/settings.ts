@@ -19,6 +19,7 @@ import {
   WOOD_SCREW,
   WOOD_SCREWS,
 } from "@octo/estimating-engine";
+import { isLenFormat, type LenFormat } from "./canvas/format";
 import { COLORS, DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, wallValue, WALLS, type Wall } from "./canvas/attrs";
 
 export type DsShape = (typeof DS_SHAPES)[number];
@@ -68,6 +69,8 @@ export interface Choices {
   wallKitByWall: Record<DsShape, Record<Wall, string>>;
   run: RunDefaults;
   ds: DsDefaults;
+  /** how every length is shown (#1092): feet-inches by default */
+  lenFormat: LenFormat;
   /** the company chose a downspout size itself (the key is stored): it stays on a 6″ gutter too (#767) */
   dsSizeSet: boolean;
 }
@@ -163,6 +166,9 @@ function stock(d: Record<string, unknown>, offer: Offer, palette: string[], fall
   return { material, ...(gauge ? { gauge } : {}), finish, ...(color ? { color } : {}) };
 }
 
+/** the company's format of lengths (#1092): a stored unknown value is feet-inches */
+export const readLenFormat = (v: unknown): LenFormat => (isLenFormat(v) ? v : "ftin");
+
 /** the settings as the canvas uses them: always complete and valid, whatever was stored */
 export function choicesFor(raw: unknown): Choices {
   const r = obj(raw);
@@ -221,7 +227,7 @@ export function choicesFor(raw: unknown): Choices {
     bottom: one(dr.bottom, offer.bottoms, "extension"),
     wall: one(dr.wall, WALLS, "wood"),
   };
-  return { offer, palette, hangerByMount, wallKitByWall, run, ds, dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
+  return { offer, palette, hangerByMount, wallKitByWall, run, ds, lenFormat: readLenFormat(r.lenFormat), dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
 }
 
 /** the module's choices: what the canvas offered before the company's settings (M5c) */

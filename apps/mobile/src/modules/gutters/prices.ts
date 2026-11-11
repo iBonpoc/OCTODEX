@@ -16,7 +16,7 @@ import type { CatalogItem } from "@/data/types";
 import { catalogMatch } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
-import { ftIn } from "./canvas/format";
+import { fmtLen, type LenFormat } from "./canvas/format";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
@@ -185,7 +185,7 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
  * A part's name when the price list has no item for it (PricesScreen «создать», the estimate's line with «нет цены»):
  * `t` — the app's translator on the page, the CLIENT's language for an estimate line (rule 7). Pure.
  */
-export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty): string {
+export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty, fmt: LenFormat = "ftin"): string {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
     const w = p.attrs.work ?? "";
@@ -196,7 +196,7 @@ export function partName(t: (key: DictKey, params?: Record<string, string | numb
   const word = part && PART_WORDS.has(part) ? t(k(`p.${part}`)) : part ?? p.key;
   const line = Object.keys(rest)
     .sort((x, y) => x.localeCompare(y))
-    .map((key) => attrText(t, key, rest[key]!))
+    .map((key) => attrText(t, key, rest[key]!, fmt))
     .join(" · ");
   return line ? `${word} · ${line}` : word;
 }
@@ -210,10 +210,10 @@ const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
  * A property's value for a person (#1090): a word where the dictionary has one (the company's own colour stays as it is),
  * ″ after a size, feet-inches for a length — never «11.875» or a bare code. `t` — the document's translator (rule 7).
  */
-function attrText(t: (key: DictKey, params?: Record<string, string | number>) => string, key: string, v: string): string {
+function attrText(t: (key: DictKey, params?: Record<string, string | number>) => string, key: string, v: string, fmt: LenFormat): string {
   if (ATTR_IN.has(key)) {
     const n = Number(v);
-    return Number.isFinite(n) ? ftIn(n) : v;
+    return Number.isFinite(n) ? fmtLen(n, fmt) : v;
   }
   if (key === "size" || key === "gutterSize") return /^\d+(\.\d+)?$/.test(v) ? `${v}″` : v;
   const group = key === "buy" ? "buy" : ATTR_WORDS[key];
@@ -227,11 +227,11 @@ function attrText(t: (key: DictKey, params?: Record<string, string | number>) =>
  * A part's quantity for a person (#1090): a length in feet as feet-inches-eighths (the sum of the engine is decimal, a
  * person reads «73′ 2″», not «73.16666666666667»), a count whole or to two places; the unit is a word of the document.
  */
-export function partQty(t: (key: DictKey, params?: Record<string, string | number>) => string, p: Pick<PartQty, "qty" | "unit">): string {
+export function partQty(t: (key: DictKey, params?: Record<string, string | number>) => string, p: Pick<PartQty, "qty" | "unit">, fmt: LenFormat = "ftin"): string {
   const n = Number(p.qty);
   if (!Number.isFinite(n)) return p.qty;
   const uk = `mod.gutters.view.u.${p.unit}` as DictKey;
   const u = t(uk) === uk ? p.unit : t(uk);
-  if (p.unit === "ft") return ftIn(n * 12);
+  if (p.unit === "ft") return fmtLen(n * 12, fmt);
   return `${Math.round(n * 100) / 100} ${u}`;
 }
