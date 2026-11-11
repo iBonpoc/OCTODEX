@@ -9,7 +9,7 @@ import {
   deleteWithRepeat, lastOwnerCompanies, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
-import { forgetDeviceState, heldKey } from "@/data/persist";
+import { forgetDeviceState, heldKey, reportStorage } from "@/data/persist";
 import { OUTBOX_KEY, othersOf, parseOutbox, REJECTED_KEY, wipedOnDelete } from "@/data/outboxOwner";
 import { parseRejected, rejectedOthers } from "@/data/outboxRejected";
 import { supabase } from "./client";
@@ -160,8 +160,16 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   const keepRejected = rejectedOthers([...parseRejected(rej.raw), ...parseRejected(rejHeld.raw).filter((o) => !parseRejected(rej.raw).some((x) => x.id === o.id))], me);
   forgetDeviceState(wipedOnDelete, { userId: me });
   if (!readable) {
-    await wipeDevice(deviceStore, warn, me, UNSORTED_KEYS);
-    await AsyncStorage.setItem(WIPE_PENDING_KEY, me || "1").catch(() => {});
+    // the mark first (second review Ж4): the wipe is repeated on the next start even if the app dies right here; a mark
+    // that cannot be written is not silent — the badge «Не сохранено на устройстве» and the log
+    await AsyncStorage.setItem(WIPE_PENDING_KEY, me || "1").then(
+      () => reportStorage(WIPE_PENDING_KEY, null),
+      (e: unknown) => {
+        warn(`the repeat mark was not written: ${(e as Error)?.message}`);
+        reportStorage(WIPE_PENDING_KEY, "write");
+      },
+    );
+    await wipeDevice(deviceStore, warn, me, [...UNSORTED_KEYS, WIPE_PENDING_KEY]);
     return;
   }
   await wipeDevice(deviceStore, warn, me);

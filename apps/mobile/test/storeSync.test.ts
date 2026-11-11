@@ -10,9 +10,14 @@ vi.mock("react/jsx-runtime", () => import("./support/miniReact"));
 vi.mock("react/jsx-dev-runtime", () => import("./support/miniReact"));
 vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID() }));
 const storage = new Map<string, string>();
+/** #763: reads of these keys fail (the outbox held) */
+const failGet = new Set<string>();
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
-    getItem: async (k: string) => storage.get(k) ?? null,
+    getItem: async (k: string) => {
+      if (failGet.has(k)) throw new Error("Row too big to fit into CursorWindow");
+      return storage.get(k) ?? null;
+    },
     setItem: async (k: string, v: string) => void storage.set(k, v),
     getAllKeys: async () => [...storage.keys()],
     multiRemove: async (ks: string[]) => ks.forEach((k) => storage.delete(k)),
@@ -87,7 +92,7 @@ vi.mock("@/data/outboxOwner", async (orig) => {
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
 import { badgeState } from "../src/data/syncLink";
-import { forgetDeviceState } from "../src/data/persist";
+import { forgetDeviceState, persistTiming } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import { wipedOnDelete } from "../src/data/outboxOwner";
@@ -114,6 +119,7 @@ let root: Root<P> | null = null;
 
 beforeEach(() => {
   storage.clear();
+  failGet.clear();
   server.loads.length = 0;
   server.sends.length = 0;
   server.points.length = 0;
@@ -1200,5 +1206,44 @@ describe("unit:storeSync — a money change the server refused stays visible (do
     storage.set("octo.cloud.v1.rejected", JSON.stringify([other, { ...other, id: "m", owner: u1c1 }, otherCompany]));
     const r = await start();
     expect(v(r).rejectedOps.map((x) => x.id)).toEqual(["m"]);
+  });
+});
+
+describe("unit:storeSync — the outbox is held (could not be read), then read at last (#763 second review №7, Ж3)", () => {
+  const timing = { ...persistTiming };
+  beforeEach(() => Object.assign(persistTiming, { read: [20, 20, 20], held: () => 200 }));
+  afterEach(() => Object.assign(persistTiming, timing));
+  it("№7: ops of older versions read late still get the signed-in person as owner", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(null, 1));
+    failGet.add("octo.outbox.v1");
+    signIn("u1", "c1");
+    root = render(StoreProvider as (p: P) => unknown, { children: null });
+    await settle();
+    await wait(150); // held
+    await settle();
+    failGet.clear();
+    await wait(400); // the held retry reads it
+    await settle();
+    await wait(50);
+    expect(stored().map((x) => [x.id, x.owner])).toEqual([["o-nobody#1", u1c1]]); // before: no owner — never sent
+  });
+  it("Ж3: an account deleted while the outbox is held — its ops read later are still dropped, other people's stay", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(u1c1, 1), owned({ userId: "u9", companyId: "c1" }, 1), owned(null, 2));
+    failGet.add("octo.outbox.v1");
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(150); // held
+    await settle();
+    forgetDeviceState(wipedOnDelete, { userId: "u1" }); // u1 deletes their account
+    await settle();
+    await as(r, null);
+    await as(r, "u2", "c1"); // another person signs in on this phone
+    failGet.clear();
+    await wait(400);
+    await settle();
+    await wait(50);
+    // before: u1's op came back with the late read, and the ownerless one was given to u2
+    expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
   });
 });

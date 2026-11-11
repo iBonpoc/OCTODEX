@@ -10,10 +10,18 @@ const storage = new Map<string, string>();
 const reads: { key: string; answer: (raw: string | null) => void }[] = [];
 /** #756: the next reads fail (of the values; a held copy reads — or fails with failHeld); `auto` — reads are answered
  *  at once from the map */
-const io = { failReads: 0, failWrites: false, auto: false };
+const io = { failReads: 0, failWrites: false, auto: false, failHeld: 0, staleHeld: null as string | null, failRemove: 0 };
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: (key: string) => {
+      if (key.startsWith("octo.held.v1.")) {
+        if (io.failHeld > 0) {
+          io.failHeld -= 1;
+          return Promise.reject(new Error("Row too big to fit into CursorWindow"));
+        }
+        // a read that took its snapshot before the latest write of the copy (second review Н2)
+        if (io.staleHeld !== null) return Promise.resolve(io.staleHeld);
+      }
       if (io.failReads > 0 && !key.startsWith("octo.held.v1.")) {
         io.failReads -= 1;
         return Promise.reject(new Error("Row too big to fit into CursorWindow"));
@@ -25,7 +33,13 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       if (io.failWrites) throw new Error("QuotaExceededError");
       storage.set(k, v);
     },
-    removeItem: async (k: string) => void storage.delete(k),
+    removeItem: async (k: string) => {
+      if (io.failRemove > 0) {
+        io.failRemove -= 1;
+        throw new Error("removeItem failed");
+      }
+      storage.delete(k);
+    },
   },
 }));
 import { render, settle } from "./support/miniReact";
@@ -44,7 +58,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 beforeEach(() => {
   storage.clear();
   reads.length = 0;
-  Object.assign(io, { failReads: 0, failWrites: false, auto: false });
+  Object.assign(io, { failReads: 0, failWrites: false, auto: false, failHeld: 0, staleHeld: null, failRemove: 0 });
 });
 
 describe("unit:persistHook — the key changes while a write waits", () => {
@@ -303,6 +317,76 @@ describe("unit:persistHook — the phone could not read or write (#756, audit A-
     await settle();
     expect((root.out as Out)[0]).toBe("tech");
     expect(storage.get("octo.role.v1")).toBe(JSON.stringify("tech"));
+    root.unmount();
+  });
+  it("second review Н1: neither the value nor its held copy reads — a new op is kept in memory only, the copy is not written over", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    storage.set("octo.held.v1.octo.outbox.v1", JSON.stringify([{ id: "paid-offline" }]));
+    io.failReads = 100;
+    io.failHeld = 100;
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    (root.out as OutOps)[1]((ops) => [...ops, { id: "new" }]);
+    await settle();
+    await wait(50);
+    expect(JSON.parse(storage.get("octo.held.v1.octo.outbox.v1")!)).toEqual([{ id: "paid-offline" }]); // before: [new] — the payment lost
+    expect((root.out as OutOps)[0]).toEqual([{ id: "new" }]);
+    expect(storageProblems().get("octo.outbox.v1")).toBe("read");
+    // the copy reads again (the value does not yet): its ops join the memory, and from now on it is written
+    io.failHeld = 0;
+    await wait(400);
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([{ id: "paid-offline" }, { id: "new" }]);
+    expect(JSON.parse(storage.get("octo.held.v1.octo.outbox.v1")!)).toEqual([{ id: "paid-offline" }, { id: "new" }]);
+    root.unmount();
+  });
+  it("second review Н2: an op sent while the read was running does not come back from the copy's snapshot", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    storage.set("octo.held.v1.octo.outbox.v1", JSON.stringify([{ id: "c" }]));
+    io.failReads = 4; // held from the copy: memory [c]
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([{ id: "c" }]);
+    (root.out as OutOps)[1]((ops) => ops.filter((o) => o.id !== "c")); // «c» sent: the store took it out
+    await settle();
+    io.staleHeld = JSON.stringify([{ id: "c" }]); // the recovering read saw the copy before that write
+    await wait(400);
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([{ id: "a" }]); // before: [a, c] — «c» would be sent twice
+    io.staleHeld = null;
+    root.unmount();
+  });
+  it("second review Ж2: the held copy that will not go is marked and removed later, never left silently", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    storage.set("octo.held.v1.octo.outbox.v1", JSON.stringify([{ id: "b" }]));
+    io.failRemove = 1;
+    persistTiming.write = () => 150;
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    expect(storageProblems().get("octo.held.v1.octo.outbox.v1")).toBe("write"); // before: .catch(() => {})
+    expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(true);
+    await wait(250);
+    await settle();
+    expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(false);
+    expect(storageProblems().has("octo.held.v1.octo.outbox.v1")).toBe(false);
+    root.unmount();
+  });
+  it("№7 / Ж3: the hook says when the value is held and when a stored value came in", async () => {
+    type Full = ReturnType<typeof usePersistentState<Op[]>>;
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    io.failReads = 4;
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    expect([(root.out as Full)[3], (root.out as Full)[4]]).toEqual([0, true]);
+    await wait(400);
+    await settle();
+    expect([(root.out as Full)[3], (root.out as Full)[4]]).toEqual([1, false]);
     root.unmount();
   });
 });

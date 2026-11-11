@@ -190,7 +190,8 @@ export async function wipeDevice(store: WipeStore, log: (m: string) => void = ()
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
     await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !spare.includes(k)));
-    await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
+    // the mark stays when the caller keeps it (the outbox could not be read: the wipe is repeated, #763 Ж4)
+    if (!spare.includes(WIPE_PENDING_KEY)) await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
     return true;
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);

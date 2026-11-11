@@ -33,6 +33,7 @@ vi.mock("../src/cloud/client", () => ({
 const storage = new Map<string, string>();
 /** review of #763 №3: reads of these keys fail */
 const failGet = new Set<string>();
+const failSet = new Set<string>();
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getAllKeys: async () => [...storage.keys()],
@@ -41,17 +42,21 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       if (failGet.has(k)) throw new Error("Row too big to fit into CursorWindow");
       return storage.get(k) ?? null;
     },
-    setItem: async (k: string, v: string) => void storage.set(k, v),
+    setItem: async (k: string, v: string) => {
+      if (failSet.has(k)) throw new Error("QuotaExceededError");
+      storage.set(k, v);
+    },
     removeItem: async (k: string) => void storage.delete(k),
   },
 }));
 import { callDelete, finishDeletion, finishOnDevice, myAccountState, profileDeleted, wipeIfPending } from "../src/cloud/account";
-import { onDeviceForgotten } from "../src/data/persist";
+import { onDeviceForgotten, storageProblems } from "../src/data/persist";
 
 beforeEach(() => {
   Object.assign(state, { hang: false, deletedAt: null, error: null, signedOut: 0, session: true });
   storage.clear();
   failGet.clear();
+  failSet.clear();
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -195,5 +200,16 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     await finishOnDevice("u1");
     expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs", "theirs-new"]);
     expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(false);
+  });
+  it("Ж4: the repeat mark that cannot be written is not silent (the badge), and a written one survives the wipe", async () => {
+    storage.set("octo.outbox.v1", "[]");
+    failGet.add("octo.outbox.v1");
+    failSet.add("octo.wipe.pending.v1");
+    await finishOnDevice("u1");
+    expect(storageProblems().get("octo.wipe.pending.v1")).toBe("write"); // before: .catch(() => {})
+    failSet.clear();
+    await finishOnDevice("u1");
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1");
+    expect(storageProblems().has("octo.wipe.pending.v1")).toBe(false);
   });
 });

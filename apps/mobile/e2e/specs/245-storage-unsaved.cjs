@@ -56,6 +56,13 @@ exports.run = async (h) => {
   h.expect((await badge().getAttribute("aria-label")) === "Не сохранено на устройстве", "a failed write: the badge says «Не сохранено на устройстве»");
   h.expect((await stored("octo.queue.v1")) === null, "a failed write: nothing was written");
   await h.shot("write-failed");
+  // the storage badge never hides the sync badge (review of #763 №9): offline → both are seen side by side
+  await h.go("/settings");
+  await badge().waitFor({ timeout: 10000 });
+  await p.getByRole("switch", { name: "Проверка: режим без сети" }).click();
+  await p.getByTestId("sync-badge").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(await shown(), "offline and unsaved: the storage badge stays next to the sync badge");
+  await h.shot("both-badges");
   await p.evaluate(() => { window.__full = false; sessionStorage.removeItem("e2e.full"); });
   await waitFor(async () => (await stored("octo.queue.v1")) !== null, "storage free again: the queue is written by the retry");
   await waitFor(async () => !(await shown()), "storage free again: the badge goes");

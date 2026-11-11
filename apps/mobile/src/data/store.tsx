@@ -515,9 +515,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true });
-  const [outbox, setOutbox, outboxReady, outboxLoads] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
+  const [outbox, setOutbox, outboxReady, outboxLoads, outboxHeld] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
   // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
-  const [rejected, setRejected, rejectedReady] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
+  const [rejected, setRejected, rejectedReady, rejectedLoads, rejectedHeld] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
   // the app is leaving (background, the tab hidden or closed): every state that waits to be written is written now
   useEffect(() => onAppLeave(flushAllWriters), []);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -537,24 +537,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
   const rejectedReadyRef = useRef(rejectedReady);
   rejectedReadyRef.current = rejectedReady;
-  const forgetRejectedOnLoad = useRef<{ userId: string | null } | null>(null);
+  // a wipe while the value is not read yet (still loading, or held — #763 second review Ж3): its filter waits for the
+  // value, and stays until the stored one is really read (loads grew), then it is dropped
+  const rejectedLoadsRef = useRef(rejectedLoads);
+  rejectedLoadsRef.current = rejectedLoads;
+  const rejectedHeldRef = useRef(rejectedHeld);
+  rejectedHeldRef.current = rejectedHeld;
+  const forgetRejectedOnLoad = useRef<{ userId: string | null; loads: number } | null>(null);
   useEffect(() => {
-    if (!rejectedReady || !forgetRejectedOnLoad.current) return;
-    const { userId } = forgetRejectedOnLoad.current;
-    forgetRejectedOnLoad.current = null;
-    setRejected((prev) => rejectedOthers(prev, userId));
+    const f = forgetRejectedOnLoad.current;
+    if (!rejectedReady || !f) return;
+    if (!rejectedHeld || rejectedLoads > f.loads) forgetRejectedOnLoad.current = null;
+    setRejected((prev) => rejectedOthers(prev, f.userId));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rejectedReady]);
+  }, [rejectedReady, rejectedLoads]);
   const outboxReadyRef = useRef(outboxReady);
   outboxReadyRef.current = outboxReady;
-  const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
+  const outboxLoadsRef = useRef(outboxLoads);
+  outboxLoadsRef.current = outboxLoads;
+  const outboxHeldRef = useRef(outboxHeld);
+  outboxHeldRef.current = outboxHeld;
+  const forgetOnLoad = useRef<{ userId: string | null; loads: number } | null>(null);
   useEffect(() => {
-    if (!outboxReady || !forgetOnLoad.current) return;
-    const { userId } = forgetOnLoad.current;
-    forgetOnLoad.current = null;
-    setOutbox((prev) => (outboxRef.current = othersOf(prev, userId)));
+    const f = forgetOnLoad.current;
+    if (!outboxReady || !f) return;
+    if (!outboxHeld || outboxLoads > f.loads) forgetOnLoad.current = null;
+    setOutbox((prev) => (outboxRef.current = othersOf(prev, f.userId)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outboxReady]);
+  }, [outboxReady, outboxLoads]);
   // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3) —
   // and again when a held outbox is read at last (outboxLoads, review of #763 №7)
   useEffect(() => {
@@ -682,11 +692,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // The deleted person comes with the wipe: the sign-in may already be gone from the store (review #240 №2)
         // told by the wipe (even «not known» = null: never the person signed in now, review #244), else the sign-in
         const me = "userId" in info ? (info.userId ?? null) : (whoRef.current?.userId ?? null);
-        if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
+        if (!outboxReadyRef.current || outboxHeldRef.current) forgetOnLoad.current = { userId: me, loads: outboxLoadsRef.current };
         // a functional update: the latest outbox, also one that is set but not yet rendered
         setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
         // the refused money changes: the deleted person's go, other people's stay (review #263 №2)
-        if (!rejectedReadyRef.current) forgetRejectedOnLoad.current = { userId: me };
+        if (!rejectedReadyRef.current || rejectedHeldRef.current) forgetRejectedOnLoad.current = { userId: me, loads: rejectedLoadsRef.current };
         setRejected((prev) => rejectedOthers(prev, me));
         setGateCodes({});
         waitingPoints.current = {};

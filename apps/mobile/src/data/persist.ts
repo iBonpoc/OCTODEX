@@ -217,6 +217,22 @@ export function recoverHeld<T>(stored: T | undefined, mine: T, dirty: boolean): 
   return mine;
 }
 
+/**
+ * The held copy is not needed any more (the merged value is under its own key): removed — a failure is not silent
+ * (second review Ж2): it is marked («write») and tried again, or the next start would merge sent ops back.
+ */
+function dropHeld(key: string, n = 1, gen = deviceGeneration()): void {
+  const k = heldKey(key);
+  AsyncStorage.removeItem(k).then(
+    () => reportStorage(k, null, "write"),
+    () => {
+      if (gen !== deviceGeneration()) return reportStorage(k, null, "write"); // wiped meanwhile: the wipe took it
+      reportStorage(k, "write");
+      setTimeout(() => dropHeld(key, n + 1, gen), persistTiming.write(n));
+    },
+  );
+}
+
 /* ---------- «the app is leaving»: every pending write now (review #263, the lost 250 ms) ---------- */
 const live = new Set<Writer>();
 /** the writers of the persistent states that are mounted */
@@ -238,6 +254,10 @@ export interface Slot<T> {
   dirty?: boolean;
   /** how many times a stored value came in (a read, a held one read at last): the store adopts what came (№7) */
   loads?: number;
+  /** held, and the memory holds what the held copy (heldKey) kept: only then a change may be written to that copy (a
+   *  copy not read is never written over — second review Н1), and it is not merged again when the value is read at last
+   *  (an op sent meanwhile would come back — Н2) */
+  keptIn?: boolean;
 }
 /** a setter's update, bound to the key it was meant for: an update for another key (a late answer for the company's
  *  cache once the hook holds «octo.db.v5») is dropped (19 §6.12) */
@@ -248,7 +268,7 @@ export function applyUpdate<T>(s: Slot<T>, next: T | ((prev: T) => T), forKey?: 
   if (!s.held) return base;
   // the same value set again (the role checked on start) is not a change: it never wins over the stored one (№6)
   const dirty = !!s.dirty || (value !== s.value && JSON.stringify(value) !== JSON.stringify(s.value));
-  return { ...base, held: true, dirty };
+  return { ...base, held: true, dirty, keptIn: s.keptIn };
 }
 
 /**
@@ -276,7 +296,7 @@ export function usePersistentState<T>(
     writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (k) => {
       if (dropHeldAfterWrite.current !== k) return;
       dropHeldAfterWrite.current = null;
-      AsyncStorage.removeItem(heldKey(k)).catch(() => {});
+      dropHeld(k);
     });
   useEffect(() => {
     const w = writer.current!;
@@ -321,8 +341,10 @@ export function usePersistentState<T>(
           writer.current!.flush();
           setState((s) => {
             if (s.key !== key) return s;
-            const stored = kept.value === undefined ? res.value : recoverHeld(res.value, kept.value, true);
-            if (kept.value !== undefined || (s.held && s.dirty)) dropHeldAfterWrite.current = key;
+            // the memory already holds the copy (read when held): taken from the memory only, never twice (Н2)
+            const inMemory = !!(s.held && s.keptIn);
+            const stored = inMemory || kept.value === undefined ? res.value : recoverHeld(res.value, kept.value, true);
+            if (kept.value !== undefined || (inMemory && s.dirty)) dropHeldAfterWrite.current = key;
             const value = s.held ? recoverHeld(stored, s.value, !!s.dirty) : stored;
             return { key, value: value === undefined ? initRef.current() : value, loaded: true, loads: (s.loads ?? 0) + 1 };
           });
@@ -341,11 +363,21 @@ export function usePersistentState<T>(
           return;
         }
         reportStorage(key, "read");
-        // held: in memory — from what the last held state kept, if it can be read — and kept aside, never over the key
+        // held: in memory — from what the last held state kept, when that copy can be read — and kept aside, never
+        // over the key; a copy that cannot be read either: the memory only (and the badge), the copy is not touched (Н1)
         setState((s) => {
-          if (s.key !== key || s.held) return s;
-          const was = kept.ok ? kept.value : undefined;
-          return was === undefined ? { key, value: initRef.current(), loaded: true, held: true } : { key, value: was, loaded: true, held: true, dirty: true };
+          if (s.key !== key) return s;
+          if (s.held) {
+            if (s.keptIn || !kept.ok) return s;
+            // the copy reads now: its ops (never in memory, so never sent) join what the memory did meanwhile
+            const value = kept.value === undefined ? s.value : (recoverHeld(kept.value, s.value, !!s.dirty) as T);
+            return { ...s, value, keptIn: true, dirty: !!s.dirty || kept.value !== undefined };
+          }
+          if (!kept.ok) return { key, value: initRef.current(), loaded: true, held: true, keptIn: false, loads: s.loads };
+          const was = kept.value;
+          return was === undefined
+            ? { key, value: initRef.current(), loaded: true, held: true, keptIn: true, loads: s.loads }
+            : { key, value: was, loaded: true, held: true, dirty: true, keptIn: true, loads: s.loads };
         });
         timer = setTimeout(attempt, persistTiming.held(failures - persistTiming.read.length));
       });
@@ -378,7 +410,7 @@ export function usePersistentState<T>(
     if (!ready || state.forgotten) return;
     // held: a change goes to its own key, so the app closed loses nothing (review №2); the stored value is not touched
     if (state.held) {
-      if (state.dirty) writer.current!.schedule(heldKey(state.key), JSON.stringify(state.value));
+      if (state.dirty && state.keptIn) writer.current!.schedule(heldKey(state.key), JSON.stringify(state.value));
       return;
     }
     writer.current!.schedule(state.key, JSON.stringify(state.value));
@@ -388,7 +420,8 @@ export function usePersistentState<T>(
     (next: T | ((prev: T) => T), forKey?: string) => setState((s) => applyUpdate(s, next, forKey)),
     [],
   );
-  return [state.value, setValue, ready, state.loads ?? 0] as const;
+  // `held` — the stored value is not read yet (the store keeps a wipe's filter until it is: second review Ж3)
+  return [state.value, setValue, ready, state.loads ?? 0, ready && !!state.held] as const;
 }
 
 /** the day the demo was seeded: the demo company's calendar day (its «today» is built from its midnight, seed.ts —
