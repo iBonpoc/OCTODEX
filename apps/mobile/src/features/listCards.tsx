@@ -172,7 +172,7 @@ export function InvoiceListCard({ i, density, panel }: { i: Invoice; density: De
       contact={{ phone: c?.phone, email: c?.email, addr }}
       // secondary: the one accent of the screen stays the main action of the screen
       // sales take no payment on an invoice (#868), only the whole deposit (paymentRight)
-      action={open && paymentRight(role, i) !== "none" ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
+      action={open && paymentRight(role, i, { fromEstimate: !!job?.estimateId, pendingCents: (db.pendingPayments ?? []).some((p) => p.invoiceId === i.id) ? 1 : 0 }) !== "none" ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
       density={density}
       columns={panel?.narrow ? INV_COLUMNS_PANEL : INV_COLUMNS}
       selected={panel?.selected}

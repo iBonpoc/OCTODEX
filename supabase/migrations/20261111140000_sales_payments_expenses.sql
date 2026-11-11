@@ -92,6 +92,11 @@ begin
                 where a.version_id = i.source_estimate_version_id and a.dep = i.total_cents)) then
     raise exception 'only the office takes this deposit' using errcode = '42501';
   end if;
+  -- a payment of this invoice still on its way (the client's ACH on /p/): the balance is not lowered until it lands — a
+  -- payment now would pay the deposit twice (code review of #1061 Б1); the phone shows it as on its way
+  if exists (select 1 from public.payments where invoice_id = i.id and status = 'pending') then
+    raise exception 'a payment of this deposit is on its way' using errcode = '22023';
+  end if;
   if i.balance_cents <= 0 then
     -- paid already (the client on the page, another phone): no second payment
     -- already_paid: the phone's own payment of this op is not on the server (the store drops it on refresh)

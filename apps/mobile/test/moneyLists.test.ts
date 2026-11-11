@@ -149,15 +149,22 @@ describe("the search of «Расходы» (spec 31, one rule)", () => {
 describe("unit:moneyLists — who takes a payment on an invoice (#868, 13 §4, 17)", () => {
   it("the office: any part of any invoice", () => {
     for (const role of ["director", "dispatcher"] as const) {
-      expect(paymentRight(role, { kind: "final" })).toBe("any");
-      expect(paymentRight(role, { kind: "deposit" })).toBe("any");
+      expect(paymentRight(role, { kind: "final" }, { fromEstimate: false })).toBe("any");
+      expect(paymentRight(role, { kind: "deposit" }, { fromEstimate: true, pendingCents: 2500 })).toBe("any");
     }
   });
   it("sales: none on an invoice (the database refuses, T191) — only the whole deposit of a deposit invoice", () => {
-    expect(paymentRight("sales", { kind: "final" })).toBe("none");
-    expect(paymentRight("sales", { kind: "progress" })).toBe("none");
-    expect(paymentRight("sales", { kind: undefined })).toBe("none");
-    expect(paymentRight("sales", { kind: "deposit" })).toBe("wholeDeposit");
+    const est = { fromEstimate: true };
+    expect(paymentRight("sales", { kind: "final" }, est)).toBe("none");
+    expect(paymentRight("sales", { kind: "progress" }, est)).toBe("none");
+    expect(paymentRight("sales", { kind: undefined }, est)).toBe("none");
+    expect(paymentRight("sales", { kind: "deposit" }, est)).toBe("wholeDeposit");
+  });
+  it("sales: a deposit invoice the office made by hand (no estimate) — none (it would be a payment of their own, 42501)", () => {
+    expect(paymentRight("sales", { kind: "deposit" }, { fromEstimate: false })).toBe("none");
+  });
+  it("sales: a payment of the deposit on its way (ACH) — none, never paid twice (review of #1061 Б1)", () => {
+    expect(paymentRight("sales", { kind: "deposit" }, { fromEstimate: true, pendingCents: 2500 })).toBe("none");
   });
 });
 

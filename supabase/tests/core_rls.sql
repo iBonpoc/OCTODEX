@@ -12670,6 +12670,52 @@ insert into public.invoices (id, company_id, number, customer_id, job_id, kind, 
   values ('11910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 1000, 1000, now());
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.invoices where id = '11910000-0000-4000-8000-000000000004'$q$) = 1, 'T191 the office still inserts a deposit invoice');
+-- the new branches of the function (rule 15): the hand-made deposit invoice of the office (no signed version) — sales are
+-- refused; the estimate not approved — sales are refused; a payment on its way (ACH) — nobody pays the deposit twice
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000002', 'a1910000-0000-4000-8000-000000000008', 'cash');
+  raise exception 'FAILED: T191 sales paid the office''s hand-made deposit invoice';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed version): refused to sales (42501)');
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
+  ('0e191000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 ACH on its way');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', 1, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', '51910000-0000-4000-8000-000000000004', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', '51910000-0000-4000-8000-000000000005', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;
+update public.estimates set status = 'approved' where id = '0e191000-0000-4000-8000-000000000005';
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 4', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000004'),
+  ('e1910000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 5', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000005');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f4', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000004'),
+  ('11910000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f5', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000005');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('a1910000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', '11910000-0000-4000-8000-000000000009', 'c7300000-0000-4000-8000-000000000001', 'ach', 2500, 'pending', 't191-ach');
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000004', 'a1910000-0000-4000-8000-000000000009', 'cash');
+  raise exception 'FAILED: T191 sales paid the deposit of an estimate not approved';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 the estimate not approved: refused to sales (42501)');
+:as_office_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000005', 'a1910000-0000-4000-8000-0000000000b0', 'cash');
+  raise exception 'FAILED: T191 a deposit with an ACH on its way was paid again';
+exception when sqlstate '22023' then null;
+end $$;
+select tst.ok(true, 'T191 an ACH of the deposit on its way: the deposit is not paid twice (22023, any role)');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '11910000-0000-4000-8000-000000000009'$q$) = 1, 'T191 only the ACH on the deposit');
 \echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
 \echo 'ALL TESTS PASSED'

@@ -23,9 +23,11 @@ export type PaymentRight = "any" | "wholeDeposit" | "none";
 /** the payment on a visit (record_visit_payment): the office and the tech of the visit — not sales (#1061; whether to
  *  bring it back is the founder's #1042) */
 export const canTakeVisitPayment = (role: Role) => role !== "sales";
-export function paymentRight(role: Role, inv: Pick<Invoice, "kind">): PaymentRight {
-  if (role === "sales") return inv.kind === "deposit" ? "wholeDeposit" : "none";
-  return "any";
+export function paymentRight(role: Role, inv: Pick<Invoice, "kind">, of: { fromEstimate: boolean; pendingCents?: number }): PaymentRight {
+  if (role !== "sales") return "any";
+  // only the deposit of an estimate goes through the server's deposit function; a hand-made one would be a payment of
+  // their own (42501). A payment of it on its way (ACH): the function refuses — paying now would pay it twice (Б1)
+  return inv.kind === "deposit" && of.fromEstimate && !(of.pendingCents && of.pendingCents > 0) ? "wholeDeposit" : "none";
 }
 
 /** chips of «Счета»: owed = not paid · overdue (the default — the one path to debts), paid, all */

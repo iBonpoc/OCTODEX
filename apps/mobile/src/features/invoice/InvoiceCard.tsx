@@ -45,11 +45,12 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
   // a cancelled job keeps its invoices (wave П-1): look in both lists
   const job = findJob(db, inv.jobId);
   const balance = invoiceBalance(inv).owesCents;
-  // sales: only the whole deposit (#868, 17) — no part, no reference (the server's deposit function takes neither)
-  const right = paymentRight(store.role, inv);
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   // 20в: ACH on its way (Stripe has not settled it): shown, never counted as paid
   const pendingCents = (db.pendingPayments ?? []).filter((p) => p.invoiceId === inv.id).reduce((a, p) => a + p.amountCents, 0);
+  // sales: only the whole deposit of an estimate, none while a payment of it is on its way (#868, 17; review of #1061 Б1) —
+  // no part, no reference (the server's deposit function takes neither)
+  const right = paymentRight(store.role, inv, { fromEstimate: !!job?.estimateId, pendingCents });
   const chip = invoiceChip(inv);
   const company = companyForPortal(db, store.companyName ?? "OCTODEX");
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
