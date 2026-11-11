@@ -2,7 +2,8 @@
  * Waiting for readiness instead of a fixed sleep (#906 п.4, audit D-07): h.go used to sleep 1000 ms after every goto and
  * h.click 350 ms after every click (≈1000 gotos per pass). `settle` resolves as soon as the page has been quiet — no DOM
  * change, no address change — for `quietMs` (after two animation frames), and at the latest after `maxMs`.
- * `appReady` waits until the app has rendered something to press (the store renders nothing until it has hydrated).
+ * `appReady` waits until the app has rendered any text (the store renders nothing until it has hydrated). After the quiet
+ * window `settle` makes the store write what waits (pagehide), so a spec that reads localStorage right after sees it.
  */
 async function settleOnce(page, quietMs, maxMs) {
   await page.evaluate(({ quietMs, maxMs }) => new Promise((resolve) => {
@@ -11,10 +12,16 @@ async function settleOnce(page, quietMs, maxMs) {
     let href = location.href;
     const mo = new MutationObserver(() => { last = performance.now(); });
     mo.observe(document.documentElement, { subtree: true, childList: true, attributes: true, characterData: true });
+    let flushed = false;
     const tick = () => {
       const now = performance.now();
-      if (location.href !== href) { href = location.href; last = now; }
-      if (now - last >= quietMs || now - start >= maxMs) { mo.disconnect(); resolve(); } else requestAnimationFrame(tick);
+      if (location.href !== href) { href = location.href; last = now; flushed = false; }
+      if (now - last >= quietMs || now - start >= maxMs) {
+        // The store writes its state 250 ms after a change; a fixed pause used to cover that. «The page is being left»
+        // (what a phone sends before it may be killed, appActive.onAppLeave) makes it write NOW — deterministic, no pause.
+        if (!flushed) { flushed = true; window.dispatchEvent(new Event("pagehide")); requestAnimationFrame(() => requestAnimationFrame(tick)); return; }
+        mo.disconnect(); resolve();
+      } else requestAnimationFrame(tick);
     };
     requestAnimationFrame(() => requestAnimationFrame(tick));
   }), { quietMs, maxMs });
@@ -28,7 +35,7 @@ async function settle(page, { quietMs = 150, maxMs = 4000 } = {}) {
 }
 
 async function appReady(page) {
-  await page.waitForFunction(() => document.body && document.body.innerText.trim().length > 0 && document.querySelector('[role="button"], button, a, [role="link"], input'), null, { timeout: 15000 });
+  await page.waitForFunction(() => document.body && document.body.innerText.trim().length > 0, null, { timeout: 15000 });
 }
 
 module.exports = { settle, appReady };
