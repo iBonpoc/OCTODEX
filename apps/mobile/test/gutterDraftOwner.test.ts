@@ -3,9 +3,9 @@ import { DEVICE_KEYS, isDeviceKey } from "../src/features/deleteAccount";
 import { DRAFT_KEY } from "../src/modules/gutters/canvas/draftStore";
 import { wipedOnDelete } from "../src/data/outboxOwner";
 
-/** #1044: the old canvas draft is device-wide with no owner — it goes with the person's other keys (deleted account, another person signing in). */
+/** #1044: the old canvas draft is device-wide with no owner — it is wiped with the person's other keys when the account is deleted (a sign-out wipes nothing: forgetOldDraft clears the rest when the canvas opens). */
 describe("the old Gutters canvas draft is a device key", () => {
-  it("its key is among the device keys (the wipe of a deleted account and of a changed person takes it)", () => {
+  it("its key is among the device keys (the wipe of a deleted account takes it)", () => {
     expect(DEVICE_KEYS).toContain(DRAFT_KEY);
     expect(isDeviceKey(DRAFT_KEY)).toBe(true);
   });

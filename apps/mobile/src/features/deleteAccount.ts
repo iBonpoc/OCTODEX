@@ -171,7 +171,8 @@ export async function deleteWithRepeat(
 /* ---------- what is wiped from the device ---------- */
 /** the keys of this person on this device (the cloud cache of every company, the outbox, the role, the Plan's person, …) */
 // octo.mod.gutters.draft.v1 — the old canvas draft of an earlier build, device-wide with no owner (#1044): nothing reads it any
-// more, but it stays on the phone until someone opens the canvas — it goes with the person's other keys
+// more. It is wiped when the account is deleted; after a sign-out it stays on the phone until someone opens the canvas
+// (forgetOldDraft) — a sign-out wipes nothing
 export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1", "octo.mod.gutters.draft.v1"];
 // octo.drafts.v1. — unsaved estimates on the phone (estimateDraft.ts, #760): the client's data among them
 // octo.broken. — a broken outbox record kept aside (persist.ts brokenKeyOf, review of #910 №1)
