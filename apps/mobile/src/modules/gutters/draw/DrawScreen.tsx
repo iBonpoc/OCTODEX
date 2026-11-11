@@ -34,6 +34,7 @@ import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
 import { SAVE_ICON, saveMark } from "./saveMark";
+import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen, ftIn } from "../canvas/format";
@@ -848,12 +849,12 @@ export default function DrawScreen() {
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
-      <Sheet visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
+      <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
         {editRun ? <QuickLength key={editRun.id} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
-      </Sheet>
-      <Sheet visible={canSave && !!quick} onClose={cancelQuick}>
+      </InputWindow>
+      <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
         {quick ? <QuickLength run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
-      </Sheet>
+      </InputWindow>
       <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
         {corner ? (
           <View testID="corner-sheet" style={{ gap: space[3] }}>
