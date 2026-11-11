@@ -1,0 +1,30 @@
+# Weekly `npm audit` of the dependencies the app ships (rule 17, #805, audit D-23): a red run = a high or critical advisory.
+# Only reads the lockfile: no install, no secrets, no write rights. It creates no issue and fixes nothing: `npm audit fix` (and
+# --force) is never run — each advisory is looked at by hand (docs/ai/CHECKS.md §4: is it reachable in the app; what is put off
+# goes to BOARD with the reason and the date). GitHub notifies about a red run.
+name: Dependency audit
+
+on:
+  schedule:
+    - cron: '7 11 * * 1'   # Monday 11:07 UTC (3:07 AM in Los Angeles)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: npm audit (production dependencies)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: All levels, for the log and the summary
+        run: |
+          npm audit --omit=dev || true
+          { echo '### npm audit (production dependencies)'; echo '```'; npm audit --omit=dev 2>&1 | tail -40; echo '```'; } >> "$GITHUB_STEP_SUMMARY" || true
+      - name: High and critical fail the run
+        run: npm audit --omit=dev --audit-level=high
