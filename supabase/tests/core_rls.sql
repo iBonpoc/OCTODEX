@@ -12572,9 +12572,14 @@ insert into public.expenses (id, company_id, vendor, amount_cents, category, cre
   ('e1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T191 owner vendor', 1000, 'materials', 'a0000000-0000-0000-0000-000000000001'),
   ('e1910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T191 sales vendor', 2000, 'materials', 'a0000000-0000-0000-0000-000000000005');
 :as_sales_a
-select tst.fails($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
-                    values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
-                            'cash', 100, 'succeeded', 't191-sales-pay')$q$, 'T191 sales cannot take a payment on an invoice (payments_insert_staff)');
+do $$ begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+    values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
+            'cash', 100, 'succeeded', 't191-sales-pay');
+  raise exception 'FAILED: T191 sales took a payment on an invoice';
+exception when insufficient_privilege then null;   -- RLS (42501), not some other error
+end $$;
+select tst.ok(true, 'T191 sales cannot take a payment on an invoice (payments_insert_staff, 42501)');
 select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'$q$) = 0, 'T191 sales do not see another person''s expense');
 select tst.ok(tst.cnt($q$select 1 from public.expenses where created_by <> 'a0000000-0000-0000-0000-000000000005'$q$) = 0, 'T191 sales see no expense of the company but their own');
 select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'$q$) = 1, 'T191 sales see their own expense');
@@ -12589,6 +12594,17 @@ insert into public.payments (company_id, invoice_id, customer_id, method, amount
 select tst.ok(tst.cnt($q$select 1 from public.expenses where id in ('e1910000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-000000000002')$q$) = 2, 'T191 the office sees every expense');
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = 't191-office-pay'$q$) = 1, 'T191 the office still takes a payment on an invoice');
+-- the deposit at the signing stays sales' (17): the server's deposit function, a fresh deposit (T73 tries sales only on a replay)
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000001');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f1', 'deposit', 'sent', 'Deposit', 2500, 2500, now());
+:as_sales_a
+select tst.ok((public.record_estimate_deposit('0e191000-0000-4000-8000-000000000001', 'a1910000-0000-4000-8000-000000000001', 'cash') ->> 'repeat') = 'false', 'T191 sales take the deposit at the signing (record_estimate_deposit)');
+:as_super
+select tst.ok((select balance_cents = 0 from public.invoices where id = '11910000-0000-4000-8000-000000000001'), 'T191 the deposit invoice is paid');
 \echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
 \echo 'ALL TESTS PASSED'
