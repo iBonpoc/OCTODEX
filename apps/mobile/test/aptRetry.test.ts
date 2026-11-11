@@ -111,7 +111,7 @@ function toolbox(opts: { pg: boolean; faketime: boolean; aptWorks: boolean }) {
   const SHA = "d475b925943ad404c6c728ac868dc73949e7281c";
   const ghEnv = join(dir, "github_env");
   writeFileSync(ghEnv, "");
-  const env: Record<string, string> = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env, RETRY_DELAYS: "0 0", HOME: dir,
     DBTOOLS_PGBIN: bin, DBTOOLS_LIBROOT: libroot,
     DBTOOLS_APT_UPDATE: `bash ${join(dir, "apt.sh")} update`, DBTOOLS_APT_INSTALL: `bash ${join(dir, "apt.sh")} install`,
