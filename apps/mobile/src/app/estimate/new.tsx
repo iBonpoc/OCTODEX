@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -17,6 +17,7 @@ import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/c
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { draftCtx, draftsKey, draftWorthKeeping, findDraft, removeDraft, upsertDraft, useEstimateDrafts } from "@/features/estimateDraft";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -26,16 +27,30 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * client → title → one list of line items (catalog or custom) → totals with discount, tax, deposit → message → send.
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
-export default function EstimateBuilder() {
-  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string }>();
+export default function EstimateBuilderScreen() {
+  const { db, mode } = useStore();
+  const { t } = useI18n();
+  // the person's drafts (#760): read before the builder starts, so a draft is its first state, not a later jump
+  const drafts = useEstimateDrafts(draftsKey(mode === "cloud", db.company?.id, db.me));
+  if (!drafts.ready) return <Screen title={t("ue.newTitle")}>{null}</Screen>;
+  return <EstimateBuilder drafts={drafts} />;
+}
+
+type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string };
+
+function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
+  const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;
   const { t, money } = useI18n();
   const toast = useToast();
   const existing = params.id ? db.estimates.find((e) => e.id === params.id) : undefined;
-  const [estimateId] = useState(() => existing?.id ?? uid());
-  const [customerId, setCustomerId] = useState(existing?.customerId ?? params.customerId);
-  const [propertyId, setPropertyId] = useState(existing?.propertyId ?? params.propertyId);
+  // a new estimate opened from the same place as an unfinished one: it goes on (#760, audit Q-01)
+  const ctx = draftCtx(params);
+  const [draft, setDraft] = useState(() => findDraft(drafts.list, ctx, Date.now(), (id) => db.estimates.some((e) => e.id === id)));
+  const [estimateId] = useState(() => existing?.id ?? draft?.estimateId ?? uid());
+  const [customerId, setCustomerId] = useState(existing?.customerId ?? draft?.customerId ?? params.customerId);
+  const [propertyId, setPropertyId] = useState(existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
   // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
   const seeCosts = db.costsVisible ?? store.role !== "tech";
   const templates = pickableTemplates(db.estimateTemplates ?? []);
@@ -44,17 +59,43 @@ export default function EstimateBuilder() {
   // fixed when the screen opens: a template archived meanwhile (a sync) must not turn this into a new estimate (security check №2)
   const [tplEdit] = useState(() => (!existing && !given && params.editTemplate && canEditEstimateTemplates(store.role) ? templates.find((x) => x.id === params.editTemplate) : undefined));
   const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts, !!given.module) : null));
-  const [templateId, setTemplateId] = useState<string | undefined>(given?.id);
-  const [checkPrice, setCheckPrice] = useState<string[]>(fromTpl?.checkPrice ?? []);
-  const [startOpen, setStartOpen] = useState(() => !existing && !given && !tplEdit && templates.length > 0);
+  const [templateId, setTemplateId] = useState<string | undefined>(draft ? draft.templateId : given?.id);
+  const [checkPrice, setCheckPrice] = useState<string[]>(draft?.checkPrice ?? fromTpl?.checkPrice ?? []);
+  const [startOpen, setStartOpen] = useState(() => !existing && !draft && !given && !tplEdit && templates.length > 0);
   const [doc, setDoc] = useState<EstimateDoc>(() =>
-    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
+    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
   );
-  const [title, setTitle] = useState(existing?.doc ? existing.title : tplEdit?.name ?? given?.name ?? "");
+  const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   const [editing, setEditing] = useState<CustomLine | null | "new">(null);
   const [setting, setSetting] = useState<SettingKind>(null);
-  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit);
+  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
+  // every change of a new estimate is kept on the phone; nothing worth keeping — no draft (#760)
+  const keyOfDrafts = drafts.key;
+  const setDrafts = drafts.setList;
+  useEffect(() => {
+    if (!ctx) return;
+    const d = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+    setDrafts((list) => (draftWorthKeeping(d) ? upsertDraft(list, d, Date.now()) : removeDraft(list, ctx)), keyOfDrafts);
+  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, setDrafts, keyOfDrafts]);
+  const dropDraft = () => {
+    if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
+  };
+  /** «Начать заново»: the draft goes, the builder is as if just opened from here */
+  const restart = () => {
+    const fromHere = fromTpl ? JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc : newDoc(db.company?.estimate.depositBps);
+    setDraft(undefined);
+    setDoc(fromHere);
+    setCur(Math.max(0, fromHere.options.findIndex((o) => o.recommended)));
+    setTitle(given?.name ?? "");
+    setCustomerId(params.customerId);
+    setPropertyId(params.propertyId);
+    setTemplateId(given?.id);
+    setCheckPrice(fromTpl?.checkPrice ?? []);
+    const askStart = !given && templates.length > 0;
+    setStartOpen(askStart);
+    setClientPicker(!params.customerId && !askStart);
+  };
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
     if (x) {
@@ -118,6 +159,7 @@ export default function EstimateBuilder() {
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
+    dropDraft(); // saved: the store holds it now (an undo brings the builder's data back from there, not from a draft)
     toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);
     router.replace(`/estimate/${estimateId}${send ? "?send=1" : ""}`);
   };
@@ -161,6 +203,21 @@ export default function EstimateBuilder() {
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
         </T>
+      ) : null}
+      {draft ? (
+        <View testID="est-draft">
+          <Card>
+            <RowView>
+              <Icon name="note" s={size.iconSm} />
+              <T v="caption" tone="mut" style={{ flex: 1 }}>
+                {t("est.draft.restored")}
+              </T>
+              <View testID="est-draft-restart">
+                <Button label={t("est.draft.restart")} variant="secondary" onPress={restart} />
+              </View>
+            </RowView>
+          </Card>
+        </View>
       ) : null}
       <Grid>
         <View style={{ gap: space[3] }}>
