@@ -34,6 +34,7 @@ const storage = new Map<string, string>();
 /** keys the device fails to read / to write (#911) */
 const failGet = new Set<string>();
 const failSet = new Set<string>();
+const failSetIf: { fn: ((k: string, v: string) => boolean) | null } = { fn: null };
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getAllKeys: async () => [...storage.keys()],
@@ -43,7 +44,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       return storage.get(k) ?? null;
     },
     setItem: async (k: string, v: string) => {
-      if (failSet.has(k)) throw new Error("QuotaExceededError");
+      if (failSet.has(k) || failSetIf.fn?.(k, v)) throw new Error("QuotaExceededError");
       storage.set(k, v);
     },
     removeItem: async (k: string) => void storage.delete(k),
@@ -57,6 +58,7 @@ beforeEach(() => {
   storage.clear();
   failGet.clear();
   failSet.clear();
+  failSetIf.fn = null;
 });
 afterEach(() => {
   vi.useRealTimers();
@@ -264,7 +266,7 @@ describe("unit:accountCloud — the repeat that only filters (review of #911)", 
     storage.set("octo.wipe.pending.v1", "filter:u0");
     failGet.add("octo.outbox.v1");
     await finishOnDevice(); // u1 deleted, the outbox still not read
-    expect(storage.get("octo.wipe.pending.v1")).toBe("filter:u0,u1");
+    expect(storage.get("octo.wipe.pending.v1")).toBe("filter:u1,u0");
     failGet.clear();
     await wipeIfPending();
     expect(ids("octo.outbox.v1")).toEqual(["theirs"]);
@@ -304,4 +306,56 @@ describe("unit:accountCloud — the repeat that only filters (review of #911)", 
     expect(storage.get("octo.cloud.v1.rejected")).toBe("{broken");
     expect(storage.has("octo.wipe.pending.v1")).toBe(false);
   });
+});
+
+describe("unit:accountCloud — one mark for every person still to finish (review of #1010)", () => {
+  const at = new Date().toISOString();
+  const op = (id: string, userId: string) => ({ id, op: { k: "x", id }, at, tries: 0, owner: { userId, companyId: "c1" } });
+  const ids = (k: string) => JSON.parse(storage.get(k)!).map((o: { id: string }) => o.id);
+
+  it("«filter:u0» is pending, u1's wipe fails: the mark asks the whole wipe for both («u1,u0»), the repeat finishes both", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([op("u0op", "u0"), op("u1op", "u1"), op("theirs", "u9")]));
+    storage.set("octo.wipe.pending.v1", "filter:u0");
+    storage.set("octo.cloud.v1.c1", "u1's cache");
+    storage.set("octo.invite.token.v1", "u1's invite");
+    failGet.add("octo.outbox.v1");
+    const { default: AS } = await import("@react-native-async-storage/async-storage");
+    const realRemove = AS.multiRemove;
+    AS.multiRemove = async () => {
+      throw new Error("disk");
+    };
+    await finishOnDevice(); // u1
+    AS.multiRemove = realRemove;
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1,u0"); // before: «filter:u0» (u1's cache stayed) or «u1» (u0 lost)
+    failGet.clear();
+    state.session = false;
+    await wipeIfPending();
+    expect(ids("octo.outbox.v1")).toEqual(["theirs"]);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.has("octo.invite.token.v1")).toBe(false);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  }, 15_000);
+
+  it("an app killed before the wipe with «filter:u0» pending: the mark already asks the whole wipe for u1 and u0", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([op("theirs", "u9")]));
+    storage.set("octo.wipe.pending.v1", "filter:u0");
+    let markWhileReading: string | undefined;
+    const real = storage.get.bind(storage);
+    storage.get = (k: string) => {
+      if (k === "octo.outbox.v1") markWhileReading = real("octo.wipe.pending.v1");
+      return real(k);
+    };
+    await finishOnDevice();
+    storage.get = real;
+    expect(markWhileReading).toBe("u1,u0");
+  });
+
+  it("the «filter:» mark cannot be written after the wipe: the whole-wipe mark stays — never no mark", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine", "u1"), op("theirs", "u9")]));
+    failGet.add("octo.outbox.v1");
+    failSetIf.fn = (k, v) => k === "octo.wipe.pending.v1" && v.startsWith("filter:");
+    await finishOnDevice();
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1"); // before: taken away by the wipe, then the write failed — none
+    expect(storage.get("octo.outbox.v1")).toContain("theirs");
+  }, 10_000);
 });

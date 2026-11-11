@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  accountErrorKey, afterDelete, filterMark, pendingOf, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
+  accountErrorKey, afterDelete, filterMark, pendingOf, wipeMark, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
 } from "../src/features/deleteAccount";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -304,6 +304,8 @@ describe("unit:deleteAccount — the mark of a wipe to repeat (#911)", () => {
     expect(pendingOf("filter:1")).toEqual({ userId: null, userIds: [null], filterOnly: true });
     expect(filterMark(["u0", "u1", "u1"])).toBe("filter:u0,u1");
     expect(filterMark([null])).toBe("filter:1");
+    expect(wipeMark(["u1", "u0", null])).toBe("u1,u0,1");
+    expect(pendingOf("u1,u0")).toEqual({ userId: "u1", userIds: ["u1", "u0"], filterOnly: false });
   });
   it("wipeDevice never removes the keys it is told to keep", async () => {
     const st = new Map([["octo.outbox.v1", "[]"], ["octo.cloud.v1.rejected", "[]"], ["octo.cloud.v1.c1", "x"], ["octo.lang.v1", "ru"]]);

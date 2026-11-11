@@ -197,25 +197,32 @@ export function pendingOf(v: string): { userId: string | null; userIds: (string 
   const ids = (filterOnly ? v.slice(FILTER_PENDING.length) : v).split(",").map(idOf);
   return { userId: ids[0] ?? null, userIds: ids, filterOnly };
 }
-export const filterMark = (ids: readonly (string | null)[]) => `${FILTER_PENDING}${[...new Set(ids.map((x) => x ?? "1"))].join(",")}`;
+const idList = (ids: readonly (string | null)[]) => [...new Set(ids.map((x) => x ?? "1"))].join(",");
+export const filterMark = (ids: readonly (string | null)[]) => `${FILTER_PENDING}${idList(ids)}`;
+/** the whole wipe is still to do for these people (the first is the one being deleted now) — «u1,u0» (review of #1010 №3) */
+export const wipeMark = (ids: readonly (string | null)[]) => idList(ids);
 /**
  * true — wiped; false — it failed (logged, and marked for the next start). `keep`: device keys that are not removed —
- * the shared outbox and the refused changes are filtered in place by the caller, never removed and written back (#911)
+ * the shared outbox and the refused changes are filtered in place by the caller, never removed and written back (#911).
+ * `marks` (#1010): the mark when it failed (default: the person) and the one left when it is done (null — none; a
+ * «filter:» mark replaces the whole-wipe mark in one write, so the phone is never left without one)
  */
 export async function wipeDevice(
   store: WipeStore,
   log: (m: string) => void = () => {},
   userId?: string | null,
   keep: readonly string[] = [],
+  marks: { failed?: string; done?: string | null } = {},
 ): Promise<boolean> {
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
     await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !keep.includes(k)));
-    await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
+    if (marks.done) await store.setItem(WIPE_PENDING_KEY, marks.done).catch((e) => log(`mark not written: ${(e as Error).message}`));
+    else await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
     return true;
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);
-    await store.setItem(WIPE_PENDING_KEY, userId || "1").catch(() => {});
+    await store.setItem(WIPE_PENDING_KEY, marks.failed ?? (userId || "1")).catch(() => {});
     return false;
   }
 }
