@@ -20,7 +20,8 @@ exports.run = async (h) => {
   // company: ZIP and EIN keep only digits in the US shape
   await h.go("/company/profile");
   const ein = p.getByPlaceholder("12-3456789").last();
-  if (await ein.count()) {
+  await ein.waitFor({ timeout: 5000 }); // the field must be there: a silent skip would pass a screen without it (#800)
+  {
     await ein.fill("");
     await ein.pressSequentially("123456789");
     h.expect((await ein.inputValue()) === "12-3456789", `EIN: ${await ein.inputValue()}`);
@@ -28,7 +29,8 @@ exports.run = async (h) => {
   }
   await h.go("/company/address");
   const zip = p.getByPlaceholder("ZIP").first();
-  if (await zip.count()) {
+  await zip.waitFor({ timeout: 5000 }); // must be there (#800)
+  {
     await zip.fill("");
     await zip.pressSequentially("91103a1234");
     h.expect((await zip.inputValue()) === "91103-1234", `ZIP: ${await zip.inputValue()}`);

@@ -9,6 +9,7 @@ import { usePersistentState } from "@/data/persist";
 import {
   isClosedLead, leadDuplicatesFor, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, type LeadTurn, type ManualWinReason,
+  timelineText,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
 import { canSeeClientMoney, canServe, notServed } from "@/features/clients";
@@ -196,7 +197,7 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
                   key={e.id}
                   density="compact"
                   lead={{ kind: "icon", icon: "clock" }}
-                  title={t(e.key, Object.fromEntries(Object.entries(e.params ?? {}).map(([k, v]) => [k, v.startsWith("lead.") ? t(v as DictKey) : v])))}
+                  title={timelineText(e, t)}
                   when={day(e.at)}
                 />
               ))}

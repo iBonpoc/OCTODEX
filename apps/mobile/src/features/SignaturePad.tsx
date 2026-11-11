@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { PanResponder, Platform, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { radius, space, component } from "@octo/design-tokens";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -13,7 +13,7 @@ import { useHideTabBar } from "@/nav/tabBarHide";
 import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
-export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string }) {
+export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent = "visit.signConsent" }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string; /** the line under the pad — what the signature confirms: the visit's completed work by default; the estimate — its own; null — none (#1104 п.5) */ consent?: DictKey | null }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [d, setD] = useState("");
@@ -86,9 +86,11 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
           <Path d={d} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </View>
-      <T v="caption" tone="mut">
-        {t("visit.signConsent")}
-      </T>
+      {consent ? (
+        <T v="caption" tone="mut">
+          {t(consent)}
+        </T>
+      ) : null}
       <RowView>
         {device === "phone" ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
         <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
