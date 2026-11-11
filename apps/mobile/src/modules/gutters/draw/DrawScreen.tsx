@@ -292,8 +292,8 @@ export default function DrawScreen() {
       // its label or «Свойства»; handles on the ends of the picked gutter come with #682
       if (tl === "line" || (held && h?.kind === "end")) {
         const a = startAt(d, p0, tolIn());
-        // «Желоб» held on a free cap: along the gutter it is a pull, across it a new gutter (decided on the first move)
-        const cap = tl === "line" && held && h?.kind === "end" && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
+        // «Желоб» held on a free cap, or at once on the picked gutter's handle: along the gutter it is a pull, across it a new gutter (decided on the first move)
+        const cap = tl === "line" && (held || h?.kind === "end" && h.id === cur.current.selected) && h?.kind === "end" && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
         dragRef.current = { kind: "line", a, ...(cap && h?.kind === "end" ? { pullable: { id: h.id, end: h.end, before: d } } : {}) };
         setGhost({ a, b: a });
       }
@@ -307,7 +307,7 @@ export default function DrawScreen() {
         const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
         const far = Math.hypot(p[0] - g.a[0], p[1] - g.a[1]) > tolIn();
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
-          dragRef.current = { kind: "pull", ...g.pullable };
+          dragRef.current = { kind: "pull", ...g.pullable, fromLine: true };
           setGhost(null);
           setSelected(g.pullable.id);
           setDrawing(moveEndAlong(g.pullable.before, g.pullable.id, g.pullable.end, p));
@@ -331,7 +331,14 @@ export default function DrawScreen() {
       const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: newRunAttrs(cur.current.ch, cur.current.story) });
       if (g.kind === "end" || g.kind === "ds" || g.kind === "pull") {
         if (e.canceled) setDrawing(g.before);
-        else commit(next, g.before);
+        else {
+          commit(next, g.before);
+          // «Желоб»: drawn on / pulled out straight from the end → its length window, as growing a gutter always did (founder 09.11)
+          if (g.kind === "pull" && g.fromLine && next !== g.before) {
+            setQuickRun(g.id);
+            quickGrew.current = true;
+          }
+        }
         liftTap.current = true;
         return;
       }

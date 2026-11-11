@@ -138,13 +138,24 @@ export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawi
   const len = Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round(along)));
   const at: P = [Math.round(fixed[0] + (ux / L) * len), Math.round(fixed[1] + (uy / L) * len)];
   if (at[0] === was[0] && at[1] === was[1]) return d;
-  const { lengthIn: _typed, ...rest } = r;
-  const moved: DrawnRun = end === 0 ? { ...rest, a: at } : { ...rest, b: at };
+  // a taped length grows or shrinks by what the finger pulled (as drawing on straight does, extendRun), not forgotten
+  const { lengthIn: typed, ...rest } = r;
+  const shift = Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) - L;
+  const keep = typed !== undefined ? { lengthIn: Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round((typed + shift) * 8) / 8)) } : {};
+  const moved: DrawnRun = end === 0 ? { ...rest, ...keep, a: at } : { ...rest, ...keep, b: at };
+  // never ends on another gutter's end by rounding (a corner only by the user's own act — drawing a line to it)
+  if (d.runs.some((x) => x.id !== runId && sameStory(x, r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return d;
   const n = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
+  const was0 = Math.round(L);
   return {
     ...d,
     runs: d.runs.map((x) => (x.id === runId ? moved : x)),
-    downspouts: d.downspouts.map((s) => (s.runId === runId && s.atIn > n ? { ...s, atIn: n } : s)),
+    // a downspout's place is measured from the gutter's start `a`: when the start moves it keeps its place on the house
+    downspouts: d.downspouts.map((s) => {
+      if (s.runId !== runId) return s;
+      const atIn = end === 0 ? s.atIn + (n - was0) : s.atIn;
+      return { ...s, atIn: Math.min(n, Math.max(0, atIn)) };
+    }),
   };
 }
 
@@ -263,7 +274,7 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing };
+export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean };
 
 /** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
 export function moveDs(d: Drawing, id: string, p: P): Drawing {

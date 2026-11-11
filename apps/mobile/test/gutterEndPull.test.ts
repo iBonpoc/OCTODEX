@@ -13,10 +13,10 @@ describe("moveEndAlong", () => {
     const m = moveEndAlong(d0, "r1", 1, [600, 40]);
     expect(m.runs[0]).toMatchObject({ a: [0, 0], b: [600, 0] });
   });
-  it("pulls it in: shorter than before, a typed length dropped, a downspout past the end comes back onto the line", () => {
+  it("pulls it in: shorter than before, a taped length follows, a downspout past the end comes back onto the line", () => {
     const m = moveEndAlong(d0, "r1", 1, [300, -50]);
     expect(m.runs[0]!.b).toEqual([300, 0]);
-    expect(m.runs[0]!.lengthIn).toBeUndefined();
+    expect(m.runs[0]!.lengthIn).toBe(300); // taped 480″ shrinks by the pulled 180″
     expect(m.downspouts[0]!.atIn).toBe(300);
   });
   it("the near end the same way (end 0): the far end stays fixed", () => {
@@ -36,6 +36,21 @@ describe("moveEndAlong", () => {
   it("nothing moves → the same drawing back (no empty «Назад» step); an unknown gutter too", () => {
     expect(moveEndAlong(d0, "r1", 1, [480, 77])).toBe(d0);
     expect(moveEndAlong(d0, "nope", 1, [10, 0])).toBe(d0);
+  });
+  it("end 0: the start moves, so a downspout keeps its place on the house (atIn counted from the start)", () => {
+    const d: Drawing = { runs: [run("r1", [0, 0], [480, 0])], downspouts: [{ id: "d1", runId: "r1", atIn: 100 } as never] };
+    const out = moveEndAlong(d, "r1", 0, [-60, 0]); // 60″ longer at the start
+    expect(out.runs[0]).toMatchObject({ a: [-60, 0], b: [480, 0] });
+    expect(out.downspouts[0]!.atIn).toBe(160); // still 100″ from the old start = 160″ from the new one
+    const back = moveEndAlong(d, "r1", 0, [60, 0]); // 60″ shorter
+    expect(back.downspouts[0]!.atIn).toBe(40);
+    expect(moveEndAlong(d, "r1", 0, [300, 0]).downspouts[0]!.atIn).toBe(0); // the start passed it: at the start
+  });
+  it("an end pulled onto another gutter's end (by rounding) does not make a corner by itself", () => {
+    const d: Drawing = { runs: [run("r1", [0, 0], [480, 0]), run("r2", [600, 0], [600, 300])], downspouts: [] };
+    expect(moveEndAlong(d, "r1", 1, [600, 0])).toBe(d);
+    expect(moveEndAlong(d, "r1", 1, [599, 0])).toBe(d);
+    expect(moveEndAlong(d, "r1", 1, [590, 0]).runs[0]!.b).toEqual([590, 0]);
   });
   it("finishStroke: a pull ends where the finger lifted; cancelled — back to before", () => {
     const g: Stroke = { kind: "pull", id: "r1", end: 1, before: d0 };
