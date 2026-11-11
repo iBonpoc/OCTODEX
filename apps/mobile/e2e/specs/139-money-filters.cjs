@@ -34,6 +34,7 @@ exports.run = async (h) => {
   const ibar = vis(p.getByTestId("filter-bar")).first();
   await ibar.waitFor();
   const got = vis(p.getByRole("button", { name: "Понятно", exact: true }));
+  // optional: the first-visit hint of the screen shows once per device — close it only when it is there (#800)
   if (await got.count()) { await got.first().click(); await p.waitForTimeout(300); }
   h.expect((await vis(p.getByRole("button", { name: "Все клиенты" })).count()) === 0, "no «Все клиенты» button");
   const before = await vis(p.locator(card)).count();
