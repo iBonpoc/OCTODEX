@@ -72,6 +72,12 @@ export function Menu<K extends string>({
         select: (k) => live.current.onSelect(k),
         waitsForDismiss: Platform.OS === "ios",
         nextFrame: (f) => requestAnimationFrame(f),
+        later: (f, ms) => {
+          const id = setTimeout(f, ms);
+          return () => clearTimeout(id);
+        },
+        // the net for a lost onDismiss: longer than any close of the menu (it has no animation on iOS)
+        waitMs: motion.durSlow + motion.durFast,
       }),
     [],
   );

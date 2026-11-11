@@ -9,7 +9,7 @@
  *   820/1280: the side panel keeps its own scroll.
  * Finds things by testID / role; waits on what it checks.
  */
-const { skipLength, sheetGone, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, sheetGone, pressWhenStill, canvasAt } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -75,12 +75,16 @@ exports.run = async (h) => {
   await sheetGone(p);
   await waitFor(async () => (await p.evaluate(() => localStorage.getItem("octo.mod.gutters.toolbar.v1"))) === "top", "the toolbar moved to the top");
 
-  // #745: a gutter and a downspout on it
+  // the menu closed, kept mounted hidden, holds no layer: nothing modal is left, the canvas takes the next stroke
+  h.expect((await p.getByRole("menu").count()) === 0 && (await p.getByRole("menuitem").count()) === 0, "no menu left after the pick");
   const b = await p.getByTestId("draw-surface").boundingBox();
   const y = b.y + b.height * 0.42;
   const x0 = b.x + b.width * 0.1, x1 = b.x + b.width * 0.5;
+  await canvasAt(p, x0, y);
+  await canvasAt(p, x1, y);
+  // #745: a gutter (this stroke right after the menu and its sheet — it lands on the canvas) and a downspout on it
   await stroke([x0, y], [x1, y]);
-  await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run");
+  await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run: the canvas takes a stroke after the menu");
 
   if (wide) {
     // the side panel holds the fields and keeps its own scroll

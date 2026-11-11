@@ -5,13 +5,22 @@ import { menuPick } from "../src/ui/menuPick";
 function setup(waitsForDismiss: boolean) {
   const log: string[] = [];
   const frames: (() => void)[] = [];
+  const timers: { f: () => void; ms: number; cancelled: boolean }[] = [];
   const p = menuPick<string>({
     close: () => log.push("close"),
     select: (k) => log.push(`select:${k}`),
     waitsForDismiss,
     nextFrame: (f) => frames.push(f),
+    later: (f, ms) => {
+      const t = { f, ms, cancelled: false };
+      timers.push(t);
+      return () => (t.cancelled = true);
+    },
+    waitMs: 510,
   });
-  return { p, log, frames };
+  /** the timers that are still due go off */
+  const fire = () => timers.filter((t) => !t.cancelled).forEach((t) => t.f());
+  return { p, log, frames, timers, fire };
 }
 
 describe("menuPick (#743)", () => {
@@ -53,5 +62,33 @@ describe("menuPick (#743)", () => {
     p.pick("b");
     p.dismissed();
     expect(log).toEqual(["close", "close", "select:b"]);
+  });
+
+  it("iOS: onDismiss never comes — the pick runs on the timer, once", () => {
+    const { p, log, timers, fire } = setup(true);
+    p.pick("relink");
+    expect(timers).toHaveLength(1);
+    expect(timers[0]!.ms).toBe(510);
+    expect(log).toEqual(["close"]);
+    fire();
+    expect(log).toEqual(["close", "select:relink"]);
+    p.dismissed(); // a late dismiss after the timer: no second pick
+    expect(log).toEqual(["close", "select:relink"]);
+  });
+
+  it("iOS: onDismiss came — the timer is cancelled and does not pick a second time", () => {
+    const { p, log, timers, fire } = setup(true);
+    p.pick("a");
+    p.dismissed();
+    expect(timers[0]!.cancelled).toBe(true);
+    fire();
+    timers[0]!.f(); // even if a cancelled timer went off anyway
+    expect(log).toEqual(["close", "select:a"]);
+  });
+
+  it("Android / web: no timer", () => {
+    const { p, timers } = setup(false);
+    p.pick("a");
+    expect(timers).toHaveLength(0);
   });
 });
