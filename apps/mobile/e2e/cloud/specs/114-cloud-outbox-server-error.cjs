@@ -113,7 +113,14 @@ exports.run = async (h, { seed, admin }) => {
 
   // the server is well again: «Повторить сейчас» sends it, the card goes
   await p.unroute("**/rest/v1/**", timeout);
-  await p.getByTestId("stuck-q-stuck").last().getByRole("button", { name: "Повторить сейчас" }).click();
+  // The app retries a stuck op by itself as soon as the server is well again (online, the queue tick) — possibly before this
+  // press: the button is then disabled («sending») and the card leaves (#1018, CHECKS §9 №3: wait for what is checked).
+  // So: press it while it is there; if the press cannot happen and the card is gone, the app was faster — the same outcome.
+  try {
+    await p.getByTestId("stuck-q-stuck").last().getByRole("button", { name: "Повторить сейчас" }).click({ timeout: 3000 });
+  } catch (e) {
+    if ((await p.getByTestId("stuck-q-stuck").count()) > 0) throw e;
+  }
   for (let i = 0; i < 30 && (await p.getByTestId("stuck-q-stuck").count()) > 0; i++) await p.waitForTimeout(500);
   h.expect((await p.getByTestId("stuck-q-stuck").count()) === 0, "«Повторить сейчас»: sent, the card is gone");
   t = await h.text();
