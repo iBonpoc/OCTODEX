@@ -7,12 +7,16 @@
  */
 import type { EstimateDoc } from "@/data/types";
 import { usePersistentState } from "@/data/persist";
-import { hasContent } from "./estimateDoc";
+import { hasContent, newDoc } from "./estimateDoc";
 
 export const DRAFTS_PREFIX = "octo.drafts.v1.";
-/** the person's drafts: demo — one list; the cloud — per company and person */
-export const draftsKey = (cloud: boolean, companyId?: string | null, userId?: string | null) =>
-  cloud ? `${DRAFTS_PREFIX}${companyId ?? "none"}.${userId ?? "none"}` : `${DRAFTS_PREFIX}demo`;
+/**
+ * The person's drafts: demo — one list; the cloud — per company and person, from the sign-in (the company chosen), not
+ * from the cache (review of #859 №3: before the first load the cache has no company — a shared «none» list would show
+ * company A's draft in company B). null — not known yet: the builder waits.
+ */
+export const draftsKey = (cloud: boolean, companyId?: string | null, userId?: string | null): string | null =>
+  !cloud ? `${DRAFTS_PREFIX}demo` : companyId && userId ? `${DRAFTS_PREFIX}${companyId}.${userId}` : null;
 
 export interface EstimateDraft {
   /** where the builder was opened from (draftCtx) */
@@ -53,17 +57,48 @@ export function upsertDraft(list: readonly EstimateDraft[], d: EstimateDraft, no
   return [d, ...list.filter((x) => x.ctx !== d.ctx && fresh(x, now))].slice(0, MAX_DRAFTS);
 }
 
+/** what the builder holds, to compare with how it opened (the time and the place are not part of it) */
+export const draftSnapshot = (d: Omit<EstimateDraft, "ctx" | "at">) =>
+  JSON.stringify([d.estimateId, d.customerId ?? null, d.propertyId ?? null, d.title, d.doc, d.templateId ?? null, d.checkPrice]);
+
+/**
+ * The drafts after a change in the builder (review of #859 №1). As it opened — nothing new to keep: a fresh builder (a
+ * template's lines and name, untouched) leaves no draft; a continued one keeps its draft as it was (its time is the last
+ * change, not this opening). Changed — kept when worth it, else taken out.
+ */
+export function nextDrafts(list: readonly EstimateDraft[], d: EstimateDraft, start: { snapshot: string; restored: boolean }, now: number): EstimateDraft[] {
+  if (draftSnapshot(d) === start.snapshot) return start.restored ? (list as EstimateDraft[]) : removeDraft(list, d.ctx);
+  return draftWorthKeeping(d) ? upsertDraft(list, d, now) : removeDraft(list, d.ctx);
+}
+
 /** this place's draft taken out; the same list when there is none (nothing written) */
 export function removeDraft(list: readonly EstimateDraft[], ctx: string | null): EstimateDraft[] {
   if (!ctx || !list.some((x) => x.ctx === ctx)) return list as EstimateDraft[];
   return list.filter((x) => x.ctx !== ctx);
 }
 
-const valid = (v: unknown): v is EstimateDraft[] =>
-  Array.isArray(v) && v.every((x) => x && typeof x.ctx === "string" && typeof x.at === "string" && Array.isArray(x.doc?.options));
+/**
+ * One stored draft, checked and brought to the current shape (an older version's draft: settings missing, an option
+ * without lines — rule 16); a broken one is dropped alone, the others stay (review of #859).
+ */
+export function cleanDraft(x: unknown): EstimateDraft | null {
+  const d = x as Partial<EstimateDraft> | null;
+  if (!d || typeof d !== "object" || typeof d.ctx !== "string" || typeof d.at !== "string" || typeof d.estimateId !== "string") return null;
+  const options = Array.isArray(d.doc?.options) ? d.doc.options.filter((o) => o && typeof o.id === "string" && Array.isArray(o.lines)) : [];
+  if (!options.length) return null;
+  const base = newDoc();
+  return {
+    ctx: d.ctx, at: d.at, estimateId: d.estimateId, customerId: d.customerId, propertyId: d.propertyId,
+    title: typeof d.title === "string" ? d.title : "",
+    doc: { ...base, ...d.doc, options, settings: { ...base.settings, ...(d.doc?.settings ?? {}) } },
+    templateId: d.templateId,
+    checkPrice: Array.isArray(d.checkPrice) ? d.checkPrice.filter((c) => typeof c === "string") : [],
+  };
+}
+export const cleanDrafts = (v: unknown): EstimateDraft[] => (Array.isArray(v) ? v.map(cleanDraft).filter((d): d is EstimateDraft => !!d) : []);
 
 /** the person's drafts on this phone; `ready` — read */
 export function useEstimateDrafts(key: string) {
-  const [list, setList, ready] = usePersistentState<EstimateDraft[]>(key, [], { validate: valid });
-  return { list, setList, ready, key };
+  const [raw, setList, ready] = usePersistentState<EstimateDraft[]>(key, [], { validate: Array.isArray });
+  return { list: cleanDrafts(raw), setList, ready, key };
 }

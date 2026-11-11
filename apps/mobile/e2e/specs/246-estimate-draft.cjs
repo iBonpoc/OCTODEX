@@ -1,8 +1,9 @@
 /**
- * e2e 246 — смета в конструкторе не пропадает (#760, audit Q-01, «Ядро: надёжность данных» №1).
+ * e2e 246 — смета в конструкторе не пропадает (#760, audit Q-01, «Ядро: надёжность данных» №1; review of #859).
  * A new estimate is kept on the phone while it is built: «Назад» and opening «+ Смета» from the same place again,
- * a reload — the client, the title and the lines are there, with «Продолжен черновик». «Начать заново» drops it;
- * a saved estimate leaves no draft. Every view; waits on what it checks (testID).
+ * a reload — the client, the title and the lines are there, with «Продолжен черновик». Another place — no draft.
+ * «Начать заново» drops it with «Отменить» for 5 s (rule 5). A template opened and left untouched leaves no draft.
+ * A saved estimate leaves no draft. Every view; finds by testID (rule 19), waits on what it checks.
  */
 const { sheetGone } = require("../sheet.cjs");
 
@@ -17,22 +18,27 @@ exports.run = async (h) => {
   };
   const titleInput = () => tid("ue-title").locator("input, textarea").first();
   const titleValue = async () => { await tid("ue-title").waitFor({ timeout: 8000 }); return titleInput().inputValue(); };
-  const hasLine = async () => (await p.locator('[data-testid^="ue-line-"]').locator("visible=true").count()) > 0;
+  // the builder's line cards (ue-line-<id>), not the line sheet's own parts (ue-line-search/-custom/-price/-save…)
+  const SHEET_PARTS = ["search", "custom", "price", "save", "remove", "source-hint"].map((x) => `:not([data-testid="ue-line-${x}"])`).join("");
+  const hasLine = async () => (await p.locator(`[data-testid^="ue-line-"]${SHEET_PARTS}`).locator("visible=true").count()) > 0;
   const draftShown = async () => (await p.getByTestId("est-draft").locator("visible=true").count()) > 0;
   const stored = () => p.evaluate(() => JSON.parse(localStorage.getItem("octo.drafts.v1.demo") || "[]"));
+  const addCustomLine = async (name, price) => {
+    await tid("ue-add-line").getByRole("button").click();
+    await tid("ue-line-search").locator("input").fill(name);
+    await tid("ue-line-custom").getByRole("button").click();
+    await tid("ue-line-price").locator("input").fill(price);
+    await tid("ue-line-save").getByRole("button").click();
+    await sheetGone(p);
+    await waitFor(hasLine, `the line «${name}» is in the builder`);
+  };
 
   await h.go("/today");
   await h.go(NEW);
   h.expect((await titleValue()) === "", "a fresh builder: empty");
   h.expect(!(await draftShown()), "a fresh builder: no «Продолжен черновик»");
   await titleInput().fill("Крыша, черновик");
-  await p.getByRole("button", { name: "Добавить позицию" }).first().click();
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("Вывезти мусор");
-  await h.sheet().getByText(/Своя позиция:/).click();
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("150");
-  await h.sheet().getByRole("button", { name: "Готово" }).click();
-  await sheetGone(p);
-  await waitFor(hasLine, "the line is in the builder");
+  await addCustomLine("Вывезти мусор", "150");
   await waitFor(async () => (await stored()).some((d) => d.title === "Крыша, черновик" && d.doc.options[0].lines.length === 1), "kept on the phone at once");
 
   // «Назад»: the builder leaves; «+ Смета» from the same client again → it goes on
@@ -42,37 +48,70 @@ exports.run = async (h) => {
   await waitFor(draftShown, "again: «Продолжен черновик»");
   h.expect((await titleValue()) === "Крыша, черновик", "again: the title is there");
   await waitFor(hasLine, "again: the line is there");
-  await h.expectText(/Вывезти мусор/, "again: the line's name");
   await h.shot("continued");
 
+  // another place (another client): its own builder, no draft from here
+  await h.go("/estimate/new?customerId=c1&propertyId=p1");
+  h.expect((await titleValue()) === "", "another place: empty");
+  h.expect(!(await draftShown()), "another place: no «Продолжен черновик»");
+
   // a reload (the app closed): still there
+  await h.go(NEW);
   await p.reload();
   await waitFor(draftShown, "reload: «Продолжен черновик»");
   h.expect((await titleValue()) === "Крыша, черновик", "reload: the title is there");
   await waitFor(hasLine, "reload: the line is there");
 
-  // «Начать заново»: empty, and the draft is gone for good
-  await tid("est-draft-restart").locator('[role="button"]').first().click();
+  // «Начать заново» → empty, with «Отменить» (rule 5): undo brings the estimate and its draft back
+  await tid("est-draft-restart").getByRole("button").click();
   await waitFor(async () => !(await draftShown()), "restart: the note goes");
   await waitFor(async () => (await titleInput().inputValue()) === "" && !(await hasLine()), "restart: an empty builder");
   await waitFor(async () => (await stored()).length === 0, "restart: no draft on the phone");
+  await p.waitForTimeout(500); // «Отменить» is armed after a moment (toastArm)
+  await h.click("Отменить");
+  await waitFor(async () => (await titleInput().inputValue()) === "Крыша, черновик" && (await hasLine()), "undo: the estimate is back");
+  await waitFor(async () => (await stored()).some((d) => d.title === "Крыша, черновик"), "undo: the draft is back on the phone");
+  // restart for good (the toast runs out)
+  await tid("est-draft-restart").getByRole("button").click();
+  await waitFor(async () => (await stored()).length === 0, "restart again: no draft on the phone");
+  await p.waitForTimeout(5600);
   await p.reload();
   h.expect((await titleValue()) === "", "restart → reload: empty");
   h.expect(!(await draftShown()), "restart → reload: no «Продолжен черновик»");
 
-  // saved: the draft goes; the next «+ Смета» starts empty
-  await titleInput().fill("Сохранённая");
-  await p.getByRole("button", { name: "Добавить позицию" }).first().click();
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("Вывезти мусор");
-  await h.sheet().getByText(/Своя позиция:/).click();
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("150");
-  await h.sheet().getByRole("button", { name: "Готово" }).click();
+  // a template opened and left untouched: no draft (its name and lines are not a change, review №1)
+  // the template is put in before the app starts on each load (a write from the running page would be overwritten)
+  await p.addInitScript(() => {
+    const s = JSON.parse(localStorage.getItem("octo.db.v5") || "null");
+    if (!s?.db || (s.db.estimateTemplates || []).some((x) => x.id === "tpl246")) return;
+    const doc = JSON.parse(JSON.stringify(s.db.estimates.find((e) => e.doc).doc));
+    doc.options = [{ ...doc.options[0], lines: [{ id: "tl1", group: "service", name: "Clean gutters (test)", quantity: "1", unit: "ea", unitPriceCents: 20000 }] }];
+    s.db.estimateTemplates = [...(s.db.estimateTemplates || []), { id: "tpl246", name: "Gutter cleaning (test)", doc }];
+    localStorage.setItem("octo.db.v5", JSON.stringify(s));
+  });
+  const TPL = "/estimate/new?template=tpl246&customerId=c2&propertyId=p2";
+  await h.go(TPL);
+  h.expect((await titleValue()) === "Gutter cleaning (test)", "a template: its name");
+  await waitFor(hasLine, "a template: its line");
+  await p.waitForTimeout(600); // past the 250 ms of a write
+  h.expect((await stored()).length === 0, "a template untouched: nothing kept");
+  await h.go("/today"); // left (the previous page in the history is another builder)
+  h.expect((await stored()).length === 0, "a template left untouched: nothing kept");
+  await h.go(TPL);
+  h.expect(!(await draftShown()), "a template opened again: no false «Продолжен черновик»");
+
+  // saved: the draft goes; the next «+ Смета» starts empty (a template exists now: «С чего начать?» → «Пустая смета»)
+  await h.go(NEW);
+  await tid("est-start-blank").getByRole("button").click();
   await sheetGone(p);
-  await waitFor(hasLine, "the line is in the builder");
-  await tid("ue-save").locator('[role="button"]').first().click();
+  await titleInput().fill("Сохранённая");
+  await addCustomLine("Вывезти мусор", "150");
+  await waitFor(async () => (await stored()).length === 1, "kept before the save");
+  await tid("ue-save").getByRole("button").click();
   await waitFor(async () => /\/estimate\/[^n/][^/]*$/.test(new URL(p.url()).pathname), "saved: the estimate opens");
   await waitFor(async () => (await stored()).length === 0, "saved: no draft on the phone");
   await h.go(NEW);
+  await tid("est-start").waitFor({ timeout: 8000 }); // a fresh builder asks «С чего начать?» again: no draft took its place
   h.expect((await titleValue()) === "", "after a save: «+ Смета» starts empty");
   h.expect(!(await draftShown()), "after a save: no «Продолжен черновик»");
 };

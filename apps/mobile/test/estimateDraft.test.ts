@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: { getItem: async () => null, setItem: async () => {} } }));
-import { DRAFT_DAYS, MAX_DRAFTS, draftCtx, draftWorthKeeping, draftsKey, findDraft, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
+import { DRAFT_DAYS, MAX_DRAFTS, cleanDrafts, draftCtx, draftSnapshot, draftWorthKeeping, draftsKey, findDraft, nextDrafts, removeDraft, upsertDraft, type EstimateDraft } from "../src/features/estimateDraft";
 import { newDoc } from "../src/features/estimateDoc";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import type { EstimateDoc } from "../src/data/types";
@@ -33,7 +33,7 @@ describe("unit:estimateDraft — where a draft belongs", () => {
     expect(draftsKey(true, "co1", "u1")).toBe("octo.drafts.v1.co1.u1");
     expect(draftsKey(true, "co1", "u2")).not.toBe(draftsKey(true, "co1", "u1"));
     expect(draftsKey(false, "co1", "u1")).toBe("octo.drafts.v1.demo");
-    expect(isDeviceKey(draftsKey(true, "co1", "u1"))).toBe(true);
+    expect(isDeviceKey(draftsKey(true, "co1", "u1")!)).toBe(true);
   });
   it("worth keeping: a line or a title; an untouched builder is not", () => {
     expect(draftWorthKeeping({ doc: newDoc(), title: "" })).toBe(false);
@@ -66,5 +66,39 @@ describe("unit:estimateDraft — found again, kept, dropped", () => {
     expect(removeDraft(list, "a").map((d) => d.ctx)).toEqual(["b"]);
     expect(removeDraft(list, "zzz")).toBe(list);
     expect(removeDraft(list, null)).toBe(list);
+  });
+});
+
+describe("unit:estimateDraft — review of #859", () => {
+  it("№3: the cloud without a company or a person yet — no key (the builder waits); never a shared «none» list", () => {
+    expect(draftsKey(true, undefined, "u1")).toBeNull();
+    expect(draftsKey(true, "co1", null)).toBeNull();
+    expect(draftsKey(true, "co-a", "u1")).not.toBe(draftsKey(true, "co-b", "u1"));
+  });
+  it("№1: a template opened and left untouched leaves no draft (its name and lines are not a change)", () => {
+    const d = draft("new||c1|p1|tpl1", { title: "Gutter cleaning" }); // worth keeping by itself: a title and a line
+    const opened = { snapshot: draftSnapshot(d), restored: false };
+    expect(nextDrafts([], d, opened, NOW)).toEqual([]);
+    expect(nextDrafts([draft("x")], d, opened, NOW).map((x) => x.ctx)).toEqual(["x"]);
+    // changed: kept
+    const changed = { ...d, title: "Gutter cleaning, 2 stories" };
+    expect(nextDrafts([], changed, opened, NOW).map((x) => x.title)).toEqual(["Gutter cleaning, 2 stories"]);
+    // changed back to how it opened: nothing to keep
+    expect(nextDrafts([changed], d, opened, NOW)).toEqual([]);
+  });
+  it("a continued draft opened again is left as it was — its time is its last change, not this opening", () => {
+    const old = draft("new||c1|p1|", { at: new Date(NOW - 20 * 86_400_000).toISOString(), title: "Roof" });
+    const list = [old];
+    const reopened = { ...old, at: new Date(NOW).toISOString() };
+    expect(nextDrafts(list, reopened, { snapshot: draftSnapshot(old), restored: true }, NOW)).toBe(list);
+  });
+  it("a broken stored draft is dropped alone; an older shape is brought to the current one", () => {
+    const good = draft("good");
+    const older = { ...draft("older"), doc: { options: [{ id: "o1", name: "A", lines: [] }] }, checkPrice: undefined };
+    const out = cleanDrafts([good, { ctx: 1 }, null, { ...draft("no-options"), doc: { options: "x" } }, older]);
+    expect(out.map((d) => d.ctx)).toEqual(["good", "older"]); // before: one bad item threw the whole list away
+    expect(out[1]!.doc.settings).toEqual(newDoc().settings);
+    expect(out[1]!.checkPrice).toEqual([]);
+    expect(cleanDrafts("not a list")).toEqual([]);
   });
 });

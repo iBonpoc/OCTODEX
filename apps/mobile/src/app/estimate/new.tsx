@@ -17,7 +17,8 @@ import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/c
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { draftCtx, draftsKey, draftWorthKeeping, findDraft, removeDraft, upsertDraft, useEstimateDrafts } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, draftWorthKeeping, findDraft, nextDrafts, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { useAuth } from "@/cloud/auth";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -28,12 +29,15 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
 export default function EstimateBuilderScreen() {
-  const { db, mode } = useStore();
+  const { mode } = useStore();
+  const auth = useAuth();
   const { t } = useI18n();
-  // the person's drafts (#760): read before the builder starts, so a draft is its first state, not a later jump
-  const drafts = useEstimateDrafts(draftsKey(mode === "cloud", db.company?.id, db.me));
-  if (!drafts.ready) return <Screen title={t("ue.newTitle")}>{null}</Screen>;
-  return <EstimateBuilder drafts={drafts} />;
+  // the person's drafts (#760): read before the builder starts, so a draft is its first state, not a later jump. The
+  // company from the sign-in, like the store's cache key — never from the cache, which may not have it yet (#859 №3)
+  const key = draftsKey(mode === "cloud", auth.company?.companyId, auth.userId);
+  const drafts = useEstimateDrafts(key ?? `${"octo.drafts.v1."}unknown`);
+  if (!key || !drafts.ready) return <Screen title={t("ue.newTitle")}>{null}</Screen>;
+  return <EstimateBuilder key={key} drafts={drafts} />;
 }
 
 type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string };
@@ -70,31 +74,53 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [editing, setEditing] = useState<CustomLine | null | "new">(null);
   const [setting, setSetting] = useState<SettingKind>(null);
   const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
-  // every change of a new estimate is kept on the phone; nothing worth keeping — no draft (#760)
+  // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
+  // (#859 №1); nothing worth keeping — no draft (#760)
   const keyOfDrafts = drafts.key;
   const setDrafts = drafts.setList;
+  const held = { estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+  const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
   useEffect(() => {
     if (!ctx) return;
-    const d = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
-    setDrafts((list) => (draftWorthKeeping(d) ? upsertDraft(list, d, Date.now()) : removeDraft(list, ctx)), keyOfDrafts);
-  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, setDrafts, keyOfDrafts]);
+    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+    setDrafts((list) => nextDrafts(list, d, opened, Date.now()), keyOfDrafts);
+  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, opened, setDrafts, keyOfDrafts]);
   const dropDraft = () => {
     if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
   };
-  /** «Начать заново»: the draft goes, the builder is as if just opened from here */
+  /** «Начать заново»: the builder as if just opened from here; the draft goes — with «Отменить» for 5 s (rule 5, #859 №2) */
   const restart = () => {
-    const fromHere = fromTpl ? JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc : newDoc(db.company?.estimate.depositBps);
+    const was = { draft, opened, doc, cur, title, customerId, propertyId, templateId, checkPrice };
+    const fromHere = fromTpl ? (JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps);
+    const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: fromHere, templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
     setDraft(undefined);
-    setDoc(fromHere);
-    setCur(Math.max(0, fromHere.options.findIndex((o) => o.recommended)));
-    setTitle(given?.name ?? "");
-    setCustomerId(params.customerId);
-    setPropertyId(params.propertyId);
-    setTemplateId(given?.id);
-    setCheckPrice(fromTpl?.checkPrice ?? []);
+    setOpened({ snapshot: draftSnapshot(fresh), restored: false });
+    setDoc(fresh.doc);
+    setCur(Math.max(0, fresh.doc.options.findIndex((o) => o.recommended)));
+    setTitle(fresh.title);
+    setCustomerId(fresh.customerId);
+    setPropertyId(fresh.propertyId);
+    setTemplateId(fresh.templateId);
+    setCheckPrice(fresh.checkPrice);
     const askStart = !given && templates.length > 0;
     setStartOpen(askStart);
     setClientPicker(!params.customerId && !askStart);
+    toast.show(t("est.draft.cleared"), () => {
+      setStartOpen(false);
+      setClientPicker(false);
+      setDraft(was.draft);
+      setOpened(was.opened);
+      setDoc(was.doc);
+      setCur(was.cur);
+      setTitle(was.title);
+      setCustomerId(was.customerId);
+      setPropertyId(was.propertyId);
+      setTemplateId(was.templateId);
+      setCheckPrice(was.checkPrice);
+      // the draft back on the phone as it was (unchanged since it opened, the effect alone would not write it)
+      const d: EstimateDraft = { ctx: ctx!, at: was.draft?.at ?? new Date().toISOString(), estimateId, customerId: was.customerId, propertyId: was.propertyId, title: was.title, doc: was.doc, templateId: was.templateId, checkPrice: was.checkPrice };
+      if (ctx && draftWorthKeeping(d)) setDrafts((list) => upsertDraft(list, d, Date.now()), keyOfDrafts);
+    });
   };
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
@@ -159,7 +185,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
-    dropDraft(); // saved: the store holds it now (an undo brings the builder's data back from there, not from a draft)
+    // saved: the store holds it now. «Отменить» on the toast takes the saved estimate back out of the store; the builder
+    // is closed by then, so its content does not come back as a draft (#860)
+    dropDraft();
     toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);
     router.replace(`/estimate/${estimateId}${send ? "?send=1" : ""}`);
   };
@@ -295,7 +323,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             </Card>
             </View>
           ))}
-          <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
+          <View testID="ue-add-line">
+            <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
+          </View>
         </View>
 
         <View style={{ gap: space[3] }}>

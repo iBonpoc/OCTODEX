@@ -67,14 +67,18 @@ export function LineSheet({
     <Sheet visible={visible} onClose={onClose} title={line ? t("ue.editLine") : t("ue.addItem")}>
       {!draft ? (
         <View style={{ gap: space[3] }}>
-          <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.searchOrType")} icon="search" />
+          <View testID="ue-line-search">
+            <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.searchOrType")} icon="search" />
+          </View>
           <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
-            <ListRow
-              title={q.trim() ? t("ue.customNamed", { name: q.trim() }) : t("ue.custom")}
-              subtitle={t("ue.customHint")}
-              left={<Icon name="plus" />}
-              onPress={() => setDraft(newLine("service", { name: q.trim(), unit: "ea" }))}
-            />
+            <View testID="ue-line-custom">
+              <ListRow
+                title={q.trim() ? t("ue.customNamed", { name: q.trim() }) : t("ue.custom")}
+                subtitle={t("ue.customHint")}
+                left={<Icon name="plus" />}
+                onPress={() => setDraft(newLine("service", { name: q.trim(), unit: "ea" }))}
+              />
+            </View>
             {matches.map((it) => (
               <View key={it.id}>
                 <Divider />

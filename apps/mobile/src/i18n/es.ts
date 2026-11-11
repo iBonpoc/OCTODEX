@@ -246,6 +246,7 @@ export const es: Dict = {
   /* core: data safety — the estimate draft (#760) */
   "est.draft.restored": "Borrador retomado: este presupuesto no se guardó",
   "est.draft.restart": "Empezar de nuevo",
+  "est.draft.cleared": "Borrador eliminado",
   "sync.stuck.badge": "No enviado: {n}",
   "sync.stuck.title": "No enviado: el servidor responde con un error",
   "sync.stuck.since": "Falla desde {when}",
