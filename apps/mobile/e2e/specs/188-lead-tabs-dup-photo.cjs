@@ -74,8 +74,9 @@ exports.run = async (h) => {
   // the address changes first, the panel swaps to the other lead a moment later: wait for what is checked — the panel now
   // shows lead a (its own «Возможный дубль» row points back at the planted lead).
   await panel.getByTestId("lead-dup-lead-l-e2e-188").waitFor({ timeout: 8000 });
-  // …and a press on «Файлы» can still be overridden while the panel mounts (its remembered tab is applied on mount: the panel
-  // stayed on «Обзор» in 1 of ~25 runs under load, #1028). Press until the tab shows its content, then check it as before.
+  // …and a press on «Файлы» can still be overridden while the panel mounts: the remembered tab is applied after the press
+  // and the panel stays on «Обзор» (1 of ~25 runs under load). That is a screen bug — #1031: the user's choice must win.
+  // Until it is fixed the spec presses until the tab shows its content (a workaround; remove it with the fix of #1031).
   const tile = panel.getByTestId("lead-photo-ph-e2e-188");
   for (let i = 0; i < 4; i++) {
     await panel.getByRole("tab", { name: /^Файлы/ }).first().click();
