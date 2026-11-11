@@ -201,8 +201,8 @@ const q = (o: Record<string, string | undefined>) => {
 const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey; hint?: DictKey }> = {
   lead: { label: "quick.lead", icon: "user" },
   client: { label: "clients.new", icon: "users" },
-  job: { label: "quick.jobNew", icon: "wrench", hint: "quick.jobHint" },
-  estimate: { label: "quick.estimateNew", icon: "invoice", hint: "quick.estimateHint" },
+  job: { label: "path.jobNew", icon: "wrench", hint: "path.jobHint" },
+  estimate: { label: "path.estimateNew", icon: "invoice", hint: "path.estimateHint" },
   expense: { label: "quick.receipt", icon: "wallet" },
   visit: { label: "sch.title", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },
@@ -231,15 +231,16 @@ const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): 
  * Property, «Record a call», «New message» come with waves 3–6. «Lead» from a client — when lead/new takes customerId.
  */
 export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
-  home: [lead, client, estimate(OFFICE), job, expense()],
+  home: [lead, client, estimate(OFFICE), expense(), job],
   // the schedule is the planners' (docs/specs/03 Р7): no «＋» on Plan for the technician
   // wave 5 (#187/#188): an event and a day off open the Plan's own EventSheet; the planners' only (Р7)
   plan: [
-    job,
     { ...lead, roles: OFFICE },
     { id: "planAdd", roles: PLANNERS, act: "planAdd" },
     { id: "planEvent", roles: PLANNERS, act: "planEvent" },
     { id: "planTimeOff", roles: PLANNERS, act: "planTimeOff" },
+    // «Работа без сметы» — the last line of every «＋» (main-path spec §2.2 п.4)
+    job,
   ],
   // wave 6-2: «Записать звонок» first — the sheet asks «к чему» itself
   calls: [{ id: "call", act: "call" }, lead, client],

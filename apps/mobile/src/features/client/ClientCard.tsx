@@ -158,7 +158,7 @@ export function ClientCardBody({ c }: { c: Customer }) {
 
       {/* #1094/#879: the card's main action — in one place, a verb: the estimate (the «＋» keeps the rest) */}
       {estimateItem && canServe(db, c.id) ? (
-        <Button label={t("client.makeEstimate")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
+        <Button label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
       ) : null}
 
       {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
