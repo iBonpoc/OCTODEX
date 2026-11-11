@@ -52,7 +52,8 @@ exports.run = async (h, { seed }) => {
   // signs out on the same phone
   await h.go("/settings/profile");
   await h.click("Выйти");
-  await p.getByText(/Вход в OCTODEX/).first().waitFor({ timeout: 15000 });
+  // signed out: the session leaves the browser (supabase-js keeps it as «sb-…-auth-token»)
+  await p.waitForFunction(() => !Object.keys(localStorage).some((k) => k.endsWith("-auth-token")), null, { timeout: 15000 });
 
   // the tech signs in on the same browser: the owner's copy leaves once the tech's own is read
   await signIn(h, { ...a1, email, userId: tech.id });
