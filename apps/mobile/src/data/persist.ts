@@ -110,7 +110,7 @@ export function flushAllWriters(): void {
   for (const w of [...live]) w.flush();
 }
 
-/** the hook's state; `forgotten` — reset by a wipe: not written until the next real change; `readError` — the device
+/** the hook's state; `forgotten` — reset by a wipe, or a cache started empty after a failed read (#926): not written until the next real change; `readError` — the device
  *  did not give the stored value (A-01): not loaded, never written, until a retry reads it */
 export interface Slot<T> {
   key: string;
@@ -138,6 +138,13 @@ export const brokenKeyOf = (key: string, at: number) => `${BROKEN_PREFIX}${key}.
 /** a failed read is tried again this many times in all, with a growing pause (A-01) */
 export const READ_TRIES = 3;
 export const READ_PAUSE_MS = 300;
+/**
+ * A cache with `patient` (the company's data, store.tsx) is tried longer, ~8 s, before it starts empty (#926, review of #1037): a passing SQLITE_BUSY ends
+ * meanwhile, and the store is not shown yet — nothing is changed on an empty base (the store writes whole values, so a
+ * change made on the empty start could never be put onto the copy afterwards)
+ */
+export const CACHE_READ_TRIES = 7;
+const pauseOf = (patient: boolean, i: number) => (patient ? Math.min(READ_PAUSE_MS * 2 ** (i - 1), 2000) : READ_PAUSE_MS * i);
 /** a setter's update, bound to the key it was meant for: an update for another key (a late answer for the company's
  *  cache once the hook holds «octo.db.v5») is dropped (19 §6.12) */
 export function applyUpdate<T>(s: Slot<T>, next: T | ((prev: T) => T), forKey?: string): Slot<T> {
@@ -161,6 +168,9 @@ export function usePersistentState<T>(
     validate?: (v: T) => boolean;
     immediate?: boolean;
     strict?: boolean;
+    /** a cache whose empty start would show an empty company: tried ~8 s before it starts empty (#926). Not for the
+     *  theme, the language, filters: the providers wait for them one after the other (review of #1037, round 2) */
+    patient?: boolean;
     /** nothing under `key` yet: an older key's value is taken if `ok` says it is this state's (#864: the person-less
      *  cloud cache of an older version — the same person's only), written under `key` at once (the old one stays) */
     adopt?: { from: string; ok: (v: T) => boolean };
@@ -175,6 +185,7 @@ export function usePersistentState<T>(
   if (!writer.current)
     writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (ok) => setWriteFailed(!ok));
   const strict = !!opts?.strict;
+  const patient = !strict && !!opts?.patient;
   /** the raw record a strict key could not parse: copied by «Сохранить копию и продолжить» */
   const broken = useRef<{ key: string; raw: string } | null>(null);
   useEffect(() => {
@@ -223,8 +234,8 @@ export function usePersistentState<T>(
           await AsyncStorage.setItem(key, old).catch(() => {});
           return old;
         } catch (e) {
-          if (i >= READ_TRIES) throw e;
-          await new Promise((r) => setTimeout(r, READ_PAUSE_MS * i));
+          if (i >= (patient ? CACHE_READ_TRIES : READ_TRIES)) throw e;
+          await new Promise((r) => setTimeout(r, pauseOf(patient, i)));
           if (!alive || w !== wiped.current) throw e;
         }
       }
@@ -253,7 +264,9 @@ export function usePersistentState<T>(
         // what the phone has only here (strict) waits for «Повторить»; a cache (the server's copy, the demo, a role)
         // starts fresh as before — a cache the device can never read (Android: a row over 2 MB) must not lock the app
         // for good (review of #910, second round №2)
-        setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true });
+        // — but its empty start is never written over the copy the device may still hold (#926: one SQLITE_BUSY without
+        // the network wiped the company's data until the network came back): only the next real change is
+        setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true, forgotten: true });
       });
     return () => {
       alive = false;

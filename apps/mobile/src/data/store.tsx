@@ -39,7 +39,7 @@ import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBa
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
-import { acceptPayment, visitPayment } from "@octo/estimating-engine";
+import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { cloudCacheKey, isNewCacheKey, othersCaches } from "./cacheKey";
@@ -439,11 +439,12 @@ function withPayment(d: DB, p: Payment, demo: boolean): DB {
   return {
     ...d,
     payments: [pay, ...d.payments],
-    invoices: d.invoices.map((i) =>
-      i.id === p.invoiceId
-        ? { ...i, paidCents: i.paidCents + p.amountCents, method: p.method, paidAt: i.paidCents + p.amountCents >= i.totalCents ? p.at : i.paidAt }
-        : i,
-    ),
+    invoices: d.invoices.map((i) => {
+      if (i.id !== p.invoiceId) return i;
+      // the sum through the engine (rule 8)
+      const paid = sumCents([i.paidCents, p.amountCents]);
+      return { ...i, paidCents: paid, method: p.method, paidAt: paid >= i.totalCents ? p.at : i.paidAt };
+    }),
   };
 }
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
@@ -472,6 +473,8 @@ export function StoreProvider({
     {
       validate: (v) =>
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+      // an empty start shows an empty company: tried longer before it (#926)
+      patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
       // theirs — an empty list without the network otherwise (#864, review); another person's is never taken
       ...(mode === "cloud" ? { adopt: { from: `octo.cloud.v1.${company!.companyId}`, ok: (v: { db: DB }) => v.db.me === auth.userId } } : {}),
@@ -1473,24 +1476,28 @@ export function StoreProvider({
         const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
         // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
         const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
-        const finalId = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final")!.id : invoiceId;
+        // the final invoice the engine counted (void ones never reach the phone: repo.ts loads live invoices only)
+        const finalInv = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final") : undefined;
+        const finalId = finalInv?.id ?? invoiceId;
         // the op always carries a new invoice id: the server uses it only when it makes the final invoice (no final yet)
         return mutate(
           "visit.pay",
           (d) => {
             const next = patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: { method, amountCents: plan.amountCents, at: now } }));
-            if (!customerId || plan.into === "none") return next;
-            return {
-              ...next,
-              // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4)
-              invoices:
-                plan.into === "final"
-                  ? next.invoices.map((i) => (i.id === finalId ? { ...i, paidCents: i.paidCents + plan.amountCents, paidAt: now, method } : i))
-                  : [
-                      ...next.invoices,
-                      { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: plan.amountCents, dueDate: now, paidAt: now, method, kind: "final" },
-                    ],
-            };
+            if (!customerId || plan.into === "none" || plan.amountCents <= 0) return next;
+            // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4). The money is a
+            // payment with its receipt, as «Принять оплату» (#1103: the invoice was marked paid with no payment — «Получено»
+            // and the client's «Оплатил» stayed behind); its id is the op's: the server writes that payment (record_visit_payment)
+            const billed =
+              plan.into === "final"
+                ? next
+                : { ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] };
+            return withPayment(
+              billed,
+              // the invoice's client, as the server writes it (record_visit_payment, #857 С4) — review of #1103 №3
+              { id: paymentId, invoiceId: finalId, customerId: finalInv?.customerId ?? customerId, amountCents: plan.amountCents, method, at: now, receivedBy: d.me },
+              modeRef.current === "demo",
+            );
           },
           plan.amountCents > 0 && customerId
             ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: plan.amountCents, method, dueDate: companyToday(Date.parse(now)) }
