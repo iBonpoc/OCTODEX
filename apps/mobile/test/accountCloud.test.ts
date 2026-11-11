@@ -640,6 +640,27 @@ describe("unit:accountCloud — the rest after #1016 (#1017)", () => {
     expect(storage.has("octo.cloud.v1.c2")).toBe(false);
   }, 10_000);
 
+  it("the mark read only the second time: «wiped» goes before that mark too — killed before the wipe → the next start wipes", async () => {
+    storage.set("octo.wipe.pending.v1", "u1");
+    storage.set("octo.wipe.done.v1", "u1");
+    storage.set("octo.cloud.v1.c2", "u2's cache");
+    let reads = 0;
+    const real = storage.get.bind(storage);
+    storage.get = (k: string) => {
+      if (k === "octo.wipe.pending.v1" && ++reads <= 3) throw new Error("SQLITE_BUSY");
+      return real(k);
+    };
+    failSetIf.fn = (k, v) => k === "octo.wipe.pending.v1" && v === "u2,u1";
+    try {
+      await killedBeforeWipe(() => finishOnDevice("u2"));
+    } finally {
+      storage.get = real;
+    }
+    expect(storage.has("octo.wipe.done.v1")).toBe(false);
+    await wipeIfPending();
+    expect(storage.has("octo.cloud.v1.c2")).toBe(false);
+  }, 15_000);
+
   it("«*» lies beside «u0», u2 deletes, the mark is not written, killed before the wipe: the next start wipes u2 whole", async () => {
     storage.set("octo.wipe.pending.v1", "u0");
     storage.set("octo.wipe.done.v1", "*");
