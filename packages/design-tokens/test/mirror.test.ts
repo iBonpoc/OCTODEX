@@ -73,7 +73,7 @@ describe("app tokens mirror the founder's DS css", () => {
   });
   it("the drawing on paper (#739)", () => {
     expect(drawingPrint).toEqual({
-      sheetW: px("draw-print-sheet-w"), margin: px("draw-print-margin"), runW: px("draw-print-run-w"), thinW: px("draw-print-thin-w"),
+      sheetW: px("draw-print-sheet-w"), pageW: px("draw-print-page-w"), margin: px("draw-print-margin"), runW: px("draw-print-run-w"), thinW: px("draw-print-thin-w"),
       dimOff: px("draw-print-dim-off"), dimStep: px("draw-print-dim-step"), extGap: px("draw-print-ext-gap"), tick: px("draw-print-tick"),
       numR: px("draw-print-num-r"), dsR: px("draw-print-ds-r"), font: px("draw-print-font"), fontSm: px("draw-print-font-sm"),
       stampH: px("draw-print-stamp-h"), scalePx: px("draw-print-scale-px"),

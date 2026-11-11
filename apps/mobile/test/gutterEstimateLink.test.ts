@@ -170,6 +170,19 @@ describe("makeEstimate — through the core's store", () => {
     r.undo();
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
   });
+  it("P4b-2 (#705): the drawing goes with the estimate as its page; «Обновить» replaces it; without a page — none", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const pg = { id: "gutters:m1", title: "Gutter drawing", w: 100, h: 50, items: [{ t: "l" as const, x1: 0, y1: 0, x2: 10, y2: 0, sw: 1, ink: "ink" as const }] };
+    const first = ok(makeEstimate(h.s, { ...input(M), page: pg }));
+    expect(h.saved[0]!.doc.pages).toEqual([pg]);
+    h.s.db = withGutterData(h.s.db, putMeasurement({ ...M, status: "draft" }));
+    ok(makeEstimate(h.s, { ...input(M, fewer), page: { ...pg, h: 60 } }));
+    expect(h.saved[1]!.doc.pages).toEqual([{ ...pg, h: 60 }]);
+    expect(first.estimateId).toBe(h.saved[1]!.id);
+    const h2 = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    ok(makeEstimate(h2.s, input(M)));
+    expect("pages" in h2.saved[0]!.doc).toBe(false);
+  });
   it("«Обновить смету»: the same estimate id, its own client; hand changes stay", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
     const first = ok(makeEstimate(h.s, input(M)));

@@ -10,7 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
-import { space } from "@octo/design-tokens";
+import { drawingPrint as DP, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
@@ -21,12 +21,12 @@ import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, RowView, Screen } from "@/ui/surfaces";
-import { blueprint } from "./blueprint";
+import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
 import { ftIn } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, measurementOf } from "../data";
-import { clientLangOf, estimateAction, makeEstimate, ofMeasurement } from "../estimateLink";
+import { clientLangOf, estimateAction, makeEstimate, ofMeasurement, pageIdOf } from "../estimateLink";
 import { toMeasurement } from "../geometry";
 import { listPreview, partName } from "../prices";
 import { readRules, toRulesOverride } from "../settings";
@@ -70,12 +70,28 @@ export default function ViewScreen() {
 
   /** one press at a time; the screen is left after a made estimate (a second press would make a second one) */
   const busy = useRef(false);
+  /** where it is: the object's address, else the lead's name (the sheet's title block) */
+  const placeText = () => {
+    const placeAddr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
+    const placeLead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
+    return placeAddr ? [placeAddr.address, placeAddr.city].filter(Boolean).join(", ") : placeLead?.name;
+  };
   const doEstimate = () => {
     if (!m || busy.current) return;
     if (action.kind === "open") return router.push(`/estimate/${action.estimateId}` as Href);
     busy.current = true;
     const tc = tFor(clientLangOf(store.db, m));
-    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p), fallbackTitle: tc("mod.gutters.title") });
+    // the drawing as on paper (#739), in the client's language: the estimate's page on /p/ and in its PDF (S6g, #705)
+    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const page = drawing.runs.length
+      ? sheetPage(
+          pageIdOf(m.id),
+          tc("mod.gutters.pdf.title"),
+          // one sheet for the phone (/p/) and the paper: built for the narrow one (pageW), the PDF scales it up
+          blueprint(drawing, tc, { company: company.name, address: placeText(), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape" }, DP.pageW),
+        )
+      : undefined;
+    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
     if (!r.ok) {
       busy.current = false;
       toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : "mod.gutters.est.off"));
@@ -97,11 +113,9 @@ export default function ViewScreen() {
   const sheet = useMemo(() => {
     if (!drawing.runs.length || !w) return null;
     const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
-    const placeAddr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
-    const placeLead = m?.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
     return blueprint(drawing, t, {
       company: company.name,
-      address: placeAddr ? [placeAddr.address, placeAddr.city].filter(Boolean).join(", ") : placeLead?.name,
+      address: placeText(),
       date: docDay(new Date().toISOString(), company.timezone),
       rough: m?.accuracy !== "tape",
     }, w);
