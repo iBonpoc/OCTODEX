@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { capSide, chainOf, centre, findCorners, houseSide, toMeasurement, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
+import { capSide, chainOf, centre, findCorners, toMeasurement, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
 import { addDownspout, addRun, flipFace, setRunAttrs } from "../src/modules/gutters/canvas/edit";
 import { computeGutterParts } from "@octo/estimating-engine";
 import { buildScene } from "../src/modules/gutters/canvas/scene";
