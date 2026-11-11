@@ -469,6 +469,8 @@ export function StoreProvider({
     {
       validate: (v) =>
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+      // an empty start shows an empty company: tried longer before it (#926)
+      patient: true,
     },
   );
   // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)

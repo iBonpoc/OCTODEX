@@ -139,12 +139,12 @@ export const brokenKeyOf = (key: string, at: number) => `${BROKEN_PREFIX}${key}.
 export const READ_TRIES = 3;
 export const READ_PAUSE_MS = 300;
 /**
- * A cache (not strict) is tried longer, ~8 s, before it starts empty (#926, review of #1037): a passing SQLITE_BUSY ends
+ * A cache with `patient` (the company's data, store.tsx) is tried longer, ~8 s, before it starts empty (#926, review of #1037): a passing SQLITE_BUSY ends
  * meanwhile, and the store is not shown yet — nothing is changed on an empty base (the store writes whole values, so a
  * change made on the empty start could never be put onto the copy afterwards)
  */
 export const CACHE_READ_TRIES = 7;
-const pauseOf = (strict: boolean, i: number) => (strict ? READ_PAUSE_MS * i : Math.min(READ_PAUSE_MS * 2 ** (i - 1), 2000));
+const pauseOf = (patient: boolean, i: number) => (patient ? Math.min(READ_PAUSE_MS * 2 ** (i - 1), 2000) : READ_PAUSE_MS * i);
 /** a setter's update, bound to the key it was meant for: an update for another key (a late answer for the company's
  *  cache once the hook holds «octo.db.v5») is dropped (19 §6.12) */
 export function applyUpdate<T>(s: Slot<T>, next: T | ((prev: T) => T), forKey?: string): Slot<T> {
@@ -164,7 +164,14 @@ export function usePersistentState<T>(
   key: string,
   initial: T | (() => T),
   /** `strict`: a stored value that is not JSON is an error, not «start fresh» — for what the phone has only there (the outbox) */
-  opts?: { validate?: (v: T) => boolean; immediate?: boolean; strict?: boolean },
+  opts?: {
+    validate?: (v: T) => boolean;
+    immediate?: boolean;
+    strict?: boolean;
+    /** a cache whose empty start would show an empty company: tried ~8 s before it starts empty (#926). Not for the
+     *  theme, the language, filters: the providers wait for them one after the other (review of #1037, round 2) */
+    patient?: boolean;
+  },
 ) {
   const init = () => (typeof initial === "function" ? (initial as () => T)() : initial);
   const [state, setState] = useState<Slot<T>>(() => ({ key, value: init(), loaded: false }));
@@ -175,6 +182,7 @@ export function usePersistentState<T>(
   if (!writer.current)
     writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (ok) => setWriteFailed(!ok));
   const strict = !!opts?.strict;
+  const patient = !strict && !!opts?.patient;
   /** the raw record a strict key could not parse: copied by «Сохранить копию и продолжить» */
   const broken = useRef<{ key: string; raw: string } | null>(null);
   useEffect(() => {
@@ -208,8 +216,8 @@ export function usePersistentState<T>(
         try {
           return await AsyncStorage.getItem(key);
         } catch (e) {
-          if (i >= (strict ? READ_TRIES : CACHE_READ_TRIES)) throw e;
-          await new Promise((r) => setTimeout(r, pauseOf(strict, i)));
+          if (i >= (patient ? CACHE_READ_TRIES : READ_TRIES)) throw e;
+          await new Promise((r) => setTimeout(r, pauseOf(patient, i)));
           if (!alive || w !== wiped.current) throw e;
         }
       }

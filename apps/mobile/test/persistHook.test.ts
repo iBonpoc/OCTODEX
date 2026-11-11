@@ -20,7 +20,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 import { render, settle } from "./support/miniReact";
-import { CACHE_READ_TRIES, flushAllWriters, forgetDeviceState, usePersistentState } from "../src/data/persist";
+import { CACHE_READ_TRIES, flushAllWriters, forgetDeviceState, READ_TRIES, usePersistentState } from "../src/data/persist";
 
 type Out = ReturnType<typeof usePersistentState<string>>;
 const Comp = ({ k }: { k: string }) => usePersistentState<string>(k, "init");
@@ -141,7 +141,9 @@ describe("unit:persistHook — a change in the last 250 ms is not lost (rule 6, 
 type Ops = { id: string }[];
 type OutOps = ReturnType<typeof usePersistentState<Ops>>;
 const Outbox = ({ k }: { k: string }) => usePersistentState<Ops>(k, [], { immediate: true, strict: true });
-const Cache = ({ k }: { k: string }) => usePersistentState<Ops>(k, []);
+const Cache = ({ k }: { k: string }) => usePersistentState<Ops>(k, [], { patient: true });
+/** a key that is not the company's data (the theme, the language, a filter): not `patient` */
+const Plain = ({ k }: { k: string }) => usePersistentState<Ops>(k, []);
 const TWO = JSON.stringify([{ id: "op1" }, { id: "op2" }]);
 /** every read the hook makes fails, through all its tries (with their pauses) */
 const failReads = async (tries = 3) => {
@@ -380,6 +382,19 @@ describe("unit:persistHook — a cache the device cannot read (review of #910, r
     expect((root.out as OutOps)[0]).toEqual([{ id: "op1" }, { id: "op2" }]);
     root.unmount();
   }, 15_000);
+
+  it("#926 (review, round 2): a key that is not patient (the theme, the language) gives up after 3 tries, as before", async () => {
+    storage.set("octo.theme.v1", TWO);
+    const root = render(Plain, { k: "octo.theme.v1" });
+    await failReads(READ_TRIES);
+    await wait(50);
+    await settle();
+    expect((root.out as OutOps)[2]).toBe(true); // before: ~8 s more, the providers one after the other — a white screen
+    expect(reads).toHaveLength(0);
+    await wait(300);
+    expect(storage.get("octo.theme.v1")).toBe(TWO); // its empty start is not written either
+    root.unmount();
+  }, 10_000);
 
   it("#926: the empty start is never written over the copy; the next real change (the server's data) is", async () => {
     storage.set(K, TWO);
