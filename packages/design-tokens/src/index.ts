@@ -84,6 +84,14 @@ export const motion = {
   /** Reanimated spring roughly equal to the CSS spring curve above. */
   spring: { damping: 16, stiffness: 220, mass: 0.9 },
   toastUndoMs: 5000,
+  /** DS §15.2 (Н-02): a plain toast stays this long, ms */
+  toastInfoMs: 2600,
+  /** DS Б8 (Н-06): a toast with an action stays this long for a screen-reader user */
+  toastUndoA11yMs: 10000,
+  /** DS §13 (Н-07): a spinner / skeleton shows only after this delay, so a fast load does not flash */
+  spinnerDelayMs: 300,
+  /** DS §7.4 (Н-37): a button in loading says «failed» after this long */
+  actionTimeoutMs: 10000,
   /** app-only: «Отменить» on a toast ignores taps this long after it shows — the second tap of a double tap
    *  must not undo what the first one made (reduced motion shows the toast at once, under the finger) */
   toastArmMs: 300,
