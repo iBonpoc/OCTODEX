@@ -84,7 +84,7 @@ exports.run = async (h) => {
   // 820/1280: «/» opens it from a screen; not while typing
   if (wide) {
     await h.go("/clients");
-    await p.locator("body").click({ position: { x: w - 5, y: 5 } }).catch(() => {});
+    await p.mouse.click(w - 5, 5); // a plain mouse click: it never waits for or fails on an overlay
     await p.keyboard.press("/");
     await p.waitForTimeout(700);
     h.expect(path(h) === "/search", `«/» opens the search (${p.url()})`);
