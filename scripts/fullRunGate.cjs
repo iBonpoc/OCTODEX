@@ -18,7 +18,12 @@ function decide(runs, sha) {
   return { ok: false, message: `Сборка для магазина только с коммита с зелёным ПОЛНЫМ прогоном 6 видов: на ${sha.slice(0, 7)} прогонов Checks нет. ${how}` };
 }
 
-module.exports = { FULL_EVENTS, decide };
+/** `gh api --paginate --slurp` prints a JSON array of pages, each page {workflow_runs: […]} — one flat list of runs */
+function runsFromPages(json) {
+  return JSON.parse(json).flatMap((page) => page.workflow_runs ?? []);
+}
+
+module.exports = { FULL_EVENTS, decide, runsFromPages };
 
 if (require.main === module) {
   const { execFileSync } = require("node:child_process");
@@ -26,7 +31,7 @@ if (require.main === module) {
   const sha = process.env.SHA;
   if (!repo || !sha) { console.error("GITHUB_REPOSITORY and SHA are required"); process.exit(2); }
   const out = execFileSync("gh", ["api", "--paginate", "--slurp", `repos/${repo}/actions/workflows/checks.yml/runs?head_sha=${sha}&per_page=100`], { encoding: "utf8" });
-  const runs = JSON.parse(out).flatMap((page) => page.workflow_runs ?? []);
+  const runs = runsFromPages(out);
   const res = decide(runs, sha);
   if (res.ok) console.log(res.message);
   else { console.log(`::error::${res.message}`); process.exit(1); }

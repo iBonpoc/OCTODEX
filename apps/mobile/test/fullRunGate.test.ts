@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 type Run = { event: string; conclusion: string | null; head_sha: string };
-const { decide } = require("../../../scripts/fullRunGate.cjs") as { decide: (runs: Run[], sha: string) => { ok: boolean; message: string } };
+const { decide, runsFromPages } = require("../../../scripts/fullRunGate.cjs") as { decide: (runs: Run[], sha: string) => { ok: boolean; message: string }; runsFromPages: (json: string) => Run[] };
 
 const A = "a".repeat(40);
 const B = "b".repeat(40);
@@ -34,10 +34,20 @@ describe("store-build gate: decide", () => {
   });
 });
 
+describe("gh --paginate --slurp output", () => {
+  it("two pages become one list; a page without runs is fine", () => {
+    const json = JSON.stringify([{ total_count: 3, workflow_runs: [run("push", "success"), run("pull_request", "success")] }, { total_count: 3, workflow_runs: [run("schedule", "success")] }, {}]);
+    const runs = runsFromPages(json);
+    expect(runs).toHaveLength(3);
+    expect(decide(runs, A).ok).toBe(true); // the nightly run is on the second page
+  });
+});
+
 describe("eas-build.yml: the gate stands before any build", () => {
   const yml = readFileSync(join(__dirname, "../../../.github/workflows/eas-build.yml"), "utf8");
   it("the iOS (store) build runs the gate; it can read the runs", () => {
-    expect(yml).toMatch(/Full Checks run is green on this commit[\s\S]*?if: inputs\.platform == 'ios'[\s\S]*?node scripts\/fullRunGate\.cjs/);
+    expect(yml).toMatch(/Full Checks run is green on this commit[\s\S]*?id: gate\s+if: inputs\.platform != 'android'[\s\S]*?node scripts\/fullRunGate\.cjs/); // every store platform; only the Android APK is free
+    expect(yml).toContain("steps.gate.outcome != 'failure'"); // the «credentials missing» hint is not shown when the gate was the failure
     expect(yml).toMatch(/actions: read/);
   });
   it("the gate comes before the Expo account and the builds", () => {
