@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { computeGutterParts, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
+import { resolveGutterRules, computeGutterParts, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
 
 /** docs/specs/33-gutters-module.md §9 S5g — parts from a measurement, lengths in inches. */
 
@@ -27,7 +27,7 @@ describe("computeGutterParts — one straight run", () => {
     expect(parts.find((p) => p.key === "coil.k.6.alu_032.white")!.use).toBe("purchase");
   });
   it("hidden hangers every 24 in; a left and a right end cap", () => {
-    expect(q(parts, "hanger.hidden.aluminum.k.6")).toBe("20");
+    expect(q(parts, "hanger.hidden.aluminum.k.6")).toBe("21");
     expect(q(parts, "endcap.L.k.6.alu_032.white")).toBe("1");
     expect(q(parts, "endcap.R.k.6.alu_032.white")).toBe("1");
   });
@@ -189,8 +189,8 @@ describe("rules a company can change", () => {
   });
   it("company spacing by kit: spike every 30 in → 16 spikes and 16 ferrules", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, hanger: "spike" })], corners: [], downspouts: [] }, { hangerSpacingIn: { spike: 30 } });
-    expect(q(parts, "spike.aluminum.k.6")).toBe("16");
-    expect(q(parts, "ferrule.aluminum.k.6")).toBe("16");
+    expect(q(parts, "spike.aluminum.k.6")).toBe("17");
+    expect(q(parts, "ferrule.aluminum.k.6")).toBe("17");
   });
   it("guards on part of a run", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, guardsIn: 120, guardType: "micromesh" })], corners: [], downspouts: [] });
@@ -264,31 +264,45 @@ describe("П18: stock — material, gauge, finish; coil blank", () => {
 describe("П18.6: hanger kits", () => {
   it("hidden without a screw takes a #10 speed screw each", () => {
     const { parts } = one({ hanger: "hidden_noscrew" });
-    expect(q(parts, "hanger.hidden_noscrew.aluminum.k.6")).toBe("20");
-    expect(q(parts, "screw.10x15")).toBe("20");
+    expect(q(parts, "hanger.hidden_noscrew.aluminum.k.6")).toBe("21");
+    expect(q(parts, "screw.10x15")).toBe("21");
   });
   it("spike and ferrule in pairs", () => {
     const { parts } = one({ hanger: "spike" });
-    expect(q(parts, "spike.aluminum.k.6")).toBe("20");
-    expect(q(parts, "ferrule.aluminum.k.6")).toBe("20");
+    expect(q(parts, "spike.aluminum.k.6")).toBe("21");
+    expect(q(parts, "ferrule.aluminum.k.6")).toBe("21");
     expect(q(parts, "hanger.spike.k.6")).toBeUndefined();
   });
-  it("+1 hanger per run (company) and the run's own spacing (snow, wind)", () => {
-    expect(q(one({}, [], { hangerExtraPerRun: 1 }).parts, "hanger.hidden.aluminum.k.6")).toBe("21");
+  it("#766: a hanger every 24 in and one at each end: floor(length / spacing) + 1", () => {
+    const n = (lengthIn: number, rules = {}) => q(computeGutterParts({ runs: [run({ id: "1", lengthIn })], corners: [], downspouts: [] }, rules).parts, "hanger.hidden.aluminum.k.6");
+    expect(n(480)).toBe("21"); // 40 ft
+    expect(n(492)).toBe("21"); // 41 ft
+    expect(n(468)).toBe("20"); // 39 ft
+    expect(n(24)).toBe("2"); // 2 ft: one at each end
+    expect(n(12)).toBe("1"); // shorter than the spacing: one
+  });
+  it("a run of length 0 has no hanger; the old rule key hangerExtraPerRun in stored rules is ignored without an error", () => {
+    const n = (lengthIn: number, rules = {}) => q(computeGutterParts({ runs: [run({ id: "1", lengthIn })], corners: [], downspouts: [] }, rules).parts, "hanger.hidden.aluminum.k.6");
+    expect(n(0)).toBeUndefined();
+    expect(resolveGutterRules({ hangerExtraPerRun: 1 } as never).hangerAtEnds).toBe(true);
+    expect(n(480, { hangerExtraPerRun: 0 })).toBe("21");
+  });
+  it("the company can switch the end hanger off (ceil(length / spacing)) and a run's own spacing wins (snow, wind)", () => {
+    expect(q(one({}, [], { hangerAtEnds: false }).parts, "hanger.hidden.aluminum.k.6")).toBe("20");
     expect(q(one({ hangerSpacingIn: 18 }).parts, "hanger.hidden.aluminum.k.6")).toBe("27");
   });
   it("tile: T-bar strap with screws and a tile labor line", () => {
     const { parts } = one({ hanger: "tbar_strap" });
-    expect(q(parts, "hanger.tbar_strap.aluminum.k.6")).toBe("20");
-    expect(q(parts, "screw.10x15")).toBe("40");
+    expect(q(parts, "hanger.tbar_strap.aluminum.k.6")).toBe("21");
+    expect(q(parts, "screw.10x15")).toBe("42");
     expect(q(parts, "labor.tile")).toBe("40");
   });
   it("wedges: one under every hanger", () => {
-    expect(q(one({ wedges: true }).parts, "wedge.k.6")).toBe("20");
+    expect(q(one({ wedges: true }).parts, "wedge.k.6")).toBe("21");
   });
   it("an unknown kit is advice and one hanger part by 24 in, not a crash", () => {
     const r = one({ hanger: "nope" });
-    expect(q(r.parts, "hanger.nope.k.6")).toBe("20");
+    expect(q(r.parts, "hanger.nope.k.6")).toBe("21");
     expect(r.advice).toContainEqual({ code: "hanger_kit_unknown", runId: "1", hanger: "nope" });
   });
 });
@@ -297,10 +311,10 @@ describe("П18: half round, copper", () => {
   const hr = (hanger: string) => one({ profile: "half_round", material: "copper", color: undefined, lengthIn: 240, hanger });
   it("shank #10 on fascia + circle + bolt + 2 screws; caps without a side; solder instead of sealant; copper rivets", () => {
     const { parts } = hr("hr_shank_fascia");
-    expect(q(parts, "shank.copper.half_round.10.6")).toBe("10");
-    expect(q(parts, "circle.copper.half_round.6")).toBe("10");
-    expect(q(parts, "bolt.10-24x075")).toBe("10");
-    expect(q(parts, "screw.10x15")).toBe("20");
+    expect(q(parts, "shank.copper.half_round.10.6")).toBe("11");
+    expect(q(parts, "circle.copper.half_round.6")).toBe("11");
+    expect(q(parts, "bolt.10-24x075")).toBe("11");
+    expect(q(parts, "screw.10x15")).toBe("22");
     expect(q(parts, "endcap.-.half_round.6.copper.-")).toBe("2");
     expect(keys(parts).some((k) => k.startsWith("endcap.L") || k.startsWith("endcap.R"))).toBe(false);
     expect(q(parts, "solder")).toBe("1");
@@ -310,7 +324,7 @@ describe("П18: half round, copper", () => {
     expect(q(parts, "rivet.42.copper.mill.-")).toBe("4");
   });
   it("shank #11 on rafters", () => {
-    expect(q(hr("hr_shank_rafter").parts, "shank.copper.half_round.11.6")).toBe("10");
+    expect(q(hr("hr_shank_rafter").parts, "shank.copper.half_round.11.6")).toBe("11");
   });
   it("sectional half round: sections with waste, slip joints", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 300, profile: "half_round" })], corners: [], downspouts: [] }, { seamless: false });
@@ -441,13 +455,13 @@ describe("П18.9: purchase units (core C3 pack_size)", () => {
 describe("bad input never gives Infinity or negative parts", () => {
   it("spacing 0 on a run falls back to the kit; company zeros fall back to the defaults", () => {
     const r = one({ hangerSpacingIn: 0 });
-    expect(q(r.parts, "hanger.hidden.aluminum.k.6")).toBe("20");
+    expect(q(r.parts, "hanger.hidden.aluminum.k.6")).toBe("21");
     expect(r.advice).toContainEqual({ code: "input_fixed", id: "1", field: "hangerSpacingIn" });
     const z = one({}, [{}], { dsStickIn: 0, dsFastenerSpacingIn: 0, jointsPerSealantTube: 0, hangerSpacingIn: { hidden: 0 } });
     expect(q(z.parts, "dsstick.rect.3x4.alu.white")).toBe("1");
     expect(q(z.parts, "ds_strap.aluminum.rect.3x4")).toBe("2");
     expect(q(z.parts, "sealant")).toBe("1");
-    expect(q(z.parts, "hanger.hidden.aluminum.k.6")).toBe("20");
+    expect(q(z.parts, "hanger.hidden.aluminum.k.6")).toBe("21");
     expect(z.parts.every((p) => /^\d+(\.\d+)?$/.test(p.qty))).toBe(true);
   });
   it("a negative length is 0 with advice; fractions are rounded to whole inches", () => {
@@ -500,7 +514,7 @@ describe("fittings carry metal and color", () => {
     expect(q(parts, "elbow.A.round.3.aluminum.-")).toBe("3");
     expect(q(parts, "elbow.A.round.3.copper.-")).toBe("3");
     expect(q(parts, "outlet.k.6.copper.-.round.3")).toBe("1");
-    expect(q(parts, "hanger.hidden.copper.k.6")).toBe("10");
+    expect(q(parts, "hanger.hidden.copper.k.6")).toBe("11");
     expect(q(parts, "hinged_hook.copper.round.3")).toBe("2");
   });
 });

@@ -2738,7 +2738,7 @@ export const en: Dict = {
   "mod.gutters.set.rulesHint": "This is how the app counts parts and waste on every measurement. The defaults are common practice; change them to yours.",
   "mod.gutters.set.r.storyFt": "Story height",
   "mod.gutters.set.r.hangerSpacingIn": "Hanger spacing",
-  "mod.gutters.set.r.hangerExtra": "+1 hanger per run (at both ends)",
+  "mod.gutters.set.r.hangerExtra": "Hanger at both ends of a run",
   "mod.gutters.set.r.wastePct": "Waste",
   "mod.gutters.set.r.cutCornerIn": "A field-cut corner takes gutter",
   "mod.gutters.set.r.corner": "Corners by default",

@@ -223,13 +223,15 @@ describe("M7c: правила и расходники компании → дв�
     const base = parts({});
     const p = parts({ rules: { wastePct: 10, hangerSpacingIn: 18 } });
     expect(qty(p, (x) => x.key.startsWith("coil."))).toBeGreaterThan(qty(base, (x) => x.key.startsWith("coil.")));
-    expect(qty(p, (x) => x.attrs.part === "hanger")).toBe(2 * Math.ceil(480 / 18));
-    expect(qty(base, (x) => x.attrs.part === "hanger")).toBe(2 * Math.ceil(480 / 24));
+    expect(qty(p, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 18) + 1));
+    expect(qty(base, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 24) + 1));
     expect(toRulesOverride({ rules: { wastePct: 7 } }).wastePct).toBe("0.07");
   });
-  it("высота этажа 12 ft — даунспот 12 ft; +1 крепление на линию", () => {
+  it("высота этажа 12 ft — даунспот 12 ft; крюк по краям по умолчанию, выключается", () => {
     expect(qty(parts({ rules: { storyFt: 12 } }), (x) => x.section === "downspouts" && x.unit === "ft")).toBe(12);
-    expect(qty(parts({ rules: { hangerExtra: true } }), (x) => x.attrs.part === "hanger")).toBe(2 * (20 + 1));
+    expect(readRules({}).hangerExtra).toBe(true); // not set in the stored settings → the default: yes
+    expect(qty(parts({}), (x) => x.attrs.part === "hanger")).toBe(2 * 21);
+    expect(qty(parts({ rules: { hangerExtra: false } }), (x) => x.attrs.part === "hanger")).toBe(2 * 20);
   });
   it("метод угла компании strip → strip miter; на углу своё (prefab) сильнее компании", () => {
     const strip = parts({ rules: { corner: "strip" } });
