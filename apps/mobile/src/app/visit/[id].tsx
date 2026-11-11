@@ -273,6 +273,7 @@ export default function VisitScreen() {
           </T>
           <Segmented
             full
+            testID="visit-method"
             value={method}
             onChange={setMethod}
             items={[

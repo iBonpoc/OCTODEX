@@ -2220,6 +2220,15 @@ export const en: Dict = {
   "w6.task.emptyDone": "No done tasks yet",
   "w6.task.emptyHint": "A task is tied to a client, lead, job or property. With a time it shows in the Plan.",
   // wave 7б-1 «Работы и выезды»: personal settings
+  "ds.title": "Design system",
+  "ds.intro": "The same tokens and components as the app, as live samples. Theme and width follow this screen — change them in Settings. Each sample shows its token key and the design-system section.",
+  "ds.moduleOnly": "Niche module only (the drawing canvas, the tape) — this colour is not used outside it.",
+  "ds.sec.color": "Colour and statuses",
+  "ds.sec.text": "Text",
+  "ds.sec.layout": "Spacing, radii, sizes, layers",
+  "ds.sec.motion": "Motion and time",
+  "ds.sec.print": "Print",
+  "ds.rowHint": "Tokens, buttons, windows, haptics — live samples",
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
   // wave 6-2 «Лиды и клиенты» (docs/specs/20): calls

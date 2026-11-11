@@ -2220,6 +2220,15 @@ export const es: Dict = {
   "w6.task.emptyDone": "Aún no hay tareas hechas",
   "w6.task.emptyHint": "Una tarea se relaciona con un cliente, prospecto, trabajo o propiedad. Con hora aparece en el Plan.",
   // wave 7б-1 «Работы и выезды»: personal settings
+  "ds.title": "Sistema de diseño",
+  "ds.intro": "Los mismos tokens y componentes de la app, como muestras en vivo. El tema y el ancho siguen a esta pantalla: cámbialos en Ajustes. Cada muestra indica su clave de token y la sección del sistema de diseño.",
+  "ds.moduleOnly": "Solo del módulo de nicho (lienzo del dibujo, cinta): este color no se usa fuera de él.",
+  "ds.sec.color": "Color y estados",
+  "ds.sec.text": "Texto",
+  "ds.sec.layout": "Espaciado, radios, tamaños, capas",
+  "ds.sec.motion": "Movimiento y tiempo",
+  "ds.sec.print": "Impresión",
+  "ds.rowHint": "Tokens, botones, ventanas, vibración: muestras en vivo",
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
   // wave 6-2 «Лиды и клиенты» (docs/specs/20): calls
