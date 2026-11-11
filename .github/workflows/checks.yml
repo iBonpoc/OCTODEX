@@ -87,7 +87,8 @@ jobs:
         run: npm run typecheck && npm test
       - name: Database tests (PostgreSQL 16)
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 faketime >/dev/null
+          bash scripts/aptRetries.sh
+          bash scripts/retry.sh "apt: postgresql-16, faketime" bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 faketime >/dev/null'
           sudo CATALOG_OUT="$RUNNER_TEMP/catalog.json" bash supabase/tests/run.sh
       # #620: the same tests with the database's clock at 23:40 in Los Angeles — the UTC date is tomorrow already, so a
       # test taking «today» from current_date goes red here, not on main for 8 hours in the company's evening (T147, #476)
@@ -186,7 +187,8 @@ jobs:
       - name: End-to-end (browser)
         working-directory: apps/mobile
         run: |
-          npx playwright install --with-deps chromium >/dev/null
+          bash ../../scripts/aptRetries.sh
+          bash ../../scripts/retry.sh "playwright install chromium (browser + system libraries)" bash -c 'npx playwright install --with-deps chromium >/dev/null'
           view="${{ matrix.view }}"
           # 08-layouts checks all 6 views by itself: run it in one view only
           [ "$view" = "390-dark" ] || export E2E_OWN_LAYOUTS=0
