@@ -212,19 +212,54 @@ export async function wipeDevice(
   log: (m: string) => void = () => {},
   userId?: string | null,
   keep: readonly string[] = [],
-  marks: { failed?: string; done?: string | null } = {},
+  marks: { failed?: string; done?: string | null; leave?: boolean; wiped?: string } = {},
+  pauseMs = MARK_PAUSE_MS,
 ): Promise<boolean> {
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
     await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])].filter((k) => !keep.includes(k)));
-    if (marks.done) await store.setItem(WIPE_PENDING_KEY, marks.done).catch((e) => log(`mark not written: ${(e as Error).message}`));
-    else await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
-    return true;
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);
     await store.setItem(WIPE_PENDING_KEY, marks.failed ?? (userId || "1")).catch(() => {});
+    // not wiped: an older «wiped» must never answer this mark (review of #1013 №5)
+    await store.removeItem(WIPE_DONE_KEY).catch(() => {});
     return false;
   }
+  // `leave`: the mark that was there could not be read — it is not known, so it is not taken away (#1013 №2)
+  if (marks.leave && !marks.done) return true;
+  // the device is wiped: the whole-wipe mark must not stay — it would wipe the next person's data on the next start
+  // (#1013 №1). Tried again; when the mark cannot be changed, «the device is wiped for them» is kept beside it
+  const markOk = await tries(() => (marks.done ? store.setItem(WIPE_PENDING_KEY, marks.done) : store.removeItem(WIPE_PENDING_KEY)), pauseMs);
+  if (markOk) {
+    await store.removeItem(WIPE_DONE_KEY).catch(() => {});
+    return true;
+  }
+  log("the mark was not changed after the wipe: «wiped» kept beside it");
+  if (!(await tries(() => store.setItem(WIPE_DONE_KEY, marks.wiped ?? (userId || "1")), pauseMs))) log("«wiped» not written either");
+  return true;
+}
+/** «the device is wiped already» for these people («u1,u0»), when the mark could not be changed after the wipe (#1013) */
+export const WIPE_DONE_KEY = "octo.wipe.done.v1";
+const MARK_TRIES = 3;
+const MARK_PAUSE_MS = 200;
+async function tries(write: () => Promise<void>, pauseMs: number): Promise<boolean> {
+  for (let i = 1; i <= MARK_TRIES; i++) {
+    try {
+      await write();
+      return true;
+    } catch {
+      if (i < MARK_TRIES) await new Promise((r) => setTimeout(r, pauseMs * i));
+    }
+  }
+  return false;
+}
+/** the whole-wipe mark needs no wipe any more: «wiped» (WIPE_DONE_KEY) names every person in it */
+export function wipedAlready(mark: string, done: string | null): boolean {
+  if (!done) return false;
+  const p = pendingOf(mark);
+  if (p.filterOnly) return false;
+  const wiped = new Set(pendingOf(done).userIds);
+  return p.userIds.every((id) => wiped.has(id));
 }
 
 /* ---------- the repeat on sign-in: when to ask «is this profile deleted» (review 7а-2b №2, №3) ---------- */
