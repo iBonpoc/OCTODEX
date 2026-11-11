@@ -26,6 +26,12 @@ describe("addDownspout: size by the gutter (#767)", () => {
     expect(put(drawing("6"), newDsAttrs(round), round)).toMatchObject({ shape: "round" });
     expect(put(drawing("6"), newDsAttrs(round), round).size).not.toBe("3x4");
   });
+  it("a company that chose 2×3 itself keeps 2×3 on a 6″ gutter (the key is stored, not just the value)", () => {
+    const ch = choicesFor({ ds: { size: "2x3" } });
+    expect(ch.dsSizeSet).toBe(true);
+    expect(put(drawing("6"), newDsAttrs(ch), ch).size).toBe("2x3");
+    expect(choicesFor({}).dsSizeSet).toBe(false);
+  });
   it("a company that offers no 3×4 keeps its size", () => {
     const ch = choicesFor({ off: { dsSizes: { rect: ["3x4"] } } });
     expect(put(drawing("6"), newDsAttrs(ch), ch).size).toBe("2x3");
