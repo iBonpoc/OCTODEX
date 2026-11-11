@@ -31,6 +31,7 @@ import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls"
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { canSeeVisit } from "@/features/access";
 
 const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
@@ -65,6 +66,13 @@ export default function VisitScreen() {
       <Screen title={t("visit.title")} back={back}>
         {cancelled ? null : <Empty icon="alert" title={t("clients.empty")} />}
         {cancelAsk}
+      </Screen>
+    );
+  // another tech's visit (#868): no access, as the server would answer
+  if (!canSeeVisit(db, { role: store.role, mode: store.mode, me: db.me }, v.id))
+    return (
+      <Screen title={t("visit.title")} back={back}>
+        <Empty icon="alert" title={t("mny.noAccess")} testID="no-access" />
       </Screen>
     );
 

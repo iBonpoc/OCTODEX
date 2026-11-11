@@ -35,6 +35,7 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { memberLabel, memberName } from "@/features/team";
+import { canSeeJob } from "@/features/access";
 
 type Tab = "details" | "money" | "history";
 
@@ -57,6 +58,13 @@ export default function JobScreen() {
     return (
       <Screen title={t("jobs.title")} back={back}>
         <Empty icon="wrench" title={t("clients.empty")} />
+      </Screen>
+    );
+  // a job with no visit of this tech (#868): no access
+  if (!canSeeJob(db, { role: store.role, mode: store.mode, me: db.me }, j.id))
+    return (
+      <Screen title={t("jobs.title")} back={back}>
+        <Empty icon="wrench" title={t("mny.noAccess")} testID="no-access" />
       </Screen>
     );
   const p = db.properties.find((x) => x.id === j.propertyId);

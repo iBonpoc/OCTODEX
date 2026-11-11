@@ -17,6 +17,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardList, Empty } from "@/ui/surfaces";
+import { canSeeEstimate } from "@/features/access";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
 export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
@@ -42,7 +43,7 @@ export function matchEstimate(db: DB, e: Estimate, q: string): boolean {
 
 /** `wrap` — the screen around the board: on 1280 it gets the open estimate as its `aside` (spec 06 «Панель 1280») */
 export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: ReactNode) => ReactElement }) {
-  const { db } = useStore();
+  const { db, role, mode } = useStore();
   const { t, money, day } = useI18n();
   const { device } = useDevice();
   // spec 31 §6 п.7: the status is kept on this device for this list; the search is not
@@ -50,7 +51,8 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
   const f: EstimateFilter = ESTIMATE_LANE.includes(kept) ? kept : "open";
   const [q, setQ] = useState("");
   const now = Date.now();
-  const all = db.estimates.map((e) => ({ e, g: estimateGroup(e, now) }));
+  // the tech: only estimates of his work (#868; estimates_select in the database)
+  const all = db.estimates.filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id)).map((e) => ({ e, g: estimateGroup(e, now) }));
   const count = (x: EstimateFilter) => all.filter(({ g }) => inEstimateFilter(g, x)).length;
   const list = all
     .filter(({ g }) => inEstimateFilter(g, f))

@@ -207,11 +207,12 @@ export function Divider() {
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd }} />;
 }
 
-export function Empty({ icon, title, hint, action }: { icon: IconKey; title: string; hint?: string; action?: ReactNode }) {
+export function Empty({ icon, title, hint, action, testID }: { icon: IconKey; title: string; hint?: string; action?: ReactNode; testID?: string }) {
   const { c } = useTheme();
   return (
     <Card style={{ alignItems: "center", paddingVertical: space[8], gap: space[3] }}>
       <View
+        testID={testID}
         style={{
           width: component.fab + space[4],
           height: component.fab + space[4],
