@@ -193,6 +193,14 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
   return { kind: "noStep", status: "warn" };
 }
 
+/**
+ * The words of the «remind» button and of its text message: «про смету» only when an estimate was sent to this lead
+ * (#1104 п.2: after a plain reply, with no estimate, the button said «Напомнить про смету»).
+ */
+export function remindWording(sentEstimate: boolean): { label: DictKey; text: DictKey } {
+  return sentEstimate ? { label: "lead.remind", text: "lead.remindText" } : { label: "lead.remindPlain", text: "lead.remindTextPlain" };
+}
+
 /** What the lead still needs before an estimate (docs/14 Р8): each item has an "Add" button on the card. */
 export type MissingItem = "phone" | "email" | "address" | "zip" | "request";
 export function missingForEstimate(l: Lead): MissingItem[] {
@@ -262,6 +270,18 @@ export interface TimelineEntry {
  * assignment, notes, estimate visits, estimates sent / opened / signed.
  */
 /** `deletedWord` — «Удалённый пользователь» in the viewer's language (a person who deleted their account, S22) */
+/**
+ * The words of one timeline entry in the viewer's language — for both lists of the lead's history (the card's compact
+ * cards and the history tab). A status and a reason come as dictionary keys: they are translated here, the reason goes
+ * after a colon (#1104: the card showed the raw key «st.replied»).
+ */
+export function timelineText(e: Pick<TimelineEntry, "key" | "params">, t: (k: DictKey, p?: Record<string, string>) => string): string {
+  const p: Record<string, string> = { ...(e.params ?? {}) };
+  if (p.status) p.status = t(p.status as DictKey);
+  if ("reason" in p) p.reason = p.reason ? `: ${t(p.reason as DictKey)}` : "";
+  return t(e.key, p);
+}
+
 export function leadTimeline(db: DB, l: Lead, viewer?: string, deletedWord = ""): TimelineEntry[] {
   const out: TimelineEntry[] = [{ id: `rcv-${l.id}`, at: l.receivedAt, icon: "inbox", key: "tl.received", params: { source: sourceName(db, l.sourceId) }, body: l.message || undefined }];
   for (const a of db.activities.filter((x) => x.subjectType === "lead" && x.subjectId === l.id)) {
