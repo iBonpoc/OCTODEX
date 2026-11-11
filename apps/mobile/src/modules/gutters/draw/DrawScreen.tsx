@@ -354,7 +354,7 @@ export default function DrawScreen() {
       }
       if (tl === "ds") {
         const id = Crypto.randomUUID();
-        const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch));
+        const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch), cur.current.ch);
         if (next !== d) {
           commit(next);
           setSelected(id);
