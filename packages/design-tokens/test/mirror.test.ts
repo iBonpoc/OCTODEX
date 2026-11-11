@@ -88,6 +88,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect([...motion.easeOut]).toEqual(bez("ease-out"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));
     expect([...motion.easeLiquid]).toEqual(bez("ease-liquid"));
+    expect([motion.toastInfoMs, motion.toastUndoA11yMs, motion.spinnerDelayMs, motion.actionTimeoutMs]).toEqual([px("toast-info-ms"), px("toast-undo-a11y-ms"), px("spinner-delay-ms"), px("action-timeout-ms")]);
     expect([motion.liquidStretch, motion.liquidSettle]).toEqual([px("liquid-stretch"), px("liquid-settle")]);
   });
   describe.each(["dark", "light"] as const)("%s theme colours", (t) => {
