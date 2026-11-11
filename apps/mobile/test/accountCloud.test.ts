@@ -240,6 +240,17 @@ describe("unit:accountCloud — the shared outbox when the device fails (#911)",
     expect(storage.has("octo.wipe.pending.v1")).toBe(false);
   });
 
+  it("#1014: a broken outbox stays as it is (whose ops — not known), a copy kept aside earlier leaves with the account", async () => {
+    // u1's ops may be inside the broken record: it is never sent nor shown; «Сохранить копию и продолжить» puts it into
+    // octo.broken.* — wiped by the next deletion (19 §6.12, decision #1014)
+    storage.set("octo.outbox.v1", '[{"id":"u1op","owner":{"userId":"u1"}},{"id":"theirs"');
+    storage.set("octo.broken.octo.outbox.v1.1700000000000", '[{"id":"u0op"');
+    await finishOnDevice(); // u1
+    expect(storage.get("octo.outbox.v1")).toBe('[{"id":"u1op","owner":{"userId":"u1"}},{"id":"theirs"');
+    expect(storage.has("octo.broken.octo.outbox.v1.1700000000000")).toBe(false);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+
   it("the refused changes: the same — a failed read keeps other people's", async () => {
     const rej = JSON.stringify([{ id: "r1", owner: { userId: "u1", companyId: "c1" } }, { id: "r9", owner: { userId: "u9", companyId: "c1" } }]);
     storage.set("octo.cloud.v1.rejected", rej);
