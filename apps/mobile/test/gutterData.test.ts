@@ -301,7 +301,7 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     const ctx = { role: "tech" as const, leadId: "l1", propertyId: "p1" };
     expect(placeActions("lead", on, ctx, undefined, {})).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measure", href: "/module/gutters/draw?lead=l1&property=p1", module: "gutters" })]);
     const data = { gutters: g([{ leadId: "l1", updatedAt: "2026-11-01" }, { leadId: "l1", updatedAt: "2026-11-05" }, { leadId: "l2", updatedAt: "2026-11-09" }]) };
-    expect(placeActions("lead", on, ctx, undefined, data)).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measureOpen", href: "/module/gutters/draw?m=m1" })]);
+    expect(placeActions("lead", on, ctx, undefined, data)).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measureOpen", href: "/module/gutters/view?m=m1" })]); // П25.3 В: the card, not the canvas
     expect(placeActions("lead", on, { role: "director" }, undefined, data)).toEqual([]);
   });
   it("M8b: something drawn on the lead's measurement → also «Смета из замера» (the review makes or updates it, #698)", async () => {
@@ -309,14 +309,14 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     const ctx = { role: "sales" as const, leadId: "l1" };
     const data = { gutters: { ...g([{ leadId: "l1" }]), elements: [{ ...E, measurementId: "m0" }] } };
     expect(placeActions("lead", on, ctx, undefined, data).map((a) => [a.labelKey, a.href])).toEqual([
-      ["mod.gutters.measureOpen", "/module/gutters/draw?m=m0"],
+      ["mod.gutters.measureOpen", "/module/gutters/view?m=m0"],
       ["mod.gutters.est.fromLead", "/module/gutters/view?m=m0&estimate=1"],
     ]);
   });
   it("property: its own measurements; home: «Замерить здесь» — a new draft; nothing while the module is not active", async () => {
     const { placeActions } = await import("../src/modules/registry");
     const data = { gutters: g([{ propertyId: "p1" }]) };
-    expect(placeActions("property", on, { role: "sales", propertyId: "p1" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/draw?m=m0" });
+    expect(placeActions("property", on, { role: "sales", propertyId: "p1" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/view?m=m0" });
     expect(placeActions("property", on, { role: "sales", propertyId: "p2" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/draw?property=p2" });
     expect(placeActions("home", on, { role: "tech" })).toEqual([
       expect.objectContaining({ id: "here", labelKey: "mod.gutters.measureHere", href: "/module/gutters/draw" }),

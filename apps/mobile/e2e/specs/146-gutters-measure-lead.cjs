@@ -6,7 +6,7 @@
  * - a property → «Замер»: its own new measurement linked to it.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, pressWhenStill } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -65,12 +65,15 @@ exports.run = async (h) => {
   h.expect((await tid("draw-to-lead").count()) === 0, "on a lead: no «Сделать заявкой»");
   await h.shot("canvas");
 
-  // back on the lead: «Открыть замер» opens the same one
+  // back on the lead: «Открыть замер» opens the same one's card (spec 33 П25.3 В), «Править чертёж» — its drawing
   await h.go(`/lead/${lead.id}`);
   await measureBtn().waitFor({ timeout: 8000 });
   h.expect(/Открыть замер/.test(await measureBtn().innerText()), "«Открыть замер»");
   await measureBtn().getByRole("button").click();
-  await waitFor(() => idInUrl() === mid, "the same measurement");
+  await waitFor(() => /\/module\/gutters\/view/.test(p.url()) && idInUrl() === mid, "the same measurement's card");
+  await tid("view-screen").waitFor({ timeout: 8000 });
+  await pressWhenStill(tid("view-edit").getByRole("button"));
+  await waitFor(() => /\/module\/gutters\/draw/.test(p.url()) && idInUrl() === mid, "«Править чертёж» → its canvas");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await waitFor(async () => (await runs()) === 1, "with its drawing");
 

@@ -8,7 +8,7 @@ import { linkChoices } from "../src/modules/gutters/data";
 
 const run = (id: string, m: string, len: number) => ({ id, measurementId: m, kind: "run" as const, geom: { a: [0, 0], b: [len, 0] }, attrs: {}, confidence: "drawn" as const });
 const db = (measurements: unknown[], elements: unknown[]) =>
-  ({ moduleData: { gutters: { measurements, elements } }, leads: [{ id: "l1", name: "Ann Lee" }], properties: [{ id: "p1", address: "12 Oak St", city: "Austin" }] }) as never;
+  ({ moduleData: { gutters: { measurements, elements } }, leads: [{ id: "l1", name: "Ann Lee" }], properties: [{ id: "p1", customerId: "c1", address: "12 Oak St", city: "Austin" }], customers: [{ id: "c1", name: "Ann Lee" }], estimates: [] }) as never;
 
 describe("measurementList", () => {
   it("a draft for nobody, one for a lead, one for an address — newest first, with what is drawn", () => {
@@ -24,11 +24,11 @@ describe("measurementList", () => {
     );
     expect(xs.map((x) => x.id)).toEqual(["b", "c", "a"]);
     expect(xs[0]).toMatchObject({ forName: "Ann Lee", address: "12 Oak St, Austin", status: "ready", runs: 1 });
-    expect(xs[1]).toMatchObject({ forName: "12 Oak St, Austin", runs: 0 });
-    expect(xs[2]).toMatchObject({ forName: null, runs: 2, lengthIn: 360 });
+    expect(xs[1]).toMatchObject({ forName: "Ann Lee", forKind: "client", address: "12 Oak St, Austin", runs: 0 });
+    expect(xs[2]).toMatchObject({ forName: null, forKind: "none", runs: 2, lengthIn: 360 });
   });
   it("no data — no list", () => {
-    expect(measurementList({ moduleData: {}, leads: [], properties: [] } as never)).toEqual([]);
+    expect(measurementList({ moduleData: {}, leads: [], properties: [], customers: [], estimates: [] } as never)).toEqual([]);
   });
 });
 

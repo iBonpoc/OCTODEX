@@ -1,6 +1,6 @@
 /**
  * «Замер желобов» from a client's card (spec 33 П24 А3, #697): a measurement is always an address's. One address →
- * straight to its measurement (the newest, else a new one); several → pick the address (a card each, rule 12); none →
+ * straight to its measurement (the newest one's card, else a new one on the canvas); several → pick the address (a card each, rule 12); none →
  * the client's card is where an address is added.
  */
 import { useEffect } from "react";
@@ -22,7 +22,7 @@ export default function StartScreen() {
   const params = useLocalSearchParams<{ customer?: string }>();
   const customerId = typeof params.customer === "string" ? params.customer : "";
   const c = db.customers.find((x) => x.id === customerId);
-  const to = clientStart(moduleHref("gutters", "draw"), db, customerId);
+  const to = clientStart({ draw: moduleHref("gutters", "draw"), view: moduleHref("gutters", "view") }, db, customerId);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   // one address: no question — straight on (replace: «назад» from the canvas comes back to the client)
   useEffect(() => {
