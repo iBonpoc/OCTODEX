@@ -19,8 +19,8 @@ import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
-import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
-import { eighthLabel, fmtLen, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
+import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
+import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -66,85 +66,82 @@ function Pick<K extends string>({ label, testID, items, value, onChange, offered
   );
 }
 
-/** the eighths typed by the tape, beside the inches: ⅜ (nothing at 0) */
-function EighthsText({ value, testID }: { value: number; testID: string }) {
-  return value ? <View testID={testID}><T v="title" w="semibold">{eighthLabel(value)}</T></View> : null;
+/** the fraction typed by the tape, beside the inches: ⅜, 3/16 (nothing at 0) */
+function FracText({ value, testID }: { value: number; testID: string }) {
+  return value ? <View testID={testID}><T v="title" w="semibold">{fracLabel(value)}</T></View> : null;
 }
 /**
  * A tape to pull (founder 09.11: «как рулетка, бегунком проматывать длину»): it shows the length in the fields and sets
- * them — feet, inches and eighths — as it is dragged, to 1/8″.
+ * them — feet, inches and sixteenths — as it is dragged, to 1/16″.
  */
-function Pull({ ft, inc, e8, onPull, testID }: { ft: string; inc: string; e8: number; onPull: (x: { ft: number; inch: number; eighths: number }) => void; testID: string }) {
+function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: number; onPull: (x: { ft: number; inch: number; sixteenths: number }) => void; testID: string }) {
   const { t } = useI18n();
-  const typed = tapeIn(ft, inc, e8);
+  const typed = tapeIn(ft, inc, e16);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
   return (
     <TapeStrip
-      marks={Math.round(last.current * 8)}
-      max={Math.round(MAX_RUN_IN * 8)}
-      scale={EIGHTHS_SCALE}
+      marks={Math.round(last.current * DENOM)}
+      max={Math.round(MAX_RUN_IN * DENOM)}
+      scale={SIXTEENTHS_SCALE}
       readout={fmtLen(last.current, "ftin")}
-      onMarks={(m) => onPull(split(m / 8))}
+      onMarks={(m) => onPull(split(m / DENOM))}
       testID={testID}
       label={t(k("pull"))}
-      stepLabels={{ less: t(k("pullLess"), { step: "⅛″" }), more: t(k("pullMore"), { step: "⅛″" }) }}
+      stepLabels={{ less: t(k("pullLess"), { step: "1/16″" }), more: t(k("pullMore"), { step: "1/16″" }) }}
     />
   );
 }
-/** the same tape for one number: inches (1/8″ marks) or metric (millimetre marks); it writes the field in its unit */
+/** the same tape for one number: inches (1/16″ marks) or metric (millimetre marks); it writes the field in its unit */
 function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenUnit, "ftin">; onOne: (v: string) => void; testID: string }) {
   const { t } = useI18n();
   const typed = oneIn(one, unit);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
   const metric = unit !== "in";
-  // metric: the field's own number, to the millimetre (it is kept to 1/8″ only when applied)
+  // metric: the field's own number, to the millimetre (it is kept to 1/16″ only when applied)
   const x = Number(one.replace(",", "."));
   const lastMm = useRef(Math.round(last.current * MM_PER_IN));
   if (metric && Number.isFinite(x) && x > 0) lastMm.current = Math.round(x * MM_OF[unit]);
   const mm = lastMm.current;
   return (
     <TapeStrip
-      marks={metric ? mm : Math.round(last.current * 8)}
-      max={metric ? Math.floor(MAX_RUN_IN * MM_PER_IN) : Math.round(MAX_RUN_IN * 8)}
-      scale={metric ? MM_SCALE : EIGHTHS_SCALE_IN}
+      marks={metric ? mm : Math.round(last.current * DENOM)}
+      max={metric ? Math.floor(MAX_RUN_IN * MM_PER_IN) : Math.round(MAX_RUN_IN * DENOM)}
+      scale={metric ? MM_SCALE : SIXTEENTHS_SCALE_IN}
       readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
-      onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / 8))}
+      onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / DENOM))}
       testID={testID}
       label={t(k("pull"))}
-      stepLabels={{ less: t(k("pullLess"), { step: metric ? "1 mm" : "⅛″" }), more: t(k("pullMore"), { step: metric ? "1 mm" : "⅛″" }) }}
+      stepLabels={{ less: t(k("pullLess"), { step: metric ? "1 mm" : "1/16″" }), more: t(k("pullMore"), { step: metric ? "1 mm" : "1/16″" }) }}
     />
   );
 }
-/** inches alone: every inch numbered as it is (no feet) */
-const EIGHTHS_SCALE_IN = (k: number) =>
-  k % 8 === 0 ? { h: 0.45, text: k ? `${k / 8}″` : undefined, bold: k % 96 === 0 } : { h: k % 4 === 0 ? 0.36 : k % 2 === 0 ? 0.28 : 0.2, frac: eighthLabel(k % 8), big: k % 8 === 4 };
 const split = (n: number) => {
-  const e = Math.round(n * 8);
-  return { ft: Math.floor(e / 96), inch: Math.floor((e % 96) / 8), eighths: e % 8 };
+  const e = Math.round(n * DENOM);
+  return { ft: Math.floor(e / 192), inch: Math.floor((e % 192) / 16), sixteenths: e % 16 };
 };
 
 /** the tape: feet and inches; «Применить» sets the length, «По рисунку» puts the drawn one back */
 function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);
-  // the fields show the length as it is, to the sixteenth: feet, inches (an odd sixteenth rides on them, 5.0625) and eighths
+  // the fields show the length as it is, to the sixteenth: feet, inches and sixteenths
   const f0 = unitFields(cur, "ftin");
   const [ft, setFt] = useState(f0.ft);
   const [inc, setInc] = useState(f0.inc);
-  const [e8, setE8] = useState(f0.e8);
+  const [e16, setE16] = useState(f0.e16);
   const [bad, setBad] = useState(false);
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
   useEffect(() => {
     const x = unitFields(cur, "ftin");
     setFt(x.ft);
     setInc(x.inc);
-    setE8(x.e8);
+    setE16(x.e16);
     setBad(false);
   }, [run.id, cur]);
   const apply = () => {
-    const n = tapeIn(ft, inc, e8);
+    const n = tapeIn(ft, inc, e16);
     setBad(n === null);
     if (n !== null) onLength(n);
   };
@@ -159,12 +156,12 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
           <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
         </View>
-        <EighthsText value={e8} testID="attr-length-frac" />
+        <FracText value={e16} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
         <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
         {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
-      <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="attr-length-tape" />
+      <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="attr-length-tape" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -232,17 +229,17 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
   const drawn = start ?? drawnLengthIn(run);
   const [unit, setUnit] = useState<LenUnit>(fmt);
   // the fields start from the drawn length IN THE UNIT they open in (#1092 review Б1/Б2): in mm — the millimetres, not the
-  // inches; in feet-inches — to the sixteenth, not the eighth
+  // inches; in feet-inches — to the sixteenth
   const f0 = unitFields(drawn, fmt);
   const [ft, setFt] = useState(f0.ft);
   const [inc, setInc] = useState(f0.inc);
-  const [e8, setE8] = useState(f0.e8);
+  const [e16, setE16] = useState(f0.e16);
   const [one, setOne] = useState(f0.one);
   const [bad, setBad] = useState(false);
   // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
   const canon = useRef(drawn);
   const edited = useRef(false);
-  const typedIn = () => (unit === "ftin" ? tapeIn(ft, inc, e8) : oneIn(one, unit));
+  const typedIn = () => (unit === "ftin" ? tapeIn(ft, inc, e16) : oneIn(one, unit));
   const edit = <A,>(set: (v: A) => void) => (v: A) => {
     edited.current = true;
     set(v);
@@ -258,7 +255,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
     const f = unitFields(n, u);
     setFt(f.ft);
     setInc(f.inc);
-    setE8(f.e8);
+    setE16(f.e16);
     setOne(f.one);
   };
   const apply = () => {
@@ -281,10 +278,10 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
               <TextField type="number" value={inc} onChangeText={edit(setInc)} label={t(k("in"))} onSubmit={apply} selectOnFocus />
             </View>
-            <EighthsText value={e8} testID="quick-length-frac" />
+            <FracText value={e16} testID="quick-length-frac" />
             <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
           </RowView>
-          <Pull ft={ft} inc={inc} e8={e8} onPull={(x) => { edited.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE8(x.eighths); setBad(false); }} testID="quick-length-tape" />
+          <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
         </>
       ) : (
         <RowView style={{ gap: space[2], alignItems: "center" }}>

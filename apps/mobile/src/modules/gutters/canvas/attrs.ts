@@ -248,14 +248,14 @@ export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string
 const same = (a: object, b: object) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const sorted = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).sort(([x], [y]) => (x < y ? -1 : 1)));
 
-/** feet, inches (a decimal one: 5.0625) and eighths typed on the tape → inches (to 1/16″); nothing sensible (empty, 0, negative, too long) → null */
+/** feet, inches (a decimal one: 5.0625 is fine) and sixteenths (0–15) typed on the tape → inches (to 1/16″); nothing sensible (empty, 0, negative, too long) → null */
 export const MAX_RUN_IN = 12 * 500;
-export function tapeIn(ft: string, inch: string, eighths = 0): number | null {
+export function tapeIn(ft: string, inch: string, sixteenths = 0): number | null {
   const f = ft.trim() === "" ? 0 : Number(ft);
   const i = inch.trim() === "" ? 0 : Number(inch);
   if (!Number.isFinite(f) || !Number.isFinite(i) || f < 0 || i < 0 || i >= 12 || !Number.isInteger(f)) return null;
   // 1/16″ (founder 11.11; 08.11: re-measured 8′ 9¼″)
-  const n = Math.round((f * 12 + i + Math.max(0, Math.min(7, Math.round(eighths))) / 8) * DENOM) / DENOM;
+  const n = Math.round((f * 12 + i + Math.max(0, Math.min(15, Math.round(sixteenths))) / DENOM) * DENOM) / DENOM;
   return n > 0 && n <= MAX_RUN_IN ? n : null;
 }
 
@@ -271,13 +271,12 @@ export function oneIn(v: string, unit: LenUnit): number | null {
 }
 
 /**
- * A length in inches written into the fields of `unit` (#922): feet + inches + eighths for ftin, the inches alone, or
+ * A length in inches written into the fields of `unit` (#922): feet + inches + sixteenths for ftin, the inches alone, or
  * a metric number (millimetres whole, as the label shows it). Switching the unit shows the SAME length in the new one.
  */
-export function unitFields(inches: number, unit: LenUnit): { ft: string; inc: string; e8: number; one: string } {
-  // feet, inches and eighths; the odd sixteenth rides on the inches as a decimal (5.0625) — tapeIn reads it back exactly
+export function unitFields(inches: number, unit: LenUnit): { ft: string; inc: string; e16: number; one: string } {
   const e = Math.round(inches * DENOM);
-  const ftin = { ft: String(Math.floor(e / 192)), inc: String(Math.floor((e % 192) / 16) + (e % 2) / DENOM), e8: Math.floor((e % 16) / 2) };
+  const ftin = { ft: String(Math.floor(e / 192)), inc: String(Math.floor((e % 192) / 16)), e16: e % 16 };
   if (unit === "ftin") return { ...ftin, one: String(inches) };
   if (unit === "in") return { ...ftin, one: String(inches) };
   return { ...ftin, one: String(Math.round(inches * MM_PER_IN) / MM_OF[unit]) };

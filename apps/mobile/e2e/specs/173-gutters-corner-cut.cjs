@@ -39,7 +39,8 @@ exports.run = async (h) => {
     await tid("quick-length-ft").locator("input").fill(String(ftv));
     await tid("quick-length-in").locator("input").fill(String(inv));
     if (eighths) {
-      // ⅛: one step of the tape by its «›» (the drag itself is e2e 168's; a 16 px drag lost a move under load — GitHub-like run 09.11)
+      // ⅛: two steps (1/16″ each) of the tape by its «›» (the drag itself is e2e 168's; a 16 px drag lost a move under load — GitHub-like run 09.11)
+      await tid("quick-length-tape-more").getByRole("button").click();
       await tid("quick-length-tape-more").getByRole("button").click();
       await tid("quick-length-frac").filter({ hasText: eighths }).waitFor({ timeout: 3000 });
     }
