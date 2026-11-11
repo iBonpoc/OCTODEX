@@ -547,6 +547,7 @@ function LegacyBody({ e }: { e: Estimate }) {
               {t("est.rescission")}
             </T>
             <SignaturePad
+              consent="est.signConsent"
               onConfirm={(path) => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                 toast.show(q(t("est.signedToast", { name: customer?.name ?? "" })), store.signEstimate(e.id, path));
@@ -616,6 +617,7 @@ function CountersignCard({ e }: { e: Estimate }) {
             </T>
             <SignaturePad
               label={t("est.countersign.padLabel")}
+              consent={null}
               confirmLabel={t("est.countersign.sign")}
               onConfirm={(path) => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
