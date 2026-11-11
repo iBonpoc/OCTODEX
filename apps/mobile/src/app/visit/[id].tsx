@@ -1,4 +1,5 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
+import { visitDueCents } from "@/features/visitDue";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
@@ -133,9 +134,9 @@ export default function VisitScreen() {
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <StatusChip status={st.status} label={t(st.label)} />
-          {v.amountDueCents > 0 ? (
+          {visitDueCents(db, v) > 0 ? (
             <T v="title" tabular>
-              {money(v.amountDueCents)}
+              {money(visitDueCents(db, v))}
             </T>
           ) : null}
         </RowView>
@@ -261,9 +262,11 @@ export default function VisitScreen() {
           <T v="caption" tone="mut">
             {t("visit.amountDue")}
           </T>
-          <T v="display" tabular>
-            {money(v.amountDueCents)}
-          </T>
+          <View testID="visit-amount-due">
+            <T v="display" tabular>
+              {money(visitDueCents(db, v))}
+            </T>
+          </View>
           <T v="caption" tone="mut">
             {t("visit.method")}
           </T>
@@ -278,16 +281,18 @@ export default function VisitScreen() {
               { key: "zelle", label: t("visit.payZelle") },
             ]}
           />
-          <Button
-            label={t("visit.recordPayment")}
-            icon="dollar"
-            full
-            onPress={() => {
-              haptic();
-              const undo = store.payVisit(v.id, method);
-              toast.show(queuedHint() ?? t("toast.paid", { amount: money(v.amountDueCents) }), undo);
-            }}
-          />
+          <View testID="visit-record-payment">
+            <Button
+              label={t("visit.recordPayment")}
+              icon="dollar"
+              full
+              onPress={() => {
+                haptic();
+                const undo = store.payVisit(v.id, method);
+                toast.show(queuedHint() ?? t("toast.paid", { amount: money(visitDueCents(db, v)) }), undo);
+              }}
+            />
+          </View>
         </Card>
       ) : null}
 

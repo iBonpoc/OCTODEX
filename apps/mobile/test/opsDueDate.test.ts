@@ -18,7 +18,10 @@ const chain = (table: string): Record<string, unknown> => {
   c.single = () => done;
   return c;
 };
-vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => chain(t), rpc: () => Promise.resolve({ data: null, error: null }) } }));
+const rpcs: { fn: string; args: Record<string, unknown> }[] = [];
+vi.mock("../src/cloud/client", () => ({
+  supabase: { from: (t: string) => chain(t), rpc: (fn: string, args: Record<string, unknown>) => { rpcs.push({ fn, args }); return Promise.resolve({ data: null, error: null }); } },
+}));
 
 import { applyOp, type Op } from "../src/cloud/ops";
 import { companyToday, setZone } from "../src/features/zone";
@@ -28,6 +31,7 @@ const dueOf = () => rows.find((r) => r.table === "invoices")?.row.due_date;
 
 afterEach(() => {
   rows.length = 0;
+  rpcs.length = 0;
   vi.useRealTimers();
   setZone("America/Los_Angeles");
 });
@@ -47,7 +51,14 @@ describe("due_date of an invoice made offline", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-11-06T00:10:00-08:00"));
     await applyOp({ k: "visit.pay", visitId: "v-1", jobId: "j-demo", customerId: "c-1", invoiceId: "i-2", paymentId: "p-2", amountCents: 500, method: "cash", dueDate: "2026-11-05" }, "co-1", "u-1");
-    expect(dueOf()).toBe("2026-11-05");
+    // the server makes the invoice (record_visit_payment, #757): the phone's day goes with the call; the phone inserts nothing
+    expect(rpcs).toEqual([{ fn: "record_visit_payment", args: { p_visit_id: "v-1", p_invoice_id: "i-2", p_payment_id: "p-2", p_method: "cash", p_due_date: "2026-11-05", p_expected_cents: 500 } }]);
+    expect(rows.filter((r) => r.table === "invoices" || r.table === "payments")).toEqual([]);
+  });
+  it("a visit.pay queued by an older build (no dueDate, the whole contract): the server's call, no day, the amount as it was", async () => {
+    await applyOp({ k: "visit.pay", visitId: "v-9", jobId: "j-demo", customerId: "c-1", invoiceId: "i-9", paymentId: "p-9", amountCents: 50000, method: "cash" }, "co-1", "u-1");
+    expect(rpcs).toEqual([{ fn: "record_visit_payment", args: { p_visit_id: "v-9", p_invoice_id: "i-9", p_payment_id: "p-9", p_method: "cash", p_due_date: null, p_expected_cents: 50000 } }]);
+    expect(rows.filter((r) => r.table === "invoices" || r.table === "payments")).toEqual([]);
   });
   it("an op queued by an older build (no dueDate): the company's today when sent", async () => {
     vi.useFakeTimers();
