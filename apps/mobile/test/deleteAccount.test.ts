@@ -288,3 +288,9 @@ describe("unit:deleteAccount — one tap, and what the screen does (review #220 
     expect(afterDelete({ ok: false, key: "acct.err.word" })).toMatchObject({ failed: false, resetFresh: false, blocked: null });
   });
 });
+
+describe("unit:deleteAccount — a broken outbox copy leaves with the account (review of #910 №1)", () => {
+  it("octo.broken.* is a device key", () => {
+    expect(isDeviceKey("octo.broken.octo.outbox.v1.1700000000000")).toBe(true);
+  });
+});
