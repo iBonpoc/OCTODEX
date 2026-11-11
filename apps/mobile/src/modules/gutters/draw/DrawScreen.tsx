@@ -30,7 +30,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
-import type { DsAttrs, RunAttrs } from "../canvas/attrs";
+import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
 import { SAVE_ICON, saveMark } from "./saveMark";
@@ -73,6 +73,9 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { ic
     </Press>
   );
 }
+
+/** a downspout size for the bar: «3×4», a round one «3″» */
+const dsSizeText = (s: string) => (s.includes("x") ? s.replace("x", "×") : `${s}″`);
 
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
@@ -458,7 +461,9 @@ export default function DrawScreen() {
     ? null
     : "a" in sel
       ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), sel.unit), n: storyOf(sel.attrs.story) })
-      : t("mod.gutters.draw.selDs", { n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
+      : t("mod.gutters.draw.selDsKind", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
+  /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
+  const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 
   // the attribute panel (П21.8): one choice = one edit of the drawing, taken back by «Назад»
   const onRunAttrs = (p: Partial<RunAttrs>) => {
@@ -847,8 +852,9 @@ export default function DrawScreen() {
           {/* one row (founder 09.11: the block took too much room): what is picked and «Свойства»; the total and the
               estimate are on «Просмотр замера» now (#700) */}
             <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-              <View testID="draw-selected" style={{ flex: 1 }}>
-                <T v="caption" w="semibold" numberOfLines={2}>{selText}</T>
+              <View testID="draw-selected" style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                {selDsIcon ? <View testID="draw-selected-kind"><Icon name={selDsIcon} s={sizes.iconSm} color={c.ink} /></View> : null}
+                <T v="caption" w="semibold" numberOfLines={2} style={{ flex: 1 }}>{selText}</T>
               </View>
               {/* «Удалить» where «Свойства» was (founder 09.11, #687); «Свойства» is on the toolbar */}
               <View testID="draw-delete">
