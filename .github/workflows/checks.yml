@@ -1,6 +1,7 @@
 # Every PR and push to main: types, unit tests (engine money scenarios, design-system guard, tokens contrast, story map),
-# database tests (RLS, money safety, client page), then the end-to-end browser runs: every spec at 390 dark, 820 light
-# and 1280 dark (each width and both themes; 08-layouts checks every screen at all 6 views), each view in 2 parallel parts.
+# database tests (RLS, money safety, client page), then the end-to-end browser runs, each view in 2 parallel parts:
+# a PR runs every spec at 390 dark, 820 light and 1280 dark (each width and both themes; 08-layouts checks every screen
+# at all 6 views); a push to main runs only 390 dark (#906 п.6, audit variant C, 11.11) — the 3 views already ran on the PR.
 # Nightly on main (and by hand): every spec at all 3 widths × 2 themes (CLAUDE.md rule 4, docs/ai/CHECKS.md §1).
 # The job "checks" is green only when all of them are — that is the one branch protection requires, and the release
 # (release.yml) starts only after it is green on main.
@@ -44,13 +45,17 @@ jobs:
           files="$(git diff --name-only "$base" "${{ github.sha }}")"
           echo "$files"
           if [ -n "$files" ] && ! echo "$files" | grep -qvE '^docs/|\.md$'; then echo "app=false" >> "$GITHUB_OUTPUT"; else echo "app=true" >> "$GITHUB_OUTPUT"; fi
-      # PR and push to main: every spec at 3 views that cover each width and both themes (08-layouts checks every screen
-      # at all 6 views by itself). Nightly and by hand: all 6 views. Each view runs in 2 parallel parts (--shard).
+      # PR: every spec at 3 views that cover each width and both themes (08-layouts checks every screen at all 6 views by
+      # itself, in 390-dark only). Push to main: 390-dark only. Nightly and by hand: all 6 views. 2 parallel parts (--shard).
       - id: views
         name: Which views
         run: |
+          # push to main: ONE view (390-dark; it also carries 08-layouts, which checks all 6 views by itself) — the full 3-view
+          # run already ran on the PR, and all 6 views run every night (#906 п.6, audit "yes" 11.11 to variant C, conditions 2–5)
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             v='["390-dark","390-light","820-dark","820-light","1280-dark","1280-light"]'
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            v='["390-dark"]'
           else
             v='["390-dark","820-light","1280-dark"]'
           fi

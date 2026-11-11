@@ -48,7 +48,7 @@ import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
-import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
+import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
@@ -551,22 +551,23 @@ export function StoreProvider({
   // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
   const rejectedReadyRef = useRef(rejectedReady);
   rejectedReadyRef.current = rejectedReady;
-  const forgetRejectedOnLoad = useRef<{ userId: string | null } | null>(null);
+  // the people whose refused changes leave once the list is loaded (more than one: an older deletion still to filter, #911)
+  const forgetRejectedOnLoad = useRef<(string | null)[] | null>(null);
   useEffect(() => {
     if (!rejectedReady || !forgetRejectedOnLoad.current) return;
-    const { userId } = forgetRejectedOnLoad.current;
+    const ids = forgetRejectedOnLoad.current;
     forgetRejectedOnLoad.current = null;
-    setRejected((prev) => rejectedOthers(prev, userId));
+    setRejected((prev) => ids.reduce((l, id) => rejectedOthers(l, id), prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rejectedReady]);
   const outboxReadyRef = useRef(outboxReady);
   outboxReadyRef.current = outboxReady;
-  const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
+  const forgetOnLoad = useRef<(string | null)[] | null>(null);
   useEffect(() => {
     if (!outboxReady || !forgetOnLoad.current) return;
-    const { userId } = forgetOnLoad.current;
+    const ids = forgetOnLoad.current;
     forgetOnLoad.current = null;
-    setOutbox((prev) => (outboxRef.current = othersOf(prev, userId)));
+    setOutbox((prev) => (outboxRef.current = ids.reduce((l, id) => othersOf(l, id), prev)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outboxReady]);
   // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3)
@@ -687,6 +688,19 @@ export function StoreProvider({
     [setDb, refresh],
   );
   // the device was wiped (account deletion): what lives only in memory goes too (19 §6.12)
+  /** the deleted person's ops (and ownerless ones) leave the outbox and the refused changes in memory; still loading →
+   *  applied to what the load brings, before ownerless ops are adopted */
+  const dropPersonOps = (me: string | null) => {
+    if (!outboxReadyRef.current) forgetOnLoad.current = [...(forgetOnLoad.current ?? []), me];
+    // a functional update: the latest outbox, also one that is set but not yet rendered
+    setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
+    // the refused money changes: the deleted person's go, other people's stay (review #263 №2)
+    if (!rejectedReadyRef.current) forgetRejectedOnLoad.current = [...(forgetRejectedOnLoad.current ?? []), me];
+    setRejected((prev) => rejectedOthers(prev, me));
+  };
+  // the repeat on start that only filters the shared outbox (#911): nothing else of the person signed in now changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => onSharedForget(dropPersonOps), []);
   useEffect(
     () =>
       onDeviceForgotten((_wiped, info) => {
@@ -695,12 +709,7 @@ export function StoreProvider({
         // The deleted person comes with the wipe: the sign-in may already be gone from the store (review #240 №2)
         // told by the wipe (even «not known» = null: never the person signed in now, review #244), else the sign-in
         const me = "userId" in info ? (info.userId ?? null) : (whoRef.current?.userId ?? null);
-        if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
-        // a functional update: the latest outbox, also one that is set but not yet rendered
-        setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
-        // the refused money changes: the deleted person's go, other people's stay (review #263 №2)
-        if (!rejectedReadyRef.current) forgetRejectedOnLoad.current = { userId: me };
-        setRejected((prev) => rejectedOthers(prev, me));
+        dropPersonOps(me);
         setGateCodes({});
         waitingPoints.current = {};
       }),
