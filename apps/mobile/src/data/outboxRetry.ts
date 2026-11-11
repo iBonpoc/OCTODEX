@@ -11,6 +11,11 @@
  */
 export type Failure = "network" | "transient" | "refusal";
 
+/** an op this build does not know (a newer build queued it, then the app went back): never sent, never a try, never
+ *  dropped — it waits as «maybe this op's alone» and after 10 minutes is shown as «не отправлено» (A-19, #784) */
+export const UNKNOWN_OP = "UnknownOpError";
+export const unknownOp = (k: unknown) => Object.assign(new Error(`unknown op: ${String(k)}`), { name: UNKNOWN_OP });
+
 /** the request did not reach the server or got no answer: the browser's / React Native's fetch, a timeout, an abort */
 const NETWORK = /failed to fetch|network request failed|networkerror|network error|load failed|fetch failed|timed? ?out|timeout|aborted|econn|enotfound|eai_again|socket hang up|internet/i;
 /** the server's «try later»: an expired JWT (PostgREST), PostgREST cannot reach the database, serialization failure,
@@ -26,6 +31,7 @@ export function classify(e: unknown): Failure {
   // «someone else changed it first» (40001 + hint row_version_conflict, module_save_settings): a retry never helps — the
   // server's «no» before the code says «serialization, try later» (review #354 Б1)
   if (field(e, "hint") === "row_version_conflict") return "refusal";
+  if (e instanceof Error && e.name === UNKNOWN_OP) return "transient";
   if (code && TRANSIENT_CODE.test(code)) return "transient";
   if (status) return status >= 500 || TRANSIENT_STATUS.has(status) ? "transient" : "refusal";
   if (code) return "refusal"; // an answer with a code (42…, 23…, 22…, P0…) and no status
@@ -51,6 +57,7 @@ export const isNetworkError = (e: unknown) => classify(e) === "network";
 const OP_ONLY_CODE = /^(XX000|57014|40001|40P01)$/;
 export function maybeOpOnly(e: unknown): boolean {
   if (classify(e) !== "transient") return false;
+  if (e instanceof Error && e.name === UNKNOWN_OP) return true;
   const code = String(field(e, "code") ?? "");
   if (code) return OP_ONLY_CODE.test(code);
   return Number(field(e, "status")) === 500;

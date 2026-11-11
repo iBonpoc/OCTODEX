@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 import { PermanentError } from "../src/cloud/ops";
-import { backoffMs, classify, isNetworkError, needsSignIn, RETRY_FIRST_MS, RETRY_MAX_MS } from "../src/data/outboxRetry";
+import { backoffMs, classify, isNetworkError, maybeOpOnly, needsSignIn, RETRY_FIRST_MS, RETRY_MAX_MS, unknownOp } from "../src/data/outboxRetry";
 import { ServerError } from "../src/cloud/ops";
 
 describe("unit:outboxRetry", () => {
@@ -43,5 +43,12 @@ describe("unit:outboxRetry", () => {
     expect(backoffMs(0)).toBe(RETRY_FIRST_MS);
     expect(backoffMs(7)).toBe(RETRY_MAX_MS);
     expect(backoffMs(50)).toBe(RETRY_MAX_MS);
+  });
+});
+
+describe("unit:outboxRetry — an op this build does not know (A-19, #784)", () => {
+  it("is not a try (never dropped) and is this op's alone (the others go)", () => {
+    expect(classify(unknownOp("from.newer.build"))).toBe("transient");
+    expect(maybeOpOnly(unknownOp("from.newer.build"))).toBe(true);
   });
 });

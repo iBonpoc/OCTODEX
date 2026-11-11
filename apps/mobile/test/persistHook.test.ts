@@ -249,3 +249,54 @@ describe("unit:persistHook — a write is refused (A-02)", () => {
     outbox.unmount();
   });
 });
+
+describe("unit:persistHook — a read error, then «Повторить» or a wipe (A-01, review of #756)", () => {
+  it("«Повторить» keeps the error on screen while it reads again (no blank screen)", async () => {
+    storage.set("octo.outbox.v1", TWO);
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    (root.out as OutOps)[3].retry();
+    await settle();
+    expect((root.out as OutOps)[3].readError).toBe("read");
+    expect((root.out as OutOps)[2]).toBe(false);
+    answerAll();
+    await settle();
+    expect((root.out as OutOps)[3].readError).toBeNull();
+    root.unmount();
+  }, 10_000);
+
+  it("a wipe while the outbox could not be read: still not loaded, nothing written over the device", async () => {
+    storage.set("octo.outbox.v1", TWO);
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    forgetDeviceState((k) => k === "octo.outbox.v1");
+    await settle();
+    expect((root.out as OutOps)[2]).toBe(false);
+    expect((root.out as OutOps)[3].readError).toBe("read");
+    (root.out as OutOps)[1]((prev) => prev.filter((x) => x.id !== "op1")); // the store drops the deleted person's ops
+    await settle();
+    expect(storage.get("octo.outbox.v1")).toBe(TWO);
+    root.unmount();
+  }, 10_000);
+
+  it("the key changes during the pause between tries: the old read is dropped, the new key is read", async () => {
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    reads.shift()!.fail(new Error("SQLITE_BUSY"));
+    await settle();
+    root.rerender({ k: "octo.queue.v1" });
+    await settle();
+    storage.set("octo.queue.v1", TWO);
+    answerAll();
+    await settle();
+    await wait(400); // the old key's pause ends: its next read never lands in the new key's state
+    while (reads.length) reads.shift()!.fail(new Error("late"));
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([{ id: "op1" }, { id: "op2" }]);
+    expect((root.out as OutOps)[3].readError).toBeNull();
+    root.unmount();
+  });
+});

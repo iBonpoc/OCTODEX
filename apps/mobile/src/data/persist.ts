@@ -56,6 +56,8 @@ export function createWriter(
 ): Writer {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: { key: string; raw: string; gen: number } | null = null;
+  /** the latest write: an older write's answer that comes after it says nothing about what is on the device now */
+  let seq = 0;
   const write = () => {
     const p = pending;
     if (timer) clearTimeout(timer);
@@ -64,15 +66,17 @@ export function createWriter(
     // scheduled before a wipe: the old person's data never lands after it
     if (!p || p.gen !== gen()) return;
     // a refused write is not swallowed (A-02): the hook shows «не сохранено на устройстве» until a write lands
+    const my = ++seq;
     let done: Promise<void>;
     try {
       done = setItem(p.key, p.raw);
     } catch (e) {
       done = Promise.reject(e);
     }
+    const told = (ok: boolean) => my === seq && p.gen === gen() && onResult?.(ok);
     done.then(
-      () => onResult?.(true),
-      () => onResult?.(false),
+      () => told(true),
+      () => told(false),
     );
   };
   return {
@@ -89,6 +93,7 @@ export function createWriter(
       if (timer) clearTimeout(timer);
       timer = null;
       pending = null;
+      seq += 1; // a write still running before the wipe tells nothing after it
     },
     flush: () => {
       if (pending) write();
@@ -179,7 +184,8 @@ export function usePersistentState<T>(
     let alive = true;
     const w = wiped.current;
     writer.current!.keyChanged(key);
-    setState({ key, value: init(), loaded: false });
+    // «Повторить»: the error stays on screen while the read is tried again (no blank screen)
+    setState((s) => (s.key === key && s.readError ? { key, value: init(), loaded: false, readError: s.readError } : { key, value: init(), loaded: false }));
     // a failed read is tried again; when every try fails the state stays NOT loaded, so nothing is written over
     // what the device holds (A-01: the outbox was overwritten with [] after one failed read)
     const read = async (): Promise<string | null> => {
@@ -224,7 +230,9 @@ export function usePersistentState<T>(
         wiped.current += 1;
         writer.current!.forget();
         setWriteFailed(false);
-        setState({ key: k, value: initRef.current(), loaded: true, forgotten: true });
+        // what could not be read is not «forgotten» into an empty value the store could write over the device (the
+        // outbox keeps other people's ops): it stays not loaded until «Повторить» reads what is left
+        setState((s) => (s.readError ? { key: k, value: initRef.current(), loaded: false, readError: s.readError } : { key: k, value: initRef.current(), loaded: true, forgotten: true }));
       }),
     [],
   );

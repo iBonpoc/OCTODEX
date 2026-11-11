@@ -516,11 +516,11 @@ export function StoreProvider({ children, readError }: { children: ReactNode; re
     setLink(failedAs(e));
   };
   // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
-  // `strict`: what is only here is never «started fresh» from a broken record (A-01)
+  // `strict`: the changes the phone has only here are never «started fresh» from a broken record (A-01)
   const [queue, setQueue, queueReady, queueHealth] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true, strict: true });
   const [outbox, setOutbox, outboxReady, outboxHealth] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true, strict: true });
   // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
-  const [rejected, setRejected, rejectedReady, rejectedHealth] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true, strict: true });
+  const [rejected, setRejected, rejectedReady, rejectedHealth] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
   // the device storage (A-01, A-02): a read that failed holds the app on «Повторить»; a refused write is shown
   const health = [dbHealth, roleHealth, queueHealth, outboxHealth, rejectedHealth];
   const notSavedOnDevice = health.some((h) => h.writeFailed);
