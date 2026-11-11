@@ -12455,8 +12455,44 @@ select tst.fails_like($q$select public.record_visit_payment('f1790000-0000-4000-
 :as_tech_a
 select tst.fails_like($q$select public.record_visit_payment('f1790000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000a3', '21810000-0000-4000-8000-0000000000a3', 'bitcoin')$q$, '%not taken on a visit%', 'T181 an unknown method');
 :as_super
-select tst.ok(not has_function_privilege('anon', 'public.record_visit_payment(uuid,uuid,uuid,text,date)', 'EXECUTE')
-          and has_function_privilege('authenticated', 'public.record_visit_payment(uuid,uuid,uuid,text,date)', 'EXECUTE'), 'T181 rights: authenticated, not anon');
+select tst.ok(not has_function_privilege('anon', 'public.record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'EXECUTE'), 'T181 rights: authenticated, not anon');
+-- security-check of PR-B: only an active tech, only on site; the money in hand is the phone's amount
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e1810000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T181 checks', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', 0, 'T181 work (test price)', 1, 40000, false);
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1810000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now()),
+  ('f1810000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now()),
+  ('f1810000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+update public.visits set status = 'on_site' where id in ('f1810000-0000-4000-8000-000000000002', 'f1810000-0000-4000-8000-000000000003');
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000001', '01810000-0000-4000-8000-0000000000b1', '21810000-0000-4000-8000-0000000000b1', 'cash')$q$, '%not on site%', 'T181 the tech: not on a visit not started');
+-- the phone showed $150: the client pays part — a partial payment of what is in hand
+select tst.ok(((public.record_visit_payment('f1810000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000b2', '21810000-0000-4000-8000-0000000000b2', 'cash', null, 15000) ->> 'amount_cents')::bigint) = 15000,
+              'T181 the money in hand is the phone''s amount (less than the balance: a partial payment)');
+-- the phone showed $500, only $250 is left: the balance is recorded, the extra cash is flagged for the owner
+select tst.ok((select (j ->> 'amount_cents')::bigint = 25000 and (j ->> 'needs_review')::boolean
+                 from (select public.record_visit_payment('f1810000-0000-4000-8000-000000000003', '01810000-0000-4000-8000-0000000000b3', '21810000-0000-4000-8000-0000000000b3', 'cash', null, 50000) j) x),
+              'T181 more in hand than the balance: the balance, needs_review — never silently another amount');
+:as_super
+select tst.ok((select needs_review from public.payments where id = '21810000-0000-4000-8000-0000000000b3'), 'T181 the payment is marked for the owner');
+-- a tech switched off keeps the assignment but takes no payment
+update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000b4', '21810000-0000-4000-8000-0000000000b4', 'cash')$q$, '%no such visit%', 'T181 a switched-off tech: no such visit');
+:as_super
+update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- a cancelled visit is paid by nobody
+:as_owner_a
+select public.cancel_visit('f1810000-0000-4000-8000-000000000001', 'other', 'T181') is not null as t181_c \gset
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000001', '01810000-0000-4000-8000-0000000000b5', '21810000-0000-4000-8000-0000000000b5', 'cash')$q$, '%not on site%', 'T181 a cancelled visit: not even the owner');
 \echo 'T181 visit payment: who may, one answer to another company or tech ok'
 
 \echo 'ALL TESTS PASSED'

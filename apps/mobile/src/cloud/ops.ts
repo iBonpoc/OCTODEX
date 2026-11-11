@@ -607,7 +607,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // already have its final invoice — the server picks the invoice, counts the amount and completes the visit. An old
       // queued visit.pay (it inserted the invoice and the payment itself) goes here too. The job is not moved: «На месте»
       // starts it (visit trigger), the office closes it (complete_job) — S10
-      return run(supabase.rpc("record_visit_payment", { p_visit_id: op.visitId, p_invoice_id: op.invoiceId, p_payment_id: op.paymentId, p_method: op.method, p_due_date: op.dueDate ?? null }));
+      return run(supabase.rpc("record_visit_payment", { p_visit_id: op.visitId, p_invoice_id: op.invoiceId, p_payment_id: op.paymentId, p_method: op.method, p_due_date: op.dueDate ?? null, p_expected_cents: op.amountCents }));
     case "lead.reply":
       // older queued op: "I replied" — the activity trigger records the first response
       return run(ins("activities", { company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "reply", direction: "out" }));

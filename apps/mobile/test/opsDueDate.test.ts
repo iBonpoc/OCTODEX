@@ -52,7 +52,7 @@ describe("due_date of an invoice made offline", () => {
     vi.setSystemTime(new Date("2026-11-06T00:10:00-08:00"));
     await applyOp({ k: "visit.pay", visitId: "v-1", jobId: "j-demo", customerId: "c-1", invoiceId: "i-2", paymentId: "p-2", amountCents: 500, method: "cash", dueDate: "2026-11-05" }, "co-1", "u-1");
     // the server makes the invoice (record_visit_payment, #757): the phone's day goes with the call; the phone inserts nothing
-    expect(rpcs).toEqual([{ fn: "record_visit_payment", args: { p_visit_id: "v-1", p_invoice_id: "i-2", p_payment_id: "p-2", p_method: "cash", p_due_date: "2026-11-05" } }]);
+    expect(rpcs).toEqual([{ fn: "record_visit_payment", args: { p_visit_id: "v-1", p_invoice_id: "i-2", p_payment_id: "p-2", p_method: "cash", p_due_date: "2026-11-05", p_expected_cents: 500 } }]);
     expect(rows.filter((r) => r.table === "invoices" || r.table === "payments")).toEqual([]);
   });
   it("an op queued by an older build (no dueDate): the company's today when sent", async () => {

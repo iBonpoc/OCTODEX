@@ -9,6 +9,8 @@
 --   * сумму считает сервер (как движок: @octo/estimating-engine visitPayment): живой final-счёт работы с остатком — платёж
 --     идёт в него на остаток; final-счёта нет — создаётся на «ещё не выставлено» (контракт − все живые счета работы);
 --     платить нечего — платежа нет, выезд просто завершается;
+--   * сумма в руке — та, что показал телефон (p_expected_cents): меньше остатка — частичная оплата, больше — остаток и
+--     needs_review (лишнее у мастера); мастер — только активный и на месте; отменённый выезд не платится;
 --   * повтор с тем же id платежа ничего не меняет (очередь телефона);
 --   * выезд → completed (если он на месте).
 -- Срок нового счёта — день компании, когда телефон принял оплату (p_due_date; не будущий и не старше 30 дней).
@@ -18,7 +20,7 @@
 set local lock_timeout = '5s';
 
 create or replace function public.record_visit_payment(p_visit_id uuid, p_invoice_id uuid, p_payment_id uuid, p_method text,
-                                                       p_due_date date default null)
+                                                       p_due_date date default null, p_expected_cents bigint default null)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_uid      uuid := auth.uid();
@@ -29,6 +31,7 @@ declare
   v_amount   bigint;
   v_invoiced bigint;
   v_today    date;
+  v_review   boolean := false;
 begin
   if v_uid is null then raise exception 'visit payment: sign in' using errcode = '42501'; end if;
   if p_visit_id is null or p_invoice_id is null or p_payment_id is null then
@@ -39,15 +42,23 @@ begin
   end if;
   select * into v from public.visits where id = p_visit_id;
   -- не видно, чужая компания, нет права — один ответ
+  -- мастер — только активный и только на своём выезде (как payments_insert_tech + tech_can_record_payment)
   if v.id is null or v.deleted_at is not null
-     or not (app.is_visit_assignee(v.id) or app.has_role(v.company_id, array['owner', 'admin', 'office', 'sales'])) then
+     or not ((app.has_role(v.company_id, array['tech']) and app.is_visit_assignee(v.id))
+             or app.has_role(v.company_id, array['owner', 'admin', 'office', 'sales'])) then
     raise exception 'visit payment: no such visit' using errcode = '42501';
   end if;
   if v.job_id is null then
     raise exception 'visit payment: an inspection takes no payment' using errcode = '22023';
   end if;
 
-  -- повтор: платёж с этим id уже есть (очередь отправила второй раз)
+  -- работа под блокировкой: две оплаты одного выезда (два телефона, повтор очереди) идут по очереди
+  select * into j from public.jobs where id = v.job_id and company_id = v.company_id for update;
+  if j.id is null or j.deleted_at is not null then
+    raise exception 'visit payment: no such visit' using errcode = '42501';
+  end if;
+  -- повтор: платёж с этим id уже есть (очередь отправила второй раз) — после блокировки, чтобы одновременный повтор
+  -- ответил replay, а не «нечего брать»
   select * into p from public.payments where id = p_payment_id;
   if p.id is not null then
     if p.company_id <> v.company_id or p.visit_id is distinct from v.id then
@@ -55,11 +66,10 @@ begin
     end if;
     return jsonb_build_object('status', 'replay', 'invoice_id', p.invoice_id, 'payment_id', p.id, 'amount_cents', p.amount_cents);
   end if;
-
-  -- работа под блокировкой: две оплаты одного выезда (два телефона) идут по очереди
-  select * into j from public.jobs where id = v.job_id and company_id = v.company_id for update;
-  if j.id is null or j.deleted_at is not null then
-    raise exception 'visit payment: no such visit' using errcode = '42501';
+  -- оплата — на месте или после (мастер); отменённый или пропущенный выезд не платится никем
+  if v.status in ('cancelled', 'no_show')
+     or (not app.has_role(v.company_id, array['owner', 'admin', 'office', 'sales']) and v.status not in ('on_site', 'completed')) then
+    raise exception 'visit payment: the visit is not on site' using errcode = '22023';
   end if;
   select * into inv from public.invoices
    where company_id = j.company_id and job_id = j.id and kind = 'final' and status <> 'void'
@@ -74,23 +84,38 @@ begin
       -- the due date is the company's day the phone took the payment (made offline at 11:50 PM, sent after midnight —
       -- still that day); never a future day, never older than 30 days
       v_today := (now() at time zone coalesce((select c.timezone from public.companies c where c.id = j.company_id), 'UTC'))::date;
-      insert into public.invoices (id, company_id, customer_id, job_id, kind, status, subtotal_cents, total_cents, due_date, sent_at)
-      values (p_invoice_id, j.company_id, j.customer_id, j.id, 'final', 'sent', v_amount, v_amount,
-              case when p_due_date between v_today - 30 and v_today then p_due_date else v_today end, now())
-      returning * into inv;
+      begin
+        insert into public.invoices (id, company_id, customer_id, job_id, kind, status, subtotal_cents, total_cents, due_date, sent_at)
+        values (p_invoice_id, j.company_id, j.customer_id, j.id, 'final', 'sent', v_amount, v_amount,
+                case when p_due_date between v_today - 30 and v_today then p_due_date else v_today end, now())
+        returning * into inv;
+      exception when unique_violation then
+        -- the id is taken (another row) — one plain answer, no constraint name out
+        raise exception 'visit payment: the invoice id is taken' using errcode = '22023';
+      end;
     end if;
   end if;
 
+  -- деньги в руке мастера — то, что показал телефон (p_expected_cents): меньше остатка — частичная оплата; больше —
+  -- записываем остаток и ставим needs_review: лишнее у мастера, владелец разберётся (не молча другая сумма)
+  if v_amount > 0 and p_expected_cents is not null and p_expected_cents > 0 then
+    if p_expected_cents < v_amount then
+      v_amount := p_expected_cents;
+    elsif p_expected_cents > v_amount then
+      v_review := true;
+    end if;
+  end if;
   if v_amount > 0 then
-    insert into public.payments (id, company_id, invoice_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by)
-    values (p_payment_id, j.company_id, inv.id, j.customer_id, v.id, p_method, v_amount, 'succeeded', p_payment_id::text, v_uid);
+    insert into public.payments (id, company_id, invoice_id, customer_id, visit_id, method, amount_cents, status, idempotency_key, received_by, needs_review)
+    values (p_payment_id, j.company_id, inv.id, j.customer_id, v.id, p_method, v_amount, 'succeeded', p_payment_id::text, v_uid, v_review);
   end if;
   if v.status = 'on_site' then
     update public.visits set status = 'completed' where id = v.id;
   end if;
   return jsonb_build_object('status', case when v_amount > 0 then 'paid' else 'nothing' end,
-                            'invoice_id', inv.id, 'payment_id', case when v_amount > 0 then p_payment_id end, 'amount_cents', v_amount);
+                            'invoice_id', inv.id, 'payment_id', case when v_amount > 0 then p_payment_id end, 'amount_cents', v_amount,
+                            'needs_review', v_review);
 end;
 $$;
-revoke all on function public.record_visit_payment(uuid, uuid, uuid, text, date) from public, anon;
-grant execute on function public.record_visit_payment(uuid, uuid, uuid, text, date) to authenticated;
+revoke all on function public.record_visit_payment(uuid, uuid, uuid, text, date, bigint) from public, anon;
+grant execute on function public.record_visit_payment(uuid, uuid, uuid, text, date, bigint) to authenticated;
