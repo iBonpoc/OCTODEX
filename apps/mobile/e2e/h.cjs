@@ -23,6 +23,14 @@ function helpers(page, BASE, OUT, name, opts = {}) {
     },
     click: async (name, opts = {}) => { await page.getByRole("button", { name, exact: true, ...opts }).last().click(); await (legacy ? page.waitForTimeout(350) : settle(page, { quietMs: 120, maxMs: 2000 })); },
     clickText: async (txt) => { await page.getByText(txt, { exact: true }).last().click(); await (legacy ? page.waitForTimeout(350) : settle(page, { quietMs: 120, maxMs: 2000 })); },
+    // Put a value into localStorage from a same-origin page where the app does NOT run (the favicon), for the NEXT page load. The
+    // running app writes its own state when it is left (pagehide) and can overwrite what a spec put there with
+    // `p.evaluate(() => localStorage.setItem(…))` (CHECKS §9 №10/№12, #1021). The value is JSON-encoded: h.seed("octo.role.v1", "tech").
+    // The page is left on the favicon — the next h.go loads the app with the value.
+    seed: async (key, value) => {
+      await page.goto(BASE + "/favicon.ico");
+      await page.evaluate(([k, v]) => localStorage.setItem(k, JSON.stringify(v)), [key, value]);
+    },
     sheet: () => page.locator('[aria-modal="true"]').last(),
     shot: (n) => page.screenshot({ path: path.join(OUT, shotFileName(name, n)) }),
     db: () => page.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db),
