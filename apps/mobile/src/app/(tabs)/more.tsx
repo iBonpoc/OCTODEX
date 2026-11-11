@@ -8,7 +8,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { GROUP_TITLE } from "@/nav/NavMenu";
 import { openSection } from "@/nav/go";
 import { meIsSub, menuGroups, moreHref, sectionHref, type Section, type SectionId } from "@/nav/sections";
-import { syncState } from "@/nav/shell";
+import { showsSyncLine } from "@/data/syncLink";
 import { moreCounts } from "@/features/moreCounts";
 import { useTick } from "@/features/sheets";
 import { Avatar, StatusChip } from "@/ui/controls";
@@ -30,7 +30,7 @@ export default function More() {
   const { c } = useTheme();
   const { wide } = useDevice();
   useTick();
-  const { db, role, mode, companyName, online, queue } = useStore();
+  const { db, role, mode, companyName, online, queue, notSavedOnDevice } = useStore();
   const auth = useAuth();
   const me = db.members.find((m) => m.id === db.me);
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
@@ -107,11 +107,11 @@ export default function More() {
             <Icon name="chevronRight" s={size.iconSm} color={c.mut} />
           </Press>
           <View testID="more-sync" style={{ marginTop: space[2] }}>
-            {syncState(online, queue.length) ? (
+            {showsSyncLine(online, queue.length, notSavedOnDevice) ? (
               <SyncBadge />
             ) : (
               // all is well — quiet, no colour (rule 2: colour is for a status that asks for something)
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessible accessibilityLabel={t("nav.more.online")}>
+              <View testID="more-sync-ok" style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessible accessibilityLabel={t("nav.more.online")}>
                 <Icon name="check" s={size.iconSm} color={c.mut} />
                 <T v="caption" tone="mut">
                   {t("nav.more.online")}
