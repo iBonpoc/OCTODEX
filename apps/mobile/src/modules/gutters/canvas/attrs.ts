@@ -50,6 +50,19 @@ export const hangerKitsFor = (profile: string, ch?: Choices): string[] => {
 export const DS_SHAPES = ["rect", "round"] as const;
 export const DS_SIZES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["2x3", "3x4", "4x5"], round: ["3", "4"] };
 export const DS_STYLES = ["plain", "corrugated"] as const;
+/**
+ * The kind of a downspout as the contractor says it (#929): the shape and the style in one choice — four kinds, each with
+ * its own icon in «Наряд». The data stay `shape` + `dsStyle` (the engine keys, the price lines); a kind is only how the
+ * pair is picked and read. No style stored is plain.
+ */
+export const DS_KINDS = [
+  { key: "rectPlain", shape: "rect", style: "plain", icon: "dsRect" },
+  { key: "rectRibbed", shape: "rect", style: "corrugated", icon: "dsRectRibbed" },
+  { key: "roundPlain", shape: "round", style: "plain", icon: "dsRound" },
+  { key: "roundRibbed", shape: "round", style: "corrugated", icon: "dsRoundRibbed" },
+] as const;
+export type DsKind = (typeof DS_KINDS)[number];
+export const dsKindOf = (shape: string, style?: string): DsKind => DS_KINDS.find((x) => x.shape === shape && x.style === (style ?? "plain")) ?? DS_KINDS[0];
 /** elbow styles by shape; rect A/B, round by angle */
 export const ELBOW_STYLES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["A", "B"], round: ["45", "60", "75", "90"] };
 /** without `elbows` the engine counts 3 × A (П18.10) */

@@ -17,7 +17,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
 import { eighthLabel, fmtLen, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
@@ -463,11 +463,49 @@ function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
   );
 }
 
+/**
+ * The kind of the downspout (#929, DESIGN-SYSTEM Б1а-style tiles): 2×2, an icon of its own and two words — shape, then
+ * style. One tap sets both; the size follows the shape (changeDs). A kind whose style the company does not install shows
+ * only when it is the one in hand. Picked = an ink frame, no colour (rule 2).
+ */
+function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch: Choices }) {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const cur = dsKindOf(ds.shape, ds.dsStyle);
+  const shown = DS_KINDS.filter((x) => x.key === cur.key || ch.offer.dsStyles.includes(x.style));
+  return (
+    <Field label={t(k("dsKind"))} testID="attr-ds-kind">
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} accessibilityRole="radiogroup">
+        {shown.map((x) => {
+          const sel = x.key === cur.key;
+          const label = t(k(`kind.${x.key}`));
+          return (
+            <Press
+              key={x.key}
+              testID={`attr-ds-kind-${x.key}`}
+              onPress={() => onAttrs({ shape: x.shape, dsStyle: x.style })}
+              visibleHeight={sizes.hitMin}
+              accessibilityRole="radio"
+              accessibilityState={{ selected: sel, checked: sel }}
+              {...({ "aria-checked": sel } as object)}
+              accessibilityLabel={label.replace("\n", " ")}
+              containerStyle={{ flexBasis: "47%", flexGrow: 1 }}
+              style={{ minHeight: sizes.hitMin + space[4], flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.inner, backgroundColor: c.surf2, borderWidth: sel ? component.selectedBorder : 1, borderColor: sel ? c.ink : c.bd }}
+            >
+              <Icon name={x.icon} s={sizes.iconMd} color={c.ink} />
+              <T v="caption" w={sel ? "bold" : "semibold"} style={{ flex: 1 }}>{label}</T>
+            </Press>
+          );
+        })}
+      </View>
+    </Field>
+  );
+}
+
 export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; compact?: boolean; /** its gutter: «Как у желоба» */ run?: DrawnRun["attrs"] }) {
   const { t } = useI18n();
   const w = wallOf(ds.shape, ds.wall);
   const sizes = withCurrent(ch.offer.dsSizes[ds.shape], ds.size);
-  const styles = withCurrent(ch.offer.dsStyles, ds.dsStyle ?? "plain");
   const bottoms = withCurrent(ch.offer.bottoms, ds.bottom.kind);
   const wallKits = withCurrent(wallKitsFor(ds.shape, w.wall, ch), w.kit);
   return (
@@ -480,8 +518,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
           <More open0={rareSet(ds)} id={ds.id} label={t(k("moreDs"))}>
-      <Pick label={t(k("shape"))} testID="attr-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(k(`sh.${s}`)) }))} value={ds.shape} onChange={(shape) => onAttrs({ shape })} />
-      <Pick label={t(k("dsStyle"))} testID="attr-ds-style" offered={ch.offer.dsStyles} items={styles.map((s) => ({ key: s, label: t(k(`st.${s}`)) }))} value={ds.dsStyle ?? "plain"} onChange={(dsStyle) => onAttrs({ dsStyle: dsStyle as DsAttrs["dsStyle"] })} />
+      <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
             <Stock a={ds} set={onAttrs} ch={ch} part="rest" />
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Pick label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
@@ -491,9 +528,8 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
         </>
       ) : (
         <>
-      <Pick label={t(k("shape"))} testID="attr-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(k(`sh.${s}`)) }))} value={ds.shape} onChange={(shape) => onAttrs({ shape })} />
+      <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
       <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
-      <Pick label={t(k("dsStyle"))} testID="attr-ds-style" offered={ch.offer.dsStyles} items={styles.map((s) => ({ key: s, label: t(k(`st.${s}`)) }))} value={ds.dsStyle ?? "plain"} onChange={(dsStyle) => onAttrs({ dsStyle: dsStyle as DsAttrs["dsStyle"] })} />
       <Stock a={ds} set={onAttrs} ch={ch} run={run} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
