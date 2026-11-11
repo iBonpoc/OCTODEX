@@ -13,6 +13,8 @@ exports.run = async (h) => {
   const desk = h.layout.width >= 1280;
   await h.go("/today");
   await role(h, "director");
+  // the store writes its state to localStorage 250 ms after it starts: wait for it (under load h.db() was null, #1028)
+  await p.waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.leads ?? []).length > 0, null, { timeout: 8000 });
   let db = await h.db();
   const withEst = db.leads.filter((l) => db.estimates.some((e) => e.leadId === l.id));
   h.expect(withEst.length >= 1, "a lead with an estimate");
@@ -69,8 +71,16 @@ exports.run = async (h) => {
   await dup.click();
   const ok = await p.waitForFunction((w) => location.pathname === "/leads" && new URLSearchParams(location.search).get("open") === w, a.id, { timeout: 4000 }).then(() => true, () => false);
   h.expect(ok, `the duplicate opens in the panel (${p.url()})`);
-  await panel.getByRole("tab", { name: /^Файлы/ }).first().click();
+  // the address changes first, the panel swaps to the other lead a moment later: wait for what is checked — the panel now
+  // shows lead a (its own «Возможный дубль» row points back at the planted lead).
+  await panel.getByTestId("lead-dup-lead-l-e2e-188").waitFor({ timeout: 8000 });
+  // …and a press on «Файлы» can still be overridden while the panel mounts (its remembered tab is applied on mount: the panel
+  // stayed on «Обзор» in 1 of ~25 runs under load, #1028). Press until the tab shows its content, then check it as before.
   const tile = panel.getByTestId("lead-photo-ph-e2e-188");
+  for (let i = 0; i < 4; i++) {
+    await panel.getByRole("tab", { name: /^Файлы/ }).first().click();
+    if (await tile.waitFor({ timeout: 1500 }).then(() => true, () => false)) break;
+  }
   await tile.waitFor({ timeout: 4000 });
   h.expect((await tile.locator("img").count()) === 0, "1280: the dead photo is the picture sign");
   h.expect((await dead()) === 0, "1280: the dead blob: of the lead's photo is never loaded");
