@@ -6,13 +6,7 @@
  * - director: the same screens are editable, «Сохранить» is there.
  * The database refuses an office update of the company anyway (core_rls T86).
  */
-// The role is put into localStorage from a same-origin page where the app does NOT run (the favicon), for the next load:
-// the running app writes its own state when it is left (pagehide, data/appActive.ts) and could overwrite what the spec put
-// there (CHECKS §9 №10; the same as e2e/cloud/signIn.cjs seedOutbox).
-const setRole = async (h, r) => {
-  await h.page.goto(new URL("/favicon.ico", h.page.url()).href);
-  await h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
-};
+const setRole = (h, r) => h.seed("octo.role.v1", r); // from a page without the app (CHECKS §9 №12)
 
 exports.run = async (h) => {
   const p = h.page;

@@ -6,7 +6,7 @@
 #   e2e 102 (and next 103, 104) — the app in a browser, built for the local stack, 390 dark (the director's exception);
 #   api-2 — «Удалить аккаунт»: the edge function + delete_account + Auth (S22).
 # Nightly at 10:47 UTC (after checks.yml's 10:17; 2:47 AM in Los Angeles), by hand, and on a PR that changes the server
-# or these scenarios. A red nightly opens (or adds to) the `nightly-red` issue, like checks.yml.
+# or these scenarios, or the app code that talks to it (src/cloud, src/data, src/features). A red nightly opens (or adds to) the `nightly-red` issue, like checks.yml.
 name: Cloud scenarios
 
 on:
@@ -21,6 +21,9 @@ on:
       - 'apps/mobile/e2e/serve.cjs'
       - 'apps/mobile/e2e/h.cjs'
       - 'apps/mobile/src/cloud/**'
+      # the store and the screens call the server through these: a change there can break a scenario (#802, audit D-02)
+      - 'apps/mobile/src/data/**'
+      - 'apps/mobile/src/features/**'
       - '.github/workflows/cloud.yml'
 
 concurrency:
