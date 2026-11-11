@@ -31,7 +31,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await p.locator('img[src^="blob:"]').count()) > 0, "this page's photo is shown");
   // «Создать» → «Фото» picks one too: it is this page's as well and is shown at once (Fab registers it)
   await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").last().click();
-  const [ch2] = await Promise.all([p.waitForEvent("filechooser"), p.getByRole("button", { name: "Фото", exact: true }).locator("visible=true").last().click()]);
+  const [ch2] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("fab-photo").locator("visible=true").last().click()]);
   await ch2.setFiles({ name: "before2.png", mimeType: "image/png", buffer: PNG });
   await waitFor(async () => ((await h.db()).visits.find((v) => v.id === v0.id)?.photos?.length ?? 0) === 2, "the «＋» photo is saved");
   await waitFor(async () => (await p.locator('img[src^="blob:"]').count()) >= 2, "the «＋» photo is shown at once");
