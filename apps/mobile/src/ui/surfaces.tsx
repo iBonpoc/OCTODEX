@@ -16,6 +16,7 @@ import { HomeHeader } from "@/nav/HomeHeader";
 import { SearchEntry } from "@/nav/SearchEntry";
 import type { FabCtx, FabItem, FabSet } from "@/nav/sections";
 import { badgeState } from "@/data/syncLink";
+import { useStorageTrouble } from "@/data/persist";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
@@ -242,6 +243,9 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
   const { online, link, queue, stuckOps } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();
+  // the phone could not keep something (full storage, a failed read — #756): said first, the rest can wait
+  const unsaved = useStorageTrouble();
+  if (unsaved) return <StorageBadge compact={compact} label={t("storage.unsaved.badge")} tone={c.status.bad} />;
   // the network is there, the server answers «not now» (5xx, 429): not «no network» (docs/specs/23 §3)
   const state = badgeState(online, link, queue.length, stuckOps.length);
   if (!state) return null;
@@ -276,6 +280,31 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
     </Press>
   ) : (
     chip
+  );
+}
+/** «Не сохранено на устройстве»: what the phone holds may be lost when the app closes (#756) */
+function StorageBadge({ compact, label, tone }: { compact?: boolean; label: string; tone: { fill: string; on: string } }) {
+  return (
+    <View
+      testID="storage-badge"
+      accessibilityRole="alert"
+      accessibilityLabel={label}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: compact ? "center" : "flex-start",
+        height: component.chip.h,
+        paddingHorizontal: component.chip.px,
+        borderRadius: radius.pill,
+        backgroundColor: tone.fill,
+        gap: space[1],
+      }}
+    >
+      <Icon name="alert" s={size.iconSm} color={tone.on} />
+      <T v="caption" w="semibold" style={{ color: tone.on }} numberOfLines={1}>
+        {label}
+      </T>
+    </View>
   );
 }
 /* ---------- Nav metrics shared by Screen, TabBar, «＋», sheets (pure part: navInsets in nav/shell.ts) ---------- */

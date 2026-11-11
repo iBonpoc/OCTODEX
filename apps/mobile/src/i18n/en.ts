@@ -243,6 +243,8 @@ export const en: Dict = {
   "offline.badge": "Offline · queued: {n}",
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Server unavailable · queued: {n}",
+  /* core: data safety (#756) */
+  "storage.unsaved.badge": "Not saved on this device",
   "sync.stuck.badge": "Not sent: {n}",
   "sync.stuck.title": "Not sent: the server answers with an error",
   "sync.stuck.since": "Failing since {when}",

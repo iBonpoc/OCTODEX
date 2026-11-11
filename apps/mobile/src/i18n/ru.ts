@@ -242,6 +242,8 @@ export const ru = {
   "offline.badge": "Без сети · в очереди: {n}",
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Сервер недоступен · в очереди: {n}",
+  /* core: data safety (#756) */
+  "storage.unsaved.badge": "Не сохранено на устройстве",
   "sync.stuck.badge": "Не отправлено: {n}",
   "sync.stuck.title": "Не отправлено: сервер отвечает ошибкой",
   "sync.stuck.since": "Ошибка с {when}",

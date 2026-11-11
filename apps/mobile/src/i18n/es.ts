@@ -243,6 +243,8 @@ export const es: Dict = {
   "offline.badge": "Sin conexión · en cola: {n}",
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Servidor no disponible · en cola: {n}",
+  /* core: data safety (#756) */
+  "storage.unsaved.badge": "No guardado en este dispositivo",
   "sync.stuck.badge": "No enviado: {n}",
   "sync.stuck.title": "No enviado: el servidor responde con un error",
   "sync.stuck.since": "Falla desde {when}",

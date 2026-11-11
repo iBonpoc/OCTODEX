@@ -457,6 +457,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     {
       validate: (v) =>
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+      // a cache the server (or the seed) fills again: an unreadable one is written anew, not held (#756)
+      overwriteOnReadError: true,
     },
   );
   // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)
