@@ -7,6 +7,7 @@ import { useFonts, Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_7
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
+import { StorageReadError } from "@/features/StorageReadError";
 import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
@@ -57,7 +58,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <I18nProvider>
             <AuthProvider>
-              <StoreProvider>
+              <StoreProvider readError={(retry, salvage, notSaved) => <StorageReadError onRetry={retry} onSalvage={salvage} notSaved={notSaved} />}>
                 <HintsProvider>
                   {/* pushes: a tap opens its record; the token is registered again (docs/specs/27-push.md §5) */}
                   <PushBridge />
