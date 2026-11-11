@@ -92,7 +92,8 @@ vi.mock("@/data/outboxOwner", async (orig) => {
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
 import { badgeState } from "../src/data/syncLink";
-import { forgetDeviceState, persistTiming } from "../src/data/persist";
+import { deviceGeneration, forgetDeviceState, persistTiming } from "../src/data/persist";
+import { OUTBOX_SORT_KEY, wipeIfPending } from "../src/cloud/account";
 import { makeSeed } from "../src/data/seed";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import { wipedOnDelete } from "../src/data/outboxOwner";
@@ -1245,5 +1246,33 @@ describe("unit:storeSync — the outbox is held (could not be read), then read a
     await wait(50);
     // before: u1's op came back with the late read, and the ownerless one was given to u2
     expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
+  });
+});
+
+describe("unit:storeSync — the outbox sorted again on a later start (#763 fourth review №1, №2)", () => {
+  it("the store filters and writes the outbox itself; the signed-in person's cache, sends and generation stay live", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(u1c1, 1), owned({ userId: "u9", companyId: "c1" }, 1));
+    storage.set(OUTBOX_SORT_KEY, JSON.stringify(["u1"])); // u1 deleted their account; the outbox could not be read then
+    signIn("u2", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    const gen = deviceGeneration();
+    const customers = valueOf(r).db.customers.length;
+    const loads = server.loads.length;
+    await wipeIfPending();
+    await settle();
+    await wait(50);
+    expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]); // written by the store, u1's gone
+    expect(deviceGeneration()).toBe(gen); // outboxOnly: the generation does not move (u2's writes and sends live)
+    expect(valueOf(r).db.customers.length).toBe(customers);
+    const p = valueOf(r).refresh(); // not blocked like a wiped cache: the reload goes to the server
+    await settle();
+    expect(server.loads.length).toBe(loads + 1);
+    answerLoads();
+    await p;
+    await wipeIfPending(); // the phone's outbox is clean now: the mark goes
+    expect(storage.has(OUTBOX_SORT_KEY)).toBe(false);
   });
 });

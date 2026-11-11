@@ -292,3 +292,48 @@ describe("unit:persist — review of #763: held changes and broken values (№6,
     expect(written).toEqual([]);
   });
 });
+
+describe("unit:persist — Writer.cancel (fourth review of #763 №2)", () => {
+  const manual = () => {
+    const calls: { k: string; v: string; ok: () => void; no: () => void }[] = [];
+    const set = (k: string, v: string) => new Promise<void>((ok, no) => calls.push({ k, v, ok, no: () => no(new Error("full")) }));
+    return { calls, set };
+  };
+  it("cancelled while a write is in flight, then it fails: no retry and no mark", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 0);
+    w.schedule("octo.held.v1.k", "[n]");
+    w.cancel("octo.held.v1.k");
+    m.calls[0]!.no();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(m.calls).toHaveLength(1);
+    expect(storageProblems().has("octo.held.v1.k")).toBe(false);
+  });
+  it("cancelled while a write is in flight, then it lands: onWritten is not called (the copy is not taken as current)", async () => {
+    const m = manual();
+    const heard: string[] = [];
+    const w = createWriter(m.set, 0, deviceGeneration, (k) => heard.push(k));
+    w.schedule("k", "v");
+    w.cancel("k");
+    m.calls[0]!.ok();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(heard).toEqual([]);
+  });
+  it("a waiting write and a waiting retry are dropped; a later schedule of the key is written as usual", async () => {
+    const m = manual();
+    const w = createWriter(m.set, 250);
+    w.schedule("k", "1");
+    w.cancel("k");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(m.calls).toHaveLength(0);
+    w.schedule("k", "2");
+    await vi.advanceTimersByTimeAsync(250);
+    m.calls[0]!.no();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(storageProblems().get("k")).toBe("write");
+    w.cancel("k"); // the retry waits: dropped, and its mark
+    expect(storageProblems().has("k")).toBe(false);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(m.calls).toHaveLength(1);
+  });
+});

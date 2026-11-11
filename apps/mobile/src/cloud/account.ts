@@ -134,42 +134,55 @@ export async function finishOnDevice(userId?: string | null): Promise<void> {
 }
 /** a wipe failed last time: once more (AuthProvider, on start) */
 export async function wipeIfPending(): Promise<void> {
+  // an outbox that could not be sorted at the deletion: only its sorting is repeated — the keys of whoever uses the
+  // phone now (role, queue, the company's cache…) are never wiped again (third review of #763 №3)
+  const sortFor = await AsyncStorage.getItem(OUTBOX_SORT_KEY).catch(() => null);
+  if (sortFor !== null) await sortOutboxAgain(parseIds(sortFor));
   const pending = await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null);
   if (!pending) return;
-  // the rest was wiped already, only the outbox could not be sorted: only that is repeated — the keys of whoever uses
-  // the phone now (role, queue, the company's cache…) are never wiped again (third review of #763 №3)
-  if (pending.startsWith(OUTBOX_ONLY)) return void (await sortOutboxAgain(pending.slice(OUTBOX_ONLY.length) || null));
   // the deleted person's id was kept with the mark ("1" — an older version: whose is not known)
   // never the session signed in now: after a failed wipe another person may have signed in (review #244, rule 6)
   await wipeKeepingOthers(pending === "1" ? null : pending, false);
 }
-/** the mark «only the outbox is left to sort»: OUTBOX_ONLY + the deleted person's id ("" — not known) */
-export const OUTBOX_ONLY = "outbox:";
-/** the outbox and the refused changes with their held copies, read: whose is what */
-async function readUnsorted(me: string | null) {
+/**
+ * «the outbox is still to be sorted for these deleted people» (a JSON list of ids, null — not known). Its own key, not
+ * WIPE_PENDING_KEY: an older version (an OTA rolled back) never reads it as a person's id and never wipes the phone
+ * again (fourth review №4); a second deletion meanwhile adds its person (№4 of the third review).
+ */
+export const OUTBOX_SORT_KEY = "octo.wipe.outbox.v1";
+const parseIds = (raw: string | null): (string | null)[] => {
+  try {
+    const v = JSON.parse(raw ?? "[]") as unknown;
+    return Array.isArray(v) ? v.filter((x): x is string | null => x === null || typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+};
+/** the outbox and the refused changes with their held copies, read: all their items, whoever's */
+async function readUnsorted() {
   const [out, outHeld, rej, rejHeld] = await Promise.all(UNSORTED_KEYS.map(readRaw));
   const readable = [out, outHeld, rej, rejHeld].every((r) => r.ok);
-  // the outbox with what a held state kept (heldKey is wiped by its prefix): other people's ops stay
-  const keep = othersOf([...parseOutbox(out.raw), ...parseOutbox(outHeld.raw).filter((o) => !parseOutbox(out.raw).some((x) => x.id === o.id))], me);
-  // the money changes the server refused: other people's stay too (review #263 №2)
-  const keepRejected = rejectedOthers([...parseRejected(rej.raw), ...parseRejected(rejHeld.raw).filter((o) => !parseRejected(rej.raw).some((x) => x.id === o.id))], me);
-  return { readable, keep, keepRejected };
+  const mainOut = parseOutbox(out.raw);
+  const mainRej = parseRejected(rej.raw);
+  // with what a held state kept (heldKey is wiped by its prefix)
+  const ops = [...mainOut, ...parseOutbox(outHeld.raw).filter((o) => !mainOut.some((x) => x.id === o.id))];
+  const refused = [...mainRej, ...parseRejected(rejHeld.raw).filter((o) => !mainRej.some((x) => x.id === o.id))];
+  return { readable, ops, refused };
 }
-/** the repeat of an outbox that could not be read: sorted when it reads, the mark stays till then */
-async function sortOutboxAgain(me: string | null): Promise<void> {
-  const { readable, keep, keepRejected } = await readUnsorted(me);
-  if (!readable) return;
-  forgetDeviceState(() => false, { userId: me, outboxOnly: true });
-  const put = (k: string, v: unknown[]) => (v.length ? AsyncStorage.setItem(k, JSON.stringify(v)) : AsyncStorage.removeItem(k));
-  try {
-    await put(OUTBOX_KEY, keep);
-    await put(REJECTED_KEY, keepRejected);
-    await AsyncStorage.removeItem(heldKey(OUTBOX_KEY));
-    await AsyncStorage.removeItem(heldKey(REJECTED_KEY));
-    await AsyncStorage.removeItem(WIPE_PENDING_KEY);
-  } catch (e) {
-    warn(`the outbox was not sorted: ${(e as Error)?.message}`); // the mark stays: the next start tries again
+/**
+ * The repeat for an outbox that could not be read. Nothing is written here (fourth review №1): the store owns the
+ * outbox while it runs (a send, a held copy) — it is told whose ops go (forgetDeviceState outboxOnly), filters its memory
+ * and writes it itself. The mark goes only when a start reads the phone's outbox with nothing of those people left.
+ */
+async function sortOutboxAgain(ids: (string | null)[]): Promise<void> {
+  const { readable, ops, refused } = await readUnsorted();
+  if (!readable) return; // still unreadable: the mark stays
+  const left = ids.some((me) => othersOf(ops, me).length !== ops.length || rejectedOthers(refused, me).length !== refused.length);
+  if (!left) {
+    await AsyncStorage.removeItem(OUTBOX_SORT_KEY).catch((e: unknown) => warn(`the sort mark stays: ${(e as Error)?.message}`));
+    return;
   }
+  for (const me of ids) forgetDeviceState(() => false, { userId: me, outboxOnly: true });
 }
 /**
  * The store in memory first (review #231): a pending write or a send still running cannot land after the wipe. The
@@ -182,20 +195,24 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   const session = orSession ? (await supabase.auth.getSession().catch(() => ({ data: { session: null } }))).data.session : null;
   const me = userId || session?.user.id || null;
   // read failed ≠ empty (review of #763 №3): another person's unsent ops could not be sorted out — those keys stay
-  // as they are and only their sorting is repeated on the next start (WIPE_PENDING_KEY = OUTBOX_ONLY + the person)
-  const { readable, keep, keepRejected } = await readUnsorted(me);
+  // as they are and only their sorting is repeated on the next starts (OUTBOX_SORT_KEY)
+  const { readable, ops, refused } = await readUnsorted();
+  const keep = othersOf(ops, me);
+  // the money changes the server refused: other people's stay too (review #263 №2)
+  const keepRejected = rejectedOthers(refused, me);
   forgetDeviceState(wipedOnDelete, { userId: me });
   if (!readable) {
-    // the mark first (second review Ж4): the wipe is repeated on the next start even if the app dies right here; a mark
-    // that cannot be written is not silent — the badge «Не сохранено на устройстве» and the log
-    await AsyncStorage.setItem(WIPE_PENDING_KEY, OUTBOX_ONLY + (me ?? "")).then(
-      () => reportStorage(WIPE_PENDING_KEY, null),
+    // the mark first (second review Ж4): the sorting is repeated on the next start even if the app dies right here; a
+    // mark that cannot be written is not silent — the badge «Не сохранено на устройстве» and the log
+    const was = parseIds(await AsyncStorage.getItem(OUTBOX_SORT_KEY).catch(() => null));
+    await AsyncStorage.setItem(OUTBOX_SORT_KEY, JSON.stringify([...new Set([...was, me])])).then(
+      () => reportStorage(OUTBOX_SORT_KEY, null),
       (e: unknown) => {
-        warn(`the repeat mark was not written: ${(e as Error)?.message}`);
-        reportStorage(WIPE_PENDING_KEY, "write");
+        warn(`the sort mark was not written: ${(e as Error)?.message}`);
+        reportStorage(OUTBOX_SORT_KEY, "write");
       },
     );
-    await wipeDevice(deviceStore, warn, me, [...UNSORTED_KEYS, WIPE_PENDING_KEY]);
+    await wipeDevice(deviceStore, warn, me, UNSORTED_KEYS);
     return;
   }
   await wipeDevice(deviceStore, warn, me);

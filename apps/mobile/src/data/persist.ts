@@ -310,6 +310,7 @@ export function usePersistentState<T>(
     writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (k) => {
       if (dropHeldAfterWrite.current !== k) return;
       dropHeldAfterWrite.current = null;
+      writer.current!.cancel(heldKey(k)); // a write of the copy scheduled after the first cancel (fourth review №3)
       dropHeld(k);
     });
   useEffect(() => {
