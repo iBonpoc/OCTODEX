@@ -243,6 +243,12 @@ export const en: Dict = {
   "offline.badge": "Offline · queued: {n}",
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Server unavailable · queued: {n}",
+  /* core: data safety — the estimate draft (#760) */
+  "est.draft.restored": "Draft continued: this estimate was not saved",
+  "est.draft.restart": "Start over",
+  "est.draft.ask": "Delete the draft?",
+  "est.draft.askHint": "This estimate is not saved: its client, title and lines will be lost.",
+  "est.draft.delete": "Delete",
   "sync.stuck.badge": "Not sent: {n}",
   // «Данные и деньги» (#756, A-01/A-02): the device storage
   "storage.readFailed.title": "Couldn’t read data from this device",

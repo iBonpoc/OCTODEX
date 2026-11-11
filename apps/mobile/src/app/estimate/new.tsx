@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -17,6 +17,8 @@ import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/c
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { useAuth } from "@/cloud/auth";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -26,16 +28,33 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * client → title → one list of line items (catalog or custom) → totals with discount, tax, deposit → message → send.
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
-export default function EstimateBuilder() {
-  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string }>();
+export default function EstimateBuilderScreen() {
+  const { mode } = useStore();
+  const auth = useAuth();
+  const { t } = useI18n();
+  // the person's drafts (#760): read before the builder starts, so a draft is its first state, not a later jump. The
+  // company from the sign-in, like the store's cache key — never from the cache, which may not have it yet (#859 №3)
+  const key = draftsKey(mode === "cloud", auth.company?.companyId, auth.userId);
+  const drafts = useEstimateDrafts(key ?? `${"octo.drafts.v1."}unknown`);
+  if (!key || !drafts.ready) return <Screen title={t("ue.newTitle")}>{null}</Screen>;
+  return <EstimateBuilder key={key} drafts={drafts} />;
+}
+
+type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string };
+
+function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
+  const params = useLocalSearchParams<Params>();
   const store = useStore();
   const { db } = store;
   const { t, money } = useI18n();
   const toast = useToast();
   const existing = params.id ? db.estimates.find((e) => e.id === params.id) : undefined;
-  const [estimateId] = useState(() => existing?.id ?? uid());
-  const [customerId, setCustomerId] = useState(existing?.customerId ?? params.customerId);
-  const [propertyId, setPropertyId] = useState(existing?.propertyId ?? params.propertyId);
+  // a new estimate opened from the same place as an unfinished one: it goes on (#760, audit Q-01)
+  const ctx = draftCtx(params);
+  const [draft, setDraft] = useState(() => findDraft(drafts.list, ctx, Date.now(), (id) => db.estimates.some((e) => e.id === id)));
+  const [estimateId] = useState(() => existing?.id ?? draft?.estimateId ?? uid());
+  const [customerId, setCustomerId] = useState(existing?.customerId ?? draft?.customerId ?? params.customerId);
+  const [propertyId, setPropertyId] = useState(existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
   // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
   const seeCosts = db.costsVisible ?? store.role !== "tech";
   const templates = pickableTemplates(db.estimateTemplates ?? []);
@@ -44,17 +63,50 @@ export default function EstimateBuilder() {
   // fixed when the screen opens: a template archived meanwhile (a sync) must not turn this into a new estimate (security check №2)
   const [tplEdit] = useState(() => (!existing && !given && params.editTemplate && canEditEstimateTemplates(store.role) ? templates.find((x) => x.id === params.editTemplate) : undefined));
   const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts, !!given.module) : null));
-  const [templateId, setTemplateId] = useState<string | undefined>(given?.id);
-  const [checkPrice, setCheckPrice] = useState<string[]>(fromTpl?.checkPrice ?? []);
-  const [startOpen, setStartOpen] = useState(() => !existing && !given && !tplEdit && templates.length > 0);
+  const [templateId, setTemplateId] = useState<string | undefined>(draft ? draft.templateId : given?.id);
+  const [checkPrice, setCheckPrice] = useState<string[]>(draft?.checkPrice ?? fromTpl?.checkPrice ?? []);
+  const [startOpen, setStartOpen] = useState(() => !existing && !draft && !given && !tplEdit && templates.length > 0);
   const [doc, setDoc] = useState<EstimateDoc>(() =>
-    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
+    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
   );
-  const [title, setTitle] = useState(existing?.doc ? existing.title : tplEdit?.name ?? given?.name ?? "");
+  const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   const [editing, setEditing] = useState<CustomLine | null | "new">(null);
   const [setting, setSetting] = useState<SettingKind>(null);
-  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit);
+  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit && !draft);
+  // every CHANGE of a new estimate is kept on the phone; opening it (a template's lines and name) is not a change
+  // (#859 №1); nothing worth keeping — no draft (#760)
+  const keyOfDrafts = drafts.key;
+  const setDrafts = drafts.setList;
+  const held = { estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+  const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
+  useEffect(() => {
+    if (!ctx) return;
+    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+    setDrafts((list) => nextDrafts(list, d, opened, Date.now()), keyOfDrafts);
+  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, opened, setDrafts, keyOfDrafts]);
+  const dropDraft = () => {
+    if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
+  };
+  /** «Начать заново» (after «Удалить черновик?» — rule 5: a confirmation, no undo across screens, #859): the builder as
+   *  if just opened from here, the draft goes */
+  const [askRestart, setAskRestart] = useState(false);
+  const restart = () => {
+    setAskRestart(false);
+    const fromHere = fromTpl ? (JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps);
+    const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: fromHere, templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
+    setDraft(undefined);
+    setOpened({ snapshot: draftSnapshot(fresh), restored: false });
+    setDoc(fresh.doc);
+    setCur(Math.max(0, fresh.doc.options.findIndex((o) => o.recommended)));
+    setTitle(fresh.title);
+    setCustomerId(fresh.customerId);
+    setPropertyId(fresh.propertyId);
+    setTemplateId(fresh.templateId);
+    setCheckPrice(fresh.checkPrice);
+    // no next sheet here: one over the leaving «Удалить черновик?» never shows on iPhone (#743) — the client and a
+    // template are picked from the builder itself
+  };
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
     if (x) {
@@ -118,6 +170,9 @@ export default function EstimateBuilder() {
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
+    // saved: the store holds it now. «Отменить» on the toast takes the saved estimate back out of the store; the builder
+    // is closed by then, so its content does not come back as a draft (#860)
+    dropDraft();
     toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);
     router.replace(`/estimate/${estimateId}${send ? "?send=1" : ""}`);
   };
@@ -161,6 +216,21 @@ export default function EstimateBuilder() {
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
         </T>
+      ) : null}
+      {draft ? (
+        <View testID="est-draft">
+          <Card>
+            <RowView>
+              <Icon name="note" s={size.iconSm} />
+              <T v="caption" tone="mut" style={{ flex: 1 }}>
+                {t("est.draft.restored")}
+              </T>
+              <View testID="est-draft-restart">
+                <Button label={t("est.draft.restart")} variant="secondary" onPress={() => setAskRestart(true)} />
+              </View>
+            </RowView>
+          </Card>
+        </View>
       ) : null}
       <Grid>
         <View style={{ gap: space[3] }}>
@@ -238,7 +308,9 @@ export default function EstimateBuilder() {
             </Card>
             </View>
           ))}
-          <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
+          <View testID="ue-add-line">
+            <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
+          </View>
         </View>
 
         <View style={{ gap: space[3] }}>
@@ -390,6 +462,17 @@ export default function EstimateBuilder() {
             </>
           ) : null}
           <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
+        </View>
+      </Sheet>
+      <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>
+        <View testID="est-draft-ask" style={{ gap: space[3] }}>
+          <T v="body" tone="mut">{t("est.draft.askHint")}</T>
+          <View testID="est-draft-delete">
+            <Button label={t("est.draft.delete")} icon="close" variant="danger" full onPress={restart} />
+          </View>
+          <View testID="est-draft-keep">
+            <Button label={t("common.cancel")} variant="secondary" full onPress={() => setAskRestart(false)} />
+          </View>
         </View>
       </Sheet>
       {/* «С чего начать?» (spec 07 §7.4): a choice menu in a sheet — rows (rule 12) */}

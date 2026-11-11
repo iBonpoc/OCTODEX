@@ -242,6 +242,12 @@ export const ru = {
   "offline.badge": "Без сети · в очереди: {n}",
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Сервер недоступен · в очереди: {n}",
+  /* core: data safety — the estimate draft (#760) */
+  "est.draft.restored": "Продолжен черновик: смета не была сохранена",
+  "est.draft.restart": "Начать заново",
+  "est.draft.ask": "Удалить черновик?",
+  "est.draft.askHint": "Смета не сохранена: её клиент, название и строки пропадут.",
+  "est.draft.delete": "Удалить",
   "sync.stuck.badge": "Не отправлено: {n}",
   // «Данные и деньги» (#756, A-01/A-02): the device storage
   "storage.readFailed.title": "Не удалось прочитать данные с устройства",

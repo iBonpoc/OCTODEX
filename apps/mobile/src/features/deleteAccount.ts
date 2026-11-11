@@ -171,8 +171,9 @@ export async function deleteWithRepeat(
 /* ---------- what is wiped from the device ---------- */
 /** the keys of this person on this device (the cloud cache of every company, the outbox, the role, the Plan's person, …) */
 export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1"];
-// «octo.broken.»: a broken outbox record kept aside (persist.ts brokenKeyOf, review of #910 №1)
-export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open.", "octo.broken."];
+// octo.drafts.v1. — unsaved estimates on the phone (estimateDraft.ts, #760): the client's data among them
+// octo.broken. — a broken outbox record kept aside (persist.ts brokenKeyOf, review of #910 №1)
+export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open.", "octo.drafts.v1.", "octo.broken."];
 export const isDeviceKey = (k: string) => DEVICE_KEYS.includes(k) || DEVICE_PREFIXES.some((p) => k.startsWith(p));
 /** set when a wipe failed: the next start wipes again (review #220 №6); its value is the deleted person's id (or "1"
  *  from older versions), so the repeat knows whose ops leave the shared outbox (review #240 №2) */
