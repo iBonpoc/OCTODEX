@@ -104,16 +104,21 @@ function toolbox(opts: { pg: boolean; faketime: boolean; aptWorks: boolean }) {
     writeFileSync(join(bin, "postgres"), "#!/usr/bin/env bash\necho 'postgres (PostgreSQL) 16.4'\n");
     for (const f of ["initdb", "postgres"]) spawnSync("chmod", ["+x", join(bin, f)]);
   }
+  const ext = join(dir, "ext");
+  mkdirSync(ext);
+  writeFileSync(join(ext, "pgcrypto.control"), "# pgcrypto\n");
   if (opts.faketime) writeFileSync(join(libroot, "x86_64-linux-gnu", "faketime", "libfaketime.so.1"), "");
   const calls = join(dir, "calls.log");
-  writeFileSync(join(dir, "apt.sh"), `#!/usr/bin/env bash\necho "apt $*" >> ${calls}\n${opts.aptWorks ? "exit 0" : "exit 100"}\n`);
+  // the stub apt, when it works, «installs» PostgreSQL the way the package does: the binaries appear
+  const installPg = `if [[ "$*" == *postgresql-16* ]]; then printf '#!/usr/bin/env bash\\n' > ${bin}/initdb; printf "#!/usr/bin/env bash\\necho 'postgres (PostgreSQL) 16.4'\\n" > ${bin}/postgres; chmod +x ${bin}/initdb ${bin}/postgres; fi`;
+  writeFileSync(join(dir, "apt.sh"), `#!/usr/bin/env bash\necho "apt $*" >> ${calls}\n${opts.aptWorks ? installPg + "\nexit 0" : "exit 100"}\n`);
   const src = join(dir, "libfaketime");
   const SHA = "d475b925943ad404c6c728ac868dc73949e7281c";
   const ghEnv = join(dir, "github_env");
   writeFileSync(ghEnv, "");
   const env: NodeJS.ProcessEnv = {
     ...process.env, RETRY_DELAYS: "0 0", HOME: dir,
-    DBTOOLS_PGBIN: bin, DBTOOLS_LIBROOT: libroot,
+    DBTOOLS_PGBIN: bin, DBTOOLS_LIBROOT: libroot, DBTOOLS_PGEXT: ext,
     DBTOOLS_APT_UPDATE: `bash ${join(dir, "apt.sh")} update`, DBTOOLS_APT_INSTALL: `bash ${join(dir, "apt.sh")} install`,
     DBTOOLS_FAKETIME_SRC: src, GITHUB_ENV: ghEnv,
     // «git clone» and «make» are stubs that leave what the real ones leave
@@ -185,13 +190,34 @@ describe("scripts/dbTools.sh: the database tools without Ubuntu's mirrors", () =
   });
 });
 
+describe("scripts/dbTools.sh: the first check of the job", () => {
+  it("PostgreSQL 16.x with pgcrypto: «checked» is printed", () => {
+    const t = toolbox({ pg: true, faketime: true, aptWorks: false });
+    expect(t.run("postgres").stdout).toContain("dbtools: checked — postgres (PostgreSQL) 16.4, pgcrypto present");
+  });
+  it("another major version fails with a plain note (the image must stay ubuntu-24.04)", () => {
+    const t = toolbox({ pg: true, faketime: true, aptWorks: false });
+    writeFileSync(join(t.dir, "pgbin", "postgres"), "#!/usr/bin/env bash\necho 'postgres (PostgreSQL) 17.0'\n");
+    const r = t.run("postgres");
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toMatch(/need PostgreSQL 16\.x[\s\S]*ubuntu-24\.04/);
+  });
+  it("no pgcrypto extension fails with a plain note", () => {
+    const t = toolbox({ pg: true, faketime: true, aptWorks: false });
+    spawnSync("rm", [join(t.dir, "ext", "pgcrypto.control")]);
+    const r = t.run("postgres");
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toMatch(/no pgcrypto extension/);
+  });
+});
+
 describe("scripts/playwrightInstall.sh: Chromium without apt when apt is down", () => {
-  function pw(depsWork: boolean) {
+  function pw(depsWork: boolean, launches = true) {
     const dir = mkdtempSync(join(tmpdir(), "pw-"));
     const log = join(dir, "log");
     const stub = join(dir, "pw.sh");
     writeFileSync(stub, `#!/usr/bin/env bash\necho "$*" >> ${log}\nif [[ "$*" == *--with-deps* ]]; then ${depsWork ? "exit 0" : "exit 100"}; fi\nexit 0\n`);
-    const r = spawnSync("bash", [join(repo, "scripts/playwrightInstall.sh")], { env: { ...process.env, PW_INSTALL: `bash ${stub}`, RETRY_DELAYS: "0 0" }, encoding: "utf8" });
+    const r = spawnSync("bash", [join(repo, "scripts/playwrightInstall.sh")], { env: { ...process.env, PW_INSTALL: `bash ${stub}`, RETRY_DELAYS: "0 0", PW_VERSION_CMD: "echo Version 1.x", PW_LAUNCH: launches ? "echo chromium launches" : "exit 1" }, encoding: "utf8" });
     return { r, log: readFileSync(log, "utf8") };
   }
   it("with dependencies when apt works (one call)", () => {
@@ -199,6 +225,11 @@ describe("scripts/playwrightInstall.sh: Chromium without apt when apt is down", 
     expect(r.status).toBe(0);
     expect(r.stdout).toContain("chromium with system dependencies");
     expect(log.trim().split("\n")).toEqual(["--with-deps chromium"]);
+  });
+  it("Chromium that is installed but does not start fails with a plain note", () => {
+    const { r } = pw(false, false);
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toMatch(/Chromium is installed but does not start/);
   });
   it("without dependencies when apt does not work, and says so", () => {
     const { r, log } = pw(false);

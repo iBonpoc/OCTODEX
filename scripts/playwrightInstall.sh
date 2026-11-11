@@ -12,3 +12,11 @@ else
   echo "playwright: apt did not work — chromium WITHOUT system dependencies (the image has them)"
   bash "$HERE/retry.sh" "playwright install chromium" bash -c "$PW chromium >/dev/null" || exit 1
 fi
+
+# Chromium must really start (audit condition, #1060): without the system dependencies it can be installed and still not run.
+LAUNCH="${PW_LAUNCH:-node $HERE/chromiumLaunches.cjs}"
+${PW_VERSION_CMD:-npx playwright --version}
+if ! bash -c "$LAUNCH"; then
+  echo "::error::Chromium is installed but does not start: its system libraries are missing (it was installed without them because apt is down?). Re-run the job when the network is back."
+  exit 1
+fi

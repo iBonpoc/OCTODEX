@@ -10,6 +10,7 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PGBIN_DIR="${DBTOOLS_PGBIN:-/usr/lib/postgresql/16/bin}"
+PGSHARE_EXT="${DBTOOLS_PGEXT:-/usr/share/postgresql/16/extension}"
 LIBROOT="${DBTOOLS_LIBROOT:-/usr/lib}"
 APT_INSTALL="${DBTOOLS_APT_INSTALL:-sudo apt-get install -y -qq}"
 APT_UPDATE="${DBTOOLS_APT_UPDATE:-sudo apt-get update -qq}"
@@ -32,6 +33,19 @@ if has postgres; then
     echo "dbtools: postgresql-16: not on the image — apt with retries"
     bash "$HERE/retry.sh" "apt: postgresql-16" bash -c "$APT_UPDATE && $APT_INSTALL postgresql-16 >/dev/null" || exit 1
   fi
+fi
+
+# The first thing the job checks (audit condition, #1060): the server is really 16.x and has the extension the tests need
+# (pgcrypto — the tests do without pg_cron / pg_net: they skip them as «not here»). A wrong image fails here, plainly.
+if has postgres; then
+  ver="$("$PGBIN_DIR/postgres" --version 2>&1)"
+  if ! echo "$ver" | grep -Eq '(^|[^0-9])16\.[0-9]'; then
+    echo "::error::the database tests need PostgreSQL 16.x in $PGBIN_DIR, found: '$ver'. The image must stay ubuntu-24.04 (not ubuntu-latest)."; exit 1
+  fi
+  if [ ! -f "$PGSHARE_EXT/pgcrypto.control" ]; then
+    echo "::error::PostgreSQL 16 has no pgcrypto extension ($PGSHARE_EXT/pgcrypto.control is missing): the tests create it. Check the image / the postgresql-16 package."; exit 1
+  fi
+  echo "dbtools: checked — $ver, pgcrypto present"
 fi
 
 if has faketime; then
