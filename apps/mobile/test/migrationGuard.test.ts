@@ -10,8 +10,13 @@
  *    writes) needs the mark `-- rule16: small (<why>)`; not needed on a table the same migration created.
  * 3. `create index concurrently` only in a file of nothing but such statements (supabase db push runs that file outside
  *    a transaction, CLI 3.0.0, 20261106190000; anything else wraps it in one and the push fails).
+ * 4. (#759) A migration new against main is dated AFTER the last migration on main: `supabase db push` refuses a file
+ *    older than one the base already has, and the release stops (08.11: phones 8 hours without updates, CHECKS §9 №9).
+ *    Only the files in release.yml's OUT_OF_ORDER_OK may be older. Main: I18N_BASE (CI: the PR's base, checks.yml) or
+ *    origin/main.
  */
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -128,5 +133,79 @@ describe("migrationGuard — the new migrations of this repository", () => {
   it("the merged history would be caught today (the guard is not blind): at least one old drop/rename is found", () => {
     const old = files.filter((x) => x.slice(0, 14) <= BASELINE).flatMap((f) => guardMigration(f, fs.readFileSync(path.join(ROOT, "supabase/migrations", f), "utf8")));
     expect(old.some((e) => /rename|drop/.test(e))).toBe(true);
+  });
+});
+
+/* ---------- 4. the time of a new migration (#759) ---------- */
+const stamp = (f: string) => path.basename(f).slice(0, 14);
+/**
+ * The new migrations (in `head`, not in `main`) dated at or before the last one on main, or sharing a time with another
+ * new one; `ok` — release.yml's OUT_OF_ORDER_OK (file names).
+ */
+export function outOfOrder(main: readonly string[], head: readonly string[], ok: readonly string[] = []): string[] {
+  const merged = new Set(main.map((f) => path.basename(f)));
+  const last = main.map(stamp).sort().at(-1) ?? "";
+  const fresh = head.map((f) => path.basename(f)).filter((f) => f.endsWith(".sql") && !merged.has(f));
+  const errs: string[] = [];
+  for (const f of fresh) {
+    if (ok.includes(f)) continue;
+    if (stamp(f) <= last)
+      errs.push(`${f}: dated ${stamp(f)}, not after the last migration on main (${last}) — supabase db push refuses it and the release stops; give it a new time (CLAUDE.md: new file, CHECKS §9 №9)`);
+    else if (fresh.some((o) => o !== f && stamp(o) === stamp(f))) errs.push(`${f}: the same time as another new migration — give each its own`);
+  }
+  return errs;
+}
+/** release.yml's OUT_OF_ORDER_OK: the file names the release lets through out of order */
+export function outOfOrderOk(releaseYml: string): string[] {
+  const m = /OUT_OF_ORDER_OK:\s*\|\s*\n((?:[ \t]+\S.*\n?)+)/.exec(releaseYml);
+  return m ? m[1].split("\n").map((l) => l.trim()).filter((l) => l.endsWith(".sql")).map((l) => path.basename(l)) : [];
+}
+
+describe("migrationGuard — a new migration is dated after the last on main (#759, the rule itself)", () => {
+  const main = ["20261110170000_a.sql", "20261111030000_trash.sql"];
+  it("older than main's last — refused (the release of 08.11: tech_no_costs after checklists)", () => {
+    expect(outOfOrder(main, [...main, "20261111020000_late.sql"])).toHaveLength(1);
+    expect(outOfOrder(main, [...main, "20261111030000_same.sql"])).toHaveLength(1); // the same time: refused too
+  });
+  it("after main's last — passes; merged files are never checked again", () => {
+    expect(outOfOrder(main, [...main, "20261111040000_new.sql"])).toEqual([]);
+    expect(outOfOrder(main, main)).toEqual([]);
+  });
+  it("two new ones with one time — refused", () => {
+    expect(outOfOrder(main, [...main, "20261111040000_x.sql", "20261111040000_y.sql"])).toHaveLength(2);
+  });
+  it("a file in OUT_OF_ORDER_OK passes", () => {
+    expect(outOfOrder(main, [...main, "20261108130000_tech_no_costs.sql"], ["20261108130000_tech_no_costs.sql"])).toEqual([]);
+  });
+  it("OUT_OF_ORDER_OK is read from release.yml", () => {
+    const yml = fs.readFileSync(path.join(ROOT, ".github/workflows/release.yml"), "utf8");
+    expect(outOfOrderOk(yml)).toContain("20261108130000_tech_no_costs.sql");
+    expect(outOfOrderOk("        env:\n          OUT_OF_ORDER_OK: |\n            supabase/migrations/1_a.sql\n            supabase/migrations/2_b.sql\n        run: x\n")).toEqual(["1_a.sql", "2_b.sql"]);
+  });
+});
+
+describe("migrationGuard — the new migrations of this branch are dated after main's (#759)", () => {
+  const git = (...a: string[]) => execFileSync("git", a, { cwd: ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  const base = (() => {
+    for (const ref of [process.env.I18N_BASE, "origin/main"]) {
+      if (!ref) continue;
+      try {
+        git("rev-parse", "--verify", `${ref}^{commit}`);
+        return ref;
+      } catch {
+        /* not fetched: the next */
+      }
+    }
+    return null;
+  })();
+  it("main's migrations are known (CI: I18N_BASE; here: git fetch origin main)", () => {
+    expect(base, "no main to compare with: git fetch origin main").toBeTruthy();
+  });
+  it("every migration new against main is dated after main's last", () => {
+    if (!base) return;
+    const main = git("ls-tree", "--name-only", base, "supabase/migrations/").split("\n").filter(Boolean);
+    const head = fs.readdirSync(path.join(ROOT, "supabase/migrations"));
+    const ok = outOfOrderOk(fs.readFileSync(path.join(ROOT, ".github/workflows/release.yml"), "utf8"));
+    expect(outOfOrder(main, head, ok)).toEqual([]);
   });
 });
