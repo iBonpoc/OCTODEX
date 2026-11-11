@@ -23,6 +23,14 @@ describe("unit:access — the demo tech sees only his own work (#868)", () => {
     expect(canSeeVisit(db, tech, theirs.id)).toBe(false);
     expect(canSeeVisit(db, tech, "nope")).toBe(false);
   });
+  it("an inspection assigned to nobody (the seed's v6) is not the tech's: «no access», as the server (visits_select, T22)", () => {
+    const v6 = db.visits.find((v) => v.id === "v6")!;
+    expect(v6.techId).toBeNull();
+    expect(canSeeVisit(db, tech, "v6")).toBe(false);
+    // made his: he reads it (e2e 163 does so before the tech's step)
+    const mine6 = { ...db, visits: db.visits.map((v) => (v.id === "v6" ? { ...v, techId: db.me, assigneeIds: [db.me] } : v)) };
+    expect(canSeeVisit(mine6, tech, "v6")).toBe(true);
+  });
   it("jobs: with a visit of mine yes, another tech's no (T22, T35)", () => {
     expect(canSeeJob(db, tech, mine.jobId)).toBe(true);
     expect(canSeeJob(db, tech, theirs.jobId)).toBe(false);
