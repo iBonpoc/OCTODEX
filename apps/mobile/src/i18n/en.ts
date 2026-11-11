@@ -2803,7 +2803,6 @@ export const en: Dict = {
   "mod.gutters.set.lenHint": "Every length — on the drawing, in the review, in the PDFs and in the parts list — is shown in this format. It is one setting for the company. Typing a length in another unit still works.",
   "mod.gutters.set.lenFormat": "Show lengths as",
   "mod.gutters.set.lenf.ftin": "Feet and inches",
-  "mod.gutters.set.lenf.ft": "Decimal feet",
   "mod.gutters.set.lenf.in": "Inches",
   "mod.gutters.set.lenf.m": "Meters",
   "mod.gutters.set.lenf.cm": "Centimeters",

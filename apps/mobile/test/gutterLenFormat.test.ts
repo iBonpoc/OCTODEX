@@ -29,18 +29,18 @@ const IN = 73 * 12 + 2.5; // 73′ 2½″
 
 describe("the six formats", () => {
   it("the same length in each", () => {
-    const want: Record<LenFormat, string> = { ftin: "73′ 2½″", ft: "73.21′", in: "878½″", m: "22.314 m", cm: "2231.4 cm", mm: "22314 mm" };
+    const want: Record<LenFormat, string> = { ftin: "73′ 2½″", in: "878½″", m: "22.314 m", cm: "2231.4 cm", mm: "22314 mm" };
     for (const f of LEN_FORMATS) expect(fmtLen(IN, f), f).toBe(want[f]);
   });
-  it("edges: zero, a whole foot, 11⅞″ rounding up to the foot, one eighth, a long run", () => {
+  it("edges: zero, a whole foot, no decimal feet (the format is not offered), 11⅞″ rounding up to the foot, one eighth, a long run", () => {
     expect(fmtLen(0, "ftin")).toBe("0″");
-    expect(fmtLen(0, "ft")).toBe("0′");
     expect(fmtLen(12, "ftin")).toBe("1′");
     expect(fmtLen(11.9375, "ftin")).toBe("1′");
     expect(fmtLen(0.125, "in")).toBe("⅛″");
     expect(fmtLen(250 * 12 + 4, "ftin")).toBe("250′ 4″");
-    expect(fmtLen(250 * 12 + 4, "ft")).toBe("250.33′");
     expect(fmtLen(12, "mm")).toBe("305 mm");
+    expect(LEN_FORMATS).toEqual(["ftin", "in", "m", "cm", "mm"]);
+    expect(isLenFormat("ft")).toBe(false);
   });
   it("the decimal point is «.» whatever the language (rule 7): no comma anywhere", () => {
     for (const f of LEN_FORMATS) expect(fmtLen(IN + 0.3, f)).not.toContain(",");
@@ -99,7 +99,7 @@ describe("the documents follow the format, in every language", () => {
         const h = drawingPdfHtml({ kind: "crew", drawing: d, spec, t: tFor(lang), opts: { lang }, company, rough: false, date: "11/10/2026", fmt: f });
         expect(h).toContain(fmtLen(ft(73) + 2, f));
         const body = h.slice(h.indexOf("<h2>"));
-        if (f !== "ftin" && f !== "ft") expect(body).not.toMatch(/\d′/);
+        if (f !== "ftin") expect(body).not.toMatch(/\d′/);
         expect(body).not.toMatch(/\d\.\d{4,}/);
       });
     }
@@ -107,7 +107,7 @@ describe("the documents follow the format, in every language", () => {
   it("parts: the quantity of a length and the coil's blank in the format", () => {
     const en = tFor("en");
     expect(partQty(en, { qty: "73.1666666667", unit: "ft" }, "mm")).toBe("22301 mm");
-    expect(partQty(en, { qty: "10", unit: "ft" }, "ft")).toBe("10′");
+    expect(partQty(en, { qty: "10", unit: "ft" }, "ftin")).toBe("10′");
     const coil = parts.find((p) => p.key.startsWith("coil."))!;
     expect(partName(en, coil, "mm")).toContain("302 mm");
     expect(partName(en, coil)).toContain("11⅞″");

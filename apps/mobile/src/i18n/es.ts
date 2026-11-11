@@ -2803,7 +2803,6 @@ export const es: Dict = {
   "mod.gutters.set.lenHint": "Toda longitud — en el plano, en la revisión, en los PDF y en la lista de piezas — se muestra en este formato. Es un ajuste de la empresa. Se puede escribir una longitud en otra unidad.",
   "mod.gutters.set.lenFormat": "Mostrar longitudes como",
   "mod.gutters.set.lenf.ftin": "Pies y pulgadas",
-  "mod.gutters.set.lenf.ft": "Pies decimales",
   "mod.gutters.set.lenf.in": "Pulgadas",
   "mod.gutters.set.lenf.m": "Metros",
   "mod.gutters.set.lenf.cm": "Centímetros",

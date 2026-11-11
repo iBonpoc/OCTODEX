@@ -2803,7 +2803,6 @@ export const ru = {
   "mod.gutters.set.lenHint": "Каждая длина — на чертеже, в просмотре, в PDF и в списке деталей — показывается в этом формате. Это одна настройка компании. Вводить длину можно и в другой единице.",
   "mod.gutters.set.lenFormat": "Показывать длины",
   "mod.gutters.set.lenf.ftin": "Футы и дюймы",
-  "mod.gutters.set.lenf.ft": "Десятичные футы",
   "mod.gutters.set.lenf.in": "Дюймы",
   "mod.gutters.set.lenf.m": "Метры",
   "mod.gutters.set.lenf.cm": "Сантиметры",
