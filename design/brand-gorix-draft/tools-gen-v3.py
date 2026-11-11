@@ -95,15 +95,20 @@ def loading(kind):
             f'<animateMotion dur="1800ms" repeatCount="indefinite" calcMode="spline" keyTimes="0;1" keySplines=".45 0 .55 1" path="{CL.format(x=DOT[kind][0])}"/></g></svg>')
 
 def success(kind):
-    """Done: the dot rides to its place, flashes, becomes the green «ok» check (always with the word). 510 = durFast + durSlow."""
+    """Done — the same start as the splash: the dot draws the same G (650 ms, same easing), rests inside it,
+    then grows, turns green «ok» and shows the check. Total 1200 = motion.durBrand. Always with the word."""
     cx, cy, r = DOT[kind]
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><title>GoRix done v3.1 · 510 ms; always with the word</title>'
-            f'<path fill="var(--i,#F2F3F5)" d="{RING[kind]}"/><g><circle r="{round(r*1.25)}" fill="var(--ring,#24272D)"/><circle r="{r}" fill="#FBFF00">'
-            f'<animate attributeName="r" values="{r};{round(r*1.5)};{round(r*1.2)}" begin="300ms" dur="210ms" fill="freeze"/>'
-            f'<animate attributeName="fill" values="#FBFF00;{OK}" begin="380ms" dur="130ms" fill="freeze"/></circle>'
-            f'<path d="M-46 4 l32 32 l62 -66" fill="none" stroke="{ON_ACC}" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" opacity="0">'
-            f'<set attributeName="opacity" to="1" begin="420ms" fill="freeze"/></path>'
-            f'<animateMotion dur="300ms" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".2 .8 .2 1" path="{CL.format(x=cx)}"/></g></svg>')
+    r = 72
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" class="gx3s"><title>GoRix done v3.1 · 1200 ms (durBrand); always with the word</title>'
+            '<style>.gx3s .cover{fill:none;stroke:var(--bgc,#24272D);stroke-width:180;stroke-dasharray:1000 1000;animation:gx3sun 650ms cubic-bezier(.4,0,.6,1) forwards}'
+            '@keyframes gx3sun{to{stroke-dashoffset:-1000}}</style>'
+            f'<path fill="var(--i,#F2F3F5)" d="{RING[kind]}"/><path class="cover" pathLength="1000" d="{COVER.format(x=cx)}"/>'
+            f'<g><circle r="{round(r*1.25)}" fill="var(--ring,#24272D)"><animate attributeName="r" values="{round(r*1.25)};{round(r*1.9)};{round(r*1.6)}" begin="800ms" dur="250ms" fill="freeze"/></circle>'
+            f'<circle r="{r}" fill="#FBFF00"><animate attributeName="r" values="{r};{round(r*1.6)};{round(r*1.35)}" begin="800ms" dur="250ms" fill="freeze"/>'
+            f'<animate attributeName="fill" values="#FBFF00;{OK}" begin="900ms" dur="200ms" fill="freeze"/></circle>'
+            f'<path d="M-46 4 l32 32 l62 -66" fill="none" stroke="{ON_ACC}" stroke-width="26" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1 1" stroke-dashoffset="1">'
+            f'<animate attributeName="stroke-dashoffset" values="1;0" begin="1000ms" dur="200ms" fill="freeze"/></path>'
+            f'<animateMotion dur="650ms" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".4 0 .6 1" path="{CL.replace("M600 232", "M760 232").format(x=cx)}"/></g></svg>')
 
 def go_button(ink, title):
     """Second direction (sketch): «Go» in the yellow pill of the main button + «Rix» in ink."""
