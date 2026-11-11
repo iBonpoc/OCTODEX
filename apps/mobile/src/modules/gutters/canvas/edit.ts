@@ -159,6 +159,26 @@ export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawi
   };
 }
 
+/** a split corner: the second gutter's end stands this far (inches) from the first one's — past the 1″ a join is read at, so each has its own end cap */
+export const SPLIT_GAP_IN = 3;
+/**
+ * «Разъединить угол» (#933): the corner is made two free ends. The second gutter of the corner is shortened at the
+ * meeting end by SPLIT_GAP_IN (a taped length by the same bit), so the join is gone and both gutters have an end cap; the
+ * rest of the line (other corners, downspouts, faces) stays. The same drawing back when the gutter is too short.
+ */
+export function splitCorner(d: Drawing, corner: Pick<FoundCorner, "runs">): Drawing {
+  const [, second] = corner.runs;
+  const r = d.runs.find((x) => x.id === second.id);
+  if (!r) return d;
+  const L = Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]);
+  if (L - SPLIT_GAP_IN < MIN_RUN_IN) return d;
+  const fixed = second.end === 0 ? r.b : r.a;
+  const at = second.end === 0 ? r.a : r.b;
+  const ux = (at[0] - fixed[0]) / L, uy = (at[1] - fixed[1]) / L;
+  const p: P = [fixed[0] + ux * (L - SPLIT_GAP_IN), fixed[1] + uy * (L - SPLIT_GAP_IN)];
+  return moveEndAlong(d, second.id, second.end, p);
+}
+
 /** a downspout on the nearest line under the finger (none if no line is near) */
 export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs: Omit<DrawnDownspout, "id" | "runId" | "atIn">, ch?: Choices): Drawing {
   const n = nearestRun(d, p, tolIn);

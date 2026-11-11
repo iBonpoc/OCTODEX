@@ -2509,6 +2509,8 @@ export const ru = {
   "mod.gutters.draw.cornerIn": "внутр.",
   "mod.gutters.draw.cornerBay": "эркер",
   "mod.gutters.draw.cornerSplash": "{k} · отбойник",
+  "mod.gutters.draw.cornerSplit": "Разъединить угол",
+  "mod.gutters.draw.cornerSplit.done": "Угол разъединён: у желобов свои заглушки",
   "mod.gutters.draw.cornerTitle": "Угол",
   "mod.gutters.draw.cornerNote": "Сменится сторона всей линии: заглушки L/R и другие углы тоже. На внутреннем угле — отбойник.",
   "mod.gutters.draw.redoShort": "Вперёд",
