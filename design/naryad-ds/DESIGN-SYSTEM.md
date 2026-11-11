@@ -1674,7 +1674,7 @@ iOS «Уменьшение движения», Android «Убрать анима
 ### 22.2. Новые компоненты и доработки
 | № | Что | На чём | Раздел | Когда |
 |---|---|---|---|---|
-| Н-40 | `Sheet` + `footer`, высоты `fit / medium / large`, `SheetPage` | `ui/overlays.tsx` | Б1 | до |
+| Н-40 | `Sheet` + `footer`, высоты `fit / medium / large`, `SheetPage` | `ui/overlays.tsx` | Б1 | до ✅ (`footer`, `height`, `onBack` — страница внутри шторки; в витрине «Окна: шторки», e2e 265; перевод экранов на `footer` — по таблице замен) |
 | Н-41 | `ConfirmDialog` + `useConfirm()` | новый, `Glass strong` | Б3 | до |
 | Н-42 | `PickerSheet` (одиночный, множественный, поиск, создание) | `Sheet` + `ListRow` | А3 | до |
 | Н-43 | `SelectField` | `Menu` + строка | А2 | до |

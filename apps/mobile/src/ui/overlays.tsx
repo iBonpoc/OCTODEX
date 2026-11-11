@@ -160,11 +160,21 @@ export function Sheet({
   children,
   dirty,
   onSave,
+  footer,
+  height = "fit",
+  onBack,
 }: {
   visible: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  /** the pinned bottom bar (DS Б1): the main action, always in view above the keyboard; the body scrolls above it */
+  footer?: ReactNode;
+  /** `fit` — by the content (default), at most `sheetHeightRatio`; `medium` — half the screen, can be pulled to `large`;
+   *  `large` — nearly the full screen. Centred windows from 820 are always by the content. */
+  height?: "fit" | "medium" | "large";
+  /** a nested step is a page inside the sheet, never a second sheet (DS Б1): «‹ Назад» goes to the page before */
+  onBack?: () => void;
   /** unsaved changes in the sheet */
   dirty?: boolean;
   /** "Save" in the unsaved-changes question */
@@ -261,7 +271,8 @@ export function Sheet({
     if (visible) scrollTop.current = 0;
   }, [visible]);
   const follow = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
-  const maxH = full ? winH - insets.top - space[2] : winH * component.sheetHeightRatio;
+  const fullH = winH - insets.top - space[2];
+  const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
@@ -287,13 +298,14 @@ export function Sheet({
         <Animated.View
           entering={reduce ? undefined : SlideInDown.duration(motion.durSlow)}
           exiting={reduce ? undefined : SlideOutDown.duration(motion.durBase)}
-          style={[{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%", maxHeight: wide ? "100%" : maxH }, wide ? null : follow]}
+          style={[{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%", maxHeight: wide ? "100%" : maxH }, !wide && height !== "fit" ? { height: maxH } : null, wide ? null : follow]}
           accessibilityViewIsModal
         >
           <Glass
             strong
             style={{
               flexShrink: 1,
+              flexGrow: !wide && height !== "fit" ? 1 : 0,
               borderRadius: component.sheetRadius,
               borderBottomLeftRadius: wide ? component.sheetRadius : 0,
               borderBottomRightRadius: wide ? component.sheetRadius : 0,
@@ -318,6 +330,14 @@ export function Sheet({
               ) : null}
               {title ? (
                 <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: size.hitMin }}>
+                  {onBack ? (
+                    <Press testID="sheet-back" onPress={onBack} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.back")}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
+                        <Icon name="chevronLeft" s={size.iconSm} />
+                        <T v="button">{t("common.back")}</T>
+                      </View>
+                    </Press>
+                  ) : null}
                   <T v="title" style={{ flexShrink: 1 }}>{title}</T>
                   <Press onPress={requestClose} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
                     <View
@@ -375,7 +395,7 @@ export function Sheet({
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */
               <GestureDetector gesture={bodyPan}>
-              <View style={{ flexShrink: 1 }} testID="sheet-body">
+              <View style={{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }} testID="sheet-body">
                 <GestureDetector gesture={scrollNative}>
                 <ScrollView
                   style={{ flexGrow: 0 }}
@@ -393,6 +413,11 @@ export function Sheet({
               </View>
               </GestureDetector>
             )}
+            {footer && !ask ? (
+              <View testID="sheet-footer" style={{ paddingTop: space[2] }}>
+                {footer}
+              </View>
+            ) : null}
           </Glass>
         </Animated.View>
       </KeyboardAvoidingView>

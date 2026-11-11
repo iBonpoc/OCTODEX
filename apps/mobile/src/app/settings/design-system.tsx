@@ -3,6 +3,7 @@ import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 import { Screen } from "@/ui/surfaces";
 import { TokenSections } from "@/features/showcase/Tokens";
+import { WindowsSection } from "@/features/showcase/Windows";
 
 /**
  * «Дизайн-система» — the showcase (#1093, founder 11.11.2026): the same components and tokens as the app, live, in both
@@ -15,6 +16,7 @@ export default function DesignSystemShowcase() {
       <View testID="showcase-intro">
         <T v="caption" tone="mut">{t("ds.intro")}</T>
       </View>
+      <WindowsSection />
       <TokenSections />
     </Screen>
   );
