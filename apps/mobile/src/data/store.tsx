@@ -455,7 +455,7 @@ export function StoreProvider({
 }: {
   children: ReactNode;
   /** `salvage` — a broken outbox record: keep its copy and go on (null for a failed read) */
-  readError?: (retry: () => void, salvage: (() => void) | null) => ReactNode;
+  readError?: (retry: () => void, salvage: (() => void) | null, notSaved: boolean) => ReactNode;
 }) {
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
@@ -2505,7 +2505,8 @@ export function StoreProvider({
     const retryAll = () => health.forEach((h) => h.readError && h.retry());
     const broken = health.filter((h) => h.salvage);
     const salvageAll = broken.length ? () => broken.forEach((h) => h.salvage!()) : null;
-    return <>{readError?.(retryAll, salvageAll) ?? null}</>;
+    // the copy of a broken record was refused (full storage): said on the error screen itself (review of #910, round 2 №1)
+    return <>{readError?.(retryAll, salvageAll, broken.some((h) => h.writeFailed)) ?? null}</>;
   }
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;
 

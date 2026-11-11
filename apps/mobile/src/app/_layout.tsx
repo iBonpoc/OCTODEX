@@ -58,7 +58,7 @@ export default function RootLayout() {
         <ThemeProvider>
           <I18nProvider>
             <AuthProvider>
-              <StoreProvider readError={(retry, salvage) => <StorageReadError onRetry={retry} onSalvage={salvage} />}>
+              <StoreProvider readError={(retry, salvage, notSaved) => <StorageReadError onRetry={retry} onSalvage={salvage} notSaved={notSaved} />}>
                 <HintsProvider>
                   {/* pushes: a tap opens its record; the token is registered again (docs/specs/27-push.md §5) */}
                   <PushBridge />

@@ -343,3 +343,17 @@ describe("unit:persistHook — a broken outbox: keep its copy and go on (review 
     root.unmount();
   }, 10_000);
 });
+
+describe("unit:persistHook — a cache the device cannot read (review of #910, round 2 №2)", () => {
+  it("after every try fails, a cache starts fresh and is loaded — it never locks the app", async () => {
+    storage.set("octo.cloud.v1.c1", TWO);
+    const root = render(Cache, { k: "octo.cloud.v1.c1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    expect((root.out as OutOps)[2]).toBe(true);
+    expect((root.out as OutOps)[3].readError).toBeNull();
+    expect((root.out as OutOps)[0]).toEqual([]);
+    root.unmount();
+  }, 10_000);
+});

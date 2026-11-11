@@ -226,7 +226,13 @@ export function usePersistentState<T>(
         }
         setState({ key, value, loaded: true });
       })
-      .catch(() => alive && w === wiped.current && setState({ key, value: init(), loaded: false, readError: "read" }));
+      .catch(() => {
+        if (!alive || w !== wiped.current) return;
+        // what the phone has only here (strict) waits for «Повторить»; a cache (the server's copy, the demo, a role)
+        // starts fresh as before — a cache the device can never read (Android: a row over 2 MB) must not lock the app
+        // for good (review of #910, second round №2)
+        setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true });
+      });
     return () => {
       alive = false;
     };

@@ -12,7 +12,7 @@ import { Button } from "@/ui/controls";
  * — after a confirmation its copy is kept on the device and the app starts without it (review of #910 №1).
  * Rendered by StoreProvider instead of the app (no store here).
  */
-export function StorageReadError({ onRetry, onSalvage }: { onRetry: () => void; onSalvage?: (() => void) | null }) {
+export function StorageReadError({ onRetry, onSalvage, notSaved }: { onRetry: () => void; onSalvage?: (() => void) | null; notSaved?: boolean }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [asking, setAsking] = useState(false);
@@ -31,6 +31,15 @@ export function StorageReadError({ onRetry, onSalvage }: { onRetry: () => void; 
             <T v="body" center>
               {t("storage.corrupt.confirm")}
             </T>
+            {notSaved ? (
+              // the copy was refused (full storage): «Продолжить» did nothing — say why and what to do
+              <View testID="storage-salvage-failed" style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
+                <Icon name="alert" s={size.iconSm} color={c.status.bad.text} />
+                <T v="body" w="semibold" style={{ color: c.status.bad.text, flexShrink: 1 }}>
+                  {t("storage.corrupt.noSpace")}
+                </T>
+              </View>
+            ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: space[2] }}>
               <View testID="storage-salvage-cancel">
                 <Button variant="secondary" label={t("storage.corrupt.cancel")} onPress={() => setAsking(false)} />

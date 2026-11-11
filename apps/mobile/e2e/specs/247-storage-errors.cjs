@@ -16,7 +16,6 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.outbox.v1", '[{"id":"op1"},'));
   await h.go("/more");
   await errorScreen().waitFor({ timeout: 5000 });
-  await h.expectText(/Не удалось прочитать данные с устройства/, "the read-error screen");
   h.expect((await p.locator('[data-testid="more-screen"]').count()) === 0, "the app is not shown over the error");
   await p.waitForTimeout(500);
   h.expect((await outbox()) === '[{"id":"op1"},', `the broken outbox is kept as it is (${await outbox()})`);
@@ -41,7 +40,20 @@ exports.run = async (h) => {
   await p.locator('[data-testid="storage-salvage"]:visible').click();
   await p.locator('[data-testid="storage-salvage-confirm"]:visible').waitFor({ timeout: 3000 });
   h.expect((await outbox()) === '[{"id":"op2"},', "nothing written before the confirmation");
+  // the device has no room for the copy: «Продолжить» says so, the broken record stays
+  await p.evaluate(() => {
+    const set = Storage.prototype.setItem;
+    window.__realSet = set;
+    Storage.prototype.setItem = function (k, v) {
+      if (String(k).startsWith("octo.broken.")) throw new DOMException("The quota has been exceeded.", "QuotaExceededError");
+      return set.call(this, k, v);
+    };
+  });
+  await p.locator('[data-testid="storage-salvage-yes"]:visible').click();
+  await p.locator('[data-testid="storage-salvage-failed"]:visible').waitFor({ timeout: 3000 });
+  h.expect((await outbox()) === '[{"id":"op2"},', "the copy refused: the broken record is not overwritten");
   await h.shot("salvage-confirm");
+  await p.evaluate(() => (Storage.prototype.setItem = window.__realSet));
   await p.locator('[data-testid="storage-salvage-yes"]:visible').click();
   await p.locator('[data-testid="more-screen"]:visible').waitFor({ timeout: 5000 });
   const copies = await p.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("octo.broken.octo.outbox.v1.")).map((k) => localStorage.getItem(k)));
@@ -60,8 +72,6 @@ exports.run = async (h) => {
   const sync = p.locator('[data-testid="more-sync"]:visible');
   await sync.waitFor({ timeout: 5000 });
   await sync.locator('[data-testid="storage-not-saved"]').waitFor({ timeout: 5000 });
-  const line = await sync.innerText();
-  h.expect(/Не сохранено на устройстве/.test(line), `the line in «Ещё» (${line})`);
-  h.expect(!/всё сохранено/.test(line), `never «всё сохранено» (${line})`);
+  h.expect((await sync.locator('[data-testid="more-sync-ok"]').count()) === 0, "never «Онлайн · всё сохранено»");
   await h.shot("not-saved");
 };

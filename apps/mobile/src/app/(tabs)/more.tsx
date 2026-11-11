@@ -111,7 +111,7 @@ export default function More() {
               <SyncBadge />
             ) : (
               // all is well — quiet, no colour (rule 2: colour is for a status that asks for something)
-              <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessible accessibilityLabel={t("nav.more.online")}>
+              <View testID="more-sync-ok" style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessible accessibilityLabel={t("nav.more.online")}>
                 <Icon name="check" s={size.iconSm} color={c.mut} />
                 <T v="caption" tone="mut">
                   {t("nav.more.online")}

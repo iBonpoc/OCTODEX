@@ -12,13 +12,18 @@ vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID()
 const storage = new Map<string, string>();
 /** keys the device fails to read (A-01) */
 const failGet = new Set<string>();
+/** key prefixes the device refuses to write (full storage) */
+const failSetPrefix: string[] = [];
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: async (k: string) => {
       if (failGet.has(k)) throw new Error("SQLITE_BUSY");
       return storage.get(k) ?? null;
     },
-    setItem: async (k: string, v: string) => void storage.set(k, v),
+    setItem: async (k: string, v: string) => {
+      if (failSetPrefix.some((p) => k.startsWith(p))) throw new Error("QuotaExceededError");
+      storage.set(k, v);
+    },
     getAllKeys: async () => [...storage.keys()],
     multiRemove: async (ks: string[]) => ks.forEach((k) => storage.delete(k)),
     removeItem: async (k: string) => void storage.delete(k),
@@ -119,6 +124,8 @@ let root: Root<P> | null = null;
 
 beforeEach(() => {
   storage.clear();
+  failGet.clear();
+  failSetPrefix.length = 0;
   server.loads.length = 0;
   server.sends.length = 0;
   server.points.length = 0;
@@ -1283,5 +1290,34 @@ describe("unit:storeSync — the device does not give the outbox back (A-01, #75
     expect([...storage.entries()].filter(([k]) => k.startsWith("octo.broken.")).map(([, v]) => v)).toEqual(['[{"id":"o1"},']);
     expect(valueOf(r).queue).toBeDefined();
     expect(storage.get("octo.outbox.v1")).toBe("[]");
+  });
+  it("the copy is refused (full storage): the error screen is told, the broken record stays (round 2 №1)", { timeout: 15_000 }, async () => {
+    storage.set("octo.outbox.v1", '[{"id":"o1"},');
+    failSetPrefix.push("octo.broken.");
+    const seen: { salvage: (() => void) | null; notSaved: boolean }[] = [];
+    const readError = (_r: () => void, s: (() => void) | null, notSaved: boolean) => (seen.push({ salvage: s, notSaved }), "READ_ERROR");
+    const r = (root = render(StoreProvider as unknown as (p: P) => unknown, { children: null, readError } as unknown as P));
+    await settle();
+    seen.at(-1)!.salvage!();
+    await settle();
+    await wait(50);
+    await settle();
+    failSetPrefix.length = 0;
+    expect(JSON.stringify(r.out)).toContain("READ_ERROR");
+    expect(seen.at(-1)!.notSaved).toBe(true);
+    expect(storage.get("octo.outbox.v1")).toBe('[{"id":"o1"},');
+  });
+  it("a cache the device cannot read: the app opens (the cache starts fresh, round 2 №2)", { timeout: 15_000 }, async () => {
+    storage.set("octo.db.v5", JSON.stringify({ day: "x", db: {} }));
+    failGet.add("octo.db.v5");
+    let called = false;
+    const readError = () => ((called = true), "READ_ERROR");
+    const r = (root = render(StoreProvider as unknown as (p: P) => unknown, { children: null, readError } as unknown as P));
+    await settle();
+    await wait(1200);
+    await settle();
+    failGet.clear();
+    expect(called).toBe(false);
+    expect(valueOf(r).queue).toBeDefined();
   });
 });
