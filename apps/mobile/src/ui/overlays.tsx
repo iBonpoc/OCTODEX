@@ -274,7 +274,7 @@ export function Sheet({
   const fullH = winH - insets.top - space[2];
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onBack ?? requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
@@ -298,7 +298,8 @@ export function Sheet({
         <Animated.View
           entering={reduce ? undefined : SlideInDown.duration(motion.durSlow)}
           exiting={reduce ? undefined : SlideOutDown.duration(motion.durBase)}
-          style={[{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%", maxHeight: wide ? "100%" : maxH }, !wide && height !== "fit" ? { height: maxH } : null, wide ? null : follow]}
+          style={[{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%", maxHeight: wide ? "100%" : maxH }, // medium / large: the height the sheet wants, but it gives way when the keyboard takes room (the header never leaves the screen)
+            !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, wide ? null : follow]}
           accessibilityViewIsModal
         >
           <Glass
@@ -328,8 +329,8 @@ export function Sheet({
                   style={{ alignSelf: "center", width: component.grabber.w, height: component.grabber.h, borderRadius: radius.pill, backgroundColor: c.track }}
                 />
               ) : null}
-              {title ? (
-                <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: size.hitMin }}>
+              {title || onBack ? (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], minHeight: size.hitMin }}>
                   {onBack ? (
                     <Press testID="sheet-back" onPress={onBack} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.back")}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }}>
@@ -338,7 +339,9 @@ export function Sheet({
                       </View>
                     </Press>
                   ) : null}
-                  <T v="title" style={{ flexShrink: 1 }}>{title}</T>
+                  <View testID="sheet-title" style={{ flex: 1 }}>
+                    <T v="title" numberOfLines={2}>{title ?? ""}</T>
+                  </View>
                   <Press onPress={requestClose} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
                     <View
                       style={{

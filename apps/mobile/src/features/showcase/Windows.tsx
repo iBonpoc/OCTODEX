@@ -20,7 +20,7 @@ export function WindowsSection() {
     setOpen(null);
     setPage(1);
   };
-  const long = Array.from({ length: 14 }, (_, i) => i + 1);
+  const long = Array.from({ length: 40 }, (_, i) => i + 1);
   const row = (id: Exclude<Which, null>, label: string, hint: string) => (
     <View key={id} testID={`showcase-sheet-${id}`} style={{ gap: space[1] }}>
       <Button label={label} variant="secondary" onPress={() => setOpen(id)} />

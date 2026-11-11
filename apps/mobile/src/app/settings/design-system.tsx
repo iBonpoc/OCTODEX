@@ -5,6 +5,7 @@ import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 import { Screen } from "@/ui/surfaces";
 import { TokenSections } from "@/features/showcase/Tokens";
+import { canSeeShowcase } from "@/features/showcase/access";
 import { WindowsSection } from "@/features/showcase/Windows";
 
 /**
@@ -15,7 +16,7 @@ export default function DesignSystemShowcase() {
   const { t } = useI18n();
   const { mode, role } = useStore();
   // the showcase is the company owner's (and the demo's): the Settings row is hidden for others, the address checks too
-  if (mode !== "demo" && role !== "director") return <Redirect href="/settings" />;
+  if (!canSeeShowcase(mode, role)) return <Redirect href="/settings" />;
   return (
     <Screen title={t("ds.title")}>
       <View testID="showcase-intro">
