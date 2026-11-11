@@ -14,13 +14,20 @@ def svg(rel, color=True):
             s = s.replace(f'fill="{c}"', 'fill="currentColor"')
     return s
 
-MARK = svg('brand/gorix-mark-ink-dark.svg')
-MARK_ACC = svg('brand/gorix-mark-ink-dark.svg').replace('currentColor', 'var(--mk)')
+def v3(n): return svg(f'v3/{n}', color=False).replace('#F2F3F5', 'currentColor').replace('#FBFF00', 'var(--dot)')
+MARK = v3('mark-calm-dark.svg')
+MARK_BOLD = v3('mark-bold-dark.svg')
+LOGO = v3('logo-calm-dark.svg')
+LOGO_BOLD = v3('logo-bold-dark.svg')
+GO_BTN = svg('v3/go-button-dark.svg', color=False).replace('fill="#F2F3F5"', 'fill="currentColor"')
+GO_ICON = svg('v3/go-icon.svg', color=False)
+def app_icon(mark, bg='#0B0C0F', ink='#F2F3F5', dot='#FBFF00'):
+    inner = re.sub(r'<svg[^>]*>|</svg>', '', mark).replace('currentColor', ink).replace('var(--dot)', dot)
+    return f'<svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="{bg}"/><g transform="translate(512 512) scale(0.86) translate(-512 -512)">{inner}</g></svg>'
 WORD = svg('brand/gorix-wordmark-dark.svg')
 LOGO_V = svg('brand/gorix-logo-vertical-dark.svg')
 MADE = svg('brand/made-with-gorix.svg')
-ICONS = {k: svg(f'icon/{p}', color=False) for k, p in
-         [('light', 'app-icon-1024.svg'), ('dark', 'ios/ios-dark.svg'), ('tinted', 'ios/ios-tinted.svg')]}
+ICONS = {'light': app_icon(MARK), 'dark': app_icon(MARK), 'tinted': app_icon(MARK, '#000000', '#FFFFFF', '#FFFFFF')}
 REFINE = [('Сейчас', svg('brand/gorix-mark-ink-dark.svg', color=False).replace('#F2F3F5', 'currentColor')),
           ('A1 · точка с зазором', svg('directions/A-route-refine/a1-gap.svg', color=False).replace('#F2F3F5', 'currentColor')),
           ('A2 · зазор + жёлтая точка', svg('directions/A-route-refine/a2-gap-acc-dot.svg', color=False).replace('#F2F3F5', 'currentColor').replace('#FBFF00', 'var(--dot)')),
@@ -28,8 +35,7 @@ REFINE = [('Сейчас', svg('brand/gorix-mark-ink-dark.svg', color=False).rep
 DIRS = [('A · Маршрут G', svg('directions/A-route/mark-on-dark.svg', color=False)),
         ('B · Печать GR', svg('directions/B-monogram/mark-on-dark.svg', color=False)),
         ('C · Отвес', svg('directions/C-plumb/mark-on-dark.svg', color=False))]
-MOTION = {k: re.sub(r'<title>.*?</title>', '', (root / f'motion/gorix-{k}.svg').read_text().replace('width="1024" height="1024" ', ''))
-          for k in ['intro', 'loading', 'success', 'pending']}
+MOTION = {k: re.sub(r'<title>.*?</title>', '', (root / f'v3/{f}.svg').read_text()) for k, f in [('intro', 'intro-calm'), ('loading', 'loading-calm'), ('success', 'success-calm')]}
 
 def phone(inner, theme):
     return f'<div class="ph t-{theme}"><div class="scr">{inner}</div></div>'
@@ -60,16 +66,15 @@ def list_screen(body, theme, fab=True):
 def placements():
     out = []
     for th in ('dark', 'light'):
-        out.append(fig(phone(f'<div class="center"><span class="mk splash" style="width:76px">{MARK_ACC}</span></div>', th),
+        out.append(fig(phone(f'<div class="center"><span class="lg" style="width:150px">{LOGO}</span></div>', th),
                        f'Заставка · {"тёмная" if th == "dark" else "светлая"}',
-                       'только знак, фон темы; тёмная — жёлтый знак, светлая — знак ink' ))
+                       'конечный кадр анимации = полный логотип; он же статичная системная заставка'))
     login = lambda logo, note: phone(f'<div class="login">{logo}<div class="in">Email</div><div class="in">Пароль</div><span class="b primary full">Войти</span></div>', 'dark')
-    out.append(fig(login(f'<span class="mk" style="width:56px">{MARK}</span>', ''), 'Вход (а) · рекомендую', 'только знак над формой: без двойной «G»'))
-    out.append(fig(login(f'<span class="lg" style="width:130px">{WORD}</span>', ''), 'Вход (б)', 'только слово GoRix'))
+    out.append(fig(login(f'<span class="lg" style="width:150px">{LOGO}</span>', ''), 'Вход', 'полный логотип над формой'))
     out.append(fig(f'<div class="wide t-light"><div class="scr"><div class="side"><span class="mk" style="width:24px">{MARK}</span><i></i><i></i><i></i><i></i></div><div class="lst"><div class="fb">Все · Активные</div><div class="cardr"></div><div class="cardr"></div></div></div></div>',
                    'Меню слева · 820+', 'знак 24 без слова сверху меню; нажатие → «О приложении»', 300))
-    out.append(fig(phone(f'<div class="about"><span class="lg" style="width:96px">{LOGO_V}</span><p>Версия 1.0.0 · сборка 1072</p><p>hello@gorix.app</p><p>Политика · Условия</p></div>', 'dark'),
-                   '«О приложении»', 'знак и слово столбиком, 96, статично'))
+    out.append(fig(phone(f'<div class="about"><span class="lg" style="width:140px">{LOGO}</span><p>Версия 1.0.0 · сборка 1072</p><p>hello@gorix.app</p><p>Политика · Условия</p></div>', 'dark'),
+                   '«О приложении»', 'полный логотип, статично'))
     out.append(fig(phone(empty(f'<span class="mk" style="width:48px">{MARK}</span>', 'Страницы нет', 'Возможно, ссылка устарела', 'На главную', 'secondary'), 'light'),
                    '«Страницы нет»', 'знак 48'))
     out.append(fig(phone(f'<div class="pp"><div class="co">ACME Gutters</div><b>Estimate #1042</b><div class="cardr"></div><div class="cardr"></div><span class="b primary full">Sign estimate</span><span class="made" style="width:120px">{MADE}</span></div>', 'light'),
@@ -81,18 +86,16 @@ def placements():
         tint = ' tint' if k == 'tinted' else ''
         apps = ''.join('<span class="app"></span>' for _ in range(7))
         out.append(fig(f'<div class="home" style="background:{bg}">{apps}<span class="app me{tint}">{ICONS[k]}</span><span class="app"></span></div>',
-                       f'Иконка iPhone · {nm}', 'знак на фоне #0B0C0F'))
+                       f'Иконка iPhone · {nm}', 'знак отдельно — только где мало места'))
     return ''.join(out)
 
 motions = [
-    ('intro', '(а) Появление', 'Движется: путь буквы рисуется от начала к концу, потом «садится» точка.',
-     'Где: заставка. Один раз за холодный запуск, только если данных нет в телефоне.', '900 мс. Экран готов раньше — не ждём.', 'Без движения: знак сразу целиком.', ''),
-    ('loading', '(б) Ожидание', 'Движется: яркий отрезок бежит по контуру пути, точка «отвечает». Буква не вращается.',
-     'Где: только полноэкранные ожидания (первая загрузка после входа, подготовка PDF). Появляется через 300 мс.', 'Цикл 1250 мс; 10 с без ответа — «Не получилось · Повторить».', 'Без движения: знак и слово «Загружаем…».', 'Загружаем…'),
-    ('success', '(в) Готово', 'Движется: точка сжимается и вырастает в зелёную галочку.',
-     'Где: одно место — конец настройки новой компании. Один раз.', '510 мс.', 'Без движения: зелёная точка с галочкой и слово.', 'Компания готова'),
-    ('pending', '(г) Ждёт отправки', 'Движется: пунктир ползёт по пути, точка пустая и «дышит».',
-     'Где: полоса «Нет сети», знак 20 px перед словами. Пока нет сети и есть неотправленное.', 'Цикл 1800 мс.', 'Без движения: пунктир и пустая точка.', 'Ждёт отправки · 3'),
+    ('intro', '(а) Появление — заставка', 'Движется: путь буквы G рисуется → жёлтая точка едет по нему → выезжает «oRix» → точка садится над «i».',
+     'Где: заставка. Один раз за холодный запуск, только если данных нет в телефоне.', '900 мс (durChart). Конечный кадр = полный логотип = статичная системная заставка, поэтому скачка нет.', 'Без движения: сразу полный логотип.', ''),
+    ('loading', '(б) Ожидание', 'Движется: жёлтая точка едет по контуру G по кругу. Буква стоит, не вращается.',
+     'Где: только полноэкранные ожидания (первая загрузка после входа, подготовка PDF). Появляется через 300 мс.', 'Цикл 1250 мс; 10 с без ответа — «Не получилось · Повторить».', 'Без движения: знак с точкой и слово «Загружаем…».', 'Загружаем…'),
+    ('success', '(в) Готово', 'Движется: точка доезжает до места, вспыхивает и становится зелёной галочкой.',
+     'Где: одно место — конец настройки новой компании. Один раз.', '510 мс.', 'Без движения: зелёная галочка и слово.', 'Компания готова'),
 ]
 no_anim = ['Загрузка списка → 300 мс ничего, потом скелетон', 'Кнопка в загрузке → маленький индикатор в кнопке', '«Потянуть, чтобы обновить» → системный индикатор',
            'Сохранено, отправлено, оплата принята → тост и вибрация', 'Списки, карточки, формы, шторки, меню, вкладки, шапка → ничего',
@@ -136,12 +139,19 @@ ul.no{padding-left:18px}ul.no li{color:var(--ink);margin:4px 0;font-size:14px}
 .mc .sm{display:flex;gap:10px;align-items:flex-end;justify-content:center;margin-top:8px;color:var(--ink)}.mc .sm span svg{display:block;width:100%;height:auto}.mc b{display:block;font-size:12.5px;text-align:center;margin-top:6px}
 .dirs{display:flex;gap:12px}.dirs figure{width:100px}.dirs .ic{width:100px;height:100px;border-radius:22px;overflow:hidden}.dirs .ic svg{display:block;width:100%;height:100%}
 .note{font-size:13px;color:var(--mut)}
+.strip{display:flex;gap:8px;align-items:center;background:var(--surf2);border:1px solid var(--bd);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--ink)}
+.mot .vis svg,.frame svg{width:100%;height:auto}.mot .vis>div{width:80px}
+.gx3.still .draw,.gx3.still .fill,.gx3.still .word{animation:none!important}
 '''
 
 js = '''
 const r=document.documentElement;document.querySelectorAll('#theme button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#theme button').forEach(x=>x.setAttribute('aria-pressed',x===b));const t=b.dataset.t;if(t)r.dataset.theme=t;else delete r.dataset.theme;});
 document.querySelectorAll('#rm button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#rm button').forEach(x=>x.setAttribute('aria-pressed',x===b));document.body.classList.toggle('rm',b.dataset.rm==='1');});
-document.querySelectorAll('[data-replay]').forEach(b=>b.onclick=()=>{const v=document.getElementById(b.dataset.replay);v.innerHTML=v.innerHTML;});
+function freeze(svg,t){try{svg.pauseAnimations();svg.setCurrentTime(t/1000)}catch(e){}svg.getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=t});}
+function still(){const rm=document.body.classList.contains('rm');document.querySelectorAll('.mot svg').forEach(s=>{if(rm){freeze(s,900)}else{try{s.unpauseAnimations()}catch(e){}}});}
+document.querySelectorAll('[data-replay]').forEach(b=>b.onclick=()=>{const v=document.getElementById(b.dataset.replay);v.innerHTML=v.innerHTML;still();});
+document.querySelectorAll('#rm button').forEach(b=>b.addEventListener('click',still));
+document.querySelectorAll('.frame').forEach(f=>freeze(f.querySelector('svg'),+f.dataset.t));
 '''
 
 def mark_cards(theme):
@@ -153,21 +163,26 @@ def mark_cards(theme):
 
 out = ['<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
        '<title>GoRix — размещение и движение</title><style>', css, '</style></head><body><main>',
-       '<h1>GoRix: где бренд, анимации, пустые экраны</h1><p>Черновик v2, 11.11.2026 · по <code>usage-map.md</code> и дизайн-системе «Наряд». Цвет бренда — главный жёлтый приложения (acc), отдельного цвета нет.</p>',
+       '<h1>GoRix: где бренд, анимации, пустые экраны</h1><p>Черновик v3, 11.11.2026 · по <code>usage-map.md</code> и дизайн-системе «Наряд». Цвет бренда — главный жёлтый приложения (acc), отдельного цвета нет.</p>',
        '<div class="seg" id="theme"><button aria-pressed="true">Как в системе</button><button data-t="dark" aria-pressed="false">Тёмная</button><button data-t="light" aria-pressed="false">Светлая</button></div>',
-       '<div class="q"><b>Нужно ваше решение (три вопроса):</b><ol><li>Направление знака: A, B или C (ниже)? <small>рекомендую A, с доработкой A3</small></li><li>Фон иконки — почти чёрный? <small>выбран, можно поменять</small></li><li>«Made with GoRix»: включено на бесплатном тарифе, выключается на платном? <small>вы ответили «да»</small></li></ol></div>',
-       '<h2>0. Направления знака</h2><p>Горилла — не знак, а возможный маскот позже (риск сходства с Gorilla Glue). На иконке — один из трёх:</p><div class="dirs">']
-for nm, s in DIRS:
-    out.append(f'<figure><div class="ic">{s}</div><figcaption><b>{nm}</b></figcaption></figure>')
-out.append('</div><h3>Доработка A: чтобы «путь к точке» читался</h3><p>Точка отделена зазором и не сливается с перекладиной даже на 16 px; косой срез начала пути делает форму «своей» (и это плюс для товарного знака). Большой и маленькие размеры 32 · 24 · 16:</p>')
-out.append(f'<div class="marks">{mark_cards("dark")}</div><p></p><div class="marks">{mark_cards("light")}</div>')
-out.append('<p class="note">Жёлтая точка (A2) — только на заставке и иконке на тёмном; на светлом фоне точка цвета ink: жёлтый на светлом не виден.</p>')
+       '<div class="q"><b>Нужно ваше решение (два вопроса):</b><ol><li>Силуэт буквы G: <b>спокойный</b> или <b>смелый</b>? <small>рекомендую спокойный</small></li><li>Направление: <b>«Маршрут с точкой»</b> или <b>«Кнопка Go»</b>? <small>рекомендую «Маршрут с точкой»</small></li></ol><small>Уже решено: цвет = жёлтый приложения; фон иконки почти чёрный; «Made with GoRix» — на бесплатном тарифе.</small></div>',
+       '<h2>Как выглядит запуск приложения</h2><p>Один приём на весь бренд: <b>жёлтая точка едет по пути и приезжает</b>. Точка буквы G = точка над «i» = точка в анимациях.</p>',
+       f'<div class="mot t-dark" style="display:block"><div id="m-launch" style="max-width:340px;margin:8px auto">{MOTION["intro"]}</div><div style="text-align:center"><button data-replay="m-launch">Ещё раз</button></div></div>',
+       '<div class="row" id="frames">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["intro"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(150, 'путь рисуется'), (380, 'точка едет, путь готов'), (600, 'выезжает «oRix»'), (900, 'точка над «i» — конец')]) + '</div>',
+       '<h2>Полный логотип</h2><p>Знак и есть первая буква — без двойной «G». Высота и толщина как у букв. Знак отдельно — только иконка, фавикон, меню слева.</p>',
+       f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · светлый (точка ink)</b></div><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · светлый</b></div></div>',
+       '<p class="note">Спокойный — косой срез начала пути. Смелый — начало пути стрелкой «вперёд». На светлом точка цвета ink: жёлтый на светлом не виден.</p>',
+       f'<h3>Знак отдельно: 120 · 32 · 24 · 16</h3><div class="row">' + ''.join(f'<figure style="width:150px"><div class="mc t-dark"><div class="big">{m}</div><div class="sm">' + ''.join(f'<span style="width:{px}px">{m}</span>' for px in (32, 24, 16)) + f'</div><b>{n}</b></div></figure>' for n, m in [('спокойный', MARK), ('смелый', MARK_BOLD)]) + '</div>',
+       '<h2>Второе направление: «Кнопка Go» (эскиз)</h2><p>«Go» в жёлтой пилюле, как главная кнопка приложения, + «Rix» цветом ink. Идея: единственный жёлтый в приложении — главное действие, и бренд — это оно же.</p>',
+       f'<div class="row"><figure style="width:300px"><div class="mc t-dark"><div class="lg" style="width:100%">{GO_BTN}</div></div><figcaption><b>Логотип</b></figcaption></figure><figure style="width:110px"><div class="dirs"><div class="ic">{GO_ICON}</div></div><figcaption><b>Иконка</b></figcaption></figure></div>',
+       '<p class="note">⚠ Риск: логотип выглядит как кнопка. На входе рядом с жёлтой «Войти» будет два жёлтых элемента — это ломает правило «жёлтый = одно главное действие на экране»; там логотип пришлось бы делать без заливки. Поэтому рекомендую «Маршрут с точкой».</p>']
 out.append(f'<h2>1. Где виден бренд</h2><p>Бренд — там, где приложение говорит от своего имени. В рабочих экранах знака нет. Клиент подрядчика видит логотип подрядчика. Листайте вбок →</p><div class="row">{placements()}</div>')
 out.append('<p class="note">Нигде больше: ни на кнопках, ни в списках, ни в SMS. Пуш — только иконка, её ставит система.</p>')
-out.append('<h2>2. Анимации знака: где и когда</h2><div class="seg" id="rm"><button data-rm="0" aria-pressed="true">С движением</button><button data-rm="1" aria-pressed="false">Уменьшенное движение</button></div>')
+out.append('<h2>2. Анимации знака: три, где и когда</h2><div class="seg" id="rm"><button data-rm="0" aria-pressed="true">С движением</button><button data-rm="1" aria-pressed="false">Уменьшенное движение</button></div>')
 for k, t, moves, where, dur, rm, word in motions:
     w = f'<span class="w">{word}</span>' if word else ''
     out.append(f'<div class="mot t-dark"><div class="vis"><div id="m-{k}">{MOTION[k]}</div>{w}<button data-replay="m-{k}">Ещё раз</button></div><div><h3>{t}</h3><p class="mv">{moves}</p><p>{where}</p><p><b>{dur}</b></p><p>{rm}</p></div></div>')
+out.append('<h3>Полоса «Нет сети» — без знака</h3><p>Рабочий экран, бренду там не место: обычный значок «Наряда» и слова, без анимации.</p><div class="strip t-dark"><svg viewBox="0 0 24 24" style="width:18px;height:18px"><path d="M7 18h10a4 4 0 0 0 .5-8 6 6 0 0 0-11.5 1.5A3.5 3.5 0 0 0 7 18zM12 15V10M9.5 12.5 12 10l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Нет сети · Ждёт отправки · 3</span></div>')
 out.append('<p>На экране одновременно не больше одной анимации знака.</p><h3>Где анимации знака НЕТ</h3><ul class="no">' + ''.join(f'<li>{x}</li>' for x in no_anim) + '</ul>')
 out.append('<h2>3. Пустые экраны</h2><p>Пустота говорит про объект, а не про бренд. Размер значка: 24 мелковат, предлагаю 36 (новый токен <code>component.emptyIcon</code>), цвет mut:</p><div class="row">')
 out.append(fig(list_screen(empty(icon(P_CLIENT, 24), 'Клиентов пока нет', 'Клиент появится, когда вы добавите его или превратите лид в клиента', 'Добавить клиента'), 'dark'), 'Значок 24 · было', 'мелко рядом с заголовком'))
