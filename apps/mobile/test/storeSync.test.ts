@@ -1376,6 +1376,39 @@ describe("unit:storeSync — two people one after the other on one phone (#864, 
     expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
     expect(storage.get("octo.cloud.v1.rejected")).toBe("[]");
   });
+  it("the first start of this version without the network: the older person-less cache is taken over when it is mine", async () => {
+    const mine = { ...secret(), me: "u1" };
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: mine }));
+    signIn("u1", "c1"); // no network: the reload never answers
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true); // before: an empty company
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false); // gone once mine is on the device
+  });
+  it("the older person-less cache of another person is never taken over — and leaves the device", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: { ...secret(), me: "u0" } }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(false);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+  });
+  it("my older cache is kept until my own key is on the device (a phone killed right then has one of them)", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: { ...secret(), me: "u1" } }));
+    failSetPrefix.push("octo.cloud.v1.c1.u1"); // the new key cannot be written
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(true); // before the check: removed, the phone kept neither
+  });
   it("the same person back without the network keeps their copy", async () => {
     storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: secret() }));
     signIn("u1", "c1");

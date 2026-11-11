@@ -51,7 +51,7 @@ exports.run = async (h, { seed }) => {
 
   // signs out on the same phone
   await h.go("/settings/profile");
-  await h.click("Выйти");
+  await p.getByTestId("account-sign-out").first().click();
   // signed out: the session leaves the browser (supabase-js keeps it as «sb-…-auth-token»)
   await p.waitForFunction(() => !Object.keys(localStorage).some((k) => k.endsWith("-auth-token")), null, { timeout: 15000 });
 

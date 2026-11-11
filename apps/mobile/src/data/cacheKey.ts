@@ -9,6 +9,8 @@ import { REJECTED_KEY } from "./outboxOwner";
 export const CLOUD_CACHE_PREFIX = "octo.cloud.v1.";
 export const cloudCacheKey = (companyId: string, userId: string) => `${CLOUD_CACHE_PREFIX}${companyId}.${userId}`;
 
+/** `octo.cloud.v1.<company>.<user>` — this version's key (an older version's has no person) */
+export const isNewCacheKey = (k: string) => k.startsWith(CLOUD_CACHE_PREFIX) && k.slice(CLOUD_CACHE_PREFIX.length).includes(".");
 /** the keys of other people's (and the older person-less) cloud caches — removed once `me` has read their own */
 export function othersCaches(keys: readonly string[], me: string): string[] {
   return keys.filter((k) => {
