@@ -45,6 +45,8 @@ exports.run = async (h) => {
     await pays.first().click();
     await p.waitForTimeout(600);
     h.expect(p.url().includes("/receipt/"), `payment card opens the receipt (${p.url()})`);
+  } else {
+    h.expect(false, "«Получено» (month) has at least one payment card (the demo has payments this month)");
   }
 
   // «Новые лиды» (month): lead card opens the lead

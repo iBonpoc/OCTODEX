@@ -63,6 +63,10 @@ exports.run = async (h) => {
     const sheet = await h.text();
     h.expect(!/Ответственный/.test(sheet) && !/Источник/.test(sheet), "no «Ответственный» / «Источник» for the tech");
     await pressEscUntilClosed(p);
+  } else {
+    // the tech's bar has no office groups at all: no button to open them, none standing open in the bar (1280). Found by
+    // #800: this check used to be skipped silently at every width.
+    h.expect((await p.locator('[data-testid^="filter-group-"]').locator("visible=true").count()) === 0, "no filter groups for the tech (neither behind a button nor open in the bar)");
   }
 
   // his lead goes up to «Лиды»

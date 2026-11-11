@@ -83,6 +83,32 @@ describe("design system: components", () => {
   });
 });
 
+describe("design system: the showcase covers everything (#1093, Настройки → Дизайн-система)", () => {
+  const reg = readFileSync(join(ROOT, "features", "showcase", "registry.ts"), "utf8");
+  const listed = (name: string) => reg.includes(`"${name}"`);
+  it("every component exported from src/ui/*.tsx is in a showcase section, or is on the pending / not-shown list with a reason", () => {
+    const missing: string[] = [];
+    for (const f of readdirSync(join(ROOT, "ui")).filter((x) => x.endsWith(".tsx"))) {
+      for (const m of readFileSync(join(ROOT, "ui", f), "utf8").matchAll(/^export (?:function|const) ([A-Z][a-z][A-Za-z0-9]*)\b/gm)) if (!listed(m[1]!)) missing.push(`${f}: ${m[1]}`);
+    }
+    expect(missing, "add the component to a section of features/showcase/registry.ts and show it (same PR)").toEqual([]);
+  });
+  it("every group of `tokens` is drawn by a showcase section", async () => {
+    const { tokens } = await import("@octo/design-tokens");
+    const missing = Object.keys(tokens).filter((g) => !listed(g));
+    expect(missing, "add the token group to a section of features/showcase/registry.ts").toEqual([]);
+  });
+  it("every section points to a heading that exists in DESIGN-SYSTEM.md", () => {
+    const ds = readFileSync(join(__dirname, "..", "..", "..", "design", "naryad-ds", "DESIGN-SYSTEM.md"), "utf8");
+    const bad: string[] = [];
+    for (const m of reg.matchAll(/ds: "§(\d+(?:\.\d+)?)"/g)) {
+      const n = m[1]!;
+      if (!new RegExp(`^#{2,3} ${n.replace(".", "\\.")}\\.`, "m").test(ds)) bad.push(`§${n}`);
+    }
+    expect(bad).toEqual([]);
+  });
+});
+
 describe("design system: tokens only", () => {
   for (const rule of rules) {
     it(`no ${rule.name}`, () => {

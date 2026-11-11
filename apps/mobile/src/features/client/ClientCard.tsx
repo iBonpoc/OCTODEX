@@ -160,9 +160,9 @@ export function ClientCardBody({ c }: { c: Customer }) {
         // money only, three equal tiles on one line — unslop 05.11
         <Card>
           <RowView style={{ alignItems: "flex-start" }}>
-            <MoneyCell label={t("client.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
-            <MoneyCell label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} />
-            <MoneyCell label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} />
+            <MoneyCell testID="client-owes" label={t("client.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
+            <MoneyCell testID="client-paid" label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} />
+            <MoneyCell testID="client-invoiced" label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} />
           </RowView>
         </Card>
       ) : null}
@@ -251,9 +251,9 @@ export function ClientCardBody({ c }: { c: Customer }) {
 }
 
 
-function MoneyCell({ label, value, tone = "ink" }: { label: string; value: string; tone?: "ink" | "warn" }) {
+function MoneyCell({ label, value, tone = "ink", testID }: { label: string; value: string; tone?: "ink" | "warn"; testID?: string }) {
   return (
-    <View style={{ alignItems: "flex-start", flex: 1 }}>
+    <View testID={testID} style={{ alignItems: "flex-start", flex: 1 }}>
       <T v="caption" tone="mut">
         {label}
       </T>
