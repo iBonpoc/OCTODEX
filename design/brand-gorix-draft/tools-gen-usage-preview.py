@@ -14,7 +14,7 @@ def svg(rel, color=True):
             s = s.replace(f'fill="{c}"', 'fill="currentColor"')
     return s
 
-def v3(n): return svg(f'v3/{n}', color=False).replace('#F2F3F5', 'currentColor').replace('#FBFF00', 'var(--dot)')
+def v3(n): return svg(f'v3/{n}', color=False).replace('#F2F3F5', 'currentColor').replace('class="dr"', 'class="dr" style="fill:var(--dring)"')
 MARK = v3('mark-calm-dark.svg')
 MARK_BOLD = v3('mark-bold-dark.svg')
 LOGO = v3('logo-calm-dark.svg')
@@ -22,7 +22,7 @@ LOGO_BOLD = v3('logo-bold-dark.svg')
 GO_BTN = svg('v3/go-button-dark.svg', color=False).replace('fill="#F2F3F5"', 'fill="currentColor"')
 GO_ICON = svg('v3/go-icon.svg', color=False)
 def app_icon(mark, bg='#0B0C0F', ink='#F2F3F5', dot='#FBFF00'):
-    inner = re.sub(r'<svg[^>]*>|</svg>', '', mark).replace('currentColor', ink).replace('var(--dot)', dot)
+    inner = re.sub(r'<svg[^>]*>|</svg>', '', mark).replace('currentColor', ink).replace('var(--dot)', dot).replace('fill:var(--dring)', 'fill:none').replace('#FBFF00', dot)
     return f'<svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="{bg}"/><g transform="translate(512 512) scale(0.86) translate(-512 -512)">{inner}</g></svg>'
 WORD = svg('brand/gorix-wordmark-dark.svg')
 LOGO_V = svg('brand/gorix-logo-vertical-dark.svg')
@@ -90,10 +90,10 @@ def placements():
     return ''.join(out)
 
 motions = [
-    ('intro', '(а) Появление — заставка', 'Движется: путь буквы G рисуется → жёлтая точка едет по нему → выезжает «oRix» → точка садится над «i».',
-     'Где: заставка. Один раз за холодный запуск, только если данных нет в телефоне.', '900 мс (durChart). Конечный кадр = полный логотип = статичная системная заставка, поэтому скачка нет.', 'Без движения: сразу полный логотип.', ''),
-    ('loading', '(б) Ожидание', 'Движется: жёлтая точка едет по контуру G по кругу. Буква стоит, не вращается.',
-     'Где: только полноэкранные ожидания (первая загрузка после входа, подготовка PDF). Появляется через 300 мс.', 'Цикл 1250 мс; 10 с без ответа — «Не получилось · Повторить».', 'Без движения: знак с точкой и слово «Загружаем…».', 'Загружаем…'),
+    ('intro', '(а) Появление — заставка', 'Движется: буква G открывается вдоль своего пути, точка едет впереди → точка встаёт внутри G → выезжает «oRix» → точка перелетает и садится над «i». Буква с первого кадра та же, что в логотипе.',
+     'Где: заставка. Один раз за холодный запуск, только если данных нет в телефоне.', '1200 мс (новый токен durBrand, на согласование). Конечный кадр = полный логотип = статичная системная заставка, поэтому скачка нет.', 'Без движения: сразу полный логотип.', ''),
+    ('loading', '(б) Ожидание', 'Движется: жёлтая точка в тёмном ободке едет по контуру G по кругу — ободок не даёт ей слиться с буквой. Буква стоит, не вращается.',
+     'Где: только полноэкранные ожидания (первая загрузка после входа, подготовка PDF). Появляется через 300 мс.', 'Цикл 1800 мс (skeletonCycle); 10 с без ответа — «Не получилось · Повторить».', 'Без движения: знак с точкой и слово «Загружаем…».', 'Загружаем…'),
     ('success', '(в) Готово', 'Движется: точка доезжает до места, вспыхивает и становится зелёной галочкой.',
      'Где: одно место — конец настройки новой компании. Один раз.', '510 мс.', 'Без движения: зелёная галочка и слово.', 'Компания готова'),
 ]
@@ -102,12 +102,12 @@ no_anim = ['Загрузка списка → 300 мс ничего, потом 
            '«О приложении», вход, «Страницы нет» → статичный знак', 'Страница клиента, PDF, письма → статично']
 
 css = '''
-:root{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--bd:rgba(255,255,255,.14);--acc:#FBFF00;--on-acc:#0B0C0F;--ok:#9CF0A8;--mk:#FBFF00;--dot:#FBFF00;color-scheme:dark}
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--bd:rgba(20,22,30,.1);--ok:#176428;--mk:#15161A;--dot:#15161A;color-scheme:light}}
-:root[data-theme="light"]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--bd:rgba(20,22,30,.1);--ok:#176428;--mk:#15161A;--dot:#15161A;color-scheme:light}
+:root{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--bd:rgba(255,255,255,.14);--acc:#FBFF00;--on-acc:#0B0C0F;--ok:#9CF0A8;--mk:#FBFF00;--dot:#FBFF00;--dring:none;--ring:#24272D;--bgc:#24272D;--i:#F2F3F5;color-scheme:dark}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--bd:rgba(20,22,30,.1);--ok:#176428;--mk:#15161A;--dot:#15161A;--dring:#15161A;--ring:#15161A;--bgc:#EFEBE5;--i:#15161A;color-scheme:light}}
+:root[data-theme="light"]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--bd:rgba(20,22,30,.1);--ok:#176428;--mk:#15161A;--dot:#15161A;--dring:#15161A;--ring:#15161A;--bgc:#EFEBE5;--i:#15161A;color-scheme:light}
 .t-dark,.t-light{color:var(--ink)}
-.t-dark{--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--bd:rgba(255,255,255,.14);--ok:#9CF0A8;--mk:#FBFF00;--dot:#FBFF00}
-.t-light{--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--bd:rgba(20,22,30,.1);--ok:#176428;--mk:#15161A;--dot:#15161A}
+.t-dark{--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--bd:rgba(255,255,255,.14);--ok:#9CF0A8;--mk:#FBFF00;--dot:#FBFF00;--dring:none;--ring:#24272D;--bgc:#24272D;--i:#F2F3F5}
+.t-light{--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--bd:rgba(20,22,30,.1);--ok:#176428;--mk:#15161A;--dot:#15161A;--dring:#15161A;--ring:#15161A;--bgc:#EFEBE5;--i:#15161A}
 .t-dark .gx{--gx-ink:#F2F3F5!important;--gx-brand:#FBFF00!important}.t-light .gx{--gx-ink:#15161A!important;--gx-brand:#15161A!important}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15px/1.45 -apple-system,system-ui,Segoe UI,sans-serif}
 main{max-width:760px;margin:0 auto;padding:16px 16px 64px}h1{font-size:24px;margin:8px 0 4px}h2{font-size:19px;margin:32px 0 8px}h3{font-size:16px;margin:20px 0 6px}p{color:var(--mut);margin:4px 0 10px}
@@ -148,9 +148,10 @@ js = '''
 const r=document.documentElement;document.querySelectorAll('#theme button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#theme button').forEach(x=>x.setAttribute('aria-pressed',x===b));const t=b.dataset.t;if(t)r.dataset.theme=t;else delete r.dataset.theme;});
 document.querySelectorAll('#rm button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#rm button').forEach(x=>x.setAttribute('aria-pressed',x===b));document.body.classList.toggle('rm',b.dataset.rm==='1');});
 function freeze(svg,t){try{svg.pauseAnimations();svg.setCurrentTime(t/1000)}catch(e){}svg.getAnimations({subtree:true}).forEach(a=>{a.pause();a.currentTime=t});}
-function still(){const rm=document.body.classList.contains('rm');document.querySelectorAll('.mot svg').forEach(s=>{if(rm){freeze(s,900)}else{try{s.unpauseAnimations()}catch(e){}}});}
+function still(){const rm=document.body.classList.contains('rm');document.querySelectorAll('.mot svg').forEach(s=>{if(rm){freeze(s,1200)}else{try{s.unpauseAnimations()}catch(e){}}});}
 document.querySelectorAll('[data-replay]').forEach(b=>b.onclick=()=>{const v=document.getElementById(b.dataset.replay);v.innerHTML=v.innerHTML;still();});
 document.querySelectorAll('#rm button').forEach(b=>b.addEventListener('click',still));
+document.getElementById('slow').onclick=function(){const b=this,v=document.getElementById('m-launch');b.setAttribute('aria-pressed','true');v.innerHTML=v.innerHTML;const s=v.querySelector('svg'),t0=performance.now();(function f(){const e=(performance.now()-t0)/3;freeze(s,Math.min(e,1200));if(e<1200)requestAnimationFrame(f);else b.setAttribute('aria-pressed','false')})();};
 document.querySelectorAll('.frame').forEach(f=>freeze(f.querySelector('svg'),+f.dataset.t));
 '''
 
@@ -163,15 +164,15 @@ def mark_cards(theme):
 
 out = ['<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
        '<title>GoRix — размещение и движение</title><style>', css, '</style></head><body><main>',
-       '<h1>GoRix: где бренд, анимации, пустые экраны</h1><p>Черновик v3, 11.11.2026 · по <code>usage-map.md</code> и дизайн-системе «Наряд». Цвет бренда — главный жёлтый приложения (acc), отдельного цвета нет.</p>',
+       '<h1>GoRix: где бренд, анимации, пустые экраны</h1><p>Итоговый вариант v3.1, 11.11.2026 · по <code>usage-map.md</code> и дизайн-системе «Наряд». Цвет бренда — главный жёлтый приложения (acc), отдельного цвета нет.</p>',
        '<div class="seg" id="theme"><button aria-pressed="true">Как в системе</button><button data-t="dark" aria-pressed="false">Тёмная</button><button data-t="light" aria-pressed="false">Светлая</button></div>',
        '<div class="q"><b>Нужно ваше решение (два вопроса):</b><ol><li>Силуэт буквы G: <b>спокойный</b> или <b>смелый</b>? <small>рекомендую спокойный</small></li><li>Направление: <b>«Маршрут с точкой»</b> или <b>«Кнопка Go»</b>? <small>рекомендую «Маршрут с точкой»</small></li></ol><small>Уже решено: цвет = жёлтый приложения; фон иконки почти чёрный; «Made with GoRix» — на бесплатном тарифе.</small></div>',
        '<h2>Как выглядит запуск приложения</h2><p>Один приём на весь бренд: <b>жёлтая точка едет по пути и приезжает</b>. Точка буквы G = точка над «i» = точка в анимациях.</p>',
-       f'<div class="mot t-dark" style="display:block"><div id="m-launch" style="max-width:340px;margin:8px auto">{MOTION["intro"]}</div><div style="text-align:center"><button data-replay="m-launch">Ещё раз</button></div></div>',
-       '<div class="row" id="frames">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["intro"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(150, 'путь рисуется'), (380, 'точка едет, путь готов'), (600, 'выезжает «oRix»'), (900, 'точка над «i» — конец')]) + '</div>',
+       f'<div class="mot t-dark" style="display:block"><div id="m-launch" style="max-width:340px;margin:8px auto">{MOTION["intro"]}</div><div style="text-align:center"><button data-replay="m-launch">Ещё раз</button> <button id="slow" aria-pressed="false">Медленно ×3</button></div></div>',
+       '<div class="row" id="frames">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["intro"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(250, 'буква открывается, точка впереди'), (700, 'G готова, точка внутри'), (900, 'выезжает «oRix», точка летит'), (1200, 'точка над «i» — конец')]) + '</div>',
        '<h2>Полный логотип</h2><p>Знак и есть первая буква — без двойной «G». Высота и толщина как у букв. Знак отдельно — только иконка, фавикон, меню слева.</p>',
-       f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · светлый (точка ink)</b></div><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · светлый</b></div></div>',
-       '<p class="note">Спокойный — косой срез начала пути. Смелый — начало пути стрелкой «вперёд». На светлом точка цвета ink: жёлтый на светлом не виден.</p>',
+       f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · светлый</b></div><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · светлый</b></div></div>',
+       '<p class="note"><b>Где точка:</b> в логотипе — над «i» (туда она приезжает в заставке); в знаке отдельно (иконка, меню) — внутри G, на конце пути. Это одна и та же точка: знак = логотип до того, как выехало «oRix».</p><p class="note">Спокойный — косой срез начала пути. Смелый — начало пути стрелкой «вперёд». Точка везде жёлтая. На светлом у неё тёмный ободок цвета ink — так жёлтый виден и на светлом.</p>',
        f'<h3>Знак отдельно: 120 · 32 · 24 · 16</h3><div class="row">' + ''.join(f'<figure style="width:150px"><div class="mc t-dark"><div class="big">{m}</div><div class="sm">' + ''.join(f'<span style="width:{px}px">{m}</span>' for px in (32, 24, 16)) + f'</div><b>{n}</b></div></figure>' for n, m in [('спокойный', MARK), ('смелый', MARK_BOLD)]) + '</div>',
        '<h2>Второе направление: «Кнопка Go» (эскиз)</h2><p>«Go» в жёлтой пилюле, как главная кнопка приложения, + «Rix» цветом ink. Идея: единственный жёлтый в приложении — главное действие, и бренд — это оно же.</p>',
        f'<div class="row"><figure style="width:300px"><div class="mc t-dark"><div class="lg" style="width:100%">{GO_BTN}</div></div><figcaption><b>Логотип</b></figcaption></figure><figure style="width:110px"><div class="dirs"><div class="ic">{GO_ICON}</div></div><figcaption><b>Иконка</b></figcaption></figure></div>',
