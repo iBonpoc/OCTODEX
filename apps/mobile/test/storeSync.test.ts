@@ -99,6 +99,7 @@ import { mineOf, StoreProvider } from "../src/data/store";
 import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
+import { visitDueCents } from "../src/features/visitDue";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import { wipedOnDelete } from "../src/data/outboxOwner";
 
@@ -1459,5 +1460,54 @@ describe("unit:storeSync — sales take the deposit through the server's deposit
   });
   it("the office: as before, payment.record", async () => {
     expect((await sentAs("office")).map((o) => o.k)).toEqual(["payment.record"]);
+  });
+});
+
+describe("unit:storeSync — the payment on a visit is a payment with its receipt (#1103)", () => {
+  type V = { db: { payments: { id: string; invoiceId: string; amountCents: number; receiptNumber?: string; method: string }[]; invoices: { id: string; jobId?: string; paidCents: number; totalCents: number }[]; visits: { id: string; jobId?: string }[]; jobs: { id: string }[] }; payVisit: (id: string, m: string) => () => void };
+  const paidOn = (d: V["db"], jobId: string) => d.invoices.filter((i) => i.jobId === jobId).reduce((s, i) => s + i.paidCents, 0);
+  const paymentsOn = (d: V["db"], jobId: string) => {
+    const inv = new Set(d.invoices.filter((i) => i.jobId === jobId).map((i) => i.id));
+    return d.payments.filter((p) => inv.has(p.invoiceId));
+  };
+  it("the demo: the visit's money is one payment with a receipt; what the invoices say paid = what the payments say", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    // a visit of a job that still owes (the seed's)
+    const visit = v0.db.visits.find((x) => x.jobId && visitDueCents(v0.db as never, x) > 0)!;
+    expect(visit).toBeTruthy();
+    const due = visitDueCents(v0.db as never, visit);
+    expect(due).toBeGreaterThan(0);
+    const before = paymentsOn(v0.db, visit.jobId!).length;
+    v0.payVisit(visit.id, "cash");
+    await settle();
+    const d = (valueOf(r) as unknown as V).db;
+    const pays = paymentsOn(d, visit.jobId!);
+    expect(pays).toHaveLength(before + 1); // before: no payment — only the invoice marked paid
+    const p = pays.find((x) => x.amountCents === due && x.method === "cash")!;
+    expect(p).toBeTruthy();
+    expect(p.receiptNumber).toMatch(/^RCT-/);
+    // «Оплатил» (by payments) = what the invoices say paid
+    expect(pays.reduce((s, x) => s + x.amountCents, 0)).toBe(paidOn(d, visit.jobId!));
+  });
+  it("the cloud: the payment on the phone is the one the server writes (the op's paymentId), one payment, no receipt number from the phone", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    const visit = v0.db.visits.find((x) => x.jobId && visitDueCents(v0.db as never, x) > 0)!;
+    const before = paymentsOn(v0.db, visit.jobId!).map((x) => x.id);
+    v0.payVisit(visit.id, "card");
+    await wait(1700); // the outbox tick
+    await settle();
+    const op = server.sends.map((x) => x.op as { k: string; paymentId?: string }).find((o) => o.k === "visit.pay")!;
+    expect(op).toBeTruthy();
+    const mine = paymentsOn((valueOf(r) as unknown as V).db, visit.jobId!).filter((x) => !before.includes(x.id));
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.id).toBe(op.paymentId);
+    expect(mine[0]!.receiptNumber).toBeUndefined(); // the server numbers it (RCT-…)
   });
 });
