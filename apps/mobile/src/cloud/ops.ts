@@ -1143,6 +1143,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           amount_cents: op.amountCents, idempotency_key: op.id,
         }),
       );
+    default:
+      // an op this build does not know (a newer build queued it) is never «sent»: it stays in the outbox (A-19, #784)
+      throw new Error(`unknown op: ${String((op as { k?: unknown }).k)}`);
   }
 }
 

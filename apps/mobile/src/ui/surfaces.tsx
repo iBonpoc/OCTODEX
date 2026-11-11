@@ -239,6 +239,38 @@ export function Empty({ icon, title, hint, action }: { icon: IconKey; title: str
 /* ---------- Sync badge (DS rule 11: queue counter visible; 13 v2 §2.2, §2.6) ----------
  * Only while there is something to say: no network (warn) or the queue still going out (info). */
 export function SyncBadge({ compact }: { compact?: boolean }) {
+  const { notSavedOnDevice } = useStore();
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const sync = <SyncChip compact={compact} />;
+  if (!notSavedOnDevice) return sync;
+  // the device refused a write (full storage, A-02): its own line next to «Не отправлено: N», never instead of it
+  const label = t("storage.notSaved.badge");
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", alignSelf: compact ? "center" : "flex-start", gap: space[1] }}>
+      {sync}
+      <View
+        testID="storage-not-saved"
+        accessibilityLabel={label}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          height: component.chip.h,
+          paddingHorizontal: component.chip.px,
+          borderRadius: radius.pill,
+          backgroundColor: c.status.bad.fill,
+          gap: space[1],
+        }}
+      >
+        <Icon name="alert" s={size.iconSm} color={c.status.bad.on} />
+        <T v="caption" w="semibold" style={{ color: c.status.bad.on }} numberOfLines={1}>
+          {label}
+        </T>
+      </View>
+    </View>
+  );
+}
+function SyncChip({ compact }: { compact?: boolean }) {
   const { online, link, queue, stuckOps } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();

@@ -244,6 +244,11 @@ export const en: Dict = {
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Server unavailable · queued: {n}",
   "sync.stuck.badge": "Not sent: {n}",
+  // «Данные и деньги» (#756, A-01/A-02): the device storage
+  "storage.readFailed.title": "Couldn’t read data from this device",
+  "storage.readFailed.body": "Data saved on the phone and unsent changes are untouched. Tap “Retry”. If that doesn’t help, restart the app.",
+  "storage.readFailed.retry": "Retry",
+  "storage.notSaved.badge": "Not saved on device",
   "sync.stuck.title": "Not sent: the server answers with an error",
   "sync.stuck.since": "Failing since {when}",
   "sync.stuck.waiting": "waiting for it: {n}",

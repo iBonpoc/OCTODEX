@@ -243,6 +243,11 @@ export const ru = {
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Сервер недоступен · в очереди: {n}",
   "sync.stuck.badge": "Не отправлено: {n}",
+  // «Данные и деньги» (#756, A-01/A-02): the device storage
+  "storage.readFailed.title": "Не удалось прочитать данные с устройства",
+  "storage.readFailed.body": "Сохранённые на телефоне данные и неотправленные изменения не тронуты. Нажмите «Повторить». Если не помогает — перезапустите приложение.",
+  "storage.readFailed.retry": "Повторить",
+  "storage.notSaved.badge": "Не сохранено на устройстве",
   "sync.stuck.title": "Не отправлено: сервер отвечает ошибкой",
   "sync.stuck.since": "Ошибка с {when}",
   "sync.stuck.waiting": "ждут его: {n}",

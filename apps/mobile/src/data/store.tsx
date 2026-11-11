@@ -161,6 +161,8 @@ interface StoreCtx {
   queue: QueuedAction[];
   /** the signed-in person's unsent ops in every company (the account deletion removes them all, review #240 №4) */
   unsentAll: number;
+  /** a write to the device was refused (full storage, A-02): «Не сохранено на устройстве» next to «Не отправлено: N» */
+  notSavedOnDevice: boolean;
   syncError: string | null;
   /**
    * the person's ops the server keeps answering with an error (docs/specs/23 §3): not dropped, shown as
@@ -444,14 +446,16 @@ function withPayment(d: DB, p: Payment, demo: boolean): DB {
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
   Object.fromEntries(doc.options.flatMap((o) => o.lines.filter((l) => l.unitCostCents !== undefined).map((l) => [l.id, l.unitCostCents!])));
 
-export function StoreProvider({ children }: { children: ReactNode }) {
+/** `readError`: the screen shown when the device did not give back what it keeps (A-01) — from the root layout, so the
+ *  store imports no UI; without it nothing is shown (tests) */
+export function StoreProvider({ children, readError }: { children: ReactNode; readError?: (retry: () => void) => ReactNode }) {
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
   const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v5";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
-  const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
+  const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
     {
@@ -491,7 +495,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [setSaved, mode, cacheKey],
   );
   // nothing chosen yet → the first role this person has (owner → director); route-guard fix
-  const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
+  const [savedRole, setRole, roleReady, roleHealth] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
   // the cloud: is the server answering (the switch «без сети» is the demo's) — a failed request says no, an answer yes;
   // without it the outbox waits longer and longer and never drops an op (rule 6, cloud e2e 104)
@@ -512,10 +516,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setLink(failedAs(e));
   };
   // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
-  const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true });
-  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
+  // `strict`: what is only here is never «started fresh» from a broken record (A-01)
+  const [queue, setQueue, queueReady, queueHealth] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true, strict: true });
+  const [outbox, setOutbox, outboxReady, outboxHealth] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true, strict: true });
   // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
-  const [rejected, setRejected, rejectedReady] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
+  const [rejected, setRejected, rejectedReady, rejectedHealth] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true, strict: true });
+  // the device storage (A-01, A-02): a read that failed holds the app on «Повторить»; a refused write is shown
+  const health = [dbHealth, roleHealth, queueHealth, outboxHealth, rejectedHealth];
+  const notSavedOnDevice = health.some((h) => h.writeFailed);
   // the app is leaving (background, the tab hidden or closed): every state that waits to be written is written now
   useEffect(() => onAppLeave(flushAllWriters), []);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -1210,6 +1218,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       link: !online ? "offline" : mode === "cloud" ? link : "ok",
       queue: pendingQueue,
       unsentAll,
+      notSavedOnDevice,
       syncError,
       stuckOps,
       retryOp,
@@ -2462,9 +2471,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
   );
 
+  // nothing is written while a state is not loaded: the screen only reads again (A-01)
+  if (health.some((h) => h.readError)) return <>{readError?.(() => health.forEach((h) => h.readError && h.retry())) ?? null}</>;
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

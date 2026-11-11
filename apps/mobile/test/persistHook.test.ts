@@ -7,11 +7,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react", () => import("./support/miniReact"));
 const storage = new Map<string, string>();
-const reads: { key: string; answer: (raw: string | null) => void }[] = [];
+const reads: { key: string; answer: (raw: string | null) => void; fail: (e: Error) => void }[] = [];
+/** keys whose writes the device refuses (A-02: full storage) */
+const refused = new Set<string>();
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
-    getItem: (key: string) => new Promise<string | null>((answer) => reads.push({ key, answer })),
-    setItem: async (k: string, v: string) => void storage.set(k, v),
+    getItem: (key: string) => new Promise<string | null>((answer, fail) => reads.push({ key, answer, fail })),
+    setItem: async (k: string, v: string) => {
+      if (refused.has(k)) throw new Error("QuotaExceededError");
+      storage.set(k, v);
+    },
   },
 }));
 import { render, settle } from "./support/miniReact";
@@ -30,6 +35,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 beforeEach(() => {
   storage.clear();
   reads.length = 0;
+  refused.clear();
 });
 
 describe("unit:persistHook — the key changes while a write waits", () => {
@@ -130,3 +136,116 @@ describe("unit:persistHook — a change in the last 250 ms is not lost (rule 6, 
   });
 });
 
+
+/* ---------- A-01 / A-02 (#756): the device storage fails ---------- */
+type Ops = { id: string }[];
+type OutOps = ReturnType<typeof usePersistentState<Ops>>;
+const Outbox = ({ k }: { k: string }) => usePersistentState<Ops>(k, [], { immediate: true, strict: true });
+const Cache = ({ k }: { k: string }) => usePersistentState<Ops>(k, []);
+const TWO = JSON.stringify([{ id: "op1" }, { id: "op2" }]);
+/** every read the hook makes fails, through all its tries (with their pauses) */
+const failReads = async () => {
+  for (let i = 0; i < 3; i++) {
+    for (let n = 0; n < 50 && !reads.length; n++) await wait(50);
+    while (reads.length) reads.shift()!.fail(new Error("SQLITE_BUSY"));
+    await settle();
+  }
+};
+
+describe("unit:persistHook — a read fails (A-01)", () => {
+  it("the outbox with 2 ops stays on the device: not loaded, nothing written, «Повторить» reads again", async () => {
+    storage.set("octo.outbox.v1", TWO);
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    const out = root.out as OutOps;
+    expect(storage.get("octo.outbox.v1")).toBe(TWO); // before: [] written over the two ops
+    expect(out[2]).toBe(false);
+    expect(out[3].readError).toBe("read");
+    out[3].retry();
+    await settle();
+    answerAll();
+    await settle();
+    const after = root.out as OutOps;
+    expect(after[0]).toEqual([{ id: "op1" }, { id: "op2" }]);
+    expect(after[2]).toBe(true);
+    expect(after[3].readError).toBeNull();
+    expect(storage.get("octo.outbox.v1")).toBe(TWO);
+    root.unmount();
+  }, 10_000);
+
+  it("one failed try is tried again: the value comes on the second try", async () => {
+    storage.set("octo.outbox.v1", TWO);
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    reads.shift()!.fail(new Error("SQLITE_BUSY"));
+    for (let n = 0; n < 50 && !reads.length; n++) await wait(50);
+    answerAll();
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([{ id: "op1" }, { id: "op2" }]);
+    expect((root.out as OutOps)[3].readError).toBeNull();
+    root.unmount();
+  });
+});
+
+describe("unit:persistHook — a broken record (A-01)", () => {
+  it("the outbox key that is not JSON is never overwritten, even after a change; the error is shown", async () => {
+    storage.set("octo.outbox.v1", "[{\"id\":\"op1\"},");
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    answerAll();
+    await settle();
+    expect((root.out as OutOps)[3].readError).toBe("corrupt");
+    expect((root.out as OutOps)[2]).toBe(false);
+    (root.out as OutOps)[1]([{ id: "new" }]);
+    await settle();
+    expect(storage.get("octo.outbox.v1")).toBe("[{\"id\":\"op1\"},");
+    root.unmount();
+  });
+
+  it("the cache that is not JSON starts fresh, as before", async () => {
+    storage.set("octo.cloud.v1.c1", "{broken");
+    const root = render(Cache, { k: "octo.cloud.v1.c1" });
+    answerAll();
+    await settle();
+    expect((root.out as OutOps)[0]).toEqual([]);
+    expect((root.out as OutOps)[2]).toBe(true);
+    expect((root.out as OutOps)[3].readError).toBeNull();
+    root.unmount();
+  });
+});
+
+describe("unit:persistHook — a write is refused (A-02)", () => {
+  it("«не сохранено на устройстве» while the device refuses; the next write that lands clears it", async () => {
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    answerAll();
+    await settle();
+    refused.add("octo.outbox.v1");
+    (root.out as OutOps)[1]([{ id: "op1" }]);
+    await settle();
+    expect((root.out as OutOps)[3].writeFailed).toBe(true); // before: swallowed
+    refused.clear();
+    (root.out as OutOps)[1]([{ id: "op1" }, { id: "op2" }]);
+    await settle();
+    expect((root.out as OutOps)[3].writeFailed).toBe(false);
+    expect(storage.get("octo.outbox.v1")).toBe(TWO);
+    root.unmount();
+  });
+
+  it("the big cache refused does not stop the outbox: its own key, its own write", async () => {
+    const cache = render(Cache, { k: "octo.cloud.v1.c1" });
+    const outbox = render(Outbox, { k: "octo.outbox.v1" });
+    answerAll();
+    await settle();
+    refused.add("octo.cloud.v1.c1");
+    (cache.out as OutOps)[1]([{ id: "big" }]);
+    (outbox.out as OutOps)[1]([{ id: "op1" }]);
+    await wait(300);
+    await settle();
+    expect((cache.out as OutOps)[3].writeFailed).toBe(true);
+    expect((outbox.out as OutOps)[3].writeFailed).toBe(false);
+    expect(storage.get("octo.outbox.v1")).toBe(JSON.stringify([{ id: "op1" }]));
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    cache.unmount();
+    outbox.unmount();
+  });
+});

@@ -244,6 +244,11 @@ export const es: Dict = {
   // «Лиды и клиенты» — очередь (docs/specs/23)
   "sync.server.badge": "Servidor no disponible · en cola: {n}",
   "sync.stuck.badge": "No enviado: {n}",
+  // «Данные и деньги» (#756, A-01/A-02): the device storage
+  "storage.readFailed.title": "No se pudieron leer los datos del dispositivo",
+  "storage.readFailed.body": "Los datos guardados en el teléfono y los cambios sin enviar no se tocaron. Toque «Reintentar». Si no ayuda, reinicie la aplicación.",
+  "storage.readFailed.retry": "Reintentar",
+  "storage.notSaved.badge": "No guardado en el dispositivo",
   "sync.stuck.title": "No enviado: el servidor responde con un error",
   "sync.stuck.since": "Falla desde {when}",
   "sync.stuck.waiting": "esperan por él: {n}",
