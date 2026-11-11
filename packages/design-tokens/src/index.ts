@@ -84,7 +84,7 @@ export const motion = {
   /** app-only (spec 24 A4): delay between columns / bars growing one after another */
   chartStagger: 40,
   /** DS §14.2 (#brand): the GoRix mark's splash, ms — longer than a chart's growth (durChart), only here */
-  durBrand: 1200,
+  durBrand: 1600,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8 } as const;
