@@ -87,7 +87,10 @@ exports.run = async (h) => {
   await p.mouse.move(sv.x + sv.width * 0.6, sv.y + sv.height * 0.6, { steps: 8 });
   await p.mouse.up();
   await p.waitForTimeout(500);
-  h.expect((await snap()) === before, "the review's drawing changes nothing");
+  // on a failure say WHICH element and field moved (#806: red 5 times on CI at 390 dark, never locally)
+  const after = await snap();
+  const moved = after === before ? "" : JSON.parse(after).flatMap((e, i) => { const o = JSON.parse(before)[i] ?? {}; return Object.keys(e).filter((k) => JSON.stringify(e[k]) !== JSON.stringify(o[k])).map((k) => `${e.kind}.${k}: ${JSON.stringify(o[k])} -> ${JSON.stringify(e[k])}`); }).join("; ") || `element count ${JSON.parse(before).length} -> ${JSON.parse(after).length}`;
+  h.expect(after === before, `the review's drawing changes nothing (${moved})`);
 
   // «Править чертёж» → the canvas, the drawing as it was
   await backToCanvas(p);
