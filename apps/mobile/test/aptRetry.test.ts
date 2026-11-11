@@ -111,7 +111,8 @@ function toolbox(opts: { pg: boolean; faketime: boolean; aptWorks: boolean }) {
   const calls = join(dir, "calls.log");
   // the stub apt, when it works, «installs» PostgreSQL the way the package does: the binaries appear
   const installPg = `if [[ "$*" == *postgresql-16* ]]; then printf '#!/usr/bin/env bash\\n' > ${bin}/initdb; printf "#!/usr/bin/env bash\\necho 'postgres (PostgreSQL) 16.4'\\n" > ${bin}/postgres; chmod +x ${bin}/initdb ${bin}/postgres; fi`;
-  writeFileSync(join(dir, "apt.sh"), `#!/usr/bin/env bash\necho "apt $*" >> ${calls}\n${opts.aptWorks ? installPg + "\nexit 0" : "exit 100"}\n`);
+  const installFt = `if [[ "$*" == *faketime* ]]; then touch ${join(libroot, "x86_64-linux-gnu", "faketime", "libfaketime.so.1")}; fi`;
+  writeFileSync(join(dir, "apt.sh"), `#!/usr/bin/env bash\necho "apt $*" >> ${calls}\n${opts.aptWorks ? installPg + "\n" + installFt + "\nexit 0" : "exit 100"}\n`);
   const src = join(dir, "libfaketime");
   const SHA = "d475b925943ad404c6c728ac868dc73949e7281c";
   const ghEnv = join(dir, "github_env");
@@ -120,7 +121,7 @@ function toolbox(opts: { pg: boolean; faketime: boolean; aptWorks: boolean }) {
     ...process.env, RETRY_DELAYS: "0 0", HOME: dir,
     DBTOOLS_PGBIN: bin, DBTOOLS_LIBROOT: libroot, DBTOOLS_PGEXT: ext,
     DBTOOLS_APT_UPDATE: `bash ${join(dir, "apt.sh")} update`, DBTOOLS_APT_INSTALL: `bash ${join(dir, "apt.sh")} install`,
-    DBTOOLS_FAKETIME_SRC: src, GITHUB_ENV: ghEnv,
+    DBTOOLS_FAKETIME_SRC: src, GITHUB_ENV: ghEnv, DBTOOLS_INSTALL_DIR: join(dir, "usr-local-faketime"), DBTOOLS_SUDO: "",
     // «git clone» and «make» are stubs that leave what the real ones leave
     DBTOOLS_CLONE: `mkdir -p ${src}/src && echo ${SHA} > ${src}/.sha && echo clone >> ${calls}`,
     DBTOOLS_SHA_CMD: `cat ${src}/.sha`,
@@ -153,10 +154,18 @@ describe("scripts/dbTools.sh: the database tools without Ubuntu's mirrors", () =
   });
   it("faketime: apt works → the package is used and nothing is built", () => {
     const t = toolbox({ pg: true, faketime: false, aptWorks: true });
-    // the stub apt «installs» nothing, so the package still is not there afterwards — the build takes over; with a real apt the lib appears
     const r = t.run("faketime");
     expect(r.status).toBe(0);
+    expect(r.stdout).toContain("faketime: installed by apt");
     expect(t.calls()).toMatch(/apt update[\s\S]*apt install/);
+    expect(t.calls()).not.toMatch(/clone|make/);
+    expect(t.ghEnv()).toBe("");
+  });
+  it("an unknown tool name fails (a typo must not pass without the tool)", () => {
+    const t = toolbox({ pg: true, faketime: true, aptWorks: false });
+    const r = t.run("faketim");
+    expect(r.status).not.toBe(0);
+    expect(r.stdout).toContain("::error::");
   });
   it("faketime: apt does not work → built from the source, the commit is checked, FAKETIME_LIB goes to GITHUB_ENV", () => {
     const t = toolbox({ pg: true, faketime: false, aptWorks: false });
@@ -165,7 +174,11 @@ describe("scripts/dbTools.sh: the database tools without Ubuntu's mirrors", () =
     expect(r.stdout).toContain("apt did not work — from the source (libfaketime v0.9.10)");
     expect(r.stdout).toContain("built from the source, commit d475b92");
     expect(t.calls()).toMatch(/clone[\s\S]*make/);
-    expect(t.ghEnv()).toContain(`FAKETIME_LIB=${t.src}/src/libfaketime.so.1`);
+    // the library is copied where the user «postgres» can read it — never under $HOME (/home/runner is closed to other users)
+    const dest = join(t.dir, "usr-local-faketime", "libfaketime.so.1");
+    expect(existsSync(dest)).toBe(true);
+    expect(t.ghEnv()).toContain(`FAKETIME_LIB=${dest}`);
+    expect(t.ghEnv()).not.toContain(`FAKETIME_LIB=${t.src}`);
     // apt was tried ONCE (not four times): a dead mirror must not eat minutes — and it is a warning, not an error, for it has a fallback
     expect((t.calls().match(/apt update/g) ?? []).length).toBe(1);
     expect(r.stdout).toContain("::warning::apt: faketime (one quick try)");
@@ -179,6 +192,13 @@ describe("scripts/dbTools.sh: the database tools without Ubuntu's mirrors", () =
     expect(again.status).toBe(0);
     expect(again.stdout).toContain("built earlier (cache)");
     expect(t.calls()).not.toMatch(/clone|make/);
+  });
+  it("the real defaults: install dir outside $HOME, fetched by the pinned commit, cache key carries the full sha", () => {
+    const sh = readFileSync(join(repo, "scripts/dbTools.sh"), "utf8");
+    expect(sh).toContain('INSTALL_DIR="${DBTOOLS_INSTALL_DIR:-/usr/local/lib/faketime}"');
+    expect(sh).toMatch(/fetch -q --depth 1 \$URL \$SHA/);
+    const wf = readFileSync(join(repo, ".github/workflows/checks.yml"), "utf8");
+    expect(wf).toContain(`libfaketime-v0.9.10-\${{ runner.os }}-\${{ runner.arch }}-d475b925943ad404c6c728ac868dc73949e7281c`);
   });
   it("faketime: the tag now points at another commit → not built (rule 17)", () => {
     const t = toolbox({ pg: true, faketime: false, aptWorks: false });

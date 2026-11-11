@@ -89,7 +89,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/libfaketime
-          key: libfaketime-v0.9.10-d475b92
+          key: libfaketime-v0.9.10-${{ runner.os }}-${{ runner.arch }}-d475b925943ad404c6c728ac868dc73949e7281c
       - name: Database tests (PostgreSQL 16)
         run: |
           bash scripts/aptRetries.sh
@@ -180,7 +180,7 @@ jobs:
         with:
           name: web-dist
           path: apps/mobile/dist
-      # The browser download is cached per Playwright version; --with-deps still adds the system libraries (fast when present).
+      # The browser download is cached per Playwright version; scripts/playwrightInstall.sh adds the system libraries (one quick apt try, then Chromium without them) and starts the browser once.
       - id: pw
         name: Playwright version
         working-directory: apps/mobile

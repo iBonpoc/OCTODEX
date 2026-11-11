@@ -18,10 +18,15 @@ SRC="${DBTOOLS_FAKETIME_SRC:-${HOME}/libfaketime}"
 TAG="v0.9.10"
 SHA="d475b925943ad404c6c728ac868dc73949e7281c"   # github.com/wolfcw/libfaketime, tag v0.9.10 (commit pinned, not just the tag)
 URL="${DBTOOLS_FAKETIME_URL:-https://github.com/wolfcw/libfaketime}"
-CLONE="${DBTOOLS_CLONE:-git clone -q --depth 1 --branch $TAG $URL $SRC}"
+# Fetched by the pinned commit, not by the tag name: a moved tag cannot bring other code in.
+CLONE="${DBTOOLS_CLONE:-git init -q $SRC && git -C $SRC fetch -q --depth 1 $URL $SHA && git -C $SRC checkout -q FETCH_HEAD}"
+# The library is copied where the user «postgres» can read it (runuser -u postgres cannot enter /home/runner).
+INSTALL_DIR="${DBTOOLS_INSTALL_DIR:-/usr/local/lib/faketime}"
+INSTALL_SUDO="${DBTOOLS_SUDO-sudo}"
 BUILD="${DBTOOLS_BUILD:-make -C $SRC/src}"
 SHA_CMD="${DBTOOLS_SHA_CMD:-git -C $SRC rev-parse HEAD}"
 want=("$@"); [ ${#want[@]} -eq 0 ] && want=(postgres faketime)
+for w in "${want[@]}"; do case "$w" in postgres|faketime) ;; *) echo "::error::dbTools.sh: unknown tool '$w' (postgres | faketime)"; exit 1;; esac; done
 has() { local w; for w in "${want[@]}"; do [ "$w" = "$1" ] && return 0; done; return 1; }
 
 system_faketime() { ls "$LIBROOT"/*/faketime/libfaketime.so.1 2>/dev/null | head -1; }
@@ -69,8 +74,11 @@ if has faketime; then
       [ -f "$SRC/src/libfaketime.so.1" ] || { echo "::error::libfaketime.so.1 is not where make puts it ($SRC/src)"; exit 1; }
       echo "dbtools: faketime: built from the source, commit ${SHA:0:7}"
     fi
-    if [ -n "${GITHUB_ENV:-}" ]; then echo "FAKETIME_LIB=$SRC/src/libfaketime.so.1" >> "$GITHUB_ENV"; fi
-    echo "dbtools: faketime: FAKETIME_LIB=$SRC/src/libfaketime.so.1"
+    DEST="$INSTALL_DIR/libfaketime.so.1"
+    $INSTALL_SUDO mkdir -p "$INSTALL_DIR" && $INSTALL_SUDO install -m 0644 "$SRC/src/libfaketime.so.1" "$DEST" \
+      || { echo "::error::could not copy libfaketime.so.1 to $INSTALL_DIR"; exit 1; }
+    if [ -n "${GITHUB_ENV:-}" ]; then echo "FAKETIME_LIB=$DEST" >> "$GITHUB_ENV"; fi
+    echo "dbtools: faketime: FAKETIME_LIB=$DEST"
   fi
 fi
 exit 0
