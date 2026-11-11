@@ -42,6 +42,8 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigne
 import { acceptPayment, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { cloudCacheKey, othersCaches } from "./cacheKey";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
@@ -460,7 +462,8 @@ export function StoreProvider({
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
-  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v5";
+  // the cache is the person's in the company (#864): the next person on a shared phone never reads it
+  const cacheKey = mode === "cloud" ? cloudCacheKey(company!.companyId, auth.userId!) : "octo.db.v5";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
@@ -485,6 +488,16 @@ export function StoreProvider({
     lastKey.current = cacheKey;
     wipedKey.current = null;
   }
+  // my cache is read: other people's copies (and the older person-less ones) leave the phone — after the read, so a
+  // write of the previous key still landing (keyChanged) is done by then (#864)
+  useEffect(() => {
+    if (!dbReady || mode !== "cloud" || !auth.userId) return;
+    const me = auth.userId;
+    AsyncStorage.getAllKeys()
+      .then((ks) => othersCaches(ks, me))
+      .then((gone) => (gone.length ? AsyncStorage.multiRemove(gone) : undefined))
+      .catch(() => {}); // not removed now: the next sign-in tries again
+  }, [dbReady, mode, auth.userId]);
   const db = useMemo(() => {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
@@ -651,7 +664,7 @@ export function StoreProvider({
     try {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
-      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
+      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== cloudCacheKey(company.companyId, auth.userId)) return;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
         // spec 36: the history read on open stays (the full read has none)

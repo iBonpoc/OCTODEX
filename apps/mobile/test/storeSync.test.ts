@@ -240,7 +240,7 @@ describe("unit:storeSync — a point answered «off» after the wipe (review #23
     await settle();
     await wait(300);
     await settle();
-    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
     expect(server.loads).toHaveLength(0); // and no reload of the wiped company either
   });
 });
@@ -1342,5 +1342,48 @@ describe("unit:storeSync — the repeat on start that only filters the shared ou
     expect(server.sends.map((x) => (x.op as { id: string }).id)).toEqual(["u9@c1#3"]); // before: «nobody#2» adopted and sent as u9's
     expect(stored().map((x) => x.id)).toEqual([]); // u9's went out; nothing of u1 or ownerless written back
     expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+});
+
+describe("unit:storeSync — two people one after the other on one phone (#864, X-04)", () => {
+  const secret = () => {
+    const d = makeSeed();
+    d.customers = d.customers.map((c) => ({ ...c, name: `SECRET ${c.name}` }));
+    return d;
+  };
+  it("the next person in the same company never sees the previous one's cache — not on screen, not on the device", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: secret() })); // an older version's cache
+    storage.set("octo.cloud.v1.rejected", "[]");
+    signIn("u1", "c1"); // the director
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads[0]!.resolve(secret());
+    await settle();
+    await wait(300);
+    await settle();
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false); // the person-less copy left once u1's own was read
+    signOut();
+    r.rerender({ children: null });
+    await settle();
+    signIn("u2", "c1"); // the tech, without the network yet
+    r.rerender({ children: null });
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).mode).toBe("cloud");
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(false); // before: the director's cache
+    expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
+    expect(storage.get("octo.cloud.v1.rejected")).toBe("[]");
+  });
+  it("the same person back without the network keeps their copy", async () => {
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: secret() }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
   });
 });
