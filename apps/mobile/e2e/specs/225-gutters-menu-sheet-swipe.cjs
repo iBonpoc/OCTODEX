@@ -110,7 +110,7 @@ exports.run = async (h) => {
   await panel().waitFor({ timeout: 5000 });
   await p.waitForTimeout(400);
   { const n = await scrollers(); h.expect(n === 1, `the downspout's sheet: only the sheet's own scroll (${n})`); }
-  await swipeMiddle(["attr-ds-size", "attr-color", "attr-elbow-qty", "attr-shape", "attr-more"]);
+  await swipeMiddle(["attr-ds-size", "attr-color", "attr-elbow-qty", "attr-ds-kind", "attr-more"]);
   await waitFor(async () => (await panel().count()) === 0, "a swipe down from the middle closes the downspout's sheet");
   await sheetGone(p);
 };

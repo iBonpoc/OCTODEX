@@ -72,6 +72,10 @@ exports.run = async (h) => {
     await tid("attr-panel").waitFor({ timeout: 5000 });
     if (await tid("attr-more").count()) await tid("attr-more").getByRole("button").click();
     await clean("a downspout's menu", lang);
+    // the kind tiles (#929): four, and no tile's words run over its frame in this language
+    await tid("attr-ds-kind").waitFor({ timeout: 5000 });
+    const over = await p.evaluate(() => [...document.querySelectorAll('[data-testid^="attr-ds-kind-"]')].filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.getAttribute("data-testid")));
+    h.expect(over.length === 0 && (await p.locator('[data-testid^="attr-ds-kind-"]').count()) === 4, `${lang}: four kind tiles, none overflows (${over.join(",")})`);
     await closePanel();
 
     // a corner's sheet

@@ -138,12 +138,12 @@ exports.run = async (h) => {
   if (!wide) {
     // 390 (П20.9): size, colour, elbows on top; one «Ещё» for the rest — closed again for this new element
     for (const id of ["attr-ds-size", "attr-color", "attr-elbow-qty"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
-    for (const id of ["attr-shape", "attr-bottom", "attr-wall", "attr-head"]) h.expect((await tid(id).count()) === 0, `390: ${id} under «Ещё»`);
+    for (const id of ["attr-ds-kind", "attr-bottom", "attr-wall", "attr-head"]) h.expect((await tid(id).count()) === 0, `390: ${id} under «Ещё»`);
     h.expect((await tid("attr-more").count()) === 1, "390: one «Ещё», closed for the new element");
-  } else h.expect((await tid("attr-shape").count()) === 1, "820/1280: the shape without «Ещё»");
+  } else h.expect((await tid("attr-ds-kind").count()) === 1, "820/1280: the kind without «Ещё»");
   await more();
-  h.expect((await chosen("attr-shape")) === "Прямоугольный", "rectangular by default");
-  await choose("attr-shape", "Круглый");
+  h.expect((await tid("attr-ds-kind-rectPlain").getAttribute("aria-checked")) === "true", "rectangular, smooth by default");
+  await tid("attr-ds-kind-roundPlain").click(); // the kind: round
   await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
   await choose("attr-wall", "Кирпич");
   await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + анкеры", "brick: its default wall kit");
