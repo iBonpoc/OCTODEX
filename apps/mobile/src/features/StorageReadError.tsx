@@ -22,7 +22,9 @@ export function StorageReadError({ onRetry }: { onRetry: () => void }) {
         <T v="body" tone="mut" center>
           {t("storage.readFailed.body")}
         </T>
-        <Button label={t("storage.readFailed.retry")} onPress={onRetry} />
+        <View testID="storage-read-retry">
+          <Button label={t("storage.readFailed.retry")} onPress={onRetry} />
+        </View>
       </View>
     </View>
   );
