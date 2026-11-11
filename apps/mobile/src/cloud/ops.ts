@@ -256,7 +256,8 @@ export type Op =
   | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
-  | { k: "estimate.sign"; id: string; svg: string; signer?: string }
+  /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none) */
+  | { k: "estimate.sign"; id: string; svg: string; signer?: string; sent?: boolean }
   /* ---- wave E2a: the company signs; the client link can be revoked (docs/specs/07 §2.2 А, Б) ---- */
   | { k: "estimate.countersign"; id: string; svg?: string; memberSignatureId?: string; jobId?: string; invoiceId?: string }
   | { k: "estimate.revoke"; id: string }
@@ -1079,12 +1080,13 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "estimate.sign": {
       // a quick estimate signed on site: the server records the client's signature and the total (sign_estimate_on_site);
       // the app no longer writes the signature or the status directly (security-check 05.11)
-      // #1126: a tech may not send — the office did (a sent estimate): that refusal is not the end, as estimate.approve
-      // on site; other refusals (changed lines) still stop it. A draft a tech never has signed (canSignDraftOnSite).
+      // #1126: a tech may not send — the office did (the client signed an estimate already sent): that refusal is not the
+      // end, as estimate.approve on site; other refusals (changed lines) still stop it. An older app's op (no `sent`) may be
+      // a tech's draft the office has changed and sent since — it stays refused, never signed onto another version.
       try {
         await applyOp({ k: "estimate.send", id: op.id }, c, userId);
       } catch (e) {
-        if (!(e instanceof PermanentError && e.code === "42501")) throw e;
+        if (!(op.sent && e instanceof PermanentError && e.code === "42501")) throw e;
       }
       const { error, status } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
       return run(Promise.resolve({ error, status }));

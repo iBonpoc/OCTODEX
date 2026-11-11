@@ -1466,7 +1466,7 @@ describe("unit:storeSync — a tech has an older quick estimate signed on site (
     await wait(1700); // the outbox tick
     await settle();
     const est = (valueOf(r) as unknown as { db: { estimates: { id: string; status: string }[] } }).db.estimates.find((x) => x.id === "e4")!;
-    return { ops: server.sends.map((x) => (x.op as { k: string }).k), status: est.status };
+    return { ops: server.sends.map((x) => (x.op as { k: string }).k), sent: server.sends.map((x) => x.op as { k: string; sent?: boolean }).find((o) => o.k === "estimate.sign")?.sent, status: est.status };
   };
   it("a draft: the tech cannot have it signed — nothing on the phone, nothing sent (before: «awaiting» on the phone, refused on the server)", async () => {
     const { ops, status } = await signAs("tech", "draft");
@@ -1474,13 +1474,15 @@ describe("unit:storeSync — a tech has an older quick estimate signed on site (
     expect(status).toBe("draft");
   });
   it("a sent one: signed as before", async () => {
-    const { ops, status } = await signAs("tech", "sent");
+    const { ops, status, sent } = await signAs("tech", "sent");
     expect(ops).toContain("estimate.sign");
+    expect(sent).toBe(true); // the server may take it past the tech's refused send
     expect(status).toBe("awaiting_countersign");
   });
   it("the office: a draft is signed as before (it sends first)", async () => {
-    const { ops, status } = await signAs("office", "draft");
+    const { ops, status, sent } = await signAs("office", "draft");
     expect(ops).toContain("estimate.sign");
+    expect(sent).toBe(false);
     expect(status).toBe("awaiting_countersign");
   });
 });

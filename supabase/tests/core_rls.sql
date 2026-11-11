@@ -12743,4 +12743,45 @@ select tst.ok(true, 'T191 an ACH of the deposit on its way: the deposit is not p
 select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '11910000-0000-4000-8000-000000000009'$q$) = 1, 'T191 only the ACH on the deposit');
 \echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
+-- ======================================================================================================================
+-- T193 (#1126): the client signs an older quick estimate on a tech's phone (sign_estimate_on_site). The app no longer stops
+-- at the tech's refused send (42501) — this is the server's door it then relies on: a tech who may sign contracts, not staff,
+-- who sees the estimate (his own): a SENT one is signed; a DRAFT one is refused (only a sent, locked version is signed).
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+do $$
+declare n int; e uuid; v uuid; o uuid;
+begin
+  for n in 1..2 loop
+    e := ('e1930000-0000-4000-8000-00000000000' || n)::uuid; v := ('e1930000-0000-4000-8000-0000000000a' || n)::uuid;
+    o := ('e1930000-0000-4000-8000-0000000000b' || n)::uuid;
+    insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+      (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T193 ' || n,
+       'a0000000-0000-0000-0000-000000000003');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (v, 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"none"}');
+    update public.estimates set current_version_id = v where id = e;
+    insert into public.estimate_options (id, company_id, version_id, name) values (o, 'ca000000-0000-0000-0000-000000000000', v, 'Only');
+    insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+      (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
+  end loop;
+end $$;
+:as_office_a
+select public.send_estimate('e1930000-0000-4000-8000-000000000001', null);
+:as_tech_a
+select tst.ok(not app.is_staff('ca000000-0000-0000-0000-000000000000'), 'T193 (fixture: the tech is not staff)');
+select tst.ok(public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000001', 'Ann Client', 'M0 0 L1 1') = 'awaiting_countersign',
+  'T193 a sent quick estimate: the client signs on the tech''s phone');
+select tst.ok(public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000001', 'Ann Client', 'M0 0 L1 1') = 'awaiting_countersign',
+  'T193 …a repeat (no network) changes nothing');
+select tst.fails_like($q$select public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000002', 'Ann Client', 'M0 0 L1 1')$q$, '%not open for approval%',
+  'T193 a draft: refused (the office sends it first)');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_approvals where estimate_id = 'e1930000-0000-4000-8000-000000000001' and party = 'customer'$q$) = 1,
+  'T193 one client signature, kept');
+select tst.ok((select status = 'draft' from public.estimates where id = 'e1930000-0000-4000-8000-000000000002'), 'T193 the draft stays a draft');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T193 the client signs a sent quick estimate on a tech''s phone; a draft is refused'
+
 \echo 'ALL TESTS PASSED'
