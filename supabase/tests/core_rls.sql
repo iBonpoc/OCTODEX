@@ -12252,8 +12252,11 @@ select tst.ok((select reason from public.trash_items('catalog_item', array[(sele
 insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e1740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T174 ach', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
 insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values ('01740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1740000-0000-4000-8000-000000000001', 'final', 10000);
 update public.invoices set status = 'sent', sent_at = now() where id = '01740000-0000-4000-8000-000000000001';
+-- money on its way is Stripe's (no person; 20261111050000)
+:as_super
 insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
 values ('ca000000-0000-0000-0000-000000000000', '01740000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'ach', 10000, 'pending', 't174-ach');
+:as_owner_a
 select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1740000-0000-4000-8000-000000000001'$q$, 'job:paid%', 'T174 a payment on its way: refund or wait first');
 -- an estimate whose lead is in the Trash waits for its lead
 insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1740000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T174 Lead Parent', '+13235550175');
@@ -12314,5 +12317,65 @@ select tst.ok((select ok from public.trash_items('task', array['a1750000-0000-40
 select tst.ok((select ok from public.trash_items('lead', array['a1750000-0000-4000-8000-000000000002'::uuid])), 'T175 then its lead');
 select tst.ok((select reason from public.trash_restore('task', array['a1750000-0000-4000-8000-000000000012'::uuid])) = 'parentDeleted', 'T175 the task waits for its lead');
 \echo 'T175 the director''s check of #752: who deleted restores, own while seen, the tech''s late task, paid on site, the task''s parent ok'
+
+-- =============================================================================
+-- T176–T178. Что человек может сделать с платежом сам (аудит 11.11 B-01, B-03, B-14; #757; миграция 20261111050000)
+-- =============================================================================
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e1760000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T176 money', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('01760000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1760000-0000-4000-8000-000000000001', 'final', 10000);
+update public.invoices set status = 'sent', sent_at = now() where id = '01760000-0000-4000-8000-000000000001';
+-- T176 (B-01, B-14): a person does not write money on its way — no pending, so no «pending then succeeded» twice
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '01760000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'cash', 10000, 'pending', 't176-p')$q$,
+  '%records a received payment only%', 'T176 a person does not insert a pending payment (B-01, B-14)');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('21760000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '01760000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'cash', 10000, 'succeeded', 't176-s');
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '01760000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'cash', 10000, 'succeeded', 't176-s2')$q$,
+  '%exceeds invoice balance%', 'T176 a second full payment is above the balance');
+:as_super
+select tst.ok((select paid_cents = 10000 and payment_status = 'paid' from public.invoices where id = '01760000-0000-4000-8000-000000000001'), 'T176 the invoice is paid once');
+\echo 'T176 a person writes no money on its way: no double payment (B-01, B-14) ok'
+
+-- T177 (B-01): the outcome of a pending payment is Stripe's; the webhook path (no person) still settles it
+:as_owner_a
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('01770000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', null, 'standalone', 8000);
+update public.invoices set status = 'sent', sent_at = now() where id = '01770000-0000-4000-8000-000000000001';
+:as_super
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('21770000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '01770000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'ach', 8000, 'pending', 't177-ach'),
+  ('21770000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '01770000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'ach', 100, 'pending', 't177-ach2');
+:as_owner_a
+select tst.fails_like($q$update public.payments set status = 'succeeded' where id = '21770000-0000-4000-8000-000000000001'$q$, '%on its way is Stripe%', 'T177 a person does not turn pending into succeeded');
+select tst.fails_like($q$update public.payments set status = 'failed' where id = '21770000-0000-4000-8000-000000000001'$q$, '%on its way is Stripe%', 'T177 nor into failed');
+:as_super
+update public.payments set status = 'succeeded' where id = '21770000-0000-4000-8000-000000000001';
+update public.payments set status = 'failed' where id = '21770000-0000-4000-8000-000000000002';
+select tst.ok((select paid_cents = 8000 from public.invoices where id = '01770000-0000-4000-8000-000000000001'), 'T177 Stripe settles its pending payments as before');
+\echo 'T177 the outcome of money on its way is Stripe''s (B-01) ok'
+
+-- T178 (B-03): returned by a person — only for a manual method; a card / bank / Tap to Pay payment only by Stripe
+:as_super
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('21780000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', null, 'c1a00000-0000-0000-0000-000000000002', 'card', 500, 'succeeded', 't178-card'),
+  ('21780000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', null, 'c1a00000-0000-0000-0000-000000000002', 'ach', 500, 'succeeded', 't178-ach'),
+  ('21780000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', null, 'c1a00000-0000-0000-0000-000000000002', 'tap_to_pay', 500, 'succeeded', 't178-tap');
+:as_owner_a
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('21780000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', null, 'c1a00000-0000-0000-0000-000000000002', 'check', 500, 'succeeded', 't178-check');
+select tst.fails_like($q$update public.payments set status = 'returned' where id = '21780000-0000-4000-8000-000000000001'$q$, '%returned only by Stripe%', 'T178 a card payment is not returned by a person (B-03)');
+select tst.fails_like($q$update public.payments set status = 'returned' where id = '21780000-0000-4000-8000-000000000002'$q$, '%returned only by Stripe%', 'T178 nor an ACH one');
+select tst.fails_like($q$update public.payments set status = 'returned' where id = '21780000-0000-4000-8000-000000000003'$q$, '%returned only by Stripe%', 'T178 nor Tap to Pay');
+update public.payments set status = 'returned' where id = '21780000-0000-4000-8000-000000000004';
+:as_super
+select tst.ok((select status = 'returned' from public.payments where id = '21780000-0000-4000-8000-000000000004'), 'T178 a bounced check is returned by the owner');
+update public.payments set status = 'returned' where id = '21780000-0000-4000-8000-000000000002';
+select tst.ok((select status = 'returned' from public.payments where id = '21780000-0000-4000-8000-000000000002'), 'T178 Stripe (no person) returns an ACH payment as before');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_payment_person_guard()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.tg_payment_person_guard()', 'EXECUTE'), 'T178 the guard is nobody''s to call');
+\echo 'T178 returned: manual methods by a person, card and bank only by Stripe (B-03) ok'
 
 \echo 'ALL TESTS PASSED'
