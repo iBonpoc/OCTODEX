@@ -10,6 +10,9 @@ export const deviceGeneration = () => generation;
 /** whose account is deleted (when known): the store drops their ops from the shared outbox, review #240 №2 */
 export interface ForgetInfo {
   userId?: string | null;
+  /** only the outbox is sorted again (a wipe repeated because it could not be read — third review №3): the signed-in
+   *  person's state, writes and sends are left alone */
+  outboxOnly?: boolean;
 }
 type Forget = (isWiped: (key: string) => boolean, info: ForgetInfo) => void;
 const listeners = new Set<Forget>();
@@ -26,7 +29,7 @@ export function onDeviceForgotten(cb: Forget): () => void {
  * without writing it, and the store drops what it keeps only in memory.
  */
 export function forgetDeviceState(isWiped: (key: string) => boolean, info: ForgetInfo = {}): void {
-  generation += 1;
+  if (!info.outboxOnly) generation += 1;
   for (const cb of [...listeners]) cb(isWiped, info);
 }
 
@@ -82,6 +85,9 @@ export interface Writer {
   forget: () => void;
   /** the app is leaving (background, the tab hidden or closed): the pending writes are written now (rule 6) */
   flush: () => void;
+  /** this key is not written any more: its pending write and its retry go, a write in flight that fails is not retried
+   *  (third review of #763 №1: a held copy's late retry would write a sent op back) */
+  cancel: (key: string) => void;
 }
 /**
  * `ms` — how long a change waits for the next one before it is written (one write for a burst of changes). 0 — written
@@ -157,6 +163,14 @@ export function createWriter(setItem: SetItem, ms = 250, gen: () => number = dev
     },
     flush: () => {
       for (const k of [...pending.keys()]) write(k);
+    },
+    cancel: (key) => {
+      stop(key);
+      pending.delete(key);
+      fails.delete(key);
+      seq += 1;
+      latest.set(key, seq); // no change of this key is the latest any more: a late failure is never retried
+      reportStorage(key, null, "write");
     },
   };
 }
@@ -337,8 +351,9 @@ export function usePersistentState<T>(
         if (!current()) return;
         if (res.ok && kept.ok) {
           reportStorage(key, null, "read");
-          // the held copy waiting to be written now (it lands before the merged value, then goes after it)
-          writer.current!.flush();
+          // the held copy is not written any more (the memory goes under the key itself): its pending write and its
+          // retry are cancelled BEFORE the copy is removed — a late retry would bring a sent op back (third review №1)
+          writer.current!.cancel(heldKey(key));
           setState((s) => {
             if (s.key !== key) return s;
             // the memory already holds the copy (read when held): taken from the memory only, never twice (Н2)

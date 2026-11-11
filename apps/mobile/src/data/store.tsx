@@ -687,7 +687,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onDeviceForgotten((_wiped, info) => {
-        wipedKey.current = cacheKeyRef.current;
+        // only the outbox sorted again (a repeat of a wipe, #763 third review №3): the signed-in person's cache stays live
+        if (!info.outboxOnly) wipedKey.current = cacheKeyRef.current;
         // the outbox keeps other people's ops (rule 6): only the deleted person's go (and old ones without an owner).
         // The deleted person comes with the wipe: the sign-in may already be gone from the store (review #240 №2)
         // told by the wipe (even «not known» = null: never the person signed in now, review #244), else the sign-in
@@ -698,6 +699,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // the refused money changes: the deleted person's go, other people's stay (review #263 №2)
         if (!rejectedReadyRef.current || rejectedHeldRef.current) forgetRejectedOnLoad.current = { userId: me, loads: rejectedLoadsRef.current };
         setRejected((prev) => rejectedOthers(prev, me));
+        if (info.outboxOnly) return;
         setGateCodes({});
         waitingPoints.current = {};
       }),

@@ -186,7 +186,7 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     await finishOnDevice("u1");
     expect(storage.get("octo.outbox.v1")).toBe(ops); // before the fix: read as «null» → wiped, «theirs» lost
     expect(storage.has("octo.role.v1")).toBe(false);
-    expect(storage.get("octo.wipe.pending.v1")).toBe("u1");
+    expect(storage.get("octo.wipe.pending.v1")).toBe("outbox:u1"); // only the outbox is left to sort (third review №3)
     failGet.clear();
     await wipeIfPending();
     expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs"]);
@@ -209,7 +209,32 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     expect(storageProblems().get("octo.wipe.pending.v1")).toBe("write"); // before: .catch(() => {})
     failSet.clear();
     await finishOnDevice("u1");
-    expect(storage.get("octo.wipe.pending.v1")).toBe("u1");
+    expect(storage.get("octo.wipe.pending.v1")).toBe("outbox:u1"); // only the outbox is left to sort (third review №3)
     expect(storageProblems().has("octo.wipe.pending.v1")).toBe(false);
+  });
+  it("third review №3: an outbox that stays unreadable — the repeat never wipes the next person's keys; sorted once it reads", async () => {
+    const at = new Date().toISOString();
+    const op = (id: string, owner?: { userId: string; companyId: string }) => ({ id, op: { k: "x", id }, at, tries: 0, ...(owner ? { owner } : {}) });
+    const ops = JSON.stringify([op("mine", { userId: "u1", companyId: "c1" }), op("theirs", { userId: "u9", companyId: "c1" })]);
+    storage.set("octo.outbox.v1", ops);
+    failGet.add("octo.outbox.v1");
+    await finishOnDevice("u1");
+    // the next person signs in and works on this phone
+    const next = { "octo.role.v1": '"tech"', "octo.queue.v1": "[]", "octo.cloud.v1.c9": '{"day":"cloud"}', "octo.invite.token.v1": '"t"' };
+    for (const [k, v] of Object.entries(next)) storage.set(k, v);
+    let heard = 0;
+    const off = onDeviceForgotten((wiped) => void (heard += Object.keys(next).filter(wiped).length));
+    await wipeIfPending(); // still unreadable
+    await wipeIfPending();
+    for (const [k, v] of Object.entries(next)) expect(storage.get(k)).toBe(v); // before: wiped on every start
+    expect(heard).toBe(0); // and not forgotten in memory either
+    expect(storage.get("octo.outbox.v1")).toBe(ops);
+    expect(storage.get("octo.wipe.pending.v1")).toBe("outbox:u1");
+    failGet.clear();
+    await wipeIfPending(); // reads now: only the outbox is sorted
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs"]);
+    for (const [k, v] of Object.entries(next)) expect(storage.get(k)).toBe(v);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+    off();
   });
 });

@@ -10,7 +10,7 @@ const storage = new Map<string, string>();
 const reads: { key: string; answer: (raw: string | null) => void }[] = [];
 /** #756: the next reads fail (of the values; a held copy reads — or fails with failHeld); `auto` — reads are answered
  *  at once from the map */
-const io = { failReads: 0, failWrites: false, auto: false, failHeld: 0, staleHeld: null as string | null, failRemove: 0 };
+const io = { failReads: 0, failWrites: false, auto: false, failHeld: 0, staleHeld: null as string | null, failRemove: 0, failWriteKeys: new Set<string>() };
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: (key: string) => {
@@ -30,7 +30,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       return new Promise<string | null>((answer) => reads.push({ key, answer }));
     },
     setItem: async (k: string, v: string) => {
-      if (io.failWrites) throw new Error("QuotaExceededError");
+      if (io.failWrites || io.failWriteKeys.has(k)) throw new Error("QuotaExceededError");
       storage.set(k, v);
     },
     removeItem: async (k: string) => {
@@ -58,7 +58,7 @@ const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 beforeEach(() => {
   storage.clear();
   reads.length = 0;
-  Object.assign(io, { failReads: 0, failWrites: false, auto: false, failHeld: 0, staleHeld: null, failRemove: 0 });
+  Object.assign(io, { failReads: 0, failWrites: false, auto: false, failHeld: 0, staleHeld: null, failRemove: 0, failWriteKeys: new Set<string>() });
 });
 
 describe("unit:persistHook — the key changes while a write waits", () => {
@@ -388,5 +388,34 @@ describe("unit:persistHook — the phone could not read or write (#756, audit A-
     await settle();
     expect([(root.out as Full)[3], (root.out as Full)[4]]).toEqual([1, false]);
     root.unmount();
+  });
+  it("third review №1: a held copy's write still to be retried is cancelled when the value reads — a sent op never comes back", async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "a" }]));
+    io.failReads = 4; // held at ~180 ms, read at ~480 ms
+    persistTiming.write = () => 400; // the copy's retry would come at ~650 ms — after the value is read and the copy removed
+    io.failWriteKeys.add("octo.held.v1.octo.outbox.v1");
+    const first = render(Outbox, { k: "octo.outbox.v1" });
+    await settle();
+    await wait(250);
+    await settle();
+    (first.out as OutOps)[1]((ops) => [...ops, { id: "n" }]); // the copy's write fails: a retry waits
+    await settle();
+    expect(storageProblems().get("octo.held.v1.octo.outbox.v1")).toBe("write");
+    await wait(350); // the value is read: [a, n] under the key, the copy removed (a write of the copy then still fails)
+    await settle();
+    expect((first.out as OutOps)[0]).toEqual([{ id: "a" }, { id: "n" }]);
+    io.failWriteKeys.clear(); // the storage works again: a retry still waiting would land now
+    (first.out as OutOps)[1]((ops) => ops.filter((o) => o.id !== "n")); // «n» sent: taken out
+    await settle();
+    await wait(500); // past the old retry
+    await settle();
+    expect(storage.has("octo.held.v1.octo.outbox.v1")).toBe(false); // before: [n] written back by the old retry
+    expect(storageProblems().has("octo.held.v1.octo.outbox.v1")).toBe(false);
+    first.unmount();
+    await settle();
+    const again = render(Outbox, { k: "octo.outbox.v1" }); // the next start
+    await settle();
+    expect((again.out as OutOps)[0]).toEqual([{ id: "a" }]); // before: [a, n] — «n» sent a second time
+    again.unmount();
   });
 });
