@@ -2,6 +2,7 @@
  * #756 (A-01, A-02): the device storage fails (docs/audit/2026-11-11-full-audit.md §2).
  * - the outbox on the device is not JSON: the app is not loaded, the screen «Не удалось прочитать данные с устройства»
  *   with «Повторить»; the record on the device is never overwritten; once it can be read, «Повторить» opens the app;
+ *   «Сохранить копию и продолжить» (after a confirmation) keeps the broken record aside and opens the app (review of #910);
  * - the device refuses a write (full storage): «Не сохранено на устройстве» in «Ещё», never «Онлайн · всё сохранено».
  */
 exports.run = async (h) => {
@@ -32,6 +33,20 @@ exports.run = async (h) => {
   await p.locator('[data-testid="storage-read-retry"]:visible').click();
   await p.locator('[data-testid="more-screen"]:visible').waitFor({ timeout: 5000 });
   h.expect((await errorScreen().count()) === 0, "the error screen is gone");
+
+  // 1b. broken again: «Сохранить копию и продолжить» — a confirmation, the copy kept, the app opens with an empty outbox
+  await p.evaluate(() => localStorage.setItem("octo.outbox.v1", '[{"id":"op2"},'));
+  await h.go("/more");
+  await errorScreen().waitFor({ timeout: 5000 });
+  await p.locator('[data-testid="storage-salvage"]:visible').click();
+  await p.locator('[data-testid="storage-salvage-confirm"]:visible').waitFor({ timeout: 3000 });
+  h.expect((await outbox()) === '[{"id":"op2"},', "nothing written before the confirmation");
+  await h.shot("salvage-confirm");
+  await p.locator('[data-testid="storage-salvage-yes"]:visible').click();
+  await p.locator('[data-testid="more-screen"]:visible').waitFor({ timeout: 5000 });
+  const copies = await p.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("octo.broken.octo.outbox.v1.")).map((k) => localStorage.getItem(k)));
+  h.expect(copies.length === 1 && copies[0] === '[{"id":"op2"},', `the broken record is kept aside (${JSON.stringify(copies)})`);
+  h.expect((await outbox()) === "[]", `the outbox starts empty (${await outbox()})`);
 
   // 2. the device refuses writes of the role (full storage): «Не сохранено на устройстве», not «всё сохранено»
   await p.addInitScript(() => {

@@ -41,7 +41,7 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigne
 import { acceptPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
+import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
@@ -448,7 +448,14 @@ const costsOf = (doc: EstimateDoc): Record<string, number> =>
 
 /** `readError`: the screen shown when the device did not give back what it keeps (A-01) — from the root layout, so the
  *  store imports no UI; without it nothing is shown (tests) */
-export function StoreProvider({ children, readError }: { children: ReactNode; readError?: (retry: () => void) => ReactNode }) {
+export function StoreProvider({
+  children,
+  readError,
+}: {
+  children: ReactNode;
+  /** `salvage` — a broken outbox record: keep its copy and go on (null for a failed read) */
+  readError?: (retry: () => void, salvage: (() => void) | null) => ReactNode;
+}) {
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
@@ -516,11 +523,11 @@ export function StoreProvider({ children, readError }: { children: ReactNode; re
     setLink(failedAs(e));
   };
   // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
-  // `strict`: the changes the phone has only here are never «started fresh» from a broken record (A-01)
+  // `strict`: what the phone has only here is never «started fresh» from a broken record — its copy is kept first (A-01)
   const [queue, setQueue, queueReady, queueHealth] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true, strict: true });
   const [outbox, setOutbox, outboxReady, outboxHealth] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true, strict: true });
   // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
-  const [rejected, setRejected, rejectedReady, rejectedHealth] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
+  const [rejected, setRejected, rejectedReady, rejectedHealth] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true, strict: true });
   // the device storage (A-01, A-02): a read that failed holds the app on «Повторить»; a refused write is shown
   const health = [dbHealth, roleHealth, queueHealth, outboxHealth, rejectedHealth];
   const notSavedOnDevice = health.some((h) => h.writeFailed);
@@ -758,6 +765,13 @@ export function StoreProvider({ children, readError }: { children: ReactNode; re
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
+            // an op this build does not know is its own trouble, never the server's: it waits (stuck after 10 minutes),
+            // the others go past it — two of them in a pass never read as «server unavailable» (review of #910 №2)
+            if (isUnknownOp(e)) {
+              failedOnce(item, msg);
+              failedNow.add(item.id);
+              continue;
+            }
             if (needsSignIn(e)) void renewSession();
             if (classify(e) === "network") clearFails(item.id);
             // an op already stuck failing again says nothing new about the server (after a restart every stuck op is
@@ -2475,7 +2489,12 @@ export function StoreProvider({ children, readError }: { children: ReactNode; re
   );
 
   // nothing is written while a state is not loaded: the screen only reads again (A-01)
-  if (health.some((h) => h.readError)) return <>{readError?.(() => health.forEach((h) => h.readError && h.retry())) ?? null}</>;
+  if (health.some((h) => h.readError)) {
+    const retryAll = () => health.forEach((h) => h.readError && h.retry());
+    const broken = health.filter((h) => h.salvage);
+    const salvageAll = broken.length ? () => broken.forEach((h) => h.salvage!()) : null;
+    return <>{readError?.(retryAll, salvageAll) ?? null}</>;
+  }
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

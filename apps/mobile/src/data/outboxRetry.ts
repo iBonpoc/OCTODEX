@@ -15,6 +15,7 @@ export type Failure = "network" | "transient" | "refusal";
  *  dropped — it waits as «maybe this op's alone» and after 10 minutes is shown as «не отправлено» (A-19, #784) */
 export const UNKNOWN_OP = "UnknownOpError";
 export const unknownOp = (k: unknown) => Object.assign(new Error(`unknown op: ${String(k)}`), { name: UNKNOWN_OP });
+export const isUnknownOp = (e: unknown) => e instanceof Error && e.name === UNKNOWN_OP;
 
 /** the request did not reach the server or got no answer: the browser's / React Native's fetch, a timeout, an abort */
 const NETWORK = /failed to fetch|network request failed|networkerror|network error|load failed|fetch failed|timed? ?out|timeout|aborted|econn|enotfound|eai_again|socket hang up|internet/i;

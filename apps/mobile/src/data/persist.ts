@@ -128,7 +128,13 @@ export interface StorageHealth {
   writeFailed: boolean;
   /** read the stored value again (after a read error) */
   retry: () => void;
+  /** «corrupt» only: the broken record is copied to its own key (`brokenKeyOf`), then the state starts empty and is
+   *  written as usual (review of #910 №1: «Повторить» alone reads the same broken bytes forever) */
+  salvage: (() => void) | null;
 }
+/** where a broken record is kept (never sent, wiped with the account — DEVICE_PREFIXES) */
+export const BROKEN_PREFIX = "octo.broken.";
+export const brokenKeyOf = (key: string, at: number) => `${BROKEN_PREFIX}${key}.${at}`;
 /** a failed read is tried again this many times in all, with a growing pause (A-01) */
 export const READ_TRIES = 3;
 export const READ_PAUSE_MS = 300;
@@ -162,6 +168,8 @@ export function usePersistentState<T>(
   if (!writer.current)
     writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (ok) => setWriteFailed(!ok));
   const strict = !!opts?.strict;
+  /** the raw record a strict key could not parse: copied by «Сохранить копию и продолжить» */
+  const broken = useRef<{ key: string; raw: string } | null>(null);
   useEffect(() => {
     const w = writer.current!;
     live.add(w);
@@ -209,7 +217,10 @@ export function usePersistentState<T>(
             if (!validate.current || validate.current(parsed)) value = parsed;
           } catch {
             // the outbox (strict) is never started fresh: what it holds stays on the device, the store shows the error
-            if (strict) return setState({ key, value: init(), loaded: false, readError: "corrupt" });
+            if (strict) {
+              broken.current = { key, raw };
+              return setState({ key, value: init(), loaded: false, readError: "corrupt" });
+            }
             /* corrupted cache: start fresh */
           }
         }
@@ -248,7 +259,23 @@ export function usePersistentState<T>(
     [],
   );
   const retry = useCallback(() => setReadTry((n) => n + 1), []);
-  const health: StorageHealth = { readError: state.key === key ? (state.readError ?? null) : null, writeFailed, retry };
+  const salvage = useCallback(() => {
+    const b = broken.current;
+    const k = keyRef.current;
+    if (!b || b.key !== k) return;
+    const w = wiped.current;
+    // the copy first: the broken record is overwritten only once its copy is on the device
+    AsyncStorage.setItem(brokenKeyOf(k, Date.now()), b.raw).then(
+      () => {
+        if (w !== wiped.current || keyRef.current !== k || broken.current !== b) return;
+        broken.current = null;
+        setState((s) => (s.key === k && s.readError === "corrupt" ? { key: k, value: initRef.current(), loaded: true } : s));
+      },
+      () => setWriteFailed(true),
+    );
+  }, []);
+  const readError = state.key === key ? (state.readError ?? null) : null;
+  const health: StorageHealth = { readError, writeFailed, retry, salvage: readError === "corrupt" ? salvage : null };
   return [state.value, setValue, ready, health] as const;
 }
 

@@ -300,3 +300,46 @@ describe("unit:persistHook — a read error, then «Повторить» or a wi
     root.unmount();
   });
 });
+
+describe("unit:persistHook — a broken outbox: keep its copy and go on (review of #910 №1)", () => {
+  const RAW = '[{"id":"op1"},';
+  it("«Сохранить копию и продолжить»: the raw record is copied first, then the outbox starts empty and is written", async () => {
+    storage.set("octo.outbox.v1", RAW);
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    answerAll();
+    await settle();
+    expect((root.out as OutOps)[3].salvage).not.toBeNull();
+    (root.out as OutOps)[3].salvage!();
+    await settle();
+    const copies = [...storage.entries()].filter(([k]) => k.startsWith("octo.broken.octo.outbox.v1."));
+    expect(copies.map(([, v]) => v)).toEqual([RAW]);
+    expect((root.out as OutOps)[2]).toBe(true);
+    expect((root.out as OutOps)[3].readError).toBeNull();
+    expect(storage.get("octo.outbox.v1")).toBe("[]");
+    root.unmount();
+  });
+  it("the copy is refused by the device: the broken record is not overwritten, the error stays", async () => {
+    storage.set("octo.outbox.v1", RAW);
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    answerAll();
+    await settle();
+    const realHas = refused.has.bind(refused);
+    refused.has = (k: string) => k.startsWith("octo.broken.") || realHas(k);
+    (root.out as OutOps)[3].salvage!();
+    await settle();
+    refused.has = realHas;
+    expect(storage.get("octo.outbox.v1")).toBe(RAW);
+    expect((root.out as OutOps)[3].readError).toBe("corrupt");
+    expect((root.out as OutOps)[3].writeFailed).toBe(true);
+    root.unmount();
+  });
+  it("a failed read has no «copy and go on» (only «Повторить»)", async () => {
+    const root = render(Outbox, { k: "octo.outbox.v1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    expect((root.out as OutOps)[3].readError).toBe("read");
+    expect((root.out as OutOps)[3].salvage).toBeNull();
+    root.unmount();
+  }, 10_000);
+});

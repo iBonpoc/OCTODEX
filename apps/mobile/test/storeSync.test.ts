@@ -791,6 +791,22 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     expect(st().map((x) => [x.id, x.tries])).toEqual([["X", 0]]); // before: a «refusal», dropped after 5 tries
     expect(v(r).syncError).toBeNull(); // no raw English text
   });
+  it("an unknown op and then an op's own timeout in a pass: the next op still goes, the link stays «ok» (review of #910 №2)", { timeout: 15_000 }, async () => {
+    const { unknownOp } = await import("../src/data/outboxRetry");
+    seedOutbox(q("X", { k: "from.newer.build", id: U(1) }), ev("Y", 2), ev("Z", 3));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(unknownOp("from.newer.build"));
+    await settle();
+    server.sends[1]!.d.reject(timeout()); // Y's own «not now»: before, the unknown op had used the probe — the queue paused
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(2), U(3)]);
+    server.sends[2]!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(v(r).link).toBe("ok");
+    expect(st().map((x) => [x.id, x.tries])).toEqual([["X", 0], ["Y", 0]]);
+  });
   it("Y gets a 500 too: the server as a whole — «server unavailable», the queue pauses, both stay, no tries", async () => {
     seedOutbox(ev("X", 1), ev("Y", 2), ev("Z", 3));
     const r = await start();
@@ -1251,5 +1267,21 @@ describe("unit:storeSync — the device does not give the outbox back (A-01, #75
     await settle();
     expect(valueOf(r).queue).toBeDefined(); // loaded: the provider with its value
     expect(storage.get("octo.outbox.v1")).toBe(two);
+  });
+  it("a broken outbox record: «copy and go on» keeps the copy, then the app opens (review of #910 №1)", { timeout: 15_000 }, async () => {
+    storage.set("octo.outbox.v1", '[{"id":"o1"},');
+    let salvage: (() => void) | null = null;
+    const readError = (_r: () => void, s: (() => void) | null) => ((salvage = s), "READ_ERROR");
+    const r = (root = render(StoreProvider as unknown as (p: P) => unknown, { children: null, readError } as unknown as P));
+    await settle();
+    expect(JSON.stringify(r.out)).toContain("READ_ERROR");
+    expect(salvage).not.toBeNull();
+    salvage!();
+    await settle();
+    await wait(50);
+    await settle();
+    expect([...storage.entries()].filter(([k]) => k.startsWith("octo.broken.")).map(([, v]) => v)).toEqual(['[{"id":"o1"},']);
+    expect(valueOf(r).queue).toBeDefined();
+    expect(storage.get("octo.outbox.v1")).toBe("[]");
   });
 });
