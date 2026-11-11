@@ -75,9 +75,10 @@ describe("effective role (bug: «/» opened My visits for the owner and the offi
 });
 
 describe("«Прибыль» by right (docs/specs/13 §3.4, §4)", () => {
-  it("the technician never sees a job's profit; the office does", () => {
+  it("the technician and sales never see a job's profit; owner, admin and office do (#868)", () => {
     expect(canSeeProfit("tech")).toBe(false);
-    for (const r of ["dispatcher", "director", "sales"] as Role[]) expect(canSeeProfit(r)).toBe(true);
+    expect(canSeeProfit("sales")).toBe(false); // before: true — sales saw «Прибыль» from the company's expenses
+    for (const r of ["dispatcher", "director"] as Role[]) expect(canSeeProfit(r)).toBe(true);
   });
   it("job and visit screens both ask canSeeProfit before showing jobProfit (failed before: the visit showed it to the tech)", () => {
     for (const f of ["job/[id].tsx", "visit/[id].tsx"]) {
