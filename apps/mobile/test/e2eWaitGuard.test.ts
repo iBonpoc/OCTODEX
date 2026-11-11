@@ -20,6 +20,8 @@ const wb = require("../e2e/waitBaseline.cjs") as {
   sleepsIn: (src: string) => number;
   counts: () => Record<string, number>;
   diff: () => { more: string[]; fewer: string[] };
+  seedDiff: () => { more: string[]; fewer: string[] };
+  liveSetItemsIn: (src: string) => number;
   files: (dir: string) => string[];
   rel: (p: string) => string;
   COMMAND: string;
@@ -79,5 +81,27 @@ describe("e2e: the shared helper waits for readiness", () => {
     const s = read(join(e2e, "settle.cjs"));
     expect(s).toMatch(/Promise\.race\(/);
     expect(s).toMatch(/stats\.capped\+\+/);
+  });
+});
+
+describe("e2e: localStorage is written from a page without the app (#1023, CHECKS §9 №12)", () => {
+  it("the counter sees a write through evaluate, not the ones before the app (addInitScript) or h.seed", () => {
+    expect(wb.liveSetItemsIn('await p.evaluate(() => localStorage.setItem("octo.role.v1", "x"));')).toBe(1);
+    expect(wb.liveSetItemsIn('await ctx.addInitScript(() => { localStorage.setItem("a", "b"); });')).toBe(0);
+    expect(wb.liveSetItemsIn('await h.seed("octo.role.v1", "tech");')).toBe(0);
+  });
+  it("no spec has more live writes than the baseline (a new spec: none) — use h.seed(key, value)", () => {
+    const { more } = wb.seedDiff();
+    expect(more, `new localStorage.setItem through evaluate while the app runs — the app can overwrite it on pagehide; use h.seed(key, value) (a page without the app). Do NOT raise the baseline:\n${more.join("\n")}`).toEqual([]);
+  });
+  it("the baseline is exact: fewer writes (a spec moved to h.seed) lower it", () => {
+    const { fewer } = wb.seedDiff();
+    expect(fewer, `you moved writes to h.seed — lower the baseline with one command:  ${wb.COMMAND}\n${fewer.join("\n")}`).toEqual([]);
+  });
+  it("h.seed exists in the helper and writes from the favicon page", () => {
+    const h = read(join(e2e, "h.cjs"));
+    expect(h).toMatch(/seed: async \(key, value\) =>/);
+    expect(h).toContain('page.goto(BASE + "/favicon.ico")');
+    expect(h).toContain("localStorage.setItem(k, JSON.stringify(v))");
   });
 });
