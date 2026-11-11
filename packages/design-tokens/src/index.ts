@@ -75,6 +75,12 @@ export const motion = {
   liquidStretch: 160,
   liquidSettle: 420,
   pressScale: 0.95,
+  /** DS §14 (Н-10): a menu grows from this scale to 1 when it opens */
+  menuScale: 0.96,
+  /** DS §14 (Н-11): a dialog shrinks from this scale to 1 when it opens */
+  alertScale: 1.06,
+  /** DS §14.2 (Н-26): one pulse of a skeleton, ms */
+  skeletonCycle: 1800,
   /** Reanimated spring roughly equal to the CSS spring curve above. */
   spring: { damping: 16, stiffness: 220, mass: 0.9 },
   toastUndoMs: 5000,
