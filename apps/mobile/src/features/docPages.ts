@@ -5,7 +5,7 @@
  * No markup is kept: a page is flat objects of scalars only (a line, a circle, a diamond, a backing box, a text), the
  * colours are the names of print tokens. The page /p/ is open to anyone with the link — an SVG string would let a
  * contractor put a script before his client (security-check of stage 0). Two rules, the same on the server:
- * - reading (`clientPages` = `app.doc_pages`, migration 20261110160000): what the page may draw passes, the rest drops;
+ * - reading (`clientPages` = `app.doc_pages`, migration 20261111010000): what the page may draw passes, the rest drops;
  * - writing (`pagesProblem` = `app.doc_pages_problem`, the trigger on estimate_versions): too many, too long → refused,
  *   never cut (the client signs the whole calc_inputs: what he sees is what he signs).
  * The examples both sides check: test/fixtures/docPages.json (unit docPages, db T165).
