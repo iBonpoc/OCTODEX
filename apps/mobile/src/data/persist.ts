@@ -187,11 +187,14 @@ export function usePersistentState<T>(
   keyRef.current = key;
   /** grows when this state is wiped: a read still running for it is dropped */
   const wiped = useRef(0);
+  /** a cache whose read failed (#926): the changes since, replayed on what one more read gives before the first write */
+  const unread = useRef<{ key: string; updates: { next: T | ((prev: T) => T) }[]; again?: boolean } | null>(null);
 
   useEffect(() => {
     let alive = true;
     const w = wiped.current;
     writer.current!.keyChanged(key);
+    unread.current = null;
     // «Повторить»: the error stays on screen while the read is tried again (no blank screen)
     setState((s) => (s.key === key && s.readError ? { key, value: init(), loaded: false, readError: s.readError } : { key, value: init(), loaded: false }));
     // a failed read is tried again; when every try fails the state stays NOT loaded, so nothing is written over
@@ -233,6 +236,7 @@ export function usePersistentState<T>(
         // for good (review of #910, second round №2)
         // — but its empty start is not written over the copy the device may still hold (#926: one SQLITE_BUSY without the
         // network wiped the company's data until the network came back); the next real change (the server's data) is
+        if (!strict) unread.current = { key, updates: [] };
         setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true, forgotten: true });
       });
     return () => {
@@ -247,6 +251,7 @@ export function usePersistentState<T>(
         const k = keyRef.current;
         if (!isWiped(k)) return;
         wiped.current += 1;
+        unread.current = null;
         writer.current!.forget();
         setWriteFailed(false);
         // what could not be read is not «forgotten» into an empty value the store could write over the device (the
@@ -259,13 +264,39 @@ export function usePersistentState<T>(
   const ready = state.loaded && state.key === key;
   useEffect(() => {
     if (!ready || state.forgotten) return;
+    const u = unread.current;
+    if (u && u.key === state.key) {
+      // the first write after a failed read (#926, director): the key is read once more — read, the changes go onto
+      // what it holds; not read, the changes are written as they are (a local edit without the network)
+      if (u.again) return;
+      u.again = true;
+      const k = u.key;
+      const w = wiped.current;
+      const done = (base: T | null) => {
+        if (unread.current !== u || w !== wiped.current) return;
+        unread.current = null;
+        setState((s) => (s.key !== k ? s : base === null ? { ...s } : { key: k, value: u.updates.reduce<T>((p, x) => (typeof x.next === "function" ? (x.next as (p: T) => T)(p) : x.next), base), loaded: true }));
+      };
+      AsyncStorage.getItem(k).then((raw) => {
+        let base = initRef.current();
+        try {
+          const v = raw == null ? base : (JSON.parse(raw) as T);
+          if (!validate.current || validate.current(v)) base = v;
+        } catch {
+          /* corrupted cache: start fresh */
+        }
+        done(base);
+      }, () => done(null));
+      return;
+    }
     writer.current!.schedule(state.key, JSON.stringify(state.value));
   }, [state, ready]);
 
-  const setValue = useCallback(
-    (next: T | ((prev: T) => T), forKey?: string) => setState((s) => applyUpdate(s, next, forKey)),
-    [],
-  );
+  const setValue = useCallback((next: T | ((prev: T) => T), forKey?: string) => {
+    const u = unread.current;
+    if (u && (forKey === undefined || forKey === u.key)) u.updates.push({ next });
+    setState((s) => applyUpdate(s, next, forKey));
+  }, []);
   const retry = useCallback(() => setReadTry((n) => n + 1), []);
   const salvage = useCallback(() => {
     const b = broken.current;

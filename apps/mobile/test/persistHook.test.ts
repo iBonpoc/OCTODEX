@@ -369,10 +369,30 @@ describe("unit:persistHook — a cache the device cannot read (review of #910, r
     await failReads();
     await wait(50);
     await settle();
-    (again.out as OutOps)[1]([]); // the server answered: its copy is written
+    (again.out as OutOps)[1]([]); // the server answered: its copy is written — once the key is read again
+    await settle();
+    for (let n = 0; n < 50 && !reads.length; n++) await wait(50);
+    expect(reads.map((r) => r.key)).toEqual(["octo.cloud.v1.c1"]);
+    reads.shift()!.fail(new Error("SQLITE_BUSY")); // not read again: written as it is
     await settle();
     await wait(300);
     expect(storage.get("octo.cloud.v1.c1")).toBe("[]");
     again.unmount();
+  }, 15_000);
+  it("#926 (director): a local change after the failed read goes onto the copy read once more — never «empty + the change»", async () => {
+    storage.set("octo.cloud.v1.c1", TWO);
+    const root = render(Cache, { k: "octo.cloud.v1.c1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    (root.out as OutOps)[1]((prev) => [...prev, { id: "op3" }]); // an edit without the network
+    await settle();
+    for (let n = 0; n < 50 && !reads.length; n++) await wait(50);
+    answerAll(); // the device gives it this time
+    await settle();
+    await wait(300);
+    expect(JSON.parse(storage.get("octo.cloud.v1.c1")!)).toEqual([{ id: "op1" }, { id: "op2" }, { id: "op3" }]); // before: [op3]
+    expect((root.out as OutOps)[0]).toEqual([{ id: "op1" }, { id: "op2" }, { id: "op3" }]);
+    root.unmount();
   }, 15_000);
 });
