@@ -538,3 +538,38 @@ describe("unit:accountCloud — the review of #1013", () => {
     expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs"]);
   });
 });
+
+describe("unit:accountCloud — «wiped» only after the wipe went through (#1013, condition of the director)", () => {
+  it("an app killed before «wiped» was written: the next start wipes the device whole", async () => {
+    // the deletion set its mark and was killed before multiRemove: no «wiped»
+    storage.set("octo.wipe.pending.v1", "u1");
+    storage.set("octo.cloud.v1.c1", "u1's cache");
+    storage.set("octo.drafts.v1.e1", "u1's draft");
+    await wipeIfPending();
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.has("octo.drafts.v1.e1")).toBe(false);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+  it("«wiped» is written only after multiRemove went through, with the ids of the mark", async () => {
+    const { default: AS } = await import("@react-native-async-storage/async-storage");
+    const order: string[] = [];
+    const realRemove = AS.multiRemove;
+    AS.multiRemove = async (ks: string[]) => {
+      order.push("wiped device");
+      await realRemove(ks);
+    };
+    const realSet = AS.setItem;
+    AS.setItem = async (k: string, v: string) => {
+      if (k === "octo.wipe.done.v1") order.push(`done=${v}`);
+      await realSet(k, v);
+    };
+    storage.set("octo.wipe.pending.v1", "filter:u0");
+    failRemove.add("octo.wipe.pending.v1");
+    failSetIf.fn = (k, v) => k === "octo.wipe.pending.v1" && v.startsWith("filter:");
+    await finishOnDevice(); // u1; the mark cannot be changed after the wipe
+    AS.multiRemove = realRemove;
+    AS.setItem = realSet;
+    expect(order).toEqual(["wiped device", "done=u1,u0"]);
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1,u0");
+  }, 10_000);
+});
