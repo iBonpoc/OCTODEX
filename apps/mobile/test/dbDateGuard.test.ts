@@ -34,8 +34,8 @@ describe("database tests: «today» is the company's day", () => {
   it.each(all.map((f) => [f]))("%s", (rel) => expect(dbDateFindings(readFileSync(join(root, rel), "utf8"))).toEqual([]));
   it("GitHub runs them at 23:40 Los Angeles too (checks.yml, the risky hour)", () => {
     const yml = readFileSync(join(root, "../../.github/workflows/checks.yml"), "utf8");
-    expect(yml).toMatch(/install[^\n]*\bfaketime\b/);
-    expect(yml).toMatch(/DB_NOW=la-2340 bash supabase\/tests\/run\.sh/);
+    expect(yml).toMatch(/scripts\/dbTools\.sh[^\n]*\bfaketime\b/); // libfaketime: the package or built from the source (scripts/dbTools.sh, #1060)
+    expect(yml).toMatch(/DB_NOW=la-2340[^\n]* bash supabase\/tests\/run\.sh/);
   });
   it("core_rls.sql has tst.today() by the company's time zone", () => {
     const src = readFileSync(join(root, "core_rls.sql"), "utf8");
