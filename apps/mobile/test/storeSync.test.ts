@@ -1443,10 +1443,19 @@ describe("unit:storeSync — sales take the deposit through the server's deposit
     (valueOf(r) as unknown as { payDeposit: (id: string, m: string) => void }).payDeposit("e5", "cash");
     await wait(1700); // the outbox tick
     await settle();
-    return server.sends.map((x) => x.op as { k: string });
+    return server.sends.map((x) => x.op as { k: string; paymentId?: string; method?: string; amountCents?: number; invoiceId?: string });
   };
   it("sales: the deposit invoice is on the phone already — sent as estimate.deposit (the database refuses sales a payment)", async () => {
-    expect((await sentAs("sales")).map((o) => o.k)).toEqual(["estimate.deposit"]); // before: payment.record → 42501
+    const ops = await sentAs("sales");
+    expect(ops.map((o) => o.k)).toEqual(["estimate.deposit"]); // before: payment.record → 42501
+    const op = ops[0]!;
+    // the payment on the phone is the one the server writes (the same id), the method as chosen, no sum from the phone
+    const local = (valueOf(root!) as unknown as { db: { payments: { id: string; invoiceId: string; method: string }[] } }).db.payments.filter((x) => x.invoiceId === "i-dep");
+    expect(local).toHaveLength(1);
+    expect(op.paymentId).toBe(local[0]!.id);
+    expect(op.method).toBe("cash");
+    expect(op.invoiceId).toBe("i-dep");
+    expect(op.amountCents).toBeUndefined();
   });
   it("the office: as before, payment.record", async () => {
     expect((await sentAs("office")).map((o) => o.k)).toEqual(["payment.record"]);
