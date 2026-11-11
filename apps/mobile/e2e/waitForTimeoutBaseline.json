@@ -189,5 +189,14 @@
  "e2e/h.cjs": 6,
  "e2e/listSearch.cjs": 2,
  "e2e/menu.cjs": 2,
- "e2e/planFilters.cjs": 5
+ "e2e/planFilters.cjs": 5,
+ "e2e/specs/250-gutters-input-window.cjs": 3,
+ "e2e/specs/251-gutters-end-pull.cjs": 5,
+ "e2e/specs/252-gutters-corner-angle.cjs": 2,
+ "e2e/cloud/specs/102-cloud-sign-in.cjs": 4,
+ "e2e/cloud/specs/103-cloud-lead-to-payment.cjs": 13,
+ "e2e/cloud/specs/104-cloud-offline-queue.cjs": 2,
+ "e2e/cloud/specs/114-cloud-outbox-server-error.cjs": 8,
+ "e2e/cloud/specs/118-cloud-outbox-rejected.cjs": 9,
+ "e2e/cloud/specs/206-cloud-tech-signs-on-site.cjs": 1
 }

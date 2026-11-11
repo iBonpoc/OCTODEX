@@ -14,7 +14,7 @@ const baseline = JSON.parse(readFileSync(join(root, "e2e/waitForTimeoutBaseline.
 /** every e2e .cjs file (specs, cloud specs, helpers) with its number of waitForTimeout calls */
 export function counts(): Record<string, number> {
   const out: Record<string, number> = {};
-  for (const dir of ["e2e/specs", "e2e/cloud", "e2e"]) {
+  for (const dir of ["e2e/specs", "e2e/cloud/specs", "e2e/cloud", "e2e"]) {
     for (const f of readdirSync(join(root, dir))) {
       const rel = `${dir}/${f}`;
       if (!f.endsWith(".cjs") || statSync(join(root, rel)).isDirectory()) continue;
