@@ -245,11 +245,12 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
   };
   const pickUnit = (u: LenUnit) => {
     // an edited field is read first; a half-typed or empty one keeps the length it had
-    const n = edited.current ? typedIn() ?? canon.current : canon.current;
+    const typed = edited.current ? typedIn() : canon.current;
+    const n = typed ?? canon.current;
     canon.current = n;
     edited.current = false;
     setUnit(u);
-    setBad(false);
+    setBad(typed === null); // a wrong number typed: the length it had comes back, and it says so
     const f = unitFields(n, u);
     setFt(f.ft);
     setInc(f.inc);
