@@ -12640,6 +12640,30 @@ select tst.ok((public.record_estimate_deposit('0e191000-0000-4000-8000-000000000
 :as_super
 select tst.ok((select balance_cents = 0 from public.invoices where id = '11910000-0000-4000-8000-000000000001'), 'T191 the deposit invoice is paid');
 select tst.ok((select balance_cents = 9999900 from public.invoices where id = '11910000-0000-4000-8000-000000000003'), 'T191 the deposit of another sum stays unpaid');
+-- В-2: the same $99 999 through record_visit_payment — sales put in a visit and a draft final of their own: refused
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1910000-0000-4000-8000-0000000000f2', now());
+update public.visits set status = 'on_site' where id = 'f1910000-0000-4000-8000-000000000001';
+:as_sales_a
+do $$ begin
+  perform public.record_visit_payment('f1910000-0000-4000-8000-000000000001', '11910000-0000-4000-8000-0000000000a5', 'a1910000-0000-4000-8000-000000000005', 'cash', null, 9999900);
+  raise exception 'FAILED: T191 record_visit_payment paid sales';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
+-- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
+do $$ begin
+  update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
+  raise exception 'FAILED: T191 sales turned a draft into a deposit';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
+:as_super
+select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
+select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
+-- the office's visit payment: T181 (unchanged)
 -- the office: a deposit invoice by hand, as before
 :as_office_a
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)

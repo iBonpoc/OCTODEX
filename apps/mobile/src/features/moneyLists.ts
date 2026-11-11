@@ -20,6 +20,9 @@ export const canSeePayments = (role: Role) => role === "director" || role === "d
  * would be a payment of their own, refused 42501); nobody else on the invoice screen. The tech takes it on his visit.
  */
 export type PaymentRight = "any" | "wholeDeposit" | "none";
+/** the payment on a visit (record_visit_payment): the office and the tech of the visit — not sales (#1061; whether to
+ *  bring it back is the founder's #1042) */
+export const canTakeVisitPayment = (role: Role) => role !== "sales";
 export function paymentRight(role: Role, inv: Pick<Invoice, "kind">): PaymentRight {
   if (role === "sales") return inv.kind === "deposit" ? "wholeDeposit" : "none";
   return "any";

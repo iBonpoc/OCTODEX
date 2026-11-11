@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { DB, Expense, Invoice, Payment } from "../src/data/types";
 import { setZone } from "../src/features/zone";
-import { paymentRight, asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
+import { canTakeVisitPayment, paymentRight, asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
 
 const LA = "America/Los_Angeles";
 afterEach(() => setZone(LA));
@@ -158,5 +158,12 @@ describe("unit:moneyLists — who takes a payment on an invoice (#868, 13 §4, 1
     expect(paymentRight("sales", { kind: "progress" })).toBe("none");
     expect(paymentRight("sales", { kind: undefined })).toBe("none");
     expect(paymentRight("sales", { kind: "deposit" })).toBe("wholeDeposit");
+  });
+});
+
+describe("unit:moneyLists — the payment on a visit (#1061 В-2)", () => {
+  it("the office and the tech take it; sales do not (record_visit_payment refuses them, T191)", () => {
+    for (const r of ["director", "dispatcher", "tech"] as const) expect(canTakeVisitPayment(r)).toBe(true);
+    expect(canTakeVisitPayment("sales")).toBe(false);
   });
 });
