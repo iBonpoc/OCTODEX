@@ -76,3 +76,4 @@
 
 ## Сделано
 - **#933 PR-1 «Угол виден» (claude/gutters-corner-angle):** чип угла на холсте — слово и градус («наруж. 90°», «наруж. 135°»); `SceneCorner.angleDeg` (из `cornerCut`), `cornerText(kind, splash, angleDeg)`. Тесты: unit `gutterCornerAngle`, e2e 252. Было/стало: `docs/specs/img/33-p933-{before,after}-390-{dark,light}.png`.
+- **#929 PR-1 «Значки» (claude/gutters-ds-icons):** четыре своих значка вида водостока в «Наряде» — `dsRect`, `dsRectRibbed`, `dsRound`, `dsRoundRibbed` (вид сверху: прямоугольное / круглое сечение, у ребристого — рёбра); `design/naryad-ds/tokens/icons.json` → `packages/design-tokens/src/icons.ts`, `mirror.test` зелёный. Выбор «Вид» плитками — PR-2. Снимок: `docs/specs/img/33-p929-icons-{dark,light}.png`.
