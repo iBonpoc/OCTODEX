@@ -104,9 +104,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setPropertyId(fresh.propertyId);
     setTemplateId(fresh.templateId);
     setCheckPrice(fresh.checkPrice);
-    const askStart = !given && templates.length > 0;
-    setStartOpen(askStart);
-    setClientPicker(!params.customerId && !askStart);
+    // no next sheet here: one over the leaving «Удалить черновик?» never shows on iPhone (#743) — the client and a
+    // template are picked from the builder itself
   };
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
@@ -469,7 +468,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         <View testID="est-draft-ask" style={{ gap: space[3] }}>
           <T v="body" tone="mut">{t("est.draft.askHint")}</T>
           <View testID="est-draft-delete">
-            <Button label={t("est.draft.delete")} icon="close" full onPress={restart} />
+            <Button label={t("est.draft.delete")} icon="close" variant="danger" full onPress={restart} />
           </View>
           <View testID="est-draft-keep">
             <Button label={t("common.cancel")} variant="secondary" full onPress={() => setAskRestart(false)} />
