@@ -156,9 +156,27 @@ jobs:
           name: e2e-screenshots-${{ matrix.view }}-${{ matrix.part }}
           path: apps/mobile/e2e/out/
 
+  # Rule 22 (CLAUDE.md, #902): the PR refers to a «до-1.0» task inside a release epic. Skipped: documents-only PRs and the
+  # label «починка-main» (scripts/rule22.cjs). Reads the PR live (not from the event), so a re-run after editing the body is enough.
+  rule22:
+    name: Rule 22 (PR names a до-1.0 task)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: PR refers to a до-1.0 task in an epic
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: node scripts/rule22.cjs
+
   checks:
     name: checks
-    needs: [changes, fast, bundle, e2e]
+    needs: [changes, fast, bundle, e2e, rule22]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -171,6 +189,8 @@ jobs:
           if [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.app }}" = "false" ]; then docs=true; fi
           if [ "$docs" = true ] && [ "$e2e" = "skipped" ]; then e2e=success; fi
           if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
+          # rule22 runs on pull requests only: "skipped" on push/schedule is fine, failure is not
+          [ "${{ needs.rule22.result }}" != "failure" ] && [ "${{ needs.rule22.result }}" != "cancelled" ] || { echo "::error::rule22=${{ needs.rule22.result }}"; exit 1; }
           [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] && [ "$bundle" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} bundle=${{ needs.bundle.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
 
   # A red nightly run opens (or adds to) one issue, so the director sees it in the morning (docs/ai/CHECKS.md §1).

@@ -257,6 +257,18 @@ export function oneIn(v: string, unit: LenUnit): number | null {
   return r > 0 && r <= MAX_RUN_IN ? r : null;
 }
 
+/**
+ * A length in inches written into the fields of `unit` (#922): feet + inches + eighths for ftin, the inches alone, or
+ * a metric number (millimetres whole, as the label shows it). Switching the unit shows the SAME length in the new one.
+ */
+export function unitFields(inches: number, unit: LenUnit): { ft: string; inc: string; e8: number; one: string } {
+  const e = Math.round(inches * 8);
+  const ftin = { ft: String(Math.floor(e / 96)), inc: String(Math.floor((e % 96) / 8)), e8: e % 8 };
+  if (unit === "ftin") return { ...ftin, one: String(inches) };
+  if (unit === "in") return { ...ftin, one: String(inches) };
+  return { ...ftin, one: String(Math.round(inches * MM_PER_IN) / MM_OF[unit]) };
+}
+
 /** the sizes a downspout can reduce to: the smaller ones of its shape (DS_SIZES lists go small to large) */
 export function smallerSizes(shape: string, size: string): string[] {
   const list = DS_SIZES[shape === "round" ? "round" : "rect"];
