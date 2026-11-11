@@ -4,11 +4,14 @@
  */
 const path = require("node:path");
 const { shotFileName } = require("./shotName.cjs");
+const { settle, appReady } = require("./settle.cjs");
 
-function helpers(page, BASE, OUT, name) {
+function helpers(page, BASE, OUT, name, opts = {}) {
+  // cloud specs (e2e/cloud, a real server that keeps the page busy) keep the fixed waits until they are moved too
+  const legacy = !!opts.legacyWaits;
   const h = {
     page,
-    go: async (p) => { await page.goto(BASE + p); await page.waitForTimeout(1000); },
+    go: async (p) => { await page.goto(BASE + p); if (legacy) return page.waitForTimeout(1000); await appReady(page); await settle(page); },
     text: async () => (await page.locator("body").innerText()).split("\n").join(" | "),
     expect: (cond, msg) => { if (!cond) throw new Error(`expect failed: ${msg}`); },
     // Polls up to 3 s: a sheet or toast may still be opening after a fixed wait (02 failed once at 1280 dark on CI, 05.11).
@@ -18,8 +21,8 @@ function helpers(page, BASE, OUT, name) {
       if (!re.test(t)) throw new Error(`expected ${re} (${msg || ""})\n${t.slice(0, 400)}`);
       return t.match(re);
     },
-    click: async (name, opts = {}) => { await page.getByRole("button", { name, exact: true, ...opts }).last().click(); await page.waitForTimeout(350); },
-    clickText: async (txt) => { await page.getByText(txt, { exact: true }).last().click(); await page.waitForTimeout(350); },
+    click: async (name, opts = {}) => { await page.getByRole("button", { name, exact: true, ...opts }).last().click(); await (legacy ? page.waitForTimeout(350) : settle(page, { quietMs: 120, maxMs: 2000 })); },
+    clickText: async (txt) => { await page.getByText(txt, { exact: true }).last().click(); await (legacy ? page.waitForTimeout(350) : settle(page, { quietMs: 120, maxMs: 2000 })); },
     sheet: () => page.locator('[aria-modal="true"]').last(),
     shot: (n) => page.screenshot({ path: path.join(OUT, shotFileName(name, n)) }),
     db: () => page.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db),

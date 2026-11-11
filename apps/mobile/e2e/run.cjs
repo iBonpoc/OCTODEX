@@ -101,7 +101,7 @@ async function waitPastCompanyMidnight() {
     const page = await ctx.newPage();
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
     page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
-    const h = helpers(page, BASE, OUT, `${file.replace(/\.cjs$/, "")}-${layout.width}-${layout.theme}`);
+    const h = helpers(page, BASE, OUT, `${file.replace(/\.cjs$/, "")}-${layout.width}-${layout.theme}`, { legacyWaits: !!spec.fixedWaits });
     h.layout = layout;
     try {
       await spec.run(h, { browser, BASE, layout, layouts, installClock });
