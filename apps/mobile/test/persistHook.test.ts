@@ -356,4 +356,23 @@ describe("unit:persistHook — a cache the device cannot read (review of #910, r
     expect((root.out as OutOps)[0]).toEqual([]);
     root.unmount();
   }, 10_000);
+  it("#926: the empty start after a failed read is not written over the good copy; a real change (the server's data) is", async () => {
+    storage.set("octo.cloud.v1.c1", TWO);
+    const root = render(Cache, { k: "octo.cloud.v1.c1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    await wait(300); // the 250-ms writer has had its time
+    root.unmount(); // and the app leaves: nothing waits to be written
+    expect(storage.get("octo.cloud.v1.c1")).toBe(TWO); // before: «[]» — the company's data gone until the network
+    const again = render(Cache, { k: "octo.cloud.v1.c1" });
+    await failReads();
+    await wait(50);
+    await settle();
+    (again.out as OutOps)[1]([]); // the server answered: its copy is written
+    await settle();
+    await wait(300);
+    expect(storage.get("octo.cloud.v1.c1")).toBe("[]");
+    again.unmount();
+  }, 15_000);
 });

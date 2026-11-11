@@ -110,7 +110,7 @@ export function flushAllWriters(): void {
   for (const w of [...live]) w.flush();
 }
 
-/** the hook's state; `forgotten` — reset by a wipe: not written until the next real change; `readError` — the device
+/** the hook's state; `forgotten` — reset by a wipe, or a cache started empty after a failed read (#926): not written until the next real change; `readError` — the device
  *  did not give the stored value (A-01): not loaded, never written, until a retry reads it */
 export interface Slot<T> {
   key: string;
@@ -231,7 +231,9 @@ export function usePersistentState<T>(
         // what the phone has only here (strict) waits for «Повторить»; a cache (the server's copy, the demo, a role)
         // starts fresh as before — a cache the device can never read (Android: a row over 2 MB) must not lock the app
         // for good (review of #910, second round №2)
-        setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true });
+        // — but its empty start is not written over the copy the device may still hold (#926: one SQLITE_BUSY without the
+        // network wiped the company's data until the network came back); the next real change (the server's data) is
+        setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true, forgotten: true });
       });
     return () => {
       alive = false;
