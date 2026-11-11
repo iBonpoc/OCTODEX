@@ -32,6 +32,7 @@ import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
+import { canTakeVisitPayment } from "@/features/moneyLists";
 
 const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
@@ -265,7 +266,7 @@ export default function VisitScreen() {
         </>
       ) : null}
 
-      {v.step === "signed" ? (
+      {v.step === "signed" && canTakeVisitPayment(store.role) ? (
         <Card>
           <T v="caption" tone="mut">
             {t("visit.amountDue")}
