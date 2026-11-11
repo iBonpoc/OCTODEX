@@ -22,10 +22,12 @@ exports.run = async (h) => {
     const base = { scope: [], checklist: [], photos: [], durationMin: 60, kind: "inspection", techId: null };
     raw.db.visits = [
       ...raw.db.visits,
-      { ...base, id: "v130-site", propertyId: p1.id, assigneeIds: [me], start: s.at.late, step: "on_site", amountDueCents: 12300 },
+      // a job visit: «к оплате» is counted from its job's contract and invoices (features/visitDue.ts, #857), not a stored field
+      { ...base, id: "v130-site", kind: "job", jobId: "j130", propertyId: p1.id, assigneeIds: [me], start: s.at.late, step: "on_site", amountDueCents: 0 },
       { ...base, id: "v130-done", propertyId: p2.id, assigneeIds: [me], start: s.at.nine, step: "done", amountDueCents: 0 },
       { ...base, id: "v130-free", propertyId: p3.id, assigneeIds: [], start: s.at.six, step: "scheduled", amountDueCents: 0 },
     ];
+    raw.db.jobs = [...raw.db.jobs, { id: "j130", propertyId: p1.id, title: "T130 job", status: "scheduled", amountCents: 12300 }];
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
     localStorage.setItem("octo.planMode.v1", JSON.stringify("feed"));
     const name = (pr) => raw.db.customers.find((c) => c.id === pr.customerId)?.name;

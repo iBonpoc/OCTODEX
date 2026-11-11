@@ -3298,6 +3298,8 @@ export const ru = {
   "pay.online.err.busy": "Слишком много попыток. Попробуйте через {n} мин.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "Подпись клиента не записана на сервере",
+  // visit payment refused by the server (#857 О1) — the tech hands it to the office
+  "visit.rej.moneyInHand": "Деньги в руке не записаны — передайте оплату офису",
   "est.signOnSite.afterSend": "Подписать на месте можно после того, как офис отправит смету.",
   "portal.offline": "Нет связи. Проверьте интернет и обновите страницу.",
   "portal.failed": "Не получилось. Попробуйте ещё раз.",

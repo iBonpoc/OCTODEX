@@ -3,6 +3,7 @@
  * e2e/cloud/cloud.cjs (docs/specs/21). helpers(page, BASE, OUT, name): screenshots go to OUT/<name>-<n>.png.
  */
 const path = require("node:path");
+const { shotFileName } = require("./shotName.cjs");
 
 function helpers(page, BASE, OUT, name) {
   const h = {
@@ -20,7 +21,7 @@ function helpers(page, BASE, OUT, name) {
     click: async (name, opts = {}) => { await page.getByRole("button", { name, exact: true, ...opts }).last().click(); await page.waitForTimeout(350); },
     clickText: async (txt) => { await page.getByText(txt, { exact: true }).last().click(); await page.waitForTimeout(350); },
     sheet: () => page.locator('[aria-modal="true"]').last(),
-    shot: (n) => page.screenshot({ path: path.join(OUT, `${name}-${n}.png`) }),
+    shot: (n) => page.screenshot({ path: path.join(OUT, shotFileName(name, n)) }),
     db: () => page.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db),
     sign: async (signer) => {
       await page.getByPlaceholder(/Ваше имя|Your name/).last().fill(signer);
