@@ -1,52 +1,73 @@
 import { describe, expect, it } from "vitest";
-import { SPLIT_GAP_IN, splitCorner } from "../src/modules/gutters/canvas/edit";
-import { DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
-import { findCorners, runEnds, type Drawing, type DrawnRun, type P } from "../src/modules/gutters/geometry";
+import { computeGutterParts } from "@octo/estimating-engine";
+import { moveEnd, moveEndAlong, splitCorner } from "../src/modules/gutters/canvas/edit";
+import { DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
+import { findCorners, runEnds, toMeasurement, type Drawing, type DrawnRun, type P } from "../src/modules/gutters/geometry";
 
-/** #933 PR-2 «Разъединить угол»: two gutters with their own end caps; the rest of the line stays. */
+/** #933 PR-2 «Разъединить угол»: a mark, not a move — nothing measured changes; two end caps instead of a corner. */
 const run = (id: string, a: P, b: P, o: Partial<DrawnRun> = {}): DrawnRun => ({ id, a, b, attrs: { ...DEFAULT_RUN_ATTRS }, ...o });
-const L2: Drawing = { runs: [run("a", [0, 0], [240, 0]), run("b", [240, 0], [240, 180], { lengthIn: 180 })], downspouts: [] };
+const L2: Drawing = { runs: [run("a", [0, 0], [240, 0], { lengthIn: 240 }), run("b", [240, 0], [240, 180], { lengthIn: 181.5 })], downspouts: [] };
 const caps = (d: Drawing) => { const e = runEnds(d, findCorners(d)); return d.runs.flatMap((r) => [0, 1].map((i) => e[r.id]?.[i as 0 | 1]?.kind)).filter((k) => k === "cap").length; };
+const split = (d: Drawing) => splitCorner(d, findCorners(d)[0]!);
+const q = (d: Drawing, key: string) => computeGutterParts(toMeasurement(d)).parts.find((p) => p.key.startsWith(key))?.qty;
 
-describe("splitCorner", () => {
-  it("the corner is gone, both gutters have an end cap there (4 caps in all), the first gutter does not move", () => {
-    const f = findCorners(L2);
-    expect(f).toHaveLength(1);
-    const s = splitCorner(L2, f[0]!);
+describe("splitCorner is a mark: nothing measured changes", () => {
+  it("points and lengths are the same to the inch; only the mark is added", () => {
+    const s = split(L2);
+    expect(s.runs.map((r) => [r.a, r.b, r.lengthIn])).toEqual(L2.runs.map((r) => [r.a, r.b, r.lengthIn]));
+    expect(s.runs.every((r) => r.attrs.openEnds)).toBe(true);
+  });
+  it("the measurement and the estimate see the same lengths: the engine's input and the installed feet are equal before and after", () => {
+    const s = split(L2);
+    expect(toMeasurement(s).runs.map((r) => r.lengthIn)).toEqual(toMeasurement(L2).runs.map((r) => r.lengthIn));
+    expect(q(s, "gutter.")).toBe(q(L2, "gutter."));
+  });
+  it("the corner is gone and each gutter has an end cap there (4 caps in all); the engine has no corner and 4 end caps", () => {
+    const s = split(L2);
+    expect(findCorners(L2)).toHaveLength(1);
     expect(findCorners(s)).toHaveLength(0);
     expect(caps(s)).toBe(4);
-    expect(s.runs[0]).toEqual(L2.runs[0]);
+    expect(toMeasurement(s).corners).toHaveLength(0);
+    expect(toMeasurement(L2).corners).toHaveLength(1);
+    expect(toMeasurement(s).runs.flatMap((r) => r.ends).filter((e) => e.kind === "cap")).toHaveLength(4);
+    const caps4 = computeGutterParts(toMeasurement(s)).parts.filter((p) => /^endcap\./.test(p.key)).reduce((n, p) => n + Number(p.qty), 0);
+    expect(caps4).toBe(4);
   });
-  it("the second gutter is shorter by the gap at the meeting end, a taped length by the same; its far end stays", () => {
-    const f = findCorners(L2)[0]!;
-    const s = splitCorner(L2, f);
-    const b = s.runs.find((r) => r.id === "b")!;
-    const which = f.runs[1].id === "b" ? b : s.runs.find((r) => r.id === f.runs[1].id)!;
-    const len = Math.hypot(which.b[0] - which.a[0], which.b[1] - which.a[1]);
-    const was = Math.hypot(L2.runs.find((r) => r.id === which.id)!.b[0] - L2.runs.find((r) => r.id === which.id)!.a[0], L2.runs.find((r) => r.id === which.id)!.b[1] - L2.runs.find((r) => r.id === which.id)!.a[1]);
-    expect(Math.round(was - len)).toBe(SPLIT_GAP_IN);
-    if (which.id === "b") expect(which.lengthIn).toBe(180 - SPLIT_GAP_IN);
+});
+
+describe("data without the mark are as before", () => {
+  it("an old drawing: the same corner, 2 caps", () => {
+    expect(findCorners(L2)).toHaveLength(1);
+    expect(caps(L2)).toBe(2);
+    expect(L2.runs.every((r) => !r.attrs.openEnds)).toBe(true);
   });
-  it("another corner of the line stays: a U shape split at one corner keeps the other", () => {
+  it("the mark survives the store's rows (jsonb attrs) and comes back", () => {
+    const back = fromElements(toElements(split(L2), "m1"));
+    expect(findCorners(back)).toHaveLength(0);
+    expect(back.runs.map((r) => r.attrs.openEnds)).toEqual(split(L2).runs.map((r) => r.attrs.openEnds));
+  });
+});
+
+describe("the mark and the rest of the line", () => {
+  it("another corner of the line stays: a U split at one corner keeps the other", () => {
     const U: Drawing = { runs: [run("a", [0, 0], [240, 0]), run("b", [240, 0], [240, 180]), run("c", [240, 180], [0, 180])], downspouts: [] };
     const f = findCorners(U);
     expect(f).toHaveLength(2);
-    expect(findCorners(splitCorner(U, f[0]!))).toHaveLength(1);
+    const s = splitCorner(U, f[0]!);
+    expect(findCorners(s)).toHaveLength(1);
+    expect(caps(s)).toBe(4);
   });
-  it("a slanted second gutter splits too (the rounding does not put the end back on the join)", () => {
+  it("a slanted corner splits too; an unknown gutter changes nothing", () => {
     const S: Drawing = { runs: [run("a", [0, 0], [240, 0]), run("b", [240, 0], [410, 170])], downspouts: [] };
-    const s = splitCorner(S, findCorners(S)[0]!);
-    expect(findCorners(s)).toHaveLength(0);
+    expect(findCorners(split(S))).toHaveLength(0);
+    expect(splitCorner(S, { runs: [{ id: "zz", end: 0 }, { id: "a", end: 1 }] })).toBe(S);
   });
-  it("too short a gutter: the same drawing back, nothing is lost", () => {
-    const T: Drawing = { runs: [run("a", [0, 0], [240, 0]), run("b", [240, 0], [240, 14])], downspouts: [] };
-    const f = findCorners(T);
-    expect(f.length ? splitCorner(T, f[0]!) : T).toBe(T);
-  });
-  it("a downspout on the shortened gutter stays on the line", () => {
-    const D: Drawing = { ...L2, downspouts: [{ id: "d", runId: "b", atIn: 179 } as never] };
-    const s = splitCorner(D, findCorners(D)[0]!);
-    const r = s.runs.find((x) => x.id === "b")!;
-    expect(s.downspouts[0]!.atIn).toBeLessThanOrEqual(Math.round(Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1])));
+  it("an end pulled or moved away drops its mark; the other gutter's stays, and the corner does not come back by itself", () => {
+    const s = split(L2);
+    const pulled = moveEndAlong(s, "b", 0, [240, 40]); // b's start (the split end) pulled along its gutter
+    expect(pulled.runs.find((r) => r.id === "b")!.attrs.openEnds).toBeUndefined();
+    expect(pulled.runs.find((r) => r.id === "a")!.attrs.openEnds).toBeTruthy();
+    const moved = moveEnd(s, "b", 0, [300, 60], 18);
+    expect(moved.runs.find((r) => r.id === "b")!.attrs.openEnds).toBeUndefined();
   });
 });

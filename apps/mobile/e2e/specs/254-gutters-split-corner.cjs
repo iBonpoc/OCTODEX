@@ -1,7 +1,8 @@
 /**
  * e2e 254 — #933 PR-2: «Разъединить угол» in the corner's sheet: two gutters with their own end caps. Every view.
  * - an L of two gutters: one corner, two end caps; the corner's sheet has «Разъединить угол»;
- * - split: no corner, four end caps, a toast; «Назад» brings the corner back.
+ * - split: no corner, four end caps, a toast; the stored points and lengths are the same to the inch (a mark, not a move);
+ *   «Назад» brings the corner back.
  * No fixed pauses: it waits on what it checks.
  */
 const { skipLength, canvasAt } = require("../gutters.cjs");
@@ -50,6 +51,9 @@ exports.run = async (h) => {
   await skipLength(p);
   await svg().locator('[id^="c:"]').first().waitFor({ timeout: 5000 });
   h.expect((await corners()) === 1 && (await caps()) === 2, `an L: one corner, two end caps (${await corners()}, ${await caps()})`);
+  const rows = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).map((e) => JSON.stringify([e.id, e.geom.a, e.geom.b, e.geom.lengthIn ?? null])).sort(), KEY);
+  await p.waitForFunction(([k]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 2, [KEY], { timeout: 5000 });
+  const before = await rows();
   await h.shot("corner");
   const k = await svg().locator('[id^="c:"]').first().boundingBox();
   await canvasAt(p, k.x + k.width / 2, k.y + k.height / 2);
@@ -61,6 +65,8 @@ exports.run = async (h) => {
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="c:"], svg [id^="c:"]').length === 0, null, { timeout: 5000 });
   h.expect((await corners()) === 0 && (await caps()) === 4, `split: no corner, four end caps (${await corners()}, ${await caps()})`);
   await h.expectText(/Угол разъединён/, "the toast says so");
+  await p.waitForFunction(([k]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).every((e) => e.attrs.openEnds), [KEY], { timeout: 5000 });
+  h.expect(JSON.stringify(await rows()) === JSON.stringify(before), `the points and lengths in the store are the same to the inch (${before.join(" ")})`);
   await h.shot("split");
   await tid("draw-undo").getByRole("button").click();
   await svg().locator('[id^="c:"]').first().waitFor({ timeout: 5000 });

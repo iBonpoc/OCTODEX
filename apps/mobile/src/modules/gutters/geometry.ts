@@ -21,6 +21,8 @@ export interface DrawnRun {
     cornerMethod?: { a?: CornerChoice["method"]; b?: CornerChoice["method"] };
     /** the splash guard of the inside corner at its start (a) / end (b) taken off (founder 09.11: «не всегда нужен») */
     noSplash?: { a?: true; b?: true };
+    /** the join at its start (a) / end (b) was split by the user («Разъединить угол», #933): two end caps, no corner — both runs carry it; the lengths are not touched */
+    openEnds?: { a?: true; b?: true };
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
@@ -45,6 +47,9 @@ export interface Drawing {
   /** per corner id (`c:<runA>:<runB>`): how to make it; default from company settings */
   corners?: Record<string, CornerChoice>;
 }
+
+/** this end of the run was split from its neighbour (openEnds): it is an end cap even where another gutter's end stands */
+export const isOpenEnd = (r: Pick<DrawnRun, "attrs">, e: 0 | 1) => !!r.attrs.openEnds?.[e ? "b" : "a"];
 
 export const SNAP_POINT_IN = 18; // 1.5 ft
 export const SNAP_ANGLE_DEG = 7;
@@ -237,6 +242,7 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
         for (const eb of [0, 1] as const) {
           const pa = ea ? A.b : A.a, pb = eb ? B.b : B.a;
           if (dist(pa, pb) > tolIn) continue;
+          if (isOpenEnd(A, ea) && isOpenEnd(B, eb)) continue; // split by the user: no corner
           // direction into the point along A, then out of the point along B
           const vin: P = ea ? sub(A.b, A.a) : sub(A.a, A.b);
           const vout: P = eb ? sub(B.a, B.b) : sub(B.b, B.a);
@@ -295,6 +301,7 @@ export function runEnds(d: Pick<Drawing, "runs">, corners: FoundCorner[], tolIn 
     res[r.id] = ([0, 1] as const).map((e): RunEnd => {
       const corner = corners.find((c) => c.runs.some((x) => x.id === r.id && x.end === e));
       if (corner) return { kind: "corner", cornerId: corner.id };
+      if (isOpenEnd(r, e)) return { kind: "cap" };
       const p = e ? r.b : r.a;
       const joined = d.runs.some((o) => o.id !== r.id && sameStory(o, r) && (dist(o.a, p) <= tolIn || dist(o.b, p) <= tolIn));
       if (joined || r.noCap?.[e]) return { kind: "join" };
@@ -345,7 +352,7 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
   const ends = runEnds(d, found);
   const runs: MeasuredRun[] = d.runs.map((r) => {
     // the corner methods are the drawing's, not the engine's run input
-    const { cornerMethod: _cm, noSplash: _ns, ...attrs } = r.attrs;
+    const { cornerMethod: _cm, noSplash: _ns, openEnds: _oe, ...attrs } = r.attrs;
     return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: side(r), ends: ends[r.id]! };
   });
   const byId = new Map(d.runs.map((r) => [r.id, r]));
