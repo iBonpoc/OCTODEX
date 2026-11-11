@@ -255,12 +255,13 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   // the deletion only — the session; unknown → null: only ops without an owner go
   // never waits for ever (a refresh of the sign-in without network): every later wipe waits for this one (#1013 №4)
   const noSession = { data: { session: null } };
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const session = orSession
     ? (
         await Promise.race([
           supabase.auth.getSession().catch(() => noSession),
-          new Promise<typeof noSession>((r) => setTimeout(() => r(noSession), START_CHECK_MS)),
-        ])
+          new Promise<typeof noSession>((r) => (timer = setTimeout(() => r(noSession), START_CHECK_MS))),
+        ]).finally(() => clearTimeout(timer))
       ).data.session
     : null;
   const me = userId || session?.user.id || null;
@@ -269,6 +270,9 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   // the mark could not be read (#1013 №2): what it holds is not known — it is not overwritten unless it must be
   let unknown = prior === undefined;
   const ids = [...new Set([me, ...(prior ? pendingOf(prior).userIds : [])])];
+  // an older «wiped» goes before the new mark (#1017 №2): it answered the older mark only — left beside the new one, an
+  // app killed before the wipe would take this person's data for wiped already
+  await tries(() => AsyncStorage.removeItem(WIPE_DONE_KEY));
   // one mark for all of them, set before the slow part: an app killed (or a wipe that fails) anywhere below wipes
   // again for every person on the next start (reviews of #911 №3, #1010 №3)
   if (!unknown) await AsyncStorage.setItem(WIPE_PENDING_KEY, wipeMark(ids)).catch(() => {});
@@ -294,8 +298,15 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   }
   // the rest is gone: the next start only filters the shared keys again (never the next person's cache and drafts) —
   // the whole-wipe mark becomes «filter:» in one write, never taken away first (review of #1010 №4)
+  // the mark still not read: a wipe that fails reads it once more and keeps its people in the new mark (#1017 №3)
+  const failed = unknown
+    ? async () => {
+        const again = await readKey(WIPE_PENDING_KEY);
+        return wipeMark([...new Set([...ids, ...(again ? pendingOf(again).userIds : [])])]);
+      }
+    : wipeMark(ids);
   await wipeDevice(deviceStore, warn, me, [OUTBOX_KEY, REJECTED_KEY], {
-    failed: wipeMark(ids),
+    failed,
     done: shared === "again" ? filterMark(ids) : null,
     leave: unknown,
     wiped: wipeMark(ids),

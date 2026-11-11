@@ -5,7 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const state = { hang: false, deletedAt: null as string | null, error: null as { message: string } | null, signedOut: 0, session: true };
+const state = { hang: false, deletedAt: null as string | null, error: null as { message: string } | null, signedOut: 0, session: true, sessionHang: false };
 function query() {
   let signal: AbortSignal | undefined;
   const q: Record<string, unknown> = {};
@@ -25,7 +25,10 @@ vi.mock("../src/cloud/client", () => ({
   supabase: {
     from: () => query(),
     auth: {
-      getSession: async () => ({ data: { session: state.session ? { access_token: "jwt", user: { id: "u1" } } : null } }),
+      getSession: () =>
+        state.sessionHang
+          ? new Promise(() => {})
+          : Promise.resolve({ data: { session: state.session ? { access_token: "jwt", user: { id: "u1" } } : null } }),
       signOut: async () => void (state.signedOut += 1),
     },
   },
@@ -57,11 +60,11 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
     },
   },
 }));
-import { callDelete, finishDeletion, finishOnDevice, myAccountState, profileDeleted, wipeIfPending } from "../src/cloud/account";
+import { callDelete, finishDeletion, finishOnDevice, myAccountState, profileDeleted, START_CHECK_MS, wipeIfPending } from "../src/cloud/account";
 import { onDeviceForgotten } from "../src/data/persist";
 
 beforeEach(() => {
-  Object.assign(state, { hang: false, deletedAt: null, error: null, signedOut: 0, session: true });
+  Object.assign(state, { hang: false, deletedAt: null, error: null, signedOut: 0, session: true, sessionHang: false });
   storage.clear();
   failGet.clear();
   failSet.clear();
@@ -572,4 +575,101 @@ describe("unit:accountCloud — «wiped» only after the wipe went through (#101
     expect(order).toEqual(["wiped device", "done=u1,u0"]);
     expect(storage.get("octo.wipe.pending.v1")).toBe("u1,u0");
   }, 10_000);
+});
+
+describe("unit:accountCloud — the rest after #1016 (#1017)", () => {
+  const at = new Date().toISOString();
+  const op = (id: string, userId: string) => ({ id, op: { k: "x", id }, at, tries: 0, owner: { userId, companyId: "c1" } });
+  const ids = (k: string) => JSON.parse(storage.get(k)!).map((o: { id: string }) => o.id);
+  const nextPerson = () => {
+    for (const k of ["octo.cloud.v1.c9", "octo.drafts.v1.e9", "octo.role.v1"]) storage.set(k, "u9's");
+  };
+  const nextPersonKept = () => {
+    for (const k of ["octo.cloud.v1.c9", "octo.drafts.v1.e9", "octo.role.v1"]) expect(storage.get(k)).toBe("u9's");
+  };
+
+  it("№1: an older «u0» never read, the wipe goes through: the next start never wipes the next person's data, u0's ops go", async () => {
+    storage.set("octo.wipe.pending.v1", "u0");
+    storage.set("octo.outbox.v1", JSON.stringify([op("u0op", "u0"), op("theirs", "u9")]));
+    failGet.add("octo.wipe.pending.v1");
+    await finishOnDevice(); // u1: the mark is read neither at first nor before the wipe
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u0"); // not known — not overwritten
+    failGet.clear();
+    nextPerson();
+    await wipeIfPending(); // the next start reads «u0»
+    nextPersonKept(); // before: «u0» asked the whole wipe — u9's cache, drafts and role gone
+    expect(ids("octo.outbox.v1")).toEqual(["theirs"]);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+    expect(storage.has("octo.wipe.done.v1")).toBe(false);
+  }, 20_000);
+
+  it("№2: a new deletion takes an older «wiped» away before its mark: killed before the wipe → the next start wipes", async () => {
+    storage.set("octo.wipe.pending.v1", "u1");
+    storage.set("octo.wipe.done.v1", "u1");
+    storage.set("octo.cloud.v1.c2", "u2's cache");
+    failSetIf.fn = (k, v) => k === "octo.wipe.pending.v1" && v === "u2,u1";
+    const { default: AS } = await import("@react-native-async-storage/async-storage");
+    const realRemove = AS.multiRemove;
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let atWipe: Map<string, string> | null = null;
+    AS.multiRemove = async (ks: readonly string[]) => {
+      atWipe = new Map(storage); // the app is killed here
+      await held;
+      await realRemove(ks);
+    };
+    const run = finishOnDevice("u2");
+    await vi.waitFor(() => expect(atWipe).not.toBeNull());
+    release();
+    await run;
+    AS.multiRemove = realRemove;
+    failSetIf.fn = null;
+    // the next start sees the phone as it was when the app was killed
+    storage.clear();
+    for (const [k, v] of atWipe!) storage.set(k, v);
+    expect(storage.has("octo.wipe.done.v1")).toBe(false); // before: «wiped»=«u1» answered the mark «u1»
+    await wipeIfPending();
+    expect(storage.has("octo.cloud.v1.c2")).toBe(false);
+  }, 10_000);
+
+  it("№3: the wipe fails while the mark was not read: read again and kept («u1,u0»), never overwritten blind", async () => {
+    storage.set("octo.wipe.pending.v1", "filter:u0");
+    let reads = 0;
+    const real = storage.get.bind(storage);
+    storage.get = (k: string) => {
+      if (k === "octo.wipe.pending.v1" && ++reads <= 6) throw new Error("SQLITE_BUSY");
+      return real(k);
+    };
+    const { default: AS } = await import("@react-native-async-storage/async-storage");
+    const realRemove = AS.multiRemove;
+    AS.multiRemove = async () => {
+      throw new Error("disk");
+    };
+    await finishOnDevice(); // u1
+    AS.multiRemove = realRemove;
+    storage.get = real;
+    expect(storage.get("octo.wipe.pending.v1")).toBe("u1,u0"); // before: «u1» — u0's ops never filtered
+  }, 20_000);
+
+  it("getSession hangs: the wipe goes on at START_CHECK_MS (only ops without an owner and the mark's people go)", async () => {
+    vi.useFakeTimers();
+    state.sessionHang = true;
+    storage.set("octo.cloud.v1.c1", "u1's cache");
+    let done = false;
+    const run = finishOnDevice().then(() => (done = true));
+    await vi.advanceTimersByTimeAsync(START_CHECK_MS - 100);
+    expect(done).toBe(false);
+    await vi.advanceTimersByTimeAsync(200);
+    // the sign-out after it waits for nothing that hangs here
+    state.sessionHang = false;
+    await run;
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+
+  it("getSession answers: the timeout timer is cleared (nothing left running after the wipe)", async () => {
+    vi.useFakeTimers();
+    await finishOnDevice();
+    expect(vi.getTimerCount()).toBe(0); // before: the START_CHECK_MS timer stayed
+  });
 });

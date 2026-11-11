@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  accountErrorKey, afterDelete, filterMark, pendingOf, wipedAlready, wipeMark, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
+  accountErrorKey, afterDelete, WIPE_DONE_ANY, WIPE_DONE_KEY, filterMark, pendingOf, wipedAlready, wipeMark, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
 } from "../src/features/deleteAccount";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -328,5 +328,26 @@ describe("unit:deleteAccount — «the device is wiped already» (#1013)", () =>
     expect(wipedAlready("u1", null)).toBe(false);
     expect(wipedAlready("filter:u1", "u1")).toBe(false);
     expect(wipedAlready("1", "1")).toBe(true);
+  });
+});
+
+describe("unit:deleteAccount — «wiped» for a mark that was not read (#1017)", () => {
+  it("«*» answers any whole-wipe mark, never a «filter:» one", () => {
+    expect(wipedAlready("u0", WIPE_DONE_ANY)).toBe(true);
+    expect(wipedAlready("u1,u0", WIPE_DONE_ANY)).toBe(true);
+    expect(wipedAlready("filter:u0", WIPE_DONE_ANY)).toBe(false);
+  });
+  it("the mark not read (`leave`), the wipe goes through: the mark stays, «wiped»=«*» beside it", async () => {
+    const kv = new Map([[WIPE_PENDING_KEY, "u0"], ["octo.cloud.v1.c1", "x"]]);
+    const store = {
+      getAllKeys: async () => [...kv.keys()],
+      multiRemove: async (ks: string[]) => ks.forEach((k) => kv.delete(k)),
+      setItem: async (k: string, v: string) => void kv.set(k, v),
+      removeItem: async (k: string) => void kv.delete(k),
+    };
+    expect(await wipeDevice(store, () => {}, "u1", [], { leave: true, failed: "u1", wiped: "u1" }, 0)).toBe(true);
+    expect(kv.get(WIPE_PENDING_KEY)).toBe("u0");
+    expect(kv.get(WIPE_DONE_KEY)).toBe(WIPE_DONE_ANY);
+    expect(kv.has("octo.cloud.v1.c1")).toBe(false);
   });
 });
