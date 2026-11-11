@@ -32,6 +32,13 @@ export function Glass({ children, style, strong, testID }: { children: ReactNode
   );
 }
 
+/** the dim layer under a window; a tap on it asks to close (a window of a module that is not a Sheet) */
+export function Scrim({ onPress }: { onPress: () => void }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  return <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onPress={onPress} accessibilityRole="button" accessibilityLabel={t("common.close")} />;
+}
+
 /* ---------- Menu: iOS-style menu that opens right at the control (not a sheet from the bottom) ----------
  * `anchor` = the control's frame in the window (measureInWindow). Tap outside or Android back closes.
  */
