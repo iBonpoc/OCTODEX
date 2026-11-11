@@ -12,10 +12,10 @@ import { staleMeasurements } from "./estimateLink";
 const draw = moduleHref("gutters", "draw");
 /** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
 const view = moduleHref("gutters", "view");
-/** «Замер желобов» on a lead, an address or a visit: its newest measurement opens, else a new one linked to it (S4g, П24) */
+/** «Замер желобов» on a lead, an address or a visit: its newest measurement's card opens, else a new one linked to it on the canvas (S4g, П24, П25.3 В) */
 function measure(data: unknown, by: { leadId?: string; propertyId?: string; leadIds?: readonly string[] }) {
   const g = asGutterData(data);
-  const { href, open: m } = measureHref(draw, g, by);
+  const { href, open: m } = measureHref({ draw, view }, g, by);
   if (m) {
     const open = { id: "measure", labelKey: "mod.gutters.measureOpen" as const, icon: "pencil" as const, href };
     // M8b (S5g): something is drawn → «Смета из замера»: the measurement's review opens and makes or updates it (П23.8, П20.25)
