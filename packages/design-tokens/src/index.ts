@@ -97,6 +97,8 @@ export const motion = {
   toastArmMs: 300,
   /** app-only (spec 24 A4): delay between columns / bars growing one after another */
   chartStagger: 40,
+  /** DS §14.2 (#brand): the GoRix mark's splash, ms — longer than a chart's growth (durChart), only here */
+  durBrand: 1600,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8 } as const;
@@ -115,6 +117,12 @@ export const component = {
   dockBtn: 36,
   sheetRadius: 24,
   modalW: 380,
+  /** DS Б3 (Н-04): the confirm dialog's max width */
+  alertMaxW: 340,
+  /** DS Б1 (Н-08): a sheet of medium height is this share of the screen */
+  sheetMediumRatio: 0.5,
+  /** DS Б6 (Н-09): a popover's width */
+  popoverW: 360,
   panelW: 360,
   /** side menu on 820/1280 (docs/specs/13 §2.5): icon rail with labels / the open menu. Not in the DS css yet (BACKLOG). */
   navRail: 72,
