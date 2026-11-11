@@ -1,0 +1,58 @@
+{
+ "src/app/figures/[metric].tsx": {
+  "count": 2,
+  "issue": 1058
+ },
+ "src/app/job/[id].tsx": {
+  "count": 2,
+  "issue": 1054
+ },
+ "src/app/money.tsx": {
+  "count": 2,
+  "issue": 1058
+ },
+ "src/app/p/[token].tsx": {
+  "count": 3,
+  "issue": 1054
+ },
+ "src/app/receipt/[id].tsx": {
+  "count": 1,
+  "issue": 1054
+ },
+ "src/app/reports/[id].tsx": {
+  "count": 1,
+  "issue": 1058
+ },
+ "src/data/selectors.ts": {
+  "count": 2,
+  "issue": 1054
+ },
+ "src/data/store.tsx": {
+  "count": 4,
+  "issue": 1057
+ },
+ "src/features/attention.ts": {
+  "count": 1,
+  "issue": 1054
+ },
+ "src/features/docPdf.ts": {
+  "count": 3,
+  "issue": 1054
+ },
+ "src/features/invoice/InvoiceCard.tsx": {
+  "count": 1,
+  "issue": 1058
+ },
+ "src/features/metrics.ts": {
+  "count": 2,
+  "issue": 1058
+ },
+ "src/features/payments/advance.ts": {
+  "count": 1,
+  "issue": 1054
+ },
+ "src/features/techDay.ts": {
+  "count": 1,
+  "issue": 1058
+ }
+}
