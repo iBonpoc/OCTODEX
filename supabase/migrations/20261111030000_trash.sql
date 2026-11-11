@@ -12,8 +12,8 @@
 --     клиент уходит в Корзину вместе со своими объектами и людьми и возвращается с ними же;
 --   * public.trash_items (удалить пачку, ответ по каждой строке), public.trash_restore (вернуть), public.trash_list
 --     (что лежит в Корзине — с именем, только если человек видит объект сейчас);
---   * ветки «своё» в select-политиках лидов, расходов, задач и каталога не видят удалённое (свои удалённые — только в
---     trash_list);
+--   * ветки «своё» в select-политиках лидов, расходов и каталога не видят удалённое (свои удалённые — только в
+--     trash_list); задачи — нет (t12 импорта, #597);
 --   * страж app.tg_job_cancel_guard: работу отменяет только владелец, админ или офис, без оплат; офис — только без
 --     счёта (аванс аннулирует только владелец или админ, tg_invoice_guard).
 -- Только прямые записи телефона (current_user «authenticated») проходят стражи и попадают в Корзину. Функции сервера
@@ -22,6 +22,9 @@
 -- Правило 16: только шаг 1 — новое добавлено, ничего не переименовано и не удалено; политики сужены alter policy
 -- (старые телефоны и так читают только deleted_at is null, cloud/repo.ts). Правило 18: каждая новая функция — revoke
 -- all from public, anon, затем явный grant. Срок хранения строк в базе (стирание) — не здесь: #628, 7а-3.
+
+-- шесть горячих таблиц получают триггеры: не ждать долго блокировку (выпуск не висит, повторит)
+set lock_timeout = '5s';
 
 -- ---- 0. Срок Корзины ------------------------------------------------------------------------------------------------
 create or replace function app.trash_days()
@@ -58,44 +61,68 @@ create policy trash_entries_select on public.trash_entries for select to authent
          or (app.is_member(company_id) and deleted_by = (select auth.uid())));
 
 -- ---- 2. Правило: можно ли удалить / вернуть (одно для стража и функций) --------------------------------------------
+-- «Своё» для тех, кто не владелец, админ или офис (спека 38 §4.2): автор, который ещё видит объект и может его менять
+-- по своей роли сейчас. Понизили продажи до мастера — клиентов он больше не трогает, даже своих (проверка руководителя
+-- #752 №2). Каталог — только владелец, админ, офис (№7).
+create or replace function app.trash_own_ok(p_kind text, p_company uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select case p_kind
+    when 'estimate' then app.is_staff(p_company) or app.has_role(p_company, array['tech'])
+    when 'expense' then app.is_staff(p_company) or app.has_role(p_company, array['tech'])
+    when 'customer' then app.is_staff(p_company)
+    when 'lead' then app.is_member(p_company)
+    when 'task' then app.is_member(p_company)
+    else false
+  end;
+$$;
+revoke all on function app.trash_own_ok(text, uuid) from public, anon, authenticated;
+
 -- Ответ — код причины спеки 38 §4.3 или null (можно). Нет строки, чужая компания, нет права — один ответ noRight.
 -- security definer: читает строку и её документы мимо RLS, а права проверяет сам по auth.uid().
 create or replace function app.trash_reason(p_kind text, p_id uuid, p_deleting boolean)
 returns text language plpgsql stable security definer set search_path = '' as $$
 declare
-  v_uid     uuid := auth.uid();
-  v_company uuid;
-  v_by      uuid;
-  v_del     timestamptz;
-  v_status  text;
-  v_sent    uuid;
-  v_parent  uuid;
-  v_entry   timestamptz;
-  v_lead    uuid;
+  v_uid      uuid := auth.uid();
+  v_company  uuid;
+  v_by       uuid;
+  v_del      timestamptz;
+  v_status   text;
+  v_sent     uuid;
+  v_customer uuid;
+  v_lead     uuid;
+  v_job      uuid;
+  v_subj_t   text;
+  v_subj     uuid;
+  v_all      boolean;
+  v_entry    timestamptz;
+  v_entry_by uuid;
 begin
   if v_uid is null or p_id is null then return 'noRight'; end if;
   case p_kind
     when 'estimate' then
       select company_id, created_by, deleted_at, status, sent_version_id, customer_id, lead_id
-        into v_company, v_by, v_del, v_status, v_sent, v_parent, v_lead from public.estimates where id = p_id;
+        into v_company, v_by, v_del, v_status, v_sent, v_customer, v_lead from public.estimates where id = p_id;
     when 'task' then
-      select company_id, created_by, deleted_at into v_company, v_by, v_del from public.tasks where id = p_id;
+      select company_id, created_by, deleted_at, subject_type, subject_id
+        into v_company, v_by, v_del, v_subj_t, v_subj from public.tasks where id = p_id;
     when 'expense' then
-      select company_id, created_by, deleted_at into v_company, v_by, v_del from public.expenses where id = p_id;
+      select company_id, created_by, deleted_at, customer_id, job_id
+        into v_company, v_by, v_del, v_customer, v_job from public.expenses where id = p_id;
     when 'catalog_item' then
       select company_id, created_by, deleted_at into v_company, v_by, v_del from public.catalog_items where id = p_id;
     when 'customer' then
       select company_id, created_by, deleted_at into v_company, v_by, v_del from public.customers where id = p_id;
     when 'lead' then
-      select company_id, created_by, deleted_at, customer_id into v_company, v_by, v_del, v_parent from public.leads where id = p_id;
+      select company_id, created_by, deleted_at, customer_id into v_company, v_by, v_del, v_customer from public.leads where id = p_id;
     else
       return 'noRight';
   end case;
   if v_company is null or not app.is_member(v_company) then return 'noRight'; end if;
-  -- чужое — владелец, админ, офис; остальные (продажи, мастер, субподрядчик) — только своё (основатель 11.11)
+  v_all := app.has_role(v_company, array['owner', 'admin', 'office']);
+  -- чужое — владелец, админ, офис; остальные — только своё, которое видят и могут менять сейчас (основатель 11.11).
   -- notYours — тому, кто видит всю компанию (продажи); мастер и субподрядчик чужого не видят: им один ответ noRight
-  if not app.has_role(v_company, array['owner', 'admin', 'office']) and v_by is distinct from v_uid then
-    return case when app.is_staff(v_company) then 'notYours' else 'noRight' end;
+  if not v_all and (v_by is distinct from v_uid or not app.trash_own_ok(p_kind, v_company)) then
+    return case when app.is_staff(v_company) and app.trash_own_ok(p_kind, v_company) then 'notYours' else 'noRight' end;
   end if;
 
   if p_deleting then
@@ -126,18 +153,26 @@ begin
     return null;
   end if;
 
-  -- вернуть: только то, что лежит в Корзине (удалено человеком, не отменой импорта или склейкой), не старше 30 дней.
+  -- вернуть: только то, что лежит в Корзине (удалено человеком, не отменой импорта или склейкой), не старше 30 дней;
+  -- не владелец, админ, офис — только то, что удалил сам (спека §6.2; проверка руководителя #752 №1).
   -- Каталог — исключение: «добавить снова» удалённую позицию было и до Корзины (ops.ts catalog.save), без срока.
   if v_del is null then return null; end if;
   if p_kind = 'catalog_item' then return null; end if;
-  select t.deleted_at into v_entry from public.trash_entries t
+  select t.deleted_at, t.deleted_by into v_entry, v_entry_by from public.trash_entries t
    where t.company_id = v_company and t.kind = p_kind and t.object_id = p_id and t.restored_at is null;
   if v_entry is null then return 'noRight'; end if;
-  if v_entry < now() - make_interval(days => app.trash_days()) then return 'expired'; end if;
-  if v_parent is not null and exists (select 1 from public.customers c where c.id = v_parent and c.deleted_at is not null) then
-    return 'parentDeleted';
+  if not v_all and v_entry_by is distinct from v_uid then
+    return case when app.is_staff(v_company) then 'notYours' else 'noRight' end;
   end if;
-  if v_lead is not null and exists (select 1 from public.leads l where l.id = v_lead and l.deleted_at is not null) then
+  if v_entry < now() - make_interval(days => app.trash_days()) then return 'expired'; end if;
+  -- родитель в Корзине или удалён — сначала родитель
+  if (v_customer is not null and exists (select 1 from public.customers c where c.id = v_customer and c.deleted_at is not null))
+     or (v_lead is not null and exists (select 1 from public.leads l where l.id = v_lead and l.deleted_at is not null))
+     or (v_job is not null and exists (select 1 from public.jobs j where j.id = v_job and j.deleted_at is not null))
+     or (v_subj_t = 'customer' and exists (select 1 from public.customers c where c.id = v_subj and c.deleted_at is not null))
+     or (v_subj_t = 'lead' and exists (select 1 from public.leads l where l.id = v_subj and l.deleted_at is not null))
+     or (v_subj_t = 'job' and exists (select 1 from public.jobs j where j.id = v_subj and j.deleted_at is not null))
+     or (v_subj_t = 'property' and exists (select 1 from public.properties p where p.id = v_subj and p.deleted_at is not null)) then
     return 'parentDeleted';
   end if;
   return null;
@@ -266,17 +301,9 @@ alter policy expenses_select on public.expenses
 alter policy expenses_update on public.expenses
   using (app.is_staff(company_id)
          or (created_by = (select auth.uid()) and app.is_member(company_id) and deleted_at is null));
-alter policy tasks_select on public.tasks
-  using (app.is_staff(company_id)
-         or (deleted_at is null
-             and ((((assignee_id = (select auth.uid())) or (created_by = (select auth.uid()))) and app.is_member(company_id))
-                  or ((subject_type = 'lead') and app.task_subject_in_company('lead', subject_id, company_id) and app.can_see_lead(subject_id))
-                  or ((subject_type = 'property') and app.can_see_property(subject_id, company_id)))));
-alter policy tasks_update on public.tasks
-  using (app.is_staff(company_id)
-         or (deleted_at is null
-             and ((((assignee_id = (select auth.uid())) or (created_by = (select auth.uid()))) and app.is_member(company_id))
-                  or ((subject_type = 'property') and app.can_see_property(subject_id, company_id)))));
+-- tasks — без сужения: t12_import_undone_subject ставит deleted_at новой задаче на снятой импортом карточке, и «своя»
+-- ветка с deleted_at is null уронила бы upsert task.save мастера (42501, регресс #597; проверка руководителя #752 №3).
+-- Своё удалённое мастер и так не вернёт: страж t03 пускает возврат только из Корзины, удалённого им самим.
 alter policy catalog_items_select on public.catalog_items
   using (app.is_member(company_id) and (deleted_at is null or app.is_staff(company_id)));
 
@@ -299,6 +326,16 @@ begin
   if coalesce(cardinality(p_ids), 0) > 500 then raise exception 'trash: at most 500 at once' using errcode = '22023'; end if;
   foreach v_id in array coalesce(p_ids, '{}'::uuid[]) loop
     id := v_id; ok := false; reason := null;
+    -- the row is locked before its rule: a new estimate / job of this client or lead (its key check takes a share lock on
+    -- the row) waits for us, and a send of the estimate at the same moment too — the rule and the write see one state (#752 №4)
+    case p_kind
+      when 'estimate' then perform 1 from public.estimates x where x.id = v_id for update;
+      when 'task' then perform 1 from public.tasks x where x.id = v_id for update;
+      when 'expense' then perform 1 from public.expenses x where x.id = v_id for update;
+      when 'catalog_item' then perform 1 from public.catalog_items x where x.id = v_id for update;
+      when 'customer' then perform 1 from public.customers x where x.id = v_id for update;
+      when 'lead' then perform 1 from public.leads x where x.id = v_id for update;
+    end case;
     v_why := app.trash_reason(p_kind, v_id, true);
     if v_why is not null then
       reason := v_why;
@@ -391,12 +428,12 @@ begin
   return query
     select t.kind, t.object_id,
            case t.kind
-             when 'estimate' then (select coalesce(nullif(concat_ws(' · ', e.number, e.title), ''), e.number) from public.estimates e where e.id = t.object_id and e.deleted_at is not null and (v_all or e.created_by = auth.uid()))
-             when 'task' then (select k.title from public.tasks k where k.id = t.object_id and k.deleted_at is not null and (v_all or k.created_by = auth.uid()))
-             when 'expense' then (select concat_ws(' · ', x.vendor, x.category) from public.expenses x where x.id = t.object_id and x.deleted_at is not null and (v_all or x.created_by = auth.uid()))
-             when 'catalog_item' then (select c.name from public.catalog_items c where c.id = t.object_id and c.deleted_at is not null and (v_all or c.created_by = auth.uid()))
-             when 'customer' then (select c.display_name from public.customers c where c.id = t.object_id and c.deleted_at is not null and (v_all or c.created_by = auth.uid()))
-             when 'lead' then (select coalesce(l.contact_name, l.number) from public.leads l where l.id = t.object_id and l.deleted_at is not null and (v_all or l.created_by = auth.uid()))
+             when 'estimate' then (select coalesce(nullif(concat_ws(' · ', e.number, e.title), ''), e.number) from public.estimates e where e.id = t.object_id and e.deleted_at is not null and (v_all or (e.created_by = auth.uid() and app.trash_own_ok('estimate', p_company))))
+             when 'task' then (select k.title from public.tasks k where k.id = t.object_id and k.deleted_at is not null and (v_all or (k.created_by = auth.uid() and app.trash_own_ok('task', p_company))))
+             when 'expense' then (select concat_ws(' · ', x.vendor, x.category) from public.expenses x where x.id = t.object_id and x.deleted_at is not null and (v_all or (x.created_by = auth.uid() and app.trash_own_ok('expense', p_company))))
+             when 'catalog_item' then (select c.name from public.catalog_items c where c.id = t.object_id and c.deleted_at is not null and (v_all or (c.created_by = auth.uid() and app.trash_own_ok('catalog_item', p_company))))
+             when 'customer' then (select c.display_name from public.customers c where c.id = t.object_id and c.deleted_at is not null and (v_all or (c.created_by = auth.uid() and app.trash_own_ok('customer', p_company))))
+             when 'lead' then (select coalesce(l.contact_name, l.number) from public.leads l where l.id = t.object_id and l.deleted_at is not null and (v_all or (l.created_by = auth.uid() and app.trash_own_ok('lead', p_company))))
            end,
            t.deleted_by, u.full_name, t.deleted_at,
            greatest(0, app.trash_days() - extract(day from now() - t.deleted_at)::int)
@@ -412,13 +449,19 @@ revoke all on function public.trash_list(uuid) from public, anon;
 grant execute on function public.trash_list(uuid) to authenticated;
 
 -- ---- 9. Отмена работы: кто и когда (#750) -----------------------------------------------------------------------------
--- Ответ — код причины или null. Оплата (в том числе платёж в пути) — сначала возврат; офис — только работу без счёта.
+-- Ответ — код причины или null. Оплата (в том числе платёж в пути и оплата на выезде без счёта) — сначала возврат;
+-- офис — только работу без счёта. Будущий public.cancel_job (security definer, PR-O4) обязан звать эту функцию сам:
+-- страж t13 в definer не срабатывает.
 create or replace function app.job_cancel_reason(p_company uuid, p_job uuid)
 returns text language sql stable security definer set search_path = '' as $$
   select case
     when not app.has_role(p_company, array['owner', 'admin', 'office']) then 'noRight'
     when exists (select 1 from public.payments p join public.invoices i on i.company_id = p.company_id and i.id = p.invoice_id
                   where i.company_id = p_company and i.job_id = p_job
+                    and p.status in ('pending', 'succeeded', 'partially_refunded') and p.amount_cents - p.refunded_cents > 0)
+      -- a payment taken on a visit with no invoice yet (#752 №5)
+      or exists (select 1 from public.payments p join public.visits v on v.company_id = p.company_id and v.id = p.visit_id
+                  where v.company_id = p_company and v.job_id = p_job and p.invoice_id is null
                     and p.status in ('pending', 'succeeded', 'partially_refunded') and p.amount_cents - p.refunded_cents > 0) then 'paid'
     when not app.has_role(p_company, array['owner', 'admin'])
          and exists (select 1 from public.invoices i where i.company_id = p_company and i.job_id = p_job and i.status <> 'void') then 'invoiceOpen'

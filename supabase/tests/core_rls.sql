@@ -12246,7 +12246,7 @@ update public.trash_entries set deleted_by = 'a0000000-0000-0000-0000-0000000000
 select tst.fails($q$update public.jobs set deleted_at = now() where id = 'e1720000-0000-4000-8000-000000000003'$q$, 'T174 sales does not delete a job (no right on deleted_at)');
 insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1740000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T174 Sales Lead', '+13235550174');
 select tst.ok((select ok from public.trash_items('lead', array['a1740000-0000-4000-8000-000000000002'::uuid])), 'T174 sales deletes his own lead');
-select tst.ok((select reason from public.trash_items('catalog_item', array[(select id from public.catalog_items where company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null and created_by is distinct from 'a0000000-0000-0000-0000-000000000005' limit 1)])) = 'notYours', 'T174 sales: not another''s catalog item');
+select tst.ok((select reason from public.trash_items('catalog_item', array[(select id from public.catalog_items where company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null limit 1)])) = 'noRight', 'T174 sales: the catalog is the office''s only (#752 №7)');
 -- a payment on its way stops the cancel too
 :as_owner_a
 insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e1740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T174 ach', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
@@ -12262,5 +12262,57 @@ select tst.ok((select ok from public.trash_items('estimate', array['e1740000-000
 select tst.ok((select ok from public.trash_items('lead', array['a1740000-0000-4000-8000-000000000003'::uuid])), 'T174 then its lead');
 select tst.ok((select reason from public.trash_restore('estimate', array['e1740000-0000-4000-8000-000000000002'::uuid])) = 'parentDeleted', 'T174 the draft waits for its lead');
 \echo 'T174 the holes found by the PR-1 check stay closed ok'
+
+-- T175: проверка руководителя #752 — вернуть может только тот, кто удалил; «своё» — пока видишь и можешь менять;
+-- задача мастера на снятой импортом карточке; оплата на выезде без счёта; родитель задачи
+-- №1: the office deletes the tech's lead — the tech does not take it back
+:as_tech_a
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T175 Tech Lead', '+13235550176');
+:as_office_a
+select tst.ok((select ok from public.trash_items('lead', array['a1750000-0000-4000-8000-000000000001'::uuid])), 'T175 the office deletes the tech''s lead');
+:as_tech_a
+select tst.ok((select reason from public.trash_restore('lead', array['a1750000-0000-4000-8000-000000000001'::uuid])) = 'noRight', 'T175 the author does not take back what the office deleted');
+select tst.ok(not exists (select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a1750000-0000-4000-8000-000000000001'), 'T175 nor sees it in his Trash');
+-- №2: sales deletes his own client, then is made a tech: neither the client back nor its name
+:as_sales_a
+insert into public.customers (id, company_id, display_name) values ('c1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T175 Sales Client');
+select tst.ok((select ok from public.trash_items('customer', array['c1750000-0000-4000-8000-000000000001'::uuid])), 'T175 sales deletes his own client');
+select tst.ok((select label from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'c1750000-0000-4000-8000-000000000001') = 'T175 Sales Client', 'T175 and sees its name');
+:as_super
+update public.memberships set role = 'tech' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.ok((select reason from public.trash_restore('customer', array['c1750000-0000-4000-8000-000000000001'::uuid])) = 'noRight', 'T175 made a tech: does not take the client back');
+select tst.ok((select label is null from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'c1750000-0000-4000-8000-000000000001'), 'T175 nor sees its name');
+:as_super
+update public.memberships set role = 'sales' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- №3: a tech's task.save on a card an import's undo took away — accepted (lands taken away), not 42501 (#597)
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T175 undone card job', :'t166_card', :'t166_prop', 'draft');
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1750000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1750000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+-- the house is alive (the tech may write on it), its card is taken away by the undo: t12 lands the task taken away
+select deleted_at as t175_prop_del from public.properties where id = :'t166_prop' \gset
+update public.properties set deleted_at = null where id = :'t166_prop';
+:as_tech_a
+insert into public.tasks (id, company_id, subject_type, subject_id, title) values
+  ('a1750000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'property', :'t166_prop', 'T175 tech late task')
+on conflict (id) do update set title = excluded.title;
+:as_super
+select tst.ok((select deleted_at is not null from public.tasks where id = 'a1750000-0000-4000-8000-000000000011'), 'T175 the tech''s late task is accepted and lands taken away');
+update public.properties set deleted_at = nullif(:'t175_prop_del', '')::timestamptz where id = :'t166_prop';
+-- №5: a payment taken on a visit with no invoice stops the cancel
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e1750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T175 paid on site', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1750000-0000-4000-8000-000000000002', now());
+insert into public.payments (company_id, customer_id, visit_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'f1750000-0000-4000-8000-000000000002', 'cash', 3000, 'succeeded', 't175-onsite');
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1750000-0000-4000-8000-000000000002'$q$, 'job:paid%', 'T175 paid on the visit, no invoice: refund first');
+-- №6: a task whose lead is deleted waits for its lead
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T175 Task Lead', '+13235550177');
+insert into public.tasks (id, company_id, subject_type, subject_id, title) values ('a1750000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a1750000-0000-4000-8000-000000000002', 'T175 call back');
+select tst.ok((select ok from public.trash_items('task', array['a1750000-0000-4000-8000-000000000012'::uuid])), 'T175 the task goes');
+select tst.ok((select ok from public.trash_items('lead', array['a1750000-0000-4000-8000-000000000002'::uuid])), 'T175 then its lead');
+select tst.ok((select reason from public.trash_restore('task', array['a1750000-0000-4000-8000-000000000012'::uuid])) = 'parentDeleted', 'T175 the task waits for its lead');
+\echo 'T175 the director''s check of #752: who deleted restores, own while seen, the tech''s late task, paid on site, the task''s parent ok'
 
 \echo 'ALL TESTS PASSED'
