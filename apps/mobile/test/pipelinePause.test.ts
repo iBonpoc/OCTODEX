@@ -6,11 +6,13 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const repo = join(__dirname, "../../..");
-const { decide, stopsFrom } = require("../../../scripts/pipelinePause.cjs") as {
+const { decide, stopsFrom, liveLabels } = require("../../../scripts/pipelinePause.cjs") as {
+  liveLabels: (l: unknown, fallback: string[]) => string[];
   decide: (a: { event: string; prLabels: string[]; stops: { number: number }[] }) => { pause: boolean; message: string };
   stopsFrom: (l: unknown) => { number: number }[];
 };
-const { pickRuns } = require("../../../scripts/pipelineResume.cjs") as {
+const { pickRuns, waitFor } = require("../../../scripts/pipelineResume.cjs") as {
+  waitFor: (runs: { id: number; status: string }[]) => boolean;
   pickRuns: (a: { prs: { number: number; runs: { id: number; conclusion: string; headSha: string; pauseFailed: boolean }[] }[]; prHeads: Record<number, string> }) => number[];
 };
 const wf = (n: string) => readFileSync(join(repo, ".github/workflows", n), "utf8");
@@ -31,6 +33,27 @@ describe("decide: who is paused", () => {
   it("pull requests in the issues list are not stops", () => {
     expect(stopsFrom([{ number: 5, pull_request: {} }, { number: 6 }])).toEqual([{ number: 6, title: undefined }]);
     expect(stopsFrom(null)).toEqual([]);
+  });
+});
+
+describe("live labels (probe #1129: «починка» added while the run waited for a runner)", () => {
+  it("the live list wins over the event's labels", () => expect(liveLabels([{ name: "починка" }, { name: "ошибка" }], [])).toEqual(["починка", "ошибка"]));
+  it("a broken answer keeps the fallback instead of dropping the label", () => {
+    expect(liveLabels(null, ["починка"])).toEqual(["починка"]);
+    expect(liveLabels({ message: "Not Found" }, ["починка"])).toEqual(["починка"]);
+  });
+  it("a PR labelled «починка» live is not paused even though the event had no labels", () => {
+    const prLabels = liveLabels([{ name: "починка" }], []);
+    expect(decide({ event: "pull_request", prLabels, stops: [{ number: 1 }] }).pause).toBe(false);
+  });
+});
+
+describe("waitFor: the resume waits for a run that is still going", () => {
+  it("queued / in progress → wait; completed → the answer is known", () => {
+    expect(waitFor([{ id: 2, status: "queued" }])).toBe(true);
+    expect(waitFor([{ id: 3, status: "in_progress" }, { id: 2, status: "completed" }])).toBe(true);
+    expect(waitFor([{ id: 3, status: "completed" }, { id: 2, status: "in_progress" }])).toBe(false);
+    expect(waitFor([])).toBe(false);
   });
 });
 
@@ -78,6 +101,11 @@ describe("the workflows", () => {
     expect(resume).toMatch(/permissions:\n  actions: write\n  issues: read\n  pull-requests: read\n  contents: read\n/);
     expect(resume).not.toMatch(/contents: write|pull-requests: write|issues: write/);
     expect(resume).not.toMatch(/gh pr merge|git push/);
+  });
+  it("the pause job reads the PR's labels live: it has the number and the right to read it", () => {
+    const job = checks.slice(checks.indexOf("\n  pause:\n"), checks.indexOf("\n  changes:\n"));
+    expect(job).toContain("PR_NUMBER: ${{ github.event.pull_request.number }}");
+    expect(job).toMatch(/pull-requests: read/);
   });
   it("label names and numbers reach the shell through env, never pasted into the command", () => {
     expect(checks).toMatch(/PR_LABELS: \$\{\{ join\(github\.event\.pull_request\.labels\.\*\.name/);
