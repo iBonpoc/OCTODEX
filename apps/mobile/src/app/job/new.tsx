@@ -166,9 +166,10 @@ export default function NewJob() {
 
       {customerId ? (
         <>
-          <SectionTitle title={t("job3.new.address")} />
+          {newClient ? <SectionTitle title={t("job3.new.address")} /> : null}
           {!newClient ? (
             <ChoiceChips
+              label={t("job3.new.address")}
               items={[...props.map((p) => ({ key: p.id, label: p.address })), { key: NEW, label: t("job3.new.newAddress") }]}
               value={(propertyId ?? "") as string}
               onChange={(k) => setPropertyId(k)}
@@ -195,13 +196,12 @@ export default function NewJob() {
           </View>
         </Labeled>
         {types.length ? (
-          <Labeled label={t("job3.type")}>
-            <ChoiceChips
-              items={types.map((x) => ({ key: x.id, label: x.name ?? (x.seedKey ? t(`job3.jt.${x.seedKey}` as DictKey) : "") }))}
-              value={jobTypeId}
-              onChange={setJobTypeId}
-            />
-          </Labeled>
+          <ChoiceChips
+            label={t("job3.type")}
+            items={types.map((x) => ({ key: x.id, label: x.name ?? (x.seedKey ? t(`job3.jt.${x.seedKey}` as DictKey) : "") }))}
+            value={jobTypeId}
+            onChange={setJobTypeId}
+          />
         ) : null}
         <Labeled label={t("job3.desc")}>
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("job3.desc")} />

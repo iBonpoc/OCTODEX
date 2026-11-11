@@ -12,6 +12,7 @@ import Animated, {
 import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
+import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
 import { focusPlan } from "./fieldFocus";
 import { offsetToShow } from "./segmentedScroll";
@@ -211,6 +212,7 @@ export function Segmented<K extends string>({
   full,
   scroll,
   testID,
+  radio,
 }: {
   items: { key: K; label: string }[];
   value: K;
@@ -220,6 +222,8 @@ export function Segmented<K extends string>({
   testID?: string;
   /** many tabs: one line that scrolls sideways on a narrow phone (the page itself never scrolls sideways) */
   scroll?: boolean;
+  /** a choice of a value in a form (not tabs of a screen): read as a radio group (#1095: ChoiceChips with a few options) */
+  radio?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -263,7 +267,7 @@ export function Segmented<K extends string>({
   const { h, pad } = component.segmented;
   const bar = (
     <View
-      accessibilityRole="tablist"
+      accessibilityRole={radio ? "radiogroup" : "tablist"}
       style={{
         height: h,
         padding: pad,
@@ -288,8 +292,9 @@ export function Segmented<K extends string>({
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: sel }}
+            accessibilityRole={radio ? "radio" : "tab"}
+            accessibilityState={radio ? { selected: sel, checked: sel } : { selected: sel }}
+            {...(radio ? ({ "aria-checked": sel } as object) : null)}
             onLayout={(e: LayoutChangeEvent) => {
               const { x, width: w } = e.nativeEvent.layout;
               setLayouts((p) => (p[it.key]?.x === x && p[it.key]?.w === w ? p : { ...p, [it.key]: { x, w } }));
@@ -600,18 +605,47 @@ export function Stepper({
 }
 
 /* ---------- ChoiceChips: wrapping single choice (when a segmented control would overflow) ---------- */
+/** a choice that fits one line as a segment: up to 4 options with up to 40 characters in all (DS А2, #1095) */
+export const fitsSegment = (labels: string[]) => labels.length <= 4 && labels.reduce((n, l) => n + l.length, 0) <= 40;
+
 export function ChoiceChips<K extends string>({
   items,
   value,
   onChange,
   nowrap,
+  label,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   /** one line (put inside a horizontal ScrollView) */
   nowrap?: boolean;
+  /** the field's name: the row of a `SelectField` when the options do not fit one line */
+  label?: string;
 }) {
+  // never a second line of chips (#1095): a few short options — a segment in one line, otherwise a field with a menu.
+  // Screens move over one by one, each naming its field with `label` (test/chipsLabel.test.ts keeps the list of the
+  // others from growing); without `label` — and in a horizontal scroll (`nowrap`) — the chips are as they were.
+  if (nowrap || label === undefined) return <ChipsRow items={items} value={value} onChange={onChange} nowrap={nowrap} />;
+  if (fitsSegment(items.map((i) => i.label))) {
+    const seg = <Segmented radio full items={items} value={value} onChange={onChange} />;
+    // with a `label` the field names itself: a caption over the segment, the row's label in a field
+    return label ? (
+      <View style={{ gap: space[1] }}>
+        <T v="caption" tone="mut">
+          {label}
+        </T>
+        {seg}
+      </View>
+    ) : (
+      seg
+    );
+  }
+  return <SelectField label={label ?? ""} value={value} items={items} onChange={onChange} />;
+}
+
+/** the chips of one line, inside a horizontal scroll (filters) */
+function ChipsRow<K extends string>({ items, value, onChange, nowrap }: { items: { key: K; label: string }[]; value: K; onChange: (k: K) => void; nowrap?: boolean }) {
   const ro = useReadOnly();
   const { c } = useTheme();
   const h = component.button.sm;
