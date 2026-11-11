@@ -1,4 +1,5 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
+import { visitDueCents } from "@/features/visitDue";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -130,7 +131,7 @@ export default function JobScreen() {
         {next ? <Button label={t("job3.act.enRoute")} icon="navigate" size="sm" variant="secondary" onPress={enRoute} /> : null}
         {openInvoice ? (
           <Button label={t("job3.act.pay")} icon="dollar" size="sm" variant="secondary" onPress={() => router.push(`/invoice/${openInvoice.id}`)} />
-        ) : next && next.amountDueCents > 0 ? (
+        ) : next && visitDueCents(db, next) > 0 ? (
           <Button label={t("job3.act.pay")} icon="dollar" size="sm" variant="secondary" onPress={() => router.push(`/visit/${next.id}`)} />
         ) : null}
         <Button label={t("job3.act.note")} icon="note" size="sm" variant="secondary" onPress={() => setTab("history")} />
@@ -314,7 +315,7 @@ export default function JobScreen() {
             {t("job3.dueNow")}
           </T>
           <T v="title" tabular>
-            {money(dueCents || (next?.amountDueCents ?? 0))}
+            {money(dueCents || (next ? visitDueCents(db, next) : 0))}
           </T>
         </RowView>
       </Card>

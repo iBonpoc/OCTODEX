@@ -28,6 +28,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
+import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
 import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
@@ -38,7 +39,7 @@ import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBa
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
-import { acceptPayment } from "@octo/estimating-engine";
+import { acceptPayment, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
@@ -1401,23 +1402,33 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // an inspection (no job) takes no payment
         const customerId = v.jobId ? customerOfJob(d0, v.jobId) : "";
         const now = new Date().toISOString();
+        // the amount is the same rule as the server's record_visit_payment (#757, audit A-17 / B-05): the job's final
+        // invoice takes its balance; with none, a new final invoice bills what is not yet billed (a deposit off)
+        const job = v.jobId ? findJob(d0, v.jobId) : undefined;
+        const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
+        // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
+        const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
+        const finalId = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final")!.id : invoiceId;
+        // the op always carries a new invoice id: the server uses it only when it makes the final invoice (no final yet)
         return mutate(
           "visit.pay",
           (d) => {
-            const next = patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: { method, amountCents: x.amountDueCents, at: now } }));
+            const next = patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: { method, amountCents: plan.amountCents, at: now } }));
+            if (!customerId || plan.into === "none") return next;
             return {
               ...next,
               // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4)
-              invoices: customerId
-                ? [
-                    ...next.invoices,
-                    { id: invoiceId, customerId, jobId: v.jobId!, totalCents: v.amountDueCents, paidCents: v.amountDueCents, dueDate: now, paidAt: now, method, kind: "final" },
-                  ]
-                : next.invoices,
+              invoices:
+                plan.into === "final"
+                  ? next.invoices.map((i) => (i.id === finalId ? { ...i, paidCents: i.paidCents + plan.amountCents, paidAt: now, method } : i))
+                  : [
+                      ...next.invoices,
+                      { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: plan.amountCents, dueDate: now, paidAt: now, method, kind: "final" },
+                    ],
             };
           },
-          v.amountDueCents > 0 && customerId
-            ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method, dueDate: companyToday(Date.parse(now)) }
+          plan.amountCents > 0 && customerId
+            ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: plan.amountCents, method, dueDate: companyToday(Date.parse(now)) }
             : // nothing to pay: the visit still ends on the server (it stayed open there and the stores drifted)
               { k: "visit.step", visitId, to: "done" },
         );
@@ -2322,8 +2333,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // the note for the tech is its own field (visits.notes, wave П3b)
         const scope = scope0;
         const note = sch.note?.trim() || undefined;
-        const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
-        const due = Math.max(0, job.amountCents - paidDeposit);
+        // what the visit takes — the one rule of the screens and the server (features/visitDue.ts, #857 №1); the screens
+        // read it live, the stored field is only a first value
+        const due = visitDueCents(d0, { jobId });
         const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();
         const snap = snapshotFor("work", jobServices(opt, e?.approval?.addonIds ?? [], (d0.jobLines ?? []).filter((l) => l.jobId === jobId)));
         const undo0 = mutate(

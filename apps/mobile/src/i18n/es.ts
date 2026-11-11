@@ -3299,6 +3299,8 @@ export const es: Dict = {
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   // spec 35 §4д п.10 («Деньги и отчёты» №7)
   "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
+  // visit payment refused by the server (#857 О1) — the tech hands it to the office
+  "visit.rej.moneyInHand": "El dinero en mano no se registró: entregue el pago a la oficina",
   "est.signOnSite.afterSend": "El cliente puede firmar en el lugar cuando la oficina haya enviado el presupuesto.",
   "portal.offline": "Sin conexión. Revise internet y vuelva a cargar la página.",
   "portal.failed": "No funcionó. Inténtelo de nuevo.",

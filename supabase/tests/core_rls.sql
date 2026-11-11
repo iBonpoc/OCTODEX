@@ -12378,4 +12378,184 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_payment_person
           and not has_function_privilege('anon', 'app.tg_payment_person_guard()', 'EXECUTE'), 'T178 the guard is nobody''s to call');
 \echo 'T178 returned: manual methods by a person, card and bank only by Stripe (B-03) ok'
 
+-- =============================================================================
+-- T179–T181. Оплата на выезде одной функцией сервера (аудит 11.11 B-02, B-05, A-17; #757; миграция 20261111060000)
+-- Числа те же, что в packages/estimating-engine/test/contract.test.ts (visitPayment)
+-- =============================================================================
+:as_office_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e1790000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T179 no invoice yet', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft'),
+  ('e1790000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T179 with a deposit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft'),
+  ('e1790000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T179 final issued', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000001', 0, 'T179 work (test price)', 1, 50000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000002', 0, 'T179 work (test price)', 1, 50000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000003', 0, 'T179 work (test price)', 1, 50000, false);
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1790000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000001', now()),
+  ('f1790000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000002', now()),
+  ('f1790000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000003', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1790000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1790000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1790000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+-- a deposit of $150 on job 2 (paid), a final of $500 on job 3 with $200 paid
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('01790000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1790000-0000-4000-8000-000000000002', 'deposit', 15000),
+  ('01790000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1790000-0000-4000-8000-000000000003', 'final', 50000);
+update public.invoices set status = 'sent', sent_at = now() where id in ('01790000-0000-4000-8000-000000000002', '01790000-0000-4000-8000-000000000003');
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '01790000-0000-4000-8000-000000000002', 'c1a00000-0000-0000-0000-000000000002', 'cash', 15000, 'succeeded', 't179-dep'),
+  ('ca000000-0000-0000-0000-000000000000', '01790000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000002', 'cash', 20000, 'succeeded', 't179-part');
+update public.visits set status = 'on_site' where id in ('f1790000-0000-4000-8000-000000000001', 'f1790000-0000-4000-8000-000000000002', 'f1790000-0000-4000-8000-000000000003');
+-- T179 (B-02): the tech records the payment on his visit — the server makes the invoice he may not insert himself
+:as_tech_a
+select tst.fails($q$insert into public.invoices (company_id, customer_id, job_id, kind, total_cents) values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1790000-0000-4000-8000-000000000001', 'final', 50000)$q$,
+                 'T179 the tech still does not insert an invoice himself (the old visit.pay path — B-02)');
+select public.record_visit_payment('f1790000-0000-4000-8000-000000000001', '01790000-0000-4000-8000-0000000000a1', '21790000-0000-4000-8000-0000000000a1', 'cash', null, 50000) as t179_a \gset
+select tst.ok((:'t179_a')::jsonb ->> 'status' = 'paid' and ((:'t179_a')::jsonb ->> 'amount_cents')::bigint = 50000, 'T179 the tech''s payment is taken: ' || :'t179_a');
+:as_super
+select tst.ok((select kind = 'final' and total_cents = 50000 and paid_cents = 50000 and payment_status = 'paid' from public.invoices where id = '01790000-0000-4000-8000-0000000000a1'), 'T179 a final invoice of the job, paid');
+select tst.ok((select status = 'completed' from public.visits where id = 'f1790000-0000-4000-8000-000000000001'), 'T179 the visit is completed');
+select tst.ok((select received_by = 'a0000000-0000-0000-0000-000000000003' and visit_id = 'f1790000-0000-4000-8000-000000000001' from public.payments where id = '21790000-0000-4000-8000-0000000000a1'), 'T179 received by the tech, on his visit');
+:as_tech_a
+select tst.ok((public.record_visit_payment('f1790000-0000-4000-8000-000000000001', '01790000-0000-4000-8000-0000000000a1', '21790000-0000-4000-8000-0000000000a1', 'cash', null, 50000) ->> 'status') = 'replay', 'T179 a replay of the queue changes nothing');
+:as_super
+select tst.ok((select count(*) = 1 from public.payments where visit_id = 'f1790000-0000-4000-8000-000000000001'), 'T179 one payment');
+\echo 'T179 the tech records a payment on his visit: the server makes the invoice (B-02) ok'
+
+-- T180 (A-17, B-05): the amount is the server's — what is not yet billed, or the live final invoice's balance
+:as_tech_a
+select tst.ok(((public.record_visit_payment('f1790000-0000-4000-8000-000000000002', '01790000-0000-4000-8000-0000000000a2', '21790000-0000-4000-8000-0000000000a2', 'check', null, 35000) ->> 'amount_cents')::bigint) = 35000,
+              'T180 a job with a $150 deposit: the visit takes $350, not the whole $500 (A-17)');
+select tst.ok(((public.record_visit_payment('f1790000-0000-4000-8000-000000000003', '01790000-0000-4000-8000-0000000000a3', '21790000-0000-4000-8000-0000000000a3', 'cash', null, 30000) ->> 'amount_cents')::bigint) = 30000,
+              'T180 a job with a final invoice: the payment goes into it, its $300 balance (B-05)');
+:as_super
+select tst.ok((select count(*) = 1 from public.invoices where job_id = 'e1790000-0000-4000-8000-000000000003' and kind = 'final' and status <> 'void')
+          and (select payment_status = 'paid' from public.invoices where id = '01790000-0000-4000-8000-000000000003')
+          and not exists (select 1 from public.invoices where id = '01790000-0000-4000-8000-0000000000a3'), 'T180 no second final invoice; the first one is paid');
+-- no amount in hand: refused — the server does not decide for the tech (#857 С2)
+insert into public.visits (id, company_id, job_id, starts_at, status) values ('f1800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1790000-0000-4000-8000-000000000003', now(), 'scheduled');
+update public.visits set status = 'on_site' where id = 'f1800000-0000-4000-8000-000000000001';
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1800000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1800000-0000-4000-8000-000000000001', '01800000-0000-4000-8000-0000000000a1', '21800000-0000-4000-8000-0000000000a1', 'cash')$q$, '%amount in hand is needed%', 'T180 no amount in hand: refused');
+select tst.fails_like($q$select public.record_visit_payment('f1800000-0000-4000-8000-000000000001', '01800000-0000-4000-8000-0000000000a1', '21800000-0000-4000-8000-0000000000a1', 'cash', null, 0)$q$, '%amount in hand is needed%', 'T180 nor zero');
+:as_super
+select tst.ok((select status = 'on_site' from public.visits where id = 'f1800000-0000-4000-8000-000000000001'), 'T180 the visit stays open');
+\echo 'T180 the amount is the server''s: not yet billed or the final''s balance, one final invoice (A-17, B-05) ok'
+
+-- T181: who may — another tech, another company, an inspection; the rights
+:as_tech2_a
+select tst.fails_like($q$select public.record_visit_payment('f1790000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000a1', '21810000-0000-4000-8000-0000000000a1', 'cash', null, 10000)$q$, '%no such visit%', 'T181 another tech: no such visit');
+:as_owner_b
+select tst.fails_like($q$select public.record_visit_payment('f1790000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000a2', '21810000-0000-4000-8000-0000000000a2', 'cash', null, 10000)$q$, '%no such visit%', 'T181 another company: no such visit');
+select tst.fails_like($q$select public.record_visit_payment('f1790000-0000-4000-8000-000000000001', '01790000-0000-4000-8000-0000000000a1', '21790000-0000-4000-8000-0000000000a1', 'cash', null, 50000)$q$, '%no such visit%', 'T181 another company does not learn of a payment by its id');
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1790000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000a3', '21810000-0000-4000-8000-0000000000a3', 'bitcoin', null, 10000)$q$, '%not taken on a visit%', 'T181 an unknown method');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'EXECUTE'), 'T181 rights: authenticated, not anon');
+-- security-check of PR-B: only an active tech, only on site; the money in hand is the phone's amount
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e1810000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T181 checks', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', 0, 'T181 work (test price)', 1, 40000, false);
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1810000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now()),
+  ('f1810000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now()),
+  ('f1810000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+update public.visits set status = 'on_site' where id in ('f1810000-0000-4000-8000-000000000002', 'f1810000-0000-4000-8000-000000000003');
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000001', '01810000-0000-4000-8000-0000000000b1', '21810000-0000-4000-8000-0000000000b1', 'cash', null, 10000)$q$, '%not on site%', 'T181 the tech: not on a visit not started');
+-- the phone showed $150: the client pays part — a partial payment of what is in hand
+select tst.ok(((public.record_visit_payment('f1810000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000b2', '21810000-0000-4000-8000-0000000000b2', 'cash', null, 15000) ->> 'amount_cents')::bigint) = 15000,
+              'T181 the money in hand is the phone''s amount (less than the balance: a partial payment)');
+-- the phone showed $500, only $250 is left: the balance is recorded, the extra cash is flagged for the owner
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000003', '01810000-0000-4000-8000-0000000000b3', '21810000-0000-4000-8000-0000000000b3', 'cash', null, 50000)$q$,
+                      '%more in hand than due%', 'T181 more in hand than the balance: refused — never another amount, nothing hidden (#857 О1)');
+:as_super
+select tst.ok(not exists (select 1 from public.payments where id = '21810000-0000-4000-8000-0000000000b3' or idempotency_key like '21810000-0000-4000-8000-0000000000b3%')
+          and (select status = 'on_site' from public.visits where id = 'f1810000-0000-4000-8000-000000000003'), 'T181 nothing recorded, the visit stays open for the office');
+-- the office closed the invoice while the tech was offline: nothing due, $120 in hand — refused too, not «nothing»
+:as_tech_a
+select tst.ok(((public.record_visit_payment('f1810000-0000-4000-8000-000000000003', '01810000-0000-4000-8000-0000000000b8', '21810000-0000-4000-8000-0000000000b8', 'cash', null, 25000) ->> 'amount_cents')::bigint) = 25000, 'T181 the balance itself is taken');
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1810000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1810000-0000-4000-8000-000000000004', 'a0000000-0000-0000-0000-000000000003');
+update public.visits set status = 'on_site' where id = 'f1810000-0000-4000-8000-000000000004';
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000004', '01810000-0000-4000-8000-0000000000b6', '21810000-0000-4000-8000-0000000000b6', 'cash', null, 12000)$q$,
+                      '%more in hand than due%', 'T181 nothing due, money in hand: refused, the tech hands it to the office');
+:as_super
+-- a draft invoice of the job is not billed (as the app reads it): the visit still takes the whole contract
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e1810000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T181 draft', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values ('ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000002', 0, 'T181 work (test price)', 1, 40000, false);
+insert into public.invoices (company_id, customer_id, job_id, kind, total_cents) values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1810000-0000-4000-8000-000000000002', 'progress', 10000);
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1810000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000002', now());
+update public.visits set status = 'on_site' where id = 'f1810000-0000-4000-8000-000000000005';
+select tst.ok(((public.record_visit_payment('f1810000-0000-4000-8000-000000000005', '01810000-0000-4000-8000-0000000000b7', '21810000-0000-4000-8000-0000000000b7', 'cash', null, 40000) ->> 'amount_cents')::bigint) = 40000, 'T181 a draft invoice is not billed: the whole contract');
+:as_super
+-- a tech switched off keeps the assignment but takes no payment
+update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000002', '01810000-0000-4000-8000-0000000000b4', '21810000-0000-4000-8000-0000000000b4', 'cash', null, 10000)$q$, '%no such visit%', 'T181 a switched-off tech: no such visit');
+:as_super
+update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- a cancelled visit is paid by nobody
+:as_owner_a
+select public.cancel_visit('f1810000-0000-4000-8000-000000000001', 'other', 'T181') is not null as t181_c \gset
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000001', '01810000-0000-4000-8000-0000000000b5', '21810000-0000-4000-8000-0000000000b5', 'cash', null, 10000)$q$, '%not on site%', 'T181 a cancelled visit: not even the owner');
+-- #857 С4: the payment's client is the invoice's; С6: the phone's invoice id taken — a new id, the money is kept
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e1810000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T181 C4', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values ('ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000003', 0, 'T181 work (test price)', 1, 20000, false);
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1810000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'e1810000-0000-4000-8000-000000000003', now());
+update public.visits set status = 'on_site' where id = 'f1810000-0000-4000-8000-000000000006';
+-- the phone sends an invoice id that is already another invoice's
+select tst.ok((select j ->> 'status' = 'paid' and (j ->> 'invoice_id') <> '01790000-0000-4000-8000-000000000002'
+                 from (select public.record_visit_payment('f1810000-0000-4000-8000-000000000006', '01790000-0000-4000-8000-000000000002', '21810000-0000-4000-8000-0000000000c1', 'cash', null, 20000) j) x),
+              'T181 a taken invoice id: a new one, the payment is kept (С6)');
+:as_super
+select tst.ok((select p.customer_id = i.customer_id from public.payments p join public.invoices i on i.id = p.invoice_id where p.id = '21810000-0000-4000-8000-0000000000c1'), 'T181 the payment''s client is its invoice''s (С4)');
+select tst.ok((select total_cents = 15000 from public.invoices where id = '01790000-0000-4000-8000-000000000002'), 'T181 the other invoice is untouched');
+-- an inspection takes no payment
+insert into public.visits (id, company_id, property_id, kind, starts_at) values ('f1810000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000002', 'inspection', now());
+:as_owner_a
+select tst.fails_like($q$select public.record_visit_payment('f1810000-0000-4000-8000-000000000007', '01810000-0000-4000-8000-0000000000c2', '21810000-0000-4000-8000-0000000000c2', 'cash', null, 1000)$q$, '%inspection takes no payment%', 'T181 an inspection: no payment');
+-- an unpaid deposit: the visit takes the contract less the deposit (server, as the engine); Ж1: a draft final of the
+-- office is billed by the visit — sent now, paid; С4: the payment's client is the invoice's, not the job's
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e1820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T181 unpaid deposit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft'),
+  ('e1820000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T181 draft final', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1820000-0000-4000-8000-000000000001', 0, 'T181 work (test price)', 1, 50000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1820000-0000-4000-8000-000000000002', 0, 'T181 work (test price)', 1, 50000, false);
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('01820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1820000-0000-4000-8000-000000000001', 'deposit', 15000),
+  ('01820000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'e1820000-0000-4000-8000-000000000002', 'final', 50000);
+update public.invoices set status = 'sent', sent_at = now() where id = '01820000-0000-4000-8000-000000000001';
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1820000-0000-4000-8000-000000000001', now()),
+  ('f1820000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1820000-0000-4000-8000-000000000002', now());
+update public.visits set status = 'on_site' where id in ('f1820000-0000-4000-8000-000000000001', 'f1820000-0000-4000-8000-000000000002');
+select tst.fails_like($q$select public.record_visit_payment('f1820000-0000-4000-8000-000000000001', '01820000-0000-4000-8000-0000000000a1', '21820000-0000-4000-8000-0000000000a1', 'cash', null, 50000)$q$,
+                      '%more in hand than due%', 'T181 an unpaid deposit: the whole contract is more than the visit takes');
+select tst.ok(((public.record_visit_payment('f1820000-0000-4000-8000-000000000001', '01820000-0000-4000-8000-0000000000a1', '21820000-0000-4000-8000-0000000000a1', 'cash', null, 35000) ->> 'amount_cents')::bigint) = 35000,
+              'T181 an unpaid deposit: the visit takes $350 (contract less the deposit), the deposit stays its own invoice');
+select tst.ok(((public.record_visit_payment('f1820000-0000-4000-8000-000000000002', '01820000-0000-4000-8000-0000000000a2', '21820000-0000-4000-8000-0000000000a2', 'cash', null, 50000) ->> 'invoice_id')) = '01820000-0000-4000-8000-000000000002',
+              'T181 a draft final of the office takes the payment (Ж1)');
+:as_super
+select tst.ok((select status = 'sent' and paid_cents = 50000 from public.invoices where id = '01820000-0000-4000-8000-000000000002'), 'T181 the draft is sent now, paid — the app sees it (Ж1)');
+select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.payments where id = '21820000-0000-4000-8000-0000000000a2'), 'T181 the payment''s client is the invoice''s, not the job''s (С4)');
+select tst.ok((select paid_cents = 0 from public.invoices where id = '01820000-0000-4000-8000-000000000001'), 'T181 the unpaid deposit is untouched');
+\echo 'T181 visit payment: who may, one answer to another company or tech ok'
+
 \echo 'ALL TESTS PASSED'
