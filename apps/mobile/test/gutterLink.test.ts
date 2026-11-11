@@ -19,6 +19,8 @@ const DAY = 86_400_000;
 const on = { modules: { gutters: { enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings: {}, rowVersion: 1 } } };
 const M = (m: Partial<MeasurementRow>): MeasurementRow => ({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null, ...m });
 const DRAW = "/module/gutters/draw";
+const VIEW = "/module/gutters/view";
+const DOORS = { draw: DRAW, view: VIEW };
 
 describe("S4h (#704): a lead's measurement shows on its address — no write", () => {
   const g = { measurements: [M({ id: "mL", leadId: "l1", updatedAt: "2026-11-05" }), M({ id: "mP", propertyId: "p2", updatedAt: "2026-11-01" })], elements: [] };
@@ -30,24 +32,26 @@ describe("S4h (#704): a lead's measurement shows on its address — no write", (
   it("a lead still finds only its own (an address of another lead does not leak in)", () => {
     expect(latestFor(g, { leadId: "l2", leadIds: ["l1"] })).toBeUndefined();
   });
-  it("the place on the address opens it", () => {
+  it("the place on the address opens its card (П25.3 В: the card, not the canvas)", () => {
     const a = placeActions("property", on, { role: "sales", propertyId: "p1", leadIds: ["l1"] }, undefined, { gutters: g });
-    expect(a[0]).toMatchObject({ labelKey: "mod.gutters.measureOpen", href: `${DRAW}?m=mL` });
+    expect(a[0]).toMatchObject({ labelKey: "mod.gutters.measureOpen", href: `${VIEW}?m=mL` });
   });
 });
 
 describe("«Замер желобов» on a client and a visit (#697, П24 А3, А7)", () => {
-  it("measureHref: the newest one, else a new one linked", () => {
-    expect(measureHref(DRAW, { measurements: [], elements: [] }, { propertyId: "p1" })).toEqual({ href: `${DRAW}?property=p1` });
+  it("measureHref: the newest one's card, else a new one linked on the canvas", () => {
+    expect(measureHref(DOORS, { measurements: [], elements: [] }, { propertyId: "p1" })).toEqual({ href: `${DRAW}?property=p1` });
+    const two = { measurements: [M({ id: "old", leadId: "l1", updatedAt: "2026-11-01" }), M({ id: "new", leadId: "l1", updatedAt: "2026-11-05" })], elements: [] };
+    expect(measureHref(DOORS, two, { leadId: "l1" }).href).toBe(`${VIEW}?m=new`);
   });
   it("client: one address → straight to it; several → pick; none → add one on the card", () => {
     const db = makeSeed();
     const two = db.customers.find((c) => db.properties.filter((p) => p.customerId === c.id).length >= 2);
     const one = db.customers.find((c) => db.properties.filter((p) => p.customerId === c.id).length === 1)!;
     const place = db.properties.find((p) => p.customerId === one.id)!;
-    expect(clientStart(DRAW, db, one.id)).toEqual({ kind: "go", href: `${DRAW}?property=${place.id}` });
-    if (two) expect(clientStart(DRAW, db, two.id)).toMatchObject({ kind: "pick" });
-    expect(clientStart(DRAW, db, "nobody")).toEqual({ kind: "none" });
+    expect(clientStart(DOORS, db, one.id)).toEqual({ kind: "go", href: `${DRAW}?property=${place.id}` });
+    if (two) expect(clientStart(DOORS, db, two.id)).toMatchObject({ kind: "pick" });
+    expect(clientStart(DOORS, db, "nobody")).toEqual({ kind: "none" });
   });
   it("the places: a client → the start screen; a visit → its lead's measurement, else its address's", () => {
     expect(placeActions("client", on, { role: "tech", customerId: "c1" }, undefined, {})).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measure", href: "/module/gutters/start?customer=c1" })]);
