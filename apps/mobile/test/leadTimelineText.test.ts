@@ -31,27 +31,17 @@ describe("timelineText — a status change reads as words", () => {
   });
 });
 
-import { remindWording } from "../src/features/leads";
-describe("remindWording — «про смету» only when an estimate was sent (#1104 п.2)", () => {
-  it("an estimate was sent: «Напомнить про смету» and its text", () => {
-    const w = remindWording(true);
-    expect(ru(w.label)).toBe("Напомнить про смету");
-    expect(ru(w.text, { name: "Анна", title: "Крыша" })).toContain("про смету «Крыша»");
-  });
-  it("no estimate: neither the button nor the text mentions one, in all three languages", () => {
-    const w = remindWording(false);
-    for (const t of [ru, en, tFor("es")]) {
-      expect(t(w.label)).not.toMatch(/смет|estimate|presupuesto/i);
-      expect(t(w.text, { name: "Анна", title: "" })).not.toMatch(/смет|estimate|presupuesto|«»/i);
-    }
-  });
-});
-
 describe("translate — a date that ends with a dot does not make «..» (#1104 п.3)", () => {
   it("«подписал(а) ср, 11 нояб.» + the sentence's dot = one dot", () => {
     const text = ru("est.countersign.clientSigned", { name: "Анна", date: "ср, 11 нояб." });
     expect(text).toContain("нояб. Подпишите");
     expect(text).not.toContain("..");
+  });
+  it("the same in English and Spanish dates (a month with a dot)", () => {
+    for (const lang of ["en", "es"] as const) {
+      const t = tFor(lang);
+      expect(t("est.countersign.clientSigned", { name: "Ann", date: "Nov. 11." }), lang).not.toContain("..");
+    }
   });
   it("an ellipsis stays an ellipsis", () => {
     expect(ru("est.countersign.clientSigned", { name: "Анна…", date: "..." })).toContain("...");

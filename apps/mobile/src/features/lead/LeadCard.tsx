@@ -9,7 +9,6 @@ import { usePersistentState } from "@/data/persist";
 import {
   isClosedLead, leadDuplicatesFor, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, type LeadTurn, type ManualWinReason,
-  remindWording,
   timelineText,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
@@ -76,10 +75,9 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
     const target = store.leadEstimateTarget(l.id);
     if (target) router.push(`/estimate/new?customerId=${target.customerId}&propertyId=${target.propertyId}&leadId=${l.id}`);
   };
-  const sentEstimate = estimates.find((x) => x.status === "sent");
-  const wording = remindWording(!!sentEstimate);
   const remind = () => {
-    Linking.openURL(smsWithBody(l.phone, t(wording.text, { name: l.name.split(" ")[0] ?? l.name, title: sentEstimate?.title ?? "" }))).catch(() => {});
+    const e = estimates.find((x) => x.status === "sent");
+    Linking.openURL(smsWithBody(l.phone, t("lead.remindText", { name: l.name.split(" ")[0] ?? l.name, title: e?.title ?? "" }))).catch(() => {});
     store.touchLead(l.id, "sms");
     toast.show(q(t("toast.reminded", { name: l.name })), store.markReminded(l.id));
   };
@@ -89,7 +87,7 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
     : !servable && l.customerId && !isClosedLead(l) ? <Button label={t("lead.openClient")} icon="user" variant="secondary" full onPress={() => router.push(`/client/${l.customerId}`)} />
     : turn.kind === "noStep" ? <Button label={t("lead.next.title")} icon="chevronRight" full onPress={() => setSheet("next")} />
     : turn.kind === "wait" && turn.action === "lostOrWait" ? <Button label={t("lead.low.title")} icon="clock" full onPress={() => setSheet("low")} />
-    : turn.kind === "wait" ? <Button label={t(wording.label)} icon="sms" full variant={turn.action === "remind" ? "primary" : "secondary"} onPress={remind} />
+    : turn.kind === "wait" ? <Button label={t("lead.remind")} icon="sms" full variant={turn.action === "remind" ? "primary" : "secondary"} onPress={remind} />
     : turn.kind === "step" && l.status === "booked" && role !== "tech" ? <Button label={t("lead.makeEstimate")} icon="invoice" full onPress={makeEstimate} />
     : turn.kind === "step" ? <Button label={t("lead.tab.tasks")} icon="check" full variant="secondary" onPress={() => setTab("tasks")} />
     : turn.kind === "snoozed" ? <Button label={t("lead.unsnooze")} icon="refresh" full variant="secondary" onPress={() => toast.show(q(t("lead.unsnoozed")), store.unsnoozeLead(l.id))} />

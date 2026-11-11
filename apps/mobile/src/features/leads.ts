@@ -193,14 +193,6 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
   return { kind: "noStep", status: "warn" };
 }
 
-/**
- * The words of the «remind» button and of its text message: «про смету» only when an estimate was sent to this lead
- * (#1104 п.2: after a plain reply, with no estimate, the button said «Напомнить про смету»).
- */
-export function remindWording(sentEstimate: boolean): { label: DictKey; text: DictKey } {
-  return sentEstimate ? { label: "lead.remind", text: "lead.remindText" } : { label: "lead.remindPlain", text: "lead.remindTextPlain" };
-}
-
 /** What the lead still needs before an estimate (docs/14 Р8): each item has an "Add" button on the card. */
 export type MissingItem = "phone" | "email" | "address" | "zip" | "request";
 export function missingForEstimate(l: Lead): MissingItem[] {

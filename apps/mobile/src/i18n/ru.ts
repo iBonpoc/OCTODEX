@@ -1295,8 +1295,6 @@ export const ru = {
   "lead.way.sms": "SMS",
   "lead.way.email": "email",
   "lead.reasonText": "Причина своими словами",
-  "lead.remindPlain": "Напомнить о себе",
-  "lead.remindTextPlain": "Здравствуйте, {name}! Напоминаем о себе. Есть вопросы? Ответьте на это сообщение.",
   "lead.remind": "Напомнить про смету",
   "lead.remindText": "Здравствуйте, {name}! Напоминаем про смету «{title}». Есть вопросы? Ответьте на это сообщение.",
   "lead.reopen": "Вернуть в работу",

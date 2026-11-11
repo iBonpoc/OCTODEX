@@ -1296,8 +1296,6 @@ export const es: Dict = {
   "lead.way.sms": "SMS",
   "lead.way.email": "email",
   "lead.reasonText": "Motivo con sus palabras",
-  "lead.remindPlain": "Dar seguimiento",
-  "lead.remindTextPlain": "¡Hola, {name}! Le escribimos para dar seguimiento. ¿Tiene preguntas? Responda a este mensaje.",
   "lead.remind": "Recordar el presupuesto",
   "lead.remindText": "Hola {name}, le recordamos el presupuesto “{title}”. ¿Preguntas? Responda a este mensaje.",
   "lead.reopen": "Volver a trabajar",
