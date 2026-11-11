@@ -244,7 +244,10 @@ export async function wipeDevice(
     return true;
   }
   log("the mark was not changed after the wipe: «wiped» kept beside it");
-  if (!(await tries(() => store.setItem(WIPE_DONE_KEY, marks.wiped ?? (userId || "1")), pauseMs))) log("«wiped» not written either");
+  // the mark there was not read (`leave`): «wiped» names whatever mark it is — «*», never only these people (review of
+  // #1029 №1: «u0» unread, «filter:u1» not written, «wiped»=«u1» → the next start wiped the next person's data)
+  const wiped = marks.leave ? WIPE_DONE_ANY : (marks.wiped ?? (userId || "1"));
+  if (!(await tries(() => store.setItem(WIPE_DONE_KEY, wiped), pauseMs))) log("«wiped» not written either");
   return true;
 }
 /** «the device is wiped already» for these people («u1,u0»), when the mark could not be changed after the wipe (#1013) */

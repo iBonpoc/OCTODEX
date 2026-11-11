@@ -176,7 +176,9 @@ async function repeatPending(): Promise<void> {
     if (markGone && (filtered === "done" || wiped)) await AsyncStorage.removeItem(WIPE_DONE_KEY).catch(() => {});
     return;
   }
-  await wipeKeepingOthers(userId, false);
+  // the mark read here is handed on, never read again (review of #1029 №2: a second read that failed left «uA,~»
+  // with «*» — the whole wipe again on every start)
+  await wipeKeepingOthers(userId, false, pending);
 }
 
 /* ---------- the shared outbox and the refused changes: filtered in place, never lost (#911) ---------- */
@@ -250,7 +252,7 @@ async function filterShared(ids: readonly (string | null)[]): Promise<Filtered> 
  * outbox is not wiped whole: another person's unsent ops on this phone stay (rule 6) — only the deleted person's go,
  * and old ones without an owner (19 §6.12).
  */
-async function wipeKeepingOthers(userId: string | null | undefined, orSession = true): Promise<void> {
+async function wipeKeepingOthers(userId: string | null | undefined, orSession = true, known?: string): Promise<void> {
   // whose account: told by the caller (the start check knows it; the session may be gone already), else — right after
   // the deletion only — the session; unknown → null: only ops without an owner go
   // never waits for ever (a refresh of the sign-in without network): every later wipe waits for this one (#1013 №4)
@@ -266,7 +268,7 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
     : null;
   const me = userId || session?.user.id || null;
   // an older deletion still to finish («filter:u0», or «u0» whose wipe failed): its people go too, never forgotten
-  const prior = await readKey(WIPE_PENDING_KEY);
+  const prior = known ?? (await readKey(WIPE_PENDING_KEY));
   // the mark could not be read (#1013 №2): what it holds is not known — it is not overwritten unless it must be
   let unknown = prior === undefined;
   const ids = [...new Set([me, ...(prior ? pendingOf(prior).userIds : [])])];

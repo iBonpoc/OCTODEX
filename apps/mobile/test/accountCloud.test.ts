@@ -740,6 +740,40 @@ describe("unit:accountCloud — the rest after #1016 (#1017)", () => {
     expect(storage.has("octo.cloud.v1.c9")).toBe(false);
   }, 20_000);
 
+  it("review of #1029 №1: «u0» unread, the outbox unread, no mark can be written: «wiped»=«*» — u9's data never wiped", async () => {
+    storage.set("octo.wipe.pending.v1", "u0");
+    storage.set("octo.outbox.v1", JSON.stringify([op("u1op", "u1"), op("theirs", "u9")]));
+    failGet.add("octo.wipe.pending.v1");
+    failGet.add("octo.outbox.v1");
+    failSet.add("octo.wipe.pending.v1");
+    await finishOnDevice(); // u1
+    failGet.clear();
+    failSet.clear();
+    expect(storage.get("octo.wipe.done.v1")).toBe("*"); // before: «u1» — it never answers «u0»
+    nextPerson();
+    await wipeIfPending();
+    nextPersonKept();
+  }, 30_000);
+
+  it("review of #1029 №2: the repeat hands its mark on — a second read that fails never leaves «u0,~» to wipe again", async () => {
+    storage.set("octo.wipe.pending.v1", "u0,~");
+    storage.set("octo.wipe.done.v1", "*");
+    storage.set("octo.cloud.v1.c0", "u0's");
+    let reads = 0;
+    const real = storage.get.bind(storage);
+    storage.get = (k: string) => {
+      if (k === "octo.wipe.pending.v1" && ++reads > 1) throw new Error("SQLITE_BUSY");
+      return real(k);
+    };
+    try {
+      await wipeIfPending();
+    } finally {
+      storage.get = real;
+    }
+    expect(storage.has("octo.cloud.v1.c0")).toBe(false);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false); // before: «u0,~» left beside «*» — wiped on every start
+  }, 20_000);
+
   it("getSession hangs: the wipe goes on at START_CHECK_MS (only ops without an owner and the mark's people go)", async () => {
     vi.useFakeTimers();
     state.sessionHang = true;
