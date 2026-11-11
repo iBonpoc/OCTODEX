@@ -1,7 +1,7 @@
 /**
  * e2e 224 — «чертёж как на бумаге» (основатель 10.11, #739; docs/specs/33-gutters-workflow.md П24.8). Every view.
  * - «Готово» → «Просмотр замера»: the drawing is a sheet — white paper in both themes, the gutters' numbers, every
- *   length on a dimension line, «D1», the corner with its angle, the title block with the scale and «примерно»;
+ *   length on a dimension line, «D1», the corner with its angle, the title block with the accuracy note (1–3″, the crew re-measures), «примерно» and the scale;
  * - none of the canvas's own marks («R», the fittings code) on the sheet;
  * - the sheet is the same in the client's PDF.
  * Finds things by testID; waits on what it checks.
@@ -54,7 +54,8 @@ exports.run = async (h) => {
   h.expect(words.includes("D1"), "the downspout «D1»");
   h.expect(words.some((w) => /^(наруж\.|внутр\.) \d+°$/.test(w)), "the corner with its angle");
   h.expect(words.some((w) => /^Масштаб: /.test(w)), "the scale in the title block");
-  h.expect(words.some((w) => /перед резкой промерьте/.test(w)), "«примерно» in the title block");
+  h.expect(words.some((w) => w === "Примерно"), "«примерно» in the title block");
+  h.expect(words.some((w) => /точностью 1–3″, бригада перемеряет/.test(w)), "the one accuracy note in the title block (#768)");
   h.expect(!words.includes("R") && !words.some((w) => /^[AB]+O?\d*$/.test(w)), "none of the canvas's own marks");
   // a dimension line by every gutter: two grey extension lines each
   const ext = await sheet.locator('line[stroke-width="1"]').count();

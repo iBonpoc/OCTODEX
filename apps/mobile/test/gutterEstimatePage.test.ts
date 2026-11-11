@@ -36,7 +36,7 @@ describe("unit:gutterEstimatePage — the drawing in the estimate", () => {
     const first: EstimateDoc = { ...newDoc(), pages: [other, page("en")] };
     const next = withMeasurementPage(first, "m1", page("en", false));
     expect(next.pages!.map((p) => p.id)).toEqual(["other:1", "gutters:m1"]);
-    expect(next.pages![1]!.items.some((x) => x.t === "x" && x.s === tFor("en")("mod.gutters.sheet.tape"))).toBe(true);
+    expect(next.pages![1]!.items.some((x) => x.t === "x" && x.s === tFor("en")("mod.gutters.sheet.accuracy"))).toBe(true);
   });
   it("in the client's language (rule 7): a Spanish client gets Spanish words", () => {
     const p = withMeasurementPage(newDoc(), "m1", page("es")).pages![0]!;
