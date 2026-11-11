@@ -17,7 +17,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => /^Пробный/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
   await h.go("/module/gutters/settings");
   await tid("gset-len-format").waitFor({ timeout: 8000 });
-  await tid("gset-len-format").getByRole("radio").nth(5).click();
+  await tid("gset-len-format").getByRole("radio").nth(4).click();
   await p.waitForFunction((k) => (JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.settings?.lenFormat === "mm", KEY, { timeout: 8000 });
 
   await h.go("/module/gutters/draw");

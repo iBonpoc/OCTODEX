@@ -5,6 +5,7 @@
  */
 import { DEFAULT_HANGER_BY_MOUNT } from "@octo/estimating-engine";
 import type { Drawing, DrawnDownspout, DrawnRun, P } from "../geometry";
+import { DENOM } from "./format";
 
 export interface MeasurementRow {
   id: string;
@@ -56,7 +57,7 @@ export function toElements(d: Drawing, measurementId: string): ElementRow[] {
     id: r.id,
     measurementId,
     kind: "run",
-    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: Math.round(r.lengthIn * 8) / 8 } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}), ...(r.unit ? { unit: r.unit } : {}) },
+    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: Math.round(r.lengthIn * DENOM) / DENOM } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}), ...(r.unit ? { unit: r.unit } : {}) },
     attrs: { ...r.attrs },
     confidence: r.lengthIn !== undefined ? "taped" : "drawn",
   }));

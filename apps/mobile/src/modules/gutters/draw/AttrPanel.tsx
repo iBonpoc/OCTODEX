@@ -20,7 +20,7 @@ import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
-import { eighthLabel, fmtLen, inputUnitOf, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
+import { eighthLabel, fmtLen, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -228,7 +228,7 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
 export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "ftin" }: { run: DrawnRun; /** the company's format of lengths (#1092): the unit typed in starts there, «drawn» says it */ fmt?: LenFormat; onLength: (lengthIn: number) => void; onDone: () => void; onCancel: () => void; /** the length the fields start from (a label tapped: its length now); none — the drawn one */ start?: number }) {
   const { t } = useI18n();
   const drawn = start ?? drawnLengthIn(run);
-  const [unit, setUnit] = useState<LenUnit>(inputUnitOf(fmt));
+  const [unit, setUnit] = useState<LenUnit>(fmt);
   const d0 = split(drawn);
   const [ft, setFt] = useState(String(d0.ft));
   const [inc, setInc] = useState(String(d0.inch));

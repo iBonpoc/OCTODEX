@@ -32,10 +32,11 @@ describe("the six formats", () => {
     const want: Record<LenFormat, string> = { ftin: "73′ 2½″", in: "878½″", m: "22.314 m", cm: "2231.4 cm", mm: "22314 mm" };
     for (const f of LEN_FORMATS) expect(fmtLen(IN, f), f).toBe(want[f]);
   });
-  it("edges: zero, a whole foot, no decimal feet (the format is not offered), 11⅞″ rounding up to the foot, one eighth, a long run", () => {
+  it("edges: zero, a whole foot, no decimal feet (the format is not offered), 11 15/16″ stays, 11 31/32″ is the foot, one eighth, a long run", () => {
     expect(fmtLen(0, "ftin")).toBe("0″");
     expect(fmtLen(12, "ftin")).toBe("1′");
-    expect(fmtLen(11.9375, "ftin")).toBe("1′");
+    expect(fmtLen(11.9375, "ftin")).toBe("11 15/16″");
+    expect(fmtLen(11.96875, "ftin")).toBe("1′");
     expect(fmtLen(0.125, "in")).toBe("⅛″");
     expect(fmtLen(250 * 12 + 4, "ftin")).toBe("250′ 4″");
     expect(fmtLen(12, "mm")).toBe("305 mm");
