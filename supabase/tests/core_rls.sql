@@ -5155,7 +5155,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
@@ -5168,7 +5168,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by', 'trash_entries.deleted_by', 'trash_entries.restored_by',
     'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
@@ -12012,5 +12012,307 @@ select tst.ok((:'t165_pages')::text !~* '(script|alert|onload|href|nested|image)
 select tst.ok(((:'t165_pages')::jsonb -> 0 ->> 'note') = 'Measured roughly' and ((:'t165_pages')::jsonb -> 0 -> 'rows' -> 0 ->> 1) = '12′ 4″', 'T165 the note and the table reach the client');
 :as_super
 \echo 'T165 the attached pages: the same rule as the app, refused on writing, the client sees only the drawing ok'
+
+-- =============================================================================
+-- T167–T173. Корзина и правила удаления (docs/specs/38-deletion.md §4, §6; #747, #750; миграция 20261111030000)
+-- =============================================================================
+-- T167: кто удаляет — чужое владелец / админ / офис; остальные только своё; прямая запись deleted_at проходит тот же страж
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values
+  ('c1670000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T167 Empty Client'),
+  ('c1670000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T170 Client With House'),
+  ('c1670000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T170 Client Z');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e1670000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'T167 owner draft'),
+  ('e1670000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'T167 owner draft 2');
+:as_tech_a
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e1670000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T167 tech draft');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category, deleted_at) values ('ca000000-0000-0000-0000-000000000000', 'Born Deleted', 100, 'materials', now())$q$,
+                      'trash:noRight%', 'T167 a row is not born deleted');
+-- another tech does not see it: nothing to delete, one answer
+:as_tech2_a
+select tst.ok((select reason from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000003'::uuid])) = 'noRight', 'T167 another tech: noRight');
+:as_tech_a
+select tst.blocked($q$update public.estimates set deleted_at = now() where id = 'e1670000-0000-4000-8000-000000000001'$q$, 'T167 the tech does not delete the owner''s estimate directly');
+select tst.ok((select ok from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000003'::uuid])), 'T167 the tech deletes his own draft');
+select tst.ok((select ok from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000003'::uuid])), 'T167 a replay is harmless');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = 'e1670000-0000-4000-8000-000000000003'$q$) = 0, 'T167 the tech no longer sees his deleted estimate');
+:as_sales_a
+select tst.fails_like($q$update public.estimates set deleted_at = now() where id = 'e1670000-0000-4000-8000-000000000001'$q$, 'trash:notYours%', 'T167 sales: not another''s estimate, even directly (#750)');
+select tst.ok((select reason from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000001'::uuid])) = 'notYours', 'T167 sales: notYours by the function too');
+:as_office_a
+update public.estimates set deleted_at = now() where id = 'e1670000-0000-4000-8000-000000000001';   -- the old direct path still works for the office
+:as_super
+select tst.ok((select deleted_by = 'a0000000-0000-0000-0000-000000000002' from public.trash_entries where object_id = 'e1670000-0000-4000-8000-000000000001' and restored_at is null),
+              'T167 the direct write lands in the Trash, with who deleted');
+select tst.ok((select deleted_by = 'a0000000-0000-0000-0000-000000000003' from public.trash_entries where object_id = 'e1670000-0000-4000-8000-000000000003'), 'T167 the tech''s own deletion is in the Trash');
+select tst.ok((select count(*) from public.trash_entries where object_id = 'e1670000-0000-4000-8000-000000000003') = 1, 'T167 one entry for a replayed deletion');
+\echo 'T167 who deletes: another''s — owner / admin / office, own — anyone; the direct write is guarded too ok'
+
+-- T168: что нельзя удалить — подписанная и отправленная смета, клиент и лид с документами
+:as_super
+select (select id from public.estimates where company_id = 'ca000000-0000-0000-0000-000000000000' and status in ('approved', 'awaiting_countersign') and deleted_at is null limit 1) as t168_signed,
+       (select id from public.estimates where company_id = 'ca000000-0000-0000-0000-000000000000' and status in ('sent', 'viewed') and deleted_at is null limit 1) as t168_sent,
+       (select l.id from public.leads l where l.company_id = 'ca000000-0000-0000-0000-000000000000' and l.deleted_at is null
+           and exists (select 1 from public.estimates e where e.lead_id = l.id and e.deleted_at is null) limit 1) as t168_lead \gset
+:as_owner_a
+select tst.ok((select reason from public.trash_items('estimate', array[:'t168_signed'::uuid])) = 'signed', 'T168 a signed estimate: signed');
+select tst.ok((select reason from public.trash_items('estimate', array[:'t168_sent'::uuid])) = 'sentOnce', 'T168 a sent estimate: sentOnce');
+select tst.fails_like(format($q$update public.estimates set deleted_at = now() where id = %L$q$, :'t168_signed'), 'trash:signed%', 'T168 a signed estimate is not deleted directly either (#750)');
+select tst.ok((select reason from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000001'::uuid])) = 'hasDocs', 'T168 a client with documents: archive only');
+select tst.ok((select reason from public.trash_items('lead', array[:'t168_lead'::uuid])) = 'hasDocs', 'T168 a lead with an estimate: archive only');
+select tst.ok((select ok from public.trash_items('customer', array['c1670000-0000-4000-8000-000000000001'::uuid])), 'T168 an empty client is deleted');
+-- one call, the answer row by row: some go, some are told why
+select tst.ok((select string_agg(coalesce(reason, 'ok'), ',' order by id) from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000002'::uuid, :'t168_signed'::uuid]))
+              in ('ok,signed', 'signed,ok'), 'T168 a batch: one deleted, one told «signed»');
+select tst.fails($q$select * from public.trash_items('estimate', (select array_agg(public.uuid_generate_v7()) from generate_series(1, 501)))$q$, 'T168 at most 500 at once');
+select tst.fails($q$select * from public.trash_items('invoice', array['01a00000-0000-0000-0000-000000000001'::uuid])$q$, 'T168 an invoice is never trashed (unknown kind)');
+:as_owner_b
+select tst.ok((select reason from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000002'::uuid])) = 'noRight', 'T168 another company: noRight');
+\echo 'T168 what cannot be deleted: signed, sent, a client or lead with documents ok'
+
+-- T169: вернуть — кто удалил или офис, не старше 30 дней, только из Корзины
+:as_tech2_a
+select tst.ok((select reason from public.trash_restore('estimate', array['e1670000-0000-4000-8000-000000000003'::uuid])) = 'noRight', 'T169 another tech does not restore (one answer: noRight)');
+:as_sales_a
+select tst.ok((select reason from public.trash_restore('estimate', array['e1670000-0000-4000-8000-000000000001'::uuid])) = 'notYours', 'T169 sales does not restore another''s');
+:as_tech_a
+select tst.blocked($q$update public.estimates set deleted_at = null where id = 'e1670000-0000-4000-8000-000000000003'$q$, 'T169 the tech does not restore directly');
+select tst.ok((select ok from public.trash_restore('estimate', array['e1670000-0000-4000-8000-000000000003'::uuid])), 'T169 the tech restores his own draft');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = 'e1670000-0000-4000-8000-000000000003'$q$) = 1, 'T169 and sees it again');
+select tst.ok((select ok from public.trash_restore('estimate', array['e1670000-0000-4000-8000-000000000003'::uuid])), 'T169 a replay is harmless');
+:as_office_a
+select tst.blocked($q$update public.estimates set deleted_at = null where id = 'e1670000-0000-4000-8000-000000000001'$q$, 'T169 a deleted estimate is not edited directly, not even back');
+select tst.ok((select ok from public.trash_restore('estimate', array['e1670000-0000-4000-8000-000000000001'::uuid])), 'T169 the office restores another''s');
+:as_super
+select tst.ok((select restored_by = 'a0000000-0000-0000-0000-000000000002' and restored_at is not null from public.trash_entries where object_id = 'e1670000-0000-4000-8000-000000000001'),
+              'T169 a restore closes the entry');
+-- a server deletion (an import's undo, a merge) is not in the Trash: «Вернуть» does not get round it
+update public.customers set deleted_at = now() where id = 'c1670000-0000-4000-8000-000000000003';
+select tst.ok(not exists (select 1 from public.trash_entries where object_id = 'c1670000-0000-4000-8000-000000000003'), 'T169 a server deletion writes no entry');
+:as_office_a
+select tst.fails_like($q$update public.customers set deleted_at = null where id = 'c1670000-0000-4000-8000-000000000003'$q$, 'trash:noRight%', 'T169 what the server deleted is not restored directly');
+select tst.ok((select reason from public.trash_restore('customer', array['c1670000-0000-4000-8000-000000000003'::uuid])) = 'noRight', 'T169 nor by the function');
+-- older than 30 days: hidden, not restored
+select tst.ok((select ok from public.trash_items('estimate', array['e1670000-0000-4000-8000-000000000001'::uuid])), 'T169 deleted again');
+:as_super
+update public.trash_entries set deleted_at = now() - interval '31 days' where object_id = 'e1670000-0000-4000-8000-000000000001' and restored_at is null;
+:as_office_a
+select tst.ok((select reason from public.trash_restore('estimate', array['e1670000-0000-4000-8000-000000000001'::uuid])) = 'expired', 'T169 after 30 days: expired');
+select tst.blocked($q$update public.estimates set deleted_at = null where id = 'e1670000-0000-4000-8000-000000000001'$q$, 'T169 not directly either');
+select tst.ok(not exists (select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'e1670000-0000-4000-8000-000000000001'), 'T169 nor shown in the Trash');
+-- the catalog: «add again» a deleted item, as before the Trash, with no limit
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values ('a1690000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T169 bracket (test)', 'ea', 100);
+update public.catalog_items set deleted_at = now(), is_active = false where id = 'a1690000-0000-4000-8000-000000000001';
+:as_super
+update public.trash_entries set deleted_at = now() - interval '40 days' where object_id = 'a1690000-0000-4000-8000-000000000001';
+:as_office_a
+update public.catalog_items set deleted_at = null, is_active = true where id = 'a1690000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id = 'a1690000-0000-4000-8000-000000000001' and deleted_at is null$q$) = 1, 'T169 the catalog item is added again after 40 days');
+\echo 'T169 restore: who deleted or the office, 30 days, only from the Trash ok'
+
+-- T170: клиент уходит в Корзину со своими объектами и людьми и возвращается с ними; родитель удалён — сначала родитель
+:as_owner_a
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1670000-0000-4000-8000-000000000002', '170 Test St', 'Pasadena');
+insert into public.contacts (id, company_id, customer_id, name, phone, is_primary) values
+  ('c1710000-0000-4000-8000-000000000171', 'ca000000-0000-0000-0000-000000000000', 'c1670000-0000-4000-8000-000000000002', 'T170 Main', '+13235550170', true),
+  ('c1710000-0000-4000-8000-000000000172', 'ca000000-0000-0000-0000-000000000000', 'c1670000-0000-4000-8000-000000000002', 'T170 Gone Before', '+13235550171', false);
+update public.contacts set deleted_at = now() - interval '1 day' where id = 'c1710000-0000-4000-8000-000000000172';
+select tst.ok((select ok from public.trash_items('customer', array['c1670000-0000-4000-8000-000000000002'::uuid])), 'T170 the client goes');
+:as_super
+select tst.ok((select deleted_at is not null from public.properties where id = 'd1700000-0000-4000-8000-000000000001')
+          and (select deleted_at is not null from public.contacts where id = 'c1710000-0000-4000-8000-000000000171'), 'T170 with his house and people');
+:as_owner_a
+select tst.ok((select ok from public.trash_restore('customer', array['c1670000-0000-4000-8000-000000000002'::uuid])), 'T170 the client comes back');
+:as_super
+select tst.ok((select deleted_at is null from public.properties where id = 'd1700000-0000-4000-8000-000000000001')
+          and (select deleted_at is null from public.contacts where id = 'c1710000-0000-4000-8000-000000000171'), 'T170 with his house and people');
+select tst.ok((select deleted_at is not null from public.contacts where id = 'c1710000-0000-4000-8000-000000000172'), 'T170 but not what was deleted before, on its own');
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c1700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'T170 Parent');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'c1700000-0000-4000-8000-000000000009', '9 Parent Rd', 'Pasadena');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e1700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1700000-0000-4000-8000-000000000009', 'd1700000-0000-4000-8000-000000000009', 'T170 child draft');
+select tst.ok((select ok from public.trash_items('estimate', array['e1700000-0000-4000-8000-000000000001'::uuid])), 'T170 the draft goes first');
+select tst.ok((select ok from public.trash_items('customer', array['c1700000-0000-4000-8000-000000000009'::uuid])), 'T170 then its client (no live documents)');
+select tst.ok((select reason from public.trash_restore('estimate', array['e1700000-0000-4000-8000-000000000001'::uuid])) = 'parentDeleted', 'T170 the draft waits for its client');
+select tst.ok((select ok from public.trash_restore('customer', array['c1700000-0000-4000-8000-000000000009'::uuid])), 'T170 the client back');
+select tst.ok((select ok from public.trash_restore('estimate', array['e1700000-0000-4000-8000-000000000001'::uuid])), 'T170 then the draft');
+\echo 'T170 a client with his house and people; the parent first ok'
+
+-- T171: своё удалённое видно только в Корзине; Корзина показывает каждому своё, офису — всё
+:as_tech_a
+insert into public.expenses (id, company_id, vendor, amount_cents, category) values ('a1710000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T171 Lowe''s', 4200, 'materials');
+select tst.ok((select ok from public.trash_items('expense', array['a1710000-0000-4000-8000-000000000001'::uuid])), 'T171 the tech deletes his expense');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'a1710000-0000-4000-8000-000000000001'$q$) = 0, 'T171 and does not see it in the list (#750)');
+select tst.blocked($q$update public.expenses set deleted_at = null where id = 'a1710000-0000-4000-8000-000000000001'$q$, 'T171 nor restores it directly');
+select tst.ok((select label from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a1710000-0000-4000-8000-000000000001') like 'T171 Lowe''s%', 'T171 his Trash shows it, by name');
+select tst.ok(not exists (select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'c1670000-0000-4000-8000-000000000001'), 'T171 not what the owner deleted');
+:as_tech2_a
+select tst.ok(not exists (select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a1710000-0000-4000-8000-000000000001'), 'T171 another tech does not see it');
+select tst.ok(tst.cnt($q$select 1 from public.trash_entries where object_id = 'a1710000-0000-4000-8000-000000000001'$q$) = 0, 'T171 nor its entry');
+:as_office_a
+select tst.ok((select count(*) from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id in ('a1710000-0000-4000-8000-000000000001', 'c1670000-0000-4000-8000-000000000001')) = 2, 'T171 the office sees everything deleted');
+:as_owner_b
+select tst.ok((select count(*) from public.trash_list('ca000000-0000-0000-0000-000000000000')) = 0, 'T171 another company: nothing');
+select tst.ok(tst.cnt($q$select 1 from public.trash_entries where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T171 nor its entries');
+:as_tech_a
+-- a lead, a task: the author deletes his own, does not see it after
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1710000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T171 Spam', '+13235550172');
+select tst.ok((select ok from public.trash_items('lead', array['a1710000-0000-4000-8000-000000000002'::uuid])), 'T171 the author deletes his empty lead');
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a1710000-0000-4000-8000-000000000002'$q$) = 0, 'T171 and does not see it');
+select tst.ok((select ok from public.trash_restore('lead', array['a1710000-0000-4000-8000-000000000002'::uuid])), 'T171 restores it from the Trash');
+\echo 'T171 own deleted rows only in the Trash; each sees his own, the office all ok'
+
+-- T172: отменить работу — владелец, админ, офис; с оплатой — нет; офис — только без счёта (#750)
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('e1720000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T172 plain', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('e1720000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T172 invoiced', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('e1720000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T172 paid', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('01720000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1720000-0000-4000-8000-000000000002', 'final', 10000),
+  ('01720000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1720000-0000-4000-8000-000000000003', 'final', 10000);
+update public.invoices set status = 'sent', sent_at = now() where id in ('01720000-0000-4000-8000-000000000002', '01720000-0000-4000-8000-000000000003');
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '01720000-0000-4000-8000-000000000003', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't172-pay');
+:as_sales_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1720000-0000-4000-8000-000000000001'$q$, 'job:noRight%', 'T172 sales does not cancel a job (#750)');
+-- the fixture person a…02 is an admin by now (T…); for this check — the office, then back
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1720000-0000-4000-8000-000000000002'$q$, 'job:invoiceOpen%', 'T172 the office: not a job with an invoice');
+update public.jobs set status = 'cancelled' where id = 'e1720000-0000-4000-8000-000000000001';
+-- the office deletes and restores another's too (founder 11.11: another's — owner, admin, office)
+select tst.ok((select ok from public.trash_items('task', array[(select id from public.tasks where company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null and created_by is distinct from 'a0000000-0000-0000-0000-000000000002' limit 1)])), 'T172 the office deletes another''s task');
+select tst.ok((select bool_and(ok) from public.trash_restore('task', (select array_agg(object_id) from public.trash_list('ca000000-0000-0000-0000-000000000000') where kind = 'task'))), 'T172 and restores it');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1720000-0000-4000-8000-000000000003'$q$, 'job:paid%', 'T172 the owner: not a paid job — refund first');
+update public.jobs set status = 'cancelled' where id = 'e1720000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select array_agg(status order by id) from public.jobs where id in ('e1720000-0000-4000-8000-000000000001', 'e1720000-0000-4000-8000-000000000002', 'e1720000-0000-4000-8000-000000000003'))
+              = array['cancelled', 'cancelled', 'draft'], 'T172 two cancelled, the paid one stays');
+\echo 'T172 cancel a job: owner / admin / office, never with a payment, the office without an invoice ok'
+
+-- T173: права (правило 18, T52)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.trash_items(text,uuid[])', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.trash_restore(text,uuid[])', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.trash_list(uuid)', 'EXECUTE'), 'T173 anon: no Trash');
+select tst.ok(has_function_privilege('authenticated', 'public.trash_items(text,uuid[])', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.trash_restore(text,uuid[])', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.trash_list(uuid)', 'EXECUTE'), 'T173 authenticated: the Trash');
+select tst.ok(not has_function_privilege('authenticated', 'app.trash_days()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_trash_guard()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_trash_note()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_job_cancel_guard()', 'EXECUTE'), 'T173 internal: the guards and the term');
+select tst.ok(has_table_privilege('authenticated', 'public.trash_entries', 'SELECT')
+          and not has_table_privilege('authenticated', 'public.trash_entries', 'INSERT')
+          and not has_table_privilege('authenticated', 'public.trash_entries', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.trash_entries', 'DELETE'), 'T173 the entries: read only, written by the server');
+select tst.ok((select relforcerowsecurity and relrowsecurity from pg_class where oid = 'public.trash_entries'::regclass), 'T173 the entries: RLS forced');
+select tst.ok(not has_function_privilege('authenticated', 'app.trash_note_row(text,uuid)', 'EXECUTE'), 'T173 internal: the entry writer');
+:as_owner_a
+select tst.fails_like($q$select app.trash_note('customer', 'c1670000-0000-4000-8000-000000000003')$q$, '%only from a trigger%', 'T173 the trigger door opens only from a trigger');
+\echo 'T173 the Trash rights ok'
+
+-- T174: дыры, найденные проверкой PR-1 (security-check): удалённое сервером «удалить ещё раз» и вернуть нельзя; время
+-- удаления — сервера; имя в Корзине — только тому, кто видит объект; работа — без deleted_at с телефона
+:as_office_a
+select tst.ok((select reason from public.trash_items('customer', array['c1670000-0000-4000-8000-000000000003'::uuid])) = 'noRight', 'T174 a client the server deleted: not «deleted again»');
+select tst.blocked($q$update public.customers set deleted_at = now() where id = 'c1670000-0000-4000-8000-000000000003'$q$, 'T174 nor re-dated directly');
+select tst.ok((select reason from public.trash_restore('customer', array['c1670000-0000-4000-8000-000000000003'::uuid])) = 'noRight', 'T174 so it is not restored');
+:as_super
+select tst.ok(not exists (select 1 from public.trash_entries where object_id = 'c1670000-0000-4000-8000-000000000003'), 'T174 and has no entry');
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c1740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T174 Future');
+update public.customers set deleted_at = '2099-01-01' where id = 'c1740000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select deleted_at < now() + interval '1 minute' from public.customers where id = 'c1740000-0000-4000-8000-000000000001')
+          and (select deleted_at < now() + interval '1 minute' from public.trash_entries where object_id = 'c1740000-0000-4000-8000-000000000001'), 'T174 the phone''s date is not kept: the server''s time');
+-- the name only to who sees the object: the tech's entry on the owner's client shows no name
+update public.trash_entries set deleted_by = 'a0000000-0000-0000-0000-000000000003' where object_id = 'c1670000-0000-4000-8000-000000000001' and restored_at is null;
+:as_tech_a
+select tst.ok((select label is null from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'c1670000-0000-4000-8000-000000000001'), 'T174 no name of what the person does not see');
+:as_super
+update public.trash_entries set deleted_by = 'a0000000-0000-0000-0000-000000000001' where object_id = 'c1670000-0000-4000-8000-000000000001' and restored_at is null;
+:as_sales_a
+select tst.fails($q$update public.jobs set deleted_at = now() where id = 'e1720000-0000-4000-8000-000000000003'$q$, 'T174 sales does not delete a job (no right on deleted_at)');
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1740000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T174 Sales Lead', '+13235550174');
+select tst.ok((select ok from public.trash_items('lead', array['a1740000-0000-4000-8000-000000000002'::uuid])), 'T174 sales deletes his own lead');
+select tst.ok((select reason from public.trash_items('catalog_item', array[(select id from public.catalog_items where company_id = 'ca000000-0000-0000-0000-000000000000' and deleted_at is null limit 1)])) = 'noRight', 'T174 sales: the catalog is the office''s only (#752 №7)');
+-- a payment on its way stops the cancel too
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e1740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T174 ach', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values ('01740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e1740000-0000-4000-8000-000000000001', 'final', 10000);
+update public.invoices set status = 'sent', sent_at = now() where id = '01740000-0000-4000-8000-000000000001';
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '01740000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000002', 'ach', 10000, 'pending', 't174-ach');
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1740000-0000-4000-8000-000000000001'$q$, 'job:paid%', 'T174 a payment on its way: refund or wait first');
+-- an estimate whose lead is in the Trash waits for its lead
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1740000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T174 Lead Parent', '+13235550175');
+insert into public.estimates (id, company_id, customer_id, property_id, lead_id, title) values ('e1740000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'a1740000-0000-4000-8000-000000000003', 'T174 lead draft');
+select tst.ok((select ok from public.trash_items('estimate', array['e1740000-0000-4000-8000-000000000002'::uuid])), 'T174 the draft goes');
+select tst.ok((select ok from public.trash_items('lead', array['a1740000-0000-4000-8000-000000000003'::uuid])), 'T174 then its lead');
+select tst.ok((select reason from public.trash_restore('estimate', array['e1740000-0000-4000-8000-000000000002'::uuid])) = 'parentDeleted', 'T174 the draft waits for its lead');
+\echo 'T174 the holes found by the PR-1 check stay closed ok'
+
+-- T175: проверка руководителя #752 — вернуть может только тот, кто удалил; «своё» — пока видишь и можешь менять;
+-- задача мастера на снятой импортом карточке; оплата на выезде без счёта; родитель задачи
+-- №1: the office deletes the tech's lead — the tech does not take it back
+:as_tech_a
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T175 Tech Lead', '+13235550176');
+:as_office_a
+select tst.ok((select ok from public.trash_items('lead', array['a1750000-0000-4000-8000-000000000001'::uuid])), 'T175 the office deletes the tech''s lead');
+:as_tech_a
+select tst.ok((select reason from public.trash_restore('lead', array['a1750000-0000-4000-8000-000000000001'::uuid])) = 'noRight', 'T175 the author does not take back what the office deleted');
+select tst.ok(not exists (select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a1750000-0000-4000-8000-000000000001'), 'T175 nor sees it in his Trash');
+-- №2: sales deletes his own client, then is made a tech: neither the client back nor its name
+:as_sales_a
+insert into public.customers (id, company_id, display_name) values ('c1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T175 Sales Client');
+select tst.ok((select ok from public.trash_items('customer', array['c1750000-0000-4000-8000-000000000001'::uuid])), 'T175 sales deletes his own client');
+select tst.ok((select label from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'c1750000-0000-4000-8000-000000000001') = 'T175 Sales Client', 'T175 and sees its name');
+:as_super
+update public.memberships set role = 'tech' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.ok((select reason from public.trash_restore('customer', array['c1750000-0000-4000-8000-000000000001'::uuid])) = 'noRight', 'T175 made a tech: does not take the client back');
+select tst.ok((select label is null from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'c1750000-0000-4000-8000-000000000001'), 'T175 nor sees its name');
+:as_super
+update public.memberships set role = 'sales' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- №3: a tech's task.save on a card an import's undo took away — accepted (lands taken away), not 42501 (#597)
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T175 undone card job', :'t166_card', :'t166_prop', 'draft');
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1750000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1750000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1750000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+-- the house is alive (the tech may write on it), its card is taken away by the undo: t12 lands the task taken away
+select deleted_at as t175_prop_del from public.properties where id = :'t166_prop' \gset
+update public.properties set deleted_at = null where id = :'t166_prop';
+:as_tech_a
+insert into public.tasks (id, company_id, subject_type, subject_id, title) values
+  ('a1750000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'property', :'t166_prop', 'T175 tech late task')
+on conflict (id) do update set title = excluded.title;
+:as_super
+select tst.ok((select deleted_at is not null from public.tasks where id = 'a1750000-0000-4000-8000-000000000011'), 'T175 the tech''s late task is accepted and lands taken away');
+update public.properties set deleted_at = nullif(:'t175_prop_del', '')::timestamptz where id = :'t166_prop';
+-- №5: a payment taken on a visit with no invoice stops the cancel
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e1750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T175 paid on site', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values ('f1750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1750000-0000-4000-8000-000000000002', now());
+insert into public.payments (company_id, customer_id, visit_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'f1750000-0000-4000-8000-000000000002', 'cash', 3000, 'succeeded', 't175-onsite');
+select tst.fails_like($q$update public.jobs set status = 'cancelled' where id = 'e1750000-0000-4000-8000-000000000002'$q$, 'job:paid%', 'T175 paid on the visit, no invoice: refund first');
+-- №6: a task whose lead is deleted waits for its lead
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a1750000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T175 Task Lead', '+13235550177');
+insert into public.tasks (id, company_id, subject_type, subject_id, title) values ('a1750000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a1750000-0000-4000-8000-000000000002', 'T175 call back');
+select tst.ok((select ok from public.trash_items('task', array['a1750000-0000-4000-8000-000000000012'::uuid])), 'T175 the task goes');
+select tst.ok((select ok from public.trash_items('lead', array['a1750000-0000-4000-8000-000000000002'::uuid])), 'T175 then its lead');
+select tst.ok((select reason from public.trash_restore('task', array['a1750000-0000-4000-8000-000000000012'::uuid])) = 'parentDeleted', 'T175 the task waits for its lead');
+\echo 'T175 the director''s check of #752: who deleted restores, own while seen, the tech''s late task, paid on site, the task''s parent ok'
 
 \echo 'ALL TESTS PASSED'
