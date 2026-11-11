@@ -49,8 +49,12 @@ jobs:
       - id: views
         name: Which views
         run: |
+          # push to main: ONE view (390-dark; it also carries 08-layouts, which checks all 6 views by itself) — the full 3-view
+          # run already ran on the PR, and all 6 views run every night (#906 п.6, audit "yes" 11.11 to variant C, conditions 2–5)
           if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             v='["390-dark","390-light","820-dark","820-light","1280-dark","1280-light"]'
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            v='["390-dark"]'
           else
             v='["390-dark","820-light","1280-dark"]'
           fi
