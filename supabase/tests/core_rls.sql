@@ -12607,7 +12607,7 @@ insert into public.estimate_versions (id, company_id, estimate_id, version_no, d
   ('51910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', 1, '{"kind":"none"}');
 insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
   ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', '51910000-0000-4000-8000-000000000001', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
-  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', '51910000-0000-4000-8000-000000000002', 'customer', 'approved', 'Ann', '{"deposit": 0}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', '51910000-0000-4000-8000-000000000002', 'customer', 'approved', 'Ann', '{"deposit": 1000}'),  -- = the office's hand-made invoice 11910…004: only the version refuses
   ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', '51910000-0000-4000-8000-000000000003', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
 set session_replication_role = replica;  -- straight to «approved» (the signing itself is S8's tests)
 update public.estimates set status = 'approved' where id in ('0e191000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002', '0e191000-0000-4000-8000-000000000003');
@@ -12644,6 +12644,8 @@ select tst.ok((select balance_cents = 9999900 from public.invoices where id = '1
 insert into public.visits (id, company_id, job_id, starts_at) values
   ('f1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1910000-0000-4000-8000-0000000000f2', now());
 update public.visits set status = 'on_site' where id = 'f1910000-0000-4000-8000-000000000001';
+-- the job has a contract: with sales in the function's roles it would pay (the test fails on «FAILED», not on «nothing due»)
+update public.jobs set contract_total_cents = 9999900 where id = 'e1910000-0000-4000-8000-0000000000f2';
 :as_sales_a
 do $$ begin
   perform public.record_visit_payment('f1910000-0000-4000-8000-000000000001', '11910000-0000-4000-8000-0000000000a5', 'a1910000-0000-4000-8000-000000000005', 'cash', null, 9999900);
@@ -12679,6 +12681,29 @@ do $$ begin
 exception when insufficient_privilege then null;
 end $$;
 select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed version): refused to sales (42501)');
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 another version');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 2, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', '51910000-0000-4000-8000-000000000017', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;
+update public.estimates set status = 'approved' where id = '0e191000-0000-4000-8000-000000000007';
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f7', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 7', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000007');
+-- the deposit invoice of version 1, the client signed version 2: the same sum, another version
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f7', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000007');
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000007', 'a1910000-0000-4000-8000-000000000017', 'cash');
+  raise exception 'FAILED: T191 sales paid a deposit invoice of another version than the client signed';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 another version than the client signed, the same sum: refused to sales (42501)');
 :as_super
 insert into public.estimates (id, company_id, customer_id, property_id, title) values
   ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
