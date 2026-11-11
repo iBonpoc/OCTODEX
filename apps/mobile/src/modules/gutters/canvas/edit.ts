@@ -109,6 +109,18 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
   };
 }
 
+/** a long press on a cap pulls the end when the finger goes along the gutter within this angle of its axis (either way), else it draws a new gutter from the end */
+export const PULL_AXIS_DEG = 30;
+/** `p` is far enough from `a` (more than `tolIn`) and its direction from `a` is within PULL_AXIS_DEG of the run's axis */
+export function alongAxis(r: Pick<DrawnRun, "a" | "b">, a: P, p: P, tolIn: number): boolean {
+  const vx = p[0] - a[0], vy = p[1] - a[1];
+  const v = Math.hypot(vx, vy);
+  const ax = r.b[0] - r.a[0], ay = r.b[1] - r.a[1];
+  const L = Math.hypot(ax, ay);
+  if (v <= tolIn || L === 0) return false;
+  return Math.abs(vx * ax + vy * ay) / (v * L) >= Math.cos((PULL_AXIS_DEG * Math.PI) / 180);
+}
+
 /**
  * Pull a free end along its own gutter (#504, founder 11.11: «тяну за край — увеличиваю, оттягиваю дальше»): the other
  * end stays, the direction stays, the finger sets the length (the finger's distance along the gutter), from MIN_RUN_IN to
@@ -249,7 +261,7 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing };
+export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing };
 
 /** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
 export function moveDs(d: Drawing, id: string, p: P): Drawing {

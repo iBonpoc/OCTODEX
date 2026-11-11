@@ -2,7 +2,8 @@
  * e2e 251 — #504 (founder 11.11): a free end cap is taken by a long press and pulled along its gutter. Every view.
  * - the picked gutter's two free ends have a handle ring;
  * - (the downspout tool; «Желоб» goes on with a new gutter from an end) a long press on an end cap, then a pull outward → the gutter is longer, the other end stays, the face is not turned;
- * - the same on the other end, pulled inward → shorter; «Назад» puts the length back.
+ * - with the downspout tool the same on the other end, pulled inward → shorter; «Назад» puts the length back;
+ * - «Желоб»: along the gutter = a pull (above), across it = a new gutter from the end (decided on the first move).
  * Finds things by testID / id; waits on what it checks.
  */
 const KEY = "octo.db.v5";
@@ -53,16 +54,15 @@ exports.run = async (h) => {
     const caps = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
     return caps.sort((a, c) => a[0] - c[0])[i];
   };
-  // not with «Желоб» (a long press on an end there goes on with a new gutter, e2e 170): the downspout tool
-  await tid("draw-tool-ds").getByRole("button").click();
-  const pull = async (at, dx) => {
+  const pull = async (at, dx, dy = 0) => {
     await p.mouse.move(at[0], at[1]);
     await p.mouse.down();
     await p.waitForTimeout(500); // held: longer than the long-press time
-    for (let i = 1; i <= 8; i++) await p.mouse.move(at[0] + (dx * i) / 8, at[1]);
+    for (let i = 1; i <= 8; i++) await p.mouse.move(at[0] + (dx * i) / 8, at[1] + (dy * i) / 8);
     await p.mouse.up();
   };
-  // the right end pulled out
+  const count = async () => (await p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length, KEY));
+  // «Желоб» (the tool it is in): a long press on the right end and a pull ALONG the gutter pulls the end
   await pull(await capAt(1), 80);
   await waitFor(async () => len(await geom()) > L0 + 1, "a long press on the cap and a pull out: the gutter is longer");
   const g1 = await geom();
@@ -71,9 +71,16 @@ exports.run = async (h) => {
   // the left end pulled in
   const L1 = len(g1);
   await p.waitForTimeout(300);
+  // the downspout tool: the same, pulled in at the left end
+  await tid("draw-tool-ds").getByRole("button").click();
   await pull(await capAt(0), 40);
   await waitFor(async () => len(await geom()) < L1 - 1, "the left end pulled in: shorter");
   // «Назад»: the length before the last pull
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => Math.abs(len(await geom()) - L1) < 1.5, "«Назад» puts the length back");
+  // «Желоб» again: a long press on the right end and a pull ACROSS the gutter is a new gutter from the end, as before
+  await tid("draw-tool-line").getByRole("button").click();
+  await p.waitForTimeout(300);
+  await pull(await capAt(1), 0, 90);
+  await waitFor(async () => (await count()) === 2, "across: a new gutter from the end");
 };

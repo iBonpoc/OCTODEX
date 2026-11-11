@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_RUN_IN, finishStroke, moveEndAlong, type Stroke } from "../src/modules/gutters/canvas/edit";
+import { MIN_RUN_IN, alongAxis, finishStroke, moveEndAlong, type Stroke } from "../src/modules/gutters/canvas/edit";
 import { MAX_RUN_IN } from "../src/modules/gutters/canvas/attrs";
 import { DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
 import type { Drawing, P } from "../src/modules/gutters/geometry";
@@ -42,5 +42,21 @@ describe("moveEndAlong", () => {
     const nr = { id: "n", attrs: DEFAULT_RUN_ATTRS };
     expect(finishStroke(g, d0, [720, 3], 18, false, nr).runs[0]!.b).toEqual([720, 0]);
     expect(finishStroke(g, d0, [720, 3], 18, true, nr)).toBe(d0);
+  });
+});
+
+describe("alongAxis: «Желоб» held on a cap — along the gutter pulls, across draws a new one", () => {
+  const r = { a: [0, 0] as P, b: [480, 0] as P };
+  it("along the axis, out or in, within 30°: a pull", () => {
+    expect(alongAxis(r, [480, 0], [560, 10], 18)).toBe(true);
+    expect(alongAxis(r, [480, 0], [400, -20], 18)).toBe(true);
+    expect(alongAxis(r, [480, 0], [480 + 87, 50], 18)).toBe(true); // 30°
+  });
+  it("across, or in between over 30°: not a pull", () => {
+    expect(alongAxis(r, [480, 0], [480, 90], 18)).toBe(false);
+    expect(alongAxis(r, [480, 0], [480 + 50, 90], 18)).toBe(false); // 61°
+  });
+  it("not far enough from where it began: undecided (false)", () => {
+    expect(alongAxis(r, [480, 0], [490, 2], 18)).toBe(false);
   });
 });

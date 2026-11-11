@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, flipFace, moveDs, moveEndAlong, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -292,7 +292,9 @@ export default function DrawScreen() {
       // its label or «Свойства»; handles on the ends of the picked gutter come with #682
       if (tl === "line" || (held && h?.kind === "end")) {
         const a = startAt(d, p0, tolIn());
-        dragRef.current = { kind: "line", a };
+        // «Желоб» held on a free cap: along the gutter it is a pull, across it a new gutter (decided on the first move)
+        const cap = tl === "line" && held && h?.kind === "end" && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
+        dragRef.current = { kind: "line", a, ...(cap && h?.kind === "end" ? { pullable: { id: h.id, end: h.end, before: d } } : {}) };
         setGhost({ a, b: a });
       }
     },
@@ -301,6 +303,18 @@ export default function DrawScreen() {
       if (!g) return;
       const p = plan(e.x, e.y);
       const d = cur.current.drawing;
+      if (g.kind === "line" && g.pullable) {
+        const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
+        const far = Math.hypot(p[0] - g.a[0], p[1] - g.a[1]) > tolIn();
+        if (run && far && alongAxis(run, g.a, p, tolIn())) {
+          dragRef.current = { kind: "pull", ...g.pullable };
+          setGhost(null);
+          setSelected(g.pullable.id);
+          setDrawing(moveEndAlong(g.pullable.before, g.pullable.id, g.pullable.end, p));
+          return;
+        }
+        if (far) dragRef.current = { kind: "line", a: g.a }; // across: a new gutter, as before
+      }
       if (g.kind === "line") setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
       else if (g.kind === "ds") setDrawing(moveDs(g.before, g.id, p));
       else if (g.kind === "pull") setDrawing(moveEndAlong(g.before, g.id, g.end, p));
