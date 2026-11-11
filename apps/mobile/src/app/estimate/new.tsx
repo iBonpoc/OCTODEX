@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
@@ -17,7 +17,7 @@ import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/c
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { draftCtx, draftSnapshot, draftsKey, draftWorthKeeping, findDraft, nextDrafts, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
+import { draftCtx, draftSnapshot, draftsKey, draftWorthKeeping, findDraft, nextDrafts, putDraftBack, removeDraft, upsertDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
@@ -79,6 +79,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const keyOfDrafts = drafts.key;
   const setDrafts = drafts.setList;
   const held = { estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
   useEffect(() => {
     if (!ctx) return;
@@ -105,7 +112,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const askStart = !given && templates.length > 0;
     setStartOpen(askStart);
     setClientPicker(!params.customerId && !askStart);
+    // «Отменить» may come after the builder is gone (the toast lives on across screens): then the draft goes back
+    // straight to storage, and the next «+ Смета» from here continues it (second review of #859, rule 5)
+    const back: EstimateDraft = { ctx: ctx!, at: was.draft?.at ?? new Date().toISOString(), estimateId, customerId: was.customerId, propertyId: was.propertyId, title: was.title, doc: was.doc, templateId: was.templateId, checkPrice: was.checkPrice };
     toast.show(t("est.draft.cleared"), () => {
+      if (!ctx || !draftWorthKeeping(back)) return;
+      if (!mounted.current) {
+        putDraftBack(keyOfDrafts, back).catch(() => toast.show(t("est.draft.notRestored")));
+        return;
+      }
       setStartOpen(false);
       setClientPicker(false);
       setDraft(was.draft);
@@ -118,8 +133,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       setTemplateId(was.templateId);
       setCheckPrice(was.checkPrice);
       // the draft back on the phone as it was (unchanged since it opened, the effect alone would not write it)
-      const d: EstimateDraft = { ctx: ctx!, at: was.draft?.at ?? new Date().toISOString(), estimateId, customerId: was.customerId, propertyId: was.propertyId, title: was.title, doc: was.doc, templateId: was.templateId, checkPrice: was.checkPrice };
-      if (ctx && draftWorthKeeping(d)) setDrafts((list) => upsertDraft(list, d, Date.now()), keyOfDrafts);
+      setDrafts((list) => upsertDraft(list, back, Date.now()), keyOfDrafts);
     });
   };
   const start = (x: EstimateTemplate | null) => {

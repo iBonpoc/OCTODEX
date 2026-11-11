@@ -247,6 +247,7 @@ export const es: Dict = {
   "est.draft.restored": "Borrador retomado: este presupuesto no se guardó",
   "est.draft.restart": "Empezar de nuevo",
   "est.draft.cleared": "Borrador eliminado",
+  "est.draft.notRestored": "No se pudo recuperar el borrador: el almacenamiento del dispositivo no está disponible",
   "sync.stuck.badge": "No enviado: {n}",
   "sync.stuck.title": "No enviado: el servidor responde con un error",
   "sync.stuck.since": "Falla desde {when}",

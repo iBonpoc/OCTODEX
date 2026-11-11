@@ -495,6 +495,8 @@ function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => voi
           {item.text}
         </T>
         {item.undo ? (
+          // testID: e2e finds «Отменить» by it, not by the word (rule 19)
+          <View testID="toast-undo">
           <UndoButton
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.id = when it showed)
@@ -503,6 +505,7 @@ function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => voi
               onDone();
             }}
           />
+          </View>
         ) : null}
       </Glass>
     </Animated.View>

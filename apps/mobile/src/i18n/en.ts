@@ -247,6 +247,7 @@ export const en: Dict = {
   "est.draft.restored": "Draft continued: this estimate was not saved",
   "est.draft.restart": "Start over",
   "est.draft.cleared": "Draft deleted",
+  "est.draft.notRestored": "Could not bring the draft back: device storage is unavailable",
   "sync.stuck.badge": "Not sent: {n}",
   "sync.stuck.title": "Not sent: the server answers with an error",
   "sync.stuck.since": "Failing since {when}",

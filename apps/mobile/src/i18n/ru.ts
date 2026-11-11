@@ -246,6 +246,7 @@ export const ru = {
   "est.draft.restored": "Продолжен черновик: смета не была сохранена",
   "est.draft.restart": "Начать заново",
   "est.draft.cleared": "Черновик удалён",
+  "est.draft.notRestored": "Черновик не удалось вернуть: память устройства недоступна",
   "sync.stuck.badge": "Не отправлено: {n}",
   "sync.stuck.title": "Не отправлено: сервер отвечает ошибкой",
   "sync.stuck.since": "Ошибка с {when}",

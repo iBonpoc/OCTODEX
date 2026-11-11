@@ -68,9 +68,21 @@ exports.run = async (h) => {
   await waitFor(async () => (await titleInput().inputValue()) === "" && !(await hasLine()), "restart: an empty builder");
   await waitFor(async () => (await stored()).length === 0, "restart: no draft on the phone");
   await p.waitForTimeout(500); // «Отменить» is armed after a moment (toastArm)
-  await h.click("Отменить");
+  await tid("toast-undo").getByRole("button").click();
   await waitFor(async () => (await titleInput().inputValue()) === "Крыша, черновик" && (await hasLine()), "undo: the estimate is back");
   await waitFor(async () => (await stored()).some((d) => d.title === "Крыша, черновик"), "undo: the draft is back on the phone");
+  // «Начать заново» → the builder left → «Отменить» on the toast that lives on: the draft is back for the next «+ Смета»
+  await tid("est-draft-restart").getByRole("button").click();
+  await waitFor(async () => (await stored()).length === 0, "restart: no draft on the phone");
+  // in the app, no reload (the toast lives on across screens)
+  await p.evaluate(() => { window.history.pushState({}, "", "/today"); window.dispatchEvent(new PopStateEvent("popstate")); });
+  await waitFor(async () => !p.url().includes("/estimate/new"), "restart → left the builder");
+  await p.waitForTimeout(300);
+  await tid("toast-undo").getByRole("button").click();
+  await waitFor(async () => (await stored()).some((d) => d.title === "Крыша, черновик"), "undo after leaving: the draft is back on the phone");
+  await h.go(NEW);
+  await waitFor(draftShown, "undo after leaving: «+ Смета» continues it");
+  h.expect((await titleValue()) === "Крыша, черновик", "undo after leaving: the title is there");
   // restart for good (the toast runs out)
   await tid("est-draft-restart").getByRole("button").click();
   await waitFor(async () => (await stored()).length === 0, "restart again: no draft on the phone");
