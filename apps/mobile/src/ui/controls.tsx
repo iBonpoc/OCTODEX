@@ -210,11 +210,14 @@ export function Segmented<K extends string>({
   onChange,
   full,
   scroll,
+  testID,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   full?: boolean;
+  /** each tab gets `<testID>-<key>` (tests find a tab by it, not by its words — CHECKS §9 п.2) */
+  testID?: string;
   /** many tabs: one line that scrolls sideways on a narrow phone (the page itself never scrolls sideways) */
   scroll?: boolean;
 }) {
@@ -281,6 +284,7 @@ export function Segmented<K extends string>({
         return (
           <Press
             key={it.key}
+            testID={testID ? `${testID}-${it.key}` : undefined}
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
