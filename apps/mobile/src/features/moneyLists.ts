@@ -14,6 +14,16 @@ import { dayKeyIn, daysBetween, dueDayKey, getZone } from "./zone";
 /** who opens the lists (13 §4): «Счета» — not the tech (he opens the invoice of his own job); «Оплаты» — owner, admin, office */
 export const canSeeInvoiceList = (role: Role) => role !== "tech";
 export const canSeePayments = (role: Role) => role === "director" || role === "dispatcher";
+/**
+ * Who takes a payment on an invoice (13 §4; the database since #868): the office — any part; sales — only the whole
+ * deposit of a deposit invoice (17: it goes through the server's deposit function, record_estimate_deposit — a part of it
+ * would be a payment of their own, refused 42501); nobody else on the invoice screen. The tech takes it on his visit.
+ */
+export type PaymentRight = "any" | "wholeDeposit" | "none";
+export function paymentRight(role: Role, inv: Pick<Invoice, "kind">): PaymentRight {
+  if (role === "sales") return inv.kind === "deposit" ? "wholeDeposit" : "none";
+  return "any";
+}
 
 /** chips of «Счета»: owed = not paid · overdue (the default — the one path to debts), paid, all */
 export type InvoiceFilter = "owed" | "paid" | "all";

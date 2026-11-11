@@ -19,6 +19,7 @@ import { ListCard, type CardSign } from "@/ui/listCard";
 import type { ContactAction, Density, FactKey } from "@/ui/listCardLayout";
 import type { DB } from "@/data/types";
 import { memberName } from "@/features/team";
+import { paymentRight } from "./moneyLists";
 
 type T = ReturnType<typeof useI18n>["t"];
 
@@ -141,7 +142,7 @@ export function EstimateListCard({ e, density, panel }: { e: Estimate; density: 
 }
 
 export function InvoiceListCard({ i, density, panel }: { i: Invoice; density: Density; panel?: PanelRow }) {
-  const { db } = useStore();
+  const { db, role } = useStore();
   const { t, money, day } = useI18n();
   const c = db.customers.find((x) => x.id === i.customerId);
   const job = findJob(db, i.jobId);
@@ -170,7 +171,8 @@ export function InvoiceListCard({ i, density, panel }: { i: Invoice; density: De
       // contact buttons only open the phone / map / mail: nothing is written for an invoice
       contact={{ phone: c?.phone, email: c?.email, addr }}
       // secondary: the one accent of the screen stays the main action of the screen
-      action={open ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
+      // sales take no payment on an invoice (#868), only the whole deposit (paymentRight)
+      action={open && paymentRight(role, i) !== "none" ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
       density={density}
       columns={panel?.narrow ? INV_COLUMNS_PANEL : INV_COLUMNS}
       selected={panel?.selected}

@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { DB, Expense, Invoice, Payment } from "../src/data/types";
 import { setZone } from "../src/features/zone";
-import { asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
+import { paymentRight, asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
 
 const LA = "America/Los_Angeles";
 afterEach(() => setZone(LA));
@@ -143,5 +143,20 @@ describe("the search of «Расходы» (spec 31, one rule)", () => {
     expect(matchExpense(db, x, "petrov")).toBe(true);
     expect(matchExpense(db, x, "zzz")).toBe(false);
     expect(matchExpense(db, { ...x, jobId: null }, "mitch")).toBe(false);
+  });
+});
+
+describe("unit:moneyLists — who takes a payment on an invoice (#868, 13 §4, 17)", () => {
+  it("the office: any part of any invoice", () => {
+    for (const role of ["director", "dispatcher"] as const) {
+      expect(paymentRight(role, { kind: "final" })).toBe("any");
+      expect(paymentRight(role, { kind: "deposit" })).toBe("any");
+    }
+  });
+  it("sales: none on an invoice (the database refuses, T191) — only the whole deposit of a deposit invoice", () => {
+    expect(paymentRight("sales", { kind: "final" })).toBe("none");
+    expect(paymentRight("sales", { kind: "progress" })).toBe("none");
+    expect(paymentRight("sales", { kind: undefined })).toBe("none");
+    expect(paymentRight("sales", { kind: "deposit" })).toBe("wholeDeposit");
   });
 });
