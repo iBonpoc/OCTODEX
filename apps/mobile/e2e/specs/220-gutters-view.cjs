@@ -1,7 +1,7 @@
 /**
  * e2e 220 — «Просмотр замера» (основатель 09.11, #698 #699 #700 #707; docs/specs/33-gutters-canvas.md П20.25). Every view.
  * - the canvas has no total and no estimate button under the drawing (#700); «Готово» at the top → the review;
- * - the review: the drawing whole; the gutters by number (along the wall / along the face, storey, size), the corner
+ * - the review: the drawing whole; under «Подробно» (П25.3 Б7) the gutters by number (along the wall / along the face, storey, size), the corner
  *   with its cut, the downspout, the parts; the total marked «тестовые цены»; «Замер примерный — перед резкой
  *   промерьте» (the drawing is rough);
  * - nobody linked → the one main action is «Привязать к клиенту или лиду» (#699);
@@ -10,7 +10,7 @@
  * - a technician opens the same review: the drawing and the list, no money — no total, no estimate action.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, closeDsMenu, openView, backToCanvas } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, openView, backToCanvas, pressWhenStill } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -60,6 +60,10 @@ exports.run = async (h) => {
   h.expect(!!m, "the review names the measurement");
   await tid("view-svg").waitFor({ timeout: 5000 });
   h.expect((await p.getByTestId("view-svg").locator("visible=true").first().locator("line").count()) >= 2, "the drawing whole");
+  // what it is made of is folded under «Подробно» (spec 33 П25.3 Б7)
+  h.expect((await tid("view-parts").count()) === 0, "the parts are folded");
+  await pressWhenStill(tid("view-details").getByRole("button"));
+  await tid("view-parts").waitFor({ timeout: 5000 });
   for (const id of ["view-run-1", "view-run-2", "view-ds-1", "view-parts", "view-rough"]) h.expect((await tid(id).count()) === 1, `the review has ${id}`);
   h.expect(/по стене .* по лицевой/.test(await tid("view-run-1").innerText()), "a gutter: along the wall and along the face");
   h.expect(/эт 1/.test(await tid("view-run-1").innerText()), "a gutter: its storey");
@@ -84,7 +88,11 @@ exports.run = async (h) => {
   await p.mouse.move(sv.x + sv.width * 0.6, sv.y + sv.height * 0.6, { steps: 8 });
   await p.mouse.up();
   await p.waitForTimeout(500);
-  h.expect(JSON.stringify((await g()).elements.filter((e) => e.measurementId === m)) === before, "the review's drawing changes nothing");
+  // on a failure say WHICH element and field moved (#806: red 5 times on CI at 390 dark, never locally)
+  const afterEls = (await g()).elements.filter((e) => e.measurementId === m);
+  const beforeEls = JSON.parse(before);
+  const moved = JSON.stringify(afterEls) === before ? "" : afterEls.length !== beforeEls.length ? `element count ${beforeEls.length} -> ${afterEls.length}` : afterEls.flatMap((e, i) => Object.keys(e).filter((k) => JSON.stringify(e[k]) !== JSON.stringify(beforeEls[i][k])).map((k) => `${e.kind}.${k}: ${JSON.stringify(beforeEls[i][k])} -> ${JSON.stringify(e[k])}`)).join("; ");
+  h.expect(JSON.stringify(afterEls) === before, `the review's drawing changes nothing (${moved})`);
 
   // «Править чертёж» → the canvas, the drawing as it was
   await backToCanvas(p);
@@ -94,6 +102,7 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/module/gutters/view?m=${encodeURIComponent(m)}`);
   await tid("view-screen").waitFor({ timeout: 8000 });
+  await pressWhenStill(tid("view-details").getByRole("button"));
   await tid("view-run-1").waitFor({ timeout: 5000 });
   h.expect((await tid("view-total").count()) === 0 && (await tid("view-test-prices").count()) === 0, "a technician sees no total");
   h.expect((await p.locator('[data-testid^="view-action-"]').locator("visible=true").count()) === 0, "a technician: no estimate action");

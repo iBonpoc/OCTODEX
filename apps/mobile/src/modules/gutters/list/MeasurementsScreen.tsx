@@ -102,7 +102,7 @@ export default function MeasurementsScreen() {
       aside={
         openItem ? (
           <ListPanel title={titleOf(openItem)} subtitle={openItem.address ?? undefined} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
-            <MeasurementView key={openItem.id} mid={openItem.id} />
+            <MeasurementView key={openItem.id} mid={openItem.id} onGone={panel.close} panel />
           </ListPanel>
         ) : undefined
       }

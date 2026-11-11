@@ -12,21 +12,24 @@ import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
 import { drawingPrint as DP, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
+import { useDevice } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import { canSeeClientMoney } from "@/features/clients";
 import { EstimateListCard } from "@/features/listCards";
-import { moduleHref } from "@/modules/registry";
+import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
-import { T } from "@/ui/primitives";
+import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, CardList, RowView, Screen } from "@/ui/surfaces";
+import { Card, CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
 import { ftIn } from "../canvas/format";
 import { fromElements } from "../canvas/model";
-import { gutterData, measurementOf } from "../data";
-import { clientLangOf, estimateAction, makeEstimate, ofMeasurement, pageIdOf } from "../estimateLink";
+import { gutterData, KEY, measurementOf } from "../data";
+import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, pageIdOf } from "../estimateLink";
+import { CardHead } from "./CardHead";
+import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
 import { listPreview, partName } from "../prices";
 import { readRules, toRulesOverride } from "../settings";
@@ -54,7 +57,7 @@ export default function ViewScreen() {
   const back = () => (router.canGoBack() ? router.back() : router.replace(moduleHref("gutters", "list") as Href));
   return (
     <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
-      <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} />
+      <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} onGone={back} />
     </Screen>
   );
 }
@@ -63,8 +66,10 @@ export default function ViewScreen() {
  * The body of «Просмотр замера»: the screen above and the 1280 panel of «Замеры». `estimate` — «Смета из замера» /
  * «Обновить из замера» came with estimate=1: done once; `from` — "draw": «Править чертёж» goes back to that canvas.
  */
-export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: string; estimate?: boolean; from?: string }) {
+export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
   const store = useStore();
+  const { device } = useDevice();
+  const cols = device !== "phone" && !panel;
   const { t, money, lang } = useI18n();
   const toast = useToast();
   const g = gutterData(store.db);
@@ -81,6 +86,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
   const action = m ? estimateAction(store.db, m, drawing.runs.length > 0) : ({ kind: "none" } as const);
   const estimates = m ? store.db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id)))) : [];
   const [linkOpen, setLinkOpen] = useState(false);
+  // «Подробно» (П25.3 Б7): what the drawing is made of — folded; the sheet, the action and the documents come first
+  const [details, setDetails] = useState(false);
 
   // «Править чертёж»: back to the canvas it came from; from a lead or an estimate — the canvas opens
   const edit = () => {
@@ -156,6 +163,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
   const rough = m.accuracy !== "tape";
   // «Чертёж в PDF» (#509): the client's — no prices, in the client's language; the crew's — the cut, in the app's
   const who = lead?.name ?? (addr ? store.db.customers.find((c) => c.id === addr.customerId)?.name : undefined);
+  // the client's document: their estimate when there is one (its PDF carries the drawing's page, P4b) — only to those
+  // who see the client's money; else the drawing without prices
+  const clientEst = money$ ? estimateOfMeasurement(store.db, m.id) : undefined;
+  const clientLang = clientLangOf(store.db, m);
   const pdf = (kind: "client" | "crew") => {
     const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
     const docLang = kind === "client" ? clientLangOf(store.db, m) : lang;
@@ -178,6 +189,11 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
   return (
     <>
       <View testID="view-screen" style={{ gap: space[4] }}>
+        <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} />
+        {/* 820 / 1280 on its own page: two columns — the sheet and the action on the left, the documents, the photos and
+            the rest on the right (П25.3 Б); a phone and the 1280 panel — one column, the same order */}
+        <View style={cols ? { flexDirection: "row", alignItems: "flex-start", gap: space[4] } : { gap: space[4] }}>
+        <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
         {/* the drawing whole — to look at only: no gestures, nothing to tap */}
         <View testID="view-drawing" pointerEvents="none" onLayout={(e) => setW(Math.round(e.nativeEvent.layout.width))}>
           {sheet ? <DocSheet sheet={sheet} testID="view-svg" /> : null}
@@ -206,13 +222,31 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
               ) : null}
             </View>
           ) : null}
-          {drawing.runs.length ? (
-            <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-              <View testID="view-pdf-client"><Button label={t("mod.gutters.view.pdfClient")} icon="invoice" variant="secondary" onPress={() => pdf("client")} /></View>
-              <View testID="view-pdf-crew"><Button label={t("mod.gutters.view.pdfCrew")} icon="invoice" variant="secondary" onPress={() => pdf("crew")} /></View>
-            </RowView>
-          ) : null}
           <View testID="view-edit"><Button label={t("mod.gutters.view.edit")} icon="pencil" variant="secondary" onPress={edit} /></View>
+        </View>
+        </View>
+        <View style={{ gap: space[4], ...(cols ? { flex: 1, minWidth: 0 } : {}) }}>
+
+        {/* «Документы» (П25.3 Б4): one card, a row per reader — the client's (the estimate, else the drawing without
+            prices, in the client's language), the crew's (the cut, the app's language). «Отправить» and the history — H3 */}
+        {drawing.runs.length ? (
+          <View testID="view-docs">
+          <Card style={{ gap: space[1] }}>
+            <T v="heading" w="semibold">{t("mod.gutters.card.docs")}</T>
+            <DocRow
+              id="client"
+              title={t("mod.gutters.card.docClient")}
+              sub={clientEst ? t("mod.gutters.card.docClientEst", { n: clientEst.number ?? "", lang: clientLang.toUpperCase() }) : t("mod.gutters.card.docClientDrawing", { lang: clientLang.toUpperCase() })}
+              openTestID="view-pdf-client"
+              onOpen={() => (clientEst ? router.push(`/estimate/${clientEst.id}` as Href) : pdf("client"))}
+            />
+            <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} />
+          </Card>
+          </View>
+        ) : null}
+
+        <View testID="view-photos">
+          <MeasurePhotos measurementId={m.id} testID="view-photo-strip" readOnly={!moduleActive(store.db.company, KEY)} />
         </View>
 
         {money$ && preview ? (
@@ -227,6 +261,12 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
         ) : null}
 
         {spec.runs.length ? (
+          <View testID="view-details">
+            <Button label={t(details ? "mod.gutters.card.detailsHide" : "mod.gutters.card.details")} icon={details ? "chevronRight" : "chevronDown"} variant="ghost" onPress={() => setDetails((x) => !x)} />
+          </View>
+        ) : null}
+
+        {details && spec.runs.length ? (
           <Card style={{ gap: space[2] }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.runs")}</T>
             {spec.runs.map((r) => (
@@ -241,7 +281,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
           </Card>
         ) : null}
 
-        {spec.corners.length ? (
+        {details && spec.corners.length ? (
           <Card style={{ gap: space[2] }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.corners")}</T>
             {spec.corners.map((c) => (
@@ -255,7 +295,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
           </Card>
         ) : null}
 
-        {spec.ds.length ? (
+        {details && spec.ds.length ? (
           <Card style={{ gap: space[2] }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.ds")}</T>
             {spec.ds.map((d) => (
@@ -269,7 +309,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
           </Card>
         ) : null}
 
-        {spec.parts.length ? (
+        {details && spec.parts.length ? (
           <Card style={{ gap: space[1] }}>
             <View testID="view-parts"><T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T></View>
             {spec.parts.map((p) => (
@@ -292,8 +332,25 @@ export function MeasurementView({ mid, estimate: autoEstimate, from }: { mid: st
             </CardList>
           </View>
         ) : null}
+        </View>
+        </View>
       </View>
       <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
     </>
+  );
+}
+
+/** a row of «Документы»: who reads it, what it is, «Открыть» (rule 12: rows of one object inside its card) */
+function DocRow({ id, title, sub, openTestID, onOpen }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void }) {
+  const { t } = useI18n();
+  return (
+    <View testID={`view-doc-${id}`}>
+      <ListRow
+        title={title}
+        subtitle={sub}
+        left={<Icon name="invoice" />}
+        right={<View testID={openTestID}><Button label={t("mod.gutters.card.open")} variant="secondary" size="sm" onPress={onOpen} /></View>}
+      />
+    </View>
   );
 }
