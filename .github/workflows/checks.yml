@@ -27,8 +27,28 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Pipeline pause (#1087, rule 26): while a task labelled «остановка» is open, a pull request without the label «починка» stops
+  # here in seconds (red, plain text) and its other jobs are skipped, so they take no runners. scripts/pipelinePause.cjs decides;
+  # pipeline-resume.yml re-runs the stopped PRs when the stop is closed. push to main, the nightly and manual runs are never paused.
+  pause:
+    name: Pipeline pause
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: No open stop (or the PR is a fix)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: node scripts/pipelinePause.cjs
+
   changes:
     name: What changed
+    needs: pause
     runs-on: ubuntu-24.04
     outputs:
       app: ${{ steps.diff.outputs.app }}
@@ -63,6 +83,7 @@ jobs:
 
   fast:
     name: Types, unit and database tests
+    needs: pause
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -210,6 +231,7 @@ jobs:
   # label «починка-main» (scripts/rule22.cjs). Reads the PR live (not from the event), so a re-run after editing the body is enough.
   rule22:
     name: Rule 22 (PR names a до-1.0 task)
+    needs: pause
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-24.04
     permissions:
@@ -226,12 +248,14 @@ jobs:
 
   checks:
     name: checks
-    needs: [changes, fast, bundle, build-web, e2e, rule22]
+    needs: [pause, changes, fast, bundle, build-web, e2e, rule22]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: All checks green
         run: |
+          # the pipeline pause (#1087): a stopped PR is RED — «skipped» jobs behind a failed pause must never read as green
+          [ "${{ needs.pause.result }}" = "success" ] || { echo "::error::пауза конвейера (pause=${{ needs.pause.result }}): влить нельзя, пока открыта остановка"; exit 1; }
           # e2e may be skipped only when the change is docs-only
           e2e="${{ needs.e2e.result }}"
           bundle="${{ needs.bundle.result }}"
