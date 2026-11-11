@@ -122,9 +122,34 @@ jobs:
         working-directory: apps/mobile
         run: npx expo export --platform ios --platform android --output-dir "$RUNNER_TEMP/bundle"
 
+  # One web build per run (#906 п.3, D-13): before, every one of the 6 e2e jobs ran its own `expo export` (7 builds a run).
+  # The build is the same for every view and part; the jobs download it and run with --no-build.
+  build-web:
+    name: Web build (once for all e2e jobs)
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Export the web app
+        working-directory: apps/mobile
+        run: npx expo export --platform web
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: apps/mobile/dist/
+          if-no-files-found: error
+          retention-days: 1
+
   e2e:
     name: End-to-end ${{ matrix.view }} part ${{ matrix.part }}
-    needs: changes
+    needs: [changes, build-web]
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45  # a part takes ~10 min; the limit only catches a hung run
@@ -140,6 +165,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: apps/mobile/dist
+      # The browser download is cached per Playwright version; --with-deps still adds the system libraries (fast when present).
+      - id: pw
+        name: Playwright version
+        working-directory: apps/mobile
+        run: echo "v=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.v }}
       - name: End-to-end (browser)
         working-directory: apps/mobile
         run: |
@@ -147,7 +185,7 @@ jobs:
           view="${{ matrix.view }}"
           # 08-layouts checks all 6 views by itself: run it in one view only
           [ "$view" = "390-dark" ] || export E2E_OWN_LAYOUTS=0
-          node e2e/run.cjs --width="${view%-*}" --theme="${view#*-}" --shard=${{ matrix.part }}/2
+          node e2e/run.cjs --no-build --width="${view%-*}" --theme="${view#*-}" --shard=${{ matrix.part }}/2
       - uses: actions/upload-artifact@v4
         if: always()
         # screenshots are for reading a failure, not a test: a GitHub storage outage must not turn green tests red (05.11.2026)
@@ -176,7 +214,7 @@ jobs:
 
   checks:
     name: checks
-    needs: [changes, fast, bundle, e2e, rule22]
+    needs: [changes, fast, bundle, build-web, e2e, rule22]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -191,7 +229,7 @@ jobs:
           if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
           # rule22 runs on pull requests only: "skipped" on push/schedule is fine, failure is not
           [ "${{ needs.rule22.result }}" != "failure" ] && [ "${{ needs.rule22.result }}" != "cancelled" ] || { echo "::error::rule22=${{ needs.rule22.result }}"; exit 1; }
-          [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] && [ "$bundle" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} bundle=${{ needs.bundle.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
+          [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] && [ "$bundle" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} bundle=${{ needs.bundle.result }} build-web=${{ needs.build-web.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
 
   # A red nightly run opens (or adds to) one issue, so the director sees it in the morning (docs/ai/CHECKS.md §1).
   nightly-alert:
