@@ -5,7 +5,7 @@
  */
 import { chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
-import { changeDs, changeRun, MILL_ONLY, type DsAttrs } from "./attrs";
+import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
 
 /** shorter than this is a slip of the finger, not a line */
@@ -106,6 +106,33 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
     ...d,
     runs: d.runs.map((x) => (x.id === runId ? moved : x)),
     downspouts: d.downspouts.map((s) => (s.runId === runId && s.atIn > L ? { ...s, atIn: L } : s)),
+  };
+}
+
+/**
+ * Pull a free end along its own gutter (#504, founder 11.11: «тяну за край — увеличиваю, оттягиваю дальше»): the other
+ * end stays, the direction stays, the finger sets the length (the finger's distance along the gutter), from MIN_RUN_IN to
+ * MAX_RUN_IN — longer and shorter. A typed length no longer matches, so it is dropped; downspouts stay on the line.
+ */
+export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawing {
+  const r = d.runs.find((x) => x.id === runId);
+  if (!r) return d;
+  const fixed = end === 0 ? r.b : r.a;
+  const was = end === 0 ? r.a : r.b;
+  const ux = was[0] - fixed[0], uy = was[1] - fixed[1];
+  const L = Math.hypot(ux, uy);
+  if (L === 0) return d;
+  const along = ((p[0] - fixed[0]) * ux + (p[1] - fixed[1]) * uy) / L;
+  const len = Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round(along)));
+  const at: P = [Math.round(fixed[0] + (ux / L) * len), Math.round(fixed[1] + (uy / L) * len)];
+  if (at[0] === was[0] && at[1] === was[1]) return d;
+  const { lengthIn: _typed, ...rest } = r;
+  const moved: DrawnRun = end === 0 ? { ...rest, a: at } : { ...rest, b: at };
+  const n = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
+  return {
+    ...d,
+    runs: d.runs.map((x) => (x.id === runId ? moved : x)),
+    downspouts: d.downspouts.map((s) => (s.runId === runId && s.atIn > n ? { ...s, atIn: n } : s)),
   };
 }
 
@@ -222,7 +249,7 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing };
+export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing };
 
 /** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
 export function moveDs(d: Drawing, id: string, p: P): Drawing {
@@ -241,6 +268,7 @@ export function moveDs(d: Drawing, id: string, p: P): Drawing {
 export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, canceled: boolean, newRun: { id: string; attrs: DrawnRun["attrs"] }): Drawing {
   if (g.kind === "end") return canceled ? g.before : moveEnd(g.before, g.id, g.end, p, tolIn);
   if (g.kind === "ds") return canceled ? g.before : moveDs(g.before, g.id, p);
+  if (g.kind === "pull") return canceled ? g.before : moveEndAlong(g.before, g.id, g.end, p);
   if (canceled) return d;
   const b = endAt(d, g.a, p, tolIn);
   return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);

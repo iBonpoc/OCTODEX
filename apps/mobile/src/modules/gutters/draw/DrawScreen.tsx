@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, flipFace, moveDs, moveEndAlong, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -254,6 +254,8 @@ export default function DrawScreen() {
 
   // one finger: draw a run, or drag an end of the picked run
   const dragRef = useRef<Stroke | null>(null);
+  /** a stroke just ended and no finger has touched down since: on the web the lift of a drag is also a tap on the spot — not a tap on an end cap (it turned the new line's face, #854) */
+  const liftTap = useRef(false);
   // where the finger touched down: the pan activates only after it has moved a little
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
@@ -271,6 +273,14 @@ export default function DrawScreen() {
       const p0 = plan(downAt.current[0], downAt.current[1]);
       const h = hitTest(d, p0, tolIn());
       const held = Date.now() - downTime.current >= motion.durSlow;
+      // a free end cap taken (#504, founder 11.11: «долгое нажатие на эндкапу — тяни за край»): held, with any tool but «Желоб», or at
+      // once on the picked gutter's handle — the end follows the finger along its gutter, longer or
+      // shorter. A corner's end is not taken (it would break the corner). «Желоб» without a hold goes on from the end, as before
+      if (h?.kind === "end" && cur.current.canSave && tl !== "line" && (held || h.id === cur.current.selected) && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap") {
+        dragRef.current = { kind: "pull", id: h.id, end: h.end, before: d };
+        setSelected(h.id);
+        return;
+      }
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
         dragRef.current = { kind: "ds", id: h.id, before: d };
@@ -293,6 +303,7 @@ export default function DrawScreen() {
       const d = cur.current.drawing;
       if (g.kind === "line") setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
       else if (g.kind === "ds") setDrawing(moveDs(g.before, g.id, p));
+      else if (g.kind === "pull") setDrawing(moveEndAlong(g.before, g.id, g.end, p));
       else setDrawing(moveEnd(g.before, g.id, g.end, p, tolIn()));
     },
     onDeactivate: (e) => {
@@ -304,9 +315,10 @@ export default function DrawScreen() {
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
       const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: newRunAttrs(cur.current.ch, cur.current.story) });
-      if (g.kind === "end" || g.kind === "ds") {
+      if (g.kind === "end" || g.kind === "ds" || g.kind === "pull") {
         if (e.canceled) setDrawing(g.before);
         else commit(next, g.before);
+        liftTap.current = true;
         return;
       }
       if (next !== d) {
@@ -324,6 +336,9 @@ export default function DrawScreen() {
   const tap = useTapGesture({
     runOnJS: true,
     simultaneousWith: [canvas.pinch, canvas.pan],
+    onBegin: () => {
+      liftTap.current = false;
+    },
     onActivate: (e) => {
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
@@ -367,7 +382,7 @@ export default function DrawScreen() {
       const h = hitTest(d, p, tolIn());
       if (h) setHint(null);
       // an end (founder 08.11): an end cap swaps left ↔ right (the whole line's face); a corner asks inside / outside
-      if (h?.kind === "end" && cur.current.canSave) {
+      if (h?.kind === "end" && cur.current.canSave && !liftTap.current) {
         const found = findCorners(d);
         const corner = found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end));
         if (corner) {

@@ -36,7 +36,7 @@ export interface SceneRun {
   face: [[number, number], [number, number]];
 }
 /** an end cap (founder 08.11): left or right, looking at the face; a tap swaps both caps of the line */
-export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story }
+export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean }
 /** a corner: outside / inside (a tap swaps); an inside one gets a splash guard by itself */
 export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean }
 export interface SceneDs {
@@ -124,7 +124,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
     const side = sideOf(r);
     ([0, 1] as const).forEach((e) => {
       if (ends[r.id]?.[e]?.kind !== "cap") return;
-      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at: toScreen(o.view, e ? r.b : r.a), side: capSide(e, side), story: storyOf(r.attrs.story) });
+      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at: toScreen(o.view, e ? r.b : r.a), side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected });
     });
   }
   const corners: SceneCorner[] = found.map((f) => ({
