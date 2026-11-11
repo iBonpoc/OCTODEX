@@ -93,7 +93,7 @@ async function admin(query) {
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
     // a refused request the spec asked for (offline, a 401 it expects) is the spec's to check, not a page error
     page.on("console", (m) => m.type() === "error" && !(spec.allowConsole || []).some((re) => re.test(m.text())) && errors.push(`console: ${m.text()}`));
-    const h = helpers(page, BASE, OUT, `cloud-${file.replace(/\.cjs$/, "")}`);
+    const h = helpers(page, BASE, OUT, `cloud-${file.replace(/\.cjs$/, "")}`, { legacyWaits: true });
     h.layout = LAYOUT;
     try {
       await spec.run(h, { seed, browser, BASE, mailpit, admin, ctx });
