@@ -2,7 +2,7 @@
  * e2e 176 — starter checklist templates of a module (docs/specs/08 §11.11; step 14 CH3b; S0b).
  * The module is off: «Чек-листы» offers nothing. The director switches Gutters on → «Шаблоны модулей» offers its three
  * starters → «Добавить» one: a company template with the module's mark and the module's item ids, the offer is gone.
- * «Отменить» brings the offer back. Archived — still not offered again. Found by testID and the db.
+ * Added, it applies to «работа» visits (#607). «Отменить» brings the offer back. Archived — still not offered again. Found by testID and the db.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -36,6 +36,9 @@ exports.run = async (h) => {
   h.expect(t && t.name === "Перед монтажом" && t.items.length === 4 && t.items[0].label === "Проверить лобовую доску на гниль", `the template: ${JSON.stringify(t)}`);
   h.expect(t.items.every((i) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(i.id)) && /^[0-9a-f-]{36}$/.test(t.id), "the module's item ids, the company's template id");
   await tid(`chk-tpl-${t.id}`).waitFor();
+  // #607: it comes into every «работа» visit by itself, into no inspection
+  h.expect(JSON.stringify(t.appliesTo) === JSON.stringify({ everyVisit: false, visitKinds: ["work"], catalogItemIds: [] }), `applies to «работа» visits: ${JSON.stringify(t.appliesTo)}`);
+  h.expect(/Работа/.test(await tid(`chk-tpl-${t.id}`).innerText()), "the list says it: «Работа»");
   h.expect((await p.getByTestId("chk-starter-gutters-pre").count()) === 0, "added: not offered");
 
   // «Отменить»: the offer comes back
