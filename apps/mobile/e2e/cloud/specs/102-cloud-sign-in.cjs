@@ -26,6 +26,7 @@ async function expectCompany(h, name, notName) {
   const t = await h.text();
   await h.go("/settings");
   h.expect(!/Сбросить тестовые данные/.test(await h.text()), "cloud mode: no demo reset in «Настройки приложения»");
+  h.expect((await p.getByTestId("demo-badge").count()) === 0, "cloud mode: no «Демо» strip");
   if (notName) h.expect(!t.includes(notName), `nothing of ${notName}`);
 }
 
