@@ -1,0 +1,519 @@
+{
+  "about": "#1147: what the phone shows the client (summarize) = what the server signs (app.estimate_option_totals over the rows estimate.save writes) \u2014 test/signTotals.test.ts and T195 \u00b7 quick: a quick estimate this phone made (estimate.add rows) \u2014 addedTotalCents = estimate_option_totals",
+  "cases": [
+    {
+      "name": "two options, the second with its add-on; tax 9.5% on material; 10% off; deposit 10%",
+      "doc": {
+        "options": [
+          {
+            "id": "o1",
+            "name": "Basic",
+            "lines": [
+              {
+                "id": "a1",
+                "name": "Line a1",
+                "group": "labor",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 125000
+              },
+              {
+                "id": "a2",
+                "name": "Line a2",
+                "group": "material",
+                "quantity": "3",
+                "unit": "ea",
+                "unitPriceCents": 4999
+              }
+            ]
+          },
+          {
+            "id": "o2",
+            "name": "Better",
+            "recommended": true,
+            "lines": [
+              {
+                "id": "b1",
+                "name": "Line b1",
+                "group": "labor",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 145000
+              },
+              {
+                "id": "b2",
+                "name": "Line b2",
+                "group": "material",
+                "quantity": "7",
+                "unit": "ea",
+                "unitPriceCents": 3333
+              },
+              {
+                "id": "b3",
+                "name": "Line b3",
+                "group": "material",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 18999,
+                "optional": true
+              }
+            ]
+          }
+        ],
+        "settings": {
+          "tax": {
+            "enabled": true,
+            "rateBps": 950,
+            "groups": {
+              "service": false,
+              "labor": false,
+              "material": true
+            }
+          },
+          "deposit": {
+            "kind": "pct",
+            "bps": 1000
+          },
+          "discount": {
+            "kind": "pct",
+            "value": "0.1"
+          }
+        }
+      },
+      "sel": {
+        "optionId": "o2",
+        "addonIds": [
+          "b3"
+        ]
+      },
+      "rows": {
+        "taxEnabled": true,
+        "taxRateBps": 950,
+        "options": [
+          {
+            "id": "o1",
+            "position": 0,
+            "name": "Basic",
+            "isRecommended": false,
+            "discountMode": "pct",
+            "discountValue": 1000
+          },
+          {
+            "id": "o2",
+            "position": 1,
+            "name": "Better",
+            "isRecommended": true,
+            "discountMode": "pct",
+            "discountValue": 1000
+          }
+        ],
+        "lines": [
+          {
+            "id": "a1",
+            "optionId": "o1",
+            "position": 0,
+            "group": "labor",
+            "name": "Line a1",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 125000,
+            "taxable": false,
+            "isOptional": false
+          },
+          {
+            "id": "a2",
+            "optionId": "o1",
+            "position": 1,
+            "group": "material",
+            "name": "Line a2",
+            "description": null,
+            "quantity": "3",
+            "unit": "ea",
+            "unitPriceCents": 4999,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "b1",
+            "optionId": "o2",
+            "position": 0,
+            "group": "labor",
+            "name": "Line b1",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 145000,
+            "taxable": false,
+            "isOptional": false
+          },
+          {
+            "id": "b2",
+            "optionId": "o2",
+            "position": 1,
+            "group": "material",
+            "name": "Line b2",
+            "description": null,
+            "quantity": "7",
+            "unit": "ea",
+            "unitPriceCents": 3333,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "b3",
+            "optionId": "o2",
+            "position": 2,
+            "group": "material",
+            "name": "Line b3",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 18999,
+            "taxable": true,
+            "isOptional": true
+          }
+        ]
+      },
+      "totalCents": 172216,
+      "depositCents": 17222
+    },
+    {
+      "name": "a fractional quantity, $50 off, tax 8.25% on labor and service; the add-on not taken; deposit $200",
+      "doc": {
+        "options": [
+          {
+            "id": "o1",
+            "name": "Only",
+            "lines": [
+              {
+                "id": "c1",
+                "name": "Line c1",
+                "group": "labor",
+                "quantity": "2.5",
+                "unit": "ea",
+                "unitPriceCents": 8999
+              },
+              {
+                "id": "c2",
+                "name": "Line c2",
+                "group": "service",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 15050
+              },
+              {
+                "id": "c3",
+                "name": "Line c3",
+                "group": "material",
+                "quantity": "12",
+                "unit": "ea",
+                "unitPriceCents": 1275
+              },
+              {
+                "id": "c4",
+                "name": "Line c4",
+                "group": "labor",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 30000,
+                "optional": true
+              }
+            ]
+          }
+        ],
+        "settings": {
+          "tax": {
+            "enabled": true,
+            "rateBps": 825,
+            "groups": {
+              "service": true,
+              "labor": true,
+              "material": false
+            }
+          },
+          "deposit": {
+            "kind": "fixed",
+            "cents": 20000
+          },
+          "discount": {
+            "kind": "fixed",
+            "cents": 5000
+          }
+        }
+      },
+      "sel": {
+        "optionId": "o1",
+        "addonIds": []
+      },
+      "rows": {
+        "taxEnabled": true,
+        "taxRateBps": 825,
+        "options": [
+          {
+            "id": "o1",
+            "position": 0,
+            "name": "Only",
+            "isRecommended": false,
+            "discountMode": "fixed",
+            "discountValue": 5000
+          }
+        ],
+        "lines": [
+          {
+            "id": "c1",
+            "optionId": "o1",
+            "position": 0,
+            "group": "labor",
+            "name": "Line c1",
+            "description": null,
+            "quantity": "2.5",
+            "unit": "ea",
+            "unitPriceCents": 8999,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "c2",
+            "optionId": "o1",
+            "position": 1,
+            "group": "service",
+            "name": "Line c2",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 15050,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "c3",
+            "optionId": "o1",
+            "position": 2,
+            "group": "material",
+            "name": "Line c3",
+            "description": null,
+            "quantity": "12",
+            "unit": "ea",
+            "unitPriceCents": 1275,
+            "taxable": false,
+            "isOptional": false
+          },
+          {
+            "id": "c4",
+            "optionId": "o1",
+            "position": 3,
+            "group": "labor",
+            "name": "Line c4",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 30000,
+            "taxable": true,
+            "isOptional": true
+          }
+        ]
+      },
+      "totalCents": 50653,
+      "depositCents": 20000
+    },
+    {
+      "name": "no tax, no discount, two add-ons \u2014 one taken; deposit 25%",
+      "doc": {
+        "options": [
+          {
+            "id": "o1",
+            "name": "Only",
+            "lines": [
+              {
+                "id": "d1",
+                "name": "Line d1",
+                "group": "service",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 99900
+              },
+              {
+                "id": "d2",
+                "name": "Line d2",
+                "group": "material",
+                "quantity": "4",
+                "unit": "ea",
+                "unitPriceCents": 2575,
+                "optional": true
+              },
+              {
+                "id": "d3",
+                "name": "Line d3",
+                "group": "labor",
+                "quantity": "2",
+                "unit": "ea",
+                "unitPriceCents": 7550,
+                "optional": true
+              }
+            ]
+          }
+        ],
+        "settings": {
+          "tax": {
+            "enabled": false,
+            "rateBps": 0,
+            "groups": {
+              "service": false,
+              "labor": false,
+              "material": true
+            }
+          },
+          "deposit": {
+            "kind": "pct",
+            "bps": 2500
+          },
+          "discount": null
+        }
+      },
+      "sel": {
+        "optionId": "o1",
+        "addonIds": [
+          "d3"
+        ]
+      },
+      "rows": {
+        "taxEnabled": false,
+        "taxRateBps": 0,
+        "options": [
+          {
+            "id": "o1",
+            "position": 0,
+            "name": "Only",
+            "isRecommended": false,
+            "discountMode": null,
+            "discountValue": null
+          }
+        ],
+        "lines": [
+          {
+            "id": "d1",
+            "optionId": "o1",
+            "position": 0,
+            "group": "service",
+            "name": "Line d1",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 99900,
+            "taxable": false,
+            "isOptional": false
+          },
+          {
+            "id": "d2",
+            "optionId": "o1",
+            "position": 1,
+            "group": "material",
+            "name": "Line d2",
+            "description": null,
+            "quantity": "4",
+            "unit": "ea",
+            "unitPriceCents": 2575,
+            "taxable": false,
+            "isOptional": true
+          },
+          {
+            "id": "d3",
+            "optionId": "o1",
+            "position": 2,
+            "group": "labor",
+            "name": "Line d3",
+            "description": null,
+            "quantity": "2",
+            "unit": "ea",
+            "unitPriceCents": 7550,
+            "taxable": false,
+            "isOptional": true
+          }
+        ]
+      },
+      "totalCents": 115000,
+      "depositCents": 28750
+    }
+  ],
+  "quick": [
+    {
+      "name": "the quick estimate, one line: the total as typed",
+      "lines": [
+        {
+          "qty": "1",
+          "totalCents": 18500
+        }
+      ],
+      "rows": [
+        {
+          "position": 0,
+          "quantity": "1",
+          "unitPriceCents": 18500,
+          "isOptional": false
+        }
+      ],
+      "serverTotalCents": 18500,
+      "shownTotalCents": 18500
+    },
+    {
+      "name": "the quick estimate, $100 for 3: estimate.add rounds the price (3333 \u00d7 3 = $99.99) \u2014 the total is not sent",
+      "lines": [
+        {
+          "qty": "3",
+          "totalCents": 10000
+        }
+      ],
+      "rows": [
+        {
+          "position": 0,
+          "quantity": "3",
+          "unitPriceCents": 3333,
+          "isOptional": false
+        }
+      ],
+      "serverTotalCents": 9999,
+      "shownTotalCents": 10000
+    },
+    {
+      "name": "the quick estimate, two lines and an add-on not counted",
+      "lines": [
+        {
+          "qty": "2",
+          "totalCents": 25000
+        },
+        {
+          "qty": "1",
+          "totalCents": 4999
+        },
+        {
+          "qty": "1",
+          "totalCents": 7000,
+          "optional": true
+        }
+      ],
+      "rows": [
+        {
+          "position": 0,
+          "quantity": "2",
+          "unitPriceCents": 12500,
+          "isOptional": false
+        },
+        {
+          "position": 1,
+          "quantity": "1",
+          "unitPriceCents": 4999,
+          "isOptional": false
+        },
+        {
+          "position": 2,
+          "quantity": "1",
+          "unitPriceCents": 7000,
+          "isOptional": true
+        }
+      ],
+      "serverTotalCents": 29999,
+      "shownTotalCents": 29999
+    }
+  ]
+}

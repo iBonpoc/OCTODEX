@@ -11,7 +11,7 @@ import { supplierToRow } from "@/features/suppliers";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
 import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
-import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
+import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
 import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
@@ -20,6 +20,7 @@ import { classify } from "@/data/outboxRetry";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
 import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
+import { versionRows } from "./estimateRows";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -155,6 +156,8 @@ export type Op =
       channel: "on_site" | "portal";
       jobId: string;
       invoiceId?: string;
+      /** on site: the total the client saw — the server refuses another (#1147; an older app's op has none) */
+      totalCents?: number;
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
@@ -256,8 +259,9 @@ export type Op =
   | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
-  /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none) */
-  | { k: "estimate.sign"; id: string; svg: string; signer?: string; sent?: boolean }
+  /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
+   *  totalCents: the total the client saw — the server refuses another (#1147; an older app's op has none) */
+  | { k: "estimate.sign"; id: string; svg: string; signer?: string; sent?: boolean; totalCents?: number }
   /* ---- wave E2a: the company signs; the client link can be revoked (docs/specs/07 §2.2 А, Б) ---- */
   | { k: "estimate.countersign"; id: string; svg?: string; memberSignatureId?: string; jobId?: string; invoiceId?: string }
   | { k: "estimate.revoke"; id: string }
@@ -332,6 +336,17 @@ async function moduleActiveOnServer(companyId: string, module: string): Promise<
 /** the sign-in expired (401 / PGRST301): renew it quietly before the outbox tries again (review #244) */
 export async function renewSession(): Promise<void> {
   await supabase.auth?.refreshSession?.().catch(() => {});
+}
+
+/**
+ * #1147: the client's signature on the device goes with the total the client saw (the server refuses another: 22023,
+ * hint estimate_total_mismatch — the client signs again). A server without that door yet (PostgREST «no such function»,
+ * PGRST202) and an older op without the total: the door without it, as before.
+ */
+async function rpcWithTotal(fn: string, args: Record<string, unknown>, totalCents: number | undefined) {
+  if (totalCents === undefined) return supabase.rpc(fn, args);
+  const r = await supabase.rpc(fn, { ...args, p_total_cents: totalCents });
+  return r.error?.code === "PGRST202" ? supabase.rpc(fn, args) : r;
 }
 
 async function run(p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) {
@@ -831,10 +846,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         } catch (e) {
           if (!(e instanceof PermanentError && e.code === "42501")) throw e;
         }
-        const { error, status } = await supabase.rpc("accept_on_site", {
+        const { error, status } = await rpcWithTotal("accept_on_site", {
           p_estimate_id: op.id, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
           p_job_id: op.jobId, p_invoice_id: op.invoiceId ?? null,
-        });
+        }, op.totalCents);
         // a server without the door yet (PostgREST «no such function»): the old way — by the token, as before
         if (error?.code !== "PGRST202") return run(Promise.resolve({ error, status }));
       }
@@ -1088,8 +1103,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       } catch (e) {
         if (!(op.sent && e instanceof PermanentError && e.code === "42501")) throw e;
       }
-      const { error, status } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
-      return run(Promise.resolve({ error, status }));
+      const args = { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg };
+      return run(rpcWithTotal("sign_estimate_on_site", args, op.totalCents));
     }
     case "estimate.countersign": {
       const { error, status } = await supabase.rpc("countersign_estimate", {
@@ -1169,14 +1184,6 @@ function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string,
  * options and line items mirrored from the doc (same ids), costs in the restricted side table.
  * The doc without costs is kept in estimate_versions.calc_inputs for the app and the client page.
  */
-/** A line's quantity as estimate_line_items keeps it; a text that is not a number goes as before (the server says no). */
-const storedQty = (q: DecLike): string | number => {
-  try {
-    return jobLineQty(q);
-  } catch {
-    return Number(q as string);
-  }
-};
 async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
   await run(
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: op.templateId ? "template" : "manual", number: "" }),
@@ -1205,7 +1212,9 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     versionId = op.versionId;
   }
   const s = op.doc.settings;
-  const taxOn = s.tax.enabled && Object.values(s.tax.groups).some(Boolean);
+  // what the server counts the totals from (#1147: the same rows as the phone's summarize — test/signTotals.test.ts, T195)
+  const rows = versionRows(op.doc);
+  const taxOn = rows.taxEnabled;
   const saveVersion = (doc: unknown) =>
     run(
       supabase
@@ -1242,26 +1251,19 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   if (!op.doc.options.length) return;
   await run(
     supabase.from("estimate_options").insert(
-      op.doc.options.map((o, i) => ({
-        id: o.id, company_id: c, version_id: versionId, name: o.name, position: i, is_recommended: !!o.recommended,
-        discount_mode: s.discount ? s.discount.kind : null,
-        discount_value: s.discount ? (s.discount.kind === "pct" ? discountBps(s.discount.value) : s.discount.cents) : null,
+      rows.options.map((o) => ({
+        id: o.id, company_id: c, version_id: versionId, name: o.name, position: o.position, is_recommended: o.isRecommended,
+        discount_mode: o.discountMode, discount_value: o.discountValue,
       })),
     ),
   );
-  const lines = op.doc.options.flatMap((o) =>
-    o.lines
-      .filter((l) => l.name.trim() !== "" || l.unitPriceCents !== 0)
-      .map((l, i) => ({
-        id: l.id, company_id: c, option_id: o.id, position: i, line_group: l.group, catalog_item_id: null,
-        origin: l.catalogItemId ? "catalog" : "manual", name: l.name.trim() || "—", description: l.description ?? null,
-        // the stored quantity (numeric(14,4)) — the same the engine counts (Н1): the lock check finds no difference
-        quantity: storedQty(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
-        taxable: taxOn && !!s.tax.groups[l.group], is_optional: !!l.optional,
-        // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
-        ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
-      })),
-  );
+  const lines = rows.lines.map((l) => ({
+    id: l.id, company_id: c, option_id: l.optionId, position: l.position, line_group: l.group, catalog_item_id: null,
+    origin: l.catalogItemId ? "catalog" : "manual", name: l.name, description: l.description,
+    quantity: l.quantity, unit: l.unit, unit_price_cents: l.unitPriceCents, taxable: l.taxable, is_optional: l.isOptional,
+    // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
+    ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
+  }));
   if (lines.length) {
     const r = await supabase.from("estimate_line_items").insert(lines);
     // a server before migration 20261108200000 has no copied_from_line_id: the lines go without it (the cost is not

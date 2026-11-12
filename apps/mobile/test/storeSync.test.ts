@@ -107,6 +107,8 @@ import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { visitDueCents } from "../src/features/visitDue";
+import { summarize } from "../src/features/estimateDoc";
+import { readFileSync } from "node:fs";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import { wipedOnDelete } from "../src/data/outboxOwner";
 
@@ -1480,6 +1482,63 @@ describe("unit:storeSync — a tech does not send an estimate to the client (#11
     const { ops, est } = await sendAs("office");
     expect(ops).toContain("estimate.send");
     expect(est.status).toBe("sent");
+  });
+});
+
+describe("unit:storeSync — the signature on the phone carries the total the client saw (#1147)", () => {
+  const load = async () => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: "office" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    Object.assign(d.estimates.find((x) => x.id === "e4")!, { status: "sent" });
+    Object.assign(d.estimates.find((x) => x.id === "e6")!, { status: "sent" });
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    return r;
+  };
+  type S = { db: { estimates: { id: string; totalCents: number; doc?: never }[]; options?: never }; signEstimate: (id: string, p: string) => void; approveEstimate: (id: string, a: object) => void };
+  const sentOps = () => server.sends.map((x) => x.op as { k: string; totalCents?: number; channel?: string });
+  // the quick examples the database counts too (T195 (а′), test/fixtures/signTotals.json «quick»)
+  const quick = (JSON.parse(readFileSync(new URL("./fixtures/signTotals.json", import.meta.url), "utf8")) as { quick: { lines: { qty: string; totalCents: number; optional?: boolean }[]; serverTotalCents: number; shownTotalCents: number }[] }).quick;
+  const signQuick = async (q: (typeof quick)[number]) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: "office" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    Object.assign(d.estimates.find((x) => x.id === "e4")!, { status: "sent", totalCents: q.shownTotalCents, lines: q.lines.map((l) => ({ name: "Line", ...l })) });
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as S).signEstimate("e4", "M0 0 L1 1");
+    await wait(1700);
+    await settle();
+    return server.sends.map((x) => x.op as { k: string; totalCents?: number }).find((o) => o.k === "estimate.sign")!;
+  };
+  it("the quick estimate: the op has the total the phone showed — the one the server counts (before: none)", async () => {
+    const q = quick.find((x) => x.serverTotalCents === x.shownTotalCents)!;
+    const op = await signQuick(q);
+    expect(op).toBeTruthy();
+    expect(op.totalCents).toBe(q.serverTotalCents);
+  });
+  it("its lines rounded by estimate.add ($100 for 3 → $99.99 on the server): the op goes without the total — no false refusal", async () => {
+    const q = quick.find((x) => x.serverTotalCents !== x.shownTotalCents)!;
+    expect((await signQuick(q)).totalCents).toBeUndefined();
+  });
+  it("the universal one on site: the chosen option with its add-ons, as summarize counts it", async () => {
+    const r = await load();
+    const v = valueOf(r) as unknown as S;
+    const e = v.db.estimates.find((x) => x.id === "e6")! as unknown as { doc: Parameters<typeof summarize>[0] };
+    const opt = e.doc.options[0]!;
+    const addons = opt.lines.filter((l) => l.optional).map((l) => l.id).slice(0, 1);
+    const sel = { optionId: opt.id, addonIds: addons };
+    v.approveEstimate("e6", { ...sel, signerName: "Ann Client", signature: "M0 0 L1 1", channel: "on_site" });
+    await wait(1700);
+    await settle();
+    const op = sentOps().find((o) => o.k === "estimate.approve")!;
+    expect(op.channel).toBe("on_site");
+    expect(op.totalCents).toBe(summarize(e.doc, sel).totalCents);
   });
 });
 
