@@ -94,6 +94,35 @@ exports.run = async (h) => {
   await vis("sheet-close").click();
   await gone("the second sheet closes too");
 
+  // a chain: the first sheet's button closes it and opens the next in the same moment — the next shows and takes taps
+  const chain = async (what) => {
+    await vis("showcase-sheet-chainA").getByRole("button").first().click();
+    await p.getByTestId("sheet-title").filter({ hasText: "Шаг 1" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+    // count the sheets on the screen at every frame from the press to the end: with the gate they never overlap
+    await p.evaluate(() => {
+      window.__chain = { max: 0, frames: 0, stop: false };
+      const tick = () => {
+        window.__chain.max = Math.max(window.__chain.max, document.querySelectorAll('[data-testid="sheet-panel"]').length);
+        window.__chain.frames++;
+        if (!window.__chain.stop) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+    await vis("showcase-chain-next").getByRole("button").first().click();
+    await p.getByTestId("sheet-title").filter({ hasText: "Шаг 2" }).locator("visible=true").first().waitFor({ timeout: 5000 });
+    const seen = await p.evaluate(() => { window.__chain.stop = true; return window.__chain; });
+    await vis("sheet-close").click();
+    await gone(`${what}: the second sheet closes too`);
+    return seen;
+  };
+  // the chain as on the web: the second shows at once and takes taps
+  await chain("chain");
+  // the chain as on iOS (the gate turned on for the test): the second waits until the first is dismissed — never both on the screen
+  await p.evaluate(() => { globalThis.__octoSheetGate = true; });
+  const gated = await chain("gated chain");
+  h.expect(gated.max <= 1, `with the gate the two sheets never overlap (most at once: ${gated.max})`);
+  await p.evaluate(() => { globalThis.__octoSheetGate = false; });
+
   // the owner will not close it: it comes straight back, and is asked once per press
   await openSheet("stuck");
   const t0 = await top();

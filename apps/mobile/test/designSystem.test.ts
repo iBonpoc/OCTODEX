@@ -68,6 +68,32 @@ describe("design system: components", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
   });
+  it("a sheet is not cut away when its data goes (#1163): no <Sheet> that is always open, no key that flips at the close", () => {
+    const bare: string[] = [];
+    const flipKey: string[] = [];
+    for (const f of code) {
+      const src = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " ")).replace(/\/\/.*$/gm, "");
+      // every <Sheet …> opening tag, to its own `>` (braces counted: a `>` inside {…} is not the end of the tag)
+      for (const m of src.matchAll(/<Sheet\b/g)) {
+        let depth = 0;
+        let i = m.index! + 6;
+        for (; i < src.length; i++) {
+          const c = src[i];
+          if (c === "{") depth++;
+          else if (c === "}") depth--;
+          else if (c === ">" && depth === 0 && src[i - 1] !== "=") break;
+        }
+        const tag = src.slice(m.index!, i + 1);
+        // the attributes outside the braces: `visible` with no value; and `visible={true}`
+        const flat = tag.replace(/\{[^{}]*\}/g, (b) => (/^\{\s*true\s*\}$/.test(b) ? "{TRUE}" : "{}"));
+        if (/\bvisible(\s|\/|>)/.test(flat) || /\bvisible=\{TRUE\}/.test(flat)) bare.push(`${relative(ROOT, f)}:${src.slice(0, m.index!).split("\n").length}`);
+      }
+      // a key that flips with a sheet's open state remounts it at the close — it is cut, not led out
+      for (const m of src.matchAll(/key=\{`[^`]*\$\{[^}]*===[^}]*\}[^`]*`\}/g)) flipKey.push(`${relative(ROOT, f)}:${src.slice(0, m.index!).split("\n").length}`);
+    }
+    expect(bare).toEqual([]);
+    expect(flipKey).toEqual([]);
+  });
   it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
     const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");
     expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);

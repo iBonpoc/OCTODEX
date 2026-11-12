@@ -59,7 +59,7 @@ describe("how the sheet leaves (#1163, DS Б1)", () => {
   });
   it("no speed (✕, the scrim, Esc): the resting time", () => {
     expect(exitDuration(400, 0, 160, 350, 220)).toBe(220);
-    expect(exitDuration(400, -1, 160, 350, 220)).toBe(220);
+    expect(exitDuration(400, -2, 160, 350, 220)).toBe(200); // the speed counts by its size
   });
   it("the scrim follows the sheet: full in place, gone when it has left, never outside 0..1", () => {
     expect(scrimLevel(0, 500)).toBe(1);

@@ -295,7 +295,7 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("vf.notify.title")}>
+    <Sheet visible={!!v} onClose={onClose} title={t("vf.notify.title")}>
       <T v="body">{text}</T>
       {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
       {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
@@ -330,7 +330,7 @@ export function CancelNotifySheet({ visitId, onClose }: { visitId: ID | null; on
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("visitP2.notify.title")}>
+    <Sheet visible={!!n} onClose={onClose} title={t("visitP2.notify.title")}>
       <T v="body">{n.text}</T>
       {!sms && !mail ? <T v="caption" tone="mut">{t("visitP2.notify.noContact")}</T> : null}
       {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => open(sms, "sms")} /> : null}
@@ -360,7 +360,7 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
     onDone?.(visitId);
   };
   return (
-    <Sheet visible onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
+    <Sheet visible={!!visitId} onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
       {CANCEL_REASONS.map((r) => (
         <ListRow key={r} title={`${reason === r ? "✓ " : ""}${t(`vc.r.${r}` as DictKey)}`} onPress={() => setReason(r)} />
       ))}

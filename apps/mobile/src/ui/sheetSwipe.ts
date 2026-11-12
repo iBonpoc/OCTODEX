@@ -45,8 +45,9 @@ export function swipeCloses(drag: number, velocity: number, height: number, r: R
  * but never quicker than `min` (a flick must not look like a cut) nor slower than `max`; no speed (✕, the scrim, Esc) — `rest`.
  */
 export function exitDuration(left: number, velocity: number, min: number, max: number, rest: number): number {
-  if (!(velocity > 0)) return rest;
-  return Math.min(max, Math.max(min, left / velocity));
+  const v = Math.abs(velocity);
+  if (!(v > 0)) return rest;
+  return Math.min(max, Math.max(min, left / v));
 }
 
 /** The scrim follows the sheet: full while it is in place, gone when it has left (0..1) */

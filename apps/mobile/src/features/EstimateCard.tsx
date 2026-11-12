@@ -1,4 +1,5 @@
 import { visitWhen } from "@/features/schedule";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -59,6 +60,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
   const st = estimateStatusView(e.status);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
+  const tplHeld = useHeldSheet(universal && tplOpen ? e : null); // the sheet goes out before it is unmounted (#1163)
   // the office: the margin, or why it is not counted (debt 5); who may not see costs (a tech, sales without view_costs —
   // the server's app.can_view_costs, db.costsVisible) never sees it: their lines come without costs (review PR-A №1)
   const margin = store.role === "tech" || db.costsVisible === false ? null : marginView(e);
@@ -206,7 +208,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
       ) : null}
 
       {universal && maySend ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
-      {universal && tplOpen ? <SaveTemplateSheet e={e} onClose={() => setTplOpen(false)} /> : null}
+      {tplHeld.value ? <SaveTemplateSheet key={tplHeld.opening} e={tplHeld.value} visible={tplHeld.visible} onExited={tplHeld.onExited} onClose={() => setTplOpen(false)} /> : null}
       {pdfIssues ? (
         <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
           <SendCheck
@@ -690,7 +692,7 @@ function DeclinedCard({ e }: { e: Estimate }) {
 }
 
 /** «Сохранить как шаблон» (spec 07 §7.1, §11): a name, then the estimate without client, property, lead or signatures */
-function SaveTemplateSheet({ e, onClose }: { e: Estimate; onClose: () => void }) {
+function SaveTemplateSheet({ e, onClose, visible, onExited }: { e: Estimate; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -712,7 +714,7 @@ function SaveTemplateSheet({ e, onClose }: { e: Estimate; onClose: () => void })
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("est.tpl.saveAs")}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("est.tpl.saveAs")}>
       <View testID="est-tpl-save-sheet" style={{ gap: space[3] }}>
         <T v="caption" tone="mut">{t("est.tpl.saveHint")}</T>
         <View testID="est-tpl-save-name">
