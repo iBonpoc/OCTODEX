@@ -53,11 +53,12 @@ exports.run = async (h) => {
   await tid("module-gutters-enable").getByRole("button").click();
   await p.waitForFunction(() => /^Пробный/.test((document.querySelector('[data-testid="module-gutters-status"]')?.textContent ?? "").trim()), null, { timeout: 8000 });
 
-  // the setting: feet-inches by default; «Миллиметры» is the fifth chip
+  // the setting: feet-inches by default; «Миллиметры» is the fifth item of the field's menu
   await h.go("/module/gutters/settings");
   await tid("gset-len-format").waitFor({ timeout: 8000 });
-  h.expect((await tid("gset-len-format").getByRole("radio").evaluateAll((rs) => rs.findIndex((r) => r.getAttribute("aria-checked") === "true"))) === 0, "feet and inches is the default");
-  await tid("gset-len-format").getByRole("radio").nth(4).click();
+  h.expect((await tid("gset-len-sample").innerText()).includes("′"), "feet and inches is the default (the sample shows feet)");
+  await tid("gset-len-format-button").click();
+  await tid("gset-len-format-mm").click();
   await lenFormatIs("mm");
   h.expect((await tid("gset-len-sample").innerText()).includes("mm"), "the sample is in mm");
   await h.shot("len-format-settings");
@@ -91,7 +92,8 @@ exports.run = async (h) => {
   // back to feet-inches: one setting, one place
   await h.go("/module/gutters/settings");
   await tid("gset-len-format").waitFor({ timeout: 8000 });
-  await tid("gset-len-format").getByRole("radio").nth(0).click();
+  await tid("gset-len-format-button").click();
+  await tid("gset-len-format-ftin").click();
   await lenFormatIs("ftin");
   h.expect((await settings()).lenFormat === "ftin", "feet and inches saved");
 };

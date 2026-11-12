@@ -225,10 +225,8 @@ export default function GutterSettingsScreen() {
         <ReadOnly value={ro}>
           {/* #1092: one format for every length — the drawing, the review, the documents, the parts */}
           <Part title={t(k("len"))} hint={t(k("lenHint"))} testID="gset-len">
-            <Field label={t(k("lenFormat"))} testID="gset-len-format">
-              <ChoiceChips items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
-              <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
-            </Field>
+            <ChoiceChips label={t(k("lenFormat"))} testID="gset-len-format" items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
+            <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
           </Part>
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">
