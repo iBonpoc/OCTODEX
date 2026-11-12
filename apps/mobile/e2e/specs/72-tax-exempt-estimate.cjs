@@ -11,7 +11,6 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
   await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
-  for (const g of await h.sheet().getByRole("switch", { name: /^Налог с продаж: / }).all()) if ((await g.getAttribute("aria-checked")) !== "true") await g.click();
   await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
   await h.expectText(/9\.5%/, "tax on the draft");
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(800);
@@ -29,7 +28,8 @@ exports.run = async (h) => {
   h.expect(!/9\.5% ·/.test(await h.text()), "no tax on the exempt client's estimate");
   await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
   await h.expectText(/Клиент без налога/, "the sheet says the client is exempt");
-  h.expect((await h.sheet().getByRole("switch", { name: "Налог с продаж" }).count()) === 0, "no tax switch for an exempt client");
+  const tg = h.sheet().getByTestId("est-tax-toggle");
+  h.expect((await tg.evaluate((e) => getComputedStyle(e).pointerEvents)) === "none" && Number(await tg.evaluate((e) => getComputedStyle(e).opacity)) < 1, "the tax switch of an exempt client is pale and does not answer");
   await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
   await h.shot("exempt");
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(800);
