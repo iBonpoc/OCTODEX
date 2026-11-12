@@ -1241,11 +1241,12 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
   }));
   const costRows = lineRows.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, unit_cost_cents: op.costs[l.id] }));
+  // the server keeps at most 500 characters of the title (a longer one would be refused for good): cut here, by
+  // character — an emoji stays whole
+  const title500 = Array.from(op.title ?? "").slice(0, 500).join("");
   const saveTx = (doc: unknown) =>
     supabase.rpc("save_estimate_version", {
-      // the server keeps at most 500 characters of the title (a longer one would be refused for good): cut here, by
-      // character — an emoji stays whole
-      p_estimate_id: op.id, p_version_id: versionId, p_title: Array.from(op.title ?? "").slice(0, 500).join(""), p_version: versionCols(doc),
+      p_estimate_id: op.id, p_version_id: versionId, p_title: title500, p_version: versionCols(doc),
       p_options: op.doc.options.length ? optionRows : [], p_lines: op.doc.options.length ? lineRows : [], p_costs: op.doc.options.length ? costRows : [],
     });
   // pages the server would refuse are left out, the estimate itself goes (spec 33 П24.7; trigger t07_doc_pages)
