@@ -12900,9 +12900,11 @@ begin
       (tst.t195_id(p_case, x ->> 'id'), 'ca000000-0000-0000-0000-000000000000', v, x ->> 'name', (x ->> 'position')::int, x ->> 'discountMode', (x ->> 'discountValue')::bigint);
   end loop;
   for x in select * from jsonb_array_elements(r -> 'lines') loop
-    insert into public.estimate_line_items (id, company_id, option_id, position, line_group, name, quantity, unit, unit_price_cents, taxable, is_optional) values
+    -- client_visible as estimate.save writes it (hidden only at $0 — the table's check refuses a priced hidden line)
+    insert into public.estimate_line_items (id, company_id, option_id, position, line_group, name, quantity, unit, unit_price_cents, taxable, is_optional, client_visible) values
       (tst.t195_id(p_case, x ->> 'id'), 'ca000000-0000-0000-0000-000000000000', tst.t195_id(p_case, x ->> 'optionId'), (x ->> 'position')::int,
-       (x ->> 'group')::text, x ->> 'name', (x ->> 'quantity')::numeric, x ->> 'unit', (x ->> 'unitPriceCents')::bigint, (x ->> 'taxable')::boolean, (x ->> 'isOptional')::boolean);
+       (x ->> 'group')::text, x ->> 'name', (x ->> 'quantity')::numeric, x ->> 'unit', (x ->> 'unitPriceCents')::bigint, (x ->> 'taxable')::boolean, (x ->> 'isOptional')::boolean,
+       coalesce((x ->> 'clientVisible')::boolean, true));
   end loop;
   return e;
 end $$;

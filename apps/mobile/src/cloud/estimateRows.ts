@@ -24,6 +24,8 @@ export interface VersionRows {
   lines: {
     id: string; optionId: string; position: number; group: string; catalogItemId?: string; name: string; description: string | null;
     quantity: string | number; unit: string; unitPriceCents: number; taxable: boolean; isOptional: boolean;
+    /** hidden from the client — only at $0 (the engine and the server's check: client_visible or price 0) */
+    clientVisible?: false;
   }[];
 }
 
@@ -48,6 +50,7 @@ export function versionRows(doc: EstimateDoc): VersionRows {
           // the stored quantity (numeric(14,4)) — the same the engine counts (Н1): the lock check finds no difference
           quantity: storedQty(l.quantity), unit: l.unit || "ea", unitPriceCents: l.unitPriceCents,
           taxable: taxOn && !!s.tax.groups[l.group], isOptional: !!l.optional,
+          ...(l.clientVisible === false && l.unitPriceCents === 0 ? { clientVisible: false as const } : {}),
         })),
     ),
   };

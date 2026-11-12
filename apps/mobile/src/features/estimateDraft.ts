@@ -8,7 +8,7 @@
 import type { EstimateDoc } from "@/data/types";
 import { useCallback } from "react";
 import { usePersistentState } from "@/data/persist";
-import { hasContent, newDoc } from "./estimateDoc";
+import { hasContent, newDoc, normalizeDoc } from "./estimateDoc";
 
 export const DRAFTS_PREFIX = "octo.drafts.v1.";
 /**
@@ -91,7 +91,7 @@ export function cleanDraft(x: unknown): EstimateDraft | null {
   return {
     ctx: d.ctx, at: d.at, estimateId: d.estimateId, customerId: d.customerId, propertyId: d.propertyId,
     title: typeof d.title === "string" ? d.title : "",
-    doc: { ...base, ...d.doc, options, settings: { ...base.settings, ...(d.doc?.settings ?? {}) } },
+    doc: normalizeDoc({ ...base, ...d.doc, options, settings: { ...base.settings, ...(d.doc?.settings ?? {}) } }).doc,
     templateId: d.templateId,
     checkPrice: Array.isArray(d.checkPrice) ? d.checkPrice.filter((c) => typeof c === "string") : [],
   };
