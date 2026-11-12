@@ -25,9 +25,16 @@ export interface LiveState extends Tf {
   /** the finger count of the last pinch / pan frame (a change makes the next frame a jump: it is dropped) */
   nPinch: number;
   nPan: number;
+  /** the pinch is at a limit of the scale: −1 the farthest, 1 the nearest, 0 free (the tick is made when it becomes nonzero) */
+  edge: -1 | 0 | 1;
 }
 
-export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0 });
+/** the scale the live transform may reach, as a factor of the view on the screen (kMin / k, kMax / k); a little beyond it gives way softly */
+export interface ScaleLimit { lo: number; hi: number }
+/** how far past a limit the live scale may go (a soft stop, as in Photos): a share of the limit; the commit goes back to the limit */
+export const OVERSHOOT = 0.05
+
+export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, edge: 0 });
 
 const tf = (st: Tf): Tf => ({ S: st.S, Tx: st.Tx, Ty: st.Ty });
 
@@ -36,19 +43,27 @@ function closeSegment(st: LiveState): Tf | null {
   "worklet";
   if (!st.seg) return null;
   st.seg = false;
+  st.edge = 0;
   const moved = st.S !== 1 || st.Tx !== 0 || st.Ty !== 0;
   return moved ? tf(st) : null;
 }
 
 /** one frame of the pinch: scale about the frame's own focal point (it follows the fingers) while two fingers are down; the commit to make, if the frame closes a segment */
-export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPointers: number; focalX: number; focalY: number }): Tf | null {
+export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPointers: number; focalX: number; focalY: number }, lim?: ScaleLimit): Tf | null {
   "worklet";
   const jump = st.nPinch !== 0 && e.numberOfPointers !== st.nPinch;
   st.nPinch = e.numberOfPointers;
   if (e.numberOfPointers < 2) return closeSegment(st);
   st.seg = true;
   if (jump) return null; // the first frame after the count changed: its delta is the jump
-  const k = e.scaleChange;
+  let k = e.scaleChange;
+  if (lim) {
+    // a soft stop at the limit of the scale: up to OVERSHOOT past it the scale gives way (the further, the less), no further
+    const target = st.S * k;
+    const room = target > lim.hi ? Math.min(lim.hi * (1 + OVERSHOOT), lim.hi * (1 + (target / lim.hi - 1) * 0.3)) : target < lim.lo ? Math.max(lim.lo / (1 + OVERSHOOT), lim.lo * (1 - (1 - target / lim.lo) * 0.3)) : target;
+    st.edge = target > lim.hi ? 1 : target < lim.lo ? -1 : 0;
+    k = room / st.S;
+  }
   // scale about the focal point f: p' = f + k·(p − f)
   st.Tx = k * st.Tx + (1 - k) * e.focalX;
   st.Ty = k * st.Ty + (1 - k) * e.focalY;

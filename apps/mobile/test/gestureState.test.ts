@@ -192,3 +192,51 @@ describe("the rest", () => {
     expect(three).toBeCloseTo(1.5 ** 12, 6);
   });
 });
+
+describe("#1281 — the limits of the scale: a soft stop, a tick at the limit, the commit inside the limits", () => {
+  const lim = { lo: 0.5, hi: 4 };
+  const frames = (n: number, k: number) => Array.from({ length: n }, () => ({ scaleChange: k, numberOfPointers: 2, focalX: 100, focalY: 100 }));
+  it("zooming in: the live scale stops softly at the nearest limit (at most OVERSHOOT past it), the edge is flagged once it is reached", () => {
+    const st = idleState();
+    let edges = 0, last = 0;
+    for (const f of frames(40, 1.2)) {
+      pinchFrame(st, f, lim);
+      if (st.edge !== 0 && last === 0) edges++;
+      last = st.edge;
+    }
+    expect(st.S).toBeLessThanOrEqual(lim.hi * (1 + OVERSHOOT) + 1e-9);
+    expect(st.S).toBeGreaterThan(lim.hi * 0.99);
+    expect(st.edge).toBe(1);
+    expect(edges).toBe(1); // one tick, not one per frame
+  });
+  it("zooming out: the same at the farthest limit", () => {
+    const st = idleState();
+    for (const f of frames(40, 0.8)) pinchFrame(st, f, lim);
+    expect(st.S).toBeGreaterThanOrEqual(lim.lo / (1 + OVERSHOOT) - 1e-9);
+    expect(st.S).toBeLessThan(lim.lo * 1.01);
+    expect(st.edge).toBe(-1);
+  });
+  it("the focal point stays under the fingers also at the limit (the map is scaled about it by the factor that was allowed)", () => {
+    const st = idleState();
+    for (const f of frames(40, 1.2)) pinchFrame(st, { ...f, focalX: 130, focalY: 70 }, lim);
+    expect(st.S * 130 + st.Tx).toBeCloseTo(130, 6);
+    expect(st.S * 70 + st.Ty).toBeCloseTo(70, 6);
+  });
+  it("back from the limit the edge is free again; no limit given (the bench): the scale is free", () => {
+    const st = idleState();
+    for (const f of frames(40, 1.2)) pinchFrame(st, f, lim);
+    pinchFrame(st, { scaleChange: 0.5, numberOfPointers: 2, focalX: 0, focalY: 0 }, lim);
+    expect(st.edge).toBe(0);
+    const free = idleState();
+    for (const f of frames(40, 1.2)) pinchFrame(free, f);
+    expect(free.S).toBeGreaterThan(1000);
+  });
+  it("the segment's end clears the edge", () => {
+    const st = idleState();
+    for (const f of frames(40, 1.2)) pinchFrame(st, f, lim);
+    endGesture(st);
+    expect(st.edge).toBe(0);
+  });
+});
+
+import { OVERSHOOT } from "../src/modules/gutters/canvas/gestureState";

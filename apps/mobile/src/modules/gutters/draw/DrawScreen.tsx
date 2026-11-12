@@ -48,7 +48,7 @@ import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
@@ -180,7 +180,9 @@ export default function DrawScreen() {
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
   // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
-  const canvas = useCanvasGestures(viewNow, setView, live, 2);
+  // the limits of the scale (#1281): the whole drawing in a quarter of the screen at the farthest, 1″ as big as a finger's target at the nearest
+  const zoomLim = useMemo(() => zoomLimits(drawing.runs.flatMap((r) => [r.a, r.b]), size.w > 0 ? size : { w: 390, h: 844 }, space[8], sizes.hitMin), [drawing.runs, size]);
+  const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });

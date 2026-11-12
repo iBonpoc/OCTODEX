@@ -27,6 +27,27 @@ export function fitView(pts: readonly P[], vp: { w: number; h: number }, margin:
   return { k, ox: vp.w / 2 - ((x0 + x1) / 2) * k, oy: vp.h / 2 + ((y0 + y1) / 2) * k };
 }
 
+/**
+ * The limits of the scale (founder 12.11, #1281): the farthest — the whole drawing in a QUARTER of the screen (half each way of
+ * the view that fits it), the nearest — 1″ as big as a finger's target (`hitPx`, twice the old nearest). Without limits a long pinch
+ * went far away and the grid had millions of lines: the app hung.
+ */
+export interface ZoomLimits { kMin: number; kMax: number }
+export function zoomLimits(pts: readonly P[], vp: { w: number; h: number }, margin: number, hitPx: number): ZoomLimits {
+  const kMax = hitPx;
+  const kFit = fitView(pts, vp, margin).k;
+  return { kMin: Math.min(Math.max(kFit / 2, Number.EPSILON), kMax), kMax };
+}
+
+/** the view with its scale inside the limits, the centre of the viewport staying where it is (a defence at the commit; the pinch stops softly before) */
+export function clampView(v: View, lim: ZoomLimits, vp: { w: number; h: number }): View {
+  const k = Math.min(lim.kMax, Math.max(lim.kMin, v.k));
+  if (k === v.k || !Number.isFinite(k)) return k === v.k ? v : { ...v, k: Number.isFinite(k) ? k : lim.kMin };
+  const r = k / v.k;
+  const cx = vp.w / 2, cy = vp.h / 2;
+  return { k, ox: cx - (cx - v.ox) * r, oy: cy - (cy - v.oy) * r };
+}
+
 /** zoom by `s` about a screen point (pinch focal point) */
 export const zoomAt = (v: View, s: number, fx: number, fy: number): View => ({ k: v.k * s, ox: fx - (fx - v.ox) * s, oy: fy - (fy - v.oy) * s });
 export const panBy = (v: View, dx: number, dy: number): View => ({ k: v.k, ox: v.ox + dx, oy: v.oy + dy });
@@ -61,10 +82,14 @@ export function gridStepIn(k: number, minPx: number): number {
 }
 
 /** the grid lines over the viewport: every 5th is a major one (the next step up) */
+/** the most lines of a grid (both ways): a view so far away that the largest step is still denser than this has no grid (#1281: a pinch far out made millions of lines) */
+export const MAX_GRID_LINES = 240;
+
 export function buildGrid(v: View, vp: { w: number; h: number }, minPx: number): SceneGrid {
   const step = gridStepIn(v.k, minPx);
   const [x0, y1] = toPlan(v, [0, 0]);
   const [x1, y0] = toPlan(v, [vp.w, vp.h]);
+  if (!(v.k > 0) || !Number.isFinite(v.k) || (x1 - x0) / step + (y1 - y0) / step > MAX_GRID_LINES) return { minor: "", major: "", stepIn: step };
   let minor = "", major = "";
   for (let i = Math.ceil(x0 / step); i * step <= x1; i++) {
     const sx = (i * step * v.k + v.ox).toFixed(1);
