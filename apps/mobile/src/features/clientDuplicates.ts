@@ -186,6 +186,7 @@ export function mergeCustomersDb(db: DB, keepId: ID, dropId: ID): DB {
     jobs: db.jobs.map(move),
     cancelledJobs: db.cancelledJobs?.map(move),
     invoices: db.invoices.map(move),
+    voidInvoices: db.voidInvoices?.map(move),
     payments: db.payments.map(move),
     files: db.files?.map(move),
     sources: db.sources.map(move),

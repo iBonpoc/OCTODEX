@@ -97,4 +97,37 @@ describe("the founder's sample on the sheet", () => {
       expect(words).toHaveLength(3);
     });
   });
+
+  describe("the short gutter in an inset (#1190)", () => {
+    for (const width of [390, DP.pageW, DP.sheetW]) {
+      it(`width ${width}: the 3′ 3″ section of the broken line is shown big once, with its corners' words; its leader joins it to the gutter`, () => {
+        const items = blueprint(kim, tFor("ru"), stamp, width).items;
+        const tx = texts(items);
+        expect(tx.filter((x) => x === "№4"), "the inset's header").toHaveLength(1);
+        // its length is in the inset only, once (not on the main contour too)
+        expect(tx.filter((x) => x === "3′ 4″"), "its length once").toHaveLength(1);
+        expect(tx.filter((x) => x === "эркер 135°"), "the bay word once").toHaveLength(1);
+        expect(tx.filter((x) => x === "наруж. 90°")).toHaveLength(4); // the rectangle's three and this one
+        // the frame: four thin lines round the header; no gutter of the contour runs through it
+        const header = items.find((p): p is Extract<DocPrim, { t: "x" }> => p.t === "x" && p.s === "№4")!;
+        const thin = items.filter((p): p is Extract<DocPrim, { t: "l" }> => p.t === "l" && p.sw === DP.thinW && p.ink === "ink");
+        // the frame is drawn from its top-left corner: the top edge, then (last) the left edge up to it
+        const top = thin.find((l) => l.y1 === l.y2 && l.y1 < header.y && header.y - l.y1 < DP.fontSm * 2.2 && l.x1 < header.x && header.x - l.x1 < DP.extGap * 3)!;
+        expect(top, "its top edge").toBeTruthy();
+        const leftEdge = thin.find((l) => l.x1 === l.x2 && l.x1 === top.x1 && Math.min(l.y1, l.y2) === top.y1)!;
+        expect(leftEdge, "its left edge").toBeTruthy();
+        const fr = { x0: top.x1, x1: top.x2, y0: top.y1, y1: Math.max(leftEdge.y1, leftEdge.y2) };
+        const runs = items.filter((p): p is Extract<DocPrim, { t: "l" }> => p.t === "l" && p.sw === DP.runW);
+        expect(runs).toHaveLength(10 - 0); // the ten gutters; the inset's own is a little thicker
+        for (const l of runs) for (let k = 0; k <= 40; k++) {
+          const x = l.x1 + ((l.x2 - l.x1) * k) / 40, y = l.y1 + ((l.y2 - l.y1) * k) / 40;
+          expect(x > fr.x0 && x < fr.x1 && y > fr.y0 && y < fr.y1, "a gutter runs through the inset").toBe(false);
+        }
+        // the leader: a thin grey line that ends on the frame
+        const grey = items.filter((p): p is Extract<DocPrim, { t: "l" }> => p.t === "l" && p.ink === "mut");
+        const onFrame = (x: number, y: number) => x >= fr.x0 - 0.2 && x <= fr.x1 + 0.2 && y >= fr.y0 - 0.2 && y <= fr.y1 + 0.2;
+        expect(grey.some((l) => onFrame(l.x2, l.y2) && !onFrame(l.x1, l.y1)), "a leader into the frame").toBe(true);
+      });
+    }
+  });
 });

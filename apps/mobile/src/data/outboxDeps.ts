@@ -84,7 +84,7 @@ const CREATES: Creates = {
   "visit.notified": none, "visit.inspection": (o) => [o.visitId], "visit.cancel": none, "visit.reschedule": none,
   "lead.visit": (o) => [o.jobId, o.visitId], "lead.add": (o) => [o.id], "visit.assign": none,
   "estimate.add": (o) => [o.id, o.versionId, o.optionId], "estimate.send": none, "estimate.save": (o) => [o.id, o.versionId],
-  "estimate.approve": (o) => [o.jobId, o.invoiceId], "payment.record": (o) => [o.id], "invoice.issue": (o) => [o.id],
+  "estimate.approve": (o) => [o.jobId, o.invoiceId], "payment.record": (o) => [o.id], "invoice.issue": (o) => [o.id], "invoice.void": none,
   "job.schedule": (o) => [o.visitId], "company.save": none, "license.save": (o) => [o.license.id], "license.remove": none,
   "contact.save": (o) => [o.contact.id], "contact.remove": none,
   "lead.prospect": (o) => [o.customerId, o.contactId, o.propertyId],

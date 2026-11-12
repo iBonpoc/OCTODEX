@@ -464,7 +464,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
     const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number; tax?: number } | null;
     const depositJob = jobs.find((j) => j.estimate_id === e.id);
-    const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit") : undefined;
+    const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit" && i.status === "sent") : undefined;
     return {
       id: s(e.id),
       serviceCategoryId: (e.service_category_id as string | null) ?? undefined,
@@ -512,10 +512,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
 
   const lastPayment = new Map<string, Row>();
   for (const p of payments) if (p.invoice_id && paymentShown(s(p.status))) lastPayment.set(s(p.invoice_id), p);
-  const mappedInvoices: Invoice[] = invoices
-    // a draft is not sent, so not a debt (wave 8): it stays out like a void one until the app has drafts
-    .filter((i) => i.status === "sent")
-    .map((i) => ({
+  const toInvoice = (i: Row): Invoice => ({
       id: s(i.id),
       customerId: s(i.customer_id),
       jobId: s(i.job_id),
@@ -533,7 +530,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       subtotalCents: i.subtotal_cents == null ? undefined : n(i.subtotal_cents),
       taxCents: n(i.tax_cents) || undefined,
       taxMode: (["included_in_price", "added_on_top", "tax_inclusive_display", "exempt"] as const).find((m) => m === i.tax_mode),
-    }));
+    ...(i.status === "void"
+      ? { status: "void" as const, voidReason: (i.void_reason as string | null) ?? undefined, voidedAt: (i.voided_at as string | null) ?? undefined }
+      : {}),
+  });
+  // a draft is not sent, so not a debt (wave 8): it stays out until the app has drafts
+  const mappedInvoices: Invoice[] = invoices.filter((i) => i.status === "sent").map(toInvoice);
+  // В1-5 (#1107): a voided invoice — apart (DB.voidInvoices), no sum reads it
+  const mappedVoidInvoices: Invoice[] = invoices.filter((i) => i.status === "void").map(toInvoice);
 
   const mappedLeads: Lead[] = leads.map((l) => ({
     id: s(l.id),
@@ -741,6 +745,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     leads: mappedLeads,
     estimates: mappedEstimates,
     invoices: mappedInvoices,
+    voidInvoices: mappedVoidInvoices,
     expenses: mappedExpenses,
     ...paymentsFromRows(payments, refundRows),
     pendingPayments: pendingFromRows(payments),
