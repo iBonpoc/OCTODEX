@@ -24,6 +24,7 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
       // #1147: the client signed on the phone another total than the server's (migration 20261112030000, db T195)
       estimate_total_mismatch: "sync.stuck.reason.estimateTotalChanged",
+      invoice_over_contract: "inv.rej.overContract",
       // step 17 C3: the merge of two clients (migration 20261109120000, db T134)
       merge_payment_in_flight: "clientDup.rej.inFlight",
       merge_already_merged: "clientDup.rej.merged",
