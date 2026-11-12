@@ -836,6 +836,7 @@ export const en: Dict = {
   "est.sec.nothingToLay": "Nothing to group",
   "est.sec.toggle": "Collapse or expand the section",
   "est.sec.nameLabel": "Section name",
+  "est.sec.nameHint": "The client will see the title the way you wrote it",
   "ue.items": "Line items",
   "ue.addItem": "Add line item",
   "ue.editLine": "Line item",

@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useEffect, useState } from "react";
 import { View } from "react-native";
 import { size, space } from "@octo/design-tokens";
 import type { EstimateSection } from "@octo/estimating-engine";
@@ -7,6 +7,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton, TextField } from "@/ui/controls";
 import { Menu, type MenuItem } from "@/ui/overlays";
 import { Icon, Press, T } from "@/ui/primitives";
+import { useScreenScroll } from "@/ui/requiredForm";
 import { RowView } from "@/ui/surfaces";
 import { useRef, type ComponentRef } from "react";
 
@@ -32,6 +33,8 @@ export interface SectionHeaderProps {
   lineCount: number;
   collapsed: boolean;
   renaming: boolean;
+  /** a signed estimate: the heading can be folded, nothing else (no «⋯», no rename) */
+  locked?: boolean;
   api: SectionApi;
 }
 
@@ -42,6 +45,24 @@ function SectionHeaderView(p: SectionHeaderProps) {
   const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [draft, setDraft] = useState(s.title ?? "");
   const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const rootRef = useRef<ComponentRef<typeof View>>(null);
+  const scroll = useScreenScroll();
+  const [ready, setReady] = useState(false);
+  // opening the rename: the draft is the title as it stands now (not as it was when the heading first drew), the heading is
+  // brought into view FIRST and the field is made after (a field that takes the focus out of sight makes the browser scroll,
+  // and the scroll closes the keyboard and the field — #1241)
+  useEffect(() => {
+    if (!p.renaming) return void setReady(false);
+    setDraft(s.title ?? "");
+    const node = rootRef.current;
+    if (!node || !scroll) return void setReady(true);
+    let live = true;
+    scroll.scrollToNode(node, space[8], false, () => live && setReady(true));
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [p.renaming]);
   const isModule = s.kind === "module";
   const items: MenuItem<SectionAction>[] = [
     { key: "rename", label: t("est.sec.rename"), icon: "pencil", testID: `est-sec-act-rename-${s.id}` },
@@ -54,11 +75,14 @@ function SectionHeaderView(p: SectionHeaderProps) {
   ];
   const commit = () => p.api.rename(s.id, draft);
   return (
-    <View testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1] }} accessibilityRole="header">
+    <View ref={rootRef} collapsable={false} testID={`est-section-${s.id}`} style={{ paddingLeft: p.depth === 1 ? space[4] : 0, paddingVertical: space[1] }} accessibilityRole="header">
       <RowView style={{ minHeight: size.rowMin }}>
-        {p.renaming ? (
-          <View style={{ flex: 1 }}>
+        {p.renaming && ready ? (
+          <View style={{ flex: 1, gap: space[1] }}>
             <TextField type="title" value={draft} onChangeText={setDraft} placeholder={t("est.sec.nameLabel")} label={t("est.sec.nameLabel")} autoFocus selectOnFocus onSubmit={commit} onBlurText={commit} testID={`est-sec-name-${s.id}`} />
+            <T v="caption" tone="mut">
+              {t("est.sec.nameHint")}
+            </T>
           </View>
         ) : (
           <Press onPress={() => p.api.toggle(s.id)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={t("est.sec.toggle")} accessibilityState={{ expanded: !p.collapsed }} containerStyle={{ flex: 1 }} testID={`est-sec-toggle-${s.id}`}>
@@ -80,9 +104,11 @@ function SectionHeaderView(p: SectionHeaderProps) {
             </RowView>
           </Press>
         )}
-        <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`}>
-          <IconButton icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
-        </View>
+        {p.locked ? null : (
+          <View ref={moreRef} collapsable={false} testID={`est-sec-menu-${s.id}`}>
+            <IconButton icon="more" label={t("est.sec.menu")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }))} />
+          </View>
+        )}
       </RowView>
       <Menu visible={!!anchor} anchor={anchor} items={items} onSelect={(a) => p.api.action(s.id, a)} onClose={() => setAnchor(null)} />
     </View>
