@@ -401,6 +401,7 @@ export const es: Dict = {
   "more.resetDone": "Datos de prueba restablecidos",
 
   "common.undo": "Deshacer",
+  "common.undoLate": "Ya no se puede deshacer: se cambió mientras tanto",
   "common.cancel": "Cancelar",
   "common.close": "Cerrar",
   "common.help": "Ayuda",

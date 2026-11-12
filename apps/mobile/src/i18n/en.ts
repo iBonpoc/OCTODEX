@@ -401,6 +401,7 @@ export const en: Dict = {
   "more.resetDone": "Test data reset",
 
   "common.undo": "Undo",
+  "common.undoLate": "Too late to undo: it was changed since",
   "common.cancel": "Cancel",
   "common.close": "Close",
   "common.help": "Help",

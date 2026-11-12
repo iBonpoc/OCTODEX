@@ -955,7 +955,7 @@ export function StoreProvider({
   /* ---------- mutations ---------- */
   /** Apply locally; in cloud mode record the op; return undo. */
   const mutate = useCallback(
-    (label: string, fn: (d: DB) => DB, op?: Op): Undo => {
+    (label: string, fn: (d: DB) => DB, op?: Op): GuardedUndo => {
       const prev = dbRef.current;
       const next = fn(prev);
       dbRef.current = next;
@@ -979,17 +979,26 @@ export function StoreProvider({
         qid = uid();
         setQueue((q) => [...q, { id: qid!, label, at: new Date().toISOString() }]);
       }
+      let done = false;
       return () => {
+        // a second «Отменить» of the same action: nothing more to take back
+        if (done) return false;
         // dropped by the server as built on a lost base: nothing to take back (review #374 №2)
-        if (oid && deadOps.current.has(oid)) return;
-        // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays
-        dbRef.current = undoOwn(prev, next, dbRef.current);
+        if (oid && deadOps.current.has(oid)) return false;
+        // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays;
+        // all or nothing: when a part of it was changed since, nothing is taken back and its op stays in the queue (the
+        // toast says it is too late — never a half undo, the director's review of #1244 Б2)
+        const r = undoOwn(prev, next, dbRef.current);
+        if (!r.ok) return false;
+        done = true;
+        dbRef.current = r.value;
         setDb(dbRef.current);
         if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
         if (oid) {
           outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
           setOutbox(outboxRef.current);
         }
+        return true;
       };
     },
     [setDb, setQueue, setOutbox],

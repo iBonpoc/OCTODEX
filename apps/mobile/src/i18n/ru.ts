@@ -400,6 +400,7 @@ export const ru = {
   "more.resetDone": "Тестовые данные сброшены",
 
   "common.undo": "Отменить",
+  "common.undoLate": "Уже не отменить: это успели изменить",
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.help": "Справка",

@@ -54,7 +54,8 @@ vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), back
 import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
-import type { CatalogItem, DB, Supplier } from "../src/data/types";
+import type { CatalogItem, DB, EstimateDoc, Supplier } from "../src/data/types";
+import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
 
 type Value = {
   db: DB;
@@ -65,6 +66,8 @@ type Value = {
   saveCatalogItem: (it: CatalogItem) => () => void;
   voidInvoice: (id: string, reason: string) => string | null;
   refresh: () => Promise<void>;
+  saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: EstimateDoc }) => () => boolean;
+  recordPayment: (invoiceId: string, amountCents: number, method: string) => () => boolean;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -137,5 +140,41 @@ describe("unit:undoOwnStore — #1193 п.6", () => {
     undo();
     await settle();
     expect(valueOf(r).db.customers.some((c) => c.id === "c-from-other-phone")).toBe(true);
+  });
+  it("a new estimate saved → the store normalizes it again on render → «Отменить»: the estimate is gone, and its op (the director's Б1)", async () => {
+    const r = await signedIn();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const doc = { options: [{ id: "o1", name: "Good", lines: [{ id: "l1", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }], settings: DEFAULT_SETTINGS } as unknown as EstimateDoc;
+    const undo = valueOf(r).saveEstimate({ id: "00000000-0000-4000-8000-00000000e0e1", customerId: c.id, propertyId: prop.id, title: "Undo me (test)", doc });
+    await settle();
+    expect(valueOf(r).db.estimates.some((e) => e.id === "00000000-0000-4000-8000-00000000e0e1")).toBe(true);
+    expect(undo()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.estimates.some((e) => e.id === "00000000-0000-4000-8000-00000000e0e1")).toBe(false);
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "estimate.save")).toEqual([]);
+    // a second «Отменить» of the same action: nothing more
+    expect(undo()).toBe(false);
+  });
+  it("two payments → «Отменить» the first: nothing is taken back (the paid amount was changed by the second), both go to the server (Б2)", async () => {
+    const r = await signedIn();
+    const before = valueOf(r).db.invoices.find((i) => i.id === "i1")!;
+    const undoA = valueOf(r).recordPayment("i1", 100, "cash");
+    await settle();
+    valueOf(r).recordPayment("i1", before.totalCents - 100, "check");
+    await settle();
+    const paidBefore = valueOf(r).db.invoices.find((i) => i.id === "i1") ?? null;
+    const paymentsBefore = valueOf(r).db.payments.length;
+    expect(undoA()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.invoices.find((i) => i.id === "i1") ?? null).toEqual(paidBefore);
+    expect(valueOf(r).db.payments.length).toBe(paymentsBefore);
+    // the queue sends one at a time: the first answered, then the second
+    await tick();
+    server.sends.forEach((x) => x.d.resolve());
+    await settle();
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "payment.record").length).toBe(2);
   });
 });
