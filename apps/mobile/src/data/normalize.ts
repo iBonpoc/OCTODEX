@@ -9,8 +9,10 @@
  *   - wave П-1 / П-2a / П-2b: cancelledJobs, jobTypes, files, jobLines, calendarEvents, customFields, customFieldValues
  *     default to empty (demo: the standard job types); a job without
  *     customerId takes the client of its property; demo jobs get their JOB number from the seed or the next one
+ *   - an estimate's document goes through normalizeDoc (a priced line marked hidden is visible, sections in limits)
  */
 import { fromLegacyTrades } from "@/features/serviceCategories";
+import { normalizeDoc } from "@/features/estimateDoc";
 import { nextJobNumber } from "./jobs";
 import { makeSeed, SEED_JOB_TYPES, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
 import { MEMBER_PREFS_DEFAULT, type Customer, type DB, type Job, type Property, type Visit } from "./types";
@@ -28,6 +30,9 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     notices: d.notices ?? [],
     notes: d.notes ?? [],
     payments: d.payments ?? [],
+    // an estimate's document as it may be counted and shown (normalizeDoc, spec 2026-11-12-estimate-editor Р3, Р4): the
+    // phone's own copy at the start too, not only the cloud's — a priced line marked hidden is visible, sections in limits
+    estimates: (d.estimates ?? []).map((e) => (e.doc && Array.isArray(e.doc.options) ? { ...e, doc: normalizeDoc(e.doc).doc } : e)),
     ...invoicesApart(d),
     company: d.company ?? null,
     sources,

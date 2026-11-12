@@ -70,6 +70,12 @@ export interface EstimateSection {
 /** at most this many sections and subsections in an option; a title at most this long (the server keeps the same) */
 export const SECTIONS_MAX = 40;
 export const SECTION_TITLE_MAX = 60;
+/** a section id, a parent id, a line's sectionId: at most this long, or it does not count (the server the same) */
+export const SECTION_ID_MAX = 64;
+/** an id a section may have: a non-empty string of at most SECTION_ID_MAX characters */
+export const sectionIdOk = (x: unknown): x is string => typeof x === "string" && x !== "" && Array.from(x).length <= SECTION_ID_MAX;
+/** a subsection is one whose parentId is a non-empty string; "" or anything else — a top section (the server the same) */
+export const isSubsection = (x: { parentId?: unknown }): boolean => typeof x.parentId === "string" && x.parentId !== "";
 
 export interface CustomOption {
   id: string;
@@ -245,10 +251,10 @@ export function countedSections(o: Pick<CustomOption, "sections">): EstimateSect
   const all = Array.isArray(o.sections) ? o.sections : [];
   const first = all
     .slice(0, SECTIONS_MAX)
-    .filter((x) => !!x && typeof x === "object" && typeof x.id === "string")
+    .filter((x) => !!x && typeof x === "object" && sectionIdOk(x.id))
     .filter((x) => !seen.has(x.id) && !!seen.add(x.id));
-  const tops = new Set(first.filter((x) => !x.parentId).map((x) => x.id));
-  return first.filter((x) => !x.parentId || tops.has(x.parentId));
+  const tops = new Set(first.filter((x) => !isSubsection(x)).map((x) => x.id));
+  return first.filter((x) => !isSubsection(x) || tops.has(x.parentId!));
 }
 
 /**
@@ -266,13 +272,13 @@ export function sectionSubtotals(o: CustomOption, s: CustomSettings): { bySectio
   lines.forEach((l, i) => {
     if (l.optional && !l.selected) return;
     const cents = t.lineTotals[i]!;
-    const sec = l.sectionId ? byId.get(l.sectionId) : undefined;
+    const sec = sectionIdOk(l.sectionId) ? byId.get(l.sectionId) : undefined;
     if (!sec) {
       unsectioned += cents;
       return;
     }
     bySection[sec.id]! += cents;
-    if (sec.parentId) bySection[sec.parentId]! += cents;
+    if (isSubsection(sec)) bySection[sec.parentId!]! += cents;
   });
   return { bySection, unsectioned };
 }
