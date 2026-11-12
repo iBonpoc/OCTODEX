@@ -60,8 +60,10 @@ export default function GutterPricesScreen() {
     fresh.forEach((it) => made.current.add(it.id));
     const undo = store.saveCatalogItems(fresh, { onlyNew: true });
     toast.show(store.online ? t(k("made"), { n: fresh.length }) : t("offline.queued"), () => {
-      fresh.forEach((it) => made.current.delete(it.id));
-      undo();
+      // too late (false): the items stay made — a second press must not make them again (#1244)
+      const r = undo();
+      if (r !== false) fresh.forEach((it) => made.current.delete(it.id));
+      return r;
     });
   };
   const bind = (it: CatalogItem, row: PriceRow) => {

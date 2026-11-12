@@ -33,6 +33,16 @@ const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 
 const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 
 /** the module's slice of the phone's data (absent or broken → empty) */
+/** «Отменить» of several of the module's changes made together (in the order made): all of them or none — the store's
+ *  undoTogether (DS §15.2); an older test store without it — one by one, the last first */
+export function undoAll(store: Pick<ModuleStore, "undoTogether">, undos: readonly unknown[]): () => boolean | undefined {
+  if (store.undoTogether) return store.undoTogether(undos);
+  return () => {
+    [...undos].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
+    return true;
+  };
+}
+
 export function gutterData(db: Pick<DB, "moduleData"> | null | undefined): GutterData {
   const g = db?.moduleData?.[KEY];
   if (!isObj(g) || !Array.isArray(g.measurements) || !Array.isArray(g.elements)) return EMPTY;
@@ -205,7 +215,7 @@ export function duplicateMeasurement(store: ModuleStore, ref: string, newId: () 
   const row: MeasurementRow = { ...c.m, updatedAt: at };
   if (!put(store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(c.m) }, apply: (d) => withGutterData(d, putMeasurement(row)), coalesceKey: c.m.id, made: [c.m.id] }))) return null;
   for (const e of c.elements) put(store.moduleOp(KEY, { kind: K.eSave, payload: { e: e as ElementRow & Record<string, unknown> }, apply: (d) => withGutterData(d, putElement(e)), coalesceKey: e.id, made: [e.id] }));
-  return { id: c.m.id, undo: () => [...undos].reverse().forEach((u) => u()) };
+  return { id: c.m.id, undo: undoAll(store, undos) };
 }
 
 /** what «Привязать» offers for a typed text: open leads and clients by name (and a lead's address), the first few */

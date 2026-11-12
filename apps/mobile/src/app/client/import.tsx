@@ -198,7 +198,8 @@ export default function ImportClients() {
           add: (r) => {
             const x = store.addCustomer({ name: r.name, phone: r.phone, email: r.email, sourceId, address: r.address, city: r.city });
             const u2 = r.firstName || r.lastName || r.company ? store.updateCustomer(x.id, { firstName: r.firstName, lastName: r.lastName, companyName: r.company }) : null;
-            return { id: x.id, undo: () => (u2?.(), x.undo()) };
+            // the card and its name parts: both or neither (#1244, DS §15.2)
+            return { id: x.id, undo: store.undoTogether([x.undo, u2]) };
           },
         });
     if (!cloud) demoMarkOpen(sha, jobId);

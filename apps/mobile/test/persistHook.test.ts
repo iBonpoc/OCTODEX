@@ -404,8 +404,12 @@ describe("unit:persistHook — a cache the device cannot read (review of #910, r
     expect(storage.get(K)).toBe(TWO); // before: «[]» — the company's data gone until the network
     (root.out as OutOps)[1]([{ id: "server" }]);
     await settle();
+    // #1189: before the first write over it, the record is read once more and copied
+    answerAll();
+    await settle();
     await wait(300);
     expect(JSON.parse(storage.get(K)!)).toEqual([{ id: "server" }]);
+    expect([...storage.entries()].some(([k, v]) => k.startsWith(`octo.broken.${K}.`) && v === TWO)).toBe(true);
     root.unmount();
   }, 15_000);
 

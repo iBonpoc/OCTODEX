@@ -196,3 +196,20 @@ export function keepCostHistory(next: DB, cur: DB): DB {
   // РС-10: the price history the same
   return next.costsVisible === false ? { ...next, costHistory: [], priceHistory: [] } : { ...next, costHistory: cur.costHistory ?? [], priceHistory: cur.priceHistory ?? [] };
 }
+
+/**
+ * «Отменить» on the toast after «Применить налог к N позициям» (the director's 5th review of #1244): the supplier's own
+ * save and the items' tax together, all or none; the supplier's save already on the server (the «Применить?» sheet was up
+ * longer than SEND_AFTER_MS) — only «Применить» is taken back, the same as having chosen «Не применять».
+ */
+export function applyTaxUndo(
+  together: (undos: readonly unknown[]) => () => boolean | undefined,
+  undoSave: unknown,
+  undoApply: () => boolean | undefined,
+): () => boolean | undefined {
+  const both = together([undoSave, undoApply]);
+  return () => {
+    const r = both();
+    return r === false ? undoApply() : r;
+  };
+}

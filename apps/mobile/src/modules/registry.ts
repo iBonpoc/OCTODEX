@@ -64,6 +64,8 @@ export type ModuleOpHandler = (
 export interface ModuleStore {
   db: import("@/data/types").DB;
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: import("@/data/types").DB) => import("@/data/types").DB; coalesceKey?: string; made?: string[] }) => unknown;
+  /** the store's «Отменить» of several actions: all or none (store.tsx). Missing in an older test store — then one by one */
+  undoTogether?: (undos: readonly unknown[]) => () => boolean | undefined;
 }
 
 /**
