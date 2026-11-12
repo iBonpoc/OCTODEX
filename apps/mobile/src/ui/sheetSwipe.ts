@@ -23,6 +23,22 @@ export function swipeCloses(drag: number, velocity: number, far: number, fast: n
 }
 
 /**
+ * How long the sheet takes to leave once it is let go (DS Б1, #1163): at the finger's speed — the way left ÷ the speed —
+ * but never quicker than `min` (a flick must not look like a cut) nor slower than `max`; no speed (✕, the scrim, Esc) — `rest`.
+ */
+export function exitDuration(left: number, velocity: number, min: number, max: number, rest: number): number {
+  if (!(velocity > 0)) return rest;
+  return Math.min(max, Math.max(min, left / velocity));
+}
+
+/** The scrim follows the sheet: full while it is in place, gone when it has left (0..1) */
+export function scrimLevel(drag: number, height: number): number {
+  "worklet";
+  if (height <= 0) return 1;
+  return 1 - Math.min(1, Math.max(0, drag / height));
+}
+
+/**
  * Whether a finger on the body becomes the swipe (the pan is activated by hand, so a child can keep its finger):
  * a child holding it (the tape, a signature) — never; sideways past the slop — never (a slider); down past the slop,
  * mostly down — yes; up, or not far yet — wait (an upward drag is the list's scroll, the pan just never starts).

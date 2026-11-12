@@ -39,6 +39,13 @@ export function WindowsSection() {
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
       </Card>
+      <Card>
+        <View testID="showcase-sheet-leave">
+          <T v="caption" tone="mut">
+            {t("ds.sheet.leave")}
+          </T>
+        </View>
+      </Card>
       <Sheet visible={open === "fit"} onClose={close} title={t("ds.sheet.fit")}>
         <T v="body">{t("ds.sheet.body")}</T>
       </Sheet>

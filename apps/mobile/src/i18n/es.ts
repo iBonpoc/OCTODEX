@@ -2224,6 +2224,7 @@ export const es: Dict = {
   "w6.task.emptyHint": "Una tarea se relaciona con un cliente, prospecto, trabajo o propiedad. Con hora aparece en el Plan.",
   // wave 7б-1 «Работы и выезды»: personal settings
   "ds.sec.windows": "Ventanas: hojas",
+  "ds.sheet.leave": "Cierre (#1163): desliza una hoja hacia abajo — sigue al dedo y el fondo se apaga con ella; suelta rápido o pasado el 40 % de su altura — se va a la velocidad del dedo, si no vuelve con un resorte. «✕», el fondo y Esc — baja en 0,22 s. Con «Reducir movimiento» — se disuelve.",
   "ds.sheet.fit": "Hoja según el contenido",
   "ds.sheet.fitHint": "Una pista, un estado, el menú «＋»: alto según el texto, como máximo el 88 % de la pantalla.",
   "ds.sheet.footer": "Hoja con barra inferior",

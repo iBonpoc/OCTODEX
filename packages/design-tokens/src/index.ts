@@ -172,8 +172,8 @@ export const component = {
   photoThumb: 72,
   /** bottom sheet: share of the screen height before it is pulled up to full height */
   sheetHeightRatio: 0.88,
-  /** bottom sheet: drag down this far (pt) or this fast (pt/ms) to close */
-  sheetDismissDrag: 120,
+  /** bottom sheet: drag down this share of its height or this fast (pt/ms) to close (it then leaves at the finger's speed) */
+  sheetDismissRatio: 0.4,
   sheetDismissVelocity: 0.8,
   /** bottom sheet body: a downward move this long (pt) at the top of the scroll becomes a swipe to close, not a tap */
   sheetBodySlop: 10,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { swipeCloses, swipeStart, swipeStep, type SwipeState } from "../src/ui/sheetSwipe";
+import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "../src/ui/sheetSwipe";
 
 /** #714 (#505 on iPhone): a swipe down on a sheet's body — the list first, then the sheet. */
 const run = (moves: [number, number][]) => {
@@ -44,5 +44,30 @@ describe("when a finger on the body becomes the swipe", () => {
   it("up, or not far yet → wait (an upward drag is the list's scroll)", () => {
     expect(swipeStart(0, -40, 10, false)).toBe("wait");
     expect(swipeStart(1, 6, 10, false)).toBe("wait");
+  });
+});
+
+describe("how the sheet leaves (#1163, DS Б1)", () => {
+  it("at the finger's speed: the way left ÷ the speed, never quicker than durFast nor slower than durSlow", () => {
+    expect(exitDuration(400, 2, 160, 350, 220)).toBe(200);
+    expect(exitDuration(400, 10, 160, 350, 220)).toBe(160);
+    expect(exitDuration(400, 0.5, 160, 350, 220)).toBe(350);
+  });
+  it("no speed (✕, the scrim, Esc): the resting time", () => {
+    expect(exitDuration(400, 0, 160, 350, 220)).toBe(220);
+    expect(exitDuration(400, -1, 160, 350, 220)).toBe(220);
+  });
+  it("the scrim follows the sheet: full in place, gone when it has left, never outside 0..1", () => {
+    expect(scrimLevel(0, 500)).toBe(1);
+    expect(scrimLevel(250, 500)).toBe(0.5);
+    expect(scrimLevel(500, 500)).toBe(0);
+    expect(scrimLevel(900, 500)).toBe(0);
+    expect(scrimLevel(-30, 500)).toBe(1);
+    expect(scrimLevel(10, 0)).toBe(1);
+  });
+  it("the share of the height decides: 40 % of a tall sheet is far, of a short one is near", () => {
+    expect(swipeCloses(0.4 * 700 + 1, 0, 0.4 * 700, 0.8)).toBe(true);
+    expect(swipeCloses(0.4 * 300 + 1, 0, 0.4 * 300, 0.8)).toBe(true);
+    expect(swipeCloses(0.4 * 700 - 1, 0.3, 0.4 * 700, 0.8)).toBe(false);
   });
 });

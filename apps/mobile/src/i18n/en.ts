@@ -2224,6 +2224,7 @@ export const en: Dict = {
   "w6.task.emptyHint": "A task is tied to a client, lead, job or property. With a time it shows in the Plan.",
   // wave 7б-1 «Работы и выезды»: personal settings
   "ds.sec.windows": "Windows: sheets",
+  "ds.sheet.leave": "Closing (#1163): swipe a sheet down — it follows the finger and the background fades with it; let go fast or past 40 % of its height — it leaves at the finger’s speed, otherwise it springs back. «✕», the background and Esc — it slides down in 0.22 s. With «Reduce motion» — it dissolves.",
   "ds.sheet.fit": "Sheet by content",
   "ds.sheet.fitHint": "A tip, a status, the «＋» menu: as tall as its text, at most 88 % of the screen.",
   "ds.sheet.footer": "Sheet with a bottom bar",
