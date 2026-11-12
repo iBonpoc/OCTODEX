@@ -119,7 +119,9 @@ export default function DrawScreen() {
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
   // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
-  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | null>(null);
+  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | "layers" | null>(null);
+  // the layers of the view (#930): on this screen only, not saved with the measurement; all on to begin with
+  const [layers, setLayers] = useState({ grid: true, labels: true, ds: true });
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
   const [quickRun, setQuickRun] = useState<string | null>(null);
   /** a length label tapped (founder 09.11): the length of that gutter, without its properties */
@@ -450,9 +452,10 @@ export default function DrawScreen() {
             faceOff: dt.runW * 2,
             dimDs: dim ? fresh : null,
             gridMinPx: space[6],
+            layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat],
+    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers],
   );
   sceneRef.current = scene;
 
@@ -617,18 +620,19 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "relink" | "unlink" | "delete";
+  type WhoKey = "acc" | "place" | "layers" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
     // «Как мерили, панель» the founder did not understand)
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
     { key: "place", label: t("mod.gutters.draw.placeItem") },
+    { key: "layers", label: t("mod.gutters.draw.layersItem") },
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
-    if (k === "acc" || k === "place") return setMoreSheet(k);
+    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -977,6 +981,21 @@ export default function DrawScreen() {
                 onChange={(a) => setAccuracy(a)}
               />
               <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
+            </View>
+          ) : null}
+          {moreSheet === "layers" ? (
+            <View testID="draw-layers" style={{ gap: space[2] }}>
+              <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>
+              {(["grid", "labels", "ds"] as const).map((l) => (
+                <RowView key={l} style={{ gap: space[3], justifyContent: "space-between" }}>
+                  <View style={{ flex: 1 }}>
+                    <T v="body">{t(`mod.gutters.draw.layer.${l}`)}</T>
+                    {l === "ds" ? <T v="caption" tone="mut">{t("mod.gutters.draw.layer.dsHint")}</T> : null}
+                  </View>
+                  <View testID={`draw-layer-${l}`}><Toggle on={layers[l]} onChange={(on) => setLayers((x) => ({ ...x, [l]: on }))} label={t(`mod.gutters.draw.layer.${l}`)} /></View>
+                </RowView>
+              ))}
+              <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>
             </View>
           ) : null}
           {moreSheet === "place" ? (

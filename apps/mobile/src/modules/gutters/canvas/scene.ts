@@ -104,9 +104,23 @@ export interface SceneOpts {
   gridMinPx?: number;
   /** the speed bench: draw every label even where it would overlap (the worst load) */
   keepAll?: boolean;
+  /** what is shown (#930): the grid, the labels (lengths, corner words), the downspouts; hidden ones are only not drawn */
+  layers?: SceneLayers;
 }
 
+/** the layers of the view (#930): a layer is hidden, never deleted — the drawing itself is as it was; all on when not said */
+export interface SceneLayers { grid?: boolean; labels?: boolean; ds?: boolean }
+
 export function buildScene(d: Drawing, o: SceneOpts): Scene {
+  const L = o.layers;
+  if (!L || (L.grid !== false && L.labels !== false && L.ds !== false)) return buildSceneAll(d, o);
+  // the downspouts layer off: the scene of the drawing without them (and nothing of theirs picked)
+  const hideDs = L.ds === false && d.downspouts.length > 0;
+  const s = buildSceneAll(hideDs ? { ...d, downspouts: [] } : d, hideDs && d.downspouts.some((x) => x.id === o.selected) ? { ...o, selected: null } : o);
+  return { ...s, ...(L.labels === false ? { labels: [] } : {}), ...(L.grid === false ? { grid: undefined } : {}) };
+}
+
+function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   const byId = new Map(d.runs.map((r) => [r.id, r]));
   const sideOf = houseSides(d);
   const off = (o.faceOff ?? 0) / (o.view.k || 1);
