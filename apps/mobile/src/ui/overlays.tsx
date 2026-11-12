@@ -1,6 +1,6 @@
 import { toastArmed } from "./toastArm";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
 import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
 import { menuPick } from "./menuPick";
@@ -106,6 +106,9 @@ export function Menu<K extends string>({
     if (el && el.isConnected && typeof el.focus === "function") el.focus();
   }, [isOpen]);
   // the Modal stays mounted after it closes (visible false), so iOS can say when it is gone; it keeps where it stood
+  const listRef = useRef<ScrollViewInstance>(null);
+  const scrolled = useRef(false);
+  if (!(visible && !!anchor)) scrolled.current = false;
   const last = useRef(anchor);
   if (anchor) last.current = anchor;
   const at = anchor ?? last.current;
@@ -118,7 +121,9 @@ export function Menu<K extends string>({
   const below = at.y + at.h + space[1];
   // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
   const room = winH - e.t - e.b;
-  const estH = Math.min((items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2, room);
+  // at most `menuMaxRows` rows show (the last one half: it scrolls); a window shorter than that cuts it further
+  const listH = Math.min(items.length * size.hitMin, component.menuMaxRows * size.hitMin, room - space[2] * 2 - (title ? size.hitMin : 0));
+  const estH = Math.min(listH + (title ? size.hitMin : 0) + space[2] * 2, room);
   const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - space[1], winH - e.b - estH)) : below;
   return (
     <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
@@ -135,7 +140,22 @@ export function Menu<K extends string>({
               {title}
             </T>
           ) : null}
-          <ScrollView style={{ maxHeight: room - space[2] * 2 - (title ? size.hitMin : 0) }} testID="menu-items" bounces={false}>
+          <ScrollView
+            ref={listRef}
+            style={{ maxHeight: listH }}
+            testID="menu-items"
+            bounces={false}
+            showsVerticalScrollIndicator
+            // opens at the chosen item (in the middle of the window when the list is longer than it)
+            onLayout={() => {
+              if (scrolled.current) return;
+              scrolled.current = true;
+              const at = items.findIndex((it) => it.selected);
+              const total = items.length * size.hitMin;
+              if (at < 0 || total <= listH) return;
+              listRef.current?.scrollTo({ y: Math.max(0, Math.min(at * size.hitMin - (listH - size.hitMin) / 2, total - listH)), animated: false });
+            }}
+          >
           {items.map((it) => (
             <Press
               key={it.key}
