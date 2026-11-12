@@ -13656,9 +13656,20 @@ select tst.fails_like(format($q$update public.catalog_items set product_url = %L
 -- zero-width, bidirectional and other invisible format characters in the barcode or the link — refused
 select tst.fails_like(format($q$update public.catalog_items set %s = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, c, v), '%' || c || '%', 'T202 a format character in ' || c)
   from (values ('barcode', U&'0123\200B456'), ('barcode', U&'0123\202E456'), ('barcode', U&'\FEFF0123'), ('barcode', U&'01\00AD23'),
-                              ('product_url', U&'https://abc.example/\200Dx'), ('product_url', U&'https://abc.example/\2066x'), ('product_url', U&'https://abc.example/\061Cx')) x(c, v);
+                              ('product_url', U&'https://abc.example/\200Dx'), ('product_url', U&'https://abc.example/\2066x'), ('product_url', U&'https://abc.example/\061Cx'),
+               -- security-check of #1233: blanks that are not format characters, and a barcode of a blank only
+               ('product_url', U&'https://abc.example/\00A0x'), ('product_url', U&'https://abc.example/\2028x'), ('product_url', U&'https://abc.example/\3000x'),
+               ('product_url', U&'https://abc.example\200B/x'), ('product_url', 'https:///x'), ('product_url', 'https://a@b.example/x'),
+               ('product_url', 'https://user:pw@b.example/x'), ('product_url', 'https://abc.example:x/'), ('product_url', 'https://abc_example/'),
+               ('barcode', U&'\00A0'), ('barcode', U&'\00A0\00A0'), ('barcode', U&'\200B'), ('barcode', '   '), ('barcode', 'АБВ123'), ('barcode', '12;34'), ('barcode', '<b>')) x(c, v);
 select tst.ok((select barcode = '0123456789012' and product_url = 'https://abc.example/hanger?id=5' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
               'T202 after the refusals the barcode and the link are as they were');
+-- what passes: a port, a query or a fragment right after the host; a barcode of letters, digits, space . _ / -
+update public.catalog_items set product_url = 'https://abc.example:8443/x' where id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_items set product_url = 'https://abc.example?q=1', barcode = '0123-456 A/B.c_d' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select product_url = 'https://abc.example?q=1' and barcode = '0123-456 A/B.c_d' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 a port, a query; a barcode with a space, a dash, a slash, a dot and an underscore — kept');
+update public.catalog_items set product_url = 'https://abc.example/hanger?id=5', barcode = '0123456789012' where id = 'a2020000-0000-4000-8000-000000000001';
 select tst.fails_like(format($q$update public.catalog_items set service_category_id = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, :'b_cat'), '%catalog_items_service_category_fk%', 'T202 another company''s direction — refused');
 -- an older phone's save — the whole item as an upsert (ops.ts catalog.save), without the new columns, the same price:
 -- the new fields stay, no price row

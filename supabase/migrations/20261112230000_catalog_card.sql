@@ -1,7 +1,7 @@
 -- РС-9 (docs/audit/2026-11-12-estimate-editor-spec.md §4.2 п.2, Р11; #1096): the catalog item's card — new fields and the
 -- history of its selling price and markup.
--- * catalog_items.barcode (≤ 64, no control or invisible format characters), product_url (only https://, no spaces,
---   no control or format characters, ≤ 500), service_category_id
+-- * catalog_items.barcode (letters, digits, space . _ / -; ≤ 64), product_url (only https:// with a host, no userinfo,
+--   no blank, control or invisible characters, ≤ 500), service_category_id
 --   (a direction of the item's own company: FK (company_id, service_category_id) → service_categories). The table-wide
 --   grant select, insert, update to authenticated (20261106070000) covers the new columns; rights do not change (members
 --   read, staff write). Older phones upsert without these columns — PostgREST writes only the columns sent, so nothing
@@ -24,16 +24,20 @@ alter table public.catalog_items
   add column if not exists barcode text,
   add column if not exists product_url text,
   add column if not exists service_category_id uuid;
--- no control characters and no invisible format ones (Cf: zero-width, bidirectional marks and overrides — the set of
--- app.client_title): the barcode and the link go to screens, supplier orders and PDFs (security-check of РС-9)
+-- Both checks name their characters explicitly (no [:space:] / [:cntrl:] classes: the tests run in the C locale, the
+-- server in C.utf8 — a check must not depend on it; security-check of РС-9).
+-- The barcode: a whitelist — letters, digits, space and . _ / - (what barcodes and SKUs are made of), 1..64, not blank.
 alter table public.catalog_items add constraint catalog_items_barcode_check
-  check (barcode is null or (length(btrim(barcode)) > 0 and length(barcode) <= 64
-                             and barcode !~ '[\u0001-\u001f\u007f-\u009f­؀-؅؜۝܏࣢᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]')) not valid;
+  check (barcode is null or (barcode ~ '^[A-Za-z0-9 ._/-]{1,64}$' and btrim(barcode) <> '')) not valid;
 alter table public.catalog_items validate constraint catalog_items_barcode_check;
+-- The link: only https:// (lowercase, so never javascript:, data: or any other scheme in any case — the app opens it as
+-- a link), a host of letters, digits, dots and hyphens right after it (no userinfo «a@b», no empty host «https:///x»),
+-- an optional port, then the end, «/», «?» or «#»; at most 500; no space, control, invisible format or other blank
+-- character (NBSP, the Unicode spaces, line and paragraph separators, ideographic space; zero-width, bidirectional
+-- marks and overrides, BOM, soft hyphen — the set of app.client_title and more).
 alter table public.catalog_items add constraint catalog_items_product_url_check
-  -- only https:// (lowercase, so never javascript:, data: or any other scheme in any case — the app opens it as a link)
-  check (product_url is null or (product_url ~ '^https://[^[:space:][:cntrl:]]+$' and length(product_url) <= 500
-                                 and product_url !~ '[\u0001-\u001f\u007f-\u009f­؀-؅؜۝܏࣢᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]')) not valid;
+  check (product_url is null or (product_url ~ '^https://[A-Za-z0-9.-]+(:[0-9]+)?(/|[?]|#|$)' and length(product_url) <= 500
+                                 and product_url !~ '[\u0001-\u0020\u007f-\u00a0\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u1680\u180e\u2000-\u200f\u2028-\u202f\u205f-\u2064\u2066-\u206f\u3000\ufeff\ufff9-\ufffb]')) not valid;
 alter table public.catalog_items validate constraint catalog_items_product_url_check;
 -- MATCH SIMPLE: no direction (null) is not checked; a direction must be of the item's own company
 alter table public.catalog_items add constraint catalog_items_service_category_fk
