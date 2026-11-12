@@ -536,6 +536,9 @@ export const ru = {
   "est.pdf.contractor": "Подрядчик",
   "est.pdf.forCompany": "от имени {company}",
   "est.pdf.awaitingSignature": "Ждёт подписи",
+  // РС-7b: what the client's document says about sections (PDF and the page /p/)
+  "est.client.subtotal": "Итого: {title}",
+  "est.client.other": "Прочее",
   "est.pdf.record": "Журнал подписи",
   "est.pdf.signer": "Кто подписал",
   "est.pdf.when": "Дата и время",

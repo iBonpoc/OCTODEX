@@ -91,6 +91,8 @@ th { color: ${P.mut}; font-weight: 500; font-size: ${s.fontPt.small}pt; }
 .r { text-align: right; white-space: nowrap; padding-left: 8pt; }
 .grp td { font-weight: 600; padding-top: ${s.rowPadPt * 2}pt; }
 .opt td { color: ${P.mut}; }
+.d1 td:first-child { padding-left: ${s.rowPadPt * 4}pt; }
+.subt td { font-weight: 600; }
 .sums { width: 50%; margin-left: auto; margin-top: 6pt; }
 .sums td { border: 0; padding: 2pt 0; }
 .tot td { font-weight: 700; font-size: ${s.fontPt.heading}pt; }
