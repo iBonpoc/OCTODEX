@@ -193,5 +193,6 @@ export function mergeHistory(db: DB, where: { itemId?: string; supplierId?: stri
  * reload right after does not blank the open screen. Not for whom the server no longer gives costs.
  */
 export function keepCostHistory(next: DB, cur: DB): DB {
-  return next.costsVisible === false ? { ...next, costHistory: [] } : { ...next, costHistory: cur.costHistory ?? [] };
+  // РС-10: the price history the same
+  return next.costsVisible === false ? { ...next, costHistory: [], priceHistory: [] } : { ...next, costHistory: cur.costHistory ?? [], priceHistory: cur.priceHistory ?? [] };
 }
