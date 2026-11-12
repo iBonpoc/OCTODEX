@@ -108,6 +108,10 @@ describe("В1-5 (#1107): who may void which invoice (as the server: tg_invoice_g
     expect(voidRefusal(d(10), "i", "x", "director")).toBe("paid");
     expect(voidRefusal(d(0, [{ invoiceId: "i", amountCents: 5 }]), "i", "x", "director")).toBe("paid");
   });
+  it("a payment on its way (ACH processing) → no, as on the server (review of #1203 №2)", () => {
+    const x = { ...(d() as object), pendingPayments: [{ id: "pp", invoiceId: "i", customerId: "c", amountCents: 100, at: "2026-11-12" }] };
+    expect(voidRefusal(x as never, "i", "x", "director")).toBe("paid");
+  });
   it("no reason, or an invoice not live (already void) → no", () => {
     expect(voidRefusal(d(), "i", "   ", "director")).toBe("reason");
     expect(voidRefusal(d(), "other", "x", "director")).toBe("gone");

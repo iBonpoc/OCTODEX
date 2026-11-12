@@ -13278,7 +13278,7 @@ create extension if not exists dblink;
 select set_config('tst.t197_conn', format('host=%s port=%s dbname=%s user=%s', split_part(current_setting('unix_socket_directories'), ',', 1),
                   current_setting('port'), current_database(), current_user), false);
 do $$
-declare c text := current_setting('tst.t197_conn'); n int; set_who text :=
+declare c text := current_setting('tst.t197_conn'); n int; msg text := ''; set_who text :=
   'set request.jwt.claim.sub = ''a0000000-0000-0000-0000-000000000002''; set role authenticated;';
 begin
   perform dblink_connect('t197a', c);
@@ -13295,6 +13295,16 @@ begin
   perform dblink_exec('t197a', 'commit');
   -- the second one goes on once the first is in: it is refused (over the contract); its connection is dropped (rolled back)
   for i in 1..100 loop exit when dblink_is_busy('t197b') = 0; perform pg_sleep(0.05); end loop;
+  -- why the second one was refused: the contract, not anything else (RLS, the role)
+  -- one result per statement of the batch: read them all, keep what each said
+  for i in 1..8 loop
+    begin
+      perform * from dblink_get_result('t197b', false) as x(t text);
+    exception when others then null;
+    end;
+    msg := msg || ' ' || coalesce(dblink_error_message('t197b'), '');
+  end loop;
+  perform tst.ok(msg like '%more than its contract%', 'T197 the second phone is refused for the contract');
   perform dblink_disconnect('t197a');
   perform dblink_disconnect('t197b');
   select count(*) into n from public.invoices where job_id = 'e1970000-0000-4000-8000-000000000002' and status = 'sent';
@@ -13339,6 +13349,25 @@ insert into public.invoices (id, company_id, number, customer_id, job_id, kind, 
   ('01970000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T197 to void', 100, 100, now());
 select tst.fails($q$update public.invoices set status = 'void', void_reason = '   ' where id = '01970000-0000-4000-8000-000000000009'$q$, 'T197 a blank reason is not one');
 select tst.fails(format($q$update public.invoices set status = 'void', void_reason = %L where id = '01970000-0000-4000-8000-000000000009'$q$, repeat('x', 501)), 'T197 nor a reason of 501 characters');
+-- an admin voids as the owner does (office_a is an admin by now in these tests)
+:as_office_a
+update public.invoices set status = 'void', void_reason = 'T197 admin' where id = '01970000-0000-4000-8000-000000000009';
+select tst.ok((select status = 'void' from public.invoices where id = '01970000-0000-4000-8000-000000000009'), 'T197 an admin voids');
+-- the visit's payment into a draft final when nothing of the contract is left: refused (the tech hands it to the office)
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-00000000000a', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'progress', 'sent', 'Progress: rest', 20000, 20000, now());
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01970000-0000-4000-8000-00000000000b', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'final', 'draft', 'Final balance', 100, 100);
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, status) values ('f1970000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000002', now(), 'scheduled');
+update public.visits set status = 'on_site' where id = 'f1970000-0000-4000-8000-000000000002';
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1970000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1970000-0000-4000-8000-000000000002', '01970000-0000-4000-8000-0000000000c2', '21970000-0000-4000-8000-0000000000c2', 'cash', null, 100)$q$,
+       '%more in hand than due%', 'T197 nothing of the contract left: the money in hand is refused (22023, «hand it to the office»)');
+:as_super
+select tst.ok((select status = 'draft' from public.invoices where id = '01970000-0000-4000-8000-00000000000b')
+              and not exists (select 1 from public.payments where id = '21970000-0000-4000-8000-0000000000c2'), 'T197 nothing written');
 \echo 'T197 the invoices of a contract: never above it; a wrong one is voided by the owner, without payments, with a reason'
 
 \echo 'ALL TESTS PASSED'

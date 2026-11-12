@@ -58,11 +58,12 @@ export function withTaxSplit<T extends D & Pick<DB, "jobs">>(d: T, invoiceId: ID
 /** why an invoice may not be voided (В1-5, #1107) — the same the server checks (tg_invoice_guard): only the director
  *  (owner / admin), only a live invoice with no payment (paid or any receipt), the reason written */
 export type VoidRefusal = "role" | "gone" | "paid" | "reason";
-export function voidRefusal(d: Pick<DB, "invoices" | "payments">, id: ID, reason: string, role: Role): VoidRefusal | null {
+export function voidRefusal(d: Pick<DB, "invoices" | "payments" | "pendingPayments">, id: ID, reason: string, role: Role): VoidRefusal | null {
   if (role !== "director") return "role";
   const inv = d.invoices.find((i) => i.id === id);
   if (!inv) return "gone";
-  if (inv.paidCents > 0 || (d.payments ?? []).some((p) => p.invoiceId === id && p.amountCents > 0)) return "paid";
+  // a payment on its way (ACH processing) counts as a payment, as on the server (pending — review of #1203 №2)
+  if (inv.paidCents > 0 || (d.payments ?? []).some((p) => p.invoiceId === id && p.amountCents > 0) || (d.pendingPayments ?? []).some((p) => p.invoiceId === id)) return "paid";
   if (!reason.trim()) return "reason";
   return null;
 }
