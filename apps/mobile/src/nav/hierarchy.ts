@@ -181,6 +181,12 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     case "settings":
       // «Профиль и аккаунт» (spec 26): opened from the profile card of «Ещё» / the menus — a page of its own
       if (id === "profile") return { section: "settings", kind: "fix.settings.profile" };
+      // «Дизайн-система» (#1093, #1150): its list goes back to the settings, a section — to the list
+      if (id === "design-system") {
+        return seg[2]
+          ? { section: "settings", kind: "ds.title", up: { href: "/settings/design-system", label: K("ds.title") } }
+          : { section: "settings", kind: "ds.title", up: { href: "/settings", label: K("nav.mySettings") } };
+      }
       // «Удалить аккаунт» lives in the profile now: back goes to «Профиль и аккаунт» (LOG п.17, spec 26)
       if (id) return { section: "settings", kind: "acct.title", up: { href: "/settings/profile", label: K("fix.settings.profile") } };
       return { section: a };
