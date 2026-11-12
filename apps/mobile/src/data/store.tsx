@@ -46,7 +46,7 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraf
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { cloudCacheKey, isNewCacheKey, othersCaches } from "./cacheKey";
+import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cacheKey";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
@@ -553,8 +553,10 @@ export function StoreProvider({
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
     {
+      // #1189: only the shape — the record is an object of this mode; a list it lacks (an older version's record) is filled
+      // by normalizeDB, never a reason to start the demo over (that wiped the person's own records)
       validate: (v) =>
-        Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : typeof v?.day === "string" && v.day !== "cloud"),
+        typeof v?.db === "object" && v.db !== null && !Array.isArray(v.db) && (mode === "cloud" ? v.day === "cloud" : typeof v?.day === "string" && v.day !== "cloud"),
       // an empty start shows an empty company: tried longer before it (#926)
       patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
@@ -590,6 +592,8 @@ export function StoreProvider({
       .then(async (ks) => {
         const gone: string[] = [];
         for (const k of othersCaches(ks, me)) if (ks.includes(mine) || isNewCacheKey(k) || !(await myOld(k).catch(() => true))) gone.push(k);
+        // their kept copies (#1189) go at once: a snapshot of another person's company is never kept for them (#1260 Б1)
+        gone.push(...othersCopies(ks, me));
         return gone;
       })
       .then((gone) => (gone.length ? AsyncStorage.multiRemove(gone) : undefined))
