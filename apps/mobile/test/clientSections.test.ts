@@ -32,4 +32,14 @@ describe("unit:clientSections — the phone = the server (T199)", () => {
     d.options[0] = { ...d.options[0]!, sections: [null, { id: "s1" }] as never };
     expect(cloneOption(d.options[0]!, 1).sections).toEqual([{ id: "s1" }]);
   });
+  it("«false» written as a string at $0 is hidden, as the server reads it; a sectionId longer than 64 is no link", () => {
+    const d: EstimateDoc = newDoc();
+    d.options[0] = { ...d.options[0]!, lines: [
+      { id: "a", name: "Kit", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: "false" as never },
+      { id: "b", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000, sectionId: "y".repeat(65) },
+      { id: "c", name: "Work 2", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000, sectionId: "s1" },
+    ] };
+    const lines = clientDoc(normalizeDoc(d).doc).options[0]!.lines;
+    expect(lines.map((l) => [l.id, l.sectionId])).toEqual([["b", undefined], ["c", "s1"]]);
+  });
 });

@@ -319,6 +319,47 @@
           "id": "s39"
         }
       ]
+    },
+    {
+      "name": "parentId: an empty string or a number is a top section; an id longer than 64 does not count; a title with Cf marks and odd spaces",
+      "sections": [
+        {
+          "id": "top1",
+          "parentId": ""
+        },
+        {
+          "id": "top2",
+          "parentId": 7
+        },
+        {
+          "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "title": "Too long id"
+        },
+        {
+          "id": "sub",
+          "parentId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+          "id": "cf",
+          "title": "  Ro​of‮ deck　 "
+        },
+        {
+          "id": "",
+          "title": "empty id"
+        }
+      ],
+      "client": [
+        {
+          "id": "top1"
+        },
+        {
+          "id": "top2"
+        },
+        {
+          "id": "cf",
+          "title": "Roof  deck"
+        }
+      ]
     }
   ]
 }
