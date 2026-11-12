@@ -2,6 +2,7 @@
  * Read the company's data from the OCTODEX database and map it to the app's view model (src/data/types.ts).
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
+import { normalizeDoc } from "@/features/estimateDoc";
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
@@ -333,7 +334,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const withCosts = (doc: unknown): EstimateDoc | undefined => {
     const d = doc as EstimateDoc | null;
     if (!d || !Array.isArray(d.options) || !d.settings) return undefined;
-    return { ...d, options: d.options.map((o) => ({ ...o, lines: o.lines.map((l) => (costOf.has(l.id) ? { ...l, unitCostCents: costOf.get(l.id) } : l)) })) };
+    // as it may be counted and shown (Р3, Р4): a priced line marked hidden is visible again, sections within the limits
+    return normalizeDoc({ ...d, options: d.options.map((o) => ({ ...o, lines: o.lines.map((l) => (costOf.has(l.id) ? { ...l, unitCostCents: costOf.get(l.id) } : l)) })) }).doc;
   };
 
   const sourceName = new Map(sources.map((r) => [s(r.id), s(r.name)]));
