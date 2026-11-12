@@ -511,7 +511,7 @@ HIG [«Accessibility»](https://developer.apple.com/design/human-interface-guide
 | `Popover` | выбор у элемента от 820 | нет | ⬜ | Н-52 |
 | `Spinner`, `Skeleton` | ожидание | частично | ⬜ (`ActivityIndicator` нигде, скелетона нет) | Н-49 |
 | `PickerSheet` | длинный выбор с поиском | да («список выбора с поиском») | ⬜ (собран 10 раз по месту) | Н-42 |
-| `SelectField` | поле-меню | нет | ⬜ | Н-43 |
+| `SelectField` | поле-меню | нет | ◐ `ui/selectField.tsx` (#1144): строка, меню у строки, галочка, ошибка, прокрутка; ⬜ клавиатура и объявление значения (#1145) | Н-43 |
 | `ToggleRow` | строка с переключателем | нет | ⬜ | Н-48 |
 | `NumberField` (`money`, `percent`, `qty`, `integer`) | число | частично | ⬜ (`MoneyField`, `PctField`, `QtyField` в `features/fields.tsx`) | Н-46 |
 | `DateField`, `TimeField`, `DurationField`, `DateRangeField` | дата и время | да («пикер даты, слоты») | ⬜ (`DatePick` есть в `features/`) | Н-45 |
@@ -546,7 +546,7 @@ HIG [«Accessibility»](https://developer.apple.com/design/human-interface-guide
 | `Press` / `Button` | ✅ | ⬜ | ⬜ | ✅ | — | ✅ | ⬜ | — | ? |
 | `IconButton` | ✅ | ⬜ | ⬜ | ✅ | — | ? | — | — | ? |
 | `TextField` | ✅ | ⬜ | ⬜ (рамка фокуса не найдена) | — | — | ⬜ (нет `disabled`) | — | ⬜ | ✅ |
-| `NumberField`, `DateField`, `TimeField`, `SelectField` (новые) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ (`PickerSheet`) | ⬜ | ⬜ |
+| `NumberField`, `DateField`, `TimeField`, `SelectField` (новые) | ⬜ (у `SelectField` ◐, #1145) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ (`PickerSheet`) | ⬜ | ⬜ |
 | `Segmented` | ✅ | ⬜ | ⬜ | ✅ | ✅ | ? | — | — | ✅ |
 | `ChoiceChips` | ✅ | ⬜ | ⬜ | ✅ | ✅ (рамка) | ? | — | ⬜ | ✅ |
 | `MultiChips` | ✅ | ⬜ | ⬜ | ✅ | ⬜ (жёлтая заливка → рамка + `check`) | ? | — | ⬜ | ✅ |
@@ -1682,7 +1682,7 @@ iOS «Уменьшение движения», Android «Убрать анима
 | Н-40 | `Sheet` + `footer`, высоты `fit / medium / large`, `SheetPage` | `ui/overlays.tsx` | Б1 | до ✅ (`footer`, `height`, `onBack` — страница внутри шторки; в витрине «Окна: шторки», e2e 265; перевод экранов на `footer` — по таблице замен) |
 | Н-41 | `ConfirmDialog` + `useConfirm()` | новый, `Glass strong` | Б3 | до |
 | Н-42 | `PickerSheet` (одиночный, множественный, поиск, создание) | `Sheet` + `ListRow` | А3 | до |
-| Н-43 | `SelectField` | `Menu` + строка | А2 | до ✅ (`ui/selectField.tsx`; в витрине «Селекторы», e2e 267) |
+| Н-43 | `SelectField` | `Menu` + строка | А2 | до ◐ сделано: строка, `Menu` у строки (не уже строки, не шире `modalW`), галочка, «Выберите», ошибка `status.bad.fill`, прокрутка при нехватке места, возврат фокуса (веб), имя поля с значением (веб), витрина «Селекторы», e2e 267; **не сделано (#1145):** клавиатура ↓/↑/буква, объявление нового значения, сторож «ChoiceChips → SelectField» (частично `chipsLabel.test.ts`, #1095) |
 | Н-44 | `StatusPicker` — в `ui/`, единственный способ | `listCard.tsx:516` | А10 | до |
 | Н-45 | `DateField`, `TimeField` | `DatePick` + `datetimepicker` (правило 17) + `Menu` (веб) | А7, А8 | до |
 | Н-38 | `DurationField` | `Stepper` + чипы | А8 | после |

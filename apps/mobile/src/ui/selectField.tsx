@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import { View } from "react-native";
 import { component, radius, size, space } from "@octo/design-tokens";
-import { useI18n, type DictKey } from "@/i18n";
-import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { Platform } from "react-native";
+import { useI18n } from "@/i18n";
+import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, type MenuItem } from "./overlays";
 import { Icon, Press, T } from "./primitives";
 
@@ -34,11 +35,10 @@ export function SelectField<K extends string>({
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  const { wide } = useDevice();
   const ref = useRef<React.ComponentRef<typeof View>>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const chosen = items.find((i) => i.key === value);
-  const shown = chosen?.label ?? placeholder ?? t("select.choose" as DictKey);
+  const shown = chosen?.label ?? placeholder ?? t("ui.select.choose");
   const menu: MenuItem<K>[] = items.map((i) => ({ key: i.key, label: i.label, selected: i.key === value }));
   const open = () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }));
   return (
@@ -47,21 +47,22 @@ export function SelectField<K extends string>({
         <Press
           onPress={open}
           disabled={disabled}
-          visibleHeight={wide ? size.field : size.fieldPhone}
+          visibleHeight={size.fieldPhone}
           accessibilityRole="button"
-          accessibilityLabel={label}
+          // the web reads the label instead of the button's text and ignores the value: the chosen one goes into the label
+          accessibilityLabel={Platform.OS === "web" ? `${label}, ${shown}` : label}
           accessibilityValue={{ text: shown }}
           accessibilityState={{ expanded: !!anchor, disabled: !!disabled }}
           aria-haspopup="menu"
           style={{
-            minHeight: wide ? size.field : size.fieldPhone,
+            minHeight: size.fieldPhone,
             flexDirection: "row",
             alignItems: "center",
             gap: space[2],
             paddingHorizontal: space[3],
             borderRadius: radius.field,
             borderWidth: component.hairline,
-            borderColor: error ? c.status.bad.text : c.bd,
+            borderColor: error ? c.status.bad.fill : c.bd,
             backgroundColor: c.in,
           }}
         >
@@ -82,7 +83,7 @@ export function SelectField<K extends string>({
           </T>
         </View>
       ) : null}
-      <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={onChange} onClose={() => setAnchor(null)} title={label} />
+      <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={onChange} onClose={() => setAnchor(null)} title={label} matchWidth />
     </View>
   );
 }
