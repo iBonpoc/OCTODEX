@@ -8,7 +8,7 @@ paths = re.findall(r'<path d="([^"]+)"/>', word)                 # G, o, R, i-st
 R = paths[2]
 G = ('M660 170 H442 A272 272 0 0 0 170 442 V582 A272 272 0 0 0 442 854 H582 A272 272 0 0 0 854 582 V450 H640 V574 H730 V582 '
      'A148 148 0 0 1 582 730 H442 A148 148 0 0 1 294 582 V442 A148 148 0 0 1 442 294 H660 Z')   # calm G, top end cut straight
-DOT = (530, 512, 70)
+DOT = (515, 512, 85)   # v4.2 designer: bigger dot so it is not a speck at 20–29 px
 S = 724 / 684; TX, TY = 36 - 170 * S, -716 - 170 * S              # as in the logo (v3)
 INK_D, INK_L, ACC, BG = '#F2F3F5', '#15161A', '#FBFF00', '#0B0C0F'
 
@@ -26,10 +26,18 @@ def svg(ink, ring=None, bg=None, rdx=0, box=None, title=''):
 
 if __name__ == '__main__':
     import json
-    cfg = json.loads((out / 'gr-layout.json').read_text())      # measured by the render script: rdx and boxes
-    for k, c in cfg.items():
-        (out / f'gr-{k}-icon.svg').write_text(svg(INK_D, None, BG, c['rdx'], c['icon'], f'GoRix GR v4.1 · {k} · app icon'))
-        (out / f'gr-{k}-dark.svg').write_text(svg(INK_D, None, None, c['rdx'], c['tight'], f'GoRix GR v4.1 · {k} · dark'))
-        (out / f'gr-{k}-mark-dark.svg').write_text(svg(INK_D, None, None, c['rdx'], c['icon'], f'GoRix GR v4.1 · {k} · square, no background'))
-        (out / f'gr-{k}-light.svg').write_text(svg(INK_L, INK_L, None, c['rdx'], c['tight'], f'GoRix GR v4.1 · {k} · light'))
-    print('wrote', 3 * len(cfg))
+    c = json.loads((out / 'gr-layout.json').read_text())['logo']   # v4.2: gap as in the logo (70); «tight» (30) merged at 20–29 px
+    W = {
+        'gr-icon.svg': svg(INK_D, None, BG, c['rdx'], c['icon'], 'GoRix GR v4.2 · app icon (iOS default, Android adaptive foreground on #0B0C0F)'),
+        'gr-icon-tinted.svg': svg('#FFFFFF', None, '#000000', c['rdx'], c['icon'], 'GoRix GR v4.2 · iOS tinted: one colour, the system tints it'),
+        'gr-icon-mono.svg': svg('#FFFFFF', None, None, c['rdx'], c['icon'], 'GoRix GR v4.2 · Android themed (monochrome): one colour on transparent'),
+        'gr-mark-dark.svg': svg(INK_D, None, None, c['rdx'], c['icon'], 'GoRix GR v4.2 · square, no background'),
+        'gr-dark.svg': svg(INK_D, None, None, c['rdx'], c['tight'], 'GoRix GR v4.2 · dark'),
+        'gr-light.svg': svg(INK_L, INK_L, None, c['rdx'], c['tight'], 'GoRix GR v4.2 · light (yellow dot in an ink ring)'),
+        'gr-small-light.svg': svg(INK_L, None, None, c['rdx'], c['tight'], 'GoRix GR v4.2 · light, 24 px and smaller: ink dot, no yellow'),
+    }
+    W['gr-icon-tinted.svg'] = W['gr-icon-tinted.svg'].replace(ACC, '#FFFFFF')
+    W['gr-icon-mono.svg'] = W['gr-icon-mono.svg'].replace(ACC, '#FFFFFF')
+    W['gr-small-light.svg'] = W['gr-small-light.svg'].replace(ACC, INK_L)
+    for n, s in W.items(): (out / n).write_text(s)
+    print('wrote', len(W))
