@@ -13057,4 +13057,133 @@ drop function tst.t195_make(int, jsonb, uuid);
 drop function tst.t195_sent(uuid);
 \echo 'T195 the client signs on the phone the total the server keeps; another total is refused'
 
+-- ======================================================================================================================
+-- T196 (#865 В1-4а, audit X-01, X-02): the tax split inside each invoice of a contract.
+-- (а) a job of its own lines with tax (test prices): $400 + $100 taxable, 10% → contract $510, tax $10. The app's
+--     invoice.issue (subtotal = total, no tax — as every app version writes it): the server splits it, the one that bills
+--     the rest takes the rest of the tax — Σ tax = $10, the same as the engine (invoiceTaxShare, contract.test.ts).
+-- (б) a void one does not count; a draft is split when it is sent; a standalone invoice is outside the contract; someone
+--     of another company is refused by the policy as before (the trigger counts nothing for them). The server's refusal
+--     above the contract is В1-4б (with voiding, #1107).
+-- (в) every contract invoice the other tests made (signature deposits, visit finals): its tax ≤ the contract's, and a
+--     fully billed contract has all of its tax in its invoices.
+-- ======================================================================================================================
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T196 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1960000-0000-4000-8000-000000000001', '196 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T196 lines', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+end $$;
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 0, 'T196 labor', 2, 20000, false),
+  ('a1960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 1, 'T196 part', 1, 10000, true);
+:as_super
+select tst.ok((select contract_total_cents from public.jobs where id = 'e1960000-0000-4000-8000-000000000001') = 51000
+              and app.job_contract_tax('e1960000-0000-4000-8000-000000000001') = 1000, 'T196 (fixture: contract $510 with $10 tax)');
+select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_tax(uuid)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.job_contract_tax(uuid)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_invoice_contract()', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.invoice_tax_split(uuid,uuid,uuid,bigint)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_invoice_contract()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.invoice_tax_split(uuid,uuid,uuid,bigint)'::regprocedure),
+              'T196 rule 18; the trigger runs as the writer (invoker), the count as definer');
+:as_office_a
+-- what invoice.issue writes (ops.ts): subtotal = total, no tax
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress payment', 17000, 17000, now());
+select tst.ok((select (subtotal_cents, tax_cents, total_cents) = (16667, 333, 17000) from public.invoices where id = '01960000-0000-4000-8000-000000000001'),
+              'T196 a progress invoice of $170 keeps its total: $166.67 + tax $3.33 (17000 × 1000 / 51000 = 333.3)');
+-- a draft is not billed: no tax yet; sent later, it is split then (and once only)
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'draft', 'T196 draft', 5100, 5100);
+select tst.ok((select tax_cents = 0 from public.invoices where id = '01960000-0000-4000-8000-000000000004'), 'T196 a draft takes no tax');
+update public.invoices set status = 'sent', sent_at = now() where id = '01960000-0000-4000-8000-000000000004';
+select tst.ok((select (subtotal_cents, tax_cents) = (5000, 100) from public.invoices where id = '01960000-0000-4000-8000-000000000004'),
+              'T196 the draft sent now: $50 + $1 tax');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T196 a test draft' where id = '01960000-0000-4000-8000-000000000004';
+:as_office_a
+-- a standalone invoice of the job (extra work) is outside the contract
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T196 extra', 5000, 5000, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (5000, 0) from public.invoices where id = '01960000-0000-4000-8000-000000000005'), 'T196 a standalone invoice is not split');
+-- the rest exactly: takes the rest of the tax
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'final', 'sent', 'Final balance', 34000, 34000, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (33333, 667) from public.invoices where id = '01960000-0000-4000-8000-000000000002'),
+              'T196 the final balance takes the rest of the tax: $6.67');
+select tst.ok((select sum(tax_cents) = 1000 and sum(total_cents) = 51000 from public.invoices
+                where job_id = 'e1960000-0000-4000-8000-000000000001' and kind in ('deposit', 'progress', 'final') and status = 'sent'),
+              'T196 Σ tax of the invoices = the contract''s tax, Σ totals = the contract');
+-- a void invoice does not count: voided (owner, no payments), the same amount is billed again with the same tax
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T196 wrong stage' where id = '01960000-0000-4000-8000-000000000001';
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress payment', 17000, 17000, now());
+select tst.ok((select tax_cents = 333 from public.invoices where id = '01960000-0000-4000-8000-000000000003'), 'T196 a void invoice frees its part and its tax');
+-- another company: the policy refuses as before, whatever the amount
+:as_owner_b
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+         ('ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'T196 B', 1, now())$q$,
+       '%row-level security%', 'T196 another company: only the policy''s refusal');
+-- the count itself answers nothing to someone who may not read the job — on a job with its whole contract still to bill,
+-- so a check that does not work would hand out a share (security-check of #1197): another company; a tech of ours who
+-- has no visit on it. A tech on a job of his (his visit payment's final, record_visit_payment) is split as the office.
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T196 open', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+  insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+    ('a1960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 0, 'T196 part', 1, 50000, true);
+end $$;
+select tst.ok((select contract_total_cents from public.jobs where id = 'e1960000-0000-4000-8000-000000000003') = 55000, 'T196 (fixture: an open contract $550, tax $50)');
+:as_owner_b
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) is null,
+              'T196 another company learns no share of our job');
+:as_tech_a
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) is null,
+              'T196 a tech with no visit on the job learns no share of it (as he cannot read its invoices)');
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1960000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) = 1000,
+              'T196 the tech of the job (his visit payment''s final) is split as the office: $110 → $10 tax');
+-- an invoice issued before the split (no tax although its share is not 0): the last one takes only its own share
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T196 old', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+  insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+    ('a1960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000002', 0, 'T196 part', 1, 50000, true);
+end $$;
+alter table public.invoices disable trigger t41_invoice_contract;   -- as an invoice made before this migration
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000002', 'deposit', 'sent', 'Deposit', 5500, 5500, now());
+alter table public.invoices enable trigger t41_invoice_contract;
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000002', 'final', 'sent', 'Final balance', 49500, 49500, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (45000, 4500) from public.invoices where id = '01960000-0000-4000-8000-000000000007'),
+              'T196 after an old invoice without tax: the final takes its own share $45, not the whole $50 (З4)');
+-- (в) every contract the other tests billed
+:as_super
+select tst.ok(coalesce(string_agg(x.title, '; '), '') = '', format('T196 the invoices of every contract keep its tax: %s', coalesce(string_agg(x.title, '; '), '')))
+  from (select j.title, j.contract_total_cents as c, app.job_contract_tax(j.id) as ct, sum(i.total_cents) as inv, sum(i.tax_cents) as tx,
+               -- a contract with an invoice issued before the split: each invoice its own share (З4), no rest gathered
+               bool_or(i.tax_cents = 0 and floor(i.total_cents::numeric * app.job_contract_tax(j.id) / nullif(j.contract_total_cents, 0) + 0.5) > 0) as before
+          from public.jobs j join public.invoices i on i.job_id = j.id and i.kind in ('deposit', 'progress', 'final') and i.status = 'sent' and i.deleted_at is null
+         group by j.id) x
+ where x.tx > x.ct or (x.inv = x.c and x.tx <> x.ct and not x.before);
+select tst.ok((select count(*) >= 1 from public.invoices i join public.jobs j on j.id = i.job_id
+                where i.kind = 'deposit' and i.tax_cents > 0 and j.estimate_id is not null),
+              'T196 a signature''s deposit carries its share of the tax');
+\echo 'T196 the invoices of a contract: the tax split inside, Σ = the contract''s'
+
 \echo 'ALL TESTS PASSED'
