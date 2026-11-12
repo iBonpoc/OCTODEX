@@ -108,6 +108,14 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     return { x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 };
   };
   const free = (b: Box) => !boxes.some((x) => hit(x, b));
+  /** a line is an obstacle for the texts (#1091): small boxes along it, so a word never lies on a gutter or a dimension line */
+  const obstacle = (a: [number, number], b: [number, number]) => {
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / DP.tick));
+    for (let i = 0; i <= n; i++) {
+      const x = a[0] + ((b[0] - a[0]) * i) / n, y = a[1] + ((b[1] - a[1]) * i) / n;
+      boxes.push({ x0: x - DP.thinW * 2, y0: y - DP.thinW * 2, x1: x + DP.thinW * 2, y1: y + DP.thinW * 2 });
+    }
+  };
 
   // the sheet: the drawing area keeps the drawing's shape (wide house — a low sheet), the title block under it
   const pts = d.runs.flatMap((r) => [r.a, r.b]);
@@ -123,16 +131,35 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     const x = q.map((v) => v[0]), y = q.map((v) => v[1]);
     return [pts.length ? Math.max(...x) - Math.min(...x) : 1, pts.length ? Math.max(...y) - Math.min(...y) : 1] as const;
   };
-  const split = all.length > 1 && all.some((g) => Math.max(...spanOf(g)) * kAll < DP.panelMin);
-  const panels = split ? all : [d.runs.map((_, i) => i)];
-  const panelOf: number[] = [];
-  panels.forEach((g, pi) => g.forEach((i) => (panelOf[i] = pi)));
   // a tall house gets a tall area, but never taller than the sheet is wide — nor than a page shows at once (a desktop)
-  const titleH = split ? DP.fontSm * 3.4 : 0;
   const areaH = (ix: number[]) => {
     const [spanX, spanY] = spanOf(ix);
     return Math.round(Math.min(inner, DP.sheetW * 0.7, Math.max(inner * 0.45, ((inner - 2 * pad) * spanY) / Math.max(spanX, 1) + 2 * pad)));
   };
+  const split = all.length > 1 && all.some((g) => Math.max(...spanOf(g)) * kAll < DP.panelMin);
+  // contours of one size share a panel and a scale (#1091, the founder's «David Kim» sample): from the biggest down, a
+  // contour joins the last panel when, on the scale of them all, the smallest of them is still `panelMin` big
+  const panelRuns: number[][] = [];
+  if (split) {
+    const members: number[][][] = [];
+    for (const g of all) {
+      const last = members.length - 1;
+      if (last >= 0) {
+        const u = [...members[last]!.flat(), ...g];
+        const k = fitView(u.flatMap((i) => [d.runs[i]!.a, d.runs[i]!.b]), { w: inner, h: areaH(u) }, pad).k;
+        if ([...members[last]!, g].every((c) => Math.max(...spanOf(c)) * k >= DP.panelMin)) {
+          members[last]!.push(g);
+          continue;
+        }
+      }
+      members.push([g]);
+    }
+    members.forEach((ms) => panelRuns.push(ms.flat()));
+  }
+  const panels = split ? panelRuns : [d.runs.map((_, i) => i)];
+  const panelOf: number[] = [];
+  panels.forEach((g, pi) => g.forEach((i) => (panelOf[i] = pi)));
+  const titleH = split ? DP.fontSm * 3.4 : 0;
   const heights = panels.map((g) => (g.length ? areaH(g) : areaH([])));
   const tops: number[] = [];
   let acc = m;
@@ -188,6 +215,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     const sgn = sideOf(r) === "L" ? 1 : -1;
     const out: [number, number] = [-u[1] * sgn, u[0] * sgn];
     line(a, b, DP.runW);
+    obstacle(a, b);
     return { r, n: i + 1, a, b, u, out, L };
   });
 
@@ -221,6 +249,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
       line([q[0] - dx, q[1] - dy], [q[0] + dx, q[1] + dy], DP.thinW * 1.5);
     }
     line(A, B, DP.thinW);
+    obstacle(A, B);
     label(tp[0], tp[1], s, DP.font);
   }
 
@@ -264,14 +293,19 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     const word = t(f.kind === "in" ? "mod.gutters.draw.cornerIn" : f.kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
     const s = `${word} ${Math.round(cornerCut(d, f, found).angleDeg)}°`;
     const w = textW(s, DP.fontSm) / 2 + DP.numR;
-    let q: [number, number] = [p[0] + (dir[0] / dl) * w, p[1] + (dir[1] / dl) * w];
-    let moved = false;
-    for (let k = 1; k < 8 && !free(boxAt(q[0], q[1], s, DP.fontSm)); k++) {
-      q = [p[0] + (dir[0] / dl) * w * (1 + k * 0.6), p[1] + (dir[1] / dl) * w * (1 + k * 0.6)];
-      moved = true;
+    // the nearest free place round the corner: inside the angle first, then the sides, nearer before farther (#1091)
+    const ux = dir[0] / dl, uy = dir[1] / dl;
+    const tries: [number, number][] = [];
+    for (const r of [1, 1.5, 2, 2.6, 3.4]) for (const turn of [0, 35, -35, 70, -70, 110, -110, 150, -150, 180]) {
+      const c = Math.cos((turn * Math.PI) / 180), sn = Math.sin((turn * Math.PI) / 180);
+      tries.push([p[0] + (ux * c - uy * sn) * w * r, p[1] + (ux * sn + uy * c) * w * r]);
     }
-    // a word that had to move away from its corner keeps a thin leader to it (#1091)
-    if (moved) line([p[0] + (dir[0] / dl) * DP.numR, p[1] + (dir[1] / dl) * DP.numR], [q[0] - (dir[0] / dl) * (textW(s, DP.fontSm) / 2), q[1] - (dir[1] / dl) * DP.fontSm * 0.65], DP.thinW, "mut");
+    let q = tries.find((c) => free(boxAt(c[0], c[1], s, DP.fontSm))) ?? tries[0]!;
+    // a word that had to move far from its corner keeps a thin leader to it
+    if (Math.hypot(q[0] - p[0], q[1] - p[1]) > w * 1.6) {
+      const lx = q[0] - p[0], ly = q[1] - p[1], ll = Math.hypot(lx, ly) || 1;
+      line([p[0] + (lx / ll) * DP.numR, p[1] + (ly / ll) * DP.numR], [q[0] - (lx / ll) * Math.min(textW(s, DP.fontSm) / 2, ll / 2), q[1] - (ly / ll) * DP.fontSm * 0.65], DP.thinW, "mut");
+    }
     label(q[0], q[1], s, DP.fontSm);
   }
 
