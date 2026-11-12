@@ -3,7 +3,7 @@ import { View, type StyleProp, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { haptics } from "@/ui/haptics";
-import { motion, radius, component } from "@octo/design-tokens";
+import { motion, radius, component, gesture, z } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -118,8 +118,8 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
 
   const pan = usePanGesture({
     runOnJS: true,
-    minDistance: wide ? 5 : undefined,
-    activateAfterLongPress: wide ? undefined : 230,
+    minDistance: wide ? gesture.dragStart : undefined,
+    activateAfterLongPress: wide ? undefined : gesture.dragHoldMs,
     onActivate: () => {
       measure();
       setDragging(id);
@@ -158,10 +158,10 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
     transform: [
       { translateX: tx.value },
       { translateY: ty.value },
-      { scale: 1 + 0.05 * lift.value },
-      { rotate: `${-2 * lift.value}deg` },
+      { scale: 1 + (motion.liftScale - 1) * lift.value },
+      { rotate: `${motion.liftTilt * lift.value}deg` },
     ],
-    zIndex: lift.value > 0.01 ? 100 : 0,
+    zIndex: lift.value > 0.01 ? z.lift : 0,
     shadowOpacity: 0.35 * lift.value,
     shadowRadius: c.shadow.radius,
     shadowOffset: { width: 0, height: component.dragHandle },
