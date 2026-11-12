@@ -28,7 +28,7 @@ describe("the founder's sample on the sheet", () => {
       expect(panels).toBeLessThanOrEqual(4);
       expect(tx.filter((x) => x.startsWith("Масштаб"))).toHaveLength(panels);
       for (let n = 1; n <= 10; n++) expect(tx.filter((x) => x === String(n)), `№${n}`).toHaveLength(1);
-      for (const len of ["300′ 5″", "69′ 3″", "45′ 3″", "25′ 7″", "3′ 5″", "3′ 8″"]) expect(tx, len).toContain(len);
+      for (const len of ["300′ 5″", "69′ 3″", "45′ 3″", "25′ 7″", "3′ 5″", "3′ 8″", "1′ 10″", "3′ 7″", "1′ 6″"]) expect(tx, len).toContain(len);
       const rs = rects(s.items);
       for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) expect(overlap(rs[i]!, rs[j]!), `labels ${i} and ${j} overlap`).toBe(false);
     });

@@ -186,6 +186,9 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     text(x0 - DP.extGap * 2, y + DP.fontSm * 0.35, t("mod.gutters.sheet.scale", { len: fmtLen(barIn, fmt) }), DP.fontSm, "end");
   };
 
+  // a panel's title row (its name and scale bar) is taken: no word or number is put there (#1091)
+  if (split) tops.forEach((y0) => boxes.push({ x0: 0, y0: y0 - 1, x1: W, y1: y0 + titleH }));
+
   // the frame and the title block's line
   const frame: [number, number][] = [[m / 2, m / 2], [W - m / 2, m / 2], [W - m / 2, H - m / 2], [m / 2, H - m / 2]];
   frame.forEach((p, i) => line(p, frame[(i + 1) % 4]!, DP.thinW));
@@ -253,13 +256,18 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     label(tp[0], tp[1], s, DP.font);
   }
 
-  // the gutter's number in a circle, on the house side of its middle
+  // the gutter's number in a circle, on the house side of its middle; where that place is taken (a short run next to
+  // another, #1091) — along the gutter and further off the line, the nearest free place
   for (const g of geo) {
     const off = DP.numR + DP.extGap * 2;
-    const p: [number, number] = [(g.a[0] + g.b[0]) / 2 - g.out[0] * off, (g.a[1] + g.b[1]) / 2 - g.out[1] * off];
-    items.push({ t: "c", cx: r1(p[0]), cy: r1(p[1]), r: DP.numR, sw: DP.thinW, fill: "paper" });
-    text(p[0], p[1] + DP.fontSm * 0.35, String(g.n), DP.fontSm);
-    boxes.push({ x0: p[0] - DP.numR, y0: p[1] - DP.numR, x1: p[0] + DP.numR, y1: p[1] + DP.numR });
+    const step = DP.numR * 2 + DP.extGap;
+    const place = (along: number, away: number): [number, number] => [(g.a[0] + g.b[0]) / 2 + g.u[0] * along - g.out[0] * away, (g.a[1] + g.b[1]) / 2 + g.u[1] * along - g.out[1] * away];
+    const tries: [number, number][] = [];
+    for (const k of [0, 1, 2, 3]) for (const along of [0, 1, -1, 2, -2, 3, -3]) tries.push([along * step, off + k * step]);
+    const spot = tries.map(([al, aw]) => place(al, aw)).find((c) => free({ x0: c[0] - DP.numR, y0: c[1] - DP.numR, x1: c[0] + DP.numR, y1: c[1] + DP.numR })) ?? place(0, off);
+    items.push({ t: "c", cx: r1(spot[0]), cy: r1(spot[1]), r: DP.numR, sw: DP.thinW, fill: "paper" });
+    text(spot[0], spot[1] + DP.fontSm * 0.35, String(g.n), DP.fontSm);
+    boxes.push({ x0: spot[0] - DP.numR, y0: spot[1] - DP.numR, x1: spot[0] + DP.numR, y1: spot[1] + DP.numR });
   }
 
   // downspouts: a circle on the gutter, «D1» on the house side, moved along if the place is taken
