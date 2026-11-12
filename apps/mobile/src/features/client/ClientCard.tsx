@@ -68,7 +68,7 @@ export function ClientCardBody({ c }: { c: Customer }) {
   /** the same rules as the «＋» of this card: the role, the tie to the client */
   const estimateItem = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate");
   const [main] = peopleOf(c);
-  const r = clientRecords(db, c, role);
+  const r = clientRecords(db, c, role, store.mode);
   const counts = clientCounts(r);
   const props = r.properties;
   const openTasks = r.tasks.filter((x) => !x.doneAt);
@@ -158,7 +158,7 @@ export function ClientCardBody({ c }: { c: Customer }) {
 
       {/* #1094/#879: the card's main action — in one place, a verb: the estimate (the «＋» keeps the rest) */}
       {estimateItem && canServe(db, c.id) ? (
-        <Button label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
+        <Button testID="client-make-estimate" label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
       ) : null}
 
       {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}

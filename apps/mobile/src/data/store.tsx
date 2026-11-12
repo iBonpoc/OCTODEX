@@ -38,7 +38,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
-import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -1891,6 +1891,9 @@ export function StoreProvider({
         );
       },
       sendEstimate: (id, tk) => {
+        // #1113: a tech never sends (the server's send_estimate is the office side's — T142): nothing «sent» on his phone,
+        // no link made, nothing queued to be refused
+        if (role === "tech") return noop;
         const cur = dbRef.current.estimates.find((e) => e.id === id);
         // a revoked token never comes back (the server refuses it too and makes its own)
         const token = (cur?.linkRevokedAt ? undefined : cur?.token) ?? tk ?? newToken();
@@ -2496,7 +2499,8 @@ export function StoreProvider({
         mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
       },
       signEstimate: (id, path) =>
-        !canCountersign(dbRef.current, dbRef.current.me) ? () => {} : mutate(
+        // #1126: a draft only by someone who may send it (the server signs only a sent, locked version)
+        !canCountersign(dbRef.current, dbRef.current.me) || !canSignDraftOnSite(role, dbRef.current.estimates.find((x) => x.id === id)?.status ?? "draft") ? () => {} : mutate(
           "estimate.sign",
           (d) => ({
             ...d,
@@ -2505,7 +2509,10 @@ export function StoreProvider({
               e.id === id && e.status !== "approved" ? { ...e, status: "awaiting_countersign", signature: path, sentAt: e.sentAt ?? new Date().toISOString() } : e,
             ),
           }),
-          { k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client" },
+          {
+            k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client",
+            sent: dbRef.current.estimates.find((x) => x.id === id)?.status === "sent",
+          },
         ),
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
