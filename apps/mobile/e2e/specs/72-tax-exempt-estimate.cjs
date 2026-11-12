@@ -7,11 +7,7 @@ exports.run = async (h) => {
   const p = h.page;
   // a draft with 9.5% tax on materials for David Kim (not exempt yet)
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
-  await p.getByRole("button", { name: "Добавить позицию" }).first().click(); await p.waitForTimeout(300);
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("carpet");
-  await h.sheet().getByText("Carpet removal").click(); await p.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(0).fill("100");
-  await h.sheet().getByRole("button", { name: "Готово" }).click(); await p.waitForTimeout(250);
+  await require("../estimateLine.cjs").addCatalog(h, "carpet", "Carpet removal", "100"); await require("../estimateLine.cjs").fold(h);
   await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
   await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");

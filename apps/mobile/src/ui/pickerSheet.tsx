@@ -30,6 +30,7 @@ export function PickerSheet<K extends string>({
   value,
   onSelect,
   onClose,
+  onExited,
   testID = "picker-sheet",
 }: {
   visible: boolean;
@@ -38,6 +39,8 @@ export function PickerSheet<K extends string>({
   value: K | null | undefined;
   onSelect: (k: K) => void;
   onClose: () => void;
+  /** the sheet is gone (what the pick opens next — a row, a field — takes its focus only now, DS Б1) */
+  onExited?: () => void;
   testID?: string;
 }) {
   const { c } = useTheme();
@@ -61,7 +64,7 @@ export function PickerSheet<K extends string>({
   };
   return (
     // Esc: the first press clears the search, the second closes (DS А3)
-    <Sheet visible={visible} onClose={close} title={title} height="large" onEscape={() => (qNow.current ? (change(""), true) : Date.now() - clearedAt.current < ESC_AFTER_CLEAR_MS)}>
+    <Sheet visible={visible} onClose={close} onExited={onExited} title={title} height="large" onEscape={() => (qNow.current ? (change(""), true) : Date.now() - clearedAt.current < ESC_AFTER_CLEAR_MS)}>
       <View testID={testID} style={{ gap: space[2] }}>
         <View testID={`${testID}-search`} accessibilityRole="search">
           <TextField type="search" icon="search" value={q} onChangeText={change} placeholder={t("ui.picker.search")} label={t("ui.picker.search")} />

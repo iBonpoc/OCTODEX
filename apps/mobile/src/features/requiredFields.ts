@@ -68,5 +68,5 @@ export const REQUIRED_FORMS: RequiredForm[] = [
   { file: "auth/sign-in.tsx", route: "/auth/sign-in", status: "todo", fields: [] },
   { file: "job/[id].tsx", route: "/job/[id]", status: "exempt", fields: [], why: "the note composer: «Добавить» is off while the note is empty — one optional input, not a form" },
   // the estimate editor is the exception of DS §12.8: its own rules (РС-4)
-  { file: "estimate/new.tsx", route: "/estimate/new", status: "todo", fields: [] },
+  { file: "estimate/new.tsx", route: "/estimate/new", status: "exempt", fields: [], why: "the editor: an open row checks itself in place (useRequiredForm for its fields, DS §8.3); the page's main buttons follow in РС-7 (ActionBar)" },
 ];

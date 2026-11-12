@@ -433,6 +433,7 @@ export function Screen({
   right,
   children,
   scroll = true,
+  onScrollBegin,
   back,
   subtitle,
   hintKey,
@@ -451,6 +452,8 @@ export function Screen({
   right?: ReactNode;
   children: ReactNode;
   scroll?: boolean;
+  /** a finger starts to scroll the page (an open row of the estimate closes and keeps what is typed, DS §8.3) */
+  onScrollBegin?: () => void;
   back?: () => void;
   subtitle?: string;
   /** stable id for the first-visit hint (shown once when `help` is set) */
@@ -745,6 +748,7 @@ export function Screen({
               automaticallyAdjustKeyboardInsets
               stickyHeaderIndices={tabs ? [1] : undefined}
               scrollEventThrottle={16}
+              onScrollBeginDrag={onScrollBegin}
               onScroll={(e) => {
                 const y = e.nativeEvent.contentOffset.y;
                 offset.current = y;
