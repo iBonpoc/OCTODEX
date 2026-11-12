@@ -579,7 +579,8 @@
             "unit": "ea",
             "unitPriceCents": 0,
             "taxable": true,
-            "isOptional": false
+            "isOptional": false,
+            "clientVisible": false
           },
           {
             "id": "c1e",

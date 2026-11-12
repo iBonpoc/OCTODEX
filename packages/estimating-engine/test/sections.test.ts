@@ -85,6 +85,9 @@ describe("Р4: section subtotals", () => {
     // a subsection under a parent that does not count is not counted either
     const lost: CustomOption = { id: "o", name: "A", sections: [{ id: "sub", parentId: "nope" }], lines: [line({ id: "y", sectionId: "sub" })] };
     expect(sectionSubtotals(lost, settings())).toEqual({ bySection: {}, unsectioned: 10000 });
+    // broken: not a list, or null entries — counted as none / skipped, never an error (40 places first)
+    expect(sectionSubtotals({ id: "o", name: "A", sections: {} as never, lines: [line({ id: "v", sectionId: "a" })] }, settings())).toEqual({ bySection: {}, unsectioned: 10000 });
+    expect(sectionSubtotals({ id: "o", name: "A", sections: [null, { id: "a" }] as never, lines: [line({ id: "v", sectionId: "a" })] }, settings()).bySection).toEqual({ a: 10000 });
     // a repeated id counts once, the first: Σ stays the subtotal
     const twice: CustomOption = { id: "o", name: "A", sections: [{ id: "a" }, { id: "a", parentId: "b" }, { id: "b" }], lines: [line({ id: "w", sectionId: "a" })] };
     expect(sectionSubtotals(twice, settings())).toEqual({ bySection: { a: 10000, b: 0 }, unsectioned: 0 });
@@ -96,6 +99,9 @@ describe("Р1: a line's profit; «Сохранить в каталог» for a m
     expect(lineProfit(line({ id: "p", quantity: "2.5", unitPriceCents: 2040, unitCostCents: 1300 }))).toBe(1850);
     expect(lineProfit(line({ id: "q", unitPriceCents: 1000, unitCostCents: 1500 }))).toBe(-500);
     expect(lineProfit(line({ id: "r", unitPriceCents: 1000 }))).toBe(1000);
+    // a quantity being typed: no number yet — null, not an error (the editor calls it on every keystroke)
+    expect(lineProfit(line({ id: "t", quantity: "abc", unitPriceCents: 1000 }))).toBeNull();
+    expect(lineProfit(line({ id: "u", quantity: "", unitPriceCents: 1000 }))).toBeNull();
   });
   it("the catalog price is the line's price, for every cost up to $100 and price up to 11 × cost", () => {
     const bad: string[] = [];
@@ -119,6 +125,8 @@ describe("Р1: a line's profit; «Сохранить в каталог» for a m
     expect(catalogMarkupFor(undefined, 100)).toEqual({ ok: false, reason: "noCost" });
     expect(catalogMarkupFor(0, 100)).toEqual({ ok: false, reason: "noCost" });
     expect(catalogMarkupFor(500, 499)).toEqual({ ok: false, reason: "belowCost" });
+    expect(catalogMarkupFor(500, 5501)).toEqual({ ok: false, reason: "aboveMax" }); // more than 11 × the cost
+    expect(catalogMarkupFor(500, 5500)).toEqual({ ok: true, markupBps: 100000 });
     // $1,000.03 cost: one bp is 10 cents, $1,000.08 is between two steps
     expect(catalogMarkupFor(100003, 100008)).toEqual({ ok: false, reason: "noExact" });
     expect(catalogMarkupFor(1000, 1100)).toEqual({ ok: true, markupBps: 1000 }); // the line's own 10%, not 9.99% (999 rounds to $11.00 too)

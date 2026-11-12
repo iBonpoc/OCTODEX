@@ -77,6 +77,15 @@ describe("unit:opsEstimateQty — the stored quantity (Н1)", () => {
     const old = writes.find((w) => w.table === "estimate_line_items" && w.kind === "insert")!.row as Record<string, unknown>[];
     expect(old.every((r) => !("copied_from_line_id" in r))).toBe(true);
   });
+  it("client_visible on every row (a batch insert sends the columns of all rows: a missing key would be NULL)", async () => {
+    writes.length = 0;
+    const line = (id: string, x: object = {}) => ({ id, name: id, group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000, ...x });
+    const doc = { options: [{ id: "o1", name: "A", lines: [line("v1"), line("h1", { unitPriceCents: 0, clientVisible: false }), line("p1", { clientVisible: false })] }], settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: null } };
+    await applyOp({ k: "estimate.save", id: "e-1", versionId: "v-new", customerId: "c-1", propertyId: "p-1", title: "T", doc, costs: {}, totalCents: 0, depositCents: 0, marginPct: null } as unknown as Op, "co-1", "u-1");
+    const rows = writes.find((w) => w.table === "estimate_line_items" && w.kind === "insert")!.row as Record<string, unknown>[];
+    // hidden only at $0 (a priced one is visible — the server's check would refuse it otherwise)
+    expect(rows.map((r) => [r.id, r.client_visible])).toEqual([["v1", true], ["h1", false], ["p1", true]]);
+  });
   it("review #420 №1: a server before the migration refuses copied_from_line_id — the lines go again without it", async () => {
     writes.length = 0;
     missingColumn.table = "estimate_line_items";
