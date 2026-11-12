@@ -33,7 +33,7 @@ export interface LineSource extends CoreLineSource {
   section: string;
   /** the quantity the module wrote (decimal text) */
   qty: string;
-  /** the engine's version the quantity was computed with (#1165): an estimate computed by an older engine says «расчёт изменился» */
+  /** the gutter parts rule's version the quantity was computed with (#1165, GUTTER_PARTS_VERSION): an older one says «расчёт изменился» */
   engineVersion?: string;
   /** the client price per unit the module wrote, cents */
   priceCents: number;
@@ -149,8 +149,9 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
       continue;
     }
     // a second line of the same part (copied to split the work): the person's — as it is, never removed (review M8a №4)
+    // (its version stamp is renewed with the rest: the update looked at the part, the note must go — #1165)
     if (seen.has(l.source.key)) {
-      out.push(l);
+      out.push(engineNow ? { ...l, source: { ...l.source, engineVersion: engineNow } } : l);
       continue;
     }
     const n = nextByKey.get(l.source.key);

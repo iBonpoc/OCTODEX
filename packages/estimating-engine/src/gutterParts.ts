@@ -450,6 +450,13 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
   return q.div(p).ceil();
 }
 
+/**
+ * The version of the gutter parts rule (#1165): raise it when `computeGutterParts` changes WHAT it counts for the same drawing
+ * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
+ * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
+ */
+export const GUTTER_PARTS_VERSION = "1";
+
 export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
   const rules = resolveGutterRules(over);
   const acc = new Acc();

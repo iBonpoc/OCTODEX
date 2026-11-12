@@ -8,7 +8,7 @@
  * The button: no lines of it anywhere → «Смета»; the measurement changed since (status draft) → «Обновить смета»;
  * nothing changed (ready) → «Открыть смету». No lead and no property → «Сделать заявкой» first (an estimate needs a client).
  */
-import { ENGINE_VERSION, type PartQty } from "@octo/estimating-engine";
+import { ENGINE_VERSION, GUTTER_PARTS_VERSION, type PartQty } from "@octo/estimating-engine";
 import type { DocAttachPage } from "@/features/docPages";
 import { pagesProblem } from "@/features/docPages";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
@@ -61,8 +61,8 @@ export function staleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: E
   );
 }
 
-/** `was` is an older engine than `now` (dotted numbers: 0.1.3 < 0.1.10 < 0.2.0); none or unreadable — not older (an old line has no version: nobody knows, nothing is said) */
-export function engineOlder(was: unknown, now: string = ENGINE_VERSION): boolean {
+/** `was` is an older parts rule than `now` (GUTTER_PARTS_VERSION, not the core's ENGINE_VERSION: a core change must not mark every estimate) (dotted numbers: 0.1.3 < 0.1.10 < 0.2.0); none or unreadable — not older (an old line has no version: nobody knows, nothing is said) */
+export function engineOlder(was: unknown, now: string = GUTTER_PARTS_VERSION): boolean {
   if (typeof was !== "string" || !/^\d+(\.\d+)*$/.test(was)) return false;
   const a = was.split(".").map(Number), b = now.split(".").map(Number);
   for (let i = 0; i < Math.max(a.length, b.length); i++) {
@@ -73,7 +73,7 @@ export function engineOlder(was: unknown, now: string = ENGINE_VERSION): boolean
 }
 
 /** the measurement's estimate was computed by an older engine (#1165): any line of this measurement carries an older version */
-export function engineChangedFor(e: Estimate | undefined, measurementId: string, now: string = ENGINE_VERSION): boolean {
+export function engineChangedFor(e: Estimate | undefined, measurementId: string, now: string = GUTTER_PARTS_VERSION): boolean {
   return !!e?.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, measurementId) && engineOlder(sourceOf(l)?.engineVersion, now)));
 }
 
@@ -81,7 +81,7 @@ export function engineChangedFor(e: Estimate | undefined, measurementId: string,
  * #1165: the measurements of this estimate whose lines the engine computed in an older version than now — the estimate is still
  * theirs (no newer one took over). A hint «расчёт изменился — обновите»; a signed estimate is only shown the hint, never changed.
  */
-export function engineStaleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: Estimate, now: string = ENGINE_VERSION): MeasurementRow[] {
+export function engineStaleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: Estimate, now: string = GUTTER_PARTS_VERSION): MeasurementRow[] {
   return gutterData(db).measurements.filter((m) => hasLinesOf(e, m.id) && estimateOfMeasurement(db, m.id)?.id === e.id && engineChangedFor(e, m.id, now));
 }
 
@@ -221,7 +221,7 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const row = { ...ownFields(was), status: "ready" as const };
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
-  const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), ENGINE_VERSION);
+  const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), GUTTER_PARTS_VERSION);
   const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
   // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
   const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;

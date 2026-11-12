@@ -117,7 +117,7 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
           </View>
         ) : null}
         {v.engineChanged ? (
-          <View testID="view-engine-changed">
+          <View testID={v.state === "signed" ? "view-engine-signed" : "view-engine-changed"}>
             <StatusChip status="warn" label={t(v.state === "signed" ? "mod.gutters.list.s.engineSigned" : "mod.gutters.list.s.engine")} />
           </View>
         ) : null}

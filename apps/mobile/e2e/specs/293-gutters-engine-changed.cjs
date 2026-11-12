@@ -49,7 +49,7 @@ exports.run = async (h) => {
 
   // the lines carry the engine's version; nothing is said while it is the current one
   const now = (await versions(eid, mid))[0];
-  h.expect(/^\d+\.\d+\.\d+$/.test(now || ""), "the lines carry the engine's version: " + now);
+  h.expect(/^\d+(\.\d+)*$/.test(now || ""), "the lines carry the engine's version: " + now);
   await h.go(`/estimate/${eid}`);
   await tid("est-pdf").waitFor({ timeout: 8000 });
   h.expect((await tid("module-gutters-engine").count()) === 0, "no word while the engine is the same");
@@ -62,7 +62,11 @@ exports.run = async (h) => {
   await h.shot("engine");
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
   await tid("view-engine-changed").waitFor({ timeout: 8000 });
-  h.expect(/Расчёт изменился — обновите/.test(await tid("view-engine-changed").innerText()), "the chip on the review");
+  h.expect((await tid("view-engine-signed").count()) === 0, "an open estimate: the chip is the «обновите» one");
+  // the measurements' list: the card says so too
+  await h.go("/module/gutters/list");
+  await tid(`measurement-${mid}`).waitFor({ timeout: 8000 });
+  h.expect(/Расчёт изменился/.test(await tid(`measurement-${mid}`).innerText()), "the card in the list of measurements says so");
 
   // «Обновить из замера»: the same estimate, the current version, no words
   await h.go(`/estimate/${eid}`);
@@ -74,11 +78,15 @@ exports.run = async (h) => {
   await tid("est-pdf").waitFor({ timeout: 8000 });
   h.expect((await tid("module-gutters-engine").count()) === 0, "the word is gone after the update");
 
-  // signed: only told (the review's chip says «после подписи»), nothing offered
+  // signed: only told (its own chip), nothing offered
   await setVersion(eid, "0.0.1", "approved");
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
-  await tid("view-engine-changed").waitFor({ timeout: 8000 });
-  h.expect(/после подписи/.test(await tid("view-engine-changed").innerText()), "a signed estimate: «Расчёт изменился после подписи»");
+  await tid("view-engine-signed").waitFor({ timeout: 8000 });
+  h.expect((await tid("view-engine-changed").count()) === 0, "a signed estimate has the «после подписи» chip, not the «обновите» one");
+  await tid("view-action-signed").waitFor({ timeout: 8000 });
   h.expect((await tid("view-action-update").count()) === 0, "no «Обновить» for a signed estimate");
+  await h.go(`/estimate/${eid}`);
+  await tid("est-pdf").waitFor({ timeout: 8000 });
+  h.expect((await tid("module-gutters-engine").count()) === 0, "no note with a button on a signed estimate's page");
   await h.shot("signed");
 };

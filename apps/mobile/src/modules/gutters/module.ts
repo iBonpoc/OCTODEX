@@ -100,7 +100,8 @@ const gutters: ModuleDef = {
   // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the review's «Перенести изменения в смету»)
   estimateNotes: (e, db) => {
     const m = staleMeasurements(db, e)[0];
-    const eng = engineStaleMeasurements(db, e)[0];
+    // the drawing's change says it first: not two buttons that do the same
+    const eng = engineStaleMeasurements(db, e).find((x) => x.id !== m?.id);
     const notes = [];
     if (m) notes.push({ id: "stale", labelKey: "mod.gutters.est.stale" as const, hintKey: "mod.gutters.est.staleHint" as const, action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate" as const, icon: "pencil" as const, href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` } });
     // #1165: the engine's rule changed since the estimate was computed → «Обновить» (a signed estimate is not offered notes at all)

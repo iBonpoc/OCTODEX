@@ -1,4 +1,5 @@
 /**
+ * (ENGINE_VERSION below is the gutter parts rule's version, GUTTER_PARTS_VERSION: the core's own ENGINE_VERSION does not mark estimates)
  * #1165 (found on the review of #1161): an estimate whose lines were computed by an older engine says «Расчёт изменился —
  * обновите»; a signed one is only told. The version is in the line's `source` (a line without one is not flagged — nobody knows).
  */
@@ -10,7 +11,7 @@ vi.mock("expo-clipboard", () => ({}));
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("../src/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
-import { computeGutterParts, DEFAULT_TAX, ENGINE_VERSION, type CustomLine, type PartQty } from "@octo/estimating-engine";
+import { computeGutterParts, DEFAULT_TAX, GUTTER_PARTS_VERSION as ENGINE_VERSION, type CustomLine, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "../src/data/types";
 import { linesFromParts, resyncLines, type ModuleLine } from "../src/modules/gutters/estimate";
 import { engineChangedFor, engineOlder, engineStaleMeasurements, estimateAction } from "../src/modules/gutters/estimateLink";
@@ -78,6 +79,15 @@ describe("an estimate of an older engine", () => {
     expect(engineStaleMeasurements(db, e).map((x) => x.id)).toEqual([M]);
     expect(engineStaleMeasurements(db, e, "0.0.1")).toEqual([]); // the same engine: nothing
   });
+  it("a copy of the same part (split by hand) gets the current version too: the note goes after «Обновить» (review of #1212)", () => {
+    const e = old("0.0.1");
+    const lines = e.doc!.options[0]!.lines as ModuleLine[];
+    const copy = { ...lines[0]!, id: "copy1", quantity: "5" } as ModuleLine; // the same key: the person's own copy
+    const out = resyncLines([...lines, copy], linesAt(ENGINE_VERSION) as ModuleLine[]);
+    expect(out.some((l) => l.id === "copy1")).toBe(true);
+    for (const l of out) expect((l.source as { engineVersion?: string }).engineVersion, l.name).toBe(ENGINE_VERSION);
+    expect(engineChangedFor(estimate(out), M)).toBe(false);
+  });
   it("«Обновить» brings the current version, also on a line kept by hand but no longer computed", () => {
     const e = old("0.0.1");
     const lines = e.doc!.options[0]!.lines as ModuleLine[];
@@ -85,5 +95,17 @@ describe("an estimate of an older engine", () => {
     const next = linesAt(ENGINE_VERSION).slice(1) as ModuleLine[]; // the first part is not computed any more
     const out = resyncLines(lines, next);
     for (const l of out) expect((l.source as { engineVersion?: string }).engineVersion, l.name).toBe(ENGINE_VERSION);
+  });
+});
+
+describe("the note on the estimate (module.estimateNotes)", () => {
+  it("an older rule gives the engine note; a drawing changed after the estimate gives only the drawing's (not two buttons that do the same)", async () => {
+    const gutters = (await import("../src/modules/gutters/module")).default;
+    const e = estimate(linesAt("0.0.1") as ModuleLine[]);
+    const mk = (status: "ready" | "draft") => ({ estimates: [e], moduleData: { gutters: { measurements: [{ id: M, status }], elements: [{ id: "x", measurementId: M, kind: "run", geom: {}, attrs: {} }] } } }) as never;
+    const ready = gutters.estimateNotes!(e, mk("ready"));
+    expect(ready.map((x) => x.id)).toEqual(["engine"]);
+    const draft = gutters.estimateNotes!(e, mk("draft"));
+    expect(draft.map((x) => x.id)).toEqual(["stale"]);
   });
 });
