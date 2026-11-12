@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { space, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, discountBps, sectionSubtotals, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
+import { LINE_GROUPS, activeLines, countedSections, discountBps, sectionSubtotals, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
@@ -17,7 +17,7 @@ import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/est
 import { SortableList } from "@/features/SortableList";
 import type { Drop } from "@/features/sortable";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, renameSection, restoreLayout, shiftLine, snapshotLayout, viewRows, type LayoutSnapshot } from "@/features/sectionLayout";
+import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -302,9 +302,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   /* ---- sections (DS §8.5): every change undoes itself only (the layout it changed), never the whole document ---- */
   const secTitle = (x: EstimateSection) => x.title ?? (x.kind && x.kind !== "module" ? t(`est.sec.${x.kind}` as DictKey) : t("est.sec.untitled"));
-  const showUndo = (text: DictKey, snap: LayoutSnapshot) => toast.show(t(text), () => setOption((o) => restoreLayout(o, snap)));
+  // «Вернуть» takes back this change only (what the person did to the layout meanwhile stays — #1227, #1231, #1241)
+  const showUndo = (text: DictKey, before: Opt, after: Opt) => {
+    const undo = layoutUndo(before, after);
+    toast.show(t(text), () => setOption((o) => undo(o)));
+  };
   const addSectionBtn = (parentId?: string) => {
-    if (!leaveRow()) return;
+    if (signed || !leaveRow()) return;
     const r = addSection(option, { parentId });
     if (!r) return void toast.show(t("est.sec.limit"));
     setOption(() => r.option);
@@ -312,23 +316,24 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setRenamingId(r.id);
   };
   const layoutBtn = () => {
-    if (!leaveRow()) return;
-    const snap = snapshotLayout(option);
+    if (signed || !leaveRow()) return;
     const next = layoutByKind(option);
     if (!next) return void toast.show(t(canAddSection(option) ? "est.sec.nothingToLay" : "est.sec.limit"));
     setOption(() => next);
-    showUndo("est.sec.laidOut", snap);
+    showUndo("est.sec.laidOut", option, next);
   };
   const sectionAction = (id: string, a: SectionAction) => {
+    if (signed) return;
     if (a === "rename") return setRenamingId(id);
     if (a === "addSub") return addSectionBtn(id);
     if (a === "addHere") return addNew(id);
     if (a === "catalogHere") return leaveRow() ? setPicker({ addTo: id }) : undefined;
-    const snap = snapshotLayout(option);
-    setOption((o) => deleteSection(o, id));
-    showUndo("est.sec.deleted", snap);
+    const next = deleteSection(option, id);
+    setOption(() => next);
+    showUndo("est.sec.deleted", option, next);
   };
   const doMove = (lineId: string, key: string) => {
+    if (signed) return setMoveFor(null);
     const index = option.lines.findIndex((l) => l.id === lineId);
     const line = option.lines[index];
     if (!line) return;
@@ -342,26 +347,35 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       return void toast.show(t("est.sec.moved"), () => setOption((o) => shiftLine(o, lineId, (dir * -1) as -1 | 1)));
     }
     const r = moveLine(option, lineId, { sectionId: key === "__none__" ? undefined : key });
-    if (!r.ok) return void toast.show(t(r.reason === "module" || r.reason === "moduleLine" ? "est.sec.moduleBlocked" : "est.sec.moved"));
+    // only a real refusal speaks; «moved» is said only after a move
+    if (!r.ok) return r.reason === "module" || r.reason === "moduleLine" ? void toast.show(t("est.sec.moduleBlocked")) : undefined;
     setOption(() => r.option);
     toast.show(t("est.sec.moved"), back);
   };
   /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
   const dropRow = (d: Drop) => {
+    if (signed) return;
     if (d.kind === "line") {
       const index = option.lines.findIndex((l) => l.id === d.id);
       const line = option.lines[index];
       if (!line) return;
       const r = moveLine(option, d.id, d.to);
-      if (!r.ok) return void toast.show(t(r.reason === "module" || r.reason === "moduleLine" ? "est.sec.moduleBlocked" : "est.sec.moved"));
+      if (!r.ok) return r.reason === "module" || r.reason === "moduleLine" ? void toast.show(t("est.sec.moduleBlocked")) : undefined;
       setOption(() => r.option);
       return void toast.show(t("est.sec.moved"), () => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index })));
     }
-    const snap = snapshotLayout(option);
+    const all = option.sections ?? [];
+    const was = all.find((x) => x.id === d.id);
     const r = moveSection(option, d.id, d.to);
-    if (!r.ok) return void toast.show(t(r.reason === "module" ? "est.sec.moduleBlocked" : "est.sec.moved"));
+    if (!r.ok || !was) return r.ok || r.reason !== "module" ? undefined : void toast.show(t("est.sec.moduleBlocked"));
     setOption(() => r.option);
-    showUndo("est.sec.moved", snap);
+    // «Вернуть» puts this section (with its subsections) back before the one that stood after its family — nothing else changes
+    const family = new Set([d.id, ...all.filter((x) => x.parentId === d.id).map((x) => x.id)]);
+    const next = all.slice(all.findIndex((x) => x.id === d.id) + 1).find((x) => !family.has(x.id) && (x.parentId ?? undefined) === (was.parentId ?? undefined));
+    toast.show(t("est.sec.moved"), () => setOption((o) => {
+      const back = moveSection(o, d.id, { parentId: was.parentId, beforeId: next?.id });
+      return back.ok ? back.option : o;
+    }));
   };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
   const openInCatalog = (id: string) => {
@@ -372,7 +386,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction };
   const sectionApi = useMemo<SectionApi>(
     () => ({
-      toggle: (id) => setCollapsedIds((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id])),
+      // folding a section closes the open row first: a wrong row speaks and stays, the section does not fold over it
+      toggle: (id) => {
+        if (!latest.current.leaveRow()) return;
+        setCollapsedIds((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
+      },
       action: (id, a) => latest.current.sectionAction(id, a),
       rename: (id, title) => {
         setOption((o) => renameSection(o, id, title));
@@ -483,8 +501,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds));
-  const secTotals = sectionSubtotals(option, s);
+  const view = useMemo(() => viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), [option, collapsedIds, holdSection]);
+  const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
   const taxValue = !s.tax.enabled || !taxGroups.length ? t("ue.off") : `${s.tax.rateBps / 100}% · ${taxGroups.map((g) => t(`ue.group.${g}` as DictKey).toLowerCase()).join(", ")}`;
@@ -583,6 +601,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     lineCount={r.lineCount}
                     collapsed={r.collapsed}
                     renaming={renamingId === r.section.id}
+                    locked={signed}
                     api={sectionApi}
                   />
                 </View>
@@ -623,14 +642,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <Button label={t("est.row.addCatalog")} icon="search" variant="secondary" full onPress={openCatalog} />
             </View>
           </RowView>
-          <RowView>
-            <View style={{ flex: 1 }} testID="est-group-by-kind">
-              <Button label={t("est.sec.layout")} variant="ghost" full onPress={layoutBtn} />
-            </View>
-            <View style={{ flex: 1 }} testID="est-add-section">
-              <Button label={`＋ ${t("est.sec.addSection")}`} variant="ghost" full onPress={() => addSectionBtn()} />
-            </View>
-          </RowView>
+          {signed ? null : (
+            <RowView>
+              <View style={{ flex: 1 }} testID="est-group-by-kind">
+                <Button label={t("est.sec.layout")} variant="ghost" full onPress={layoutBtn} />
+              </View>
+              <View style={{ flex: 1 }} testID="est-add-section">
+                <Button label={`＋ ${t("est.sec.addSection")}`} variant="ghost" full onPress={() => addSectionBtn()} />
+              </View>
+            </RowView>
+          )}
         </View>
 
         <View style={{ gap: space[3] }}>
@@ -741,7 +762,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         items={[
           { key: "__up__", label: t("est.sec.moveUp") },
           { key: "__down__", label: t("est.sec.moveDown") },
-          ...(option.sections ?? []).filter((x) => x.kind !== "module").map((x) => ({ key: x.id, label: secTitle(x) })),
+          // the sections as the list counts them (a broken or past-the-limit one is not offered); a subsection with its parent
+          ...countedSections(option).filter((x) => x.kind !== "module").map((x) => {
+            const parent = x.parentId ? option.sections?.find((y) => y.id === x.parentId) : undefined;
+            return { key: x.id, label: parent ? `${secTitle(parent)} > ${secTitle(x)}` : secTitle(x) };
+          }),
           { key: "__none__", label: t("est.sec.moveNone") },
         ]}
         value={null}

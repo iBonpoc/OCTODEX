@@ -15,7 +15,8 @@ import { legacyForEstimate } from "./legacyTotals";
 import { visitPayment } from "@octo/estimating-engine";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
 import { posFromRows } from "@/features/purchaseOrderRows";
-import type { CostHistoryEntry } from "@/data/types";
+import type { CostHistoryEntry, PriceHistoryEntry } from "@/data/types";
+import { priceHistoryFromRow } from "@/features/catalogCard";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -795,6 +796,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         // spec 36: absent before the migration and for items without a supplier
         ...(typeof r.supplier_id === "string" ? { supplierId: r.supplier_id } : {}),
         ...(typeof r.supplier_sku === "string" ? { supplierSku: r.supplier_sku } : {}),
+        // РС-10: the card's fields (absent before the migration, and when not set)
+        ...catalogCardFromRow(r),
       })),
     memberSignatures: signatureRows.map((r) => ({
       id: s(r.id), userId: s(r.user_id), svg: s(r.svg), name: s(r.name), title: (r.title as string | null) ?? undefined,
@@ -831,6 +834,25 @@ export function deletedMembers(rows: readonly Row[], known: ReadonlySet<string> 
     seen.add(id);
     out.push({ id, name: "", initials: "—", kind: r.role === "subcontractor" ? "sub" : "employee", roles: appRoles(r.role as DbRole), pending: true, deleted: true });
   }
+  return out;
+}
+
+/** РС-10: catalog_items.sku / barcode / product_url / service_category_id and who made and changed it → the item's
+ *  fields; absent or empty — left out */
+export function catalogCardFromRow(r: Row): Pick<CatalogItem, "sku" | "barcode" | "productUrl" | "serviceCategoryId" | "createdAt" | "createdBy" | "updatedAt" | "updatedBy"> {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : undefined);
+  const out: ReturnType<typeof catalogCardFromRow> = {};
+  const set = <K extends keyof typeof out>(k: K, v: string | undefined) => {
+    if (v !== undefined) out[k] = v;
+  };
+  set("sku", str(r.sku));
+  set("barcode", str(r.barcode));
+  set("productUrl", str(r.product_url));
+  set("serviceCategoryId", str(r.service_category_id));
+  set("createdAt", str(r.created_at));
+  set("createdBy", str(r.created_by));
+  set("updatedAt", str(r.updated_at));
+  set("updatedBy", str(r.updated_by));
   return out;
 }
 
@@ -919,6 +941,26 @@ export function pendingFromRows(rows: Row[]): PendingPayment[] {
  * spec 36: the newest history rows of one item or of one supplier (catalog_cost_history; RLS: only who sees costs —
  * others get none). Read when the item's or the supplier's screen opens. A server before the migration: none.
  */
+/**
+ * РС-10: the newest price and markup changes of one item (catalog_price_history; RLS: only who sees costs — others get
+ * none). Read when the item's card opens. A server before the migration: none.
+ */
+export async function loadPriceHistory(companyId: string, itemId: string, limit = 20): Promise<PriceHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("catalog_price_history")
+    .select("id, item_id, unit_price_cents, prev_unit_price_cents, markup_bps, prev_markup_bps, source, at, by")
+    .eq("company_id", companyId)
+    .eq("item_id", itemId)
+    .order("at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return (data as Row[]).map(priceHistoryFromRow);
+}
+
 export async function loadCostHistory(companyId: string, where: { itemId?: string; supplierId?: string }, limit = 20): Promise<CostHistoryEntry[]> {
   let b = supabase.from("catalog_cost_history").select("id, item_id, supplier_id, unit_cost_cents, vendor_tax_bps, source, at").eq("company_id", companyId);
   if (where.itemId) b = b.eq("item_id", where.itemId);

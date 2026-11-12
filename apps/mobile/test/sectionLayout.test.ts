@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { SECTIONS_MAX, sectionSubtotals, type CustomLine, type CustomOption, type EstimateSection } from "@octo/estimating-engine";
 import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
-import { addSection, deleteSection, layoutByKind, moveLine, moveSection, renameSection, restoreLayout, shiftLine, snapshotLayout, viewRows } from "../src/features/sectionLayout";
+import { addSection, deleteSection, layoutByKind, moveLine, moveSection, layoutUndo, renameSection, shiftLine, viewRows } from "../src/features/sectionLayout";
 
 const L = (id: string, group: CustomLine["group"], over: Partial<CustomLine> = {}): CustomLine => ({ id, name: id, group, quantity: "1", unit: "ea", unitPriceCents: 1000, ...over });
 const opt = (lines: CustomLine[], sections?: EstimateSection[]): CustomOption => ({ id: "o", name: "Good", lines, ...(sections ? { sections } : {}) });
@@ -63,13 +63,34 @@ describe("add / rename / delete", () => {
     expect(d2.lines.map((l) => l.sectionId)).toEqual([undefined, "s1a", undefined]);
     expect(ids(d2)).toEqual(ids(o));
   });
-  it("«Вернуть» of a delete restores the sections and the lines' sections, not the rest of the option", () => {
+  it("«Вернуть» of a delete: the section and its lines are back, the rest of the option is left as it is", () => {
     const o = opt([L("a", "service", { sectionId: "s1" })], [{ id: "s1", title: "Roof" }]);
-    const snap = snapshotLayout(o);
-    const after = { ...deleteSection(o, "s1"), lines: deleteSection(o, "s1").lines.map((l) => ({ ...l, name: "edited" })) };
-    const back = restoreLayout(after, snap);
+    const gone = deleteSection(o, "s1");
+    const edited = { ...gone, lines: gone.lines.map((l) => ({ ...l, name: "edited" })) };
+    const back = layoutUndo(o, gone)(edited);
     expect(back.sections).toEqual(o.sections);
     expect(back.lines[0]).toMatchObject({ sectionId: "s1", name: "edited" });
+  });
+  it("delete A, add «Двор» with a line, «Вернуть»: «Двор» and its line are whole (third time #1227, #1231, #1241)", () => {
+    const o = opt([L("a", "service", { sectionId: "A" }), L("z", "material")], [{ id: "A", title: "Крыша" }]);
+    const gone = deleteSection(o, "A");
+    const withYard = addSection(gone, { title: "Двор" }, () => "Y")!.option;
+    const moved = moveLine(withYard, "z", { sectionId: "Y" });
+    const now = (moved as { ok: true; option: CustomOption }).option;
+    const back = layoutUndo(o, gone)(now);
+    expect(sec(back).sort()).toEqual(['A"Крыша"', 'Y"Двор"']);
+    expect(back.lines.find((l) => l.id === "z")!.sectionId).toBe("Y");
+    expect(back.lines.find((l) => l.id === "a")!.sectionId).toBe("A");
+  });
+  it("«Вернуть» of a delete: a subsection gets its parent again; a line the person moved since stays where they put it", () => {
+    const o = opt([L("a", "service", { sectionId: "sub" }), L("b", "service", { sectionId: "A" })], [{ id: "A", title: "Roof" }, { id: "sub", title: "Gutters", parentId: "A" }]);
+    const gone = deleteSection(o, "A");
+    expect(sec(gone)).toEqual(['sub"Gutters"']);
+    const movedAway = (moveLine(gone, "a", { sectionId: undefined }) as { option: CustomOption }).option;
+    const back = layoutUndo(o, gone)(movedAway);
+    expect(sec(back)).toEqual(['A"Roof"', 'sub<A"Gutters"']);
+    expect(back.lines.find((l) => l.id === "a")!.sectionId).toBeUndefined();
+    expect(back.lines.find((l) => l.id === "b")!.sectionId).toBe("A");
   });
 });
 
@@ -125,11 +146,20 @@ describe("«Разложить по видам» (Р4)", () => {
   it("«Вернуть» of the layout restores the sections and each line's section", () => {
     n = 0;
     const o = opt([L("a", "service"), L("b", "material")]);
-    const snap = snapshotLayout(o);
     const r = layoutByKind(o, nid)!;
-    const back = restoreLayout(r, snap);
+    const back = layoutUndo(o, r)(r);
     expect(back.sections).toBeUndefined();
     expect(back.lines.every((l) => l.sectionId === undefined)).toBe(true);
+  });
+  it("«Вернуть» of the layout after the person added a section with a line: theirs stays", () => {
+    n = 0;
+    const o = opt([L("a", "service"), L("b", "material")]);
+    const r = layoutByKind(o, nid)!;
+    const yard = addSection(r, { title: "Двор" }, () => "Y")!.option;
+    const withLine = { ...yard, lines: [...yard.lines, L("c", "labor", { sectionId: "Y" })] };
+    const back = layoutUndo(o, r)(withLine);
+    expect(sec(back)).toEqual(['Y"Двор"']);
+    expect(back.lines.map((l) => `${l.id}:${l.sectionId ?? ""}`)).toEqual(["a:", "b:", "c:Y"]);
   });
 });
 

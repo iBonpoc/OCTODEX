@@ -83,7 +83,7 @@ const cleanTitle = (t: unknown): string | undefined => {
 /** a section title as the editor keeps it (the same cleaning as normalizeDoc) */
 export const cleanSectionTitle = cleanTitle;
 /** hidden from the client as the server reads it: false, or «false» / 0 written by another copy */
-const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
+export const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
 
 const SECTION_KINDS: readonly string[] = ["service", "labor", "material", "module"];
 /** what the client reads of a section — the same keys app.client_sections passes: id, title, a known kind, parentId */
@@ -93,6 +93,10 @@ const clientSection = (x: EstimateSection): EstimateSection => ({
   ...(typeof x.kind === "string" && SECTION_KINDS.includes(x.kind) ? { kind: x.kind } : {}),
   ...(isSubsection(x) ? { parentId: x.parentId } : {}),
 });
+
+/** an option's sections as the client reads them — the same as app.client_sections (test/fixtures/clientSections.json);
+ *  a template keeps them so too (#1232: the server checks a template's sections are already in this form) */
+export const clientSectionsOf = (o: Pick<CustomOption, "sections">): EstimateSection[] => countedSections(o).map(clientSection);
 
 /**
  * A document as it may be counted and shown (spec 2026-11-12-estimate-editor Р3, Р4) — on every way in (the cloud, a

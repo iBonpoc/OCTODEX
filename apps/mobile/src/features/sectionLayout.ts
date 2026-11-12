@@ -117,22 +117,60 @@ export function deleteSection<T extends Opt>(o: T, id: string): T {
   return withSections(o, sections, lines);
 }
 
-/** what «Вернуть» of a layout change restores: the sections and which section each line was in — nothing else of the option */
-export interface LayoutSnapshot {
-  sections: EstimateSection[] | undefined;
-  sectionOf: Record<string, string | undefined>;
-}
-export const snapshotLayout = (o: Opt): LayoutSnapshot => ({ sections: o.sections, sectionOf: Object.fromEntries(o.lines.map((l) => [l.id, l.sectionId])) });
-export function restoreLayout<T extends Opt>(o: T, snap: LayoutSnapshot): T {
-  const lines = o.lines.map((l) => {
-    if (!(l.id in snap.sectionOf)) return l;
-    const want = snap.sectionOf[l.id];
-    if (l.sectionId === want) return l;
-    const { sectionId: _s, ...rest } = l;
-    return want ? { ...rest, sectionId: want } : rest;
-  });
-  const { sections: _old, ...rest } = o;
-  return { ...(rest as T), lines, ...(snap.sections ? { sections: snap.sections } : {}) } as T;
+/**
+ * «Вернуть» of a layout change (delete a section, «Разложить по видам») takes back THAT change only, never the whole
+ * document (#1227, #1231, #1241): the function is built from the option before and after the change, and later applied to
+ * whatever the option is by then. It puts a section that went back (after its old neighbour), gives a subsection its
+ * parent again if nobody has moved it since, sends a line back to the section it left if it still stands where the change
+ * put it, and removes a section the change made only if nothing stands in it now. What the person added or moved
+ * meanwhile stays as it is.
+ */
+export function layoutUndo(before: Opt, after: Opt): <T extends Opt>(o: T) => T {
+  const b = before.sections ?? [];
+  const a = after.sections ?? [];
+  const inAfter = new Set(a.map((x) => x.id));
+  const inBefore = new Set(b.map((x) => x.id));
+  const gone = b.map((sec, i) => ({ sec, prev: i > 0 ? b[i - 1]!.id : undefined })).filter((x) => !inAfter.has(x.sec.id));
+  const created = a.filter((x) => !inBefore.has(x.id)).map((x) => x.id);
+  const parentWas = new Map<string, { was?: string; now?: string }>();
+  for (const sec of a) {
+    const old = b.find((x) => x.id === sec.id);
+    if (old && (old.parentId ?? undefined) !== (sec.parentId ?? undefined)) parentWas.set(sec.id, { was: old.parentId, now: sec.parentId });
+  }
+  const afterOf = new Map(after.lines.map((l) => [l.id, l.sectionId] as const));
+  const moves = before.lines.filter((l) => afterOf.has(l.id) && (afterOf.get(l.id) ?? undefined) !== (l.sectionId ?? undefined)).map((l) => ({ id: l.id, from: l.sectionId, to: afterOf.get(l.id) }));
+  return <T extends Opt>(o: T): T => {
+    let sections = [...(o.sections ?? [])];
+    // sections that went come back after the neighbour they stood after (or at the start)
+    for (const g of gone) {
+      if (sections.some((x) => x.id === g.sec.id)) continue;
+      const at = g.prev ? sections.findIndex((x) => x.id === g.prev) : -1;
+      sections = [...sections.slice(0, at + 1), g.sec, ...sections.slice(at + 1)];
+    }
+    // a subsection that became a top section gets its parent back, if nobody moved it since and the parent is there
+    sections = sections.map((x) => {
+      const w = parentWas.get(x.id);
+      if (!w || (x.parentId ?? undefined) !== (w.now ?? undefined)) return x;
+      if (w.was && !sections.some((y) => y.id === w.was)) return x;
+      const { parentId: _p, ...rest } = x;
+      return w.was ? { ...rest, parentId: w.was } : rest;
+    });
+    const moved = new Map(moves.map((m) => [m.id, m] as const));
+    const lines: CustomLine[] = o.lines.map((l) => {
+      const m = moved.get(l.id);
+      if (!m || (l.sectionId ?? undefined) !== (m.to ?? undefined)) return l;
+      if (m.from && !sections.some((x) => x.id === m.from)) return l;
+      const { sectionId: _s, ...rest } = l;
+      return m.from ? { ...rest, sectionId: m.from } : rest;
+    });
+    // a section the change made goes if it is empty now (no line, no subsection)
+    for (const id of created) {
+      if (lines.some((l) => l.sectionId === id) || sections.some((x) => x.parentId === id)) continue;
+      sections = sections.filter((x) => x.id !== id);
+    }
+    const { sections: _old, ...rest } = o;
+    return { ...(rest as T), lines, ...(sections.length || before.sections ? { sections } : {}) } as T;
+  };
 }
 
 /**

@@ -124,6 +124,18 @@ describe("design system: components", () => {
     expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
     expect(src).toMatch(/onDeactivate:[\s\S]*?haptics\.medium\(\)/);
   });
+  it("every drag that is held (activateAfterLongPress / handle) has its three feelings: light on lift, selection on a new place, medium on drop; none when nothing moved (founder 12.11)", () => {
+    const hits: string[] = [];
+    for (const f of code) {
+      const src = readFileSync(f, "utf8");
+      if (!/activateAfterLongPress|dragHoldMs/.test(src) || f.endsWith(join("ui", "haptics.ts"))) continue;
+      for (const k of ["light", "selection", "medium"]) if (!new RegExp(`haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
+    }
+    expect(hits, "a drag without its haptics (DS §15.6): lift = light, new place = selection, drop = medium").toEqual([]);
+    const sortable = readFileSync(join(ROOT, "features", "SortableList.tsx"), "utf8");
+    // let go where it was taken: no drop, no «medium»
+    expect(sortable).toMatch(/r\.p !== fromSlot\.current/);
+  });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>
       readFileSync(f, "utf8")

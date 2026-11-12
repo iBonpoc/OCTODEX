@@ -66,6 +66,9 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
   const lift = useSharedValue(0);
   const dragY = useSharedValue(0);
   const startOffset = useRef(0);
+  /** the slot the held row started in, and the one it is over now (a change of slot = one tick of «selection», DS §15.6) */
+  const fromSlot = useRef(0);
+  const slot = useRef(0);
   const lastT = useRef(0);
   const absY = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -96,7 +99,13 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
       const ty = lastT.current + ((latest.current.scroll?.offset() ?? 0) - startOffset.current);
       dragY.value = ty;
       const r = place(key, ty);
-      if (r) setState((s) => (s.active === key && s.to !== r.p ? { ...s, to: r.p } : s));
+      if (r) {
+        if (r.p !== slot.current) {
+          slot.current = r.p;
+          haptics.selection();
+        }
+        setState((s) => (s.active === key && s.to !== r.p ? { ...s, to: r.p } : s));
+      }
     },
     [dragY, place],
   );
@@ -131,6 +140,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         lift.value = reduce ? 1 : withTiming(1, { duration: motion.durSlow });
         const { rest, at } = withoutBlock(rs, key);
         // `from`: the slot of the held row among the others
+        fromSlot.current = at;
+        slot.current = at;
         setState({ active: key, from: at, to: at, h: me.h });
         void rest;
         if (row.type === "section") hold?.(row.section.id);
@@ -152,7 +163,6 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         lastT.current = ty;
         absY.current = y;
         refresh(key);
-        // crossing into another section: the one tick of «selection» (§15.6)
       },
       end: (key, canceled) => {
         stop();
@@ -164,7 +174,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         const me = layouts.current.get(key);
         const centre = me ? me.y + me.h / 2 + ty : 0;
         const inside = centre > -gesture.autoScrollEdge && centre < total + gesture.autoScrollEdge;
-        const d = !canceled && r && inside ? resolveDrop(rs, key, r.p) : null;
+        // let go where it was taken: nothing moved — no «medium», no move, no toast
+        const d = !canceled && r && inside && r.p !== fromSlot.current ? resolveDrop(rs, key, r.p) : null;
         setState({ active: null, to: 0, from: 0, h: 0 });
         hold?.(null);
         void st;

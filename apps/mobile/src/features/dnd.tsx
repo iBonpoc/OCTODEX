@@ -135,6 +135,8 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       if (next !== last.current) {
         last.current = next;
         setHover(next);
+        // over another place to drop: one tick of «selection» (DS §15.6)
+        if (next) haptics.selection();
       }
     },
     onDeactivate: (e) => {

@@ -707,12 +707,15 @@ export function Screen({
   const screenScroll = useRef<ScreenScroll>({
     scrollBy: (dy) => scrollRef.current?.scrollTo({ y: Math.max(0, offset.current + dy), animated: false }),
     offset: () => offset.current,
-    scrollToNode: (node, margin, animated) => {
+    scrollToNode: (node, margin, animated, done) => {
       const sv = scrollRef.current;
-      if (!sv) return;
+      if (!sv) return void done?.();
       sv.measureInWindow((_sx, sy) => {
         node.measureInWindow((_x, y) => {
           sv.scrollTo({ y: scrollTargetY({ offset: offset.current, nodeY: y, viewY: sy, covered: coveredTop.current, margin }), animated });
+          // the scroll event of a jump comes a frame later: a caller that focuses a field waits for it (a scroll right after
+          // the focus is a drag to «on-drag» keyboard dismiss, and the field loses it)
+          if (done) requestAnimationFrame(() => requestAnimationFrame(done));
         });
       });
     },
@@ -746,7 +749,9 @@ export function Screen({
               scrollEnabled={!scrollLocked}
               contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
-              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
+              // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : Platform.OS === "android" ? "on-drag" : "none"}
               automaticallyAdjustKeyboardInsets
               stickyHeaderIndices={tabs ? [1] : undefined}
               scrollEventThrottle={16}
