@@ -13,8 +13,9 @@ exports.run = async (h) => {
     const last = await vis("showcase-rows-last").innerText();
     h.expect(last.includes(name), `${id}: the last response is «${name}» (${last.replace(/\n/g, " ")})`);
   }
-  for (const id of ["row", "swipe", "section", "required", "profit"]) {
-    h.expect((await vis(`showcase-rows-${id}`).innerText()).includes("Образец появится"), `${id}: named with its component to come`);
+  for (const id of ["row", "swipe", "section", "required", "profit", "catalog"]) {
+    await vis(`showcase-rows-${id}-soon`).waitFor({ timeout: 3000 });
+    h.expect((await vis(`showcase-rows-${id}`).innerText()).length > 20, `${id}: named, with its rule`);
   }
   // the list of sections names it
   await h.go("/settings/design-system");

@@ -15,6 +15,7 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "section", title: "ds.rows.section", hint: "ds.rows.sectionHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
+  { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
 ];
 
 /** Estimate rows and lists (DS §8.3): the drag feel is live; the rest are named here and come with their components. */
@@ -53,7 +54,9 @@ export function RowsSection() {
           <View testID={`showcase-rows-${p.id}`} style={{ gap: space[1] }}>
             <T v="heading">{t(p.title)}</T>
             <T v="caption" tone="mut">{t(p.hint)}</T>
-            <T v="caption">{t("ds.rows.soon")}</T>
+            <View testID={`showcase-rows-${p.id}-soon`}>
+              <T v="caption">{t("ds.rows.soon")}</T>
+            </View>
           </View>
         </Card>
       ))}
