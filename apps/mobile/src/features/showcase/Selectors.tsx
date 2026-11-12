@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { useI18n } from "@/i18n";
+import { ChoiceChips, ReadOnly } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
@@ -19,6 +20,8 @@ export function SelectorsSection() {
   const [err, setErr] = useState<Unit | null>(null);
   const [long, setLong] = useState<(typeof MANY)[number] | null>(null);
   const items = UNITS.map((u) => ({ key: u, label: u }));
+  const [few, setFew] = useState<"a" | "b" | "c">("a");
+  const [many, setMany] = useState<Unit>("ft");
   return (
     <View testID="showcase-selectors">
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
@@ -28,7 +31,20 @@ export function SelectorsSection() {
         <SelectField testID="showcase-select-chosen" label={t("ds.select.unit")} value={unit} items={items} onChange={setUnit} />
         <SelectField testID="showcase-select-empty" label={t("ds.select.unit")} value={none} items={items} onChange={setNone} />
         <SelectField testID="showcase-select-error" label={t("ds.select.unit")} value={err} items={items} onChange={setErr} error={err ? undefined : t("ds.select.error")} />
+        <ReadOnly value>
+          <SelectField testID="showcase-select-readonly" label={t("ds.select.readonly")} value="ft" items={items} onChange={() => {}} />
+        </ReadOnly>
         <SelectField testID="showcase-select-long" label={t("ds.select.twelve")} value={long} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setLong} />
+      </Card>
+      <Card>
+        <T v="heading">{t("ds.choice.title")}</T>
+        <T v="caption" tone="mut">{t("ds.choice.hint")}</T>
+        <View testID="showcase-choice-few">
+          <ChoiceChips label={t("ds.choice.few")} value={few} onChange={setFew} items={[{ key: "a", label: t("ds.choice.a") }, { key: "b", label: t("ds.choice.b") }, { key: "c", label: t("ds.choice.c") }]} />
+        </View>
+        <View testID="showcase-choice-many">
+          <ChoiceChips label={t("ds.choice.many")} value={many} onChange={setMany} items={items} />
+        </View>
       </Card>
     </View>
   );
