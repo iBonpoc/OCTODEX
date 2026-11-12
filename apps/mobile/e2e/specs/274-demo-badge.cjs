@@ -15,5 +15,6 @@ exports.run = async (h) => {
   await h.go("/today");
   await vis("demo-badge").getByRole("button").first().click();
   await p.waitForURL(/\/auth\/sign-in/, { timeout: 5000 });
+  await p.getByTestId("demo-badge").waitFor({ state: "detached", timeout: 5000 });
   h.expect((await p.getByTestId("demo-badge").count()) === 0, "sign-in: no strip");
 };

@@ -7,3 +7,11 @@ export function showsDemoBadge(mode: "cloud" | "demo", path: string): boolean {
   if (mode !== "demo") return false;
   return !(path.startsWith("/p/") || path.startsWith("/f/") || path.startsWith("/auth/"));
 }
+
+/**
+ * Where the strip leads: a person who signed in but has no company yet (the app is still in the demo) goes to «создать
+ * компанию», not back to the e-mail form — as in «Профиль и аккаунт» (settings/profile.tsx).
+ */
+export function demoBadgeTarget(signedIn: boolean): "/auth/company" | "/auth/sign-in" {
+  return signedIn ? "/auth/company" : "/auth/sign-in";
+}
