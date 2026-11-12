@@ -964,12 +964,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const cols: Record<string, string | null> = {};
       if (op.description !== undefined) cols.description = op.description?.trim() || null;
       if (op.jobTypeId !== undefined) cols.job_type_id = op.jobTypeId;
-      const money: Record<string, boolean | number> = {};
+      const money: Record<string, boolean | number | null> = {};
       if (op.taxEnabled !== undefined) money.tax_enabled = op.taxEnabled;
       if (op.taxRateBps !== undefined) money.tax_rate_bps = op.taxRateBps;
-      // #1219: the rate in ppm when set (the server writes its basis points); a change with only the basis points (an
-      // older queued one) — the server puts ppm back to null
+      // #1219: the rate in ppm when set (the server writes its basis points); a rate in basis points only (an older
+      // queued change, «Отменить» back to a job without ppm) says ppm is gone — the server keeps a ppm it is not told
+      // about while the basis points stay the same (888 for 8.875 % and 8.88 %)
       if (op.taxRatePpm !== undefined) money.tax_rate_ppm = op.taxRatePpm;
+      else if (op.taxRateBps !== undefined) money.tax_rate_ppm = null;
       if (Object.keys(money).length) return run(supabase.from("jobs").update({ ...cols, ...money }).eq("id", op.id));
       return Object.keys(cols).length ? run(supabase.from("jobs").update(cols).eq("id", op.id)) : undefined;
     }

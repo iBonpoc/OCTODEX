@@ -13563,6 +13563,22 @@ select tst.ok((select (tax_rate_ppm, tax_rate_bps, contract_total_cents) = (7375
               'T201 a new phone sets 7.375 %: basis points 738, $1073.75');
 :as_super
 select tst.ok(app.job_contract_tax('a2010000-0000-4000-8000-0000000000e1') = 7375, 'T201 the contract''s tax at 7.375 %: $73.75');
+-- the same basis points with ppm gone (this phone's «Отменить» back to 8.88 %: ops job.update writes tax_rate_ppm null)
+:as_office_a
+update public.jobs set tax_rate_ppm = 88750, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
+update public.jobs set tax_rate_bps = 888, tax_rate_ppm = null where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 888 and contract_total_cents = 108880 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 the same basis points, ppm null: 8.88 % again ($1088.80)');
+-- an older phone makes a job with the basis points only: no ppm, its rate counts
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+  ('a2010000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'T201 old', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'draft', true, 950);
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000e4', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000e3', 0, 'T201 part', 1, 100000, true);
+select tst.ok((select tax_rate_ppm is null and contract_total_cents = 109500 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e3'),
+              'T201 an older phone''s job: no ppm, 9.5 % as before ($1095.00)');
+:as_super
 -- (г) a template may carry ratePpm, a whole one 0..1000000
 select tst.ok((select bool_and(app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '88750'))
                       and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '1000001'))
@@ -13572,8 +13588,9 @@ select tst.ok((select bool_and(app.valid_estimate_template_doc(jsonb_set(doc, '{
               and exists (select 1 from public.estimate_templates where app.valid_estimate_template_doc(doc)),
               'T201 a template: ratePpm 88750 passes; above 100 %, a fraction, a string — refused');
 select tst.ok(app.doc_tax_ppm('{"rateBps": 950}') = 95000 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750}') = 88750
-              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 1.5}') = 88800 and app.doc_tax_ppm('{}') is null
-              and app.doc_tax_ppm('{"rateBps": 950, "ratePpm": 88750}') = 95000,
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 1.5}') = 88800 and app.doc_tax_ppm('{}') = 0
+              and app.doc_tax_ppm('{"rateBps": 950, "ratePpm": 88750}') = 95000
+              and app.doc_tax_ppm('{"ratePpm": 88750}') = 0 and app.doc_tax_ppm('{"rateBps": "888", "ratePpm": 88750}') = 0,
               'T201 the document''s rate: ppm (rounding to its basis points), else the basis points × 100');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_rate_ppm()', 'EXECUTE')
               and not has_function_privilege('authenticated', 'app.job_lines_totals_ppm(uuid,boolean,int)', 'EXECUTE')

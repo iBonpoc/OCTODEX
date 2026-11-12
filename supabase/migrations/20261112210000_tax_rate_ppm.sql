@@ -33,15 +33,17 @@ $$;
 revoke all on function app.version_tax_ppm(int, int) from public, anon, authenticated;
 
 -- the rate of a document's settings.tax in ppm: ratePpm when it is a whole ppm (0..1000000) that rounds to the rateBps
--- beside it, else rateBps × 100 (a rate changed by something that writes only the basis points: the ppm is stale); null —
--- no readable rate (the same as taxRatePpm of the engine)
+-- beside it, else rateBps × 100 (a rate changed by something that writes only the basis points: the ppm is stale), else
+-- 0 — no readable rate (the same as taxRatePpm of the engine)
 create or replace function app.doc_tax_ppm(t jsonb)
 returns numeric language sql immutable set search_path = '' as $$
   select case
     when jsonb_typeof(t -> 'ratePpm') = 'number' and (t ->> 'ratePpm') ~ '^[0-9]{1,7}$' and (t ->> 'ratePpm')::numeric <= 1000000
-         and (jsonb_typeof(t -> 'rateBps') is distinct from 'number' or floor((t ->> 'ratePpm')::numeric / 100 + 0.5) = (t ->> 'rateBps')::numeric)
+         and jsonb_typeof(t -> 'rateBps') = 'number' and floor((t ->> 'ratePpm')::numeric / 100 + 0.5) = (t ->> 'rateBps')::numeric
       then (t ->> 'ratePpm')::numeric
     when jsonb_typeof(t -> 'rateBps') = 'number' then (t ->> 'rateBps')::numeric * 100
+    -- no basis points (or not a number): 0, as the engine counts (rateBps || 0)
+    else 0
   end
 $$;
 revoke all on function app.doc_tax_ppm(jsonb) from public, anon, authenticated;

@@ -71,6 +71,18 @@ describe("unit:taxRatePpm — a rate with three decimals (#1219)", () => {
     expect(j.amountCents).toBe(109500);
     expect(taxBefore(d, "j3")).toEqual({ taxEnabled: true, taxRateBps: 950 });
   });
+  it("«Отменить» back to a job without ppm (8.88 %): the same basis points 888, ppm null to the server", async () => {
+    let d: DB = makeSeed();
+    d = withJobLine(d, { id: "l1", jobId: "j3", position: 0, name: "Labor", quantity: "1", unitPriceCents: 100000, taxable: true });
+    d = withJobTax(d, "j3", { taxEnabled: true, taxRateBps: 888 });
+    const prev = taxBefore(d, "j3");
+    d = withJobTax(d, "j3", { taxEnabled: true, ...percentToRate("8.875")! });
+    d = withJobTax(d, "j3", prev);
+    expect(d.jobs.find((x) => x.id === "j3")!.amountCents).toBe(108880);
+    writes.length = 0;
+    await applyOp({ k: "job.update", id: "j3", ...prev }, "co", "u");
+    expect(writes[0]!.row).toEqual({ tax_enabled: true, tax_rate_bps: 888, tax_rate_ppm: null });
+  });
   it("an older job (only basis points) counts as before", () => {
     expect(totalOf([{ quantity: "1", unitPriceCents: 100000, taxable: true }], { taxEnabled: true, taxRateBps: 888 }).tax).toBe(8880);
     expect(jobRateText({ taxEnabled: true, taxRateBps: 825 })).toBe("8.25");
@@ -86,7 +98,8 @@ describe("unit:taxRatePpm — a rate with three decimals (#1219)", () => {
     expect(writes).toEqual([{ table: "jobs", kind: "update", row: { tax_enabled: true, tax_rate_bps: 888, tax_rate_ppm: 88750 } }]);
     writes.length = 0;
     await applyOp({ k: "job.update", id: "j1", taxEnabled: true, taxRateBps: 950 }, "co", "u");
-    expect(writes).toEqual([{ table: "jobs", kind: "update", row: { tax_enabled: true, tax_rate_bps: 950 } }]);
+    // ppm is gone: told to the server (it keeps a ppm it is not told about while the basis points stay the same)
+    expect(writes).toEqual([{ table: "jobs", kind: "update", row: { tax_enabled: true, tax_rate_bps: 950, tax_rate_ppm: null } }]);
   });
   it("estimate.save writes the version's ppm and its basis points", async () => {
     writes.length = 0;

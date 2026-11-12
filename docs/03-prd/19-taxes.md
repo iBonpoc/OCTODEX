@@ -163,7 +163,7 @@
 - Таблица ставок — справочник компании; Octo не поставляет «официальные» ставки по адресам и не подбирает ставку по ZIP. Пресеты кладут несколько заглушек.
 - Изменение ставки = новая запись с новой `effective_from` (старая закрывается `effective_to`), чтобы история не переписывалась. Пример: «County & City of LA 9.75%» с `effective_to = 2026-09-30` и «10.25%» с `effective_from = 2026-10-01`; черновик от 25.09.2026, отправленный 02.10.2026, получает предупреждение «ставка устарела» (как TX8).
 
-### 7.5 Формулы налога на документе (на вариант; все суммы в центах, round half up, `r = tax_rate_bps / 10000`)
+### 7.5 Формулы налога на документе (на вариант; все суммы в центах, round half up, `r = tax_rate_ppm / 1 000 000`, а без ppm `r = tax_rate_bps / 10000` — #1219: ставки с тремя знаками, 8,875 %)
 Общие величины (`05` §7.2): `subtotal`, `discount`, `net = subtotal − discount`, `taxable_sub = Σ line_total(included, taxable)`, `taxable_disc = subtotal = 0 ? 0 : round(discount × taxable_sub / subtotal)`.
 ```
 included_in_price:      tax = 0;  total = net                          // taxable не действует

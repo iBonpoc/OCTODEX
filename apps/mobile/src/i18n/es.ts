@@ -2609,7 +2609,7 @@ export const es: Dict = {
   "job5.lines.err.undo": "No se puede deshacer: el total quedaría por debajo de lo facturado",
   "job5.ca.chip": "Se requiere contrato",
   "job5.ca.text": "Según la ley de CA, una obra en vivienda de más de $500 requiere un contrato escrito firmado por el cliente.",
-  "job5.lines.err.rate": "La tasa es un número de 0 a 100, p. ej. 8.25",
+  "job5.lines.err.rate": "La tasa es un número de 0 a 100, hasta 4 decimales, p. ej. 8.875",
   "job5.lines.exempt": "El cliente está exento de impuestos: no se cobra impuesto",
   "job5.type.pick": "Tipo de trabajo",
   "job5.tags": "Etiquetas",

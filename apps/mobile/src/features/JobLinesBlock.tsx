@@ -145,7 +145,9 @@ export function JobLinesBlock({ job }: { job: Job }) {
       ) : null}
       {editable && lines.length && (!exempt || job.taxEnabled) ? (
         <Card>
-          <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
+          <View testID="job-tax-toggle">
+            <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
+          </View>
           {job.taxEnabled ? (
             <RowView>
               <View testID="job-tax-rate" style={{ flex: 1 }}>

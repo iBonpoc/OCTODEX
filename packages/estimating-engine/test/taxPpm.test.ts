@@ -33,6 +33,8 @@ describe("tax rate in ppm (#1219)", () => {
     // left behind does not round to them — stale, the basis points count
     expect(taxRatePpm({ rateBps: 950, ratePpm: 88750 })).toBe(95000);
     expect(taxRatePpm({ rateBps: 888, ratePpm: 88750 })).toBe(88750);
+    // no basis points: 0 — the server the same (app.doc_tax_ppm, T201)
+    expect(taxRatePpm({ ratePpm: 88750 } as unknown as { rateBps: number; ratePpm: number })).toBe(0);
     expect(ppmOk(0) && ppmOk(1_000_000) && !ppmOk("88750")).toBe(true);
   });
   it("the basis points next to ppm: round half up, as the server", () => {

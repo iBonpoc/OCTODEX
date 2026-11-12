@@ -93,7 +93,7 @@ describe("ops: wave П-2a money fields", () => {
   });
   it("job tax goes with the other job fields", async () => {
     await applyOp({ k: "job.update", id: "j1", taxEnabled: true, taxRateBps: 1025 }, "co", "u");
-    expect(calls).toEqual([{ table: "jobs", how: "update", id: "j1", row: { tax_enabled: true, tax_rate_bps: 1025 } }]);
+    expect(calls).toEqual([{ table: "jobs", how: "update", id: "j1", row: { tax_enabled: true, tax_rate_bps: 1025, tax_rate_ppm: null } }]);
   });
   it("job tags in one call to the server", async () => {
     await applyOp({ k: "job.tags", id: "j1", tagIds: ["a", "b"] }, "co", "u");
