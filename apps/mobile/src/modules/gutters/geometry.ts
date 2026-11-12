@@ -262,8 +262,8 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
   return out;
 }
 
-/** a length to the nearest 1/8″ (founder 08.11: «8′ 9¼″») */
-export const eighth = (n: number) => Math.round(n * 8) / 8;
+/** a length to the nearest 1/16″ (founder 11.11; 08.11: «8′ 9¼″») */
+export const sixteenth = (n: number) => Math.round(n * 16) / 16;
 
 /** how far the gutter's face stands from its back (the line drawn along the fascia): its size, 5″ → 5″ */
 export const faceOffsetIn = (r: Pick<DrawnRun, "attrs">) => {
@@ -274,7 +274,7 @@ export const faceOffsetIn = (r: Pick<DrawnRun, "attrs">) => {
 /**
  * The cut of a corner (founder 08.11): for each of its runs, the length along the back (the wall) and along the face.
  * At a corner end the face is longer (outside) or shorter (inside) by offset · tan(turn / 2) — 90° → the offset itself;
- * a cap end adds nothing. Both ends of a run count (a run between two corners). To the nearest 1/8″.
+ * a cap end adds nothing. Both ends of a run count (a run between two corners). To the nearest 1/16″.
  */
 export interface CornerCutRun { id: string; backIn: number; frontIn: number; offsetIn: number }
 export function cornerCut(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">, all: FoundCorner[] = findCorners(d)): { angleDeg: number; runs: CornerCutRun[] } {
@@ -289,7 +289,7 @@ export function cornerCut(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">
       delta += c.outward ? k : -k;
     }
     const back = runLengthIn(r);
-    return { id, backIn: eighth(back), frontIn: eighth(back + delta), offsetIn: off };
+    return { id, backIn: sixteenth(back), frontIn: sixteenth(back + delta), offsetIn: off };
   });
   return { angleDeg: 180 - (here?.turnDeg ?? 90), runs };
 }

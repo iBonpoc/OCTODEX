@@ -1,5 +1,6 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
+import { DemoBadge } from "@/features/DemoBadge";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
@@ -602,6 +603,7 @@ export function Screen({
   const header = (
     <View style={{ gap: space[2], marginBottom: space[3] }}>
       <VersionBadge />
+      <DemoBadge />
       {hasUp ? (
         <>
           {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.

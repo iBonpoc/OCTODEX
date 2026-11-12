@@ -20,7 +20,7 @@ import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { EIGHTHS_SCALE, MM_SCALE, Tape as TapeStrip } from "./Tape";
-import { eighthLabel, fmtLen, ftIn, LEN_UNITS, MM_OF, MM_PER_IN, type LenUnit } from "../canvas/format";
+import { eighthLabel, fmtLen, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -84,7 +84,7 @@ function Pull({ ft, inc, e8, onPull, testID }: { ft: string; inc: string; e8: nu
       marks={Math.round(last.current * 8)}
       max={Math.round(MAX_RUN_IN * 8)}
       scale={EIGHTHS_SCALE}
-      readout={ftIn(last.current)}
+      readout={fmtLen(last.current, "ftin")}
       onMarks={(m) => onPull(split(m / 8))}
       testID={testID}
       label={t(k("pull"))}
@@ -129,16 +129,18 @@ const split = (n: number) => {
 function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);
-  const [ft, setFt] = useState(String(split(cur).ft));
-  const [inc, setInc] = useState(String(split(cur).inch));
-  const [e8, setE8] = useState(split(cur).eighths);
+  // the fields show the length as it is, to the sixteenth: feet, inches (an odd sixteenth rides on them, 5.0625) and eighths
+  const f0 = unitFields(cur, "ftin");
+  const [ft, setFt] = useState(f0.ft);
+  const [inc, setInc] = useState(f0.inc);
+  const [e8, setE8] = useState(f0.e8);
   const [bad, setBad] = useState(false);
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
   useEffect(() => {
-    const x = split(cur);
-    setFt(String(x.ft));
-    setInc(String(x.inch));
-    setE8(x.eighths);
+    const x = unitFields(cur, "ftin");
+    setFt(x.ft);
+    setInc(x.inc);
+    setE8(x.e8);
     setBad(false);
   }, [run.id, cur]);
   const apply = () => {
@@ -155,7 +157,7 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         </View>
         <T v="body" tone="mut">{t(k("ft"))}</T>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
-          <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
+          <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
         </View>
         <EighthsText value={e8} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
@@ -225,15 +227,17 @@ function UnitPick({ unit, onUnit, testID }: { unit: LenUnit; onUnit: (u: LenUnit
  * selected — a digit typed replaces it. Feet + inches (+ ⅛), inches alone (260″ → 21′ 8″) or mm; kept in inches.
  * «Применить» keeps what is there; «Отменить» (or a tap outside) takes the gutter away — a stray line from a zoom.
  */
-export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: DrawnRun; onLength: (lengthIn: number) => void; onDone: () => void; onCancel: () => void; /** the length the fields start from (a label tapped: its length now); none — the drawn one */ start?: number }) {
+export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "ftin" }: { run: DrawnRun; /** the company's format of lengths (#1092): the unit typed in starts there, «drawn» says it */ fmt?: LenFormat; onLength: (lengthIn: number) => void; onDone: () => void; onCancel: () => void; /** the length the fields start from (a label tapped: its length now); none — the drawn one */ start?: number }) {
   const { t } = useI18n();
   const drawn = start ?? drawnLengthIn(run);
-  const [unit, setUnit] = useState<LenUnit>("ftin");
-  const d0 = split(drawn);
-  const [ft, setFt] = useState(String(d0.ft));
-  const [inc, setInc] = useState(String(d0.inch));
-  const [e8, setE8] = useState(d0.eighths);
-  const [one, setOne] = useState(String(drawn));
+  const [unit, setUnit] = useState<LenUnit>(fmt);
+  // the fields start from the drawn length IN THE UNIT they open in (#1092 review Б1/Б2): in mm — the millimetres, not the
+  // inches; in feet-inches — to the sixteenth, not the eighth
+  const f0 = unitFields(drawn, fmt);
+  const [ft, setFt] = useState(f0.ft);
+  const [inc, setInc] = useState(f0.inc);
+  const [e8, setE8] = useState(f0.e8);
+  const [one, setOne] = useState(f0.one);
   const [bad, setBad] = useState(false);
   // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
   const canon = useRef(drawn);
@@ -291,7 +295,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start }: { run: D
         </RowView>
       )}
       {unit !== "ftin" ? <PullOne one={one} unit={unit} onOne={(v) => { edited.current = true; setOne(v); setBad(false); }} testID="quick-length-tape" /> : null}
-      <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>
+      <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
         <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>
@@ -403,8 +407,8 @@ function More({ open0, id, label, children }: { open0: boolean; id: string; labe
 }
 
 export function RunAttrsView({
-  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact, onUnit,
-}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean; /** how its length is shown on the drawing (founder 09.11) */ onUnit?: (u: LenUnit) => void }) {
+  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner, compact,
+}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void; /** 390: what is changed often on top, the rest under «Ещё» (П20.9) */ compact?: boolean; }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
@@ -413,7 +417,7 @@ export function RunAttrsView({
   return (
     <>
       <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-        <T v="heading" w="semibold">{`${t(k("run"))} · ${ftIn(run.lengthIn ?? drawnLengthIn(run))}`}</T>
+        <T v="heading" w="semibold">{`${t(k("run"))} · ${fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}`}</T>
         {/* no «рулетка / нарисовано» per line any more: how the drawing was measured is one choice (П20.16) */}
       </RowView>
       {compact ? (
@@ -421,7 +425,6 @@ export function RunAttrsView({
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
       <Select label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
         <Stock a={a} set={onAttrs} ch={ch} part="color" />
-      {onUnit ? <Pick label={t(k("unitShow"))} testID="attr-unit" items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)) }))} value={run.unit ?? "ftin"} onChange={onUnit} /> : null}
       <Tape run={run} onLength={onLength} />
           <More open0={false} id={run.id} label={t(k("moreRun"))}>
       <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
@@ -433,7 +436,6 @@ export function RunAttrsView({
         </>
       ) : (
         <>
-      {onUnit ? <Pick label={t(k("unitShow"))} testID="attr-unit" items={LEN_UNITS.map((u) => ({ key: u, label: t(k(`unit.${u}`)) }))} value={run.unit ?? "ftin"} onChange={onUnit} /> : null}
       <Tape run={run} onLength={onLength} />
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
       <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />

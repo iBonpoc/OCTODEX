@@ -107,6 +107,7 @@ import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { visitDueCents } from "../src/features/visitDue";
+import { tFor } from "../src/i18n/translate";
 import { summarize } from "../src/features/estimateDoc";
 import { readFileSync } from "node:fs";
 import { isDeviceKey } from "../src/features/deleteAccount";
@@ -1539,6 +1540,94 @@ describe("unit:storeSync — the signature on the phone carries the total the cl
     const op = sentOps().find((o) => o.k === "estimate.approve")!;
     expect(op.channel).toBe("on_site");
     expect(op.totalCents).toBe(summarize(e.doc, sel).totalCents);
+  });
+});
+
+describe("unit:storeSync — the deposit invoice of the older path is named in the client's language (В1-7б, #1104 п.4; rule 7)", () => {
+  const depositWith = async (lang: "en" | "es" | "ru") => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: "office" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    // the client's language is not known: the company's (docLanguageFor); e5 without its job and deposit invoice yet
+    d.company = { ...d.company!, docLanguage: lang };
+    const e = d.estimates.find((x) => x.id === "e5")!;
+    e.depositPaidAt = undefined;
+    const old = d.jobs.filter((j) => j.estimateId === e.id).map((j) => j.id);
+    d.invoices = d.invoices.filter((i) => !old.includes(i.jobId ?? ""));
+    d.jobs = d.jobs.filter((j) => !old.includes(j.id));
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as { payDeposit: (id: string, m: string) => void }).payDeposit("e5", "cash");
+    await settle();
+    const db = (valueOf(r) as unknown as { db: { jobs: { id: string; estimateId?: string }[]; invoices: { jobId?: string; kind?: string; title?: string }[] } }).db;
+    const job = db.jobs.find((j) => j.estimateId === "e5")!;
+    return db.invoices.find((i) => i.jobId === job.id && i.kind === "deposit")!.title;
+  };
+  it("Spanish: «Depósito» (before: «Deposit» whatever the client's language)", async () => {
+    expect(await depositWith("es")).toBe(tFor("es")("path.inv.deposit"));
+  });
+  it("Russian: «Депозит»", async () => {
+    expect(await depositWith("ru")).toBe(tFor("ru")("path.inv.deposit"));
+  });
+  it("English: «Deposit», as before", async () => {
+    expect(await depositWith("en")).toBe("Deposit");
+  });
+});
+
+describe("unit:storeSync — the demo keeps its data past midnight (the founder's measurement, 12.11; К1, Э1)", () => {
+  it("a demo record of an earlier day is read as it is — not replaced by a fresh seed at midnight in Los Angeles", async () => {
+    const d = makeSeed();
+    d.estimates = [...d.estimates, { ...d.estimates[0]!, id: "e-kept", title: "The founder's measurement estimate" }];
+    storage.set("octo.db.v5", JSON.stringify({ day: "2020-01-01", db: d })); // an earlier day (never today in LA)
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    const db = (valueOf(r) as unknown as { db: { estimates: { id: string }[] } }).db;
+    expect(db.estimates.some((e) => e.id === "e-kept")).toBe(true); // before: gone — a new seed
+  });
+  it("«Сбросить тестовые данные» still starts the demo over (with «Отменить»)", async () => {
+    const d = makeSeed();
+    d.estimates = [...d.estimates, { ...d.estimates[0]!, id: "e-kept" }];
+    storage.set("octo.db.v5", JSON.stringify({ day: "2020-01-01", db: d }));
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const undo = (valueOf(r) as unknown as { resetDemo: () => () => void }).resetDemo();
+    await settle();
+    expect((valueOf(r) as unknown as { db: { estimates: { id: string }[] } }).db.estimates.some((e) => e.id === "e-kept")).toBe(false);
+    undo();
+    await settle();
+    expect((valueOf(r) as unknown as { db: { estimates: { id: string }[] } }).db.estimates.some((e) => e.id === "e-kept")).toBe(true);
+  });
+});
+
+describe("unit:storeSync — a tech makes an estimate only where he works, and keeps seeing it (#1138)", () => {
+  type W = { db: { me: string; estimates: { id: string; createdBy?: string }[] }; saveEstimate: (e: object) => void };
+  const doc = { options: [{ id: "o-1138", name: "A", lines: [{ id: "l-1138", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }], settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: null } };
+  const saveAs = async (propertyId: string, customerId: string) => {
+    storage.set("octo.role.v1", JSON.stringify("tech"));
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    (valueOf(r) as unknown as W).saveEstimate({ id: "e-1138", customerId, propertyId, title: "T 1138", doc });
+    await settle();
+    return valueOf(r) as unknown as W;
+  };
+  it("at a property with no visit of his (p7): not saved — it would vanish behind «нет доступа» (before: saved)", async () => {
+    const v = await saveAs("p7", "c7");
+    expect(v.db.estimates.some((e) => e.id === "e-1138")).toBe(false);
+  });
+  it("a quick estimate (addEstimate) keeps its author too", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo, the office
+    await settle();
+    const v = valueOf(r) as unknown as { db: { me: string; estimates: { title: string; createdBy?: string }[] }; addEstimate: (e: object) => void };
+    v.addEstimate({ customerId: "c1", propertyId: "p1", title: "Quick 1138", totalCents: 18500, depositCents: 0, status: "draft", lines: [{ name: "Work", qty: "1", totalCents: 18500 }] });
+    await settle();
+    const d = (valueOf(r) as unknown as typeof v).db;
+    expect(d.estimates.find((e) => e.title === "Quick 1138")?.createdBy).toBe(d.me);
+  });
+  it("at his job's property (p1): saved, and its author is him (the server's created_by)", async () => {
+    const v = await saveAs("p1", "c1");
+    expect(v.db.estimates.find((e) => e.id === "e-1138")?.createdBy).toBe(v.db.me);
   });
 });
 

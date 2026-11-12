@@ -472,6 +472,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
       leadId: (e.lead_id as string | null) ?? undefined,
+      createdBy: (e.created_by as string | null) ?? undefined,
       totalCents: sel?.total !== undefined ? n(sel.total) : legacy ? legacy.totalCents : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,

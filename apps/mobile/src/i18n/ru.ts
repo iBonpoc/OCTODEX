@@ -30,6 +30,8 @@ export const ru = {
   "path.leadNew": "Создать лид",
   "path.clientNew": "Создать клиента",
   "path.expenseNew": "Создать расход",
+  // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
+  "path.inv.deposit": "Депозит",
   "path.visitAdd": "Добавить выезд",
   "path.photoAdd": "Добавить фото",
   "path.estimateNew": "Создать смету",
@@ -277,9 +279,9 @@ export const ru = {
   "sync.stuck.note": "Ошибка на сервере, не в телефоне. Повторяем сами каждые 5 минут.",
   "sync.stuck.busy": "Изменение сейчас отправляется. Дождитесь ответа сервера и попробуйте снова.",
   "sync.stuck.moneyChip": "Деньги",
-  "sync.stuck.money": "Среди уходящих есть деньги: счёт, оплата, задаток или расход. На сервер они не попадут, запишите их заново.",
-  "sync.stuck.moneySelf": "Это деньги: счёт, оплата, задаток или расход. На сервер они не попадут, запишите их заново.",
-  "att.rejected.deposit": "Задаток не записан на сервере",
+  "sync.stuck.money": "Среди уходящих есть деньги: счёт, оплата, депозит или расход. На сервер они не попадут, запишите их заново.",
+  "sync.stuck.moneySelf": "Это деньги: счёт, оплата, депозит или расход. На сервер они не попадут, запишите их заново.",
+  "att.rejected.deposit": "Депозит не записан на сервере",
   "att.rejected.invoice": "Счёт не записан на сервере",
   "att.rejected.payment": "Оплата не записана на сервере",
   "att.rejected.expense": "Расход не записан на сервере",
@@ -596,6 +598,8 @@ export const ru = {
   "company.hint": "Вы станете владельцем. Мастеров и диспетчера пригласите позже.",
   "account.title": "Аккаунт",
   "account.demo": "Демо-режим: данные тестовые и хранятся только на этом устройстве.",
+  "demo.badge": "Демо · данные только на этом телефоне",
+  "demo.badgeAction": "Войти или создать компанию",
   "account.signIn": "Войти или создать аккаунт",
   "account.signOut": "Выйти",
   "account.noCompany": "Аккаунт есть, компании ещё нет.",
@@ -2314,6 +2318,8 @@ export const ru = {
   "ds.note.offlineHint": "Без сети изменения идут в очередь, на плашке счётчик. Выход с экрана возвращает сеть.",
   "ds.note.offlineOn": "Выключить сеть",
   "ds.note.offlineOff": "Включить сеть",
+  "ds.note.demo": "Плашка «Демо»",
+  "ds.note.demoHint": "В демо над каждым экраном: данные придуманные и лежат только на этом телефоне. Нажатие — вход.",
   "ds.note.later": "Тост ошибки и баннер — вместе с Н-62 и Н-63 (#957, #958).",
   "ds.hap.web": "На вебе вибрации нет: кнопки ниже ничего не дадут. Откройте раздел на телефоне.",
   "ds.hap.map": "Карта откликов",
@@ -2819,7 +2825,6 @@ export const ru = {
   "mod.gutters.attr.unit.cm": "см",
   "mod.gutters.attr.unitTitle": "Единица длины",
   "mod.gutters.attr.unitPick": "Единица: {u} — сменить",
-  "mod.gutters.attr.unitShow": "Показывать длину в",
   "mod.gutters.attr.colorAsRun": "Как у желоба ({c})",
   "mod.gutters.attr.offsetOwn": "Свой",
   "mod.gutters.attr.quickTitle": "Длина желоба",
@@ -3162,6 +3167,7 @@ export const ru = {
   "mod.gutters.view.parts": "Детали",
   "mod.gutters.sheet.tape": "Рулетка — замер точный, можно резать",
   "mod.gutters.sheet.scale": "Масштаб: {len}",
+  "mod.gutters.sheet.panel": "Контур {n} · желоба {runs}",
   "mod.gutters.view.rough": "Замер примерный — перед резкой промерьте",
   "mod.gutters.view.estimates": "Сметы по замеру",
   "mod.gutters.view.stale": "Чертёж правили после сметы: количества обновятся, ваши ручные правки останутся",
@@ -3671,6 +3677,8 @@ export const ru = {
   "sup.vendorLocked": "Продавец: {name} (меняет офис)",
   // «Данные и деньги» #1113: a tech does not send an estimate
   "est.tech.officeSends": "Смету клиенту отправит офис",
+  // «Данные и деньги» #1138: a tech makes an estimate only where he works
+  "est.tech.notHere": "Смету по этому адресу составит офис: у вас здесь нет выезда",
 } as const;
 
 export type DictKey = keyof typeof ru;

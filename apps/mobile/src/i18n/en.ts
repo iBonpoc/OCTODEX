@@ -31,6 +31,8 @@ export const en: Dict = {
   "path.leadNew": "Create lead",
   "path.clientNew": "Create client",
   "path.expenseNew": "Create expense",
+  // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
+  "path.inv.deposit": "Deposit",
   "path.visitAdd": "Add visit",
   "path.photoAdd": "Add photo",
   "path.estimateNew": "Create estimate",
@@ -597,6 +599,8 @@ export const en: Dict = {
   "company.hint": "You become the owner. Invite technicians and the dispatcher later.",
   "account.title": "Account",
   "account.demo": "Demo mode: test data, stored only on this device.",
+  "demo.badge": "Demo · data stays on this phone only",
+  "demo.badgeAction": "Sign in or create a company",
   "account.signIn": "Sign in or create account",
   "account.signOut": "Sign out",
   "account.noCompany": "Signed in, no company yet.",
@@ -2315,6 +2319,8 @@ export const en: Dict = {
   "ds.note.offlineHint": "Offline, changes go to the queue, the badge counts them. Leaving the screen puts the network back.",
   "ds.note.offlineOn": "Turn the network off",
   "ds.note.offlineOff": "Turn the network on",
+  "ds.note.demo": "The «Demo» strip",
+  "ds.note.demoHint": "In the demo, above every screen: the data is made up and lives on this phone only. A tap goes to sign-in.",
   "ds.note.later": "The error toast and the banner come with Н-62 and Н-63 (#957, #958).",
   "ds.hap.web": "The web has no haptics: the buttons below do nothing. Open this section on a phone.",
   "ds.hap.map": "Map of responses",
@@ -2819,7 +2825,6 @@ export const en: Dict = {
   "mod.gutters.attr.unit.cm": "cm",
   "mod.gutters.attr.unitTitle": "Length unit",
   "mod.gutters.attr.unitPick": "Unit: {u} — change",
-  "mod.gutters.attr.unitShow": "Show the length in",
   "mod.gutters.attr.colorAsRun": "Same as the gutter ({c})",
   "mod.gutters.attr.offsetOwn": "Custom",
   "mod.gutters.attr.quickTitle": "Gutter length",
@@ -3162,6 +3167,7 @@ export const en: Dict = {
   "mod.gutters.view.parts": "Parts",
   "mod.gutters.sheet.tape": "Tape — measured exactly, ready to cut",
   "mod.gutters.sheet.scale": "Scale: {len}",
+  "mod.gutters.sheet.panel": "Contour {n} · gutters {runs}",
   "mod.gutters.view.rough": "Rough measurement — measure again before cutting",
   "mod.gutters.view.estimates": "Estimates from this measurement",
   "mod.gutters.view.stale": "The drawing changed after the estimate: quantities will update, your own edits stay",
@@ -3671,4 +3677,6 @@ export const en: Dict = {
   "sup.vendorLocked": "Vendor: {name} (the office changes it)",
   // «Данные и деньги» #1113: a tech does not send an estimate
   "est.tech.officeSends": "The office sends the estimate to the client",
+  // «Данные и деньги» #1138: a tech makes an estimate only where he works
+  "est.tech.notHere": "The office makes the estimate for this address: you have no visit here",
 };

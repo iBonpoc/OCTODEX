@@ -5,7 +5,7 @@
  */
 import { dsCode } from "./attrs";
 import { capSide, cornerCut, findCorners, houseSides, isOpenEnd, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
-import { fmtLen } from "./format";
+import { fmtLen, type LenFormat } from "./format";
 import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./labels";
 
 /** the view: screen = (x·k + ox, −y·k + oy) — north up */
@@ -90,6 +90,8 @@ export interface SceneOpts {
   storyText: (n: Story) => string;
   /** a corner's chip (i18n: «наруж.», «внутр. · брызги»); none — no chip (the speed bench) */
   cornerText?: (kind: SceneCorner["kind"], splash: boolean, angleDeg: number) => string;
+  /** the company's format of lengths (#1092): every label is in it */
+  fmt?: LenFormat;
   /** how far the face line stands off the run, px */
   faceOff?: number;
   /** extra labels (the bench: up to 150 in all) — anchored at a plan point */
@@ -158,7 +160,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
-    const len = fmtLen(runLengthIn(r), r.unit);
+    const len = fmtLen(runLengthIn(r), o.fmt);
     add(`len:${r.id}`, s.a, s.b, o.lenWithStory ? `${len} · ${o.storyText(s.story)}` : len, "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
   });
   // over the mark: its fittings in one word («AABO⁴», founder 08.11); the number is inside the mark

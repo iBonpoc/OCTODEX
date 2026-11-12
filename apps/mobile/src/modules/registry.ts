@@ -73,6 +73,9 @@ export interface ModuleStore {
  */
 export interface ModuleEstimateStore extends ModuleStore {
   leadEstimateTarget: (leadId: string) => { customerId: string; propertyId: string; undo: () => void } | null;
+  /** a new estimate at this property is the person's to make (a tech: where he works — the server's estimates_insert);
+   *  asked before anything is written for it (#1138). Missing in an older test store — then «yes». */
+  mayMakeEstimateAt?: (propertyId: string | undefined) => boolean;
   saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => () => void;
 }
 

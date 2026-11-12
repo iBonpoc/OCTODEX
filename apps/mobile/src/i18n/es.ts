@@ -31,6 +31,8 @@ export const es: Dict = {
   "path.leadNew": "Crear lead",
   "path.clientNew": "Crear cliente",
   "path.expenseNew": "Crear gasto",
+  // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
+  "path.inv.deposit": "Depósito",
   "path.visitAdd": "Añadir visita",
   "path.photoAdd": "Añadir foto",
   "path.estimateNew": "Crear presupuesto",
@@ -597,6 +599,8 @@ export const es: Dict = {
   "company.hint": "Usted será el dueño. Invite a técnicos y despachador después.",
   "account.title": "Cuenta",
   "account.demo": "Modo demo: datos de prueba, solo en este dispositivo.",
+  "demo.badge": "Demo · los datos solo están en este teléfono",
+  "demo.badgeAction": "Iniciar sesión o crear una empresa",
   "account.signIn": "Entrar o crear cuenta",
   "account.signOut": "Salir",
   "account.noCompany": "Con cuenta, sin empresa aún.",
@@ -2315,6 +2319,8 @@ export const es: Dict = {
   "ds.note.offlineHint": "Sin red, los cambios van a la cola y la insignia los cuenta. Al salir de la pantalla vuelve la red.",
   "ds.note.offlineOn": "Apagar la red",
   "ds.note.offlineOff": "Encender la red",
+  "ds.note.demo": "La franja «Demo»",
+  "ds.note.demoHint": "En la demo, sobre cada pantalla: los datos son inventados y solo viven en este teléfono. Un toque lleva al inicio de sesión.",
   "ds.note.later": "El aviso de error y el banner llegan con Н-62 y Н-63 (#957, #958).",
   "ds.hap.web": "La web no tiene vibración: los botones de abajo no hacen nada. Abre esta sección en el teléfono.",
   "ds.hap.map": "Mapa de respuestas",
@@ -2819,7 +2825,6 @@ export const es: Dict = {
   "mod.gutters.attr.unit.cm": "cm",
   "mod.gutters.attr.unitTitle": "Unidad de longitud",
   "mod.gutters.attr.unitPick": "Unidad: {u} — cambiar",
-  "mod.gutters.attr.unitShow": "Mostrar el largo en",
   "mod.gutters.attr.colorAsRun": "Igual que la canaleta ({c})",
   "mod.gutters.attr.offsetOwn": "Propio",
   "mod.gutters.attr.quickTitle": "Largo de la canaleta",
@@ -3162,6 +3167,7 @@ export const es: Dict = {
   "mod.gutters.view.parts": "Piezas",
   "mod.gutters.sheet.tape": "Cinta — medida exacta, lista para cortar",
   "mod.gutters.sheet.scale": "Escala: {len}",
+  "mod.gutters.sheet.panel": "Contorno {n} · canaletas {runs}",
   "mod.gutters.view.rough": "Medición aproximada: vuelva a medir antes de cortar",
   "mod.gutters.view.estimates": "Presupuestos de esta medición",
   "mod.gutters.view.stale": "El dibujo cambió después del presupuesto: las cantidades se actualizarán, sus cambios manuales se quedan",
@@ -3671,4 +3677,6 @@ export const es: Dict = {
   "sup.vendorLocked": "Vendedor: {name} (lo cambia la oficina)",
   // «Данные и деньги» #1113: a tech does not send an estimate
   "est.tech.officeSends": "La oficina envía el presupuesto al cliente",
+  // «Данные и деньги» #1138: a tech makes an estimate only where he works
+  "est.tech.notHere": "La oficina hará el presupuesto para esta dirección: usted no tiene visita aquí",
 };

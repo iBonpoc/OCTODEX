@@ -14,6 +14,7 @@ import { pagesProblem } from "@/features/docPages";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { estimateTitle, newDoc, uid } from "@/features/estimateDoc";
 import { moduleActive, type ModuleEstimateStore } from "../registry";
+import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
 import type { DocLang } from "@/i18n/translate";
 import { gutterData, K, KEY, ownFields, putMeasurement, withGutterData } from "./data";
@@ -144,7 +145,7 @@ export interface MakeInput {
 export type MakeResult =
   | { ok: true; estimateId: string; undo: () => void; updated: boolean }
   /** off: the module is not active (О2); signed: never changed; noClient: no lead or property this person can make an estimate for */
-  | { ok: false; reason: "off" | "signed" | "noClient" };
+  | { ok: false; reason: "off" | "signed" | "noClient" | "notHere" };
 
 /**
  * «Смета» / «Обновить смету»: a revision of the measurement (the server numbers it, T98), the measurement is ready, and
@@ -157,6 +158,14 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   if (!moduleActive(db.company, KEY)) return { ok: false, reason: "off" };
   const e = estimateOfMeasurement(db, x.m.id);
   if (e && SIGNED.has(e.status)) return { ok: false, reason: "signed" };
+  // #1138 (review of #1169 Б1): a NEW estimate only where the person may make one (a tech: a property he works at, the
+  // server's estimates_insert) — asked before anything is written: no revision, no «ready», no client from the lead, no
+  // false «Смета составлена». The property it would be at: the lead's (or its client's), else the measurement's own.
+  if (!e && store.mayMakeEstimateAt) {
+    const lead = x.m.leadId ? db.leads.find((l) => l.id === x.m.leadId) : undefined;
+    const at = lead ? leadEstimatePropertyId(db, lead) : x.m.propertyId ?? undefined;
+    if (!store.mayMakeEstimateAt(at)) return { ok: false, reason: "notHere" };
+  }
   // the client and the property: the estimate's own, else the lead's (made from it when it has none, S3), else the
   // property's — also when the lead is not seen here (a tech on his visit's property; review M8b №6)
   let target: { customerId: string; propertyId: string; undo: () => void; leadId?: string } | null = null;
