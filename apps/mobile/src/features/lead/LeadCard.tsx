@@ -23,6 +23,7 @@ import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } fro
 import { Icon, Press, T } from "@/ui/primitives";
 import { liveUri } from "@/features/photoUri";
 import { Sheet, useToast } from "@/ui/overlays";
+import { canMakeEstimateAt, canSeeEstimate, leadEstimatePropertyId } from "@/features/access";
 import { Card, Empty, Grid, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -67,11 +68,15 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
   const closedIds = new Set(closed.map((c) => c.id));
   const dupCustomers = dups.customers.filter((c) => c.id !== l.customerId && !closedIds.has(c.id));
   const servable = canServe(db, l.customerId);
-  const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
+  // a tech: only the estimates the server shows him (canSeeEstimate, #1138); a new one only where he works (estimates_insert)
+  const who = { role, mode: store.mode, me: db.me };
+  const estimates = db.estimates.filter((e) => (e.leadId === l.id || (l.customerId && e.customerId === l.customerId)) && canSeeEstimate(db, who, e.id));
+  const mayMakeEstimate = canMakeEstimateAt(db, who, leadEstimatePropertyId(db, l));
   const assignee = db.members.find((m) => m.id === l.assigneeId);
   const events = leadTimeline(db, l, db.me, t("acct.deletedName"));
 
   const makeEstimate = () => {
+    if (!mayMakeEstimate) return void toast.show(t("est.tech.notHere"));
     const target = store.leadEstimateTarget(l.id);
     if (target) router.push(`/estimate/new?customerId=${target.customerId}&propertyId=${target.propertyId}&leadId=${l.id}`);
   };
@@ -219,8 +224,8 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
           <LeadVisits leadId={l.id} />
         </>
       ) : null}
-      {tab === "estimates" ? <LeadEstimates leadId={l.id} onNew={makeEstimate} part="estimates" /> : null}
-      {tab === "files" ? <LeadEstimates leadId={l.id} onNew={makeEstimate} part="files" /> : null}
+      {tab === "estimates" ? <LeadEstimates leadId={l.id} onNew={mayMakeEstimate ? makeEstimate : undefined} part="estimates" /> : null}
+      {tab === "files" ? <LeadEstimates leadId={l.id} onNew={mayMakeEstimate ? makeEstimate : undefined} part="files" /> : null}
 
       <ReplySheet leadId={sheet === "reply" ? l.id : null} onClose={() => setSheet(null)} />
       <CallResultSheet key={`call-${sheet === "call"}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => (isOpenLead(l) ? setSheet("next") : undefined)} />
@@ -318,18 +323,18 @@ function LeadVisits({ leadId }: { leadId: string }) {
 }
 
 /** Estimates of the lead + photos taken on its visits. */
-function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => void; part: "estimates" | "files" }) {
-  const { db, role } = useStore();
+function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew?: () => void; part: "estimates" | "files" }) {
+  const { db, role, mode } = useStore();
   const { t, money, day } = useI18n();
   const { c } = useTheme();
   const l = db.leads.find((x) => x.id === leadId)!;
-  const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
+  const estimates = db.estimates.filter((e) => (e.leadId === l.id || (l.customerId && e.customerId === l.customerId)) && canSeeEstimate(db, { role, mode, me: db.me }, e.id));
   const photos = db.visits.filter((v) => v.leadId === l.id || (!!l.propertyId && visitPropertyId(db, v) === l.propertyId)).flatMap((v) => v.photos);
   return (
-    <View style={{ gap: space[3] }}>
+    <View testID={`lead-${part}`} style={{ gap: space[3] }}>
       {part === "estimates" ? (
       <>
-      <SectionTitle title={t("client.estimates")} right={isOpenLead(l) ? <Button label={t("lead.makeEstimateShort")} icon="plus" size="sm" variant="ghost" onPress={onNew} /> : undefined} />
+      <SectionTitle title={t("client.estimates")} right={isOpenLead(l) && onNew ? <View testID="lead-new-estimate"><Button label={t("lead.makeEstimateShort")} icon="plus" size="sm" variant="ghost" onPress={onNew} /></View> : undefined} />
       {estimates.length ? (
         <CardGrid>
           {estimates.map((e) => (

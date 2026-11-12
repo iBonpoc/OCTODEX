@@ -4,12 +4,13 @@
  *   visits_select / is_visit_assignee — T22, T35;   jobs_select / is_job_assignee — T22, T35;
  *   invoices_select (the tech's job) — T22;
  *   estimates_select (created_by = him, or app.is_property_assignee: a visit of his that counts at the property) — T33;
+ *   estimates_insert (a tech: a property he works at) — T33;
  *   catalog_items_update / insert — staff only — T99.
  * In the cloud the server already gave the phone only what the person may see (RLS): every rule here says «yes» there,
  * so nothing the tech made offline (his own draft, not on the server yet) is ever hidden by the phone. The rules matter
  * in the demo, where the phone holds the whole company. Pure, unit-tested: test/access.test.ts.
  */
-import type { DB, ID, Role } from "@/data/types";
+import type { DB, ID, Lead, Role } from "@/data/types";
 import type { Mode } from "@/data/store";
 import { techVisitCounts } from "./comms/comms";
 import { isAssigned } from "./schedule";
@@ -33,22 +34,31 @@ export function canSeeInvoice(db: Pick<DB, "visits" | "invoices">, w: Who, invoi
   const inv = db.invoices.find((x) => x.id === invoiceId);
   return !!inv && canSeeJob(db, w, inv.jobId);
 }
-/** an estimate is the tech's as the server's estimates_select says (T33): on a property where he has a visit that counts
- *  (app.is_property_assignee → tech_visit_counts: his, not cancelled / no-show, its job not done, within the last 14 days —
- *  features/comms techVisitCounts), an inspection without a job included. Not through a lead assigned to him: the server
- *  does not show it that way (director's review of #1134 Б1). The server's «created by him» the phone does not keep;
- *  his own estimate is on his property anyway (estimates_insert). */
-export function canSeeEstimate(db: Pick<DB, "visits" | "jobs" | "estimates">, w: Who, estimateId: ID): boolean {
+/** an estimate is the tech's as the server's estimates_select says (T33): made by him (created_by), or on a property where
+ *  he has a visit that counts (app.is_property_assignee → tech_visit_counts: his, not cancelled / no-show, its job not
+ *  done, within the last 14 days — features/comms techVisitCounts), an inspection without a job included. Not through a
+ *  lead assigned to him: the server does not show it that way (director's review of #1134 Б1). */
+export function canSeeEstimate(db: Pick<DB, "visits" | "jobs" | "estimates" | "leads">, w: Who, estimateId: ID): boolean {
   if (free(w)) return true;
   const e = db.estimates.find((x) => x.id === estimateId);
-  return !!e && isPropertyAssignee(db, w, e.propertyId);
+  return !!e && (e.createdBy === w.me || isPropertyAssignee(db, w, e.propertyId));
 }
-/** the server's app.is_property_assignee: a visit of his that counts, at this property (the visit's own, else its job's) */
-export function isPropertyAssignee(db: Pick<DB, "visits" | "jobs">, w: Who, propertyId: ID | undefined, now = Date.now()): boolean {
+/** the server's app.is_property_assignee: a visit of his that counts, at this property — the visit's own, else its job's,
+ *  else its lead's (the server's t04_visit_property fills it the same way, #1138) */
+export function isPropertyAssignee(db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined, now = Date.now()): boolean {
   if (!propertyId) return false;
   return db.visits.some(
-    (v) => (v.propertyId ?? db.jobs.find((j) => j.id === v.jobId)?.propertyId) === propertyId && techVisitCounts({ me: w.me, jobs: db.jobs }, v, now),
+    (v) =>
+      (v.propertyId ?? db.jobs.find((j) => j.id === v.jobId)?.propertyId ?? (v.leadId ? db.leads.find((l) => l.id === v.leadId)?.propertyId : undefined)) === propertyId &&
+      techVisitCounts({ me: w.me, jobs: db.jobs }, v, now),
   );
 }
+/** the property a lead's estimate is made at (the store's leadTarget): the lead's own, else its client's first; none —
+ *  a new one is made for it (then nobody has a visit there yet) */
+export function leadEstimatePropertyId(db: Pick<DB, "properties">, l: Pick<Lead, "propertyId" | "customerId">): ID | undefined {
+  return l.propertyId ?? (l.customerId ? db.properties.find((p) => p.customerId === l.customerId)?.id : undefined);
+}
+/** a tech saves a new estimate only where the server lets him (estimates_insert: a property he works at, #1138) */
+export const canMakeEstimateAt = (db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined): boolean => free(w) || isPropertyAssignee(db, w, propertyId);
 /** the price list is the office's to change (catalog_items_update — staff); the tech only reads it */
 export const canEditCatalog = (role: Role) => role !== "tech";

@@ -3674,4 +3674,6 @@ export const es: Dict = {
   "sup.vendorLocked": "Vendedor: {name} (lo cambia la oficina)",
   // «Данные и деньги» #1113: a tech does not send an estimate
   "est.tech.officeSends": "La oficina envía el presupuesto al cliente",
+  // «Данные и деньги» #1138: a tech makes an estimate only where he works
+  "est.tech.notHere": "La oficina hará el presupuesto para esta dirección: usted no tiene visita aquí",
 };
