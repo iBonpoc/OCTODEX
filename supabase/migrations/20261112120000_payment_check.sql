@@ -1,7 +1,10 @@
 -- The payment check: a payment is never above its invoice's balance (app.tg_payment_not_above_balance, 20261104090000).
 -- The trigger runs before the row's RLS check and its foreign keys, as the function's owner: it now looks only at an
--- invoice of the payment's own company, and only for someone of that company (or a server path with no signed-in user —
--- the Stripe webhook, migrations). Anyone else learns nothing and takes no lock: the RLS check refuses the row as before.
+-- invoice of the payment's own company, and only for someone who may read that invoice (the office side; a tech on a job
+-- of his) or a server path with no signed-in user (the Stripe webhook, migrations). Anyone else learns nothing and takes no
+-- lock: the RLS check refuses the row as before. A security-definer function that pays for someone outside the company
+-- (portal_pay_simulated for a signed-in client) checks the balance itself, as it does today: this trigger cannot tell it
+-- from a direct insert.
 -- The refusal says no amounts (hint payment_above_balance); T176 still finds «exceeds invoice balance».
 -- Rule 16: the same function, the same trigger; nothing renamed or dropped. Rule 18: revoked from everyone (a trigger).
 -- Test: supabase/tests/core_rls.sql T198.
@@ -13,9 +16,14 @@ begin
   if new.invoice_id is null or new.status not in ('pending', 'succeeded') then
     return new;
   end if;
-  -- a person of another company (or with no role in this one): nothing is read — RLS refuses the row after this trigger.
-  -- Sales and the tech stay: server functions pay for them (record_estimate_deposit, record_visit_payment)
-  if auth.uid() is not null and not app.has_role(new.company_id, array['owner', 'admin', 'office', 'sales', 'tech']) then
+  -- only someone who may read this invoice (as invoices_select): the office side of the company; a tech only on a job of
+  -- his (record_visit_payment pays for him there). Anyone else — another company, a tech of another job — learns nothing
+  -- and takes no lock: the RLS check refuses the row after this trigger. The job id is read without a lock: the answer
+  -- is yes or no, and the tech knows his jobs.
+  if auth.uid() is not null
+     and not app.is_staff(new.company_id)
+     and not (app.has_role(new.company_id, array['tech'])
+              and app.is_job_assignee((select i.job_id from public.invoices i where i.id = new.invoice_id and i.company_id = new.company_id))) then
     return new;
   end if;
   -- only an invoice of the payment's own company (a mismatched pair is refused by the foreign key after this trigger)

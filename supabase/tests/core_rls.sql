@@ -13412,6 +13412,21 @@ exception when check_violation then
   get stacked diagnostics h = pg_exception_hint, msg = message_text;
   perform tst.ok(h = 'payment_above_balance' and msg !~ '[0-9]', 'T198 our own overpayment: refused, no amounts in the text');
 end $$;
+:as_tech_a
+do $$ declare st text; msg text; begin
+  -- a tech of the company, not on that job (he cannot read the invoice): only the policy's refusal, whatever the amount
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-tech-1');
+  raise exception 'FAILED: T198 a tech wrote a payment on another job''s invoice';
+exception when others then
+  get stacked diagnostics st = returned_sqlstate, msg = message_text;
+  perform tst.ok(st = '42501' and msg not like '%balance%', format('T198 a tech of another job learns no balance (%s %s)', st, msg));
+end $$;
+-- a server path above the balance: refused (the Stripe webhook's database calls keep the check)
+:as_super
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+         ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'card', 999999999, 'succeeded', 't198-server-over')$q$,
+       '%exceeds invoice balance%', 'T198 a server path above the balance: refused');
 -- a server path (no signed-in user) into a voided invoice: refused as for a person
 :as_super
 select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
