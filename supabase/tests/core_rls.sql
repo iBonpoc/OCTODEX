@@ -13940,6 +13940,18 @@ update public.estimate_templates set doc = jsonb_set(doc, '{options,0,sections}'
 select tst.ok((select name = 'T203 Roof renamed' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb and doc #>> '{options,0,lines,1,clientVisible}' = 'false'
                  from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
               'T203 the office renames and edits a template with sections; the hidden line stays');
+-- a rename alone (no doc in the update) passes; t02 runs on every update (security-check of #1238: after a later change
+-- of app.client_sections a rename still puts the stored sections in the form first, never a refusal)
+update public.estimate_templates set name = 'T203 renamed again' where id = 'e2030000-0000-4000-8000-000000000001';
+select tst.ok((select name = 'T203 renamed again' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 a rename alone passes, the sections as they were');
+select tst.ok((select tgtype & 16 = 16 and tgtype & 4 = 4 and not exists (select 1 from pg_attribute a where a.attrelid = t.tgrelid and a.attnum = any (t.tgattr))
+                 from pg_trigger t where t.tgname = 't02_template_sections'), 'T203 t02 is before insert and every update (not only «of doc»)');
+-- too large or too many options: t02 leaves it to the check (refused)
+select tst.fails(format($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'T203 big', %L::jsonb)$q$,
+                 jsonb_build_object('options', (select jsonb_agg(jsonb_build_object('id', 'o' || i, 'name', 'O', 'lines', '[]'::jsonb, 'sections', '[]'::jsonb)) from generate_series(1, 11) i),
+                                    'settings', '{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}'::jsonb)), 'T203 eleven options — refused by the check');
 -- the shared examples (apps/mobile/test/fixtures/clientSections.json): what the phone sends is what the server keeps
 :as_super
 select tst.ok(coalesce(string_agg(c ->> 'name', '; '), '') = '', format('T203 a template keeps every example in the client''s form: %s', coalesce(string_agg(c ->> 'name', '; '), '')))

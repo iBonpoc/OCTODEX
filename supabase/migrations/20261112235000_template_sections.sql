@@ -23,18 +23,25 @@ grant execute on function app.client_sections(jsonb), app.client_title(text) to 
 create or replace function app.tg_template_sections()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if jsonb_typeof(new.doc -> 'options') = 'array' then
+  -- a document the check refuses anyway (too large, too many options): left to it, no work here (security-check of #1238)
+  if new.doc is null or octet_length(new.doc::text) > 262144 or jsonb_typeof(new.doc -> 'options') is distinct from 'array'
+     or jsonb_array_length(new.doc -> 'options') > 10 then
+    return new;
+  end if;
+  begin
     new.doc := jsonb_set(new.doc, '{options}', (
       select coalesce(jsonb_agg(case when jsonb_typeof(o) = 'object' and jsonb_typeof(o -> 'sections') = 'array'
                                      then jsonb_set(o, '{sections}', app.client_sections(o -> 'sections')) else o end order by n), '[]'::jsonb)
         from jsonb_array_elements(new.doc -> 'options') with ordinality x(o, n)));
-  end if;
+  end;
   return new;
 end;
 $$;
 revoke all on function app.tg_template_sections() from public, anon, authenticated;
 drop trigger if exists t02_template_sections on public.estimate_templates;
-create trigger t02_template_sections before insert or update of doc on public.estimate_templates
+-- on every update, not only «of doc»: a rename re-checks the stored document too (the table's check), so after a later
+-- change of app.client_sections a rename still passes — the stored sections are put in the new form first
+create trigger t02_template_sections before insert or update on public.estimate_templates
   for each row execute function app.tg_template_sections();
 
 create or replace function app.valid_estimate_template_doc(p jsonb)
