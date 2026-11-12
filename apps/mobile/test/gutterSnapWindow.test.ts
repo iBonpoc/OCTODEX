@@ -195,21 +195,61 @@ describe("review of the director 12.11: no tick on a wobble; no snap onto the ne
   });
   it("swingEnd: an end of A does not stick to the FAR end of B, which meets A's standing end (A would lie on B: two corners with one id, a double count)", () => {
     const d: Drawing = { runs: [run("A", [0, 0], [600, 0]), run("B", [0, 0], [0, 300])], downspouts: [] };
-    const sw = swingEnd(d, "A", 1, [3, 298], null, TOL)!; // the finger is at B's far end
+    // the finger is at B's far end: A would lie on B — no frame at all (the last one stays), and no snap
+    expect(swingEnd(d, "A", 1, [3, 298], null, TOL)).toBeNull();
+    // the finger a little to the side: a frame, and it is not on B's end; one corner A–B, no second one
+    const sw = swingEnd(d, "A", 1, [150, 250], null, TOL)!;
     expect(sw.end).toBeUndefined();
-    const a = sw.drawing.runs[0]!, b = sw.drawing.runs[1]!;
-    expect(!(a.b[0] === b.b[0] && a.b[1] === b.b[1])).toBe(true);
-    expect(findCorners(sw.drawing).filter((c) => c.id.startsWith("c:A:B")).length).toBeLessThanOrEqual(1);
+    expect(sw.drawing.runs[0]!.b).not.toEqual(sw.drawing.runs[1]!.b);
+    expect(findCorners(sw.drawing)).toHaveLength(1);
   });
   it("moveCorner: the joint does not stick to the other end of a gutter that meets a far end of the pair", () => {
     // A: (0,0)-(300,300) joint, B: (300,300)-(600,0); C starts at A's far end (0,0) and ends at (0,300)
     const d: Drawing = { runs: [run("A", [0, 0], [300, 300]), run("B", [300, 300], [600, 0]), run("C", [0, 0], [0, 300])], downspouts: [] };
     const mv = moveCorner(d, "c:A:B", [2, 298], [false, false], TOL, null);
-    expect(mv?.end).toBeUndefined();
+    expect(mv).not.toBeNull(); // a frame is drawn (the joint follows the finger)…
+    expect(mv!.end).toBeUndefined(); // …but it does not stick to C's other end
+    expect(mv!.drawing.runs[0]!.b).not.toEqual([0, 300]);
   });
   it("moveCorner: folded back on itself (the sides within MIN_TURN_DEG) is no frame, as one in a line", () => {
     const d: Drawing = { runs: [run("A", [0, 0], [150, 150]), run("B", [150, 150], [100, 0])], downspouts: [] };
     // the far ends (0,0) and (100,0) seen from (300,5) lie in nearly one direction: the angle at the joint is ~0°
     expect(moveCorner(d, "c:A:B", [300, 5], [false, false], TOL, null)).toBeNull();
+  });
+});
+
+describe("review 3 of the director: the cut at ±180° (west) and an end laid back onto its neighbour", () => {
+  it("drawing to the WEST (180°): a wobble of ±1″ for 40 frames — exactly ONE tick", () => {
+    const d: Drawing = { runs: [], downspouts: [] };
+    const a: P = [400, 0];
+    let prev: string | null = null, ticks = 0;
+    for (let i = 0; i < 40; i++) {
+      const key = drawSnap(d, a, [0, i % 2 ? 1 : -1], TOL, undefined, prev); // atan2 gives π−ε, then −π+ε
+      expect(key === null || key === "s:180").toBe(true);
+      if (drawTick(key, prev)) ticks++;
+      prev = key;
+    }
+    expect(ticks).toBe(1);
+  });
+  it("an end straightened into a line with its neighbour (180° to it), the finger wobbling across the cut: exactly ONE tick", () => {
+    // B ends at the standing end (0,0) coming from the east; A goes west: 180° to B
+    const d: Drawing = { runs: [run("B", [300, 0], [0, 0]), run("A", [0, 0], [-300, 100])], downspouts: [] };
+    const st: { held: number | null; onEnd: P | null } = { held: null, onEnd: null };
+    let ticks = 0;
+    for (let i = 0; i < 40; i++) {
+      const sw = swingEnd(d, "A", 1, [-400, i % 2 ? 1 : -1], st.held, TOL, st.onEnd)!;
+      expect(sw).not.toBeNull();
+      if (pullTick(sw, st)) ticks++;
+      st.held = sw.step;
+      st.onEnd = sw.end ?? null;
+    }
+    expect(ticks).toBe(1);
+  });
+  it("swingEnd: a step of 0° to the neighbour (A laid on B) is no frame; so is anything under MIN_TURN_DEG; 90° and 180° are", () => {
+    const d: Drawing = { runs: [run("B", [300, 0], [0, 0]), run("A", [0, 0], [-300, 100])], downspouts: [] };
+    expect(swingEnd(d, "A", 1, [400, 3], null, TOL)).toBeNull(); // along B
+    expect(swingEnd(d, "A", 1, [400, 60], null, TOL)).toBeNull(); // ~9° off B
+    expect(swingEnd(d, "A", 1, [3, 400], null, TOL)).not.toBeNull(); // 90°
+    expect(swingEnd(d, "A", 1, [-400, 3], null, TOL)).not.toBeNull(); // straight on
   });
 });

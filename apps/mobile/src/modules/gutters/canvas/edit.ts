@@ -31,6 +31,9 @@ export function endAt(d: Drawing, a: P, p: P, tolIn: number, except?: string): P
  * DISTANCE / ANGLE with a hysteresis (`prev` — the key of the last frame: left only past 1.5 × the window), not by whether the rounded
  * point equals a snapped one — a wobble of an inch at the edge of a window gave a tick every other frame.
  */
+/** the angle between two directions, 0…π, across the cut at ±180° */
+const angDiff = (a: number, b: number): number => Math.abs(((a - b + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+
 export function drawSnap(d: Drawing, a: P, p: P, tolIn: number, except?: string, prev: string | null = null): string | null {
   const ends = endsOf(d, except).filter((e) => e[0] !== a[0] || e[1] !== a[1]);
   let best: P | null = null, bd = Infinity;
@@ -45,9 +48,10 @@ export function drawSnap(d: Drawing, a: P, p: P, tolIn: number, except?: string,
   const raw = Math.atan2(v[1], v[0]);
   const step = Math.PI / 4;
   const m = Math.round(raw / step) * step;
-  const key = `s:${Math.round((m * 180) / Math.PI)}`;
+  const deg = Math.round((m * 180) / Math.PI);
+  const key = `s:${deg === -180 ? 180 : deg}`; // west is one step: −180° and 180° are the same key (a wobble across the cut gave a tick every frame)
   const win = ((prev === key ? SNAP_ANGLE_DEG + 2 : SNAP_ANGLE_DEG) * Math.PI) / 180;
-  return Math.abs(raw - m) <= win ? key : null;
+  return angDiff(raw, m) <= win ? key : null;
 }
 
 export function addRun(d: Drawing, id: string, a: P, b: P, attrs: DrawnRun["attrs"]): Drawing {
@@ -286,7 +290,8 @@ export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: numb
   const raw = Math.atan2(vy, vx);
   let delta = ((raw - ref + Math.PI * 3) % (Math.PI * 2)) - Math.PI; // (−180°, 180°]
   const step = Math.PI / 4;
-  const m = Math.round(delta / step) * step;
+  const m0 = Math.round(delta / step) * step;
+  const m = m0 <= -Math.PI + 1e-9 ? Math.PI : m0; // west is one step (180°), whichever side of the cut the finger is on
   // entered within a width of `tolIn` across the ray; one already held is kept a little further (hysteresis)
   const put = (at: P, len: number, delta1: number, snapped: boolean, step: number | null, snapEnd?: P): Swing => {
     const moved: DrawnRun = closeEnd(end === 0 ? { ...r, a: at, lengthIn: len } : { ...r, b: at, lengthIn: len }, end);
@@ -327,12 +332,14 @@ export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: numb
     return { drawing: moveEndAlong(d, runId, end, p), deg: Math.round((dOrig * 180) / Math.PI), snapped: true, step: HELD_ORIGINAL };
   };
   if (held === HELD_ORIGINAL && inWindow(offOrig, dist, tolIn, true)) return alongNow();
-  const stay = held !== null && held !== HELD_ORIGINAL && inWindow(Math.abs(delta - held), dist, tolIn, true);
-  const stepIn = stay || inWindow(Math.abs(delta - m), dist, tolIn);
+  const stay = held !== null && held !== HELD_ORIGINAL && inWindow(angDiff(delta, held), dist, tolIn, true);
+  const stepIn = stay || inWindow(angDiff(delta, m), dist, tolIn);
   if (!stepIn && inWindow(offOrig, dist, tolIn)) return alongNow();
   const snapped = stepIn;
   const stepHeld = stay ? held : snapped ? m : null;
   if (snapped) delta = stepHeld!;
+  // laid back onto the neighbour at the standing end (a turn under MIN_TURN_DEG from it, a step of 0° too): the gutters would overlap and a second, false corner would be found — no frame, as in moveCorner
+  if (nb && Math.abs(delta) < (MIN_TURN_DEG * Math.PI) / 180) return null;
   const ang = ref + delta;
   const len = Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round(dist)));
   const at: P = [Math.round(fixed[0] + Math.cos(ang) * len), Math.round(fixed[1] + Math.sin(ang) * len)];

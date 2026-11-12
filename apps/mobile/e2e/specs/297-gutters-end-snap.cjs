@@ -55,6 +55,8 @@ exports.run = async (h) => {
     const ends = g.flatMap((r) => [r.a, r.b]);
     return ends.some((q, i) => ends.some((o, j) => j !== i && Math.hypot(o[0] - q[0], o[1] - q[1]) < 1.5));
   }, KEY, { timeout: 8000 });
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="c:"]').length === 1, null, { timeout: 8000 });
+  h.expect((await svg().locator('[id^="c:"]').count()) === 1, "a corner mark appeared where they meet");
   const g = await runs();
   const share = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]) < 1.5;
   const ends = g.flatMap((r) => [r.a, r.b]);
@@ -64,12 +66,13 @@ exports.run = async (h) => {
   const joint = (await center('[id^="c:"]'))[0];
   await stroke(joint, [joint[0] + 90, joint[1] + 60]); // a third gutter FROM the joint: three ends meet there
   await waitRuns(3);
+  const still = JSON.stringify((await runs()).map((r) => [r.a, r.b])); // the drawing before the press
   await p.mouse.move(joint[0], joint[1]);
   await p.mouse.down();
   await hold();
   await p.mouse.move(joint[0] + 50, joint[1] + 2, { steps: 8 }); // the press takes effect when the finger starts to move
-  await p.getByText(/Стык из трёх концов не двигается/).first().waitFor({ timeout: 5000 });
+  await tid("toast-text").waitFor({ timeout: 5000 });
+  h.expect(/Стык из трёх концов/.test(await tid("toast-text").innerText()), "the toast says why: a joint of three ends");
   await p.mouse.up();
-  const after = await runs();
-  h.expect(JSON.stringify(after.map((r) => [r.a, r.b])) === JSON.stringify((await runs()).map((r) => [r.a, r.b])), "nothing moved");
+  h.expect(JSON.stringify((await runs()).map((r) => [r.a, r.b])) === still, "nothing moved");
 };
