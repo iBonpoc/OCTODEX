@@ -1,6 +1,6 @@
 import { Fragment, type ReactNode } from "react";
 import { View } from "react-native";
-import { radius, space, spaceHalf, tokens } from "@octo/design-tokens";
+import { component, radius, space, spaceHalf, tokens } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
@@ -36,11 +36,11 @@ function Sample({ group, path, value }: { group: string; path: string; value: st
   const box = space[6];
   let sample: ReactNode = <View style={{ width: box }} />;
   if (isColor(value)) {
-    sample = <View style={{ width: box, height: box, borderRadius: radius.tip, backgroundColor: value, borderWidth: 1, borderColor: c.bd }} />;
+    sample = <View style={{ width: box, height: box, borderRadius: radius.tip, backgroundColor: value, borderWidth: component.hairline, borderColor: c.bd }} />;
   } else if (typeof value === "number" && (group === "space" || group === "spaceHalf")) {
     sample = <View style={{ width: Math.max(value, spaceHalf.hair), height: space[2], backgroundColor: c.mut, borderRadius: spaceHalf.hair }} />;
   } else if (typeof value === "number" && group === "radius") {
-    sample = <View style={{ width: box, height: box, borderWidth: 1, borderColor: c.mut, borderRadius: Math.min(value, box / 2) }} />;
+    sample = <View style={{ width: box, height: box, borderWidth: component.hairline, borderColor: c.mut, borderRadius: Math.min(value, box / 2) }} />;
   }
   return (
     <RowView style={{ paddingVertical: space[1] }} >

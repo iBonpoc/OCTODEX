@@ -19,6 +19,7 @@ export interface ShowcaseSection {
 }
 
 export const SECTIONS: ShowcaseSection[] = [
+  { id: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet"] },
   { id: "tokens-color", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
   { id: "tokens-text", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
   { id: "tokens-layout", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
@@ -33,7 +34,7 @@ export const SECTIONS: ShowcaseSection[] = [
 export const UI_PENDING: readonly string[] = [
   "Columns", "Meter", "ReadOnly", "Button", "IconButton", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
   "TextField", "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
-  "ListPanel", "Glass", "Menu", "Sheet", "HelpButton", "ToastProvider", "T", "Icon", "Press", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
+  "ListPanel", "Glass", "Menu", "HelpButton", "ToastProvider", "T", "Icon", "Press", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
   "Divider", "Empty", "SyncBadge", "Screen",
 ];
 

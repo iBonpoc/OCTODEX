@@ -28,6 +28,18 @@ exports.run = async (h) => {
   const closeSheet = async () => {
     await pressEscUntilClosed(p);
   };
+  /** which items the open «＋» sheet has — by testID `fab-<id>` (rule 19: not by the words, they get renamed) */
+  const has = async (...ids) => {
+    const out = [];
+    for (const id of ids) out.push((await sheet().getByTestId(`fab-${id}`).count()) === 1);
+    return out.every(Boolean);
+  };
+  const lacks = async (...ids) => {
+    for (const id of ids) if ((await sheet().getByTestId(`fab-${id}`).count()) !== 0) return false;
+    return true;
+  };
+  /** the top edge of an item: the order in the sheet */
+  const topOf = async (id) => (await sheet().getByTestId(`fab-${id}`).boundingBox()).y;
   const box = async (l) => (await l.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
 
   await h.go("/today");
@@ -47,8 +59,8 @@ exports.run = async (h) => {
   // Главная: only what works
   await plus().click();
   let body = await sheetText();
-  for (const it of ["Создать лид", "Создать клиента", "Создать смету", "Работа без сметы", "Создать расход"]) h.expect(body.includes(it), `Главная «＋» has «${it}»`);
-  for (const it of ["Добавить фото", "Задача", "Голосовая"]) h.expect(!body.includes(it), `Главная «＋» has no «${it}» yet`);
+  h.expect(await has("lead", "client", "estimate", "job", "expense"), "Главная «＋»: lead, client, estimate, job, expense");
+  h.expect(await lacks("photo", "task"), "Главная «＋» has no photo and no task yet");
   await h.shot("home-sheet");
   await sheet().getByTestId("fab-client").click();
   await p.waitForTimeout(700);
@@ -81,7 +93,7 @@ exports.run = async (h) => {
 
   // Clients: one item — straight to the new client form
   await h.go("/clients");
-  h.expect((await p.getByRole("button", { name: "Создать клиента", exact: true }).locator("visible=true").count()) === 1, "Clients: one «＋ Новый клиент»");
+  h.expect((await plus().count()) === 1, "Clients: one «＋» (its only item goes straight to the form)");
   await plus().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/client/edit", `Clients «＋» → /client/edit (${p.url()})`);
@@ -89,7 +101,7 @@ exports.run = async (h) => {
   // Client (#1094): the card's main action is a visible verb «Создать смету»; the «＋» offers the estimate first,
   // then «Работа без сметы», each with one line saying what it makes
   await h.go("/client/c1");
-  const mainBtn = p.getByRole("button", { name: "Создать смету", exact: true }).locator("visible=true");
+  const mainBtn = p.getByTestId("client-make-estimate").locator("visible=true");
   h.expect((await mainBtn.count()) === 1, "client card: one visible «Создать смету» button");
   await mainBtn.first().click();
   await p.waitForURL(/\/estimate\/new/, { timeout: 5000 });
@@ -97,9 +109,12 @@ exports.run = async (h) => {
   await h.go("/client/c1");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Работа без сметы") && body.includes("Создать смету"), "client «＋»: estimate and job");
-  h.expect(body.indexOf("Создать смету") < body.indexOf("Работа без сметы"), "client «＋»: the estimate comes before the job, the job is last");
-  h.expect(/Цена для клиента/.test(body) && /Гарантия, мелкий ремонт, повторный вызов — без сметы и подписи/.test(body), "client «＋»: each item says what it makes and when");
+  h.expect(await has("estimate", "job"), "client «＋»: estimate and job");
+  h.expect((await topOf("estimate")) < (await topOf("job")), "client «＋»: the estimate comes before the job, the job is last");
+  for (const id of ["estimate", "job"]) {
+    const lines = (await sheet().getByTestId(`fab-${id}`).innerText()).split("\n").filter(Boolean);
+    h.expect(lines.length >= 2, `client «＋»: fab-${id} has a label and a line saying what it makes (${lines.join(" | ")})`);
+  }
   await sheet().getByTestId("fab-estimate").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/estimate/new" && new URL(p.url()).searchParams.get("customerId") === "c1", `client «＋» → estimate for c1 (${p.url()})`);
@@ -108,7 +123,7 @@ exports.run = async (h) => {
   await h.go("/job/j1");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Добавить выезд") && body.includes("Создать смету"), "job «＋»: visit and estimate");
+  h.expect(await has("visit", "estimate"), "job «＋»: visit and estimate");
   await sheet().getByTestId("fab-visit").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/job/schedule" && new URL(p.url()).searchParams.get("jobId") === "j1", `job «＋» → schedule j1 (${p.url()})`);
@@ -117,8 +132,8 @@ exports.run = async (h) => {
   await h.go("/plan");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Создать лид") && body.includes("Записать в план"), "Plan «＋»: lead and «Записать в план»");
-  for (const it of ["Работа без сметы", "Событие", "Выходной"]) h.expect(body.includes(it), `Plan «＋» has «${it}»`);
+  h.expect(await has("lead", "planAdd"), "Plan «＋»: lead and «Записать в план»");
+  h.expect(await has("job", "planEvent", "planTimeOff"), "Plan «＋»: job, event, day off");
   await sheet().getByTestId("fab-planAdd").click();
   await p.waitForTimeout(600);
   await h.expectText(/Осмотр|осмотр/, "«Записать в план» opens the Plan's sheet");
@@ -143,7 +158,7 @@ exports.run = async (h) => {
   h.expect((await vis("home-bell").count()) === 0, "tech: no bell (client and money notices are the office's)");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Создать лид") && body.includes("Создать расход") && !body.includes("Создать клиента") && !body.includes("Создать смету") && !body.includes("Работа без сметы"), "tech Главная «＋»: Лид · Расход");
+  h.expect((await has("lead", "expense")) && (await lacks("client", "estimate", "job")), "tech Главная «＋»: Лид · Расход");
   await closeSheet();
   const tdb = await h.db();
   const mine = tdb.visits.find((v) => v.kind !== "inspection" && ((v.assigneeIds ?? []).includes(tdb.me) || v.techId === tdb.me));
@@ -151,7 +166,7 @@ exports.run = async (h) => {
     await h.go(`/visit/${mine.id}`);
     await plus().click();
     body = await sheetText();
-    h.expect(body.includes("Добавить фото") && body.includes("Создать лид") && body.includes("Создать расход"), "tech visit «＋»: Фото · Лид · Расход");
+    h.expect(await has("photo", "lead", "expense"), "tech visit «＋»: Фото · Лид · Расход");
     await h.shot("visit-sheet");
     await closeSheet();
   }
