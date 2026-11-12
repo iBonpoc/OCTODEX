@@ -50,7 +50,7 @@ export const SCREENS: ShowcaseScreen[] = [
 
 export const SECTIONS: ShowcaseSection[] = [
   { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet"] },
-  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField", "PickerSheet"] },
+  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press"] },
   { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge"] },
   { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: [] },
@@ -76,5 +76,6 @@ export const UI_PENDING: readonly string[] = [
 /** components that are plumbing, not something a person sees — each with the reason */
 export const UI_NOT_SHOWN: Record<string, string> = {
   "Background": "the screen background under everything; seen on every sample",
+  "ScreenScrollCtx": "context that lets a form scroll its screen to a wrong field; nothing to see",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",
 };

@@ -357,7 +357,8 @@ export const print = {
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */
 /** sizes on the drawing canvas (design/naryad-ds/tokens/foundation.css --draw-*): line widths, a downspout, a node,
  *  the gap between a length label and its line; colours are themes[t].drawing */
-export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4 } as const;
+/** `pullSidePx`: a free end taken by the finger swings round the other end only after the finger is this far (screen px) off the line's axis (#818) */
+export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4, pullSidePx: 14 } as const;
 /** the drawing on paper (foundation.css --draw-print-*; a module's measurement sheet, its PDFs, the estimate's page, #739):
  *  sizes in sheet units — the sheet is `sheetW` wide and scales to the screen or the page; colours are `print`;
  *  `pageW`: the estimate's page — one sheet for the phone (/p/) and the paper, so built for the narrow one;

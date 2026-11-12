@@ -3,6 +3,7 @@
  * their costs; archive with «Отменить» (rule 5). Owner, admin, office only (nav/roles.ts). «new» (or any id
  * not on the phone) — a new supplier.
  */
+import { useRequiredForm } from "@/ui/requiredForm";
 import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -37,7 +38,15 @@ export default function SupplierScreen() {
   const [taxText, setTaxText] = useState(() => (found?.taxBps === undefined ? "" : String(found.taxBps / 100)));
   const set = (p: Partial<Supplier>) => setS((x) => ({ ...x, ...p }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/suppliers"));
-  const ok = s.name.trim() !== "" && !emailBad(s.email);
+  const form = useRequiredForm();
+  const submit = () =>
+    form.submit(
+      [
+        ...(s.name.trim() !== "" ? [] : [{ id: "name", text: t("form.req.supName") }]),
+        ...(emailBad(s.email) ? [{ id: "email", text: t("sup.emailBad") }] : []),
+      ],
+      save,
+    );
   const costs = store.db.costsVisible !== false;
   const items = found ? itemsOfSupplier(store.db, found.id) : [];
   // spec 36: the newest history rows of this supplier from the server, when opened (director's check of #459 Н4)
@@ -93,14 +102,13 @@ export default function SupplierScreen() {
     <Screen title={found ? t("sup.edit") : t("sup.new")} back={back}>
       <Card>
         <View testID="sup-name">
-          <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} />
+          <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} field={form.field("name")} />
         </View>
         <TextField type="name" value={s.contactName ?? ""} onChangeText={(v) => set({ contactName: v })} placeholder={t("sup.contact")} />
         <View testID="sup-phone">
           <TextField type="phone" value={s.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder={t("sup.phone")} />
         </View>
-        <TextField type="email" value={s.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder={t("sup.email")} />
-        {emailBad(s.email) ? <T v="caption" tone="bad">{t("sup.emailBad")}</T> : null}
+        <TextField type="email" value={s.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder={t("sup.email")} field={form.field("email", (v) => (emailBad(v) ? t("sup.emailBad") : undefined))} />
         <View testID="sup-account">
           <TextField type="identifier" value={s.accountNumber ?? ""} onChangeText={(v) => set({ accountNumber: v })} placeholder={t("sup.account")} />
         </View>
@@ -152,9 +160,8 @@ export default function SupplierScreen() {
         <TextField type="note" value={s.notes ?? ""} onChangeText={(v) => set({ notes: v })} placeholder={t("sup.notes")} multiline />
       </Card>
 
-      {!ok ? <T v="caption" tone="mut">{t("sup.need")}</T> : null}
       <View testID="sup-save">
-        <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
+        <Button label={t("ue.save")} icon="check" full testID="supplier-save" onPress={submit} />
       </View>
 
       {found ? (
