@@ -5,6 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { fmtLen, ftIn } from "../src/modules/gutters/canvas/format";
+import { setLength } from "../src/modules/gutters/canvas/edit";
 import { oneIn, tapeIn, unitFields } from "../src/modules/gutters/canvas/attrs";
 import { fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { sixteenth, type Drawing } from "../src/modules/gutters/geometry";
@@ -42,10 +43,12 @@ describe("showing to 1/16″", () => {
 });
 
 describe("typing to 1/16″", () => {
-  it("the tape: inches may carry the odd sixteenth, the eighths come beside", () => {
+  it("the tape: feet, inches and sixteenths (0–15); a decimal inch is read too", () => {
+    expect(tapeIn("0", "5", 3)).toBe(5.1875);
+    expect(tapeIn("1", "2", 6)).toBe(14.375);
+    expect(tapeIn("1", "2", 15)).toBe(14 + 15 / 16);
+    expect(tapeIn("1", "2", 99)).toBe(14 + 15 / 16);
     expect(tapeIn("5", "3.0625", 0)).toBe(63.0625);
-    expect(tapeIn("0", "5.0625", 1)).toBe(5.1875);
-    expect(tapeIn("1", "2", 3)).toBe(14.375);
   });
   it("one number in inches or metric rounds to the nearest 1/16″", () => {
     expect(oneIn("60.0625", "in")).toBe(60.0625);
@@ -58,7 +61,7 @@ describe("typing to 1/16″", () => {
     for (let k = 1; k <= 192 * 3; k++) {
       const n = k / 16;
       const f = unitFields(n, "ftin");
-      expect(tapeIn(f.ft, f.inc, f.e8), `${n}″`).toBe(n);
+      expect(tapeIn(f.ft, f.inc, f.e16), `${n}″`).toBe(n);
     }
   });
 });
@@ -73,11 +76,12 @@ describe("the length window starts from the length as it is (#1181 review Б1/Б
   it("5 3/16″ in the fields: editing another field keeps the sixteenth (the old fields showed 5¼)", () => {
     const f = unitFields(36 + 5.1875, "ftin");
     expect(f.ft).toBe("3");
-    expect(tapeIn("4", f.inc, f.e8)).toBe(48 + 5.1875);
-    expect(tapeIn(f.ft, "6", f.e8)).toBe(36 + 6 + 0.125 * (f.e8 as number));
+    expect(f.e16).toBe(3);
+    expect(tapeIn("4", f.inc, f.e16)).toBe(48 + 5.1875);
+    expect(tapeIn(f.ft, "6", f.e16)).toBe(36 + 6 + 3 / 16);
     for (let k = 1; k <= 192; k++) {
       const g = unitFields(k / 16, "ftin");
-      expect(tapeIn(g.ft, g.inc, g.e8), `${k}/16`).toBe(k / 16);
+      expect(tapeIn(g.ft, g.inc, g.e16), `${k}/16`).toBe(k / 16);
     }
   });
 });
@@ -91,6 +95,13 @@ describe("keeping to 1/16″", () => {
   it("an old length in eighths is read as it was", () => {
     expect(fromElements(toElements(d(878.125), "m1")).runs[0]!.lengthIn).toBe(878.125);
     expect(fromElements(toElements(d(878.4), "m1")).runs[0]!.lengthIn).toBe(878.375);
+  });
+  it("a typed length is kept to the sixteenth by setLength (e2e 168 found it kept to 1/8 here)", () => {
+    const base = d(0);
+    const noLen: Drawing = { ...base, runs: base.runs.map(({ lengthIn: _l, ...x }) => x) };
+    expect(setLength(noLen, "a", 306.1875).runs[0]!.lengthIn).toBe(306.1875);
+    expect(setLength(noLen, "a", 306.03).runs[0]!.lengthIn).toBe(306);
+    expect(setLength(noLen, "a", 306.04).runs[0]!.lengthIn).toBe(306.0625);
   });
   it("the cut of a corner is to 1/16″", () => {
     expect(sixteenth(5.04)).toBe(5.0625);
