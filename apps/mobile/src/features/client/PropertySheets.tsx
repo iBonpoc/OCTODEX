@@ -48,7 +48,7 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={exists ? t("prop.edit") : t("prop.new")} dirty={JSON.stringify(d) !== d0} onSave={ok ? save : undefined}>
+    <Sheet visible={!!value} onClose={onClose} title={exists ? t("prop.edit") : t("prop.new")} dirty={JSON.stringify(d) !== d0} onSave={ok ? save : undefined}>
       <Labeled label={t("prop.street")}>
         <TextField type="street" value={d.address} onChangeText={(v) => set({ address: v })} placeholder={t("prop.street")} icon="pin" />
       </Labeled>
@@ -102,7 +102,7 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("prop.access")} dirty={dirty} onSave={save}>
+    <Sheet visible={!!value} onClose={onClose} title={t("prop.access")} dirty={dirty} onSave={save}>
       <Labeled label={t("prop.accessNotes")}>
         <TextField type="note" value={notes} onChangeText={setNotes} placeholder={t("prop.accessNotesHint")} label={t("prop.accessNotes")} multiline />
       </Labeled>
@@ -133,7 +133,7 @@ export function PropertyPeopleSheet({ value, onClose }: { value: Property | null
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("prop.people")} dirty={dirty} onSave={save}>
+    <Sheet visible={!!value} onClose={onClose} title={t("prop.people")} dirty={dirty} onSave={save}>
       <T v="caption" tone="mut">
         {t("prop.peopleHint")}
       </T>

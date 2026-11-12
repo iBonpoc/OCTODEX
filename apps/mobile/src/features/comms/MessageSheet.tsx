@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { Linking, ScrollView, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -36,11 +37,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function MessageSheet({ preset, onClose }: { preset: MessagePreset | null; onClose: () => void }) {
-  if (!preset) return null;
-  return <MessageSheetBody key={`${preset.owner?.id ?? ""}-${preset.person?.id ?? ""}`} preset={preset} onClose={onClose} />;
+  const h = useHeldSheet(preset);
+  if (!h.value) return null;
+  const p = h.value;
+  return <MessageSheetBody key={`${p.owner?.id ?? ""}-${p.person?.id ?? ""}-${h.opening}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
-function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose: () => void }) {
+function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: MessagePreset; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { db, role } = store;
   const { t } = useI18n();
@@ -98,7 +101,7 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
         : messagePeople(db, role, query)
       ).slice(0, 20);
   return (
-    <Sheet visible onClose={onClose} title={t("w6.msg.new")} dirty={text.trim().length > 0} onSave={ok ? send : undefined}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("w6.msg.new")} dirty={text.trim().length > 0} onSave={ok ? send : undefined}>
       <View style={{ gap: space[3] }}>
         <Field label={t("w6.msg.to")}>
           {to ? (
