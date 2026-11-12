@@ -150,11 +150,23 @@ describe("review Б2 (director, counted): a removal is COUNTED on its gutter; th
     expect(kept.atIn).toBe(s0.atIn); // it did not move
     expect(split.downspouts).toHaveLength(2); // A has its own again
   });
-  it("A's downspout taken off, then B (with its own) joined to A: the chain wants one — it has B's, A's removal counts: none is wanted, B's goes (the rule of the director: counted; a toast says so)", () => {
+  it("A's downspout taken off, then B (with its own) joined to A: the counts are zeroed — the chain has ONE downspout, B's, which stays (no toast: nothing was taken off)", () => {
     const base = auto({ runs: [run("A", [0, 0], [200, 0]), run("B", [300, 0], [300, 200])], downspouts: [] }, none);
+    const bDs = base.downspouts.find((s) => s.runId === "B")!;
     const gone = removeElement(base, base.downspouts.find((s) => s.runId === "A")!.id);
+    expect(offOf(gone, "A")).toBe(1);
     const joined = auto({ ...gone, runs: [gone.runs[0]!, { ...gone.runs[1]!, a: [200, 0], b: [200, 200] }] }, gone);
-    expect(joined.downspouts).toHaveLength(0);
+    expect(joined.downspouts).toHaveLength(1);
+    expect(joined.downspouts[0]!.id).toBe(bDs.id);
+    expect(joined.downspouts[0]!.atIn).toBe(bDs.atIn); // it stays where it stands
+    expect(offOf(joined, "A")).toBe(0);
+  });
+  it("a gutter drawn on to a chain keeps its counts (nothing was joined); a split keeps them too", () => {
+    const base = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
+    const gone = removeElement(base, base.downspouts[0]!.id);
+    const longer = auto({ ...gone, runs: [...gone.runs, run("b", [240, 0], [240, 200])] }, gone);
+    expect(offOf(longer, "a")).toBe(1);
+    expect(longer.downspouts).toHaveLength(0);
   });
   it("the gutter that carried the count is deleted: a gutter of its chain left takes it over; «Отменить» gives it back", () => {
     const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]);

@@ -7,7 +7,7 @@
  * straight gutter overflows), less the ones the user put by hand. The ones put here carry `auto` and are the program's: whenever a
  * chain is touched (a gutter drawn, joined, split, deleted, moved, its length typed) its automatic downspouts are put again where
  * they belong — the free end, 12″ in — so they never stand where the line was before; one that already stands at a free end stays.
- * A downspout taken off by hand is COUNTED on its gutter (`attrs.dsAutoOff`, a number): the chain wants that many less. The program
+ * A downspout taken off by hand is COUNTED on its gutter (and the counts are zeroed when two chains are joined: the new chain is another) (`attrs.dsAutoOff`, a number): the chain wants that many less. The program
  * puts no downspout out of the drawing just because there is no place for it: it takes one off only when the chain wants fewer (it was
  * made shorter, joined, split), the one nearest the middle first.
  *
@@ -147,6 +147,11 @@ export function autoDownspouts(d: Drawing, o: AutoDsOptions, before?: Drawing, f
   for (const ids of chains(d)) {
     if (hot && !ids.some((id) => hot.has(id))) continue;
     const set = new Set(ids);
+    // two chains joined into one (the sign: its gutters came from two different chains before): the counts of removed downspouts are
+    // zeroed — the person took one off in the OLD chain, the new one is another (decision of the director 12.11); the ones that stand stay
+    if (before && !force && new Set(ids.map((id) => sig(before, id)).filter(Boolean)).size > 1 && next.runs.some((r) => set.has(r.id) && offOf(r))) {
+      next = { ...next, runs: next.runs.map((r) => { if (!set.has(r.id) || !offOf(r)) return r; const { dsAutoOff: _o, ...rest } = r.attrs; return { ...r, attrs: rest }; }) };
+    }
     const runs = next.runs.filter((r) => set.has(r.id));
     const total = runs.reduce((n, r) => n + runLengthIn(r), 0);
     if (total <= 0) continue;
