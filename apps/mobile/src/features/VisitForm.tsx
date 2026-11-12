@@ -3,6 +3,7 @@
  * работу», «Перенести»; «Сообщить клиенту?» after saving; «Отменить выезд» (§7.4). Rules — features/schedule.ts.
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -228,9 +229,9 @@ export function VisitFormHead({ propertyId, jobId, exceptId }: { propertyId?: ID
 
 /** «Записать осмотр» / «+ Осмотр» / «Перенести» as one sheet; `onSave` returns the visit id (for «Сообщить клиенту?») */
 export function VisitFormSheet({
-  visible, onClose, title, saveLabel, init, onSave, withNote = true,
+  visible, onExited, onClose, title, saveLabel, init, onSave, withNote = true,
 }: {
-  visible: boolean; onClose: () => void; title: string; saveLabel: string;
+  visible: boolean; onExited?: () => void; onClose: () => void; title: string; saveLabel: string;
   init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; day?: DayKey; exceptId?: ID; propertyId?: ID; jobId?: ID; allDay?: boolean; allowAllDay?: boolean };
   onSave: (v: VisitFormValue) => ID | null; withNote?: boolean;
 }) {
@@ -244,7 +245,7 @@ export function VisitFormSheet({
   };
   return (
     <>
-      <Sheet visible={visible && !notifyId} onClose={onClose} title={title} dirty={f.dirty} onSave={f.past ? undefined : save}>
+      <Sheet visible={visible && !notifyId} onExited={onExited} onClose={onClose} title={title} dirty={f.dirty} onSave={f.past ? undefined : save}>
         <VisitFormHead propertyId={init.propertyId} jobId={init.jobId} exceptId={init.exceptId} />
         <VisitFormFields f={f} noteLabel={withNote} />
         <Button label={saveLabel} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
@@ -388,6 +389,7 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
   const { t, day, time } = useI18n();
   const toast = useToast();
   const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
+  const moveHeld = useHeldSheet(sheet === "move" ? true : null); // the sheet goes out before it is unmounted (#1163)
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
   const people = assigneesOf(v);
@@ -409,9 +411,11 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
           <Button label={t("vc.title")} icon="close" variant="secondary" size="sm" onPress={() => setSheet("cancel")} />
         </RowView>
       ) : null}
-      {sheet === "move" ? (
+      {moveHeld.value ? (
         <VisitFormSheet
-          visible
+          key={moveHeld.opening}
+          visible={moveHeld.visible}
+          onExited={moveHeld.onExited}
           onClose={() => setSheet(null)}
           title={t("vw.reschedule")}
           saveLabel={t("vw.reschedule")}

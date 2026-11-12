@@ -186,7 +186,7 @@ export default function CompanyIntake() {
       </CardList>
 
       {/* closed only by «Готово»: a tap beside it would lose the key for good (security-check #422 №2) */}
-      <Sheet visible={!!shownKey} onClose={() => {}} title={t("intake.set.keyTitle")}>
+      <Sheet visible={!!shownKey} canClose={false} onClose={() => {}} title={t("intake.set.keyTitle")}>
         <View testID="intake-key-sheet" style={{ gap: space[3] }}>
           <T v="caption" tone="mut">{t("intake.set.keyOnce")}</T>
           <T v="body" tabular>{shownKey ?? ""}</T>

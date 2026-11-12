@@ -53,125 +53,134 @@ exports.run = async (h) => {
     await gone(`${label}: closed at the end`);
   };
 
-  await h.go("/settings/design-system/windows");
-  await vis("showcase-windows").waitFor({ timeout: 5000 });
-  await check("reduce motion (the runner's setting): a dissolve");
+  // the two ways a sheet leaves: the owner asked first and the sheet stays while it goes out (web, Android), or the sheet
+  // goes out first and the owner is asked after (iOS) — each is run on the web by a flag
+  const suite = async (mode) => {
+    await h.go("/settings/design-system/windows");
+    await vis("showcase-windows").waitFor({ timeout: 5000 });
+    await p.evaluate((m) => { globalThis.__octoSheetLeave = m; }, mode);
+    await check(`${mode}: reduce motion (the runner's setting): a dissolve`);
 
-  // the owner empties its data when it closes: the sheet goes out with what it showed (its height and title stay)
-  await vis("showcase-sheet-empties").getByRole("button").first().click();
-  await p.getByTestId("sheet-title").locator("visible=true").first().waitFor({ timeout: 3000 });
-  await p.evaluate(() => {
-    const el = [...document.querySelectorAll('[data-testid="sheet-panel"]')].pop();
-    const ti = [...document.querySelectorAll('[data-testid="sheet-title"]')].pop();
-    window.__empt = { hs: [], titles: [], done: false };
-    const tick = () => {
-      if (!document.body.contains(el)) { window.__empt.done = true; return; }
-      window.__empt.hs.push(Math.round(el.getBoundingClientRect().height));
-      window.__empt.titles.push(ti.textContent);
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
-  await vis("sheet-close").click();
-  await p.waitForFunction(() => window.__empt && window.__empt.done, null, { timeout: 5000 });
-  const emp = await p.evaluate(() => window.__empt);
-  h.expect(new Set(emp.hs).size === 1 && emp.hs.length >= 2, `the sheet does not collapse on the way out (heights ${[...new Set(emp.hs)]})`);
-  h.expect(new Set(emp.titles).size === 1 && emp.titles[0] === "Карточка работы", `…nor change its title (${[...new Set(emp.titles)]})`);
-
-  // a tap under the leaving sheet works at once (web: the layer lets it through) — no waiting for the sheet to be gone
-  await openSheet("fit");
-  await vis("sheet-close").click();
-  // (a click by Playwright waits for the target to be free — so ask the page what is under the finger right now)
-  const under = await p.evaluate(() => {
-    const b = [...document.querySelectorAll('[data-testid="showcase-sheet-medium"] [role="button"]')].find((e) => e.getBoundingClientRect().height > 0);
-    const r = b.getBoundingClientRect();
-    const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-    return !!e && !!e.closest('[data-testid="showcase-sheet-medium"]');
-  });
-  h.expect(under, "the leaving sheet takes no tap: what is under it is under the finger at once");
-  await vis("showcase-sheet-medium").getByRole("button").first().click();
-  await p.getByTestId("sheet-title").filter({ hasText: "Шторка половинная" }).locator("visible=true").first().waitFor({ timeout: 3000 });
-  await vis("sheet-close").click();
-  await gone("the second sheet closes too");
-
-  // a chain: the first sheet's button closes it and opens the next in the same moment — the next shows and takes taps
-  const chain = async (what) => {
-    await vis("showcase-sheet-chainA").getByRole("button").first().click();
-    await p.getByTestId("sheet-title").filter({ hasText: "Шаг 1" }).locator("visible=true").first().waitFor({ timeout: 3000 });
-    // count the sheets on the screen at every frame from the press to the end: with the gate they never overlap
+    // the owner empties its data when it closes: the sheet goes out with what it showed (its height and title stay)
+    await vis("showcase-sheet-empties").getByRole("button").first().click();
+    await p.getByTestId("sheet-title").locator("visible=true").first().waitFor({ timeout: 3000 });
     await p.evaluate(() => {
-      window.__chain = { max: 0, frames: 0, stop: false };
+      const el = [...document.querySelectorAll('[data-testid="sheet-panel"]')].pop();
+      const ti = [...document.querySelectorAll('[data-testid="sheet-title"]')].pop();
+      window.__empt = { hs: [], titles: [], done: false };
       const tick = () => {
-        window.__chain.max = Math.max(window.__chain.max, document.querySelectorAll('[data-testid="sheet-panel"]').length);
-        window.__chain.frames++;
-        if (!window.__chain.stop) requestAnimationFrame(tick);
+        if (!document.body.contains(el)) { window.__empt.done = true; return; }
+        window.__empt.hs.push(Math.round(el.getBoundingClientRect().height));
+        window.__empt.titles.push(ti.textContent);
+        requestAnimationFrame(tick);
       };
       requestAnimationFrame(tick);
     });
-    await vis("showcase-chain-next").getByRole("button").first().click();
-    await p.getByTestId("sheet-title").filter({ hasText: "Шаг 2" }).locator("visible=true").first().waitFor({ timeout: 5000 });
-    const seen = await p.evaluate(() => { window.__chain.stop = true; return window.__chain; });
     await vis("sheet-close").click();
-    await gone(`${what}: the second sheet closes too`);
-    return seen;
-  };
-  // the chain as on the web: the second shows at once and takes taps
-  await chain("chain");
-  // the chain as on iOS (the gate turned on for the test): the second waits until the first is dismissed — never both on the screen
-  await p.evaluate(() => { globalThis.__octoSheetGate = true; });
-  const gated = await chain("gated chain");
-  h.expect(gated.max <= 1, `with the gate the two sheets never overlap (most at once: ${gated.max})`);
-  await p.evaluate(() => { globalThis.__octoSheetGate = false; });
+    await p.waitForFunction(() => window.__empt && window.__empt.done, null, { timeout: 5000 });
+    const emp = await p.evaluate(() => window.__empt);
+    h.expect(new Set(emp.hs).size === 1 && emp.hs.length >= 2, `the sheet does not collapse on the way out (heights ${[...new Set(emp.hs)]})`);
+    h.expect(new Set(emp.titles).size === 1 && emp.titles[0] === "Карточка работы", `…nor change its title (${[...new Set(emp.titles)]})`);
 
-  // the owner will not close it: it comes straight back, and is asked once per press
-  await openSheet("stuck");
-  const t0 = await top();
-  const askedText = async () => Number(/(\d+)/.exec(await vis("showcase-stuck-asked").innerText())?.[1]);
-  h.expect((await askedText()) === 0, "not asked yet");
-  await vis("sheet-close").click();
-  await p.waitForFunction((n) => /(\d+)/.exec(document.querySelector('[data-testid="showcase-stuck-asked"]')?.textContent ?? "")?.[1] === String(n), 1, { timeout: 3000 });
-  h.expect((await askedText()) === 1, "«✕»: the owner is asked once");
-  await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, t0, { timeout: 3000 });
-  h.expect((await p.getByTestId("sheet-panel").count()) === 1, "…and the sheet is back in its place");
-  const inPlace = () => p.evaluate(() => [document.querySelector('[data-testid="sheet-panel"]'), document.querySelector('[data-testid="sheet-scrim"]')].map((e) => Number(getComputedStyle(e).opacity)));
-  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="sheet-panel"],[data-testid="sheet-scrim"]')].every((e) => Number(getComputedStyle(e).opacity) === 1), null, { timeout: 3000 });
-  h.expect((await inPlace()).every((o) => o === 1), "…fully visible (the sheet and the background)");
-  await p.getByTestId("sheet-scrim").getByRole("button").first().click({ position: { x: 5, y: 5 } });
-  await p.waitForFunction(() => /(\d+)/.exec(document.querySelector('[data-testid="showcase-stuck-asked"]')?.textContent ?? "")?.[1] === "2", null, { timeout: 3000 });
-  await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, t0, { timeout: 3000 });
-  await vis("showcase-stuck-done").getByRole("button").first().click();
-  await gone("the owner closes it itself: it goes out");
+    if (mode === "after") {
+      // a tap under the leaving sheet works at once (web: the layer lets it through) — no waiting for the sheet to be gone
+      await openSheet("fit");
+      await vis("sheet-close").click();
+      // (a click by Playwright waits for the target to be free — so ask the page what is under the finger right now)
+      const under = await p.evaluate(() => {
+        const b = [...document.querySelectorAll('[data-testid="showcase-sheet-medium"] [role="button"]')].find((e) => e.getBoundingClientRect().height > 0);
+        const r = b.getBoundingClientRect();
+        const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return !!e && !!e.closest('[data-testid="showcase-sheet-medium"]');
+      });
+      h.expect(under, "the leaving sheet takes no tap: what is under it is under the finger at once");
+      await vis("showcase-sheet-medium").getByRole("button").first().click();
+      await p.getByTestId("sheet-title").filter({ hasText: "Шторка половинная" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+      await vis("sheet-close").click();
+      await gone("the second sheet closes too");
 
-  // the phone: a short slow pull springs back, a long one takes the sheet away (the pull is paced by frames: a slow finger)
-  if (h.layout.width < 820) {
-    const pull = async (share) => {
-      const box = await p.getByLabel("Шторка", { exact: true }).last().boundingBox(); // the grabber
-      const full = (await panel().boundingBox()).height;
-      const x = box.x + box.width / 2;
-      const y = box.y + box.height / 2;
-      await p.mouse.move(x, y);
-      await p.mouse.down();
-      for (let d = 0; d <= full * share; d += 6) {
-        await p.mouse.move(x, y + d);
-        await frame();
-      }
-      const mid = Math.round((await panel().boundingBox()).y);
-      await p.mouse.up();
-      return mid;
+    }
+
+    // a chain: the first sheet's button closes it and opens the next in the same moment — the next shows and takes taps
+    const chain = async (what, next = "showcase-chain-next", toTitle = "Шаг 2") => {
+      await vis("showcase-sheet-chainA").getByRole("button").first().click();
+      await p.getByTestId("sheet-title").filter({ hasText: "Шаг 1" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+      // count the sheets on the screen at every frame from the press to the end: with the gate they never overlap
+      await p.evaluate(() => {
+        window.__chain = { max: 0, frames: 0, stop: false };
+        const tick = () => {
+          window.__chain.max = Math.max(window.__chain.max, document.querySelectorAll('[data-testid="sheet-panel"]').length);
+          window.__chain.frames++;
+          if (!window.__chain.stop) requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      await vis(next).getByRole("button").first().click();
+      await p.getByTestId("sheet-title").filter({ hasText: toTitle }).locator("visible=true").first().waitFor({ timeout: 5000 });
+      const seen = await p.evaluate(() => { window.__chain.stop = true; return window.__chain; });
+      await vis("sheet-close").click();
+      await gone(`${what}: the second sheet closes too`);
+      return seen;
     };
-    await openSheet("fit");
-    const y0 = await top();
-    const mid1 = await pull(0.15);
-    h.expect(mid1 > y0 + 10, `short pull follows (${y0} → ${mid1})`);
-    await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, y0, { timeout: 3000 });
-    h.expect((await p.getByTestId("sheet-panel").count()) === 1, "a short slow pull springs back");
-    // a fresh opening for the long pull (a second pull in the same opening does not follow the finger — noted in #1167)
+    const chained = await chain(`${mode} chain`);
+    // iOS way: the owner's own close cuts, so the next sheet never meets a Modal that is going out — never two at once
+    if (mode === "before") h.expect(chained.max <= 1, `the chain: the two sheets never overlap (most at once: ${chained.max})`);
+    // the next sheet mounted by the owner's condition and recreated at each opening (a held wrapper)
+    const chainedC = await chain(`${mode} chain C`, "showcase-chain-next-c", "Шаг 3");
+    if (mode === "before") h.expect(chainedC.max <= 1, `the chain, the next sheet recreated: never two at once (most at once: ${chainedC.max})`);
+
+    // the owner will not close it: it comes straight back, and is asked once per press
+    await openSheet("stuck");
+    const t0 = await top();
+    const askedText = async () => Number(/(\d+)/.exec(await vis("showcase-stuck-asked").innerText())?.[1]);
+    h.expect((await askedText()) === 0, "not asked yet");
     await vis("sheet-close").click();
-    await gone("closed before the long pull");
-    await openSheet("fit");
-    await settle(p);
-    const mid = await pull(0.7);
-    h.expect(mid > y0 + 50, `the sheet follows the finger (${y0} → ${mid})`);
-    await gone("a long pull takes the sheet away");
-  }
+    await p.waitForFunction((n) => /(\d+)/.exec(document.querySelector('[data-testid="showcase-stuck-asked"]')?.textContent ?? "")?.[1] === String(n), 1, { timeout: 3000 });
+    h.expect((await askedText()) === 1, "«✕»: the owner is asked once");
+    await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, t0, { timeout: 3000 });
+    h.expect((await p.getByTestId("sheet-panel").count()) === 1, "…and the sheet is back in its place");
+    const inPlace = () => p.evaluate(() => [document.querySelector('[data-testid="sheet-panel"]'), document.querySelector('[data-testid="sheet-scrim"]')].map((e) => Number(getComputedStyle(e).opacity)));
+    await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="sheet-panel"],[data-testid="sheet-scrim"]')].every((e) => Number(getComputedStyle(e).opacity) === 1), null, { timeout: 3000 });
+    h.expect((await inPlace()).every((o) => o === 1), "…fully visible (the sheet and the background)");
+    await p.getByTestId("sheet-scrim").getByRole("button").first().click({ position: { x: 5, y: 5 } });
+    await p.waitForFunction(() => /(\d+)/.exec(document.querySelector('[data-testid="showcase-stuck-asked"]')?.textContent ?? "")?.[1] === "2", null, { timeout: 3000 });
+    await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, t0, { timeout: 3000 });
+    await vis("showcase-stuck-done").getByRole("button").first().click();
+    await gone("the owner closes it itself: it goes out");
+
+    // the phone: a short slow pull springs back, a long one takes the sheet away (the pull is paced by frames: a slow finger)
+    if (h.layout.width < 820) {
+      const pull = async (share) => {
+        const box = await p.getByLabel("Шторка", { exact: true }).last().boundingBox(); // the grabber
+        const full = (await panel().boundingBox()).height;
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await p.mouse.move(x, y);
+        await p.mouse.down();
+        for (let d = 0; d <= full * share; d += 6) {
+          await p.mouse.move(x, y + d);
+          await frame();
+        }
+        const mid = Math.round((await panel().boundingBox()).y);
+        await p.mouse.up();
+        return mid;
+      };
+      await openSheet("fit");
+      const y0 = await top();
+      const mid1 = await pull(0.15);
+      h.expect(mid1 > y0 + 10, `short pull follows (${y0} → ${mid1})`);
+      await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, y0, { timeout: 3000 });
+      h.expect((await p.getByTestId("sheet-panel").count()) === 1, "a short slow pull springs back");
+      // a fresh opening for the long pull (a second pull in the same opening does not follow the finger — noted in #1167)
+      await vis("sheet-close").click();
+      await gone("closed before the long pull");
+      await openSheet("fit");
+      await settle(p);
+      const mid = await pull(0.7);
+      h.expect(mid > y0 + 50, `the sheet follows the finger (${y0} → ${mid})`);
+      await gone("a long pull takes the sheet away");
+    }
+  };
+  await suite("after");
+  await suite("before");
 };

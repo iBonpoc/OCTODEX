@@ -6,9 +6,7 @@ import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
-import { setGatePlatform, sheetGate, sheetMayShow, useSheetGate } from "./sheetGate";
-
-setGatePlatform(Platform.OS === "ios");
+import { leaveBefore } from "./sheetLeave";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -234,6 +232,7 @@ export function Sheet({
   onSave,
   onExited,
   onEscape,
+  canClose,
   footer: footerNow,
   height: heightNow = "fit",
   onBack: onBackNow,
@@ -257,6 +256,8 @@ export function Sheet({
   onExited?: () => void;
   /** Esc / Android «Назад» first asks the content: true — it took the key (a search to clear), the sheet stays (DS А3) */
   onEscape?: () => boolean;
+  /** false while the owner will not let it close (a refund under way, a key to copy): ✕, the scrim, Esc and the swipe do nothing — it does not go out and come back */
+  canClose?: boolean;
 }) {
   // While the sheet goes out the owner has often already emptied what it showed (`visible={!!x}`, `{x ? … : null}`):
   // it keeps showing the last render from while it was open, so it does not collapse or jump on the way out
@@ -275,54 +276,26 @@ export function Sheet({
   const leaving = useRef(false); // a close is asked or under way: one onClose per close, whatever is pressed meanwhile
   const shown = useRef(visible);
   shown.current = visible;
-  // The sheet stays on the screen while it goes out, also when the owner closes it by itself (DS Б1, #1163):
-  // `present` is "mounted", `visible` is what the owner wants. `session` marks one opening or one exit: the callback
-  // of an earlier one does nothing.
+  // How a sheet leaves (DS Б1, #1163) — two ways, by platform:
+  //  after  (web, Android): the owner is asked first (`onClose`); the sheet stays on the screen while it goes out, also
+  //         when the owner closes it by itself — `present` is "mounted", `visible` is what the owner wants;
+  //  before (iOS): the Modal must be dismissed the very moment the owner closes it — a sheet the owner opens in the same
+  //         beat (a chain: «Следующий шаг» → the next one) never shows over a Modal that is still going out, and its
+  //         invisible layer takes every touch (#743). So the owner's own close cuts, as it always did, and the person's
+  //         close (✕, the scrim, Esc, the swipe) goes out FIRST, inside the Modal, and only then asks the owner.
+  // `session` marks one opening or one exit: the callback of an earlier one does nothing.
+  const before = leaveBefore();
   const [present, setPresent] = useState(visible);
-  // iOS: a sheet the owner opens while another is going out waits for it (sheetGate.ts). It does not show in the beat it
-  // is asked in — it is armed one tick later, when the sheet that closed in the same beat has registered that it leaves —
-  // and one at a time, in the order asked
-  const gateOn = sheetGate.on();
-  useSheetGate(); // re-render when the gate changes
-  const counted = useRef(false); // this sheet is counted in the gate while its Modal is on the way out
-  const ticket = useRef(0); // its place in the queue of those that wait to open
-  const [armed, setArmed] = useState(false);
-  const may =
-    !gateOn ||
-    (armed && sheetMayShow({ gate: true, leavingAll: sheetGate.count(), selfLeaving: counted.current, first: ticket.current === sheetGate.first() }));
-  const canShow = visible && may;
-  const open = canShow || present;
-  const presentNow = useRef(present);
-  presentNow.current = present;
+  const open = before ? visible : visible || present;
   const session = useRef(0);
   const exitSpeed = useRef(0);
   const [asked, setAsked] = useState(0);
   const [full, setFull] = useState(false);
   const [ask, setAsk] = useState(false);
-  const live = useRef({ dirty, onClose, onExited, onEscape });
-  live.current = { dirty, onClose, onExited, onEscape };
-  const uncount = useCallback(() => {
-    if (!counted.current) return;
-    counted.current = false;
-    sheetGate.leave();
-  }, []);
-  const unqueue = useCallback(() => {
-    if (!ticket.current) return;
-    sheetGate.unqueue(ticket.current);
-    ticket.current = 0;
-  }, []);
-  // unmounted on the way out or while waiting: the gate must not stay held
-  useEffect(
-    () => () => {
-      uncount();
-      unqueue();
-    },
-    [uncount, unqueue],
-  );
+  const live = useRef({ dirty, onClose, onExited, onEscape, canClose });
+  live.current = { dirty, onClose, onExited, onEscape, canClose };
   useEffect(() => {
-    if (canShow) {
-      unqueue();
-      uncount(); // it came back while it was going out: it is the same sheet, no longer leaving
+    if (visible) {
       session.current++;
       exitSpeed.current = 0;
       passThrough(false);
@@ -333,7 +306,7 @@ export function Sheet({
       setFull(false);
       setAsk(false);
     }
-  }, [canShow, drag, fade, unqueue, uncount]);
+  }, [visible, drag, fade]);
   // web: the Modal's root is a fixed layer that takes every tap; while the sheet goes out it lets them through (DS §10:
   // do not wait for an animation to press). Native: the Modal is its own window — ⬜ (DS Б1)
   const rootRef = useRef<React.ComponentRef<typeof Animated.View>>(null);
@@ -354,68 +327,53 @@ export function Sheet({
       }
     }
   }, []);
-  const mounted = useRef(true);
-  useEffect(() => () => void (mounted.current = false), []);
-  // the arming (after the beat's effects), and a wish taken back before it was shown
+  const mounted = useRef(false);
   useEffect(() => {
-    if (!gateOn) return;
-    if (visible) {
-      const id = setTimeout(() => {
-        if (!ticket.current) ticket.current = sheetGate.queue();
-        setArmed(true);
-      }, 0);
-      return () => clearTimeout(id);
-    }
-    const waited = armed || ticket.current !== 0;
-    unqueue();
-    setArmed(false);
-    // asked to open and closed before it ever showed: no exit will come, the owner can let the data go
-    if (waited && !presentNow.current) live.current.onExited?.();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, gateOn]);
+    mounted.current = true;
+    return () => void (mounted.current = false);
+  }, []);
   const gone = useCallback((id: number) => {
     if (id !== session.current || !mounted.current) return;
     leaving.current = false;
     setPresent(false);
     live.current.onExited?.();
-    // the gate opens when the Modal is really dismissed (iOS: onDismiss); this is the net, as in menuPick
-    if (counted.current) setTimeout(uncount, motion.durSlow + motion.durFast);
-  }, [uncount]);
+  }, []);
   // it goes down at the finger's speed (✕, the scrim, Esc, the owner's own close — in durBase), the scrim fades with
-  // it; reduce motion and the centred window (no swipe) — it dissolves
-  const exit = useCallback(
-    (speed: number) => {
+  // it; reduce motion and the centred window (no swipe) — it dissolves; `then` runs once, when it has left
+  const animateOut = useCallback(
+    (speed: number, then: (id: number) => void) => {
       const id = ++session.current;
       leaving.current = true;
-      if (sheetGate.on() && !counted.current) {
-        counted.current = true;
-        sheetGate.enter();
-      }
-      passThrough(true);
+      let ran = false;
+      const finish = () => {
+        if (ran || id !== session.current || !mounted.current) return;
+        ran = true;
+        then(id);
+      };
       const done = (finished?: boolean) => {
         "worklet";
-        if (finished) runOnJS(gone)(id);
+        if (finished) runOnJS(finish)();
       };
       // the animation's end can fail to come (the screen under the sheet went to the background, the frames stopped):
       // the sheet is taken off by this safety net too, once the exit has had its time
       if (reduce || wide) {
         // a dissolve is what reduce motion allows: it must not be skipped by the system setting
         fade.value = withTiming(0, { duration: motion.durFast, reduceMotion: ReduceMotion.Never }, done);
-        setTimeout(() => gone(id), motion.durFast + motion.durBase);
+        setTimeout(finish, motion.durFast + motion.durBase);
         return;
       }
       const h = sheetH.value || winH;
       const ms = exitDuration(Math.max(h - drag.value, 0), speed, motion.durFast, motion.durSlow, motion.durBase);
       drag.value = withTiming(h, { duration: ms, easing: speed > 0 ? Easing.linear : Easing.bezier(...motion.easeOut) }, done);
-      setTimeout(() => gone(id), ms + motion.durBase);
+      setTimeout(finish, ms + motion.durBase);
     },
-    [reduce, wide, winH, drag, fade, sheetH, gone, passThrough],
+    [reduce, wide, winH, drag, fade, sheetH],
   );
-  const exitNow = useRef(exit);
-  exitNow.current = exit;
-  // the owner closed it (after its own «Сохранить», or because we asked): now it goes out
+  // after-way: the owner closed it (after its own «Сохранить», or because we asked): now it goes out
   useEffect(() => {
-    if (!visible && present) exitNow.current(exitSpeed.current);
+    if (before || visible || !present) return;
+    passThrough(true);
+    animateOut(exitSpeed.current, gone);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
   // we asked the owner (onClose); if it is still open after the answer, the sheet comes back at once (busy, a key to enter…)
@@ -429,17 +387,29 @@ export function Sheet({
   const requestClose = useCallback(
     (v?: number, discard?: boolean) => {
       if (leaving.current) return;
+      if (live.current.canClose === false) {
+        drag.value = withSpring(0, motion.spring); // a pull that began is let go back
+        return;
+      }
       if (live.current.dirty && !discard) {
         drag.value = withSpring(0, motion.spring);
         setAsk(true);
         return;
       }
-      leaving.current = true;
       exitSpeed.current = typeof v === "number" ? v : 0;
-      live.current.onClose();
-      setAsked((n) => n + 1);
+      const ask = () => {
+        live.current.onClose();
+        setAsked((n) => n + 1);
+      };
+      if (before) {
+        // iOS: it goes out first, inside the Modal, then the owner is asked (a refusal brings it back)
+        animateOut(exitSpeed.current, ask);
+      } else {
+        leaving.current = true;
+        ask();
+      }
     },
-    [drag],
+    [drag, before, animateOut],
   );
   const pan = useMemo(
     () =>
@@ -517,7 +487,7 @@ export function Sheet({
   const fullH = winH - insets.top - space[2];
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={open} transparent animationType="none" onDismiss={uncount} onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView

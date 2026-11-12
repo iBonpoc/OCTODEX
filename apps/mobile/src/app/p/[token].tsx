@@ -260,7 +260,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                         ) : null}
                       </Card>
                       {online === inv.id ? (
-                        <StripeCheckout
+                        <StripeCheckout /* ds-allow: a Modal, not a Sheet — the gate and the way out for such Modals are a separate task */
                           visible
                           token={token}
                           invoiceId={inv.id}

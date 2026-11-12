@@ -68,15 +68,22 @@ describe("design system: components", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
   });
-  it("a sheet is not cut away when its data goes (#1163): no <Sheet> that is always open, no key that flips at the close", () => {
+  it("a sheet is not cut away when its data goes (#1163): no always-open sheet or wrapper, no `if (!x) return null` before a sheet, no key that flips at the close", () => {
     const bare: string[] = [];
+    const early: string[] = [];
     const flipKey: string[] = [];
+    const at = (src: string, i: number) => src.slice(0, i).split("\n").length;
     for (const f of code) {
-      const src = readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " ")).replace(/\/\/.*$/gm, "");
-      // every <Sheet …> opening tag, to its own `>` (braces counted: a `>` inside {…} is not the end of the tag)
-      for (const m of src.matchAll(/<Sheet\b/g)) {
+      const raw = readFileSync(f, "utf8");
+      const src = raw.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, " ")).replace(/\/\/.*$/gm, (c) => (c.includes("ds-allow") ? c : ""));
+      const rel = relative(ROOT, f);
+      if (rel.endsWith(join("ui", "overlays.tsx"))) continue; // the Sheet itself
+      // every capitalised element's opening tag, to its own `>` (braces counted: a `>` inside {…} is not the end of the tag):
+      // a sheet — or a wrapper that holds one — given `visible` with no value or `visible={true}` is mounted by its owner's
+      // condition, and the owner's unmount is a cut
+      for (const m of src.matchAll(/<[A-Z]\w*/g)) {
         let depth = 0;
-        let i = m.index! + 6;
+        let i = m.index! + m[0].length;
         for (; i < src.length; i++) {
           const c = src[i];
           if (c === "{") depth++;
@@ -84,14 +91,19 @@ describe("design system: components", () => {
           else if (c === ">" && depth === 0 && src[i - 1] !== "=") break;
         }
         const tag = src.slice(m.index!, i + 1);
-        // the attributes outside the braces: `visible` with no value; and `visible={true}`
         const flat = tag.replace(/\{[^{}]*\}/g, (b) => (/^\{\s*true\s*\}$/.test(b) ? "{TRUE}" : "{}"));
-        if (/\bvisible(\s|\/|>)/.test(flat) || /\bvisible=\{TRUE\}/.test(flat)) bare.push(`${relative(ROOT, f)}:${src.slice(0, m.index!).split("\n").length}`);
+        if (!(/\bvisible(\s|\/|>)/.test(flat) || /\bvisible=\{TRUE\}/.test(flat))) continue;
+        const line = raw.split("\n")[at(src, m.index!) - 1] ?? "";
+        if (line.includes("ds-allow")) continue;
+        bare.push(`${rel}:${at(src, m.index!)}`);
       }
+      // `if (!x) return null;` and then a sheet (a body named …Sheet…) — the sheet is gone with its data (not the held value of `useHeldSheet`: that one stays until the sheet has left)
+      for (const m of src.matchAll(/if \(!(?!h\.value\b|\w*[Hh]eld\.value\b)[\w.?]+\)\s*return null;\s*\n(?:\s*\/\/[^\n]*\n)*\s*return <(?:\w*Sheet\w*|Sheet)\b/g)) early.push(`${rel}:${at(src, m.index!)}`);
       // a key that flips with a sheet's open state remounts it at the close — it is cut, not led out
-      for (const m of src.matchAll(/key=\{`[^`]*\$\{[^}]*===[^}]*\}[^`]*`\}/g)) flipKey.push(`${relative(ROOT, f)}:${src.slice(0, m.index!).split("\n").length}`);
+      for (const m of src.matchAll(/key=\{`[^`]*\$\{\s*(?:!!|String\(|[^}?]*===|\w*(?:[oO]pen|[vV]isible|[sS]heet)\w*\s*\?(?!\?))[^}]*\}[^`]*`\}/g)) flipKey.push(`${rel}:${at(src, m.index!)}`);
     }
     expect(bare).toEqual([]);
+    expect(early).toEqual([]);
     expect(flipKey).toEqual([]);
   });
   it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
@@ -8,7 +9,17 @@ import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB";
+type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC";
+
+/** the third step of the chain: mounted by the owner's condition and recreated at each opening — the way a sheet is meant to be mounted */
+function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExited: () => void; onClose: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("ds.sheet.chainC")}>
+      <T v="body">{t("ds.sheet.chainBodyC")}</T>
+    </Sheet>
+  );
+}
 
 /** Windows (DS §10): the sheet in every height, with the pinned bottom bar and with a page inside. */
 export function WindowsSection() {
@@ -16,7 +27,8 @@ export function WindowsSection() {
   const [open, setOpen] = useState<Which>(null);
   const [page, setPage] = useState(1);
   const [item, setItem] = useState<string | null>(null); // the owner that empties its data when it closes
-  const [asked, setAsked] = useState(0); // how many times the stubborn sheet was asked to close
+  const [asked, setAsked] = useState(0);
+  const chainC = useHeldSheet(open === "chainC" ? "c" : null); // a sheet mounted by the owner's condition: it goes out led, and starts fresh // how many times the stubborn sheet was asked to close
   const s = SECTIONS.find((x) => x.id === "windows")!;
   const close = () => {
     setOpen(null);
@@ -61,10 +73,14 @@ export function WindowsSection() {
         <View testID="showcase-chain-next">
           <Button label={t("ds.sheet.chainNext")} onPress={() => setOpen("chainB")} />
         </View>
+        <View testID="showcase-chain-next-c">
+          <Button label={t("ds.sheet.chainNextC")} variant="secondary" onPress={() => setOpen("chainC")} />
+        </View>
       </Sheet>
       <Sheet visible={open === "chainB"} onClose={close} title={t("ds.sheet.chainB")}>
         <T v="body">{t("ds.sheet.chainBodyB")}</T>
       </Sheet>
+      {chainC.value ? <ChainSheetC key={chainC.opening} visible={chainC.visible} onExited={chainC.onExited} onClose={close} /> : null}
       <Sheet visible={!!item} onClose={() => setItem(null)} title={item ?? ""}>
         {item ? (
           <>

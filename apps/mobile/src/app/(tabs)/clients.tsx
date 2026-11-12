@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { canImportClients } from "@/features/client/importRun";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -76,6 +77,8 @@ export default function Clients() {
   const toast = useToast();
   const store = useStore();
   const [picking, setPicking] = useState<Customer | null>(null);
+  const pickHeld = useHeldSheet(picking); // the sheet goes out before it is unmounted (#1163)
+  const pk = pickHeld.value;
   /** «…» of the list (13 §3.3): «Импорт из CSV» — the office's */
   const [more, setMore] = useState(false);
   /** archive: one tap with «Undo»; «do not service» needs a reason → the client's page (existing form) */
@@ -205,17 +208,18 @@ export default function Clients() {
           ))}
         </>
       )}
-      {picking ? (
+      {pk ? (
         <StatusPicker
-          visible
+          visible={pickHeld.visible}
+          onExited={pickHeld.onExited}
           onClose={() => setPicking(null)}
-          title={`${t("card.statusTitle")} · ${picking.name}`}
-          options={pickerOptions("customer", statusOf(picking)).map((o) => {
+          title={`${t("card.statusTitle")} · ${pk.name}`}
+          options={pickerOptions("customer", statusOf(pk)).map((o) => {
             const chip = clientStatusChip[o.status as CustomerStatus];
             // «Не обслуживаем» — the director's and the office's only (04 §12.8)
             return { key: o.status, tone: chip.s, label: t(chip.l), current: o.current, enabled: o.enabled && (o.status !== "do_not_service" || canMarkNoService(role)), form: o.how === "form" };
           })}
-          onPick={(k) => pickStatus(picking, k as CustomerStatus)}
+          onPick={(k) => pickStatus(pk, k as CustomerStatus)}
         />
       ) : null}
       <Sheet visible={more} onClose={() => setMore(false)} title={t("clients.title")}>
