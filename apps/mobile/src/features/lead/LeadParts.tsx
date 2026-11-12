@@ -2,6 +2,7 @@
  * Parts of the lead card (app/lead/[id].tsx): overview sections with edit sheets, close / reopen, tasks, history.
  * Every edit is a store mutation with "Undo" (rule 5) and works offline (rule 6).
  */
+import { useOpening } from "@/ui/heldSheet";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
@@ -79,6 +80,11 @@ export function LeadOverview({ l }: { l: Lead }) {
   const { db, role } = store;
   const { t, money, day } = useI18n();
   const [edit, setEdit] = useState<EditKind>(null);
+  // a form starts fresh at each opening — a counter that grows at the opening, not a key that flips at the close (#1163)
+  const openContact = useOpening(edit === "contact");
+  const openAddress = useOpening(edit === "address");
+  const openRequest = useOpening(edit === "request");
+  const openCost = useOpening(edit === "cost");
   const [peopleOpen, setPeopleOpen] = useState(false);
   // the lead's people, or the client's once the lead has one (S3); a tech who cannot open the client does not edit them
   const people = peopleForLead(db, l);
@@ -213,10 +219,10 @@ export function LeadOverview({ l }: { l: Lead }) {
         />
       </Card>
 
-      <ContactSheet key={`ContactSheet-${edit === "contact"}`} l={l} visible={edit === "contact"} onClose={() => setEdit(null)} />
-      <AddressSheet key={`AddressSheet-${edit === "address"}`} l={l} visible={edit === "address"} onClose={() => setEdit(null)} />
-      <RequestSheet key={`RequestSheet-${edit === "request"}`} l={l} visible={edit === "request"} onClose={() => setEdit(null)} />
-      <CostSheet key={`CostSheet-${edit === "cost"}`} l={l} visible={edit === "cost"} onClose={() => setEdit(null)} />
+      <ContactSheet key={`ContactSheet-${openContact}`} l={l} visible={edit === "contact"} onClose={() => setEdit(null)} />
+      <AddressSheet key={`AddressSheet-${openAddress}`} l={l} visible={edit === "address"} onClose={() => setEdit(null)} />
+      <RequestSheet key={`RequestSheet-${openRequest}`} l={l} visible={edit === "request"} onClose={() => setEdit(null)} />
+      <CostSheet key={`CostSheet-${openCost}`} l={l} visible={edit === "cost"} onClose={() => setEdit(null)} />
       <AssigneeSheet l={l} visible={edit === "assignee"} onClose={() => setEdit(null)} />
       <SourceSheet
         visible={edit === "source"}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { visitDueCents } from "@/features/visitDue";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -88,6 +89,8 @@ export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visibl
   const toast = useToast();
   const [q, setQ] = useState("");
   const [propertyId, setPropertyId] = useState<ID | null>(null);
+  const propHeld = useHeldSheet(propertyId); // the sheet goes out before it is unmounted (#1163)
+  const pid = propHeld.value;
   const waiting = waitingJobs(db);
   const needle = q.trim().toLowerCase();
   const properties = db.properties
@@ -130,16 +133,18 @@ export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visibl
           </View>
         </View>
       </Sheet>
-      {propertyId ? (
+      {pid ? (
         <VisitFormSheet
-          visible
+          key={propHeld.opening}
+          visible={propHeld.visible}
+          onExited={propHeld.onExited}
           onClose={() => { setPropertyId(null); close(); }}
           title={t("vf.addInspection")}
           saveLabel={t("lead.next.book")}
-          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId, day: onDay }}
+          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId: pid, day: onDay }}
           onSave={(v) => {
             const visitId = uid();
-            const r = store.addInspection(propertyId, { ...v, visitId });
+            const r = store.addInspection(pid, { ...v, visitId });
             toast.show(t("vf.inspectionSaved", { date: day(v.start), time: time(v.start) }), r.undo);
             return visitId;
           }}

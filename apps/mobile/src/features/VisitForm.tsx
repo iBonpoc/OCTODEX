@@ -3,6 +3,7 @@
  * работу», «Перенести»; «Сообщить клиенту?» after saving; «Отменить выезд» (§7.4). Rules — features/schedule.ts.
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
@@ -228,9 +229,9 @@ export function VisitFormHead({ propertyId, jobId, exceptId }: { propertyId?: ID
 
 /** «Записать осмотр» / «+ Осмотр» / «Перенести» as one sheet; `onSave` returns the visit id (for «Сообщить клиенту?») */
 export function VisitFormSheet({
-  visible, onClose, title, saveLabel, init, onSave, withNote = true,
+  visible, onExited, onClose, title, saveLabel, init, onSave, withNote = true,
 }: {
-  visible: boolean; onClose: () => void; title: string; saveLabel: string;
+  visible: boolean; onExited?: () => void; onClose: () => void; title: string; saveLabel: string;
   init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; day?: DayKey; exceptId?: ID; propertyId?: ID; jobId?: ID; allDay?: boolean; allowAllDay?: boolean };
   onSave: (v: VisitFormValue) => ID | null; withNote?: boolean;
 }) {
@@ -244,7 +245,7 @@ export function VisitFormSheet({
   };
   return (
     <>
-      <Sheet visible={visible && !notifyId} onClose={onClose} title={title} dirty={f.dirty} onSave={f.past ? undefined : save}>
+      <Sheet visible={visible && !notifyId} onExited={onExited} onClose={onClose} title={title} dirty={f.dirty} onSave={f.past ? undefined : save}>
         <VisitFormHead propertyId={init.propertyId} jobId={init.jobId} exceptId={init.exceptId} />
         <VisitFormFields f={f} noteLabel={withNote} />
         <Button label={saveLabel} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
@@ -295,7 +296,7 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("vf.notify.title")}>
+    <Sheet visible={!!v} onClose={onClose} title={t("vf.notify.title")}>
       <T v="body">{text}</T>
       {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
       {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
@@ -330,7 +331,7 @@ export function CancelNotifySheet({ visitId, onClose }: { visitId: ID | null; on
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("visitP2.notify.title")}>
+    <Sheet visible={!!n} onClose={onClose} title={t("visitP2.notify.title")}>
       <T v="body">{n.text}</T>
       {!sms && !mail ? <T v="caption" tone="mut">{t("visitP2.notify.noContact")}</T> : null}
       {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => open(sms, "sms")} /> : null}
@@ -360,7 +361,7 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
     onDone?.(visitId);
   };
   return (
-    <Sheet visible onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
+    <Sheet visible={!!visitId} onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
       {CANCEL_REASONS.map((r) => (
         <ListRow key={r} title={`${reason === r ? "✓ " : ""}${t(`vc.r.${r}` as DictKey)}`} onPress={() => setReason(r)} />
       ))}
@@ -388,6 +389,7 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
   const { t, day, time } = useI18n();
   const toast = useToast();
   const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
+  const moveHeld = useHeldSheet(sheet === "move" ? true : null); // the sheet goes out before it is unmounted (#1163)
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
   const people = assigneesOf(v);
@@ -409,9 +411,11 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
           <Button label={t("vc.title")} icon="close" variant="secondary" size="sm" onPress={() => setSheet("cancel")} />
         </RowView>
       ) : null}
-      {sheet === "move" ? (
+      {moveHeld.value ? (
         <VisitFormSheet
-          visible
+          key={moveHeld.opening}
+          visible={moveHeld.visible}
+          onExited={moveHeld.onExited}
           onClose={() => setSheet(null)}
           title={t("vw.reschedule")}
           saveLabel={t("vw.reschedule")}

@@ -165,7 +165,7 @@ function EditSheet({ c, active, onClose }: { c: ServiceCategory | null; active: 
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={original} dirty={dirty} onSave={save}>
+    <Sheet visible={!!c} onClose={onClose} title={original} dirty={dirty} onSave={save}>
       <TextField type="title" value={name} onChangeText={setName} placeholder={t("dir.ownPlaceholder")} />
       {taken ? (
         <T v="caption" tone="warn">

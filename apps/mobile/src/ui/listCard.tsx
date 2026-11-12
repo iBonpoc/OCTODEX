@@ -513,8 +513,10 @@ export interface StatusPickerOption {
   form?: boolean;
 }
 
-export function StatusPicker({ visible, onClose, title, options, onPick }: {
+export function StatusPicker({ visible, onExited, onClose, title, options, onPick }: {
   visible: boolean;
+  /** the sheet has left (a sheet mounted by data lets the data go: `useHeldSheet`) */
+  onExited?: () => void;
   onClose: () => void;
   title: string;
   options: StatusPickerOption[];
@@ -523,7 +525,7 @@ export function StatusPicker({ visible, onClose, title, options, onPick }: {
   const { c } = useTheme();
   const { t } = useI18n();
   return (
-    <Sheet visible={visible} onClose={onClose} title={title}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={title}>
       <View accessibilityRole="radiogroup" style={{ gap: spaceHalf.hair }}>
         {options.map((o) => {
           const row = (
