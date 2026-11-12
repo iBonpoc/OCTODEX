@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -171,6 +171,73 @@ export function splitCorner(d: Drawing, corner: Pick<FoundCorner, "runs">): Draw
   return { ...d, runs: d.runs.map((r) => (ids.has(r.id) ? { ...r, attrs: { ...r.attrs, openEnds: { ...r.attrs.openEnds, [ids.get(r.id) ? "b" : "a"]: true } } } : r)) };
 }
 
+/** the finger has gone more than `sideIn` (plan inches) sideways from the axis of the gutter being pulled (#818): the end turns round the other end instead of only growing */
+export function pulledSide(r: Pick<DrawnRun, "a" | "b">, end: 0 | 1, p: P, sideIn: number): boolean {
+  const fixed = end === 0 ? r.b : r.a;
+  const was = end === 0 ? r.a : r.b;
+  const ux = was[0] - fixed[0], uy = was[1] - fixed[1];
+  const L = Math.hypot(ux, uy);
+  if (L === 0) return false;
+  return Math.abs((p[0] - fixed[0]) * uy - (p[1] - fixed[1]) * ux) / L > sideIn;
+}
+
+export interface Swing {
+  drawing: Drawing;
+  /** the angle shown by the chip: between the neighbouring gutter (else the gutter's old direction) and the gutter now, whole degrees, 0–180 */
+  deg: number;
+  /** the direction is held at a step of 45° (the haptic tick is on entering it) */
+  snapped: boolean;
+}
+
+/**
+ * A free end taken and swung (#818, founder 12.11: «свободно перемещалась и прилипала под 90°»): the gutter turns round its
+ * OTHER end (it stays), the end follows the finger — the length is the finger's distance (whole inches, as moveEndAlong), the
+ * direction free, but held at a step of 45° relative to the neighbouring gutter at the standing end (else to the gutter's old
+ * direction) within ±SNAP_ANGLE_DEG. A typed length no longer matches and is dropped; downspouts stay on the line.
+ */
+export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P): Swing | null {
+  const r = d.runs.find((x) => x.id === runId);
+  if (!r) return null;
+  const fixed = end === 0 ? r.b : r.a;
+  const was = end === 0 ? r.a : r.b;
+  const vx = p[0] - fixed[0], vy = p[1] - fixed[1];
+  const dist = Math.hypot(vx, vy);
+  if (dist === 0) return null;
+  // the reference: a gutter that ends where this one stands (a corner), else this gutter's own old direction
+  const nb = d.runs.find((x) => x.id !== runId && sameStory(x, r) && [x.a, x.b].some((q) => Math.hypot(q[0] - fixed[0], q[1] - fixed[1]) <= 1.5));
+  const refTo: P = nb ? (Math.hypot(nb.a[0] - fixed[0], nb.a[1] - fixed[1]) <= 1.5 ? nb.b : nb.a) : was;
+  const ref = Math.atan2(refTo[1] - fixed[1], refTo[0] - fixed[0]);
+  const raw = Math.atan2(vy, vx);
+  let delta = ((raw - ref + Math.PI * 3) % (Math.PI * 2)) - Math.PI; // (−180°, 180°]
+  const step = Math.PI / 4;
+  const m = Math.round(delta / step) * step;
+  const snapped = Math.abs(delta - m) <= (SNAP_ANGLE_DEG * Math.PI) / 180;
+  if (snapped) delta = m;
+  const ang = ref + delta;
+  const len = Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round(dist)));
+  const at: P = [Math.round(fixed[0] + Math.cos(ang) * len), Math.round(fixed[1] + Math.sin(ang) * len)];
+  if (at[0] === was[0] && at[1] === was[1]) return { drawing: d, deg: Math.round((Math.abs(delta) * 180) / Math.PI), snapped };
+  // never ends on another gutter's end by rounding (a corner only by the user's own act — drawing a line to it)
+  if (d.runs.some((x) => x.id !== runId && sameStory(x, r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return { drawing: d, deg: Math.round((Math.abs(delta) * 180) / Math.PI), snapped };
+  const { lengthIn: _typed, ...rest } = r;
+  const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, a: at } : { ...rest, b: at }, end);
+  const n = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
+  const was0 = Math.round(Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]));
+  return {
+    drawing: {
+      ...d,
+      runs: d.runs.map((x) => (x.id === runId ? moved : x)),
+      downspouts: d.downspouts.map((s) => {
+        if (s.runId !== runId) return s;
+        const atIn = end === 0 ? s.atIn + (n - was0) : s.atIn;
+        return { ...s, atIn: Math.min(n, Math.max(0, atIn)) };
+      }),
+    },
+    deg: Math.round((Math.abs(delta) * 180) / Math.PI),
+    snapped,
+  };
+}
+
 /** the split mark of an end that moved away is gone (the end is its own again) */
 const closeEnd = (r: DrawnRun, end: 0 | 1): DrawnRun => {
   const k = end ? "b" : "a";
@@ -295,7 +362,7 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean };
+export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean; /** the finger left the gutter's axis (#818): the end swings round the other one, free, held at 45° steps — stays so till the lift */ swung?: boolean };
 
 /** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
 export function moveDs(d: Drawing, id: string, p: P): Drawing {
@@ -314,7 +381,7 @@ export function moveDs(d: Drawing, id: string, p: P): Drawing {
 export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, canceled: boolean, newRun: { id: string; attrs: DrawnRun["attrs"] }): Drawing {
   if (g.kind === "end") return canceled ? g.before : moveEnd(g.before, g.id, g.end, p, tolIn);
   if (g.kind === "ds") return canceled ? g.before : moveDs(g.before, g.id, p);
-  if (g.kind === "pull") return canceled ? g.before : moveEndAlong(g.before, g.id, g.end, p);
+  if (g.kind === "pull") return canceled ? g.before : g.swung ? (swingEnd(g.before, g.id, g.end, p)?.drawing ?? g.before) : moveEndAlong(g.before, g.id, g.end, p);
   if (canceled) return d;
   const b = endAt(d, g.a, p, tolIn);
   return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);
