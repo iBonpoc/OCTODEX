@@ -41,7 +41,7 @@ exports.run = async (h) => {
   v = (await h.db()).visits.find((x) => x.id === id);
   h.expect(v.photos.length === 1, "photo added");
   // view → delete → undo
-  await h.click("Фото 1");
+  await h.page.locator('[data-testid^="photo-thumb-"]').locator("visible=true").first().click();
   await h.click("Удалить фото");
   v = (await h.db()).visits.find((x) => x.id === id);
   h.expect(v.photos.length === 0, "photo deleted");
