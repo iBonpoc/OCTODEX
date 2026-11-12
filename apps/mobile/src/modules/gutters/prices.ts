@@ -13,15 +13,16 @@
  */
 import { computeGutterParts, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
-import { attributesLine, catalogMatch } from "@/features/catalogMatch";
+import { catalogMatch } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
+import { ftIn } from "./canvas/format";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
 
 /** what a part is, for the parts the engine leaves without `part` (their key's first word says it) */
-const PART_BY_KEY: Record<string, string> = { gutter: "gutter", ds: "downspout", guard: "guard_run" };
+const PART_BY_KEY: Record<string, string> = { gutter: "gutter", ds: "downspout", guard: "guard_run", coil: "gutter", section: "gutter", dsstick: "downspout" };
 /** properties that never change the price: an end cap left or right is one item (the founder's lists: one SKU) */
 const NOT_PRICED = new Set(["side"]);
 
@@ -53,6 +54,7 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
 export const PART_WORDS = new Set([
   "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
+  "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
 ]);
 export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile"]);
@@ -192,6 +194,44 @@ export function partName(t: (key: DictKey, params?: Record<string, string | numb
   }
   const { part, ...rest } = matchAttrs(p);
   const word = part && PART_WORDS.has(part) ? t(k(`p.${part}`)) : part ?? p.key;
-  const line = attributesLine(rest);
+  const line = Object.keys(rest)
+    .sort((x, y) => x.localeCompare(y))
+    .map((key) => attrText(t, key, rest[key]!))
+    .join(" · ");
   return line ? `${word} · ${line}` : word;
+}
+
+/** the dictionary group of an enum property's words: «k» is «K-style», «painted» is «Painted» */
+const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal: "m", color: "c", finish: "f", shape: "sh" };
+/** a property in inches (a coil's blank, a section's length): feet-inches-eighths, as on the drawing */
+const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
+
+/**
+ * A property's value for a person (#1090): a word where the dictionary has one (the company's own colour stays as it is),
+ * ″ after a size, feet-inches for a length — never «11.875» or a bare code. `t` — the document's translator (rule 7).
+ */
+function attrText(t: (key: DictKey, params?: Record<string, string | number>) => string, key: string, v: string): string {
+  if (ATTR_IN.has(key)) {
+    const n = Number(v);
+    return Number.isFinite(n) ? ftIn(n) : v;
+  }
+  if (key === "size" || key === "gutterSize") return /^\d+(\.\d+)?$/.test(v) ? `${v}″` : v;
+  const group = key === "buy" ? "buy" : ATTR_WORDS[key];
+  if (!group) return v;
+  const k = (key === "buy" ? `mod.gutters.pr.buy.${v}` : `mod.gutters.attr.${group}.${v}`) as DictKey;
+  const w = t(k);
+  return w === k ? v : w;
+}
+
+/**
+ * A part's quantity for a person (#1090): a length in feet as feet-inches-eighths (the sum of the engine is decimal, a
+ * person reads «73′ 2″», not «73.16666666666667»), a count whole or to two places; the unit is a word of the document.
+ */
+export function partQty(t: (key: DictKey, params?: Record<string, string | number>) => string, p: Pick<PartQty, "qty" | "unit">): string {
+  const n = Number(p.qty);
+  if (!Number.isFinite(n)) return p.qty;
+  const uk = `mod.gutters.view.u.${p.unit}` as DictKey;
+  const u = t(uk) === uk ? p.unit : t(uk);
+  if (p.unit === "ft") return ftIn(n * 12);
+  return `${Math.round(n * 100) / 100} ${u}`;
 }

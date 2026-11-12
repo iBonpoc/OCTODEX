@@ -15,7 +15,7 @@ import { ftIn } from "../canvas/format";
 import type { Drawing } from "../geometry";
 import { blueprint } from "./blueprint";
 import { sheetSvg } from "@/features/docPages";
-import { partName } from "../prices";
+import { partName, partQty } from "../prices";
 import type { MeasureSpec } from "./spec";
 
 type Tr = (key: DictKey, params?: Record<string, string | number>) => string;
@@ -68,9 +68,8 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
       ? `<h2>${esc(t("mod.gutters.view.ds"))}</h2><table>${spec.ds.map((d) => `<tr><td>${esc(t("mod.gutters.ds", { n: d.n }))}</td><td>${esc(t("mod.gutters.story", { n: d.story }))}</td><td>${esc(d.size)}</td><td>${esc(t("mod.gutters.view.dsLine", { e: d.elbows, o: d.offsets }))}</td></tr>`).join("")}</table>`
       : `<p>${esc(t("mod.gutters.pdf.dsCount", { n: spec.ds.length }))}</p>`
     : "";
-  const unit = (u: string) => word(t, `mod.gutters.view.u.${u}`, u);
   const partsTable = crew && spec.parts.length
-    ? `<h2>${esc(t("mod.gutters.view.parts"))}</h2><table>${spec.parts.map((p: PartQty) => `<tr><td>${esc(partName(t, p))}</td><td class="r">${esc(`${Number(p.qty)} ${unit(p.unit)}`)}</td></tr>`).join("")}</table>`
+    ? `<h2>${esc(t("mod.gutters.view.parts"))}</h2><table>${spec.parts.map((p: PartQty) => `<tr><td>${esc(partName(t, p))}</td><td class="r">${esc(partQty(t, p))}</td></tr>`).join("")}</table>`
     : "";
   const rough = x.rough ? `<p class="note"><b>${esc(t("mod.gutters.view.rough"))}</b></p>` : "";
   const title = t(crew ? "mod.gutters.pdf.titleCrew" : "mod.gutters.pdf.title");

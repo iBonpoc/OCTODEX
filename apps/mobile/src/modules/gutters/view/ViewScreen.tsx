@@ -31,7 +31,7 @@ import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMe
 import { CardHead } from "./CardHead";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
-import { listPreview, partName } from "../prices";
+import { listPreview, partName, partQty } from "../prices";
 import { readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
 import { measureSpec } from "./spec";
@@ -154,7 +154,6 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const v = t(key as DictKey);
     return v === key ? raw : v;
   };
-  const unit = (u: string) => word(`mod.gutters.view.u.${u}`, u);
   const kindWord = (k: string) => t(k === "in" ? "mod.gutters.draw.cornerIn" : k === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
 
   if (!m) return <View testID="view-not-found"><T tone="mut">{t("mod.gutters.view.notFound")}</T></View>;
@@ -315,7 +314,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             {spec.parts.map((p) => (
               <RowView key={p.key} style={{ justifyContent: "space-between", gap: space[2] }}>
                 <T v="caption" style={{ flexShrink: 1 }}>{partName(t, p)}</T>
-                <T v="caption" tabular>{`${Number(p.qty)} ${unit(p.unit)}`}</T>
+                <T v="caption" tabular>{partQty(t, p)}</T>
               </RowView>
             ))}
           </Card>
