@@ -424,7 +424,7 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
           onSave={(f) => {
             const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin, f.allDay);
             const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : () => {};
-            toast.show(f.allDay ? t("job5.allDaySaved", { date: day(f.start) }) : t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), () => { undoTech(); undoMove(); });
+            toast.show(f.allDay ? t("job5.allDaySaved", { date: day(f.start) }) : t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), store.undoTogether([undoMove, undoTech]));
             // the client was told the old time: offer to tell the new one (§5.2)
             return v.customerNotifiedAt ? v.id : null;
           }}

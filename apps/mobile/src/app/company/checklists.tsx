@@ -77,8 +77,10 @@ export default function CompanyChecklists() {
     pressed.current.add(id);
     const undo = store.saveChecklistTemplate(tpl, { ifNew: true });
     toast.show(store.online ? t("chk3.starterAdded") : t("offline.queued"), () => {
-      pressed.current.delete(id);
-      undo();
+      // too late (false): the template stays, and so does «pressed» (#1244)
+      const r = undo();
+      if (r !== false) pressed.current.delete(id);
+      return r;
     });
   };
 

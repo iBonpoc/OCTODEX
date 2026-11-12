@@ -170,6 +170,18 @@ describe("makeEstimate — through the core's store", () => {
     r.undo();
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
   });
+  it("#1244 (the director's 3rd review): with the core's undoTogether — one «Отменить» of all three parts, all or none (too late → nothing undone)", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const asked: unknown[][] = [];
+    const st = { ...h.s, undoTogether: (undos: readonly unknown[]) => (asked.push([...undos]), () => false) };
+    // the harness's own functions write through h.s: keep the db in step
+    Object.defineProperty(st, "db", { get: () => h.s.db });
+    const r = ok(makeEstimate(st, input(M)));
+    expect(r.undo()).toBe(false);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toHaveLength(3);
+    expect(h.undone).toEqual([]);
+  });
   it("#1138 (review of #1169 Б1): where the person may not make a new estimate — «notHere», and NOTHING is written (before: a revision, «ready», a client from the lead and a false «Смета составлена»)", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
     const asked: (string | undefined)[] = [];
