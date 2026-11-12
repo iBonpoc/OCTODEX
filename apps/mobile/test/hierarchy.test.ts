@@ -135,4 +135,8 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/legal/terms", {}, db, "director", { appOpen: false })).toEqual({});
     expect(navContext("/legal/terms", {}, db, "director", { appOpen: true }).up?.href).toBe("/help");
   });
+  it("the design showcase (#1150): its list goes back to the settings, a section — to the list (not to «Профиль и аккаунт»)", () => {
+    expect(navContext("/settings/design-system", {}, db, "director")).toMatchObject({ section: "settings", up: { href: "/settings" } });
+    expect(navContext("/settings/design-system/buttons", {}, db, "director")).toMatchObject({ section: "settings", up: { href: "/settings/design-system" } });
+  });
 });

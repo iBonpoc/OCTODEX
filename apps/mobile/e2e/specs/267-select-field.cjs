@@ -9,7 +9,7 @@ const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
-  await h.go("/settings/design-system");
+  await h.go("/settings/design-system/selectors");
   await vis("showcase-selectors").waitFor({ timeout: 5000 });
   const chosen = vis("showcase-select-chosen");
   const empty = vis("showcase-select-empty");

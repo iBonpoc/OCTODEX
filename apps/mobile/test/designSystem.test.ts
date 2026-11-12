@@ -33,6 +33,21 @@ const rules: { name: string; re: RegExp }[] = [
 
 const outsideUi = code.filter((f) => !f.includes(`${join("src", "ui")}`));
 
+/** #816 (C-08): the general rule lets a bare 0 and 1 through; the module's screens carry no such border — `component.hairline` */
+describe("design system: the module's hairline is a token", () => {
+  it("no «borderWidth: 1» (nor a 1 in another border width) in modules/gutters", () => {
+    const hits: string[] = [];
+    for (const f of code.filter((x) => x.includes(join("src", "modules", "gutters")))) {
+      readFileSync(f, "utf8")
+        .split("\n")
+        .forEach((l, i) => {
+          if (/\bborder(Top|Bottom|Left|Right)?Width:\s*1\b(?![.\w])/.test(l)) hits.push(`${relative(ROOT, f)}:${i + 1}`);
+        });
+    }
+    expect(hits, hits.join("\n")).toEqual([]);
+  });
+});
+
 describe("design system: components", () => {
   it("text only through <T> (no raw react-native Text outside src/ui)", () => {
     const hits = outsideUi.filter((f) => {
@@ -48,6 +63,15 @@ describe("design system: components", () => {
         .some((l) => /from "react-native"/.test(l) && /\b(Pressable|TouchableOpacity|TouchableHighlight|TouchableWithoutFeedback)\b/.test(l) && !l.includes("ds-allow")),
     );
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
+  });
+  it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
+    const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
+    expect(hits).toEqual([]);
+  });
+  it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
+    const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");
+    expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
+    expect(src).toMatch(/onDeactivate:[\s\S]*?haptics\.medium\(\)/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>

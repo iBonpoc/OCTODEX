@@ -2,7 +2,7 @@ import { visitWhen } from "@/features/schedule";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { space, type StatusName, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { DB, Estimate, PaymentMethod } from "@/data/types";
@@ -313,7 +313,7 @@ function OnSiteSign({ e }: { e: Estimate }) {
           <SignBlock
             defaultName={customer?.name ?? ""}
             onSign={(name, svg) => {
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              haptics.success();
               const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
               toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
             }}
@@ -559,7 +559,7 @@ function LegacyBody({ e }: { e: Estimate }) {
               <SignaturePad
                 consent="est.signConsent"
                 onConfirm={(path) => {
-                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  haptics.success();
                   toast.show(q(t("est.signedToast", { name: customer?.name ?? "" })), store.signEstimate(e.id, path));
                 }}
               />
@@ -617,7 +617,7 @@ function CountersignCard({ e }: { e: Estimate }) {
                   icon="check"
                   full
                   onPress={() => {
-                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    haptics.success();
                     toast.show(store.online ? t("est.countersign.done") : t("offline.queued"), store.countersignEstimate(e.id, { savedId: mine.id }));
                   }}
                 />
@@ -631,7 +631,7 @@ function CountersignCard({ e }: { e: Estimate }) {
               consent={null}
               confirmLabel={t("est.countersign.sign")}
               onConfirm={(path) => {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                haptics.success();
                 const undo = store.countersignEstimate(e.id, path);
                 toast.show(store.online ? t("est.countersign.done") : t("offline.queued"), undo);
               }}
