@@ -107,6 +107,7 @@ import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { visitDueCents } from "../src/features/visitDue";
+import { tFor } from "../src/i18n/translate";
 import { summarize } from "../src/features/estimateDoc";
 import { readFileSync } from "node:fs";
 import { isDeviceKey } from "../src/features/deleteAccount";
@@ -1539,6 +1540,39 @@ describe("unit:storeSync — the signature on the phone carries the total the cl
     const op = sentOps().find((o) => o.k === "estimate.approve")!;
     expect(op.channel).toBe("on_site");
     expect(op.totalCents).toBe(summarize(e.doc, sel).totalCents);
+  });
+});
+
+describe("unit:storeSync — the deposit invoice of the older path is named in the client's language (В1-7б, #1104 п.4; rule 7)", () => {
+  const depositWith = async (lang: "en" | "es" | "ru") => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: "office" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    // the client's language is not known: the company's (docLanguageFor); e5 without its job and deposit invoice yet
+    d.company = { ...d.company!, docLanguage: lang };
+    const e = d.estimates.find((x) => x.id === "e5")!;
+    e.depositPaidAt = undefined;
+    const old = d.jobs.filter((j) => j.estimateId === e.id).map((j) => j.id);
+    d.invoices = d.invoices.filter((i) => !old.includes(i.jobId ?? ""));
+    d.jobs = d.jobs.filter((j) => !old.includes(j.id));
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as { payDeposit: (id: string, m: string) => void }).payDeposit("e5", "cash");
+    await settle();
+    const db = (valueOf(r) as unknown as { db: { jobs: { id: string; estimateId?: string }[]; invoices: { jobId?: string; kind?: string; title?: string }[] } }).db;
+    const job = db.jobs.find((j) => j.estimateId === "e5")!;
+    return db.invoices.find((i) => i.jobId === job.id && i.kind === "deposit")!.title;
+  };
+  it("Spanish: «Depósito» (before: «Deposit» whatever the client's language)", async () => {
+    expect(await depositWith("es")).toBe(tFor("es")("path.inv.deposit"));
+  });
+  it("Russian: «Депозит»", async () => {
+    expect(await depositWith("ru")).toBe(tFor("ru")("path.inv.deposit"));
+  });
+  it("English: «Deposit», as before", async () => {
+    expect(await depositWith("en")).toBe("Deposit");
   });
 });
 

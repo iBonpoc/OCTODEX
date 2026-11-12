@@ -14,9 +14,9 @@ import { clientPages, pagesProblem, type DocPrim } from "../src/features/docPage
 const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
 const r = (id: string, a: P, b: P, o: Partial<DrawnRun> = {}): DrawnRun => ({ id, a, b, attrs, ...o });
 const ft = (n: number) => n * 12;
-/** an L (a corner) and a run far away — the founder's snapshot: two gutters far apart */
+/** an L (a corner) and a run apart from it — on one scale (a far-away contour gets its own panel, see below) */
 const d: Drawing = {
-  runs: [r("a", [0, ft(10)], [ft(10), ft(10)], { lengthIn: ft(10) }), r("b", [ft(10), ft(10)], [ft(10), 0]), r("c", [ft(-30), ft(-30)], [ft(-25), ft(-30)])],
+  runs: [r("a", [0, ft(10)], [ft(10), ft(10)], { lengthIn: ft(10) }), r("b", [ft(10), ft(10)], [ft(10), 0]), r("c", [ft(-6), ft(-8)], [ft(-1), ft(-8)])],
   downspouts: [{ ...DEFAULT_DS_ATTRS, id: "d1", runId: "a", atIn: 6 }],
 };
 const t = tFor("ru");

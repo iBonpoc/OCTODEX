@@ -31,6 +31,8 @@ export const es: Dict = {
   "path.leadNew": "Crear lead",
   "path.clientNew": "Crear cliente",
   "path.expenseNew": "Crear gasto",
+  // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
+  "path.inv.deposit": "Depósito",
   "path.visitAdd": "Añadir visita",
   "path.photoAdd": "Añadir foto",
   "path.estimateNew": "Crear presupuesto",
@@ -3170,6 +3172,7 @@ export const es: Dict = {
   "mod.gutters.view.parts": "Piezas",
   "mod.gutters.sheet.tape": "Cinta — medida exacta, lista para cortar",
   "mod.gutters.sheet.scale": "Escala: {len}",
+  "mod.gutters.sheet.panel": "Contorno {n} · canaletas {runs}",
   "mod.gutters.view.rough": "Medición aproximada: vuelva a medir antes de cortar",
   "mod.gutters.view.estimates": "Presupuestos de esta medición",
   "mod.gutters.view.stale": "El dibujo cambió después del presupuesto: las cantidades se actualizarán, sus cambios manuales se quedan",

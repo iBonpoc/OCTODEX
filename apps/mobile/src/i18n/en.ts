@@ -31,6 +31,8 @@ export const en: Dict = {
   "path.leadNew": "Create lead",
   "path.clientNew": "Create client",
   "path.expenseNew": "Create expense",
+  // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
+  "path.inv.deposit": "Deposit",
   "path.visitAdd": "Add visit",
   "path.photoAdd": "Add photo",
   "path.estimateNew": "Create estimate",
@@ -3170,6 +3172,7 @@ export const en: Dict = {
   "mod.gutters.view.parts": "Parts",
   "mod.gutters.sheet.tape": "Tape — measured exactly, ready to cut",
   "mod.gutters.sheet.scale": "Scale: {len}",
+  "mod.gutters.sheet.panel": "Contour {n} · gutters {runs}",
   "mod.gutters.view.rough": "Rough measurement — measure again before cutting",
   "mod.gutters.view.estimates": "Estimates from this measurement",
   "mod.gutters.view.stale": "The drawing changed after the estimate: quantities will update, your own edits stay",
