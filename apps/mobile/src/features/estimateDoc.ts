@@ -67,9 +67,10 @@ export function cloneOption(o: CustomOption, i: number): CustomOption {
 /** a section's title as it may be kept: no control characters, at most SECTION_TITLE_MAX (the server cuts the same) */
 const cleanTitle = (t: unknown): string | undefined => {
   if (typeof t !== "string") return undefined;
+  // as the template's cut: a control character is a space, the length in characters (never half an emoji)
   // eslint-disable-next-line no-control-regex
-  const x = t.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, SECTION_TITLE_MAX);
-  return x.trim() ? x : undefined;
+  const x = Array.from(t.replace(/[\u0000-\u001f\u007f]/g, " ")).slice(0, SECTION_TITLE_MAX).join("").trim();
+  return x ? x : undefined;
 };
 
 /**
@@ -94,11 +95,16 @@ export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: st
       return l;
     });
     let sections = o.sections;
-    if (o.sections) {
+    // not a list (a broken copy, another version): no sections — one estimate never stops the company's load
+    if (o.sections !== undefined && !Array.isArray(o.sections)) {
+      sections = undefined;
+      oc = true;
+    } else if (o.sections) {
       const seen = new Set<string>();
+      // the engine's order (countedSections): the first 40, then the broken ones and a repeated id go
       const kept = o.sections
-        .filter((x) => x && typeof x.id === "string")
         .slice(0, SECTIONS_MAX)
+        .filter((x) => !!x && typeof x === "object" && typeof x.id === "string")
         .filter((x) => !seen.has(x.id) && !!seen.add(x.id))
         .map((x) => {
           const title = cleanTitle(x.title);
@@ -113,7 +119,8 @@ export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: st
     }
     if (!oc) return o;
     changed = true;
-    return { ...o, lines, ...(sections ? { sections } : {}) };
+    const { sections: _s, ...rest } = o;
+    return { ...rest, lines, ...(sections ? { sections } : {}) };
   });
   return { doc: changed ? { ...doc, options } : doc, unhidden };
 }
@@ -204,12 +211,12 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
     // the attached pages as app.client_doc passes them (spec 33 П24.7): a broken shape or page never reaches the client
     ...(pages.length ? { pages } : {}),
     // a line with quantity 0 bills nothing and is how a part is left out (spec 33 П23.8а №4, П23.9): never shown as a $0 row
-    // a line hidden from the client (only at $0 — the engine and the server the same, Р3) goes whole; a section keeps only
-    // what the client reads (a module's key stays the company's), as app.client_doc
+    // a line hidden from the client (only at $0 — the engine the same, Р3; the server's app.client_doc the same from РС-6)
+    // goes whole; a section keeps only what the client reads (a module's key stays the company's)
     options: doc.options.map((o) => ({
       ...o,
       lines: o.lines.filter((l) => !zeroQty(l) && !(l.clientVisible === false && l.unitPriceCents === 0)).map(({ unitCostCents: _c, source: _s, ...l }) => l),
-      ...(o.sections ? { sections: countedSections(o).map(({ module: _m, ...x }) => x) } : {}),
+      ...(Array.isArray(o.sections) ? { sections: countedSections(o).map(({ module: _m, ...x }) => x) } : {}),
     })),
   };
 }

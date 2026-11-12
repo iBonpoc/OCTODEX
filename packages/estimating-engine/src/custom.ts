@@ -241,7 +241,12 @@ export function lineProfit(l: CustomLine): number | null {
 export function countedSections(o: Pick<CustomOption, "sections">): EstimateSection[] {
   // a repeated id counts once, the first (the document comes from a phone: no check of it on the way)
   const seen = new Set<string>();
-  const first = (o.sections ?? []).slice(0, SECTIONS_MAX).filter((x) => !seen.has(x.id) && !!seen.add(x.id));
+  // the first 40, then a broken entry (no id) and a repeated id go — the app's normalizeDoc and the server the same order
+  const all = Array.isArray(o.sections) ? o.sections : [];
+  const first = all
+    .slice(0, SECTIONS_MAX)
+    .filter((x) => !!x && typeof x === "object" && typeof x.id === "string")
+    .filter((x) => !seen.has(x.id) && !!seen.add(x.id));
   const tops = new Set(first.filter((x) => !x.parentId).map((x) => x.id));
   return first.filter((x) => !x.parentId || tops.has(x.parentId));
 }

@@ -36,8 +36,28 @@ describe("normalizeDoc", () => {
     expect(r).toHaveLength(SECTIONS_MAX - 1); // 40 kept, the repeated s0 once
     expect(r[0]).toEqual({ id: "s0", title: "T0" });
     const t = normalizeDoc(docOf([], [{ id: "x", title: "Roof\u0007\n" + "y".repeat(80) }, { id: "z", title: "   " }])).doc.options[0]!.sections!;
-    expect(t[0]!.title).toBe("Roof" + "y".repeat(56));
+    expect(t[0]!.title).toBe("Roof  " + "y".repeat(54)); // a control character is a space (as the template's cut)
     expect(t[1]).toEqual({ id: "z" }); // a blank title is no title: the screen says «Раздел N»
+  });
+  it("a title is cut by characters: never half an emoji (the server would refuse the JSON)", () => {
+    const t = normalizeDoc(docOf([], [{ id: "x", title: "a".repeat(59) + "😀😀" }])).doc.options[0]!.sections![0]!.title!;
+    expect(Array.from(t)).toHaveLength(60);
+    expect(t.endsWith("😀")).toBe(true);
+    expect(JSON.stringify(t)).not.toMatch(/\\ud83d"/);
+  });
+  it("broken sections never stop the load: not a list — none; null entries go, in the engine's order (40 first)", () => {
+    const notList = docOf([line({ id: "a" })]);
+    (notList.options[0] as unknown as { sections: unknown }).sections = {};
+    expect(normalizeDoc(notList).doc.options[0]!.sections).toBeUndefined();
+    const withNull = [null, ...Array.from({ length: SECTIONS_MAX }, (_, i) => ({ id: `s${i}` }))] as never;
+    const r = normalizeDoc(docOf([], withNull)).doc.options[0]!.sections!;
+    expect(r).toHaveLength(SECTIONS_MAX - 1); // the 40 first places, the null among them goes: s39 is past 40
+    expect(r.at(-1)!.id).toBe(`s${SECTIONS_MAX - 2}`);
+  });
+  it("a draft with broken sections is read, not dropped (#859)", () => {
+    const d = docOf([line({ id: "a" })]);
+    (d.options[0] as unknown as { sections: unknown }).sections = "x";
+    expect(cleanDraft({ ctx: "c", at: "2026-11-12", estimateId: "e", doc: d })?.doc.options[0]!.lines).toHaveLength(1);
   });
   it("a line whose section is not there keeps its sectionId (the data is not rewritten)", () => {
     const d = docOf([line({ id: "a", sectionId: "gone" })], [{ id: "s1" }]);
@@ -60,6 +80,14 @@ describe("the ways in and out", () => {
   it("versionRows: client_visible false only for a $0 line (the server's check)", () => {
     const d = docOf([line({ id: "a", unitPriceCents: 0, clientVisible: false }), line({ id: "b", clientVisible: false })]);
     expect(versionRows(d).lines.map((l) => l.clientVisible)).toEqual([false, undefined]);
+  });
+  it("«Добавить вариант» of an option with no sections: none on the copy", () => {
+    expect("sections" in cloneOption(docOf([line({ id: "a" })]).options[0]!, 1)).toBe(false);
+  });
+  it("clientDoc: sections past 40, a subsection without its parent, a repeated id — as the engine counts them", () => {
+    const secs = [{ id: "a" }, { id: "a", parentId: "b" }, { id: "sub", parentId: "nope" }, ...Array.from({ length: SECTIONS_MAX }, (_, i) => ({ id: `s${i}` }))];
+    const o = clientDoc(docOf([], secs)).options[0]!;
+    expect(o.sections!.map((x) => x.id)).toEqual(["a", ...Array.from({ length: SECTIONS_MAX - 3 }, (_, i) => `s${i}`)]);
   });
   it("«Добавить вариант» keeps the sections (the lines keep their sectionId)", () => {
     const o = docOf([line({ id: "a", sectionId: "s1" })], [{ id: "s1", title: "Roof" }]).options[0]!;
