@@ -48,6 +48,15 @@ function FieldWarn({ at }: { at: string }) {
     </View>
   ) : null;
 }
+/** a choice that names its field (a segment or a dropdown) with the refusal said under it (#374: the save was refused, the pick rolled back) */
+function ChoiceWarn<K extends string>(p: React.ComponentProps<typeof ChoiceChips<K>> & { testID: string }) {
+  return (
+    <View style={{ gap: space[2] }}>
+      <ChoiceChips {...p} label={p.label} />
+      <FieldWarn at={p.testID} />
+    </View>
+  );
+}
 /** a stepper with its note under it */
 function Step({ testID, children }: { testID: string; children: React.ReactNode }) {
   return (
@@ -225,7 +234,7 @@ export default function GutterSettingsScreen() {
         <ReadOnly value={ro}>
           {/* #1092: one format for every length — the drawing, the review, the documents, the parts */}
           <Part title={t(k("len"))} hint={t(k("lenHint"))} testID="gset-len">
-            <ChoiceChips label={t(k("lenFormat"))} testID="gset-len-format" items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
+            <ChoiceWarn label={t(k("lenFormat"))} testID="gset-len-format" items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
             <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
           </Part>
           {/* #932 (founder 11.11): where the roof's overhang is set */}
@@ -393,19 +402,11 @@ export default function GutterSettingsScreen() {
           </Part>
 
           <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
-            <Field label={t(a("profile"))} testID="gset-run-profile">
-              <ChoiceChips items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
-            </Field>
-            <Field label={t(a("size"))} testID="gset-run-size">
-              <ChoiceChips items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
-            </Field>
-            <Field label={t(a("material"))} testID="gset-run-material">
-              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
-            </Field>
+            <ChoiceWarn label={t(a("profile"))} testID="gset-run-profile" items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
+            <ChoiceWarn label={t(a("size"))} testID="gset-run-size" items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
+            <ChoiceWarn label={t(a("material"))} testID="gset-run-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
             {runGauges.length ? (
-              <Field label={t(a("gauge"))} testID="gset-run-gauge">
-                <ChoiceChips items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
-              </Field>
+              <ChoiceWarn label={t(a("gauge"))} testID="gset-run-gauge" items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
             ) : null}
             {MILL_ONLY.has(ch.run.material) ? null : (
               <Field label={t(a("finish"))} testID="gset-run-finish">
@@ -436,22 +437,12 @@ export default function GutterSettingsScreen() {
           </Part>
 
           <Part title={t(k("defDs"))} hint={t(k("defDsHint"))} testID="gset-def-ds">
-            <Field label={t(a("shape"))} testID="gset-ds-shape">
-              <ChoiceChips items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
-            </Field>
-            <Field label={t(a("size"))} testID="gset-ds-size">
-              <ChoiceChips items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
-            </Field>
-            <Field label={t(a("dsStyle"))} testID="gset-ds-style">
-              <ChoiceChips items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
-            </Field>
-            <Field label={t(a("material"))} testID="gset-ds-material">
-              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
-            </Field>
+            <ChoiceWarn label={t(a("shape"))} testID="gset-ds-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
+            <ChoiceWarn label={t(a("size"))} testID="gset-ds-size" items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
+            <ChoiceWarn label={t(a("dsStyle"))} testID="gset-ds-style" items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
+            <ChoiceWarn label={t(a("material"))} testID="gset-ds-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
             {dsGauges.length ? (
-              <Field label={t(a("gauge"))} testID="gset-ds-gauge">
-                <ChoiceChips items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
-              </Field>
+              <ChoiceWarn label={t(a("gauge"))} testID="gset-ds-gauge" items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
             ) : null}
             {MILL_ONLY.has(ch.ds.material) ? null : (
               <Field label={t(a("finish"))} testID="gset-ds-finish">

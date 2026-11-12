@@ -168,20 +168,24 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   const h = Math.ceil(o.fontSize * 1.4);
   const texts = new Map<string, { text: string; kind: SceneLabel["kind"] }>();
   const want: LabelWant[] = [];
-  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number) => {
+  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number, must?: boolean) => {
     texts.set(id, { text, kind });
-    want.push({ id, a, b, w: labelWidth(text, o.fontSize, o.padX), h, priority, pad });
+    want.push({ id, a, b, w: labelWidth(text, o.fontSize, o.padX), h, priority, pad, ...(must ? { must } : {}) });
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
     const len = fmtLen(runLengthIn(r), o.fmt);
-    add(`len:${r.id}`, s.a, s.b, o.lenWithStory ? `${len} · ${o.storyText(s.story)}` : len, "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
+    const text = o.lenWithStory ? `${len} · ${o.storyText(s.story)}` : len;
+    // a gutter long enough on the screen (or the picked one) keeps its length even over a line; a tiny one next to others
+    // is hidden when no clear place is left (#1185: zoomed out, the small ones lay on each other and on the lines)
+    const must = s.selected || Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) >= labelWidth(text, o.fontSize, o.padX);
+    add(`len:${r.id}`, s.a, s.b, text, "len", runLengthIn(r) + (s.selected ? 1e6 : 0), undefined, must);
   });
   // over the mark: its fittings in one word («AABO⁴», founder 08.11); the number is inside the mark
   const dsById = new Map(d.downspouts.map((x) => [x.id, x]));
   ds.forEach((s) => {
     const code = dsCode(dsById.get(s.id)!);
-    if (code) add(`ds:${s.id}`, s.at, s.at, code, "ds", -1, o.dsPad);
+    if (code) add(`ds:${s.id}`, s.at, s.at, code, "ds", s.selected ? 1e6 : -1, o.dsPad, s.selected); // the picked one's word stays, as its length does
   });
   if (o.cornerText) for (const k of corners) add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", -1, o.dsPad);
   for (const x of o.extra ?? []) {
@@ -189,6 +193,8 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
     add(`x:${x.id}`, p, p, x.text, x.kind, -2);
   }
   const marks = o.dsPad ? [...ds.map((x) => x.at), ...caps.map((x) => x.at), ...corners.map((x) => x.at)].map((at) => ({ at, r: o.dsPad! })) : [];
-  const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, marks);
+  // the gutters and their faces are lines no word lies on (#1185)
+  const lines = runs.flatMap((r) => [{ a: r.a, b: r.b }, { a: r.face[0], b: r.face[1] }]);
+  const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, marks, lines);
   return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })), ...(o.gridMinPx ? { grid: buildGrid(o.view, o.viewport, o.gridMinPx) } : {}) };
 }
