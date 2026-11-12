@@ -704,7 +704,25 @@ export function Screen({
   // the forms under the screen scroll it to a field (DS §11 п.3): the view's place in the window, then to `margin` below the top
   // the top of the content lies under the status bar / header (`top`, below): the field stops below it, not at the very top
   const coveredTop = useRef(0);
+  const coveredBottom = useRef(0);
+  /** the height of the content and of the window it scrolls in: the page can go no further than their difference */
+  const contentH = useRef(0);
+  /** the last jump we made with scrollTo: scroll events of the jumps before it may still arrive and are older than it */
+  const lastJump = useRef<{ y: number; at: number } | null>(null);
+  const viewH = useRef(0);
   const screenScroll = useRef<ScreenScroll>({
+    scrollBy: (dy) => {
+      // the place is kept at once: the next tick of a held row must not read the old one while the scroll event is on its way
+      offset.current = Math.max(0, Math.min(offset.current + dy, contentH.current > 0 ? Math.max(0, contentH.current - viewH.current) : Number.POSITIVE_INFINITY));
+      lastJump.current = { y: offset.current, at: Date.now() };
+      scrollRef.current?.scrollTo({ y: offset.current, animated: false });
+    },
+    measureVisible: (cb) => {
+      const sv = scrollRef.current;
+      if (!sv) return cb(null);
+      sv.measureInWindow((_x, y, _w, h) => cb({ top: y + coveredTop.current, bottom: y + h - coveredBottom.current }));
+    },
+    offset: () => offset.current,
     scrollToNode: (node, margin, animated, done) => {
       const sv = scrollRef.current;
       if (!sv) return void done?.();
@@ -724,6 +742,7 @@ export function Screen({
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;
   coveredTop.current = pinned ? 0 : navInsets.top;
+  coveredBottom.current = kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0);
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
   return (
@@ -753,10 +772,15 @@ export function Screen({
               automaticallyAdjustKeyboardInsets
               stickyHeaderIndices={tabs ? [1] : undefined}
               scrollEventThrottle={16}
+              onContentSizeChange={(_w, h) => (contentH.current = h)}
+              onLayout={(e) => (viewH.current = e.nativeEvent.layout.height)}
               onScrollBeginDrag={onScrollBegin}
               onScroll={(e) => {
                 const y = e.nativeEvent.contentOffset.y;
-                offset.current = y;
+                // a late event of an earlier jump (a held row's autoscroll makes one every 16 ms) is older than what we asked of the
+                // scroll: the place is the last one asked, until the events catch up with it (else the held row lagged by a few steps)
+                const jump = lastJump.current;
+                if (!jump || Date.now() - jump.at > 250 || Math.abs(y - jump.y) < 1) offset.current = y;
                 const now = y > 0;
                 if (now !== under) setUnder(now);
               }}

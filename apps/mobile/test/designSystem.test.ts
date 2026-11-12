@@ -124,6 +124,32 @@ describe("design system: components", () => {
     expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
     expect(src).toMatch(/onDeactivate:[\s\S]*?haptics\.medium\(\)/);
   });
+  it("every drag that is held (activateAfterLongPress / handle) has its three feelings: light on lift, selection on a new place, medium on drop; none when nothing moved (founder 12.11)", () => {
+    const hits: string[] = [];
+    for (const f of code) {
+      const src = readFileSync(f, "utf8");
+      if (!/holdConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
+      // «medium» may come through feelOf(result) — the drop's feel decided by what it came to (sortable.ts)
+      for (const k of ["light", "selection", "medium"]) if (!new RegExp(k === "medium" ? "haptics\\.medium\\(|feelOf\\(" : `haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
+    }
+    expect(hits, "a drag without its haptics (DS §15.6): lift = light, new place = selection, drop = medium").toEqual([]);
+    const sortable = readFileSync(join(ROOT, "features", "SortableList.tsx"), "utf8");
+    // let go where it was taken: no drop, no «medium»
+    expect(sortable).toMatch(/r\.p !== fromSlot\.current/);
+    // the buzz follows what the drop came to (feelOf, tested in sortable.test): it is asked after the result, never before
+    expect(sortable).toMatch(/const res: DropResult = d \? drop\(d\) : "same";[\s\S]*?feelOf\(res\)/);
+    expect(sortable.slice(0, sortable.indexOf("const res: DropResult"))).not.toMatch(/haptics\.(medium|warning)/);
+    // one finger: only the held row's own gesture writes its place (a second finger would make the row jump); a refused begin sets nothing
+    expect(sortable).toMatch(/const w = dragWrite\(activeSV\.value, k,/);
+    expect(sortable).toMatch(/if \(!canBegin\(activeKey\.current\)\) return;[\s\S]*?activeSV\.value = key;/);
+    // a row that goes while it is held lets the page scroll again (lock(false)) — on its own and when the list goes
+    expect(sortable).toMatch(/heldGone\(activeKey\.current, keys\)\) abort\(\)/);
+    expect(sortable).toMatch(/useEffect\(\(\) => \(\) => abortRef\.current\(\), \[\]\)/);
+    // the shadow is a token
+    expect(sortable).toMatch(/component\.liftShadow/);
+    // the kind of pointer, not the width, decides how a body starts a drag
+    for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
+  });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>
       readFileSync(f, "utf8")

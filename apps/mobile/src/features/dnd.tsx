@@ -3,8 +3,9 @@ import { View, type StyleProp, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { haptics } from "@/ui/haptics";
-import { motion, radius, component } from "@octo/design-tokens";
-import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { motion, radius, component, z } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
+import { finePointer, holdConfig } from "@/ui/pointer";
 
 /**
  * Drag & drop per DS motion spec (docs/09-design-system.md «Анимации»):
@@ -108,23 +109,28 @@ export function DropZone({ id, children, style }: { id: string; children: ReactN
 /** Wrap a card to make it draggable; `onDrop(zoneId)` fires when released over another zone. */
 export function Draggable({ id, from, onDrop, children }: { id: string; from: string; onDrop: (zone: string) => void; children: ReactNode }) {
   const { measure, hit, setHover, setDragging, setDragFrom } = useDnd();
-  const { wide } = useDevice();
+  const cfg = useMemo(() => holdConfig(finePointer()), []);
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const tx = useSharedValue(0);
   const ty = useSharedValue(0);
   const lift = useSharedValue(0);
+  const held = useSharedValue(0);
   const last = useRef<string | null>(null);
 
   const pan = usePanGesture({
     runOnJS: true,
-    minDistance: wide ? 5 : undefined,
-    activateAfterLongPress: wide ? undefined : 230,
+    // a mouse / pen starts by a move, a finger by a hold (the kind of pointer, not the width of the screen, #1245); one finger
+    minDistance: cfg.minDistance,
+    activateAfterLongPress: cfg.activateAfterLongPress,
+    maxPointers: 1,
     onActivate: () => {
       measure();
       setDragging(id);
       setDragFrom(from);
-      lift.value = reduce ? 1 : withTiming(1, { duration: motion.durSlow });
+      held.value = 1;
+      // reduced motion: no lift (scale, tilt, shadow); the frame and the ground still show which card is held
+      lift.value = reduce ? 0 : withTiming(1, { duration: motion.durSlow });
       haptics.light();
     },
     onUpdate: (e) => {
@@ -135,6 +141,8 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       if (next !== last.current) {
         last.current = next;
         setHover(next);
+        // over another place to drop: one tick of «selection» (DS §15.6)
+        if (next) haptics.selection();
       }
     },
     onDeactivate: (e) => {
@@ -144,6 +152,7 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       setDragging(null);
       setDragFrom(null);
       lastDragEnd = Date.now();
+      held.value = 0;
       if (z) {
         haptics.medium();
         onDrop(z);
@@ -158,19 +167,19 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
     transform: [
       { translateX: tx.value },
       { translateY: ty.value },
-      { scale: 1 + 0.05 * lift.value },
-      { rotate: `${-2 * lift.value}deg` },
+      { scale: 1 + (motion.liftScale - 1) * lift.value },
+      { rotate: `${motion.liftTilt * lift.value}deg` },
     ],
-    zIndex: lift.value > 0.01 ? 100 : 0,
-    shadowOpacity: 0.35 * lift.value,
+    zIndex: held.value > 0.5 ? z.lift : 0,
+    shadowOpacity: component.liftShadow * lift.value,
     shadowRadius: c.shadow.radius,
     shadowOffset: { width: 0, height: component.dragHandle },
     shadowColor: c.shadow.color,
     borderRadius: radius.card,
     borderWidth: component.selectedBorder,
-    borderColor: lift.value > 0.01 ? c.acc : "transparent",
+    borderColor: held.value > 0.5 ? c.acc : "transparent",
     // glass is translucent: a lifted card gets the solid page colour so it reads above other cards
-    backgroundColor: lift.value > 0.01 ? c.bg : "transparent",
+    backgroundColor: held.value > 0.5 ? c.bg : "transparent",
   }));
 
   return (
