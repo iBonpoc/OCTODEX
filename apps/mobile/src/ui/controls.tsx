@@ -604,6 +604,15 @@ export function TextField({
       </View>
     ) : null}
     </View>
+    {shownError ? (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={tid ? `${tid}-error` : undefined}>
+        <Icon name="alert" s={sizes.iconSm} color={c.status.bad.text} />
+        <T v="caption" tone="bad">
+          {shownError}
+        </T>
+      </View>
+    ) : null}
+    </View>
   );
 }
 
