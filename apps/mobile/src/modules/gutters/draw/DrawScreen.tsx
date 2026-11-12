@@ -918,7 +918,7 @@ export default function DrawScreen() {
               </RowView>
             ) : null}
             <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
-            {/* the cut (founder 08.11): each run along the wall and along the face, to 1/8″ */}
+            {/* the cut (founder 08.11): each run along the wall and along the face, to 1/16″ */}
             {cut ? (
               <View testID="corner-cut" style={{ gap: space[2] }}>
                 <RowView style={{ justifyContent: "space-between" }}>
