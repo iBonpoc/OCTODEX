@@ -121,7 +121,7 @@ describe("unit:catalogCardStore — РС-10", () => {
     expect(itemOf(r)).toMatchObject({ updatedBy: "u1" });
     expect(typeof itemOf(r).updatedAt).toBe("string");
     await tick();
-    const op = server.sends.find((x) => x.op.k === "catalog.save")!.op as { item: Record<string, unknown> };
+    const op = server.sends.find((x) => x.op.k === "catalog.save")!.op as unknown as { item: Record<string, unknown> };
     expect(["createdAt", "createdBy", "updatedAt", "updatedBy"].filter((k) => k in op.item)).toEqual([]);
   });
   it("who does not see costs gets no price row; loadPriceHistory does not ask the server for them", async () => {
