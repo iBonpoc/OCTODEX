@@ -37,7 +37,7 @@ REFINE = [('Сейчас', svg('brand/gorix-mark-ink-dark.svg', color=False).rep
 DIRS = [('A · Маршрут G', svg('directions/A-route/mark-on-dark.svg', color=False)),
         ('B · Печать GR', svg('directions/B-monogram/mark-on-dark.svg', color=False)),
         ('C · Отвес', svg('directions/C-plumb/mark-on-dark.svg', color=False))]
-MOTION = {k: re.sub(r'<title>.*?</title>', '', (root / f'v3/{f}.svg').read_text()) for k, f in [('intro', 'intro-calm'), ('loading', 'loading-calm'), ('success', 'success-calm')]}
+MOTION = {k: re.sub(r'<title>.*?</title>', '', (root / f'v3/{f}.svg').read_text()) for k, f in [('intro', 'intro-calm'), ('morph', 'intro-to-gr-calm'), ('loading', 'loading-calm'), ('success', 'success-calm')]}
 
 def phone(inner, theme):
     return f'<div class="ph t-{theme}"><div class="scr">{inner}</div></div>'
@@ -172,6 +172,10 @@ out = ['<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="v
        '<h2>Как выглядит запуск приложения</h2><p>Один приём на весь бренд: <b>жёлтая точка едет по пути и приезжает</b>. Точка буквы G = точка над «i» = точка в анимациях.</p>',
        f'<div class="mot t-dark" style="display:block"><div id="m-launch" style="max-width:340px;margin:8px auto">{MOTION["intro"]}</div><div style="text-align:center"><button data-replay="m-launch">Ещё раз</button> <button id="slow" aria-pressed="false">Медленно ×3</button></div></div>',
        '<div class="row" id="frames">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["intro"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(250, 'буква открывается, точка впереди'), (700, 'G готова, точка внутри'), (800, 'точка выезжает из G'), (1100, 'точка летит, выезжает «oRix»'), (1600, 'точка над «i» — конец')]) + '</div>',
+       '<h2>Из GoRix в GR</h2><p>После заставки логотип сворачивается в знак: «o», «i» и «x» уходят, R подъезжает к G, а точка с «i» возвращается внутрь G. Получается знак GR — тот же, что на иконке.</p>',
+       f'<div class="mot t-dark" style="display:block"><div id="m-morph" style="max-width:340px;margin:8px auto">{MOTION["morph"]}</div><div style="text-align:center"><button data-replay="m-morph">Ещё раз</button></div></div>',
+       '<div class="row">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["morph"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(1600, 'логотип готов'), (2200, '«o», «i», «x» уходят'), (2350, 'R едет к G, точка летит назад'), (2700, 'знак GR — конец')]) + '</div>',
+       '<p class="note"><b>Где:</b> если после заставки данные ещё грузятся, логотип сворачивается в GR, и точка сразу переходит в ожидание (едет по G). Так заставка и ожидание — одно движение. Ещё — ролики и сайт. <b>Время:</b> логотип держится 400 мс, сворачивание 700 мс (всего 2,7 с от начала). Экран готов раньше — сразу растворяемся в первый экран, не ждём конца. Без движения — сразу знак GR.</p>',
        '<h2>Полный логотип</h2><p>Знак и есть первая буква — без двойной «G». Высота и толщина как у букв. Отдельно (иконка, фавикон, меню слева) — знак <b>GR</b>: те же G и R, что в слове.</p>',
        f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO}</div><b>тёмная тема</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO}</div><b>светлая тема</b></div></div>',
        '<p class="note"><b>Где точка:</b> в логотипе — над «i» (туда она приезжает в заставке); в знаке GR — внутри G, на конце пути. Это одна и та же точка. Точка везде жёлтая; на светлом у неё ободок цвета ink, чтобы жёлтый был виден.</p>',
