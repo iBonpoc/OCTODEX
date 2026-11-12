@@ -25,7 +25,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindow
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
-import { component, layout, motion, radius, size, space, type StatusName } from "@octo/design-tokens";
+import { component, layout, motion, radius, size, space, z, type StatusName } from "@octo/design-tokens";
 import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
@@ -444,6 +444,7 @@ export function Screen({
   fabCtx,
   fabOn,
   home,
+  footer,
   aside,
   testID,
 }: {
@@ -474,12 +475,18 @@ export function Screen({
   fabOn?: Partial<Record<NonNullable<FabItem["act"]>, () => void>>;
   /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
   home?: boolean;
+  /** the pinned panel of the screen's main action (ui/actionBar.tsx, DS §8.9): phone — at the bottom over the content, which leaves room
+   *  for it; hidden while the keyboard is up (the keys cover it, the field is what the person is in). From 820 the screen puts the same
+   *  buttons in its own column. */
+  footer?: ReactNode;
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
   testID?: string;
 }) {
   const kb = useKeyboardHeight();
+  /** the pinned panel stands on a phone only, and not under the keyboard */
+  const [footH, setFootH] = useState(0);
   const hints = useHints();
   const { c } = useTheme();
   const { t } = useI18n();
@@ -764,7 +771,7 @@ export function Screen({
             <ScrollView
               ref={scrollRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footer && !wide ? footH : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
               // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
               // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.
@@ -819,6 +826,14 @@ export function Screen({
           >
             <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
           </Animated.View>
+        ) : null}
+        {footer && !wide && !kb ? (
+          <View
+            onLayout={(e) => setFootH(e.nativeEvent.layout.height)}
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: z.nav, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+          >
+            {footer}
+          </View>
         ) : null}
         {floatFab && !kb ? (
           <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
