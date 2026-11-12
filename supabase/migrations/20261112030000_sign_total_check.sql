@@ -48,6 +48,10 @@ begin
   if not found or not (app.is_staff(e.company_id) or app.can_read_estimate(e.id)) then
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
+  -- the right to sign first (as sign_estimate_on_site): someone without it never learns how the total stands
+  if not app.can_sign_contracts(e.company_id) then
+    raise exception 'on-site signature requires an employee who may sign contracts' using errcode = '42501';
+  end if;
   if e.status in ('sent', 'viewed') and e.link_revoked_at is null then
     select * into v from public.estimate_versions where id = e.sent_version_id;
     select * into o from public.estimate_options where id = p_option_id and version_id = v.id and deleted_at is null;

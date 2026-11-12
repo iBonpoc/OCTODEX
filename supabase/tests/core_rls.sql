@@ -12874,6 +12874,7 @@ update public.memberships set can_sign_contracts = false where user_id = 'a00000
 -- ======================================================================================================================
 \set totals_json `cat :sign_totals`
 :as_super
+select set_config('tst.t195_json', :'totals_json', false);
 create function tst.t195_id(p_case int, p_key text) returns uuid language sql immutable as $$
   select (substr(md5('t195:' || p_case || ':' || p_key), 1, 8) || '-' || substr(md5('t195:' || p_case || ':' || p_key), 9, 4) || '-4' ||
           substr(md5('t195:' || p_case || ':' || p_key), 14, 3) || '-8' || substr(md5('t195:' || p_case || ':' || p_key), 18, 3) || '-' ||
@@ -12926,6 +12927,29 @@ select tst.ok(count(*) = jsonb_array_length((:'totals_json')::jsonb -> 'cases') 
   from jsonb_array_elements((:'totals_json')::jsonb -> 'cases') with ordinality as x(c, i),
        lateral app.estimate_option_totals(tst.t195_id(i::int, 'version'), tst.t195_id(i::int, x.c -> 'sel' ->> 'optionId'), tst.t195_addons(i::int, x.c)) t;
 
+-- (а′) a quick estimate this phone made (estimate.add rows: price = round(total / qty)): the server's total =
+--      addedTotalCents on the phone (apps/mobile/test/signTotals.test.ts, the same «quick» examples)
+do $$
+declare q jsonb; i int := 0; e uuid; v uuid; o uuid; r jsonb; t record; bad text := '';
+begin
+  for q in select * from jsonb_array_elements((current_setting('tst.t195_json'))::jsonb -> 'quick') loop
+    i := i + 1;
+    e := tst.t195_id(100 + i, 'estimate'); v := tst.t195_id(100 + i, 'version'); o := tst.t195_id(100 + i, 'option');
+    insert into public.estimates (id, company_id, customer_id, property_id, title) values
+      (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T195 quick ' || i);
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (v, 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"pct","value":"0.1"}');
+    insert into public.estimate_options (id, company_id, version_id, name, is_recommended) values (o, 'ca000000-0000-0000-0000-000000000000', v, 'Quick', true);
+    for r in select * from jsonb_array_elements(q -> 'rows') loop
+      insert into public.estimate_line_items (company_id, option_id, position, line_group, name, quantity, unit_price_cents, is_optional, origin) values
+        ('ca000000-0000-0000-0000-000000000000', o, (r ->> 'position')::int, 'labor', 'Quick line', (r ->> 'quantity')::numeric, (r ->> 'unitPriceCents')::bigint, (r ->> 'isOptional')::boolean, 'assembly');
+    end loop;
+    select * into t from app.estimate_option_totals(v, o, '{}');
+    if t.total is distinct from (q ->> 'serverTotalCents')::bigint then bad := bad || (q ->> 'name') || ' → ' || t.total || '; '; end if;
+  end loop;
+  if i < 3 or bad <> '' then raise exception 'FAILED: T195 the quick estimate''s server total = the phone''s addedTotalCents (% examples): %', i, bad; end if;
+end $$;
+select tst.ok(true, 'T195 the quick estimate''s server total = the phone''s addedTotalCents');
+
 -- (б) the universal estimate (example 1) signed on the owner's device with the total the client saw
 select tst.t195_sent(tst.t195_id(1, 'estimate'));
 update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
@@ -12951,6 +12975,14 @@ end $$;
 select tst.ok(true, 'T195 …the refusal: 22023 with the hint estimate_total_mismatch');
 :as_super
 :as_owner_a
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann Client', 'M0 0 L1 1', true, null, null, null)$q$,
+         tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0)),
+       '%another total%', 'T195 no total at all (null) through the new door: refused (22023)');
+:as_owner_b
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann Client', 'M0 0 L1 1', true, null, null, %s)$q$,
+         tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0), :t195_total1),
+       '%not found%', 'T195 another company, the right total: «not found»');
+:as_owner_a
 select tst.ok((public.accept_on_site(tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0),
                                      'Ann Client', 'M0 0 L1 1', true, null, null, :t195_total1) ->> 'status') = 'awaiting_countersign',
   'T195 the total the client saw: signed');
@@ -12975,6 +13007,8 @@ update public.memberships set can_sign_contracts = true where user_id = 'a000000
 select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(9, 'estimate'), :t195_quick),
        '%not found%', 'T195 another tech: «not found»');
 :as_tech_a
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', null)$q$, tst.t195_id(9, 'estimate')),
+       '%another total%', 'T195 the quick estimate, no total at all (null): refused (22023)');
 select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(9, 'estimate'), :t195_quick + 1),
        '%another total%', 'T195 the quick estimate, another total: refused');
 select tst.ok(public.sign_estimate_on_site(tst.t195_id(9, 'estimate'), 'Ann', 'M0 0 L1 1', :t195_quick) = 'awaiting_countersign',
@@ -12985,6 +13019,32 @@ select tst.ok(public.sign_estimate_on_site(tst.t195_id(9, 'estimate'), 'Ann', 'M
 select tst.ok((select (selection ->> 'total')::bigint = :t195_quick and version_id = tst.t195_id(9, 'version')
                  from public.estimate_approvals where estimate_id = tst.t195_id(9, 'estimate') and party = 'customer'),
   'T195 …the quick estimate''s signature keeps that total and the sent version');
+
+-- the right to sign comes first in the new accept_on_site too (director's review of #1155 Б2): a tech who reads the
+-- estimate but may not sign gets 42501 whatever the total — never the total check
+select tst.t195_make(7, (:'totals_json')::jsonb -> 'cases' -> 0, 'a0000000-0000-0000-0000-000000000003');
+select tst.t195_sent(tst.t195_id(7, 'estimate'));
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.ok(app.can_read_estimate(tst.t195_id(7, 'estimate')), 'T195 (fixture: the tech reads his estimate)');
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann', 'M0 0 L1 1', true, null, null, 1)$q$,
+         tst.t195_id(7, 'estimate'), tst.t195_id(7, 'o2'), tst.t195_addons(7, (:'totals_json')::jsonb -> 'cases' -> 0)),
+       '%may sign contracts%', 'T195 the new accept_on_site: no right to sign → 42501 before the total');
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- a link the office revoked (a wrong price): the new door does not sign it either, whatever the total
+select tst.t195_make(6, (:'totals_json')::jsonb -> 'cases' -> 2, 'a0000000-0000-0000-0000-000000000003');
+select tst.t195_sent(tst.t195_id(6, 'estimate'));
+select t.total as t195_rev from app.estimate_option_totals(tst.t195_id(6, 'version'), tst.t195_id(6, 'o1'), '{}') t \gset
+:as_office_a
+select public.send_estimate(tst.t195_id(6, 'estimate')) is not null as t195_link;   -- the client's link exists
+select public.revoke_estimate_link(tst.t195_id(6, 'estimate'));
+:as_super
+select tst.ok((select link_revoked_at is not null from public.estimates where id = tst.t195_id(6, 'estimate')), 'T195 (fixture: the office revoked the link)');
+:as_tech_a
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(6, 'estimate'), :t195_rev),
+       '%revoked%', 'T195 a revoked link through the new door: refused');
+:as_super
 
 -- the old doors without the total (older app versions): as before
 select tst.t195_make(8, (:'totals_json')::jsonb -> 'cases' -> 2, 'a0000000-0000-0000-0000-000000000003');

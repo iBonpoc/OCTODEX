@@ -1,5 +1,5 @@
 {
-  "about": "#1147: what the phone shows the client (summarize) = what the server signs (app.estimate_option_totals over the rows estimate.save writes) — test/signTotals.test.ts and T195",
+  "about": "#1147: what the phone shows the client (summarize) = what the server signs (app.estimate_option_totals over the rows estimate.save writes) \u2014 test/signTotals.test.ts and T195 \u00b7 quick: a quick estimate this phone made (estimate.add rows) \u2014 addedTotalCents = estimate_option_totals",
   "cases": [
     {
       "name": "two options, the second with its add-on; tax 9.5% on material; 10% off; deposit 10%",
@@ -318,7 +318,7 @@
       "depositCents": 20000
     },
     {
-      "name": "no tax, no discount, two add-ons — one taken; deposit 25%",
+      "name": "no tax, no discount, two add-ons \u2014 one taken; deposit 25%",
       "doc": {
         "options": [
           {
@@ -434,6 +434,86 @@
       },
       "totalCents": 115000,
       "depositCents": 28750
+    }
+  ],
+  "quick": [
+    {
+      "name": "the quick estimate, one line: the total as typed",
+      "lines": [
+        {
+          "qty": "1",
+          "totalCents": 18500
+        }
+      ],
+      "rows": [
+        {
+          "position": 0,
+          "quantity": "1",
+          "unitPriceCents": 18500,
+          "isOptional": false
+        }
+      ],
+      "serverTotalCents": 18500,
+      "shownTotalCents": 18500
+    },
+    {
+      "name": "the quick estimate, $100 for 3: estimate.add rounds the price (3333 \u00d7 3 = $99.99) \u2014 the total is not sent",
+      "lines": [
+        {
+          "qty": "3",
+          "totalCents": 10000
+        }
+      ],
+      "rows": [
+        {
+          "position": 0,
+          "quantity": "3",
+          "unitPriceCents": 3333,
+          "isOptional": false
+        }
+      ],
+      "serverTotalCents": 9999,
+      "shownTotalCents": 10000
+    },
+    {
+      "name": "the quick estimate, two lines and an add-on not counted",
+      "lines": [
+        {
+          "qty": "2",
+          "totalCents": 25000
+        },
+        {
+          "qty": "1",
+          "totalCents": 4999
+        },
+        {
+          "qty": "1",
+          "totalCents": 7000,
+          "optional": true
+        }
+      ],
+      "rows": [
+        {
+          "position": 0,
+          "quantity": "2",
+          "unitPriceCents": 12500,
+          "isOptional": false
+        },
+        {
+          "position": 1,
+          "quantity": "1",
+          "unitPriceCents": 4999,
+          "isOptional": false
+        },
+        {
+          "position": 2,
+          "quantity": "1",
+          "unitPriceCents": 7000,
+          "isOptional": true
+        }
+      ],
+      "serverTotalCents": 29999,
+      "shownTotalCents": 29999
     }
   ]
 }
