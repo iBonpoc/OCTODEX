@@ -318,3 +318,14 @@ export function putBack<T extends Opt>(o: T, lineId: string, place: { sectionId?
   const at = Math.max(0, Math.min(place.index, others.length));
   return { ...o, lines: [...others.slice(0, at), back, ...others.slice(at)] };
 }
+
+/**
+ * The list looks the same: the same rows in the same order at the same depth (a drop that changes nothing the person can see is no
+ * move: no buzz, no toast). The order of the array between sections is not seen, so it does not count.
+ */
+export function sameLayout(a: Opt, b: Opt): boolean {
+  const view = (o: Opt) => viewRows(o).map((r) => (r.type === "section" ? `s:${r.section.id}:${r.depth}` : r.type === "line" ? `l:${r.line.id}:${r.depth}` : "u"));
+  const x = view(a);
+  const y = view(b);
+  return x.length === y.length && x.every((k, i) => k === y[i]);
+}

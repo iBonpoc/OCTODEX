@@ -75,6 +75,9 @@ export const motion = {
   liquidStretch: 160,
   liquidSettle: 420,
   pressScale: 0.95,
+  /** DS §14.6 (Н-28): a lifted card / row grows to this scale and tilts by `liftTilt` degrees */
+  liftScale: 1.05,
+  liftTilt: -2,
   /** DS §14 (Н-10): a menu grows from this scale to 1 when it opens */
   menuScale: 0.96,
   /** DS §14 (Н-11): a dialog shrinks from this scale to 1 when it opens */
@@ -101,7 +104,17 @@ export const motion = {
   durBrand: 1600,
 } as const;
 
-export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8 } as const;
+export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
+
+/** DS §14.6 (Н-28, Н-87): the numbers of a drag — app-only tokens (not in the DS css) */
+export const gesture = {
+  /** a finger holds a folded card / row this long to lift it (otherwise it is a scroll) */
+  dragHoldMs: 230,
+  /** a mouse (or a handle) moves this far to start a drag, px */
+  dragStart: 5,
+  /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
+  autoScrollEdge: 64,
+} as const;
 
 /* ---------- components.css ---------- */
 export const component = {
@@ -164,6 +177,8 @@ export const component = {
   hairline: 1,
   /** drag preview handle */
   dragHandle: 16,
+  /** the shadow of a lifted card or row at full lift (opacity) */
+  liftShadow: 0.35,
   /** checklist checkbox */
   checkbox: { size: 22, radius: 7, border: 1.5 },
   /** gap between photo thumbnails */
