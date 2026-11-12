@@ -108,6 +108,10 @@ describe("fixed money scenarios", () => {
 describe("random estimates (3,000 seeded cases) match the integer reference", () => {
   const r = rng(20261104);
   const pick = <T,>(a: T[]) => a[Math.floor(r() * a.length)]!;
+  // every disagreement is collected and listed by ONE test — no placeholder `expect(true)` that is green whatever happens (#800)
+  const mismatches: { case: number; got: unknown; want: unknown }[] = [];
+  const brokenInvariants: number[] = [];
+  let compared = 0;
   for (let k = 0; k < 3000; k++) {
     const lines: RefLine[] = Array.from({ length: 1 + Math.floor(r() * 8) }, () => {
       const dec = pick(["", ".5", ".25", ".125", ".333", ".0625", ".75"]);
@@ -128,14 +132,23 @@ describe("random estimates (3,000 seeded cases) match the integer reference", ()
     };
     const res = computeCustomOption({ id: "o", name: "o", lines: lines.map(line) }, settings(s));
     const ref = reference(lines, s);
+    compared++;
     if (res.subtotal !== ref.sub || res.discount !== ref.disc || res.tax !== ref.tax || res.total !== ref.total || res.deposit !== ref.dep) {
-      it(`case ${k}`, () => expect({ sub: res.subtotal, disc: res.discount, tax: res.tax, total: res.total, dep: res.deposit }).toEqual(ref));
+      mismatches.push({ case: k, got: { sub: res.subtotal, disc: res.discount, tax: res.tax, total: res.total, dep: res.deposit }, want: ref });
     }
     if (!(res.total === res.net + res.tax && res.deposit <= res.total && res.discount <= res.subtotal && res.taxableDisc <= res.discount)) {
-      it(`invariants case ${k}`, () => expect(false).toBe(true));
+      brokenInvariants.push(k);
     }
   }
-  it("all 3,000 cases matched (failures would be listed above)", () => expect(true).toBe(true));
+  it("the loop compared all 3,000 cases (the number of checked cases never goes down)", () => {
+    expect(compared).toBe(3000);
+  });
+  it("all 3,000 cases match the integer reference (the disagreeing cases are listed)", () => {
+    expect(mismatches.slice(0, 10)).toEqual([]);
+  });
+  it("all 3,000 cases keep the invariants: total = net + tax, deposit ≤ total, discount ≤ subtotal (the broken cases are listed)", () => {
+    expect(brokenInvariants.slice(0, 20)).toEqual([]);
+  });
 });
 
 describe("catalog price matrix: cost × (1 + supplier tax) × (1 + markup)", () => {

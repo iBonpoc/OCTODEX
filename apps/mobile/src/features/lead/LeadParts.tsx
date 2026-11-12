@@ -15,6 +15,7 @@ import { Labeled, MoneyField } from "@/features/fields";
 import { CatalogPicker } from "@/features/estimatePickers";
 import {
   canSeeLeadCost, isOverdueTask, leadTimeline, openTasks, reasonsFor, sourceName, sourceOf, type TimelineEntry,
+  timelineText,
 } from "@/features/leads";
 import { SourceSheet, sourceKindLabel } from "./SourcePicker";
 import { InterestPicker, MissingBlock } from "./LeadSheets";
@@ -502,12 +503,7 @@ export function LeadHistory({ l }: { l: Lead }) {
   const { db } = useStore();
   const { t, day, time } = useI18n();
   const items = leadTimeline(db, l, db.me, t("acct.deletedName"));
-  const text = (e: TimelineEntry) => {
-    const p: Record<string, string> = { ...(e.params ?? {}) };
-    if (p.status) p.status = t(p.status as DictKey);
-    if (p.reason) p.reason = p.reason ? `: ${t(p.reason as DictKey)}` : "";
-    return t(e.key, p);
-  };
+  const text = (e: TimelineEntry) => timelineText(e, t);
   if (!items.length) return <Empty icon="clock" title={t("tl.empty")} />;
   return (
     <Card>

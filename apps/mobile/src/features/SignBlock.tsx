@@ -30,7 +30,7 @@ export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: s
           {t("portal.need")}
         </T>
       ) : null}
-      <SignaturePad confirmLabel={t("portal.approve")} disabled={!ready} onConfirm={(svg) => onSign(name.trim(), svg)} />
+      <SignaturePad consent="est.signConsent" confirmLabel={t("portal.approve")} disabled={!ready} onConfirm={(svg) => onSign(name.trim(), svg)} />
     </View>
   );
 }

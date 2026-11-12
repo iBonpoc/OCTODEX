@@ -207,11 +207,12 @@ export function Divider() {
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd }} />;
 }
 
-export function Empty({ icon, title, hint, action }: { icon: IconKey; title: string; hint?: string; action?: ReactNode }) {
+export function Empty({ icon, title, hint, action, testID }: { icon: IconKey; title: string; hint?: string; action?: ReactNode; testID?: string }) {
   const { c } = useTheme();
   return (
     <Card style={{ alignItems: "center", paddingVertical: space[8], gap: space[3] }}>
       <View
+        testID={testID}
         style={{
           width: component.fab + space[4],
           height: component.fab + space[4],
@@ -428,6 +429,7 @@ export function Screen({
   fabOn,
   home,
   aside,
+  testID,
 }: {
   title: string;
   help?: string;
@@ -456,6 +458,8 @@ export function Screen({
   home?: boolean;
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
   aside?: ReactNode;
+  /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
+  testID?: string;
 }) {
   const kb = useKeyboardHeight();
   const hints = useHints();
@@ -665,7 +669,7 @@ export function Screen({
     </View>
   );
   const content = (
-    <View style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center", gap: space[3] }}>
+    <View testID={testID} style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center", gap: space[3] }}>
       {header}
       {children}
     </View>

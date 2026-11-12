@@ -12,12 +12,19 @@ vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID()
 const storage = new Map<string, string>();
 /** keys the device fails to read (A-01) */
 const failGet = new Set<string>();
+/** keys whose next N reads fail (#926: a passing SQLITE_BUSY) */
+const failGetN = new Map<string, number>();
 /** key prefixes the device refuses to write (full storage) */
 const failSetPrefix: string[] = [];
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: async (k: string) => {
       if (failGet.has(k)) throw new Error("SQLITE_BUSY");
+      const n = failGetN.get(k) ?? 0;
+      if (n > 0) {
+        failGetN.set(k, n - 1);
+        throw new Error("SQLITE_BUSY");
+      }
       return storage.get(k) ?? null;
     },
     setItem: async (k: string, v: string) => {
@@ -99,6 +106,9 @@ import { mineOf, StoreProvider } from "../src/data/store";
 import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
+import { visitDueCents } from "../src/features/visitDue";
+import { summarize } from "../src/features/estimateDoc";
+import { readFileSync } from "node:fs";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import { wipedOnDelete } from "../src/data/outboxOwner";
 
@@ -125,6 +135,7 @@ let root: Root<P> | null = null;
 beforeEach(() => {
   storage.clear();
   failGet.clear();
+  failGetN.clear();
   failSetPrefix.length = 0;
   server.loads.length = 0;
   server.sends.length = 0;
@@ -240,7 +251,7 @@ describe("unit:storeSync — a point answered «off» after the wipe (review #23
     await settle();
     await wait(300);
     await settle();
-    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+    expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
     expect(server.loads).toHaveLength(0); // and no reload of the wiped company either
   });
 });
@@ -1307,14 +1318,14 @@ describe("unit:storeSync — the device does not give the outbox back (A-01, #75
     expect(seen.at(-1)!.notSaved).toBe(true);
     expect(storage.get("octo.outbox.v1")).toBe('[{"id":"o1"},');
   });
-  it("a cache the device cannot read: the app opens (the cache starts fresh, round 2 №2)", { timeout: 15_000 }, async () => {
+  it("a cache the device cannot read: the app opens (the cache starts fresh, round 2 №2)", { timeout: 20_000 }, async () => {
     storage.set("octo.db.v5", JSON.stringify({ day: "x", db: {} }));
     failGet.add("octo.db.v5");
     let called = false;
     const readError = () => ((called = true), "READ_ERROR");
     const r = (root = render(StoreProvider as unknown as (p: P) => unknown, { children: null, readError } as unknown as P));
     await settle();
-    await wait(1200);
+    await wait(8800); // a cache is tried ~8 s before it starts fresh (#926)
     await settle();
     failGet.clear();
     expect(called).toBe(false);
@@ -1342,5 +1353,376 @@ describe("unit:storeSync — the repeat on start that only filters the shared ou
     expect(server.sends.map((x) => (x.op as { id: string }).id)).toEqual(["u9@c1#3"]); // before: «nobody#2» adopted and sent as u9's
     expect(stored().map((x) => x.id)).toEqual([]); // u9's went out; nothing of u1 or ownerless written back
     expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+  });
+});
+
+describe("unit:storeSync — the cache the device did not give at first (#926, review of #1037 №1)", () => {
+  it("every first try fails, the next read gives it: the company's data is shown, a change offline goes onto it", async () => {
+    const company = makeSeed();
+    company.customers = company.customers.map((c) => ({ ...c, name: `KEPT ${c.name}` }));
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: company }));
+    failGetN.set("octo.cloud.v1.c1.u1", 5); // SQLITE_BUSY through all the first tries
+    signIn("u1", "c1"); // no network: the reload never answers
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    for (let n = 0; n < 100; n++) {
+      await wait(100);
+      await settle();
+      if (r.out && valueOf(r).db.customers.some((c) => c.name.startsWith("KEPT"))) break;
+    }
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("KEPT"))).toBe(true); // before: an empty company
+    valueOf(r).saveCompany({ name: "New name" }); // a change without the network
+    await wait(400);
+    await settle();
+    const disk = storage.get("octo.cloud.v1.c1.u1") ?? "";
+    expect(disk).toContain("KEPT"); // before: «empty + the change»
+    expect(disk).toContain("New name");
+  }, 20_000);
+});
+
+describe("unit:storeSync — two people one after the other on one phone (#864, X-04)", () => {
+  const secret = () => {
+    const d = makeSeed();
+    d.customers = d.customers.map((c) => ({ ...c, name: `SECRET ${c.name}` }));
+    return d;
+  };
+  it("the next person in the same company never sees the previous one's cache — not on screen, not on the device", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: secret() })); // an older version's cache
+    storage.set("octo.cloud.v1.rejected", "[]");
+    signIn("u1", "c1"); // the director
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads[0]!.resolve(secret());
+    await settle();
+    await wait(300);
+    await settle();
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false); // the person-less copy left once u1's own was read
+    signOut();
+    r.rerender({ children: null });
+    await settle();
+    signIn("u2", "c1"); // the tech, without the network yet
+    r.rerender({ children: null });
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).mode).toBe("cloud");
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(false); // before: the director's cache
+    expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
+    expect(storage.get("octo.cloud.v1.rejected")).toBe("[]");
+  });
+  it("the first start of this version without the network: the older person-less cache is taken over when it is mine", async () => {
+    const mine = { ...secret(), me: "u1" };
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: mine }));
+    signIn("u1", "c1"); // no network: the reload never answers
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true); // before: an empty company
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false); // gone once mine is on the device
+  });
+  it("the older person-less cache of another person is never taken over — and leaves the device", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: { ...secret(), me: "u0" } }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(false);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(false);
+  });
+  it("my older cache is kept until my own key is on the device (a phone killed right then has one of them)", async () => {
+    storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: { ...secret(), me: "u1" } }));
+    failSetPrefix.push("octo.cloud.v1.c1.u1"); // the new key cannot be written
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(storage.has("octo.cloud.v1.c1")).toBe(true); // before the check: removed, the phone kept neither
+  });
+  it("the same person back without the network keeps their copy", async () => {
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: secret() }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("SECRET");
+  });
+});
+
+describe("unit:storeSync — a tech does not send an estimate to the client (#1113, П-23/П-44; spec 35 §4д п.10)", () => {
+  const sendAs = async (dbRole: string) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: dbRole });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    const e = d.estimates.find((x) => x.id === "e6")!;
+    Object.assign(e, { status: "draft", token: undefined, sentAt: undefined });
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as { sendEstimate: (id: string) => void }).sendEstimate("e6");
+    await wait(1700); // the outbox tick
+    await settle();
+    const est = (valueOf(r) as unknown as { db: { estimates: { id: string; status: string; token?: string }[] } }).db.estimates.find((x) => x.id === "e6")!;
+    return { ops: server.sends.map((x) => (x.op as { k: string }).k), est };
+  };
+  it("the tech: nothing changes and nothing goes to the server (before: «sent» on the phone + a link, the op refused 42501)", async () => {
+    const { ops, est } = await sendAs("tech");
+    expect(ops).not.toContain("estimate.send");
+    expect(est.status).toBe("draft");
+    expect(est.token).toBeUndefined();
+  });
+  it("the office: sent as before", async () => {
+    const { ops, est } = await sendAs("office");
+    expect(ops).toContain("estimate.send");
+    expect(est.status).toBe("sent");
+  });
+});
+
+describe("unit:storeSync — the signature on the phone carries the total the client saw (#1147)", () => {
+  const load = async () => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: "office" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    Object.assign(d.estimates.find((x) => x.id === "e4")!, { status: "sent" });
+    Object.assign(d.estimates.find((x) => x.id === "e6")!, { status: "sent" });
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    return r;
+  };
+  type S = { db: { estimates: { id: string; totalCents: number; doc?: never }[]; options?: never }; signEstimate: (id: string, p: string) => void; approveEstimate: (id: string, a: object) => void };
+  const sentOps = () => server.sends.map((x) => x.op as { k: string; totalCents?: number; channel?: string });
+  // the quick examples the database counts too (T195 (а′), test/fixtures/signTotals.json «quick»)
+  const quick = (JSON.parse(readFileSync(new URL("./fixtures/signTotals.json", import.meta.url), "utf8")) as { quick: { lines: { qty: string; totalCents: number; optional?: boolean }[]; serverTotalCents: number; shownTotalCents: number }[] }).quick;
+  const signQuick = async (q: (typeof quick)[number]) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: "office" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    Object.assign(d.estimates.find((x) => x.id === "e4")!, { status: "sent", totalCents: q.shownTotalCents, lines: q.lines.map((l) => ({ name: "Line", ...l })) });
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as S).signEstimate("e4", "M0 0 L1 1");
+    await wait(1700);
+    await settle();
+    return server.sends.map((x) => x.op as { k: string; totalCents?: number }).find((o) => o.k === "estimate.sign")!;
+  };
+  it("the quick estimate: the op has the total the phone showed — the one the server counts (before: none)", async () => {
+    const q = quick.find((x) => x.serverTotalCents === x.shownTotalCents)!;
+    const op = await signQuick(q);
+    expect(op).toBeTruthy();
+    expect(op.totalCents).toBe(q.serverTotalCents);
+  });
+  it("its lines rounded by estimate.add ($100 for 3 → $99.99 on the server): the op goes without the total — no false refusal", async () => {
+    const q = quick.find((x) => x.serverTotalCents !== x.shownTotalCents)!;
+    expect((await signQuick(q)).totalCents).toBeUndefined();
+  });
+  it("the universal one on site: the chosen option with its add-ons, as summarize counts it", async () => {
+    const r = await load();
+    const v = valueOf(r) as unknown as S;
+    const e = v.db.estimates.find((x) => x.id === "e6")! as unknown as { doc: Parameters<typeof summarize>[0] };
+    const opt = e.doc.options[0]!;
+    const addons = opt.lines.filter((l) => l.optional).map((l) => l.id).slice(0, 1);
+    const sel = { optionId: opt.id, addonIds: addons };
+    v.approveEstimate("e6", { ...sel, signerName: "Ann Client", signature: "M0 0 L1 1", channel: "on_site" });
+    await wait(1700);
+    await settle();
+    const op = sentOps().find((o) => o.k === "estimate.approve")!;
+    expect(op.channel).toBe("on_site");
+    expect(op.totalCents).toBe(summarize(e.doc, sel).totalCents);
+  });
+});
+
+describe("unit:storeSync — a tech has an older quick estimate signed on site (#1126)", () => {
+  const signAs = async (dbRole: string, status: string) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: dbRole });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    Object.assign(d.estimates.find((x) => x.id === "e4")!, { status }); // e4: a quick estimate (no doc) of the tech's
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as { signEstimate: (id: string, path: string) => void }).signEstimate("e4", "M0 0 L1 1");
+    await wait(1700); // the outbox tick
+    await settle();
+    const est = (valueOf(r) as unknown as { db: { estimates: { id: string; status: string }[] } }).db.estimates.find((x) => x.id === "e4")!;
+    return { ops: server.sends.map((x) => (x.op as { k: string }).k), sent: server.sends.map((x) => x.op as { k: string; sent?: boolean }).find((o) => o.k === "estimate.sign")?.sent, status: est.status };
+  };
+  it("a draft: the tech cannot have it signed — nothing on the phone, nothing sent (before: «awaiting» on the phone, refused on the server)", async () => {
+    const { ops, status } = await signAs("tech", "draft");
+    expect(ops).not.toContain("estimate.sign");
+    expect(status).toBe("draft");
+  });
+  it("a sent one: signed as before", async () => {
+    const { ops, status, sent } = await signAs("tech", "sent");
+    expect(ops).toContain("estimate.sign");
+    expect(sent).toBe(true); // the server may take it past the tech's refused send
+    expect(status).toBe("awaiting_countersign");
+  });
+  it("the office: a draft is signed as before (it sends first)", async () => {
+    const { ops, status, sent } = await signAs("office", "draft");
+    expect(ops).toContain("estimate.sign");
+    expect(sent).toBe(false);
+    expect(status).toBe("awaiting_countersign");
+  });
+});
+
+describe("unit:storeSync — sales take the deposit through the server's deposit function (#868, 17, T73)", () => {
+  const withDeposit = () => {
+    const d = makeSeed();
+    const e = d.estimates.find((x) => x.id === "e5")!;
+    e.depositPaidAt = undefined;
+    // the seed's own job of e5 (its deposit paid) leaves: one job, one unpaid deposit invoice
+    const old = d.jobs.filter((j) => j.estimateId === e.id).map((j) => j.id);
+    d.invoices = d.invoices.filter((i) => !old.includes(i.jobId ?? ""));
+    d.jobs = [...d.jobs.filter((j) => !old.includes(j.id)), { id: "j-dep", customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: e.id }];
+    d.invoices = [...d.invoices, { id: "i-dep", customerId: e.customerId, jobId: "j-dep", totalCents: 34200, paidCents: 0, dueDate: new Date().toISOString(), kind: "deposit", title: "Deposit" }];
+    return d;
+  };
+  const sentAs = async (dbRole: string) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: dbRole });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(withDeposit()));
+    await settle();
+    (valueOf(r) as unknown as { payDeposit: (id: string, m: string) => void }).payDeposit("e5", "cash");
+    await wait(1700); // the outbox tick
+    await settle();
+    return server.sends.map((x) => x.op as { k: string; paymentId?: string; method?: string; amountCents?: number; invoiceId?: string });
+  };
+  it("sales: the deposit invoice is on the phone already — sent as estimate.deposit (the database refuses sales a payment)", async () => {
+    const ops = await sentAs("sales");
+    expect(ops.map((o) => o.k)).toEqual(["estimate.deposit"]); // before: payment.record → 42501
+    const op = ops[0]!;
+    // the payment on the phone is the one the server writes (the same id), the method as chosen, no sum from the phone
+    const local = (valueOf(root!) as unknown as { db: { payments: { id: string; invoiceId: string; method: string }[] } }).db.payments.filter((x) => x.invoiceId === "i-dep");
+    expect(local).toHaveLength(1);
+    expect(op.paymentId).toBe(local[0]!.id);
+    expect(op.method).toBe("cash");
+    expect(op.invoiceId).toBe("i-dep");
+    expect(op.amountCents).toBeUndefined();
+  });
+  it("the office: as before, payment.record", async () => {
+    expect((await sentAs("office")).map((o) => o.k)).toEqual(["payment.record"]);
+  });
+});
+
+describe("unit:storeSync — the payment on a visit is a payment with its receipt (#1103)", () => {
+  type V = { db: { payments: { id: string; invoiceId: string; amountCents: number; receiptNumber?: string; method: string }[]; invoices: { id: string; jobId?: string; paidCents: number; totalCents: number }[]; visits: { id: string; jobId?: string }[]; jobs: { id: string }[] }; payVisit: (id: string, m: string) => () => void };
+  const paidOn = (d: V["db"], jobId: string) => d.invoices.filter((i) => i.jobId === jobId).reduce((s, i) => s + i.paidCents, 0);
+  const paymentsOn = (d: V["db"], jobId: string) => {
+    const inv = new Set(d.invoices.filter((i) => i.jobId === jobId).map((i) => i.id));
+    return d.payments.filter((p) => inv.has(p.invoiceId));
+  };
+  it("the demo: the visit's money is one payment with a receipt; what the invoices say paid = what the payments say", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    // a visit of a job that still owes (the seed's)
+    const visit = v0.db.visits.find((x) => x.jobId && visitDueCents(v0.db as never, x) > 0)!;
+    expect(visit).toBeTruthy();
+    const due = visitDueCents(v0.db as never, visit);
+    expect(due).toBeGreaterThan(0);
+    const before = paymentsOn(v0.db, visit.jobId!).length;
+    v0.payVisit(visit.id, "cash");
+    await settle();
+    const d = (valueOf(r) as unknown as V).db;
+    const pays = paymentsOn(d, visit.jobId!);
+    expect(pays).toHaveLength(before + 1); // before: no payment — only the invoice marked paid
+    const p = pays.find((x) => x.amountCents === due && x.method === "cash")!;
+    expect(p).toBeTruthy();
+    expect(p.receiptNumber).toMatch(/^RCT-/);
+    // «Оплатил» (by payments) = what the invoices say paid
+    expect(pays.reduce((s, x) => s + x.amountCents, 0)).toBe(paidOn(d, visit.jobId!));
+  });
+  it("the job has its final invoice — the payment goes into that invoice, on THE INVOICE's client (not the job's); no second final (review №1, №3; director's review of #1123 №1)", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    // v2 on j2 (client c2): its final i1 is owed and billed to another client (c4) — the two must not be mixed up
+    const seed = makeSeed();
+    seed.invoices.find((i) => i.id === "i1")!.customerId = "c4";
+    server.loads.splice(0).forEach((x) => x.resolve(seed));
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    const visit = v0.db.visits.find((x) => x.id === "v2")!;
+    const fin = v0.db.invoices.find((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final")!;
+    expect((fin as unknown as { customerId: string }).customerId).toBe("c4");
+    expect((v0.db.jobs.find((j) => j.id === visit.jobId) as unknown as { customerId: string }).customerId).toBe("c2");
+    const due = visitDueCents(v0.db as never, visit);
+    expect(due).toBe(fin.totalCents - fin.paidCents);
+    const finals = v0.db.invoices.filter((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final").length;
+    v0.payVisit(visit.id, "check");
+    await settle();
+    const d = (valueOf(r) as unknown as V).db;
+    const p = d.payments.find((x) => x.invoiceId === fin.id && x.amountCents === due)!;
+    expect(p).toBeTruthy(); // into the final invoice itself
+    expect((p as unknown as { customerId: string }).customerId).toBe("c4");
+    expect(d.invoices.find((i) => i.id === fin.id)!.paidCents).toBe(fin.totalCents);
+    expect(d.invoices.filter((i) => i.jobId === visit.jobId && (i as { kind?: string }).kind === "final")).toHaveLength(finals);
+  });
+  it("«paid» (paidAt) only once the whole invoice is paid: a part leaves it as it was, the rest sets it (director's review of #1123 №2)", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    type R = { db: { invoices: { id: string; paidCents: number; totalCents: number; paidAt?: string }[] }; recordPayment: (id: string, cents: number, m: string) => () => void };
+    const inv0 = (valueOf(r) as unknown as R).db.invoices.find((i) => i.id === "i1")!;
+    expect(inv0.paidCents).toBe(0);
+    expect(inv0.paidAt).toBeUndefined();
+    (valueOf(r) as unknown as R).recordPayment("i1", 50000, "cash");
+    await settle();
+    const part = (valueOf(r) as unknown as R).db.invoices.find((i) => i.id === "i1")!;
+    expect(part.paidCents).toBe(50000);
+    expect(part.paidAt).toBeUndefined(); // a part: not «paid»
+    (valueOf(r) as unknown as R).recordPayment("i1", inv0.totalCents - 50000, "cash");
+    await settle();
+    const all = (valueOf(r) as unknown as R).db.invoices.find((i) => i.id === "i1")!;
+    expect(all.paidCents).toBe(inv0.totalCents);
+    expect(all.paidAt).toBeTruthy(); // the rest: «paid»
+  });
+  it("«Отменить» takes the payment back with the invoice's sum (and a new final invoice with it)", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    const visit = v0.db.visits.find((x) => x.jobId && visitDueCents(v0.db as never, x) > 0)!;
+    const payments0 = v0.db.payments.length;
+    const invoices0 = JSON.stringify(v0.db.invoices);
+    const undo = v0.payVisit(visit.id, "cash");
+    await settle();
+    expect((valueOf(r) as unknown as V).db.payments.length).toBe(payments0 + 1);
+    undo();
+    await settle();
+    const d = (valueOf(r) as unknown as V).db;
+    expect(d.payments.length).toBe(payments0);
+    expect(JSON.stringify(d.invoices)).toBe(invoices0);
+  });
+  it("the cloud: the payment on the phone is the one the server writes (the op's paymentId), one payment, no receipt number from the phone", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    const v0 = valueOf(r) as unknown as V;
+    const visit = v0.db.visits.find((x) => x.jobId && visitDueCents(v0.db as never, x) > 0)!;
+    const before = paymentsOn(v0.db, visit.jobId!).map((x) => x.id);
+    v0.payVisit(visit.id, "card");
+    await wait(1700); // the outbox tick
+    await settle();
+    const op = server.sends.map((x) => x.op as { k: string; paymentId?: string }).find((o) => o.k === "visit.pay")!;
+    expect(op).toBeTruthy();
+    const mine = paymentsOn((valueOf(r) as unknown as V).db, visit.jobId!).filter((x) => !before.includes(x.id));
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!.id).toBe(op.paymentId);
+    expect(mine[0]!.receiptNumber).toBeUndefined(); // the server numbers it (RCT-…)
   });
 });

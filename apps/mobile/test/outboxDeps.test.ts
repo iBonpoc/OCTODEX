@@ -313,3 +313,17 @@ describe("unit:outboxDeps — money (review #259 круг 3, п.1)", () => {
   });
 });
 
+
+describe("unit:outboxDeps — a deposit on the signature's job and invoice (review of #1061)", () => {
+  it("the job and the deposit invoice were on the phone: «Отменить изменение…» of a stuck deposit takes only its payment, never their later ops", () => {
+    const op = { k: "estimate.deposit", id: u(1), jobId: u(2), invoiceId: u(3), paymentId: u(4), method: "cash", customerId: u(5), propertyId: u(6),
+                 title: "T", totalCents: 1000, depositCents: 100, dueDate: "2026-11-11" } as Op;
+    const before = { jobs: [{ id: u(2) }], invoices: [{ id: u(3) }] };
+    const made = madeOnQueue(op, before);
+    expect(made).toEqual([u(4)]); // before: undefined — every id counted as the deposit's child
+    const D = item(op, { made });
+    const touchJob = item({ k: "job.update", id: u(2), description: "x" });
+    const remind = item({ k: "invoice.remind", activityId: u(7), customerId: u(5), invoiceId: u(3), channel: "sms", at: OLD });
+    expect(ids(dependentsOf([D, touchJob, remind], me, D.id))).toEqual([]); // before: [job.update, invoice.remind]
+  });
+});

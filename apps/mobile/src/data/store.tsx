@@ -20,6 +20,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
+import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
 /** app lead status → public.leads.status */
@@ -38,10 +39,12 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
-import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
-import { acceptPayment, visitPayment } from "@octo/estimating-engine";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
+import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { cloudCacheKey, isNewCacheKey, othersCaches } from "./cacheKey";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
@@ -437,11 +440,12 @@ function withPayment(d: DB, p: Payment, demo: boolean): DB {
   return {
     ...d,
     payments: [pay, ...d.payments],
-    invoices: d.invoices.map((i) =>
-      i.id === p.invoiceId
-        ? { ...i, paidCents: i.paidCents + p.amountCents, method: p.method, paidAt: i.paidCents + p.amountCents >= i.totalCents ? p.at : i.paidAt }
-        : i,
-    ),
+    invoices: d.invoices.map((i) => {
+      if (i.id !== p.invoiceId) return i;
+      // the sum through the engine (rule 8)
+      const paid = sumCents([i.paidCents, p.amountCents]);
+      return { ...i, paidCents: paid, method: p.method, paidAt: paid >= i.totalCents ? p.at : i.paidAt };
+    }),
   };
 }
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
@@ -460,7 +464,8 @@ export function StoreProvider({
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
-  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v5";
+  // the cache is the person's in the company (#864): the next person on a shared phone never reads it
+  const cacheKey = mode === "cloud" ? cloudCacheKey(company!.companyId, auth.userId!) : "octo.db.v5";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
@@ -469,6 +474,11 @@ export function StoreProvider({
     {
       validate: (v) =>
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+      // an empty start shows an empty company: tried longer before it (#926)
+      patient: true,
+      // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
+      // theirs — an empty list without the network otherwise (#864, review); another person's is never taken
+      ...(mode === "cloud" ? { adopt: { from: `octo.cloud.v1.${company!.companyId}`, ok: (v: { db: DB }) => v.db.me === auth.userId } } : {}),
     },
   );
   // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)
@@ -485,6 +495,25 @@ export function StoreProvider({
     lastKey.current = cacheKey;
     wipedKey.current = null;
   }
+  // my cache is read: other people's copies (and the older person-less ones) leave the phone (#864). An older one only
+  // once my own key is on the device (taken over from it, or written): never before, or a phone killed now has neither
+  useEffect(() => {
+    if (!dbReady || mode !== "cloud" || !auth.userId) return;
+    const me = auth.userId;
+    const mine = cacheKey;
+    const myOld = async (k: string) => {
+      const raw = await AsyncStorage.getItem(k);
+      return raw != null && (JSON.parse(raw) as { db?: { me?: string } }).db?.me === me;
+    };
+    AsyncStorage.getAllKeys()
+      .then(async (ks) => {
+        const gone: string[] = [];
+        for (const k of othersCaches(ks, me)) if (ks.includes(mine) || isNewCacheKey(k) || !(await myOld(k).catch(() => true))) gone.push(k);
+        return gone;
+      })
+      .then((gone) => (gone.length ? AsyncStorage.multiRemove(gone) : undefined))
+      .catch(() => {}); // not removed now: the next sign-in tries again
+  }, [dbReady, mode, auth.userId, cacheKey]);
   const db = useMemo(() => {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
@@ -651,7 +680,7 @@ export function StoreProvider({
     try {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
-      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
+      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== cloudCacheKey(company.companyId, auth.userId)) return;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
         // spec 36: the history read on open stays (the full read has none)
@@ -997,7 +1026,15 @@ export function StoreProvider({
         }
         return next;
       },
-      { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
+      // sales take no payment on an invoice (13 §4; the database since #868), but the whole deposit of an estimate — yes
+      // (17, T73): it goes through the server's deposit function, which pays the balance it knows. The office keeps
+      // payment.record (its reference, a part of the deposit)
+      est && fullyPaid && job && role === "sales"
+        ? {
+            k: "estimate.deposit", id: est.id, jobId: job.id, invoiceId, paymentId: payment.id, method, customerId: est.customerId, propertyId: est.propertyId,
+            title: est.title, totalCents: est.totalCents, depositCents: est.depositCents ?? inv.totalCents, dueDate: companyToday(Date.parse(now)),
+          }
+        : { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
     );
   };
 
@@ -1440,24 +1477,28 @@ export function StoreProvider({
         const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
         // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
         const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
-        const finalId = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final")!.id : invoiceId;
+        // the final invoice the engine counted (void ones never reach the phone: repo.ts loads live invoices only)
+        const finalInv = plan.into === "final" ? jobInvoices.find((i) => i.kind === "final") : undefined;
+        const finalId = finalInv?.id ?? invoiceId;
         // the op always carries a new invoice id: the server uses it only when it makes the final invoice (no final yet)
         return mutate(
           "visit.pay",
           (d) => {
             const next = patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: { method, amountCents: plan.amountCents, at: now } }));
-            if (!customerId || plan.into === "none") return next;
-            return {
-              ...next,
-              // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4)
-              invoices:
-                plan.into === "final"
-                  ? next.invoices.map((i) => (i.id === finalId ? { ...i, paidCents: i.paidCents + plan.amountCents, paidAt: now, method } : i))
-                  : [
-                      ...next.invoices,
-                      { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: plan.amountCents, dueDate: now, paidAt: now, method, kind: "final" },
-                    ],
-            };
+            if (!customerId || plan.into === "none" || plan.amountCents <= 0) return next;
+            // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4). The money is a
+            // payment with its receipt, as «Принять оплату» (#1103: the invoice was marked paid with no payment — «Получено»
+            // and the client's «Оплатил» stayed behind); its id is the op's: the server writes that payment (record_visit_payment)
+            const billed =
+              plan.into === "final"
+                ? next
+                : { ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] };
+            return withPayment(
+              billed,
+              // the invoice's client, as the server writes it (record_visit_payment, #857 С4) — review of #1103 №3
+              { id: paymentId, invoiceId: finalId, customerId: finalInv?.customerId ?? customerId, amountCents: plan.amountCents, method, at: now, receivedBy: d.me },
+              modeRef.current === "demo",
+            );
           },
           plan.amountCents > 0 && customerId
             ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: plan.amountCents, method, dueDate: companyToday(Date.parse(now)) }
@@ -1851,6 +1892,9 @@ export function StoreProvider({
         );
       },
       sendEstimate: (id, tk) => {
+        // #1113: a tech never sends (the server's send_estimate is the office side's — T142): nothing «sent» on his phone,
+        // no link made, nothing queued to be refused
+        if (role === "tech") return noop;
         const cur = dbRef.current.estimates.find((e) => e.id === id);
         // a revoked token never comes back (the server refuses it too and makes its own)
         const token = (cur?.linkRevokedAt ? undefined : cur?.token) ?? tk ?? newToken();
@@ -1946,6 +1990,8 @@ export function StoreProvider({
         const now = new Date().toISOString();
         return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
           k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
+          // #1147: on site, the total the client saw (the option with its add-ons, as summarize counts it — the server the same)
+          ...(a.channel === "on_site" ? { totalCents: summarize(e.doc, a).totalCents } : {}),
         });
       },
       countersignEstimate: (id, signature) => {
@@ -2456,7 +2502,8 @@ export function StoreProvider({
         mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
       },
       signEstimate: (id, path) =>
-        !canCountersign(dbRef.current, dbRef.current.me) ? () => {} : mutate(
+        // #1126: a draft only by someone who may send it (the server signs only a sent, locked version)
+        !canCountersign(dbRef.current, dbRef.current.me) || !canSignDraftOnSite(role, dbRef.current.estimates.find((x) => x.id === id)?.status ?? "draft") ? () => {} : mutate(
           "estimate.sign",
           (d) => ({
             ...d,
@@ -2465,7 +2512,15 @@ export function StoreProvider({
               e.id === id && e.status !== "approved" ? { ...e, status: "awaiting_countersign", signature: path, sentAt: e.sentAt ?? new Date().toISOString() } : e,
             ),
           }),
-          { k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client" },
+          {
+            k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client",
+            sent: dbRef.current.estimates.find((x) => x.id === id)?.status === "sent",
+            // #1147: the total the client saw on the phone — the server refuses another (the office changed it meanwhile).
+            // Not while this phone's own estimate.add of it is still queued: that op writes its lines' prices as
+            // round(total / qty), cents off the phone's total — a refusal that only looks like a change; the door without
+            // the total then, as before (#1153 removes that door once no such op is left)
+            ...(signTotalFor(dbRef.current.estimates.find((x) => x.id === id), outboxRef.current.some((x) => x.op.k === "estimate.add" && x.op.id === id))),
+          },
         ),
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);

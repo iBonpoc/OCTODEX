@@ -21,15 +21,15 @@ const routeExists = (href: string) => {
 };
 
 describe("unit:fab — the sets (13 §2.4, only what works)", () => {
-  it("Главная / «＋ Создать»: office — Лид · Клиент · Работа · Смета · Расход; tech — Лид · Расход", () => {
-    for (const r of ["director", "dispatcher", "sales"] as Role[]) expect(ids("home", r), r).toEqual(["lead", "client", "job", "estimate", "expense"]);
+  it("Главная / «＋ Создать»: office — Лид · Клиент · Смета · Расход · Работа без сметы (последней); tech — Лид · Расход", () => {
+    for (const r of ["director", "dispatcher", "sales"] as Role[]) expect(ids("home", r), r).toEqual(["lead", "client", "estimate", "expense", "job"]);
     expect(fabItems("home", "director").find((i) => i.id === "job")!.href).toBe("/job/new");
     expect(ids("home", "tech")).toEqual(["lead", "expense"]);
   });
   it("План: planners — Работа · Лид · Записать в план · Событие · Выходной; sales — Работа · Лид (без даты, S17); tech — no «＋» (Р7)", () => {
-    expect(ids("plan", "director")).toEqual(["job", "lead", "planAdd", "planEvent", "planTimeOff"]);
-    expect(ids("plan", "dispatcher")).toEqual(["job", "lead", "planAdd", "planEvent", "planTimeOff"]);
-    expect(ids("plan", "sales")).toEqual(["job", "lead"]);
+    expect(ids("plan", "director")).toEqual(["lead", "planAdd", "planEvent", "planTimeOff", "job"]);
+    expect(ids("plan", "dispatcher")).toEqual(["lead", "planAdd", "planEvent", "planTimeOff", "job"]);
+    expect(ids("plan", "sales")).toEqual(["lead", "job"]);
     for (const it of fabItems("plan", "director").filter((i) => i.id.startsWith("plan"))) expect(it.href, it.id).toBeUndefined();
     expect(fabItems("plan", "director").find((i) => i.id === "planEvent")!.act).toBe("planEvent");
     expect(fabItems("plan", "director").find((i) => i.id === "planTimeOff")!.act).toBe("planTimeOff");
@@ -44,16 +44,16 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
     expect(ids("calls", "tech")).toEqual(["call", "lead"]);
   });
   it("Клиент: the job and the estimate are tied to the client; nothing to tie to — no item", () => {
-    const [jb, it] = fabItems("client", "director", { customerId: "c1" });
+    const [it, jb] = fabItems("client", "director", { customerId: "c1" }); // #1094: the estimate first
     expect(jb).toMatchObject({ id: "job", href: "/job/new?customerId=c1" });
     expect(it).toMatchObject({ id: "estimate", href: "/estimate/new?customerId=c1" });
-    expect(fabItems("client", "director", { customerId: "c1", propertyId: "p1" })[0]!.href).toBe("/job/new?customerId=c1&propertyId=p1");
+    expect(fabItems("client", "director", { customerId: "c1", propertyId: "p1" })[1]!.href).toBe("/job/new?customerId=c1&propertyId=p1");
     expect(ids("client", "director")).toEqual([]);
     expect(ids("client", "tech", { customerId: "c1" })).toEqual([]);
   });
   it("Объект: the same «＋» as the client, tied to the client and this property (20 §6-4, S17 / S5)", () => {
     const ctx = { customerId: "c1", propertyId: "p1" };
-    expect(fabItems("client", "director", ctx).map((i) => i.href)).toEqual(["/job/new?customerId=c1&propertyId=p1", "/estimate/new?customerId=c1&propertyId=p1"]);
+    expect(fabItems("client", "director", ctx).map((i) => i.href)).toEqual(["/estimate/new?customerId=c1&propertyId=p1", "/job/new?customerId=c1&propertyId=p1"]);
     // the screen declares it only for a client that may be served (both of its screens: the card and a row's list)
     const src = fs.readFileSync(path.join(APP, "property/[id].tsx"), "utf8");
     expect(src.match(/fab=\{servable \? "client" : undefined\}/g)?.length).toBe(2);
