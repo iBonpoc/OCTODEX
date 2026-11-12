@@ -151,8 +151,12 @@ function planTogether(undos: readonly unknown[]): UndoPlan {
         // the store's reverse step (no plan to fold): a part of its own — asked first, run with the others' commits
         const mark = markOf(u);
         if (mark) {
-          if (mark.ready && !mark.ready()) return null;
-          commits.push(() => void (u as () => unknown)());
+          // asked on the state after the other parts (review of #1279 №3)
+          if (!mark.ready(value)) return null;
+          commits.push(() => {
+            // asked just before: it goes back — a «no» now is a bug to see, never a silent half undo
+            if ((u as () => boolean | undefined)() !== true) console.warn("[undo] a reverse step refused after it was ready");
+          });
           live++;
         } else others.push(u as () => unknown);
         continue;
@@ -1089,14 +1093,25 @@ export function StoreProvider({
         setQueue((q) => [...q, { id: qid!, label, at: new Date().toISOString() }]);
       }
       let done = false;
+      /** the op that carries this action now: its own, or a later one it was folded into (#1265) */
+      const carrierId = () => {
+        let id = oid;
+        while (id && foldedInto.current.has(id)) id = foldedInto.current.get(id)!;
+        return id;
+      };
+      /** a module's op written again from the phone's data `d` (ModuleDef.rebuild); null — it cannot */
+      const rebuilt = (item: OwnedItem, d: DB): OwnedItem | null => {
+        if (item.op.k !== "module.op") return null;
+        const payload = moduleDef(item.op.module)?.rebuild?.({ kind: item.op.kind, payload: item.op.payload }, d);
+        return payload ? { ...item, op: { ...item.op, payload } } : null;
+      };
       return runnable((cur) => {
         // a second «Отменить» of the same action: nothing more to take back
         if (done) return "done";
-        // dropped by the server as built on a lost base: nothing to take back, the toast just closes (review #374 №2)
-        if (oid && deadOps.current.has(oid)) return "dead";
-        // the op that carries this action now: its own, or a later one it was folded into (#1265)
-        let live = oid;
-        while (live && foldedInto.current.has(live)) live = foldedInto.current.get(live)!;
+        const live = carrierId();
+        // dropped by the server (a lost base, the module turned off): nothing to take back, the toast just closes (review
+        // #374 №2) — its own op or the one it was folded into (#1266)
+        if (oid && (deadOps.current.has(oid) || (live && deadOps.current.has(live)))) return "dead";
         // already on its way to the server or there (sent, being sent): taking it back on the phone only would be undone
         // by the next read — too late (the director's 4th review of #1244)
         if (live && (inFlight.current === live || !outboxRef.current.some((x) => x.id === live))) return null;
@@ -1105,30 +1120,32 @@ export function StoreProvider({
         // toast says it is too late — never a half undo, the director's review of #1244 Б2)
         const r = undoOwn(prev, next, cur);
         if (!r.ok) return null;
-        // folded into a later op (#1265): that op stays, written again from what the phone holds after the undo — its
-        // module says how (ModuleDef.rebuild); a module that cannot — too late, as before
-        let rewritten: OwnedItem | null = null;
-        if (live && live !== oid) {
-          const carrier = outboxRef.current.find((x) => x.id === live)!;
-          const payload = carrier.op.k === "module.op" ? moduleDef(carrier.op.module)?.rebuild?.({ kind: carrier.op.kind, payload: carrier.op.payload }, r.value) : null;
-          if (!payload || carrier.op.k !== "module.op") return null;
-          rewritten = { ...carrier, op: { ...carrier.op, payload } };
-        }
+        // folded into a later op (#1265): that op stays and is written again from the phone's whole record after the undo
+        // — so it carries every later change folded into it, and none of this one's; its module says how
+        // (ModuleDef.rebuild); a module that cannot — too late, as before
+        if (live && live !== oid && !rebuilt(outboxRef.current.find((x) => x.id === live)!, r.value)) return null;
         return {
           value: r.value,
           commit: () => {
             done = true;
             if (oid) undoneOps.current.add(oid);
             if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
-            if (rewritten) {
-              outboxRef.current = outboxRef.current.map((x) => (x.id === rewritten!.id ? rewritten! : x));
-              setOutbox(outboxRef.current);
-            } else if (oid) {
-              // the op it replaced comes back in its place — unless that action was taken back already (#1265)
+            if (!oid) return;
+            // resolved again now: another part of the same «Отменить» (undoTogether) may have put this op back already
+            const now = carrierId();
+            if (now && now !== oid) {
+              // still folded: the carrier written from what the phone holds now — after every part of this «Отменить»
+              const carrier = outboxRef.current.find((x) => x.id === now);
+              const again = carrier ? rebuilt(carrier, dbRef.current) : null;
+              if (again) outboxRef.current = outboxRef.current.map((x) => (x.id === now ? again : x));
+            } else {
+              // the op it replaced comes back in its place — unless that action was taken back already (#1265); back in
+              // place, it carries itself again (the director's review of #1279 Б1)
               const back = replaced && !undoneOps.current.has(replaced.id) ? replaced : null;
+              if (replaced) foldedInto.current.delete(replaced.id);
               outboxRef.current = back ? outboxRef.current.map((x) => (x.id === oid ? back : x)) : outboxRef.current.filter((x) => x.id !== oid);
-              setOutbox(outboxRef.current);
             }
+            setOutbox(outboxRef.current);
           },
         };
       });
@@ -2334,7 +2351,11 @@ export function StoreProvider({
         // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
         const after = (now: DB) => (back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line));
         // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
-        const ready = () => !lineChangeRefusal(dbRef.current, after(dbRef.current), line.jobId);
+        // on a given state (undoTogether asks on the state after its other parts), or now
+        const ready = (v?: unknown) => {
+          const d = (v as DB | undefined) ?? dbRef.current;
+          return !lineChangeRefusal(d, after(d), line.jobId);
+        };
         return markUndo(() => {
           if (!ready()) return false;
           if (back.k === "remove") mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id });
@@ -2347,7 +2368,10 @@ export function StoreProvider({
         if (!line) return markUndo(() => false);
         mutate("jobLine.remove", (d) => withoutJobLine(d, id), { k: "jobLine.remove", id });
         // the removal may already be on the server: «Отменить» puts the line back as its own step
-        const ready = () => !lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId);
+        const ready = (v?: unknown) => {
+          const d = (v as DB | undefined) ?? dbRef.current;
+          return !lineChangeRefusal(d, withJobLine(d, line), line.jobId);
+        };
         return markUndo(() => {
           if (!ready()) return false;
           mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
@@ -2357,7 +2381,10 @@ export function StoreProvider({
       setJobTax: (jobId, tax) => {
         const prev = taxBefore(dbRef.current, jobId);
         mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
-        const ready = () => !lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId);
+        const ready = (v?: unknown) => {
+          const d = (v as DB | undefined) ?? dbRef.current;
+          return !lineChangeRefusal(d, withJobTax(d, jobId, prev), jobId);
+        };
         return markUndo(() => {
           if (!ready()) return false;
           mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });

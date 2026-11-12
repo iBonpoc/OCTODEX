@@ -19,7 +19,7 @@ import { supabase } from "@/cloud/client";
 import { PermanentError, uploadPhoto } from "@/cloud/ops";
 import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
-import { type GuardedUndo } from "@/data/undo";
+import { type GuardedUndo, markOf, NO_UNDO } from "@/data/undo";
 
 export const KEY = "gutters";
 export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", rAdd: "revision.add" } as const;
@@ -38,15 +38,14 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
  *  undoTogether (DS §15.2); an older test store without it — one by one, the last first */
 export function undoAll(store: Pick<ModuleStore, "undoTogether">, undos: readonly unknown[]): GuardedUndo {
   if (store.undoTogether) return store.undoTogether(undos);
-  return asUndo(() => {
-    [...undos].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
-    return true;
-  })!;
+  // an older test store without undoTogether: nothing to take back together
+  return NO_UNDO;
 }
 
-/** what the module store's moduleOp gave, as the toast takes it: the store's own undo (mutate) — or nothing (null). The
- *  one place a module turns it into a GuardedUndo (test/undoBrand.test.ts); an older test store's plain function too */
-export const asUndo = (u: unknown): GuardedUndo | null => (typeof u === "function" ? (u as GuardedUndo) : null);
+/** what the module store's moduleOp gave, as the toast takes it: the store's own undo (mutate) — the module not active —
+ *  null. Any other function is not an undo (NO_UNDO): a module never makes one of its own (the director's review of
+ *  #1279 Б2; test/undoBrand.test.ts) */
+export const asUndo = (u: unknown): GuardedUndo | null => (u == null ? null : markOf(u) ? (u as GuardedUndo) : NO_UNDO);
 
 export function gutterData(db: Pick<DB, "moduleData"> | null | undefined): GutterData {
   const g = db?.moduleData?.[KEY];
@@ -121,7 +120,9 @@ export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, lab
 
 /**
  * #1265: a waiting op written again from the phone's data (an earlier change folded into it was taken back): a
- * measurement's save — its row now; an element's — the element now; gone from the phone, or another kind — null.
+ * measurement's save — its row now; an element's — the element now; gone from the phone, or another kind — null. The
+ * row as the phone holds it after the undo: so the op carries every later change folded into it (B, C…) and none of the
+ * one taken back (the director's review of #1279 №4).
  */
 export function rebuildOp(op: { kind: string; payload: Record<string, unknown> }, d: DB): Record<string, unknown> | null {
   const g = gutterData(d);

@@ -472,6 +472,60 @@ describe("unit:undoOwnStore — #1265: an op folded into a later one (coalesceKe
     expect(sent).toHaveLength(1);
     expect((sent[0]!.op.payload as { m: { leadId: string | null; accuracy: string } }).m).toMatchObject({ leadId: null, accuracy: "tape" });
   }, 15000);
+  it("(а) «Отменить» the accuracy (B) first, then the link (A): both true — A was put back in its place and carries itself again (review of #1279 Б1)", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(st(), M.id, "tape")!;
+    await settle();
+    expect(undoAcc()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: "l1", accuracy: "rough" });
+    expect(undoLink()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+  it("(б) both in one «Отменить» (undoTogether [A, B]): true, nothing reaches the server — not A's link (review of #1279 Б1)", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(st(), M.id, "tape")!;
+    await settle();
+    expect((call(r, "undoTogether", [undoLink, undoAcc]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+  it("(б') the same in the other order (undoTogether [B, A]): true, nothing reaches the server", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(st(), M.id, "tape")!;
+    await settle();
+    expect((call(r, "undoTogether", [undoAcc, undoLink]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+  it("A folded into B, B dropped by the server (module_inactive): «Отменить» A — undefined, the toast just closes (review of #1279 №2)", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    setAccuracy(st(), M.id, "tape");
+    await tick();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    server.sends.find((x) => x.op.k === "module.op")!.d.reject(new PermanentError("module gutters is not active", 403, "42501", "module_inactive"));
+    await settle();
+    expect(undoLink()).toBeUndefined();
+  }, 15000);
   it("then «Отменить» the accuracy too: the op goes — nothing reaches the server", async () => {
     const r = await withGutters();
     const undoLink = relink(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, { leadId: "l1" })!;
@@ -486,6 +540,41 @@ describe("unit:undoOwnStore — #1265: an op folded into a later one (coalesceKe
     await tick();
     expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
   }, 15000);
+});
+
+describe("unit:undoOwnStore — a store's reverse step inside undoTogether (review of #1279 №3)", () => {
+  it("a job line (a reverse step) + a client's name: true — both back; the line's own «Отменить» after it is too late (done)", async () => {
+    const r = await demo();
+    // a job of its own lines (no estimate: its lines are not the estimate's), not done, nothing billed on it (a line
+    // taken off below what was billed is refused — t19)
+    const job = valueOf(r).db.jobs.find((j) => !j.estimateId && j.status !== "done" && !valueOf(r).db.invoices.some((i) => i.jobId === j.id))!;
+    expect(job).toBeDefined();
+    const c = valueOf(r).db.customers[0]!;
+    const lineId = "00000000-0000-4000-8000-0000000007a1";
+    const undoLine = call(r, "saveJobLine", { id: lineId, jobId: job.id, position: 99, name: "Extra (test)", quantity: "1", unitPriceCents: 500, taxable: false }, true) as () => unknown;
+    await settle();
+    const undoName = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
+    await settle();
+    expect((call(r, "undoTogether", [undoLine, undoName]) as () => unknown)()).toBe(true);
+    await settle();
+    expect((valueOf(r).db.jobLines ?? []).some((l) => l.id === lineId)).toBe(false);
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
+    // done inside undoTogether: on its own toast it is too late, it does not run twice
+    expect(undoLine()).toBe(false);
+  });
+  it("the reverse step would be refused (the line under what was billed — t19): false — the client's name does not go back either", async () => {
+    const r = await demo();
+    const job = valueOf(r).db.jobs.find((j) => !j.estimateId && j.status !== "done" && valueOf(r).db.invoices.some((i) => i.jobId === j.id))!;
+    expect(job).toBeDefined();
+    const c = valueOf(r).db.customers[0]!;
+    const undoLine = call(r, "saveJobLine", { id: "00000000-0000-4000-8000-0000000007a2", jobId: job.id, position: 99, name: "Extra (test)", quantity: "1", unitPriceCents: 500, taxable: false }, true);
+    await settle();
+    const undoName = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
+    await settle();
+    expect((call(r, "undoTogether", [undoLine, undoName]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+  });
 });
 
 describe("unit:undoOwnStore — the demo: what an action adds is what the store shows (the director's Б3)", () => {

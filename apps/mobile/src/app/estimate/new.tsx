@@ -317,8 +317,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const secTitle = (x: EstimateSection) => x.title ?? (x.kind && x.kind !== "module" ? t(`est.sec.${x.kind}` as DictKey) : t("est.sec.untitled"));
   // «Вернуть» takes back this change only (what the person did to the layout meanwhile stays — #1227, #1231, #1241)
   const showUndo = (text: DictKey, before: Opt, after: Opt) => {
-    const undo = layoutUndo(before, after);
-    toast.show(t(text), localUndo(() => setOption((o) => undo(o))));
+    const restore = layoutUndo(before, after);
+    toast.show(t(text), localUndo(() => setOption((o) => restore(o))));
   };
   const addSectionBtn = (parentId?: string) => {
     if (signed || !leaveRow()) return;

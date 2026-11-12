@@ -10,18 +10,31 @@
 declare const undoBrand: unique symbol;
 export type GuardedUndo = (() => boolean | undefined) & { readonly [undoBrand]: true };
 
-/** the store's undos made without a plan (a reverse step: a job line, a tag): undoTogether runs them as its own parts, after
- *  asking `ready` (no answer — always ready) */
-const marked = new WeakMap<object, (() => boolean) | null>();
-/** the store's own (store.tsx): an undo made by mutate or undoTogether. Nothing else marks one — test/undoBrand.test.ts.
- *  `ready` — would it go back now (a reverse step the server may refuse: a job line under a sent invoice) */
-export const markUndo = (f: () => boolean | undefined, ready?: () => boolean): GuardedUndo => {
-  marked.set(f, ready ?? null);
-  return f as GuardedUndo;
+/** every undo the store made, and for its reverse steps (no plan: a job line, a tag) how to ask whether it would go back on
+ *  a given state — undoTogether asks on the state after its other parts (the director's review of #1279 №3) */
+const marked = new WeakMap<object, ((value: unknown) => boolean) | null>();
+/**
+ * The store's own (store.tsx): an undo made by mutate, undoTogether or a reverse step. Nothing else marks one —
+ * test/undoBrand.test.ts. Once it went back (true) it is done: a second call is too late (false), so a reverse step run
+ * inside undoTogether never runs again on its own toast. `ready` — would it go back on that state (a job line under a sent
+ * invoice would not); a done one never is.
+ */
+export const markUndo = (f: () => boolean | undefined, ready?: (value: unknown) => boolean): GuardedUndo => {
+  let done = false;
+  const g = () => {
+    if (done) return false;
+    const r = f();
+    if (r === true) done = true;
+    return r;
+  };
+  marked.set(g, (v: unknown) => !done && (ready ? ready(v) : true));
+  return g as GuardedUndo;
 };
-/** marked by the store (and how to ask it), or not — a screen's own function */
-export const markOf = (f: unknown): { ready: (() => boolean) | null } | null =>
-  typeof f === "function" && marked.has(f) ? { ready: marked.get(f) ?? null } : null;
+/** made by the store (and how to ask it), or not — a screen's own function */
+export const markOf = (f: unknown): { ready: (value: unknown) => boolean } | null => {
+  const r = typeof f === "function" ? marked.get(f) : undefined;
+  return r ? { ready: r } : null;
+};
 
 /** the brand only — for the wrappers below, which are the toast's last step (never a part of undoTogether: there they run
  *  after its parts, as a screen's own function) */
@@ -44,7 +57,7 @@ export function withAfter(undo: GuardedUndo, after: () => void): GuardedUndo {
 
 /** a screen's own state only (a snoozed card, a line of a form not saved yet, a run the server undoes itself): no store
  *  action in it — those go through the store's own undo (test/undoBrand.test.ts reads every use) */
-export const localUndo = (f: () => void): GuardedUndo =>
+export const localUndo = (f: (() => void) & { readonly [undoBrand]?: never }): GuardedUndo =>
   brand(() => {
     f();
     return true;

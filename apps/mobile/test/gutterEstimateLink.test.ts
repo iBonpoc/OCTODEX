@@ -31,7 +31,7 @@ import { laborRows, materialRows, missingItems, partName, sampleJob } from "../s
 import type { MeasurementRow } from "../src/modules/gutters/canvas/model";
 import { tFor } from "../src/i18n/translate";
 import { newDoc } from "../src/features/estimateDoc";
-import type { GuardedUndo } from "../src/data/undo";
+import { markUndo, type GuardedUndo } from "../src/data/undo";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const name = (p: PartQty) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;
@@ -133,8 +133,13 @@ describe("makeEstimate — through the core's store", () => {
         if (!active) return null;
         sent.push({ kind: c.kind, payload: c.payload });
         s.db = c.apply(s.db);
-        return () => undone.push(c.kind);
+        return markUndo(() => (undone.push(c.kind), true));
       },
+      undoTogether: (us: readonly unknown[]) =>
+        markUndo(() => {
+          [...us].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
+          return true;
+        }),
       leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: () => undone.push("target") }),
       saveEstimate: (e: (typeof saved)[number]) => {
         saved.push(e);
