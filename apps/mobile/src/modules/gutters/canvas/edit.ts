@@ -287,7 +287,12 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
 
 /** remove a line (with its downspouts) or a downspout */
 export function removeElement(d: Drawing, id: string): Drawing {
-  if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
+  const line = d.runs.find((r) => r.id === id);
+  if (line) {
+    // the «no more by itself» of its chain does not go with it: a gutter of the chain that is left takes it (#1246 review)
+    const heir = line.dsAutoOff ? [...chainOf(d, id)].find((x) => x !== id) : undefined;
+    return { ...d, runs: d.runs.filter((r) => r.id !== id).map((r) => (r.id === heir ? { ...r, dsAutoOff: true as const } : r)), downspouts: d.downspouts.filter((s) => s.runId !== id) };
+  }
   // a downspout the program had put, taken off by hand: its chain is not given another by itself (#1246)
   const gone = d.downspouts.find((s) => s.id === id);
   const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, dsAutoOff: true as const } : r)) : d.runs;
@@ -385,7 +390,11 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
   const runs = back.runs.filter((r) => !haveR.has(r.id));
   const ids = new Set([...cur.runs, ...runs].map((r) => r.id));
   const downspouts = back.downspouts.filter((s) => !haveD.has(s.id) && ids.has(s.runId));
-  return runs.length || downspouts.length ? { ...cur, runs: [...cur.runs, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
+  // an automatic downspout taken off and brought back: its gutter is not «off» any more (removeElement had set that)
+  const asked = before.downspouts.find((s) => s.id === removedId);
+  const unflag = asked?.auto && downspouts.some((s) => s.id === removedId) && !before.runs.find((r) => r.id === asked.runId)?.dsAutoOff;
+  const base = unflag ? cur.runs.map((r) => (r.id === asked!.runId && r.dsAutoOff ? { ...r, dsAutoOff: undefined } : r)) : cur.runs;
+  return runs.length || downspouts.length ? { ...cur, runs: [...base, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
 }
 
 /** a one-finger stroke in progress */

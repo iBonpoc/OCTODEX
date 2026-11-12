@@ -5,8 +5,8 @@
  */
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
-import { autoDownspouts, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN, chains, removeDownspout } from "../src/modules/gutters/canvas/autoDs";
-import { moveDs, removeElement } from "../src/modules/gutters/canvas/edit";
+import { autoDownspouts, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN, chains } from "../src/modules/gutters/canvas/autoDs";
+import { moveDs, removeElement, restoreRemoved } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_DS_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { runLengthIn, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../src/modules/gutters/geometry";
 
@@ -118,13 +118,27 @@ describe("by hand", () => {
     const d = auto({ ...old, runs: [...old.runs, run("b", [0, 500], [240, 500])] }, old);
     expect(d.downspouts.map((s) => s.runId)).toEqual(["b"]);
   });
-  it("removeDownspout is removeElement for a pipe; «keep the outlet» makes it a pipe-less outlet that counts as a hand-put one", () => {
+});
+
+describe("review: «Отменить» and the flag", () => {
+  it("removed by hand and brought back by «Отменить»: the gutter is not «off» — a later change keeps its downspout", () => {
     const d1 = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
-    expect(removeDownspout(d1, d1.downspouts[0]!.id).downspouts).toHaveLength(0);
-    const kept = removeDownspout(d1, d1.downspouts[0]!.id, { keepOutlet: true });
-    expect(kept.downspouts[0]!.pipe).toBe(false);
-    expect(kept.downspouts[0]!.auto).toBeUndefined();
-    expect(auto(kept, d1)).toBe(kept);
+    const id = d1.downspouts[0]!.id;
+    const gone = removeElement(d1, id);
+    expect(gone.runs[0]!.dsAutoOff).toBe(true);
+    const back = restoreRemoved(gone, d1, id);
+    expect(back.downspouts).toHaveLength(1);
+    expect(back.runs[0]!.dsAutoOff).toBeUndefined();
+    const longer = auto({ ...back, runs: [{ ...back.runs[0]!, b: [300, 0] }] }, back);
+    expect(longer.downspouts).toHaveLength(1);
+  });
+  it("the gutter that carried «off» is deleted: a gutter of its chain left takes the flag — no downspout comes back by itself", () => {
+    const A = run("A", [0, 0], [200, 0], { dsAutoOff: true }), B = run("B", [200, 0], [200, 200]);
+    const d = auto({ runs: [A, B], downspouts: [] }, { runs: [A, B], downspouts: [] });
+    expect(d.downspouts).toHaveLength(0);
+    const after = removeElement(d, "A");
+    expect(after.runs[0]!.dsAutoOff).toBe(true);
+    expect(auto(after, d).downspouts).toHaveLength(0);
   });
 });
 

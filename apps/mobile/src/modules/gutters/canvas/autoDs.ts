@@ -7,7 +7,7 @@
  * overflows). Downspouts the user put by hand count and are never touched; the ones put here carry `auto`. A removed auto one
  * is not put back (`dsAutoOff` on its gutter). Pure functions: the same drawing back when nothing changes.
  */
-import { addDownspout, removeElement } from "./edit";
+import { addDownspout } from "./edit";
 import { isOpenEnd, runLengthIn, sameStory, type Drawing, type DrawnDownspout, type DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
 
@@ -131,17 +131,4 @@ export function autoDownspouts(d: Drawing, o: AutoDsOptions, before?: Drawing): 
     }
   }
   return next;
-}
-
-/**
- * A downspout taken off by hand: a gutter of the chain that had an auto one there says «no more by itself» (`dsAutoOff`), so the
- * next change does not put it back. A hand-put one just goes. `keepOutlet`: the outlet stays (water goes to another gutter / a chain).
- */
-export function removeDownspout(d: Drawing, id: string, opts: { keepOutlet?: boolean } = {}): Drawing {
-  const s = d.downspouts.find((x) => x.id === id);
-  if (!s) return d;
-  if (opts.keepOutlet) {
-    return { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, pipe: false as const, auto: undefined } : x)) };
-  }
-  return removeElement(d, id);
 }

@@ -38,10 +38,6 @@ export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
   atIn: number;
   /** put by the program (spec 33-gutters-ds-auto, #1246), not by hand: it is recounted when the chain changes; moved or edited by hand — it is yours */
   auto?: true;
-  /** only the outlet, no pipe (water goes to another gutter or hangs on a chain — #1247); no field = a pipe with its outlet */
-  pipe?: false;
-  /** where the water of an outlet without a pipe goes */
-  to?: "chain" | "gutter";
 }
 
 export interface CornerChoice {
