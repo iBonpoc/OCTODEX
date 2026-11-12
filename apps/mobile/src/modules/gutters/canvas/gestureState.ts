@@ -31,6 +31,15 @@ export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPi
 
 const tf = (st: Tf): Tf => ({ S: st.S, Tx: st.Tx, Ty: st.Ty });
 
+/** the segment (two fingers down) ends: the commit to make, if the live transform moved (defined first: a worklet is a const once compiled) */
+function closeSegment(st: LiveState): Tf | null {
+  "worklet";
+  if (!st.seg) return null;
+  st.seg = false;
+  const moved = st.S !== 1 || st.Tx !== 0 || st.Ty !== 0;
+  return moved ? tf(st) : null;
+}
+
 /** one frame of the pinch: scale about the frame's own focal point (it follows the fingers) while two fingers are down; the commit to make, if the frame closes a segment */
 export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPointers: number; focalX: number; focalY: number }): Tf | null {
   "worklet";
@@ -68,13 +77,6 @@ export function endGesture(st: LiveState): Tf | null {
   return closeSegment(st);
 }
 
-function closeSegment(st: LiveState): Tf | null {
-  "worklet";
-  if (!st.seg) return null;
-  st.seg = false;
-  const moved = st.S !== 1 || st.Tx !== 0 || st.Ty !== 0;
-  return moved ? tf(st) : null;
-}
 
 /** a ⊖ b: the map that, after b, gives a — what is left of the live transform when b has been committed (S' = S_a/S_b, T' = T_a − S'·T_b) */
 export function sub(a: Tf, b: Tf): Tf {
