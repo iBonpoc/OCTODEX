@@ -52,14 +52,19 @@ revoke all on function app.job_contract_tax(uuid) from public, anon, authenticat
 -- the share of the tax of an invoice of `p_total` on the job (sent now): null — nothing to split (no such job of this
 -- company, no contract amount, an invoice with a discount of its own). Security definer: it reads the job's other
 -- invoices and the contract under the job's row lock (two phones billing one job at once are split one after the other).
--- Only for someone of that company (owner, admin, office, sales; a tech too — his visit payment's final through
--- record_visit_payment) or a server path with no signed-in user; anyone else gets null, nothing is locked or read
+-- Only for the office side of that company (owner, admin, office, sales), a tech on a job of his (his visit payment's
+-- final through record_visit_payment) or a server path with no signed-in user; anyone else gets null, nothing is locked or read
 -- (security-check of #865: the trigger runs before the row's RLS check).
 create or replace function app.invoice_tax_split(p_company uuid, p_job uuid, p_invoice uuid, p_total bigint)
 returns bigint language plpgsql security definer set search_path = '' as $$
 declare j public.jobs; v_inv bigint; v_tax bigint; v_ctax bigint; v_left bigint; v_share bigint; v_before boolean;
 begin
-  if auth.uid() is not null and not app.has_role(p_company, array['owner', 'admin', 'office', 'sales', 'tech']) then return null; end if;
+  -- the office side of the company; a tech only on a job of his (a visit of his — as invoices_select lets him read it):
+  -- another job's contract, tax and billed sum are not his to learn (security-check of #1197)
+  if auth.uid() is not null and not (app.has_role(p_company, array['owner', 'admin', 'office', 'sales'])
+                                     or (app.has_role(p_company, array['tech']) and app.is_job_assignee(p_job))) then
+    return null;
+  end if;
   if p_job is null or not (p_total > 0) then return null; end if;
   select * into j from public.jobs where id = p_job and company_id = p_company for no key update;
   if j.id is null or not (j.contract_total_cents > 0) then return null; end if;

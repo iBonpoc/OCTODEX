@@ -13130,12 +13130,31 @@ select tst.ok((select tax_cents = 333 from public.invoices where id = '01960000-
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
          ('ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'T196 B', 1, now())$q$,
        '%row-level security%', 'T196 another company: only the policy''s refusal');
--- and the count itself answers nothing outside the company (a check that does not work would give B the share)
-select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 'f1960000-0000-4000-8000-000000000009', 100) is null,
+-- the count itself answers nothing to someone who may not read the job — on a job with its whole contract still to bill,
+-- so a check that does not work would hand out a share (security-check of #1197): another company; a tech of ours who
+-- has no visit on it. A tech on a job of his (his visit payment's final, record_visit_payment) is split as the office.
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T196 open', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+  insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+    ('a1960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 0, 'T196 part', 1, 50000, true);
+end $$;
+select tst.ok((select contract_total_cents from public.jobs where id = 'e1960000-0000-4000-8000-000000000003') = 55000, 'T196 (fixture: an open contract $550, tax $50)');
+:as_owner_b
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) is null,
               'T196 another company learns no share of our job');
 :as_tech_a
-select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 'f1960000-0000-4000-8000-000000000009', 5100) is not null,
-              'T196 a tech of the company (his visit payment''s final) is split as the office');
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) is null,
+              'T196 a tech with no visit on the job learns no share of it (as he cannot read its invoices)');
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1960000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) = 1000,
+              'T196 the tech of the job (his visit payment''s final) is split as the office: $110 → $10 tax');
 -- an invoice issued before the split (no tax although its share is not 0): the last one takes only its own share
 :as_super
 do $$ begin
