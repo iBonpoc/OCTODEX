@@ -68,11 +68,12 @@ export const UI_PENDING: readonly string[] = [
   "Columns", "Meter", "ReadOnly", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
   "TextField", "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
   "ListPanel", "Glass", "Menu", "HelpButton", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
-  "Divider", "Empty", "Screen",
+  "Divider", "Empty", "Screen", "FieldError", "Anchored",
 ];
 
 /** components that are plumbing, not something a person sees — each with the reason */
 export const UI_NOT_SHOWN: Record<string, string> = {
   "Background": "the screen background under everything; seen on every sample",
+  "ScreenScrollCtx": "context that lets a form scroll its screen to a wrong field; nothing to see",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",
 };
