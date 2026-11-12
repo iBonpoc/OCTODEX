@@ -20,7 +20,8 @@ export type InputNode = ComponentRef<typeof TextInput>;
 
 /** the screen's scroll, offered to the forms under it: `scrollToNode` brings a view `margin` below the top */
 export interface ScreenScroll {
-  scrollToNode: (node: ViewNode, margin: number, animated: boolean) => void;
+  /** `done` is called when the scroll has been made (the view is where the person can see it) */
+  scrollToNode: (node: ViewNode, margin: number, animated: boolean, done?: () => void) => void;
 }
 export const ScreenScrollCtx = createContext<ScreenScroll | null>(null);
 export const useScreenScroll = () => useContext(ScreenScrollCtx);
