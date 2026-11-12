@@ -1,5 +1,5 @@
 /**
- * e2e 261 — a short gutter on the sheet gets an enlarged inset (#1190, the founder's «David Kim» sample: 3′ 3″ next to 45′).
+ * e2e 290 — a short gutter on the sheet gets an enlarged inset (#1190, the founder's «David Kim» sample: 3′ 3″ next to 45′).
  * Every view. A long run, a bay of 3′ 3″ at its end and one more run go straight into the store; «Просмотр» shows the
  * short one in a frame «№N» with its length once, and the crew's PDF carries it too.
  * Finds things by testID; waits on what it checks (no pauses).
