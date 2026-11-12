@@ -5,6 +5,7 @@
  * the logic of what is picked is test/gutterLift.test.ts.)
  */
 const { skipLength } = require("../gutters.cjs");
+const { settle } = require("../settle.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -51,13 +52,14 @@ exports.run = async (h) => {
   await p.mouse.up();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="lift-"]').length === 0, null, { timeout: 5000 });
   h.expect((await svg().locator('[id^="target-"]').count()) === 0, "let go: the marks are gone");
+  // …and the release of the hold is not a tap: the page goes quiet (a flip of the cap's side would have been written by now), and both
+  // gutters are the same WHOLE element as before (geom and attrs, the side L/R included)
+  await settle(p, { quietMs: 500, maxMs: 4000 });
+  const mid = await runs();
+  for (const r of before) h.expect(JSON.stringify(mid.find((x) => x.id === r.id)) === JSON.stringify(r), `gutter ${r.id.slice(0, 4)}: the release of the hold changed nothing (geom and attrs)`);
 
   // a quick drag from the same end with «Желоб» is still drawing: a new gutter from it
   await tid("draw-tool-line").getByRole("button").click();
   await stroke(aEnd, [aEnd[0], aEnd[1] + 60]);
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 3, KEY, { timeout: 8000 });
-  // …and, all the way through, the two gutters are the same WHOLE: the release of the hold was not a tap that flips the cap's side
-  // (checked after the later drawing, so a late flip would have been written by now)
-  const after = await runs();
-  for (const id of before.map((r) => r.id)) h.expect(JSON.stringify(after.find((r) => r.id === id)) === JSON.stringify(before.find((r) => r.id === id)), `gutter ${id.slice(0, 4)} is untouched (geom and attrs)`);
 };
