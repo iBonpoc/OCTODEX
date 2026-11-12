@@ -14,14 +14,14 @@ exports.run = async (h) => {
   const db = () => p.evaluate((k) => (JSON.parse(localStorage.getItem(k) || "null") || {}).db, DB_KEY);
   const ofM = (l, mid) => l.source && l.source.module === "gutters" && l.source.measurementId === mid;
   const versions = async (eid, mid) => ((await db()).estimates.find((x) => x.id === eid)?.doc?.options ?? []).flatMap((o) => o.lines).filter((l) => ofM(l, mid)).map((l) => l.source.engineVersion);
-  const setVersion = (eid, v, status) =>
-    p.evaluate(({ k, id, v, status }) => {
-      const st = JSON.parse(localStorage.getItem(k));
-      const e = st.db.estimates.find((x) => x.id === id);
-      for (const o of e.doc.options) for (const l of o.lines) if (l.source && l.source.module === "gutters") l.source.engineVersion = v;
-      if (status) e.status = status;
-      localStorage.setItem(k, JSON.stringify(st));
-    }, { k: DB_KEY, id: eid, v, status });
+  /** the version in the estimate's module lines (and its status) — written through h.seed, a page without the app (CHECKS §9 №12) */
+  const setVersion = async (eid, v, status) => {
+    const st = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+    const e = st.db.estimates.find((x) => x.id === eid);
+    for (const o of e.doc.options) for (const l of o.lines) if (l.source && l.source.module === "gutters") l.source.engineVersion = v;
+    if (status) e.status = status;
+    await h.seed(DB_KEY, st);
+  };
 
   await h.go("/today");
   const lead = (await db()).leads.find((l) => l.propertyId) || (await db()).leads[0];
