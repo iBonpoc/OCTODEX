@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, splitCorner, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -944,6 +944,22 @@ export default function DrawScreen() {
                 <T v="caption" tone="mut">{t("mod.gutters.draw.cutNote", { off: cut.runs[0]!.offsetIn })}</T>
               </View>
             ) : null}
+            {/* «Разъединить угол» (#933): two gutters with their own end caps; «Назад» and the toast bring it back */}
+            <View testID="corner-split">
+              <Button
+                label={t("mod.gutters.draw.cornerSplit")}
+                variant="secondary"
+                size="sm"
+                onPress={() => {
+                  const before = cur.current.drawing;
+                  const next = splitCorner(before, corner);
+                  setCornerSheet(null);
+                  if (next === before) return;
+                  commit(next, before);
+                  toast.show(t("mod.gutters.draw.cornerSplit.done"), () => commit(before, cur.current.drawing));
+                }}
+              />
+            </View>
             {<CornerTriangle key={corner.id} d={drawing} f={corner} onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))} />}
           </View>
         ) : null}
