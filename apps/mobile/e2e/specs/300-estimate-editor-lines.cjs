@@ -65,4 +65,21 @@ exports.run = async (h) => {
     back = await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 3, null, { timeout: 500 }).then(() => true, () => false);
   }
   h.expect(back, "«Вернуть» brought it back (3 rows)");
+
+  // «Из каталога»: one thing — its row opens
+  await tid("est-add-catalog").getByRole("button").click();
+  await h.sheet().locator("input").first().fill("carpet");
+  await h.sheet().getByText("Carpet removal").first().click();
+  // (the cursor in the quantity is the phone's: the browser gives the focus back to the button that opened the sheet)
+  await vis('[data-testid^="est-qty-"]').first().locator("input").fill("7");
+  const carpetId = (await vis('[data-testid^="est-collapse-"]').first().getAttribute("data-testid")).replace("est-collapse-", "");
+
+  // «⋯ → Заменить»: another thing in the place, the quantity stays
+  await tid(`est-line-${carpetId}`).getByRole("button", { name: /Действия со строкой/ }).click();
+  await tid(`est-act-replace-${carpetId}`).click();
+  await h.sheet().locator("input").first().fill("railing bracket");
+  await h.sheet().getByText("Railing bracket", { exact: true }).first().click();
+  await p.waitForFunction((id) => !!document.querySelector(`[data-testid="est-line-${id}"]`), carpetId, { timeout: 3000 });
+  await p.waitForFunction(() => document.querySelector('[data-testid^="est-name-"] input')?.value === "Railing bracket", null, { timeout: 3000 });
+  h.expect((await vis('[data-testid^="est-qty-"]').first().locator("input").inputValue()) === "7", "replaced: the quantity stayed (7)");
 };

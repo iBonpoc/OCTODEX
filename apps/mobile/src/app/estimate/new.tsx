@@ -90,6 +90,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [focusRow, setFocusRow] = useState<{ id: string; field: "name" | "qty" } | null>(null);
   const [picker, setPicker] = useState<"add" | { replace: string } | null>(null);
   const rowForm = useRequiredForm();
+  // what a pick in the catalog sheet opens next (a row with the cursor in it) waits until the sheet is gone: the web would give the
+  // focus back to the button that opened it
+  const afterPicker = useRef<(() => void) | null>(null);
   // number fields of the open row that hold text which is not a number (the line keeps the last right value): "<line>:<field>"
   const badFields = useRef(new Set<string>());
   const [setting, setSetting] = useState<SettingKind>(null);
@@ -220,16 +223,21 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setOption((o) => ({ ...o, lines: [...o.lines, ...made] }));
     // one thing — open, the focus in the quantity; a kit comes folded
     if (made.length === 1) {
-      setFocusRow({ id: made[0]!.id, field: "qty" });
-      setOpenId(made[0]!.id);
+      const id = made[0]!.id;
+      afterPicker.current = () => {
+        setFocusRow({ id, field: "qty" });
+        setOpenId(id);
+      };
     }
   };
   const clearRow = (id: string) => {
     const prev = doc;
     setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === id ? clearLine(x) : x)) }));
     setPicker(null);
-    setFocusRow({ id, field: "name" });
-    setOpenId(id);
+    afterPicker.current = () => {
+      setFocusRow({ id, field: "name" });
+      setOpenId(id);
+    };
     toast.show(t("est.row.replaced"), () => setDoc(prev));
   };
   const rowAction = (id: string, a: RowAction) => {
@@ -493,6 +501,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         value={null}
         onSelect={(k) => (k === "__clear__" && typeof picker === "object" && picker ? clearRow(picker.replace) : fromCatalog(k))}
         onClose={() => setPicker(null)}
+        onExited={() => {
+          const next = afterPicker.current;
+          afterPicker.current = null;
+          next?.();
+        }}
         testID="est-catalog-picker"
       />
       <Sheet visible={setting !== null} onClose={() => setSetting(null)} title={setting ? t(`ue.${setting}` as DictKey) : undefined}>

@@ -40,6 +40,8 @@ type Common = {
   onNext?: () => void;
   autoFocus?: boolean;
   selectOnFocus?: boolean;
+  /** the text is not a number now (the value did not move): a row that holds it must not close over it */
+  onBad?: (bad: boolean) => void;
 };
 export type NumberFieldProps = Common &
   (
@@ -88,6 +90,12 @@ export function NumberField(props: NumberFieldProps) {
   // text must not stand empty while the row thinks it is 2.5 — the row cannot close over it (onBad)
   const needed = props.kind === "qty" && parsed.state === "empty";
   const bad = parsed.state === "bad" || needed;
+  const onBad = props.onBad;
+  useEffect(() => {
+    onBad?.(bad);
+    return () => onBad?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bad]);
   const sign = SIGN[props.kind];
   const unit = props.unit ?? sign.after;
   return (
