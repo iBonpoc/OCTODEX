@@ -29,7 +29,8 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -294,27 +295,32 @@ export default function DrawScreen() {
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
   const downTime = useRef(0);
-  /** the hold timer of the touch, and whether it already picked something up (the drag then has no second «взял», #1272) */
+  /** the hold that picks something up (canvas/holdLift.ts, #1272): the state of this touch, its timer, and what is lifted (the point is drawn bigger) */
+  const hold = useRef<Hold>("idle");
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pickedUp = useRef(false);
+  const [lifted, setLifted] = useState<Lift | null>(null);
   const clearHold = () => {
     if (holdTimer.current) clearTimeout(holdTimer.current);
     holdTimer.current = null;
   };
-  /** «взял»: once per touch — at the end of the hold, or (a downspout dragged at once) at the first move */
-  const liftTick = () => {
-    if (pickedUp.current) return;
-    pickedUp.current = true;
-    haptics.light();
+  useEffect(() => clearHold, []); // the screen is left with a touch down: no timer left running
+  /** the touch took something (at its first move): `light` once, unless the hold did it already; the point is lifted */
+  const takeTick = (target: Lift | null, atOnce = true) => {
+    const r = holdMove(hold.current, atOnce);
+    hold.current = r.hold;
+    if (r.light) haptics.light();
+    if (target) setLifted(target);
   };
-  /** the hold ran out with the finger still: if it is on something that can be taken, `light` and the picked ring (selection) — before any move */
+  /** the hold ran out with the finger still: if it is on something that can be taken, `light` and the lifted look — before any move */
   const liftAtHold = () => {
     holdTimer.current = null;
-    if (dragRef.current || !cur.current.canSave) return;
-    const target = liftTarget(withoutDs(cur.current.drawing, !cur.current.layers.ds), plan(downAt.current[0], downAt.current[1]), tolIn());
-    if (!target) return;
-    liftTick();
+    const target = dragRef.current || !cur.current.canSave ? null : liftTarget(withoutDs(cur.current.drawing, !cur.current.layers.ds), plan(downAt.current[0], downAt.current[1]), tolIn());
+    const r = holdFire(hold.current, !!target);
+    hold.current = r.hold;
+    if (!r.light || !target) return;
+    haptics.light();
     setSelected(target.id);
+    setLifted(target);
   };
   const pan = usePanGesture({
     runOnJS: true,
@@ -325,12 +331,15 @@ export default function DrawScreen() {
       downTime.current = Date.now();
       // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
       // 12.11: «не чувствую момента, когда можно тянуть»); the drag after it has no second «взял»
-      pickedUp.current = false;
+      hold.current = holdBegin().hold;
+      setLifted(null);
       clearHold();
       holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
     },
     onFinalize: () => {
-      clearHold(); // let go without moving: nothing changes, no «medium» (the drawing is untouched)
+      clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
+      hold.current = holdCancel(hold.current).hold;
+      setLifted(null);
     },
     onActivate: () => {
       clearHold(); // moved: before the hold it is drawing as ever; after it the pick-up was made already
@@ -358,13 +367,13 @@ export default function DrawScreen() {
           if (corner && cornerMovable(d, corner.id)) {
             dragRef.current = { kind: "corner", cornerId: corner.id, before: d, from: p0, held: [true, true], tol: snapIn(), onEnd: null };
             setSelected(endHere.id);
-            liftTick(); // picked up (already, if the hold ran out first: #1272)
+            takeTick({ kind: "corner", id: endHere.id, cornerId: corner.id }); // picked up (already, if the hold ran out first: #1272)
             return;
           }
           if (!corner && runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
             dragRef.current = { kind: "pull", id: endHere.id, end: endHere.end, before: d, from: p0, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
             setSelected(endHere.id);
-            liftTick(); // picked up (already, if the hold ran out first: #1272)
+            takeTick({ kind: "end", id: endHere.id, end: endHere.end }); // picked up (already, if the hold ran out first: #1272)
             return;
           }
         }
@@ -372,7 +381,7 @@ export default function DrawScreen() {
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
         dragRef.current = { kind: "ds", id: h.id, before: d };
-        liftTick();
+        takeTick({ kind: "ds", id: h.id });
         setSelected(h.id);
         return;
       }
@@ -398,7 +407,7 @@ export default function DrawScreen() {
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
           // along its own line: the end is taken and follows the finger (it may then leave the line: it swings, #818)
           dragRef.current = { kind: "pull", ...g.pullable, fromLine: true, from: g.a, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
-          liftTick(); // picked up (the «Желоб» stroke turned into a pull)
+          takeTick({ kind: "end", id: g.pullable.id, end: g.pullable.end }); // picked up (the «Желоб» stroke turned into a pull)
           setGhost(null);
           setSelected(g.pullable.id);
           const sw = swingEnd(g.pullable.before, g.pullable.id, g.pullable.end, grabbedEnd(g.pullable.before, g.pullable.id, g.pullable.end, g.a, p), HELD_ORIGINAL, snapIn());
@@ -490,6 +499,7 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
@@ -567,6 +577,7 @@ export default function DrawScreen() {
             padX: space[1],
             gap: dt.labelGap,
             selected,
+            lift: lifted,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
             dsPad: DS_MARK_R,
@@ -583,7 +594,7 @@ export default function DrawScreen() {
             layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers],
+    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers, lifted],
   );
   sceneRef.current = scene;
 

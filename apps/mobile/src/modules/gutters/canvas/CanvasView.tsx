@@ -9,7 +9,7 @@ import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "re
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN } from "react-native-worklets";
 import type { View as PlanView } from "./scene";
-import { beginGesture, endGesture, panStep, pinchStep, type LiveState } from "./gestureState";
+import { applyTf, endGesture, panFrame, pinchFrame, settle, type LiveState, type Pending, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
 export interface Live { tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number> }
@@ -34,65 +34,68 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   // the gesture's callbacks may be the ones made at an earlier render: they read the view of now from a ref
   const now = useRef({ view, onView });
   now.current = { view, onView };
-  const commit = (a: number, b: number, k: number, x: number, y: number) => now.current.onView(commitView(now.current.view, a, b, k, x, y));
-  // one gesture of the two is one commit (gestureState.ts, #1271): pan and pinch both end, the first one commits and closes it
-  const phase = useSharedValue<0 | 1 | 2>(0);
-  const pinched = useSharedValue(false);
+  // commits made and not rendered yet (gestureState.ts: the render takes away exactly its commit from the live transform)
+  const pending = useRef<Pending[]>([]);
+  const commit = (S: number, Tx: number, Ty: number) => {
+    const t = { S, Tx, Ty };
+    const v = applyTf(now.current.view, t);
+    pending.current.push({ view: v, tf: t });
+    now.current.onView(v);
+  };
+  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it */
+  const settleView = (v: PlanView) => {
+    const r = settle({ S: s.value, Tx: tx.value, Ty: ty.value }, pending.current, v);
+    pending.current = r.pending;
+    tx.value = r.live.Tx;
+    ty.value = r.live.Ty;
+    s.value = r.live.S;
+    fx.value = 0;
+    fy.value = 0;
+  };
+  // the live transform is kept in the origin form (fx = fy = 0): p' = S·p + T
+  const seg = useSharedValue(false);
+  const nPinch = useSharedValue(0);
+  const nPan = useSharedValue(0);
   const state = (): LiveState => {
     "worklet";
-    return { tx: tx.value, ty: ty.value, s: s.value, phase: phase.value, pinched: pinched.value };
+    return { S: s.value, Tx: tx.value, Ty: ty.value, seg: seg.value, nPinch: nPinch.value, nPan: nPan.value };
   };
-  const put = (st: LiveState) => {
+  const put = (st: LiveState, req: Tf | null) => {
     "worklet";
-    tx.value = st.tx;
-    ty.value = st.ty;
-    s.value = st.s;
-    phase.value = st.phase;
-    pinched.value = st.pinched;
-  };
-  const begin = () => {
-    "worklet";
-    const st = state();
-    beginGesture(st);
-    put(st);
+    tx.value = st.Tx;
+    ty.value = st.Ty;
+    s.value = st.S;
+    fx.value = 0;
+    fy.value = 0;
+    seg.value = st.seg;
+    nPinch.value = st.nPinch;
+    nPan.value = st.nPan;
+    if (req) scheduleOnRN(commit, req.S, req.Tx, req.Ty);
   };
   const end = () => {
     "worklet";
     const st = state();
-    const go = endGesture(st);
-    phase.value = st.phase;
-    if (go) scheduleOnRN(commit, st.tx, st.ty, st.s, fx.value, fy.value);
+    put(st, endGesture(st));
   };
   const pan = usePanGesture({
     minPointers: panPointers,
-    onBegin: begin,
-    onActivate: begin,
     onUpdate: (e) => {
       "worklet";
       const st = state();
-      panStep(st, e);
-      put(st);
+      put(st, panFrame(st, e, panPointers));
     },
     onDeactivate: end,
   });
   const pinch = usePinchGesture({
-    onBegin: begin,
-    onActivate: (e) => {
-      "worklet";
-      begin();
-      fx.value = e.focalX;
-      fy.value = e.focalY;
-    },
     onUpdate: (e) => {
       "worklet";
       const st = state();
-      pinchStep(st, e);
-      put(st);
+      put(st, pinchFrame(st, e));
     },
     onDeactivate: end,
   });
   const both = useSimultaneousGestures(pan, pinch);
-  return { pan, pinch, both };
+  return { pan, pinch, both, settleView };
 }
 
 export type CanvasGestures = ReturnType<typeof useCanvasGestures>;
@@ -122,10 +125,8 @@ function Canvas({ view, live, size, onSize, gestures, children, testID }: Parame
   const { tx, ty, s, fx, fy } = live;
   // the painter has redrawn at the committed view: drop the live transform in the same frame
   useLayoutEffect(() => {
-    tx.value = 0;
-    ty.value = 0;
-    s.value = 1;
-  }, [view, tx, ty, s]);
+    gestures.settleView(view);
+  }, [view, gestures]);
 
   const st = useAnimatedStyle(() => {
     const cx = size.w / 2;

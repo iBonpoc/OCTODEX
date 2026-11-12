@@ -1,53 +1,102 @@
 /**
- * The live transform of the canvas's own two gestures (pan, pinch) as pure steps (spec 33 П35 «жесты», #1271; founder 12.11: «щипком
- * приблизил с 1% до 100%, отпустил — откатилось примерно до 80%»). The cause, from the code: the live scale is multiplied by every
- * `scaleChange` of the pinch, including the last frames while the fingers lift (one pointer left, the span jumps: `scaleChange` < 1),
- * and the two gestures (pan with two pointers and pinch) both commit at their end — the first commit resets the live transform, the
- * second one commits what the late frames made of it (0.8 ×). The rule: only frames with TWO pointers count; the first end commits and
- * closes the gesture (`phase` 2), nothing after it counts until a new touch begins; one commit per gesture.
+ * The live transform of the canvas's own two gestures (pan, pinch) as PURE steps (spec 33 П35 «жесты», #1271; founder 12.11: «щипком
+ * приблизил с 1% до 100%, отпустил — откатилось примерно до 80%»; review of the director on #1278). The three causes, each closed here
+ * and each with a test on a sequence of the library's events (test/gestureState.test.ts):
+ *  1. a double end — the pan (two fingers) ends at the first lifted finger and commits, the pinch goes on to the last finger, its late
+ *     frames made a second commit: now a commit only closes a SEGMENT (a stretch with two fingers down); a segment is closed once;
+ *  2. frames with ONE finger (the lift: the span collapses, `scaleChange` < 1, the focal point jumps to the finger left) — dropped, and
+ *     the first frame after a change of the finger count is dropped too (its delta is the jump);
+ *  3. the race with the redraw — a new segment began before the React render of the last commit, and «drop the live transform» ate its
+ *     part: the live transform is CUMULATIVE against the view that is on the screen; a commit is a snapshot of it, and the render of a
+ *     commit (`settle`) takes away exactly that commit, not everything.
+ * A second finger put down after the first lifted begins a NEW segment (the pinch lives to the last finger): zooming «in several goes»
+ * works. The transform is the screen map p' = S·p + T (origin form: no focal point to keep); the canvas draws it as scale + shift.
  * Functions are worklets (they run on the UI thread); plain objects in, the same object changed.
  */
-export interface LiveState {
-  tx: number;
-  ty: number;
-  s: number;
-  /** 0 nothing yet, 1 a gesture is going on, 2 it has ended and committed (late events are ignored) */
-  phase: 0 | 1 | 2;
-  /** a pinch took part: the single-pointer frames of the lift are not a pan then */
-  pinched: boolean;
+
+/** the map p' = S·p + T (screen px) */
+export interface Tf { S: number; Tx: number; Ty: number }
+
+export const IDENTITY: Tf = { S: 1, Tx: 0, Ty: 0 };
+
+export interface LiveState extends Tf {
+  /** a segment (two fingers down) is going on */
+  seg: boolean;
+  /** the finger count of the last pinch / pan frame (a change makes the next frame a jump: it is dropped) */
+  nPinch: number;
+  nPan: number;
 }
 
-export const idleState = (): LiveState => ({ tx: 0, ty: 0, s: 1, phase: 0, pinched: false });
+export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0 });
 
-/** a touch began: a new gesture */
-export function beginGesture(st: LiveState): void {
+const tf = (st: Tf): Tf => ({ S: st.S, Tx: st.Tx, Ty: st.Ty });
+
+/** one frame of the pinch: scale about the frame's own focal point (it follows the fingers) while two fingers are down; the commit to make, if the frame closes a segment */
+export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPointers: number; focalX: number; focalY: number }): Tf | null {
   "worklet";
-  if (st.phase !== 1) {
-    st.phase = 1;
-    st.pinched = false;
-  }
+  const jump = st.nPinch !== 0 && e.numberOfPointers !== st.nPinch;
+  st.nPinch = e.numberOfPointers;
+  if (e.numberOfPointers < 2) return closeSegment(st);
+  st.seg = true;
+  if (jump) return null; // the first frame after the count changed: its delta is the jump
+  const k = e.scaleChange;
+  // scale about the focal point f: p' = f + k·(p − f)
+  st.Tx = k * st.Tx + (1 - k) * e.focalX;
+  st.Ty = k * st.Ty + (1 - k) * e.focalY;
+  st.S *= k;
+  return null;
 }
 
-/** one frame of the pinch: counted while two fingers are down */
-export function pinchStep(st: LiveState, e: { scaleChange: number; numberOfPointers: number }): void {
+/** one frame of the pan: the fingers' centre moves (`need` fingers or more: 2 where one finger draws, 1 on a canvas that only looks) */
+export function panFrame(st: LiveState, e: { changeX: number; changeY: number; numberOfPointers: number }, need: number): Tf | null {
   "worklet";
-  if (st.phase !== 1 || e.numberOfPointers < 2) return;
-  st.pinched = true;
-  st.s *= e.scaleChange;
+  const jump = st.nPan !== 0 && e.numberOfPointers !== st.nPan;
+  st.nPan = e.numberOfPointers;
+  if (e.numberOfPointers < need) return closeSegment(st);
+  st.seg = true;
+  if (jump) return null;
+  st.Tx += e.changeX;
+  st.Ty += e.changeY;
+  return null;
 }
 
-/** one frame of the pan: after a pinch only the frames with two fingers (the lift moves the focal point) */
-export function panStep(st: LiveState, e: { changeX: number; changeY: number; numberOfPointers: number }): void {
+/** a gesture (pan or pinch) ended: the commit to make if a segment was going on (the second of the two ends finds none) */
+export function endGesture(st: LiveState): Tf | null {
   "worklet";
-  if (st.phase !== 1 || (st.pinched && e.numberOfPointers < 2)) return;
-  st.tx += e.changeX;
-  st.ty += e.changeY;
+  st.nPinch = 0;
+  st.nPan = 0;
+  return closeSegment(st);
 }
 
-/** a gesture of the two ended: true — commit the live transform now (once); a second end, or one with nothing moved, is false */
-export function endGesture(st: LiveState): boolean {
+function closeSegment(st: LiveState): Tf | null {
   "worklet";
-  if (st.phase !== 1) return false;
-  st.phase = 2;
-  return st.tx !== 0 || st.ty !== 0 || st.s !== 1;
+  if (!st.seg) return null;
+  st.seg = false;
+  const moved = st.S !== 1 || st.Tx !== 0 || st.Ty !== 0;
+  return moved ? tf(st) : null;
+}
+
+/** a ⊖ b: the map that, after b, gives a — what is left of the live transform when b has been committed (S' = S_a/S_b, T' = T_a − S'·T_b) */
+export function sub(a: Tf, b: Tf): Tf {
+  "worklet";
+  const S = a.S / b.S;
+  return { S, Tx: a.Tx - S * b.Tx, Ty: a.Ty - S * b.Ty };
+}
+
+/** a view (k, ox, oy: plan → screen) after the live transform `t` is committed */
+export interface View { k: number; ox: number; oy: number }
+export const applyTf = (v: View, t: Tf): View => ({ k: v.k * t.S, ox: t.S * v.ox + t.Tx, oy: t.S * v.oy + t.Ty });
+
+/** a commit made and not rendered yet: the view it made and the live transform it took */
+export interface Pending { view: View; tf: Tf }
+
+/**
+ * The render of a view arrived. A commit of ours — the live transform loses exactly that commit (and the later pending ones are
+ * re-based on it); a view that is not ours (the «fit» button, a new size) — the live transform is dropped, as before.
+ */
+export function settle(live: Tf, pending: Pending[], view: View): { live: Tf; pending: Pending[] } {
+  const i = pending.findIndex((p) => p.view === view);
+  if (i < 0) return { live: tf(IDENTITY), pending: [] };
+  const done = pending[i]!.tf;
+  return { live: sub(live, done), pending: pending.slice(i + 1).map((p) => ({ view: p.view, tf: sub(p.tf, done) })) };
 }

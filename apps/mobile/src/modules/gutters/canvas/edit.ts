@@ -618,15 +618,16 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
  * What a finger held still on `p` for the long-press time picks up (#1272, founder 12.11): a downspout, a free end (a cap), or a corner
  * that can be moved — with the id to select (the picked ring is the visible «поднято»); a joint of three ends, a line, nothing — null.
  */
-export function liftTarget(d: Drawing, p: P, tolIn: number): { kind: "ds" | "end" | "corner"; id: string } | null {
+export type Lift = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "corner"; id: string; cornerId: string };
+export function liftTarget(d: Drawing, p: P, tolIn: number): Lift | null {
   const h = hitTest(d, p, tolIn);
   if (!h) return null;
   if (h.kind === "ds") return { kind: "ds", id: h.id };
   if (h.kind !== "end") return null;
   const found = findCorners(d);
   const corner = found.find((c) => c.runs.some((x) => x.id === h.id && x.end === h.end));
-  if (corner) return cornerMovable(d, corner.id) ? { kind: "corner", id: h.id } : null;
-  return runEnds(d, found)[h.id]?.[h.end]?.kind === "cap" ? { kind: "end", id: h.id } : null;
+  if (corner) return cornerMovable(d, corner.id) ? { kind: "corner", id: h.id, cornerId: corner.id } : null;
+  return runEnds(d, found)[h.id]?.[h.end]?.kind === "cap" ? { kind: "end", id: h.id, end: h.end } : null;
 }
 
 /** a one-finger stroke in progress */
