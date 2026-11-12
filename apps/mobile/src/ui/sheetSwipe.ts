@@ -16,10 +16,44 @@ export function swipeStep(s: SwipeState, scrollTop: number, travel: number): { s
   return { state: { base }, drag: Math.max(0, travel - base) };
 }
 
-/** let go: far enough or fast enough (the same thresholds as the grabber); a sheet not moved never closes */
-export function swipeCloses(drag: number, velocity: number, far: number, fast: number): boolean {
-  if (drag <= 0) return false;
-  return drag > far || velocity > fast;
+/** the release rule's constants (tokens `component.sheetDismissRatio / sheetProjectMs / sheetSlowVelocity / sheetFlickVelocity`) */
+export interface ReleaseRule {
+  /** the share of the height past which the sheet leaves (the nearer of the two places: in place / gone) */
+  settle: number;
+  /** ms: where the sheet would be after this time at the finger's speed */
+  project: number;
+  /** pt/ms: below this the speed does not count — the sheet's own place decides */
+  slow: number;
+  /** pt/ms: from this speed down a flick always takes it away */
+  flick: number;
+}
+
+/**
+ * Let go (DS Б1, the rule measured on iOS 26.2): a flick down always leaves; otherwise the sheet goes to the nearer of
+ * «in place» and «gone» counted from where it would be after `project` ms at the finger's speed (the speed counts from
+ * `slow` up). No minimum travel; a sheet not moved never closes.
+ */
+export function swipeCloses(drag: number, velocity: number, height: number, r: ReleaseRule): boolean {
+  if (drag <= 0 || height <= 0) return false;
+  if (velocity >= r.flick) return true;
+  const where = velocity >= r.slow ? drag + velocity * r.project : drag;
+  return where > height * r.settle;
+}
+
+/**
+ * How long the sheet takes to leave once it is let go (DS Б1, #1163): at the finger's speed — the way left ÷ the speed —
+ * but never quicker than `min` (a flick must not look like a cut) nor slower than `max`; no speed (✕, the scrim, Esc) — `rest`.
+ */
+export function exitDuration(left: number, velocity: number, min: number, max: number, rest: number): number {
+  if (!(velocity > 0)) return rest;
+  return Math.min(max, Math.max(min, left / velocity));
+}
+
+/** The scrim follows the sheet: full while it is in place, gone when it has left (0..1) */
+export function scrimLevel(drag: number, height: number): number {
+  "worklet";
+  if (height <= 0) return 1;
+  return 1 - Math.min(1, Math.max(0, drag / height));
 }
 
 /**

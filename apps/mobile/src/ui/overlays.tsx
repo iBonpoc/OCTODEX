@@ -4,11 +4,11 @@ import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollV
 import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
 import { menuPick } from "./menuPick";
-import { swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
+import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, Easing } from "react-native-reanimated";
+import Animated, { FadeIn, FadeOut, SlideInDown, useAnimatedProps, useAnimatedStyle, ReduceMotion, runOnJS, useReducedMotion, useSharedValue, withSpring, withTiming, Easing } from "react-native-reanimated";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
@@ -175,16 +175,23 @@ export const useSheetHold = () => useContext(SheetHold);
  * an upward drag stays a scroll.
  * `dirty` (unsaved changes): any way of closing asks "Save / Don't save / Cancel" first (DS rule 10).
  */
+const releaseRule = {
+  settle: component.sheetDismissRatio,
+  project: component.sheetProjectMs,
+  slow: component.sheetSlowVelocity,
+  flick: component.sheetFlickVelocity,
+};
+
 export function Sheet({
   visible,
   onClose,
-  title,
-  children,
+  title: titleNow,
+  children: childrenNow,
   dirty,
   onSave,
-  footer,
-  height = "fit",
-  onBack,
+  footer: footerNow,
+  height: heightNow = "fit",
+  onBack: onBackNow,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -202,6 +209,11 @@ export function Sheet({
   /** "Save" in the unsaved-changes question */
   onSave?: () => void;
 }) {
+  // While the sheet goes out the owner has often already emptied what it showed (`visible={!!x}`, `{x ? … : null}`):
+  // it keeps showing the last render from while it was open, so it does not collapse or jump on the way out
+  const seen = useRef({ title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow });
+  if (visible) seen.current = { title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow };
+  const { title, children, footer, height, onBack } = seen.current;
   const { c } = useTheme();
   const { wide } = useDevice();
   const insets = useSafeAreaInsets();
@@ -209,23 +221,115 @@ export function Sheet({
   const { t } = useI18n();
   const { height: winH } = useWindowDimensions();
   const drag = useSharedValue(0);
+  const fade = useSharedValue(1); // the sheet and its scrim dissolve (reduce motion, the centred window): 1 → 0
+  const sheetH = useSharedValue(0); // the sheet's own height: how far it has to go, and how the scrim follows
+  const leaving = useRef(false); // a close is asked or under way: one onClose per close, whatever is pressed meanwhile
+  const shown = useRef(visible);
+  shown.current = visible;
+  // The sheet stays on the screen while it goes out, also when the owner closes it by itself (DS Б1, #1163):
+  // `present` is "mounted", `visible` is what the owner wants. `session` marks one opening or one exit: the callback
+  // of an earlier one does nothing.
+  const [present, setPresent] = useState(visible);
+  const open = visible || present;
+  const session = useRef(0);
+  const exitSpeed = useRef(0);
+  const [asked, setAsked] = useState(0);
   const [full, setFull] = useState(false);
   const [ask, setAsk] = useState(false);
   const live = useRef({ dirty, onClose });
   live.current = { dirty, onClose };
   useEffect(() => {
     if (visible) {
+      session.current++;
+      exitSpeed.current = 0;
+      passThrough(false);
       drag.value = 0;
+      fade.value = 1;
+      leaving.current = false;
+      setPresent(true);
       setFull(false);
       setAsk(false);
     }
-  }, [visible, drag]);
-  const requestClose = useCallback(() => {
-    if (live.current.dirty) {
-      drag.value = withSpring(0, motion.spring);
-      setAsk(true);
-    } else live.current.onClose();
-  }, [drag]);
+  }, [visible, drag, fade]);
+  // web: the Modal's root is a fixed layer that takes every tap; while the sheet goes out it lets them through (DS §10:
+  // do not wait for an animation to press). Native: the Modal is its own window — ⬜ (DS Б1)
+  const rootRef = useRef<React.ComponentRef<typeof Animated.View>>(null);
+  const passThrough = useCallback((on: boolean) => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    let el = rootRef.current as unknown as HTMLElement | null;
+    // the ref of an animated view is not always the DOM node: then by the test id (the top sheet is the last one)
+    if (!(el instanceof Element)) el = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="sheet-panel"]')).pop() ?? null;
+    if (!el) return;
+    // every fixed layer above the sheet (the Modal has two); `important`: react-native-web puts
+    // `pointer-events: auto !important` in the layer's class
+    for (; el; el = el.parentElement) {
+      if (getComputedStyle(el).position !== "fixed") continue;
+      if (on) el.style.setProperty("pointer-events", "none", "important");
+      else el.style.removeProperty("pointer-events");
+    }
+  }, []);
+  const mounted = useRef(true);
+  useEffect(() => () => void (mounted.current = false), []);
+  const gone = useCallback((id: number) => {
+    if (id !== session.current || !mounted.current) return;
+    leaving.current = false;
+    setPresent(false);
+  }, []);
+  // it goes down at the finger's speed (✕, the scrim, Esc, the owner's own close — in durBase), the scrim fades with
+  // it; reduce motion and the centred window (no swipe) — it dissolves
+  const exit = useCallback(
+    (speed: number) => {
+      const id = ++session.current;
+      leaving.current = true;
+      passThrough(true);
+      const done = (finished?: boolean) => {
+        "worklet";
+        if (finished) runOnJS(gone)(id);
+      };
+      // the animation's end can fail to come (the screen under the sheet went to the background, the frames stopped):
+      // the sheet is taken off by this safety net too, once the exit has had its time
+      if (reduce || wide) {
+        // a dissolve is what reduce motion allows: it must not be skipped by the system setting
+        fade.value = withTiming(0, { duration: motion.durFast, reduceMotion: ReduceMotion.Never }, done);
+        setTimeout(() => gone(id), motion.durFast + motion.durBase);
+        return;
+      }
+      const h = sheetH.value || winH;
+      const ms = exitDuration(Math.max(h - drag.value, 0), speed, motion.durFast, motion.durSlow, motion.durBase);
+      drag.value = withTiming(h, { duration: ms, easing: speed > 0 ? Easing.linear : Easing.out(Easing.cubic) }, done);
+      setTimeout(() => gone(id), ms + motion.durBase);
+    },
+    [reduce, wide, winH, drag, fade, sheetH, gone, passThrough],
+  );
+  const exitNow = useRef(exit);
+  exitNow.current = exit;
+  // the owner closed it (after its own «Сохранить», or because we asked): now it goes out
+  useEffect(() => {
+    if (!visible && present) exitNow.current(exitSpeed.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+  // we asked the owner (onClose); if it is still open after the answer, the sheet comes back at once (busy, a key to enter…)
+  useEffect(() => {
+    if (asked === 0 || !shown.current) return;
+    leaving.current = false;
+    drag.value = withSpring(0, motion.spring);
+    fade.value = withTiming(1, { duration: motion.durFast, reduceMotion: ReduceMotion.Never });
+  }, [asked, drag, fade]);
+  const requestClose = useCallback(
+    (v?: number, discard?: boolean) => {
+      if (leaving.current) return;
+      if (live.current.dirty && !discard) {
+        drag.value = withSpring(0, motion.spring);
+        setAsk(true);
+        return;
+      }
+      leaving.current = true;
+      exitSpeed.current = typeof v === "number" ? v : 0;
+      live.current.onClose();
+      setAsked((n) => n + 1);
+    },
+    [drag],
+  );
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -236,9 +340,10 @@ export function Sheet({
           drag.value = g.dy > 0 ? g.dy : g.dy / 3;
         },
         onPanResponderRelease: (_, g) => {
-          if (g.dy > component.sheetDismissDrag || g.vy > component.sheetDismissVelocity) requestClose();
+          const h = sheetH.value || winH;
+          if (swipeCloses(g.dy, g.vy, h, releaseRule)) requestClose(g.vy);
           else {
-            if (g.dy < -component.sheetDismissDrag / 2 || g.vy < -component.sheetDismissVelocity) setFull(true);
+            if (g.dy < -component.sheetExpandDrag || g.vy < -component.sheetFlickVelocity) setFull(true);
             drag.value = withSpring(0, motion.spring);
           }
         },
@@ -246,7 +351,7 @@ export function Sheet({
           drag.value = withSpring(0, motion.spring);
         },
       }),
-    [drag, requestClose],
+    [drag, requestClose, sheetH, winH],
   );
   const scrollTop = useRef(0);
   const held = useRef(false);
@@ -285,21 +390,27 @@ export function Sheet({
       const r = swipeStep(swipe.current, scrollTop.current, e.translationY);
       swipe.current = { base: null };
       // Gesture Handler counts pt per second, the grabber pt per ms
-      if (swipeCloses(r.drag, e.velocityY / 1000, component.sheetDismissDrag, component.sheetDismissVelocity)) requestClose();
+      const v = e.velocityY / 1000;
+      if (swipeCloses(r.drag, v, sheetH.value || winH, releaseRule)) requestClose(v);
       else drag.value = withSpring(0, motion.spring);
     },
   });
   useEffect(() => {
     if (visible) scrollTop.current = 0;
   }, [visible]);
-  const follow = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
+  const follow = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }], opacity: fade.value }));
+  // the scrim goes out as the sheet goes down (1 → 0 over the sheet's height), and with the dissolve
+  const scrimFollow = useAnimatedStyle(() => {
+    return { opacity: fade.value * scrimLevel(drag.value, sheetH.value || winH) };
+  });
   const fullH = winH - insets.top - space[2];
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onBack ?? requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={open} transparent animationType="none" onRequestClose={onBack ?? (() => requestClose())} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
+        pointerEvents={visible ? "auto" : "none"}
         behavior={avoidBehavior}
         // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32) — without one, as before;
         // the phone sheet runs to the edge
@@ -307,21 +418,26 @@ export function Sheet({
       >
         <Animated.View
           entering={reduce ? undefined : FadeIn.duration(motion.durBase)}
-          exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
           style={StyleSheet.absoluteFill}
         >
-          <Pressable
-            style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}
-            onPress={requestClose}
-            accessibilityRole="button"
-            accessibilityLabel={t("common.close")}
-          />
+          <Animated.View testID="sheet-scrim" style={[StyleSheet.absoluteFill, scrimFollow]}>
+            <Pressable
+              style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}
+              onPress={() => requestClose()}
+              accessibilityRole="button"
+              accessibilityLabel={t("common.close")}
+            />
+          </Animated.View>
         </Animated.View>
         <Animated.View
           entering={reduce ? undefined : SlideInDown.duration(motion.durSlow)}
-          exiting={reduce ? undefined : SlideOutDown.duration(motion.durBase)}
+          ref={rootRef}
+          testID="sheet-panel"
+          onLayout={(e) => {
+            sheetH.value = e.nativeEvent.layout.height;
+          }}
           style={[{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%", maxHeight: wide ? "100%" : maxH }, // medium / large: the height the sheet wants, but it gives way when the keyboard takes room (the header never leaves the screen)
-            !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, wide ? null : follow]}
+            !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, follow]}
           accessibilityViewIsModal
         >
           <Glass
@@ -364,7 +480,7 @@ export function Sheet({
                   <View testID="sheet-title" style={{ flex: 1 }}>
                     <T v="title" numberOfLines={2}>{title ?? ""}</T>
                   </View>
-                  <Press onPress={requestClose} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
+                  <Press testID="sheet-close" onPress={() => requestClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
                     <View
                       style={{
                         width: component.dockBtn,
@@ -399,7 +515,7 @@ export function Sheet({
                   </Press>
                 ) : null}
                 <Press
-                  onPress={() => { setAsk(false); onClose(); }}
+                  onPress={() => { setAsk(false); requestClose(0, true); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
                   accessibilityLabel={t("sheet.discard")}
