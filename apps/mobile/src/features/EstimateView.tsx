@@ -4,11 +4,12 @@
  */
 import { View } from "react-native";
 import { space, component, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, ppmToPctText, taxRatePpm, type CustomOption } from "@octo/estimating-engine";
+import { activeLines, ppmToPctText, taxRatePpm, type CustomOption } from "@octo/estimating-engine";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { optionTotals, shownQty, withAddons } from "./estimateDoc";
+import { clientRows } from "./clientLayout";
 import { DocPagesView } from "./DocPagesView";
 import { StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -35,6 +36,7 @@ export function EstimateView({
   const option: CustomOption = withAddons(base, addonIds);
   const tot = optionTotals(doc, option);
   const act = activeLines(option.lines);
+  const rows = clientRows(option, doc.settings, t, "all");
   const s = doc.settings;
   const many = doc.options.length > 1;
 
@@ -77,64 +79,63 @@ export function EstimateView({
 
       <Card>
         {many ? <T v="heading">{option.name}</T> : null}
-        {LINE_GROUPS.map((g) => {
-          const idx = act.map((l, i) => (l.group === g && !l.optional ? i : -1)).filter((i) => i >= 0);
-          if (!idx.length) return null;
-          return (
-            <View key={g} style={{ gap: space[1] }}>
-              <T v="caption" tone="mut" w="semibold">
-                {t(`ue.group.${g}` as DictKey)}
-              </T>
-              {idx.map((i) => {
-                const l = act[i]!;
-                return (
-                  <RowView key={l.id} style={{ justifyContent: "space-between", alignItems: "flex-start", minHeight: component.rowCompact }}>
-                    <View style={{ flex: 1 }}>
-                      <T v="body">{l.name}</T>
-                      <T v="caption" tone="mut" tabular>
-                        {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
-                      </T>
-                    </View>
-                    <T v="body" tabular>
-                      {money(tot.lineTotals[i] ?? 0)}
-                    </T>
-                  </RowView>
-                );
-              })}
-              <Divider />
-            </View>
-          );
-        })}
-
-        {act.some((l) => l.optional) ? (
-          <View style={{ gap: space[1] }}>
-            <T v="caption" tone="mut" w="semibold">
-              {t("portal.addons")}
-            </T>
-            {act.map((l, i) =>
-              l.optional ? (
-                <RowView key={l.id} style={{ minHeight: size.hitMin }}>
-                  <View style={{ flex: 1 }}>
-                    <T v="body">{l.name}</T>
-                    <T v="caption" tone="mut" tabular>
-                      + {money(tot.lineTotals[i] ?? 0)}
-                    </T>
-                  </View>
-                  {readOnly || !onAddons ? (
+        {/* the lines by section (own words as written, the dictionary's in the client's language) or by kind; an add-on stands in its own
+            place with its switch (no separate block); a section's subtotal counts the chosen add-ons only */}
+        {rows.map((r, k) => {
+            if (r.type === "group") {
+              return (
+                <View key={`g${r.group}`} style={{ gap: space[1] }}>
+                  {k > 0 ? <Divider /> : null}
+                  <T v="caption" tone="mut" w="semibold">
+                    {t(`ue.group.${r.group}` as DictKey)}
+                  </T>
+                </View>
+              );
+            }
+            if (r.type === "section" || r.type === "other") {
+              return (
+                <View key={r.type === "section" ? `s${r.id}` : "other"} testID={r.type === "section" ? `est-client-section-${r.id}` : "est-client-other"} style={{ paddingLeft: r.type === "section" && r.depth ? space[4] : 0 }}>
+                  <T v="caption" tone="mut" w="semibold">
+                    {r.title}
+                  </T>
+                </View>
+              );
+            }
+            if (r.type === "subtotal") {
+              return (
+                <View key={`t${k}`} testID={`est-client-subtotal-${r.id}`} style={{ gap: space[1] }}>
+                  <Line label={t("est.client.subtotal", { title: r.title })} v={money(r.cents)} />
+                  <Divider />
+                </View>
+              );
+            }
+            const l = act[r.i]!;
+            return (
+              <View key={l.id} testID={`est-client-line-${l.id}`}>
+              <RowView style={{ justifyContent: "space-between", alignItems: "flex-start", minHeight: l.optional && !readOnly && onAddons ? size.hitMin : component.rowCompact, paddingLeft: r.depth ? space[4] : 0 }}>
+                <View style={{ flex: 1 }}>
+                  <T v="body">{l.name}</T>
+                  <T v="caption" tone="mut" tabular>
+                    {l.optional ? `${t("portal.addons")} · ` : ""}
+                    {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
+                  </T>
+                </View>
+                <T v="body" tabular>
+                  {l.optional && !l.selected ? `+ ${money(tot.lineTotals[r.i] ?? 0)}` : money(tot.lineTotals[r.i] ?? 0)}
+                </T>
+                {l.optional ? (
+                  readOnly || !onAddons ? (
                     l.selected ? <StatusChip status="ok" label={t("est.chosen")} /> : null
                   ) : (
-                    <Toggle
-                      label={l.name}
-                      on={!!l.selected}
-                      onChange={(on) => onAddons(on ? [...addonIds, l.id] : addonIds.filter((x) => x !== l.id))}
-                    />
-                  )}
-                </RowView>
-              ) : null,
-            )}
-            <Divider />
-          </View>
-        ) : null}
+                    <Toggle label={l.name} on={!!l.selected} onChange={(on) => onAddons(on ? [...addonIds, l.id] : addonIds.filter((x) => x !== l.id))} />
+                  )
+                ) : null}
+              </RowView>
+              </View>
+            );
+        })}
+        {/* a kind's group (no sections) ended with a divider; a section ends with its subtotal and its own divider */}
+        {rows.at(-1)?.type === "subtotal" || rows.length === 0 ? null : <Divider />}
 
         <Line label={t("ue.subtotal")} v={money(tot.subtotal)} />
         {tot.discount ? <Line label={t("ue.discount")} v={`−${money(tot.discount)}`} /> : null}
