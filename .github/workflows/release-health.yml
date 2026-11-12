@@ -31,12 +31,15 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
-          # only ok / not: neither the key nor the list goes to the log
-          if [ -n "$SUPABASE_ACCESS_TOKEN" ] && supabase projects list -o json 2>/dev/null | grep -q "\"$PROJECT_REF\""; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "ok=false" >> "$GITHUB_OUTPUT"
-          fi
+          # only ok / not: neither the key nor the list goes to the log. 3 tries 30 s apart: a passing outage of the network
+          # or of Supabase is not a stop (a task «остановка» pauses every PR — the director)
+          ok=false
+          for try in 1 2 3; do
+            if [ -n "$SUPABASE_ACCESS_TOKEN" ] && supabase projects list -o json 2>/dev/null | grep -q "\"$PROJECT_REF\""; then ok=true; break; fi
+            echo "the key check: try $try did not pass"
+            if [ "$try" -lt 3 ]; then sleep 30; fi
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
       - name: Keep the «остановка» tasks in step
         env:
           GH_TOKEN: ${{ github.token }}
