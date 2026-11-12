@@ -7,6 +7,7 @@ import { Button } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, SectionTitle, SyncBadge } from "@/ui/surfaces";
+import { DemoBadge } from "@/features/DemoBadge";
 import { SECTIONS } from "./registry";
 
 /** Notices (DS §15): a toast, a toast with «Отменить» for 5 seconds, the «no network» badge. Each one is live. */
@@ -59,6 +60,13 @@ export function NoticesSection() {
         )}
         <View testID="showcase-note-badge" style={{ minHeight: space[6] }}>
           <SyncBadge />
+        </View>
+      </Card>
+      <Card>
+        <T v="heading">{t("ds.note.demo")}</T>
+        <T v="caption" tone="mut">{t("ds.note.demoHint")}</T>
+        <View testID="showcase-note-demo">
+          <DemoBadge always />
         </View>
       </Card>
       <Card>
