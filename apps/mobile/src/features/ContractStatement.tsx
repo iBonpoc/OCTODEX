@@ -12,6 +12,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 
 export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey } {
   if (i.paidCents >= i.totalCents) return { s: "ok", l: "money.paid" };
@@ -51,7 +52,8 @@ export function ContractStatement({ jobId }: { jobId: string }) {
     return !!undo;
   };
 
-  const row = (label: string, v: number, strong?: boolean) => (
+  const row = (label: string, v: number, strong?: boolean, testID?: string) => (
+    <View testID={testID}>
     <RowView style={{ justifyContent: "space-between" }}>
       <T v={strong ? "heading" : "body"} tone={strong ? "ink" : "mut"}>
         {label}
@@ -60,6 +62,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
         {money(v)}
       </T>
     </RowView>
+    </View>
   );
 
   return (
@@ -67,7 +70,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
       <SectionTitle title={t("inv.statement")} />
       <Card>
         {row(t("inv.contract"), st.contract)}
-        {row(t("inv.invoiced"), st.invoiced)}
+        {row(t("inv.invoiced"), st.invoiced, false, "statement-invoiced")}
         {row(t("inv.paid"), st.paid)}
         <Divider />
         {row(t("inv.remaining"), st.remaining, true)}
@@ -98,6 +101,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
           })}
         </CardGrid>
       ) : null}
+      <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
       {st.toInvoice > 0 ? (
         <RowView style={{ flexWrap: "wrap" }}>
           {!hasFinal ? (

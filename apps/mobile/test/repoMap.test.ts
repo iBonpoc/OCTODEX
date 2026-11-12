@@ -271,3 +271,29 @@ describe("repo: the invoices of a contract (#865 review З3, З5)", () => {
     expect(db.jobs.find((j) => j.id === "j1")?.contractTaxCents).toBeUndefined();
   });
 });
+
+describe("repo: a voided invoice (В1-5, #1107)", () => {
+  it("goes apart with its reason; the live list and its sums never see it", async () => {
+    rows.invoices = [
+      { id: "iv-live", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "sent", total_cents: 1000, paid_cents: 0, sent_at: "2026-11-05T10:00:00Z" },
+      { id: "iv-void", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "void", total_cents: 9000, paid_cents: 0, sent_at: "2026-11-05T09:00:00Z", void_reason: "Wrong amount", voided_at: "2026-11-05T09:30:00Z" },
+      { id: "iv-draft", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "draft", total_cents: 500, paid_cents: 0 },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id)).toEqual(["iv-live"]);
+    expect(db.voidInvoices).toEqual([expect.objectContaining({ id: "iv-void", status: "void", voidReason: "Wrong amount", voidedAt: "2026-11-05T09:30:00Z", totalCents: 9000 })]);
+  });
+});
+
+describe("repo: a voided deposit does not hide the paid one (В1-5)", () => {
+  it("the estimate's deposit is the live one", async () => {
+    rows.estimates = [{ id: "e7", company_id: CO, customer_id: "c1", property_id: "p1", title: "T", status: "approved" }];
+    rows.jobs = [...rows.jobs!, { id: "j7", property_id: "p1", customer_id: "c1", number: "JOB-0007", status: "scheduled", estimate_id: "e7", contract_total_cents: 100000 }];
+    rows.invoices = [
+      { id: "d-void", company_id: CO, customer_id: "c1", job_id: "j7", kind: "deposit", status: "void", total_cents: 10000, paid_cents: 0, void_reason: "wrong", updated_at: "2026-11-05T09:00:00Z" },
+      { id: "d-live", company_id: CO, customer_id: "c1", job_id: "j7", kind: "deposit", status: "sent", total_cents: 10000, paid_cents: 10000, updated_at: "2026-11-06T10:00:00Z" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.estimates.find((e) => e.id === "e7")?.depositPaidAt).toBe("2026-11-06T10:00:00Z"); // before: the void one was found first — not paid
+  });
+});

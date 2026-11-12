@@ -42,6 +42,11 @@ export const REJECT_REASONS = {
   po_not_open: "po.rej.notOpen",
   // #865 В1-4б (the server refusal comes with voiding, #1107): the job's invoices would be more than its contract
   invoice_over_contract: "inv.rej.overContract",
+  // В1-5 (#1107): a void the server refused — a payment came in meanwhile, or the person may not void
+  invoice_has_payments: "inv.void.rej.paid",
+  invoice_void_forbidden: "inv.void.rej.role",
+  // a payment into an invoice voided meanwhile (migration 20261112090000, t06_payment_not_void)
+  invoice_void: "inv.void.rej.payment",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
@@ -99,8 +104,10 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     case "estimate.countersign": return { ...base, what: "deposit", href: `/estimate/${op.id}` };
     // #865: billed above the contract (another phone billed the job meanwhile) — the card says so
     case "invoice.issue": return { ...base, what: "invoice", href: `/job/${op.jobId}`, amountCents: op.totalCents, ...(reason === "invoice_over_contract" ? { reason } : {}) };
-    case "invoice.pay": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents };
-    case "payment.record": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents };
+    // В1-5: the void the server did not take — the invoice stays live; the card says why
+    case "invoice.void": return { ...base, what: "invoice", href: `/invoice/${op.id}`, amountCents: op.totalCents, labelKey: "inv.void.rej.title", ...(reason ? { reason } : {}) };
+    case "invoice.pay": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents, ...(reason === "invoice_void" ? { reason } : {}) };
+    case "payment.record": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents, ...(reason === "invoice_void" ? { reason } : {}) };
     // the money in the tech's hand the server did not take (more than due, the visit cancelled meanwhile…): say it in
     // the tech's words — the office records it (record_visit_payment, #857 О1)
     case "visit.pay": return { ...base, what: "payment", href: `/visit/${op.visitId}`, amountCents: op.amountCents, labelKey: "visit.rej.moneyInHand" };
