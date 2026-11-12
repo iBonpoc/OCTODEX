@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -98,14 +98,6 @@ function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number
     </View>
   );
 }
-
-/** the run's direction is the same before and after (a pull along it, not a swing): the length window opens only for that */
-const straightOn = (before: { runs: { id: string; a: [number, number]; b: [number, number] }[] }, next: typeof before, id: string): boolean => {
-  const u = before.runs.find((r) => r.id === id), v = next.runs.find((r) => r.id === id);
-  if (!u || !v) return false;
-  const [ux, uy, vx, vy] = [u.b[0] - u.a[0], u.b[1] - u.a[1], v.b[0] - v.a[0], v.b[1] - v.a[1]];
-  return Math.abs(ux * vy - uy * vx) <= 1e-6 * Math.hypot(ux, uy) * Math.hypot(vx, vy) + 1e-9 && ux * vx + uy * vy > 0;
-};
 
 export default function DrawScreen() {
   const { t, money } = useI18n();
@@ -180,7 +172,7 @@ export default function DrawScreen() {
     return () => clearInterval(iv);
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
-  const [hint, setHint] = useState<Tool | "select" | null>(null);
+  const [hint, setHint] = useState<Tool | "select" | "move" | null>(null);
   const live = useLive();
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
@@ -319,13 +311,13 @@ export default function DrawScreen() {
         const sel = cur.current.selected;
         const ring = endHere.id === sel || (!!corner && corner.runs.some((x) => x.id === sel));
         if (held || (ring && tl !== "line") || tl === "ds") {
-          if (corner) {
+          if (corner && cornerMovable(d, corner.id)) {
             dragRef.current = { kind: "corner", cornerId: corner.id, before: d, from: p0, held: [true, true] };
             setSelected(endHere.id);
             haptics.light(); // picked up
             return;
           }
-          if (runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
+          if (!corner && runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
             dragRef.current = { kind: "pull", id: endHere.id, end: endHere.end, before: d, from: p0, held: HELD_ORIGINAL };
             setSelected(endHere.id);
             haptics.light(); // picked up
@@ -417,7 +409,7 @@ export default function DrawScreen() {
           commit(next, g.before);
           if (next !== g.before) haptics.medium(); // set down (DS §15.6) — only when something moved
           // «Желоб»: drawn on / pulled out straight from the end → its length window, as growing a gutter always did (founder 09.11)
-          if (g.kind === "pull" && g.fromLine && next !== g.before && straightOn(g.before, next, g.id)) {
+          if (g.kind === "pull" && g.fromLine && next !== g.before && sameDirection(g.before, next, g.id)) {
             setQuickRun(g.id);
             quickGrew.current = true;
           }
@@ -454,6 +446,8 @@ export default function DrawScreen() {
         setLenEdit(lab.id.slice(4));
         return;
       }
+      // (the lift of a drag of an end or a corner is a tap on the spot on the web: not a tap on its label, #818 review)
+      if (lab?.id.startsWith("corner:") && liftTap.current) return;
       if (lab?.id.startsWith("corner:")) {
         setCornerSheet(lab.id.slice(7));
         return;
@@ -471,6 +465,8 @@ export default function DrawScreen() {
         setSheet(true); // its menu (founder 09.11)
         return;
       }
+      // …nor a tap that puts a downspout (the downspout tool drags ends and corners now)
+      if (tl === "ds" && liftTap.current) return;
       if (tl === "ds") {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch), cur.current.ch);
@@ -795,14 +791,14 @@ export default function DrawScreen() {
     </View>
   );
   const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
-  // #818 (founder 12.11: «не понимаю, как тянуть край»): once per opening of the canvas, when a gutter is first picked, a toast says how an
-  // end and a corner are taken, with any tool — not a bubble that would stand over the drawing
+  // #818 (founder 12.11: «не понимаю, как тянуть край»): once per opening of the canvas, when a gutter is first picked, the hint bubble says how
+  // an end and a corner are taken, with any tool (the bubble the tools' hints use: it never replaces a toast with «Отменить», rule 5)
   const movedHint = useRef(false);
   useEffect(() => {
     if (movedHint.current || !canSave || !selected || !drawing.runs.some((r) => r.id === selected)) return;
     movedHint.current = true;
-    toast.show(t("mod.gutters.draw.moveHint"));
-  }, [selected, canSave, drawing.runs, toast, t]);
+    setHint("move");
+  }, [selected, canSave, drawing.runs]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;

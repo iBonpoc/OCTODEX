@@ -109,6 +109,11 @@ export interface SceneOpts {
   layers?: SceneLayers;
 }
 
+/** the angle's arc (#818): its radius is `ARC_R_TIMES` × the mark's radius (a token), at most `ARC_SIDE_SHARE` of the shorter side on the screen; sides this close to one line (|sin|) have no arc. Scene constants derived from `drawing.dsR`, not tokens of their own */
+const ARC_R_TIMES = 3;
+const ARC_SIDE_SHARE = 0.45;
+const ARC_PARALLEL_EPS = 0.02;
+
 /** the layers of the view (#930): a layer is hidden, never deleted — the drawing itself is as it was; all on when not said */
 export interface SceneLayers { grid?: boolean; labels?: boolean; ds?: boolean }
 
@@ -163,9 +168,9 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       const L = Math.hypot(q[0] - at[0], q[1] - at[1]);
       return { L, u: [(q[0] - at[0]) / (L || 1), (q[1] - at[1]) / (L || 1)] as [number, number] };
     });
-    const R = Math.min(DT.dsR * 3, us[0]!.L * 0.45, us[1]!.L * 0.45);
+    const R = Math.min(DT.dsR * ARC_R_TIMES, us[0]!.L * ARC_SIDE_SHARE, us[1]!.L * ARC_SIDE_SHARE);
     const cross = us[0]!.u[0] * us[1]!.u[1] - us[0]!.u[1] * us[1]!.u[0];
-    const arc = R >= DT.dsR && Math.abs(cross) > 0.02 ? { from: [at[0] + us[0]!.u[0] * R, at[1] + us[0]!.u[1] * R] as [number, number], to: [at[0] + us[1]!.u[0] * R, at[1] + us[1]!.u[1] * R] as [number, number], r: R, sweep: (cross > 0 ? 1 : 0) as 0 | 1 } : null;
+    const arc = R >= DT.dsR && Math.abs(cross) > ARC_PARALLEL_EPS ? { from: [at[0] + us[0]!.u[0] * R, at[1] + us[0]!.u[1] * R] as [number, number], to: [at[0] + us[1]!.u[0] * R, at[1] + us[1]!.u[1] * R] as [number, number], r: R, sweep: (cross > 0 ? 1 : 0) as 0 | 1 } : null;
     return {
       id: f.id, runId: f.runs[0].id, at, kind: f.kind,
       splash: d.corners?.[f.id]?.splashGuard ?? (f.kind === "in" && !splashOff(d, f)),

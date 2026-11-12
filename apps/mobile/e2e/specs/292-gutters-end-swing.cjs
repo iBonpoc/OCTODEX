@@ -1,6 +1,6 @@
 /**
  * e2e 292 — #818 (founder 12.11: «заглушка свободно перемещалась и прилипала под 90°»). Every view.
- * A picked gutter's free end handle: pulled along — only the length (e2e 251); pulled sideways past the threshold — the end
+ * A free end taken (a long press, any tool): along its line only the length (e2e 251); pulled sideways — the end
  * follows the finger, the other end stays; near a right angle it is held there and the chip says «90°»; «Назад» puts it back.
  * Finds things by testID / id; waits on what it checks (no pauses).
  */
@@ -74,6 +74,5 @@ exports.run = async (h) => {
     const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt)[0]?.geom;
     return !!g && g.a[0] === ax && g.a[1] === ay && g.b[0] === bx && g.b[1] === by;
   }, [KEY, g0.a[0], g0.a[1], g0.b[0], g0.b[1]], { timeout: 5000 });
-  h.expect(true, "«Назад» puts the end back");
   await h.shot("swing");
 };

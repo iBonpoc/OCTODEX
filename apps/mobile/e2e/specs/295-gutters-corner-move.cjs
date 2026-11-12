@@ -1,5 +1,5 @@
 /**
- * e2e 294 — #818 (spec 33 П35, founder 12.11: «оттягивать угол»): a corner taken by a long press (with the «Желоб» tool, the
+ * e2e 295 — #818 (spec 33 П35, founder 12.11: «оттягивать угол»): a corner taken by a long press (with the «Желоб» tool, the
  * default) and moved: the joint follows the finger, both far ends stand, a side near its axis is held there, the chip says the
  * angle; «Назад» puts everything back. Every view. Finds things by testID / id; waits on what it checks (no pauses).
  */
@@ -66,7 +66,6 @@ exports.run = async (h) => {
   // «Назад»: one step puts the joint back
   await pressWhenStill(tid("draw-undo").getByRole("button"));
   await p.waitForFunction(([k, jx, jy]) => { const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).map((e) => e.geom); return g.length === 2 && g.every((q) => [q.a, q.b].some((v) => Math.abs(v[0] - jx) < 1.5 && Math.abs(v[1] - jy) < 1.5)); }, [KEY, ...joint(before)], { timeout: 8000 });
-  h.expect(true, "«Назад» puts the joint back");
 
   // the downspout tool: a plain drag from the corner (no hold, nothing to pick first) takes it — «Водосток» has no other use for it
   await tid("draw-tool-ds").getByRole("button").click();
@@ -76,5 +75,13 @@ exports.run = async (h) => {
   for (let i = 1; i <= 10; i++) await p.mouse.move(corner2[0] + (120 * i) / 10, corner2[1], { steps: 3 });
   await p.mouse.up();
   await p.waitForFunction(([k, jx, jy]) => { const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).map((e) => e.geom); if (g.length !== 2) return false; const sh = [g[0].a, g[0].b].find((u) => [g[1].a, g[1].b].some((v) => Math.abs(u[0] - v[0]) < 1.5 && Math.abs(u[1] - v[1]) < 1.5)); return !!sh && (Math.abs(sh[0] - jx) > 1.5 || Math.abs(sh[1] - jy) > 1.5); }, [KEY, ...joint(before)], { timeout: 8000 });
-  h.expect(true, "with the downspout tool a plain drag from the corner moves it");
+  const dsN = await p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "downspout" && !e.deletedAt).length, KEY);
+  h.expect(dsN === 0, `the lift of the drag put no downspout (${dsN})`);
+  await pressWhenStill(tid("draw-undo").getByRole("button")); // back, for the next step
+
+  // «Желоб» without a hold: drawing from the corner goes on as always — a third gutter, the corner is not taken
+  await tid("draw-tool-line").getByRole("button").click();
+  const corner3 = await svg().locator('[id^="c:"]').first().evaluate((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+  await stroke(corner3, [corner3[0] + 80, corner3[1] + 80]);
+  await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 3, KEY, { timeout: 8000 });
 };

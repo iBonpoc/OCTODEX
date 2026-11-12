@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { findCorners, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { findCorners, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, MIN_TURN_DEG, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -282,11 +282,30 @@ export interface CornerMove {
  * written as `lengthIn`. null — no corner of that id, a side would be shorter than MIN_RUN_IN, the joint would land on another
  * gutter's end (the caller keeps the last frame), or the sides would be parallel with no way to cross.
  */
+/** a corner that can be taken: two ends and no third one of the same storey at the joint (spec П35) */
+export function cornerMovable(d: Drawing, cornerId: string): boolean {
+  const f = findCorners(d).find((c) => c.id === cornerId);
+  if (!f) return false;
+  const ids = new Set(f.runs.map((x) => x.id));
+  const a = d.runs.find((r) => r.id === f.runs[0].id);
+  return !!a && !d.runs.some((x) => !ids.has(x.id) && sameStory(x, a) && [x.a, x.b].some((q) => Math.hypot(q[0] - f.at[0], q[1] - f.at[1]) <= 1.5));
+}
+
+/** the run points the same way before and after (a pull along it, not a swing) */
+export function sameDirection(before: Pick<Drawing, "runs">, next: Pick<Drawing, "runs">, id: string): boolean {
+  const u = before.runs.find((r) => r.id === id), v = next.runs.find((r) => r.id === id);
+  if (!u || !v) return false;
+  const [ux, uy, vx, vy] = [u.b[0] - u.a[0], u.b[1] - u.a[1], v.b[0] - v.a[0], v.b[1] - v.a[1]];
+  return Math.abs(ux * vy - uy * vx) <= 1e-6 * Math.hypot(ux, uy) * Math.hypot(vx, vy) + 1e-9 && ux * vx + uy * vy > 0;
+}
+
 export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, boolean] = [false, false]): CornerMove | null {
   const f = findCorners(d).find((c) => c.id === cornerId);
   if (!f) return null;
   const rs = f.runs.map((x) => ({ x, r: d.runs.find((r) => r.id === x.id)! }));
   if (rs.some((q) => !q.r)) return null;
+  // a third end of the same storey at the joint: moving the pair would tear it off (spec П35: «стык с тремя концами не двигается»)
+  if (d.runs.some((x) => !rs.some((q) => q.r.id === x.id) && sameStory(x, rs[0]!.r) && [x.a, x.b].some((q) => Math.hypot(q[0] - f.at[0], q[1] - f.at[1]) <= 1.5))) return null;
   const far = rs.map((q) => (q.x.end === 0 ? q.r.b : q.r.a));
   const step = Math.PI / 4;
   const win = (i: number) => ((SNAP_ANGLE_DEG + (held[i] ? SNAP_LEAVE_EXTRA_DEG : 0)) * Math.PI) / 180;
@@ -321,13 +340,18 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
   at = [Math.round(at[0]), Math.round(at[1])];
   const lens = far.map((q) => Math.round(Math.hypot(at[0] - q[0], at[1] - q[1])));
   if (lens.some((n) => n < MIN_RUN_IN || n > MAX_RUN_IN)) return null;
+  // a side never turns inside out: the joint stays on the finger's side of each far end (the crossing of two rays may land behind one)
+  if (far.some((q) => (at[0] - q[0]) * (p[0] - q[0]) + (at[1] - q[1]) * (p[1] - q[1]) < 0)) return null;
   const same = at[0] === f.at[0] && at[1] === f.at[1];
-  // never ends on another gutter's end by rounding (a corner only by the user's own act — drawing a line to it)
-  if (!same && d.runs.some((x) => !rs.some((q) => q.r.id === x.id) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return null;
+  // never ends on another gutter's end of the same storey by rounding (a corner only by the user's own act — drawing a line to it)
+  if (!same && d.runs.some((x) => !rs.some((q) => q.r.id === x.id) && sameStory(x, rs[0]!.r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return null;
   const angle = Math.round((Math.abs(Math.atan2(cross2(sub2(far[0]!, at), sub2(far[1]!, at)), dot2(sub2(far[0]!, at), sub2(far[1]!, at)))) * 180) / Math.PI);
+  // a corner stays a corner: the frame that would lay the two sides almost in one line (a turn under MIN_TURN_DEG) is not drawn — it would
+  // stop being found, and its method and splash guard would be orphaned
+  if (180 - angle < MIN_TURN_DEG) return null;
   const nowHeld: [boolean, boolean] = [!!rays[0], !!rays[1]];
   if (same) return { drawing: d, deg: angle, held: nowHeld };
-  const ids = new Map(rs.map((q, i) => [q.r.id, { end: q.x.end, len: lens[i]!, was: Math.round(runLengthIn(q.r) || Math.hypot(q.r.b[0] - q.r.a[0], q.r.b[1] - q.r.a[1])) }]));
+  const ids = new Map(rs.map((q, i) => [q.r.id, { end: q.x.end, len: lens[i]! }]));
   const runs = d.runs.map((r) => {
     const m = ids.get(r.id);
     if (!m) return r;
@@ -487,7 +511,7 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "corner"; cornerId: string; before: Drawing; /** where the finger touched down: the joint moves by the finger's move from it, never jumps to it */ from?: P; /** the sides held (at 45° steps or in their own direction) by the last frame */ held: [boolean, boolean] } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean; /** the finger left the gutter's axis (#818): the end swings round the other one, free, held at 45° steps — stays so till the lift */ swung?: boolean ; /** where the finger touched down: the side threshold counts from it */ from?: P; /** the step of 45° held by the last frame (the window's hysteresis) */ held?: number | null };
+export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "corner"; cornerId: string; before: Drawing; /** where the finger touched down: the joint moves by the finger's move from it, never jumps to it */ from?: P; /** the sides held (at 45° steps or in their own direction) by the last frame */ held: [boolean, boolean] } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean; /** where the finger touched down: the end moves by the finger's move from it */ from?: P; /** the step of 45° held by the last frame (the window's hysteresis) */ held?: number | null };
 
 /** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
 export function moveDs(d: Drawing, id: string, p: P): Drawing {
