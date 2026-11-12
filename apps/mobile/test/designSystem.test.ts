@@ -139,6 +139,14 @@ describe("design system: components", () => {
     // the buzz follows what the drop came to (feelOf, tested in sortable.test): it is asked after the result, never before
     expect(sortable).toMatch(/const res: DropResult = d \? drop\(d\) : "same";[\s\S]*?feelOf\(res\)/);
     expect(sortable.slice(0, sortable.indexOf("const res: DropResult"))).not.toMatch(/haptics\.(medium|warning)/);
+    // one finger: only the held row's own gesture writes its place (a second finger would make the row jump); a refused begin sets nothing
+    expect(sortable).toMatch(/const w = dragWrite\(activeSV\.value, k,/);
+    expect(sortable).toMatch(/if \(!canBegin\(activeKey\.current\)\) return;[\s\S]*?activeSV\.value = key;/);
+    // a row that goes while it is held lets the page scroll again (lock(false)) — on its own and when the list goes
+    expect(sortable).toMatch(/heldGone\(activeKey\.current, keys\)\) abort\(\)/);
+    expect(sortable).toMatch(/useEffect\(\(\) => \(\) => abortRef\.current\(\), \[\]\)/);
+    // the shadow is a token
+    expect(sortable).toMatch(/component\.liftShadow/);
     // the kind of pointer, not the width, decides how a body starts a drag
     for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
   });

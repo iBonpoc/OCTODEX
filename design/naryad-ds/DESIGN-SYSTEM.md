@@ -1709,8 +1709,8 @@ iOS «Уменьшение движения», Android «Убрать анима
 | Н-24 | `brandPresets` (12 цветов) | `ColorField` | А15 | после |
 | Н-25 | `component.button.prominent` = 50 | **только при варианте (б)**, по решению В-07 | §7.2 | до, если «да» |
 | Н-26 | `motion.skeletonCycle` = 1800 | пульс скелетона | §14.2 | до |
-| Н-27 | `z.lift` = 3 | поднятый при перетаскивании предмет (вместо 10, 100, 2/1) | §14.6 | после |
-| Н-28 | `gesture.dragHoldMs` = 230, `gesture.dragStart` = 5, `motion.liftScale` = 1.05, `motion.liftTilt` = −2 | перетаскивание (числа в `dnd.tsx`) | §14.6 | после (строки сметы — до 1.0) |
+| Н-27 | `z.lift` = 3 | поднятый при перетаскивании предмет (вместо 10, 100, 2/1) | §14.6 | после ✅ (токен и `dnd.tsx` / `SortableList.tsx` на нём) |
+| Н-28 | `gesture.dragHoldMs` = 230, `gesture.dragStart` = 5, `motion.liftScale` = 1.05, `motion.liftTilt` = −2 | перетаскивание (числа в `dnd.tsx`) | §14.6 ✅ токены в `packages/design-tokens`, `dnd.tsx` и `SortableList.tsx` на них | после (строки сметы — до 1.0) |
 | Н-29 | `gesture.slop` = 10 | порог «жест взят» (заменяет `sheetBodySlop` и константу смахивания назад) | §14.6 | до |
 | Н-30 | блок `prefers-reduced-motion` в `foundation.css`: оставить `--dur-fast` | растворение при уменьшенном | §14.5 | до |
 | Н-31 | ~35 значков `extraIcons` и ~35 `component.*` app-only — в CSS и `icons.json` «Наряда» (C-13, DS-22) | зеркало видит всё | §2.1 | после |

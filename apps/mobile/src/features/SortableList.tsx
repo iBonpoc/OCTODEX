@@ -11,7 +11,7 @@ import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, holdConfig } from "@/ui/pointer";
-import { canBegin, dragKind, edgeStep, feelOf, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
+import { canBegin, dragKind, dragWrite, edgeStep, feelOf, heldGone, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
 /**
@@ -31,6 +31,8 @@ interface Ctl {
   lift: ReturnType<typeof useSharedValue<number>>;
   /** 1 while a row is held (frame, ground): shown also under reduced motion */
   held: ReturnType<typeof useSharedValue<number>>;
+  /** the key of the held row for the UI thread ("" — none): only its own finger writes the row's place */
+  activeSV: ReturnType<typeof useSharedValue<string>>;
   dragY: ReturnType<typeof useSharedValue<number>>;
   /** how far the page has scrolled since the row was taken (the row goes with it) */
   scrolled: ReturnType<typeof useSharedValue<number>>;
@@ -81,6 +83,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
   const [state, setState] = useState<{ active: string | null; to: number; from: number; h: number }>({ active: null, to: 0, from: 0, h: 0 });
   const lift = useSharedValue(0);
   const held = useSharedValue(0);
+  const activeSV = useSharedValue("");
   const dragY = useSharedValue(0);
   const scrolled = useSharedValue(0);
   const visible = useRef<{ top: number; bottom: number } | null>(null);
@@ -139,7 +142,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
   );
 
   /** where each row stands NOW, in the list (the browser tells a layout only when a size changes, not when a row above grew) */
-  const measureAll = useCallback((withHeld = false) => {
+  const measureAll = useCallback((withHeld = false, done?: () => void) => {
     boxRef.current?.measureInWindow((_x: number, cy: number) => {
       // the first measure (at the start) takes every row, the held one too — its place may be stale after a drop (the browser tells a
       // layout only when a size changes). A later measure leaves the held row out: it is lifted (scaled, tilted) by then.
@@ -150,11 +153,34 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => {
           layouts.current.set(k, { y: ny - cy, h: nh });
           // the bar is drawn from these: draw it again with the new numbers
-          if (--left === 0) bump((v) => v + 1);
+          if (--left === 0) {
+            bump((v) => v + 1);
+            done?.();
+          }
         }),
       );
     });
   }, []);
+
+  /** the drag ends by itself: the held row is gone (its adding was undone, another option opened) or the list goes — the page must scroll again */
+  const abort = useCallback(() => {
+    if (activeKey.current === null) return;
+    activeKey.current = null;
+    activeSV.value = "";
+    stop();
+    lock(false);
+    held.value = 0;
+    lift.value = 0;
+    dragY.value = 0;
+    setState({ active: null, to: 0, from: 0, h: 0 });
+    latest.current.onHold?.(null);
+  }, [activeSV, stop, lock, held, lift, dragY]);
+  useEffect(() => {
+    if (heldGone(activeKey.current, keys)) abort();
+  }, [keys, abort]);
+  const abortRef = useRef(abort);
+  abortRef.current = abort;
+  useEffect(() => () => abortRef.current(), []);
 
   const ctl = useMemo<Ctl>(
     () => ({
@@ -165,6 +191,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
       h: state.h,
       lift,
       held,
+      activeSV,
       dragY,
       scrolled,
       snap,
@@ -182,6 +209,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         // a section folds when taken: an open row inside it must close first (a wrong one speaks and the drag does not start)
         if (before && !before(row)) return;
         activeKey.current = key;
+        activeSV.value = key;
         startOffset.current = sc?.offset() ?? 0;
         // the finger's place is known from the first moment (before, the page ran up from a 0 and the row with it)
         absY.current = y;
@@ -204,7 +232,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         if (row.type === "section") {
           hold?.(row.section.id);
           // the section folds: the rows below it have moved — measure them again once the fold is drawn
-          requestAnimationFrame(() => requestAnimationFrame(() => measureAll()));
+          // (and the place is found again at once: a finger that does not move gives no move to do it)
+          requestAnimationFrame(() => requestAnimationFrame(() => measureAll(false, () => refresh(key, true))));
         }
         // the page follows the held row near the edges of what can be seen (below the header, above the bottom bar)
         timer.current = setInterval(() => {
@@ -227,6 +256,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         // only the held row's own finger ends the drag (the other finger's end took its place, its lastT and its lock)
         if (!ownsDrag(activeKey.current, key)) return;
         activeKey.current = null;
+        activeSV.value = "";
         lastT.current = endTy;
         stop();
         lock(false);
@@ -254,7 +284,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         lift.value = reduce ? 0 : withSpring(0, motion.spring);
       },
     }),
-    [keys, state, snap, lift, held, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, insets.top, insets.bottom, winH],
+    [keys, state, snap, lift, held, activeSV, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, insets.top, insets.bottom, winH],
   );
 
   // the bar: where the held row will stand
@@ -306,7 +336,7 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
 
   // the movement is on the UI thread (no bridge per frame): the row follows the finger and the page's scroll; the JS side is told
   // only to find the place (`move`). One finger: a second one cancels the drag.
-  const { dragY, scrolled, held, lift } = ctl;
+  const { dragY, scrolled, held, lift, activeSV } = ctl;
   const begin = ctl.begin;
   const move = ctl.move;
   const end = ctl.end;
@@ -319,7 +349,9 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     },
     onUpdate: (e) => {
       "worklet";
-      dragY.value = e.translationY + scrolled.value;
+      const w = dragWrite(activeSV.value, k, e.translationY, scrolled.value);
+      if (w === null) return;
+      dragY.value = w;
       runOnJS(move)(k, e.translationY, e.absoluteY);
     },
     onDeactivate: (e) => {
@@ -339,7 +371,9 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     },
     onUpdate: (e) => {
       "worklet";
-      dragY.value = e.translationY + scrolled.value;
+      const w = dragWrite(activeSV.value, k, e.translationY, scrolled.value);
+      if (w === null) return;
+      dragY.value = w;
       runOnJS(move)(k, e.translationY, e.absoluteY);
     },
     onDeactivate: (e) => {
@@ -357,7 +391,7 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
         { rotate: on ? `${motion.liftTilt * lift.value}deg` : "0deg" },
       ],
       zIndex: on ? z.lift : 0,
-      shadowOpacity: on ? 0.35 * lift.value : 0,
+      shadowOpacity: on ? component.liftShadow * lift.value : 0,
       shadowRadius: c.shadow.radius,
       shadowOffset: { width: 0, height: component.dragHandle },
       shadowColor: c.shadow.color,

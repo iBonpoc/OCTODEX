@@ -144,3 +144,16 @@ export const feelOf = (r: DropResult): "medium" | "warning" | null => (r === "mo
 export const canBegin = (active: string | null): boolean => active === null;
 /** only the row that is held hears about moves and the end of ITS drag */
 export const ownsDrag = (active: string | null, key: string): boolean => active === key;
+
+/**
+ * What a gesture may write to the held row's place: only THE held row's own finger. A second finger on another row (its `begin` was
+ * refused) or on the other handler of the same row must not move the lifted row — it would jump between the fingers (#1262).
+ * Runs on the UI thread (a worklet): `active` is the held key, "" — none.
+ */
+export function dragWrite(active: string, key: string, translationY: number, scrolled: number): number | null {
+  "worklet";
+  return active !== "" && active === key ? translationY + scrolled : null;
+}
+
+/** the held row is no longer in the list (its adding was undone, another option opened): the drag must end by itself */
+export const heldGone = (active: string | null, keys: string[]): boolean => active !== null && !keys.includes(active);

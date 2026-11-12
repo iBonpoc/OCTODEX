@@ -130,7 +130,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 40 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
   // the row is still under the finger (the page's offset used to grow past the end: the row ran away from the finger)
   const held = await tid(`sort-row-${first}`).boundingBox();
-  h.expect(Math.abs(held.y + held.height / 2 - (vh - 6)) < 120, `held at the end of the page: the row stays with the finger (row at ${Math.round(held.y + held.height / 2)}, finger at ${vh - 6})`);
+  h.expect(Math.abs(held.y + held.height / 2 - (vh - 6)) < 60, `held at the end of the page: the row stays with the finger (row at ${Math.round(held.y + held.height / 2)}, finger at ${vh - 6})`);
   // the last row may be out of sight (a phone: the totals take the end of the page): the finger goes into the top zone and the page
   // scrolls back until the last row is well in view
   const x = hb.x + hb.width / 2;
@@ -151,6 +151,9 @@ exports.run = async (h) => {
   await p.mouse.move(x, lastBox.y + lastBox.height + 50, { steps: 3 });
   await p.mouse.up();
   await p.waitForFunction((k) => { const ids = [...document.querySelectorAll('[data-testid^="est-line-"]')].map((e) => e.getAttribute("data-testid")); return ids[ids.length - 1] === `est-line-${k}`; }, first.slice(2), { timeout: 5000 });
+
+  // let go: no row is open (a drop must not count as a tap that opens the row under the finger)
+  h.expect((await p.locator('[data-testid^="est-name-"]').count()) === 0, "after the drop no row is open");
 
   // the module leads its own: its line has no handle; a drop into its section is refused with a toast
   await tid("ue-save").getByRole("button").click();

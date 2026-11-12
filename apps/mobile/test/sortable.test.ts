@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine, CustomOption, EstimateSection } from "@octo/estimating-engine";
 import { moveLine, moveSection, sameLayout, viewRows } from "../src/features/sectionLayout";
-import { canBegin, dragKind, edgeStep, feelOf, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
+import { canBegin, dragKind, dragWrite, edgeStep, heldGone, feelOf, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
 
 const L = (id: string, sectionId?: string): CustomLine => ({ id, name: id, group: "service", quantity: "1", unit: "ea", unitPriceCents: 100, ...(sectionId ? { sectionId } : {}) });
 const opt = (lines: CustomLine[], sections?: EstimateSection[]): CustomOption => ({ id: "o", name: "Good", lines, ...(sections ? { sections } : {}) });
@@ -173,5 +173,33 @@ describe("one drag at a time (#1245 Б2)", () => {
     expect(ownsDrag("l:a", "l:a")).toBe(true);
     expect(ownsDrag("l:a", "l:b")).toBe(false);
     expect(ownsDrag(null, "l:a")).toBe(false);
+  });
+});
+
+describe("a second finger does not move the held row (#1262 Б-1)", () => {
+  it("row A is held; a finger on row B (its begin was refused) or on A's other handler writes nothing to A's place", () => {
+    // the UI thread asks dragWrite for every update of every gesture; only the held key's own finger gets a place
+    const heldKey = "l:a";
+    const fingerA = dragWrite(heldKey, "l:a", -40, 100);
+    const fingerB = dragWrite(heldKey, "l:b", 300, 100);
+    expect(fingerA).toBe(60);
+    expect(fingerB).toBeNull();
+    // before any row is held (""), and after the end, nobody writes
+    expect(dragWrite("", "l:a", 10, 0)).toBeNull();
+    // the sequence of one drag: B's moves come between A's, the place follows A only
+    let y = 0;
+    for (const [k, t] of [["l:a", 10], ["l:b", 250], ["l:a", 20], ["l:b", -90], ["l:a", 30]] as const) {
+      const w = dragWrite(heldKey, k, t, 0);
+      if (w !== null) y = w;
+    }
+    expect(y).toBe(30);
+  });
+});
+
+describe("a held row that is gone ends the drag (#1262 замечание 2)", () => {
+  it("held and still in the list: goes on; gone (adding undone, another option): ends; nothing held: nothing to end", () => {
+    expect(heldGone("l:a", ["s:A", "l:a"])).toBe(false);
+    expect(heldGone("l:a", ["s:A", "l:b"])).toBe(true);
+    expect(heldGone(null, ["l:b"])).toBe(false);
   });
 });
