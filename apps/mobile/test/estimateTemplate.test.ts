@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../src/cloud/client", () => ({ supabase: {} }));
 import { computeCustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateDoc } from "@/data/types";
+import { clientSectionsOf } from "@/features/estimateDoc";
 import { cleanEstimateTemplate, fromTemplate, pickableTemplates, splitCosts, templateFromCents, toTemplateDoc, validTemplateDoc } from "@/features/estimateTemplate";
 import { estimateTemplateFromDb } from "../src/cloud/repo";
 import { estimateTemplateToDb } from "../src/cloud/ops";
@@ -130,6 +131,78 @@ describe("unit:estimateTemplate — the server's check on the phone, costs apart
       { id: "a", name: "B", doc: d }, { id: "b", name: "A", doc: d }, { id: "c", name: "C", doc: d, lastUsedAt: "2026-11-08" }, { id: "d", name: "D", doc: d, archivedAt: "x" },
     ]);
     expect(list.map((x) => x.id)).toEqual(["c", "b", "a"]);
+  });
+});
+
+describe("unit:estimateTemplate — #1232: the hidden $0 lines and the sections stay in a template", () => {
+  const ch = (code: number) => String.fromCharCode(code);
+  const withSections: EstimateDoc = {
+    options: [
+      {
+        id: "o1", name: "Good",
+        sections: [
+          { id: "s1", title: `  Roof ${ch(0x200b)}work  ` },
+          { id: "s1b", title: "Flashing", parentId: "s1" },
+          { id: "s2", kind: "labor" },
+          { id: "s3", title: "Gutters", kind: "module", module: "gutters" },
+          { id: "s1", title: "Twice" },
+          { id: "orphan", parentId: "nope" },
+        ],
+        lines: [
+          { id: "l1", name: "Shingles", group: "material", quantity: "10", unit: "sq", unitPriceCents: 12000, sectionId: "s1b" },
+          { id: "l2", name: "Hanger kit", group: "material", quantity: "40", unit: "ea", unitPriceCents: 0, clientVisible: false, sectionId: "s3" },
+          { id: "l3", name: "Hidden but priced", group: "labor", quantity: "1", unit: "hr", unitPriceCents: 5000, clientVisible: false, sectionId: "s2" },
+          { id: "l4", name: "No section", group: "service", quantity: "1", unit: "ea", unitPriceCents: 9900, sectionId: "x".repeat(65) },
+        ],
+      },
+    ],
+    settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" } },
+  } as unknown as EstimateDoc;
+
+  it("the template keeps the sections as the client reads them, each line's section and «hidden» only at $0", () => {
+    const tpl = toTemplateDoc(withSections, true, false, true);
+    const o = tpl.options[0]!;
+    expect(o.sections).toEqual([{ id: "s1", title: "Roof work" }, { id: "s1b", title: "Flashing", parentId: "s1" }, { id: "s2", kind: "labor" }, { id: "s3", title: "Gutters", kind: "module" }]);
+    expect(o.lines.map((l) => [l.id, l.sectionId, l.clientVisible])).toEqual([["l1", "s1b", undefined], ["l2", "s3", false], ["l3", "s2", undefined], ["l4", undefined, undefined]]);
+    expect(validTemplateDoc(tpl)).toBe(true);
+  });
+  it("an estimate from the template has them all again (fresh ids, the same sections)", () => {
+    const tpl = toTemplateDoc(withSections, true);
+    const { doc } = fromTemplate(tpl, [], {}, true);
+    const o = doc.options[0]!;
+    expect(o.sections).toEqual([{ id: "s1", title: "Roof work" }, { id: "s1b", title: "Flashing", parentId: "s1" }, { id: "s2", kind: "labor" }, { id: "s3", title: "Gutters", kind: "module" }]);
+    expect(o.lines.map((l) => [l.name, l.sectionId, l.clientVisible])).toEqual([["Shingles", "s1b", undefined], ["Hanger kit", "s3", false], ["Hidden but priced", "s2", undefined], ["No section", undefined, undefined]]);
+  });
+  it("the check on the phone refuses what the server would: sections not a list, hidden with a price or not a boolean, a long sectionId", () => {
+    const tpl = toTemplateDoc(withSections, true);
+    const opt = (x: object) => ({ ...tpl, options: [{ ...tpl.options[0]!, ...x }] }) as EstimateDoc;
+    const line0 = (x: object) => opt({ lines: [{ ...tpl.options[0]!.lines[0]!, ...x }] });
+    expect(validTemplateDoc(opt({ sections: "s1" }))).toBe(false);
+    expect(validTemplateDoc(line0({ clientVisible: false }))).toBe(false);
+    expect(validTemplateDoc(line0({ clientVisible: "false" }))).toBe(false);
+    expect(validTemplateDoc(line0({ clientVisible: 0 }))).toBe(false);
+    expect(validTemplateDoc(line0({ sectionId: "x".repeat(65) }))).toBe(false);
+    // sections in another form (an older or newer phone's cleaning): the server puts them in the client's form itself
+    // (trigger t02, db T203) — never a refusal for that
+    expect(validTemplateDoc(opt({ sections: withSections.options[0]!.sections }))).toBe(true);
+  });
+  it("a $0 line hidden the way another copy writes it («false», 0) stays hidden in the template, as a boolean", () => {
+    const d = { ...withSections, options: [{ ...withSections.options[0]!, lines: [
+      { id: "a", name: "Kit", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: "false" },
+      { id: "b", name: "Kit 2", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: 0 },
+    ] }] } as unknown as EstimateDoc;
+    const tpl = toTemplateDoc(d, true);
+    expect(tpl.options[0]!.lines.map((l) => l.clientVisible)).toEqual([false, false]);
+    expect(validTemplateDoc(tpl)).toBe(true);
+  });
+  it("the shared examples (test/fixtures/clientSections.json, the server's T199 and T203 the same): the phone's client form is the server's", async () => {
+    const fx = (await import("./fixtures/clientSections.json")).default as { cases: { name: string; sections: unknown; client: unknown }[] };
+    for (const c of fx.cases) {
+      expect(clientSectionsOf({ sections: c.sections as never }), c.name).toEqual(c.client);
+      const tpl = toTemplateDoc({ ...withSections, options: [{ ...withSections.options[0]!, sections: c.sections as never }] }, true);
+      expect(tpl.options[0]!.sections ?? [], c.name).toEqual(c.client);
+      expect(validTemplateDoc(tpl), c.name).toBe(true);
+    }
   });
 });
 

@@ -13482,10 +13482,11 @@ begin
                  'T199 unsigned: the priced one is shown, «false» as a string hides at $0');
   perform tst.ok(not (app.client_doc(doc) -> 'options' -> 0 -> 'lines' -> 1) ? 'sectionId', 'T199 a sectionId longer than 64 is no link');
 end $$;
+-- #1232 (T203): app.client_title and app.client_sections — pure functions of their argument — are granted to the member
+-- who saves a template (its check uses them); app.client_doc stays closed, anon never
 select tst.ok(not has_function_privilege('authenticated', 'app.client_doc(jsonb,boolean)', 'EXECUTE')
-              and not has_function_privilege('authenticated', 'app.client_title(text)', 'EXECUTE'), 'T199 rule 18: the new forms are closed too');
-select tst.ok(not has_function_privilege('authenticated', 'app.client_sections(jsonb)', 'EXECUTE')
-              and not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE'), 'T199 rule 18: only the page functions read it');
+              and not has_function_privilege('anon', 'app.client_title(text)', 'EXECUTE'), 'T199 rule 18: the new forms are closed too');
+select tst.ok(not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE'), 'T199 rule 18: anon never reads it');
 \echo 'T199 the client reads the sections; a hidden line only at $0'
 
 -- ======================================================================================================================
@@ -13875,5 +13876,94 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_price_history(
               and (select prosecdef from pg_proc where oid = 'app.tg_price_history()'::regprocedure)
               and (select prosecdef from pg_proc where oid = 'app.tg_markup_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
 \echo 'T202 the catalog card: barcode, link, direction; the price and markup history'
+
+-- ======================================================================================================================
+-- T203 (#1232): an estimate template keeps the hidden $0 lines and the sections. A line's clientVisible (false only at
+-- $0) and sectionId (≤ 64); an option's sections already as the client reads them (app.client_sections of them = them).
+-- Saved by the office through the table's own check (it runs as the member: app.client_sections is executable). Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('e2030000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T203 Roof', $j${"options":[{"id":"o1","name":"Good",
+   "sections":[{"id":"s1","title":"Roof work"},{"id":"s1b","title":"Flashing","parentId":"s1"},{"id":"s2","kind":"labor"},{"id":"s3","title":"Gutters","kind":"module"}],
+   "lines":[
+    {"id":"l1","name":"Shingles","group":"material","quantity":"10","unit":"sq","unitPriceCents":12000,"sectionId":"s1b"},
+    {"id":"l2","name":"Hanger kit","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"clientVisible":false,"sectionId":"s3"},
+    {"id":"l3","name":"Labor","group":"labor","quantity":"1","unit":"hr","unitPriceCents":5000,"clientVisible":true,"sectionId":"s2"}]}],
+ "settings":{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":true,"labor":true,"material":true}},"deposit":{"kind":"none"}}}$j$);
+select tst.ok((select doc #> '{options,0,sections}' = '[{"id":"s1","title":"Roof work"},{"id":"s1b","title":"Flashing","parentId":"s1"},{"id":"s2","kind":"labor"},{"id":"s3","title":"Gutters","kind":"module"}]'::jsonb
+                  and doc #>> '{options,0,lines,1,clientVisible}' = 'false' and doc #>> '{options,0,lines,0,sectionId}' = 's1b'
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 the office saves a template with sections, a hidden $0 line and each line''s section (red before #1232)');
+:as_super
+create function tst.t203_doc(p_option jsonb, p_line jsonb) returns jsonb language sql immutable as $$
+  select jsonb_build_object('options', jsonb_build_array(jsonb_build_object('id', 'o1', 'name', 'Good',
+           'lines', jsonb_build_array(jsonb_build_object('id', 'l1', 'name', 'Shingles', 'group', 'material', 'quantity', '1', 'unit', 'ea', 'unitPriceCents', 12000) || p_line)) || p_option),
+         'settings', '{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":true,"labor":true,"material":true}},"deposit":{"kind":"none"}}'::jsonb)
+$$;
+select tst.ok(app.valid_estimate_template_doc(tst.t203_doc('{}', '{}'))
+              and app.valid_estimate_template_doc(tst.t203_doc('{"sections": null}', '{"sectionId": null, "clientVisible": null}'))
+              and app.valid_estimate_template_doc(tst.t203_doc('{"sections": []}', '{"sectionId": "x"}')),
+              'T203 a template without these keys, or with them empty, is valid as before');
+select tst.ok(not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"clientVisible": false}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"clientVisible": "false"}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', jsonb_build_object('sectionId', repeat('x', 65))))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"sectionId": ""}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"sectionId": 5}')),
+              'T203 refused: hidden with a price, hidden not a boolean, a sectionId past 64, empty or not a string');
+select tst.ok(not app.valid_estimate_template_doc(tst.t203_doc('{"sections": "s1"}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s1", "title": "Roof", "module": "gutters"}]}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', jsonb_build_array(jsonb_build_object('id', 's1', 'title', E'Roof​work'))), '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s1"}, {"id": "s1"}]}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s2", "parentId": "nope"}]}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', (select jsonb_agg(jsonb_build_object('id', 's' || i)) from generate_series(1, 41) i)), '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s1", "kind": "roof"}]}', '{}')),
+              'T203 refused: sections not as the client reads them — not a list, a module key, an invisible character, an id twice, an orphan subsection, past 40, an unknown kind');
+select tst.ok(app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"kind": "labor", "id": "s2"}, {"parentId": "s2", "title": "Gutters", "id": "s3"}]}', '{"sectionId": "s3"}')),
+              'T203 the order of a section''s keys does not count');
+-- the server puts the sections in the client's form itself before its check (t02, code-reviewer of #1232): a phone
+-- with another cleaning never meets a refusal for it; only sections that are not a list are refused
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('e2030000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T203 raw',
+   tst.t203_doc(jsonb_build_object('sections', jsonb_build_array(
+     jsonb_build_object('id', 's1', 'title', E'  Roof\u200Bwork  ', 'module', 'gutters', 'kind', 'roof'), jsonb_build_object('id', 's1', 'title', 'Twice'),
+     jsonb_build_object('id', 'orphan', 'parentId', 'nope'), jsonb_build_object('id', 's2', 'parentId', 's1'))), '{"sectionId": "s2"}'));
+select tst.ok((select doc #> '{options,0,sections}' = '[{"id": "s1", "title": "Roofwork"}, {"id": "s2", "parentId": "s1"}]'::jsonb
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000002'),
+              'T203 sections in another form: kept in the client''s form (title cleaned, no module key or unknown kind, an id once, no orphan)');
+select tst.fails($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'T203 bad', tst.t203_doc('{"sections": "s1"}', '{}'))$q$,
+                 'T203 sections that are not a list — refused');
+-- the update path (t02, t30 and the check as the member): the office renames the template and changes its sections
+update public.estimate_templates set name = 'T203 Roof renamed' where id = 'e2030000-0000-4000-8000-000000000001';
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,sections}', '[{"id": "s9", "title": " New\u0007 "}]'::jsonb) where id = 'e2030000-0000-4000-8000-000000000001';
+select tst.ok((select name = 'T203 Roof renamed' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb and doc #>> '{options,0,lines,1,clientVisible}' = 'false'
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 the office renames and edits a template with sections; the hidden line stays');
+-- a rename alone (no doc in the update) passes; t02 runs on every update (security-check of #1238: after a later change
+-- of app.client_sections a rename still puts the stored sections in the form first, never a refusal)
+update public.estimate_templates set name = 'T203 renamed again' where id = 'e2030000-0000-4000-8000-000000000001';
+select tst.ok((select name = 'T203 renamed again' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 a rename alone passes, the sections as they were');
+select tst.ok((select tgtype & 16 = 16 and tgtype & 4 = 4 and not exists (select 1 from pg_attribute a where a.attrelid = t.tgrelid and a.attnum = any (t.tgattr))
+                 from pg_trigger t where t.tgname = 't02_template_sections'), 'T203 t02 is before insert and every update (not only «of doc»)');
+-- too large or too many options: t02 leaves it to the check (refused)
+select tst.fails(format($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'T203 big', %L::jsonb)$q$,
+                 jsonb_build_object('options', (select jsonb_agg(jsonb_build_object('id', 'o' || i, 'name', 'O', 'lines', '[]'::jsonb, 'sections', '[]'::jsonb)) from generate_series(1, 11) i),
+                                    'settings', '{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}'::jsonb)), 'T203 eleven options — refused by the check');
+-- the shared examples (apps/mobile/test/fixtures/clientSections.json): what the phone sends is what the server keeps
+:as_super
+select tst.ok(coalesce(string_agg(c ->> 'name', '; '), '') = '', format('T203 a template keeps every example in the client''s form: %s', coalesce(string_agg(c ->> 'name', '; '), '')))
+  from jsonb_array_elements((:'sections_json')::jsonb -> 'cases') c
+ where not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', c -> 'client'), '{}'))
+    or app.client_sections(c -> 'sections') is distinct from c -> 'client';
+select tst.ok(has_function_privilege('authenticated', 'app.client_sections(jsonb)', 'EXECUTE') and has_function_privilege('authenticated', 'app.client_title(text)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'app.client_title(text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_template_sections()', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_template_sections()'::regprocedure),
+              'T203 rule 18: the template check''s helpers — the member who saves, never anon; the trigger as the writer');
+drop function tst.t203_doc(jsonb, jsonb);
+\echo 'T203 a template keeps the hidden $0 lines and the sections'
 
 \echo 'ALL TESTS PASSED'
