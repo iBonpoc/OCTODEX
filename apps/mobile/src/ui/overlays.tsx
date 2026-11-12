@@ -1,6 +1,7 @@
 import { toastArmed } from "./toastArm";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { ScreenScrollCtx } from "./requiredForm";
 import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
 import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
@@ -503,6 +504,8 @@ export function Sheet({
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
     <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+      {/* a form in a sheet scrolls the sheet's own body, never the screen under it (DS §11 п.3) */}
+      <ScreenScrollCtx.Provider value={null}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
@@ -659,6 +662,7 @@ export function Sheet({
         </Animated.View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
+    </ScreenScrollCtx.Provider>
     </Modal>
   );
 }
