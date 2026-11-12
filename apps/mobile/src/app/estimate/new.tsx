@@ -13,8 +13,8 @@ import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
-import { LineRow, rowFieldId, type RowAction } from "@/features/estimate/LineRow";
-import { clearLine, duplicateLine, isBlank, replaceLine, rowProblems } from "@/features/estimateRows";
+import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
+import { clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField } from "@/features/fields";
@@ -158,39 +158,44 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setDoc((d) => ({ ...d, options: d.options.map((o) => (o.id === option.id ? fn(o) : o)) }));
   const setSettings = (patch: Partial<EstimateDoc["settings"]>) => setDoc((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
   const patchLine = (id: string, patch: Partial<CustomLine>) => setOption((o) => ({ ...o, lines: o.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+  // «Отменить» of an action takes back THAT action only (a row edited since stays as edited)
   const removeLine = (id: string) => {
-    const prev = doc;
-    setOption((o) => ({ ...o, lines: o.lines.filter((l) => l.id !== id) }));
+    const index = option.lines.findIndex((l) => l.id === id);
+    const line = option.lines[index];
+    if (!line) return;
+    setOption((o) => ({ ...o, lines: dropLine(o.lines, id) }));
     setOpenId((cur) => (cur === id ? null : cur));
-    toast.show(t("est.row.deleted"), () => setDoc(prev));
+    toast.show(t("est.row.deleted"), () => setOption((o) => ({ ...o, lines: reinsertLine(o.lines, line, index) })));
+  };
+  // what is wrong in the open row now: the line's own data and the number fields that hold text which is not a number
+  const problemsOf = (l: CustomLine) => {
+    const out = rowProblems(l).map((p) => ({ id: rowFieldId(l.id, p.id), text: t(p.key) }));
+    const more: [("qty" | "price" | "cost"), DictKey][] = [["qty", "est.row.needQty"], ["price", "est.row.needPrice"], ["cost", "est.row.needCost"]];
+    for (const [f, key] of more) {
+      const id = rowFieldId(l.id, f);
+      if (badFields.current.has(`${l.id}:${f}`) && !out.some((x) => x.id === id)) out.push({ id, text: t(key) });
+    }
+    return out;
   };
   // the open row closes (and keeps what is typed) — unless something in it is wrong: then the errors, the scroll to the first,
-  // the vibration, and it stays open (DS §8.3); a row with nothing typed in it disappears without a trace
-  const leaveRow = (): boolean => {
+  // the vibration, and it stays open (DS §8.3). `quiet` (a finger starts to scroll): nothing of that — the page must be able
+  // to scroll; a row with an error just stays open. A row with nothing typed in it disappears without a trace.
+  const leaveRow = (quiet = false): boolean => {
     if (!openId) return true;
     const l = option.lines.find((x) => x.id === openId);
     if (!l) {
       setOpenId(null);
       return true;
     }
-    if (isBlank(l)) {
-      setOption((o) => ({ ...o, lines: o.lines.filter((x) => x.id !== openId) }));
-      setOpenId(null);
-      return true;
-    }
-    const problems = rowProblems(l).map((p) => ({ id: rowFieldId(l.id, p.id), text: t(p.key) }));
-    for (const f of ["qty", "price"] as const) {
-      const id = rowFieldId(l.id, f);
-      if (badFields.current.has(`${l.id}:${f}`) && !problems.some((x) => x.id === id)) problems.push({ id, text: t(f === "qty" ? "est.row.needQty" : "est.row.needPrice") });
-    }
-    if (problems.length) {
-      rowForm.submit(problems, () => {});
-      return false;
-    }
-    setOpenId(null);
-    return true;
+    const problems = problemsOf(l);
+    const what = leaveDecision(l, problems.length, quiet);
+    if (what === "remove") setOption((o) => ({ ...o, lines: dropLine(o.lines, openId) }));
+    if (what === "stay-loud") rowForm.submit(problems, () => {});
+    if (what === "remove" || what === "fold") setOpenId(null);
+    return what === "remove" || what === "fold";
   };
   const openRow = (id: string) => {
+    if (signed) return;
     if (id === openId) return void leaveRow();
     if (!leaveRow()) return;
     setFocusRow(null);
@@ -213,11 +218,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const made = linesFromCatalog(it, db.catalog);
     setPicker(null);
     if (target) {
-      const prev = doc;
       const old = option.lines.find((x) => x.id === target);
       if (!old || !made[0]) return;
       setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === target ? replaceLine(x, made[0]!) : x)) }));
-      toast.show(t("est.row.replaced"), () => setDoc(prev));
+      // the price was to be checked — it is a new thing now
+      setCheckPrice((ids) => ids.filter((x) => x !== target));
+      toast.show(t("est.row.replaced"), () => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) })));
       return;
     }
     setOption((o) => ({ ...o, lines: [...o.lines, ...made] }));
@@ -231,24 +237,38 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     }
   };
   const clearRow = (id: string) => {
-    const prev = doc;
+    const old = option.lines.find((x) => x.id === id);
+    if (!old) return;
     setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === id ? clearLine(x) : x)) }));
+    setCheckPrice((ids) => ids.filter((x) => x !== id));
     setPicker(null);
     afterPicker.current = () => {
       setFocusRow({ id, field: "name" });
       setOpenId(id);
     };
-    toast.show(t("est.row.replaced"), () => setDoc(prev));
+    toast.show(t("est.row.replaced"), () => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) })));
   };
   const rowAction = (id: string, a: RowAction) => {
     if (a === "delete") return removeLine(id);
     if (a === "replace") return setPicker({ replace: id });
     const d = duplicateLine(option.lines, id);
     if (!d) return;
-    const prev = doc;
     setOption((o) => ({ ...o, lines: duplicateLine(o.lines, id, () => d.copyId)?.lines ?? o.lines }));
-    toast.show(t("est.row.duplicated"), () => setDoc(prev));
+    toast.show(t("est.row.duplicated"), () => setOption((o) => ({ ...o, lines: dropLine(o.lines, d.copyId) })));
   };
+  // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
+  const latest = useRef({ openRow, leaveRow, patchLine, rowAction });
+  latest.current = { openRow, leaveRow, patchLine, rowAction };
+  const rowApi = useMemo<RowApi>(
+    () => ({
+      open: (id) => latest.current.openRow(id),
+      close: () => void latest.current.leaveRow(),
+      change: (id, patch) => latest.current.patchLine(id, patch),
+      action: (id, a) => latest.current.rowAction(id, a),
+      bad: (id, field, bad) => void (bad ? badFields.current.add(`${id}:${field}`) : badFields.current.delete(`${id}:${field}`)),
+    }),
+    [],
+  );
   const addOption = () => {
     if (doc.options.length >= MAX_OPTIONS) return;
     const o = cloneOption(option, doc.options.length);
@@ -266,6 +286,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setDoc((d) => ({ ...d, options: d.options.map((o) => ({ ...o, recommended: o.id === option.id ? on : on ? false : o.recommended })) }));
 
   // #1138: a tech saves a new estimate only where the server lets him (estimates_insert — a property he works at)
+  // a signed estimate: its rows do not open (DS §8.3)
+  const signed = !!existing && (existing.status === "awaiting_countersign" || existing.status === "approved");
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
   const ok = !!customer && !!property && hasContent(doc);
   const save = (send: boolean) => {
@@ -300,27 +322,31 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       return;
     }
     const name = title.trim() === tplEdit.name ? live.name : title.trim();
-    const next = editedTemplate(live, doc, seeCosts, name);
+    // the open row first (a wrong number keeps it open), a row with nothing typed in it is not part of the template
+    if (!leaveRow()) return;
+    const tplDoc: EstimateDoc = { ...doc, options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !isBlank(l)) })) };
+    const next = editedTemplate(live, tplDoc, seeCosts, name);
     if (!next) {
       toast.show(t("est.tpl.cannot"));
       return;
     }
     // the server checks the same: over the version this screen opened on, else «не сохранено» (row_version_conflict)
-    const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, doc, seeCosts) });
+    const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, tplDoc, seeCosts) });
     // «Отменить» (rule 5): the edit waits on the phone while the toast is up (SEND_AFTER_MS) — taken out of the queue
     toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), undo);
     router.replace("/estimate/templates");
   };
 
   const act = activeLines(option.lines);
-  const lineTotal = (l: CustomLine) => totals.lineTotals[act.indexOf(l)] ?? 0;
+  // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
+  const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
   const taxValue = !s.tax.enabled || !taxGroups.length ? t("ue.off") : `${s.tax.rateBps / 100}% · ${taxGroups.map((g) => t(`ue.group.${g}` as DictKey).toLowerCase()).join(", ")}`;
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
   return (
-    <Screen onScrollBegin={() => void leaveRow()} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder">
+    <Screen onScrollBegin={() => void leaveRow(true)} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder">
       {existing && existing.status !== "draft" ? (
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
@@ -398,14 +424,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 <LineRow
                   line={l}
                   open={openId === l.id}
-                  total={lineTotal(l)}
+                  total={totalById.get(l.id) ?? 0}
                   costsVisible={seeCosts}
                   form={rowForm}
-                  onOpen={() => openRow(l.id)}
-                  onClose={() => void leaveRow()}
-                  onChange={(patch) => patchLine(l.id, patch)}
-                  onAction={(a) => rowAction(l.id, a)}
-                  onBad={(f, bad) => void (bad ? badFields.current.add(`${l.id}:${f}`) : badFields.current.delete(`${l.id}:${f}`))}
+                  api={rowApi}
+                  locked={signed}
                   autoFocus={focusRow?.id === l.id ? focusRow.field : undefined}
                   checkPrice={checkPrice.includes(l.id)}
                 />
@@ -488,8 +511,24 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         </View>
       </Grid>
 
+      <Sheet visible={picker !== null && db.catalog.length === 0} onClose={() => setPicker(null)} title={t("est.row.pickTitle")}>
+        <View testID="est-catalog-empty" style={{ gap: space[3] }}>
+          <T v="body" tone="mut">
+            {t("est.row.emptyCatalog")}
+          </T>
+          <Button
+            label={t("est.row.openCatalog")}
+            icon="search"
+            variant="secondary"
+            onPress={() => {
+              setPicker(null);
+              router.push("/catalog");
+            }}
+          />
+        </View>
+      </Sheet>
       <PickerSheet<string>
-        visible={picker !== null}
+        visible={picker !== null && db.catalog.length > 0}
         title={picker !== null && typeof picker === "object" ? t("est.row.replaceTitle") : t("est.row.pickTitle")}
         items={[
           ...(picker !== null && typeof picker === "object" ? [{ key: "__clear__", label: t("est.row.clear") }] : []),

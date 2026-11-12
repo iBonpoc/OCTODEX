@@ -82,4 +82,5 @@ exports.run = async (h) => {
   await p.waitForFunction((id) => !!document.querySelector(`[data-testid="est-line-${id}"]`), carpetId, { timeout: 3000 });
   await p.waitForFunction(() => document.querySelector('[data-testid^="est-name-"] input')?.value === "Railing bracket", null, { timeout: 3000 });
   h.expect((await vis('[data-testid^="est-qty-"]').first().locator("input").inputValue()) === "7", "replaced: the quantity stayed (7)");
+
 };

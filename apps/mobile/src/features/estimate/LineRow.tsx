@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import Animated, { Easing, useReducedMotion, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { motion, size, space } from "@octo/design-tokens";
@@ -29,6 +29,16 @@ const OWN = "__own__";
 
 export type RowAction = "replace" | "duplicate" | "delete";
 
+/** what the rows ask of the screen: ONE object with stable functions (the rows are memoised: a row redraws when its own data does) */
+export interface RowApi {
+  open: (id: string) => void;
+  close: () => void;
+  change: (id: string, patch: Partial<CustomLine>) => void;
+  action: (id: string, a: RowAction) => void;
+  /** a number field of the row holds text that is not a number (the line itself keeps the last right value) */
+  bad: (id: string, field: "qty" | "price" | "cost", bad: boolean) => void;
+}
+
 export interface LineRowProps {
   line: CustomLine;
   open: boolean;
@@ -37,20 +47,17 @@ export interface LineRowProps {
   /** who sees the cost (not the tech): the cost field, the profit */
   costsVisible: boolean;
   form: RequiredForm;
-  onOpen: () => void;
-  onClose: () => void;
-  onChange: (patch: Partial<CustomLine>) => void;
-  onAction: (a: RowAction) => void;
-  /** a number field of the row holds text that is not a number (the line itself keeps the last right value) */
-  onBad: (field: "qty" | "price", bad: boolean) => void;
-  /** the screen's field ids of this line (the form's registry): `est-name-<id>`, `est-qty-<id>`, `est-price-<id>` */
+  api: RowApi;
+  /** the field that takes the cursor when the row opens */
   autoFocus?: "name" | "qty";
   checkPrice?: boolean;
+  /** a signed estimate: the row does not open (DS §8.3) */
+  locked?: boolean;
 }
 
-export const rowFieldId = (lineId: string, f: "name" | "qty" | "price") => `est-${f}-${lineId}`;
+export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
 
-export function LineRow(p: LineRowProps) {
+function LineRowView(p: LineRowProps) {
   const { l, open } = { l: p.line, open: p.open };
   const { t, money } = useI18n();
   const { c } = useTheme();
@@ -58,7 +65,13 @@ export function LineRow(p: LineRowProps) {
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
   const [more, setMore] = useState(false);
-  const [ownUnit, setOwnUnit] = useState(() => !!l.unit && !(UNITS as readonly string[]).includes(l.unit));
+  // «Своя…»: the unit is written by hand — chosen so, or not one of the list (a catalog thing, a module, «Отменить»)
+  const known = (UNITS as readonly string[]).includes(l.unit);
+  const [pickedOwn, setPickedOwn] = useState(false);
+  useEffect(() => {
+    if (known) setPickedOwn(false);
+  }, [known, l.unit]);
+  const ownUnit = pickedOwn || !known;
   // the height of the row opens in `durBase` (reduced motion: at once)
   const grow = useSharedValue(open ? 1 : 0);
   useEffect(() => {
@@ -73,11 +86,11 @@ export function LineRow(p: LineRowProps) {
     { key: "duplicate", label: t("est.row.duplicate"), icon: "copy", testID: `est-act-duplicate-${l.id}` },
     { key: "delete", label: t("est.row.delete"), icon: "trash", destructive: true, testID: `est-act-delete-${l.id}` },
   ];
-  const f = (id: "name" | "qty" | "price") => p.form.field(rowFieldId(l.id, id));
+  const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
 
   if (!open) {
     return (
-      <Press onPress={p.onOpen} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} testID={`est-line-${l.id}`}>
+      <Press onPress={p.locked ? undefined : () => p.api.open(l.id)} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} testID={`est-line-${l.id}`}>
         <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1] }}>
           <RowView style={{ alignItems: "flex-start" }}>
             <View style={{ paddingTop: space[1] }}>
@@ -120,14 +133,16 @@ export function LineRow(p: LineRowProps) {
             ref={moreRef}
             collapsable={false}
           >
+            <View testID={`est-menu-${l.id}`}>
             <IconButton
               icon="more"
               label={t("est.row.actions")}
               onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))}
             />
+            </View>
           </View>
           <View testID={`est-collapse-${l.id}`}>
-            <Button label={t("est.row.collapse")} icon="chevronDown" variant="ghost" size="sm" onPress={p.onClose} />
+            <Button label={t("est.row.collapse")} icon="chevronDown" variant="ghost" size="sm" onPress={p.api.close} />
           </View>
         </RowView>
       </RowView>
@@ -139,31 +154,31 @@ export function LineRow(p: LineRowProps) {
           </T>
         </View>
       ) : null}
-      <TextField type="title" value={l.name} onChangeText={(v) => p.onChange({ name: v })} placeholder={t("ue.lineName")} label={t("ue.lineName")} field={f("name")} autoFocus={p.autoFocus === "name"} testID={`est-name-${l.id}`} />
-      <TextField type="note" value={l.description ?? ""} onChangeText={(v) => p.onChange({ description: v || undefined })} placeholder={t("ue.lineDesc")} label={t("ue.lineDesc")} />
-      <Segmented<LineGroup> full radio label={t("ue.type")} value={l.group} onChange={(g) => p.onChange({ group: g })} items={GROUPS.map((g) => ({ key: g, label: t(`ue.group.${g}` as DictKey) }))} testID={`est-kind-${l.id}`} />
+      <TextField type="title" value={l.name} onChangeText={(v) => p.api.change(l.id, { name: v })} placeholder={t("ue.lineName")} label={t("ue.lineName")} field={f("name")} autoFocus={p.autoFocus === "name"} testID={`est-name-${l.id}`} />
+      <TextField type="note" value={l.description ?? ""} onChangeText={(v) => p.api.change(l.id, { description: v || undefined })} placeholder={t("ue.lineDesc")} label={t("ue.lineDesc")} />
+      <Segmented<LineGroup> full radio label={t("ue.type")} value={l.group} onChange={(g) => p.api.change(l.id, { group: g })} items={GROUPS.map((g) => ({ key: g, label: t(`ue.group.${g}` as DictKey) }))} testID={`est-kind-${l.id}`} />
       <RowView style={{ alignItems: "flex-start" }}>
         <View style={{ flex: 1 }}>
-          <NumberField kind="qty" label={t("ue.qty")} qty={String(l.quantity)} onChange={(q) => p.onChange({ quantity: q })} field={f("qty")} onBad={(b) => p.onBad("qty", b)} autoFocus={p.autoFocus === "qty"} selectOnFocus testID={`est-qty-${l.id}`} />
+          <NumberField kind="qty" label={t("ue.qty")} qty={String(l.quantity)} onChange={(q) => p.api.change(l.id, { quantity: q })} field={f("qty")} onBad={(b) => p.api.bad(l.id, "qty", b)} autoFocus={p.autoFocus === "qty"} selectOnFocus testID={`est-qty-${l.id}`} />
         </View>
         <View style={{ flex: 1 }}>
           <SelectField<string>
             label={t("ue.unit")}
             value={ownUnit ? OWN : l.unit}
             items={unitItems}
-            onChange={(u) => (u === OWN ? setOwnUnit(true) : (setOwnUnit(false), p.onChange({ unit: u })))}
+            onChange={(u) => (u === OWN ? setPickedOwn(true) : (setPickedOwn(false), p.api.change(l.id, { unit: u })))}
             testID={`est-unit-${l.id}`}
           />
         </View>
       </RowView>
-      {ownUnit ? <TextField type="unit" value={l.unit} onChangeText={(v) => p.onChange({ unit: v })} placeholder="ea" label={t("est.row.unitOwn")} testID={`est-unit-own-${l.id}`} /> : null}
+      {ownUnit ? <TextField type="unit" value={l.unit} onChangeText={(v) => p.api.change(l.id, { unit: v })} placeholder="ea" label={t("est.row.unitOwn")} testID={`est-unit-own-${l.id}`} /> : null}
       <RowView style={{ alignItems: "flex-start" }}>
         <View style={{ flex: 1 }}>
-          <NumberField kind="money" label={t("est.row.price")} unitWord={t("est.row.dollars")} cents={l.unitPriceCents} onChange={(cents) => p.onChange({ unitPriceCents: cents })} field={f("price")} onBad={(b) => p.onBad("price", b)} testID={`est-price-${l.id}`} />
+          <NumberField kind="money" label={t("est.row.price")} unitWord={t("est.row.dollars")} cents={l.unitPriceCents} onChange={(cents) => p.api.change(l.id, { unitPriceCents: cents })} field={f("price")} onBad={(b) => p.api.bad(l.id, "price", b)} testID={`est-price-${l.id}`} />
         </View>
         {p.costsVisible ? (
           <View style={{ flex: 1 }}>
-            <NumberField kind="money" label={t("est.row.cost")} unitWord={t("est.row.dollars")} cents={l.unitCostCents ?? 0} onChange={(cents) => p.onChange({ unitCostCents: cents })} testID={`est-cost-${l.id}`} />
+            <NumberField kind="money" label={t("est.row.cost")} unitWord={t("est.row.dollars")} cents={l.unitCostCents} onChange={(cents) => p.api.change(l.id, { unitCostCents: cents })} onClear={() => p.api.change(l.id, { unitCostCents: undefined })} field={f("cost")} onBad={(b) => p.api.bad(l.id, "cost", b)} placeholder="" testID={`est-cost-${l.id}`} />
           </View>
         ) : null}
       </RowView>
@@ -199,11 +214,13 @@ export function LineRow(p: LineRowProps) {
             <T v="body" style={{ flex: 1 }}>
               {t("ue.addon")}
             </T>
-            <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.onChange({ optional: on })} />
+            <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
           </RowView>
         ) : null}
       </View>
-      <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.onAction(a)} onClose={() => setMenu(null)} />
+      <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />
     </Animated.View>
   );
 }
+
+export const LineRow = memo(LineRowView);

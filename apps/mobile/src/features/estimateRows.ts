@@ -26,7 +26,8 @@ export function rowProblems(l: Pick<CustomLine, "name" | "quantity" | "unitPrice
   const out: RowProblem[] = [];
   if (l.name.trim() === "") out.push({ id: "name", key: "est.row.needName" });
   const q = typeof l.quantity === "string" ? parseQty(l.quantity) : String(l.quantity);
-  if (q === null) out.push({ id: "qty", key: "est.row.needQty" });
+  // «0» is not a quantity either (a line of nothing)
+  if (q === null || /^0*\.?0*$/.test(q)) out.push({ id: "qty", key: "est.row.needQty" });
   if (!Number.isFinite(l.unitPriceCents) || l.unitPriceCents < 0) out.push({ id: "price", key: "est.row.needPrice" });
   return out;
 }
@@ -48,6 +49,8 @@ export function replaceLine(old: CustomLine, from: CustomLine): CustomLine {
 export function clearLine(old: CustomLine): CustomLine {
   const out: CustomLine = { id: old.id, name: "", group: old.group, quantity: old.quantity, unit: old.unit, unitPriceCents: 0 };
   if (old.sectionId !== undefined) out.sectionId = old.sectionId;
+  // the module's mark stays (as in `replaceLine`): else «Обновить смету» adds the module's part a second time
+  if (old.source !== undefined) out.source = old.source;
   return out;
 }
 
@@ -77,4 +80,32 @@ export function rowFigures(l: CustomLine, costsVisible: boolean): { total: numbe
     profit = null;
   }
   return { total, profit, marginPct: profit === null ? null : marginPctOf(total, total - profit) };
+}
+
+/* ---- «Отменить» of one action takes back that action only (a later edit of another row stays) ---- */
+
+/** the line back where it was (by its place in the list at the time), unless it is there already */
+export function reinsertLine(lines: CustomLine[], line: CustomLine, index: number): CustomLine[] {
+  if (lines.some((l) => l.id === line.id)) return lines;
+  const at = Math.max(0, Math.min(index, lines.length));
+  return [...lines.slice(0, at), line, ...lines.slice(at)];
+}
+/** the line as it was before the action (replace, clear) */
+export function restoreLine(lines: CustomLine[], old: CustomLine): CustomLine[] {
+  return lines.map((l) => (l.id === old.id ? old : l));
+}
+/** the copy of «Дублировать» out again */
+export function dropLine(lines: CustomLine[], id: string): CustomLine[] {
+  return lines.filter((l) => l.id !== id);
+}
+
+/**
+ * What happens to the open row when something asks it to close (DS §8.3): a row with nothing typed in it vanishes; a right one
+ * folds; a wrong one stays — and says why (the errors, the scroll, the vibration) unless the ask is a finger starting to scroll
+ * (`quiet`): the page must be able to scroll, so the row just stays open.
+ */
+export function leaveDecision(l: Pick<CustomLine, "name" | "unitPriceCents" | "description">, problems: number, quiet: boolean): "remove" | "fold" | "stay-loud" | "stay-quiet" {
+  if (isBlank(l)) return "remove";
+  if (problems === 0) return "fold";
+  return quiet ? "stay-quiet" : "stay-loud";
 }
