@@ -29,7 +29,7 @@ export function FieldsSection() {
         <View testID="showcase-num-percent-value">
           <T v="caption" tone="mut">{t("ds.fields.value", { v: `${formatBps(bps)} %` })}</T>
         </View>
-        <NumberField kind="qty" label={t("ds.fields.qty")} unit="ft" qty={qty} onChange={setQty} testID="showcase-num-qty" />
+        <NumberField kind="qty" label={t("ds.fields.qty")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={qty} onChange={setQty} testID="showcase-num-qty" />
         <NumberField kind="integer" label={t("ds.fields.integer")} value={days} onChange={setDays} testID="showcase-num-integer" />
       </Card>
     </View>
