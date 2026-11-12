@@ -53,7 +53,7 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
           }}
         >
           <Icon name="camera" s={size.iconMd} />
-          <T v="micro" tone="mut">
+          <T v="micro" tone="mut" center numberOfLines={2}>
             {t("visit.addPhoto")}
           </T>
         </Press>

@@ -127,7 +127,7 @@ export function SignatureFullscreen({
           >
             {!path ? (
               <View style={{ position: "absolute", left: 0, right: 0, top: cv.h / 2 - space[3], alignItems: "center" }} pointerEvents="none">
-                <T v="caption" tone="mut">
+                <T v="caption" tone="mut" center>
                   {label}
                 </T>
               </View>

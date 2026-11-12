@@ -77,7 +77,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
       >
         {!d ? (
           <View style={{ position: "absolute", left: 0, right: 0, top: h / 2 - 10, alignItems: "center" }} pointerEvents="none">
-            <T v="caption" tone="mut">
+            <T v="caption" tone="mut" center>
               {(label ?? t("visit.signHere"))}
             </T>
           </View>
