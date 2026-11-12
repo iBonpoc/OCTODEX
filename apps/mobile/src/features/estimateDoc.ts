@@ -15,9 +15,12 @@ import {
   type CustomTotals,
   type LineGroup,
   type LineSource,
+  type EstimateSection,
   SECTIONS_MAX,
   SECTION_TITLE_MAX,
   countedSections,
+  isSubsection,
+  sectionIdOk,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
 import { clientPages, pagesProblem } from "./docPages";
@@ -61,17 +64,33 @@ export function newDoc(defaultDepositBps?: number | null): EstimateDoc {
 /** A copy of an option with fresh ids (for "add option"). */
 export function cloneOption(o: CustomOption, i: number): CustomOption {
   // the sections go with it (the same ids — unique within an option): the lines keep their sectionId (Р4)
-  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })), ...(o.sections ? { sections: o.sections.map((x) => ({ ...x })) } : {}) };
+  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })), ...(Array.isArray(o.sections) ? { sections: o.sections.filter((x) => !!x && typeof x === "object").map((x) => ({ ...x })) } : {}) };
 }
 
 /** a section's title as it may be kept: no control characters, at most SECTION_TITLE_MAX (the server cuts the same) */
+// the same three sets as the server's app.client_title (migration 20261112150000): a control character (Cc) is a space,
+// a format character (Cf: zero width, the direction marks…) goes, the title is trimmed of these spaces
+// eslint-disable-next-line no-control-regex
+const TITLE_CC = /[\u0000-\u001f\u007f-\u009f]/g;
+const TITLE_CF = /[\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
+const TITLE_EDGE = /^[\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
 const cleanTitle = (t: unknown): string | undefined => {
   if (typeof t !== "string") return undefined;
-  // as the template's cut: a control character is a space, the length in characters (never half an emoji)
-  // eslint-disable-next-line no-control-regex
-  const x = Array.from(t.replace(/[\u0000-\u001f\u007f]/g, " ")).slice(0, SECTION_TITLE_MAX).join("").trim();
+  // the length in characters (never half an emoji), cut before the trim — as the server
+  const x = Array.from(t.replace(TITLE_CC, " ").replace(TITLE_CF, "")).slice(0, SECTION_TITLE_MAX).join("").replace(TITLE_EDGE, "");
   return x ? x : undefined;
 };
+/** hidden from the client as the server reads it: false, or «false» / 0 written by another copy */
+const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
+
+const SECTION_KINDS: readonly string[] = ["service", "labor", "material", "module"];
+/** what the client reads of a section — the same keys app.client_sections passes: id, title, a known kind, parentId */
+const clientSection = (x: EstimateSection): EstimateSection => ({
+  id: x.id,
+  ...(cleanTitle(x.title) ? { title: cleanTitle(x.title) } : {}),
+  ...(typeof x.kind === "string" && SECTION_KINDS.includes(x.kind) ? { kind: x.kind } : {}),
+  ...(isSubsection(x) ? { parentId: x.parentId } : {}),
+});
 
 /**
  * A document as it may be counted and shown (spec 2026-11-12-estimate-editor Р3, Р4) — on every way in (the cloud, a
@@ -88,7 +107,7 @@ export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: st
     if (!o || typeof o !== "object" || !Array.isArray(o.lines)) return o;
     let oc = false;
     const lines = o.lines.map((l) => {
-      if (l.clientVisible === false && l.unitPriceCents !== 0) {
+      if (markedHidden(l) && l.unitPriceCents !== 0) {
         unhidden.push(l.id);
         oc = true;
         const { clientVisible: _v, ...rest } = l;
@@ -106,7 +125,7 @@ export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: st
       // the engine's order (countedSections): the first 40, then the broken ones and a repeated id go
       const kept = o.sections
         .slice(0, SECTIONS_MAX)
-        .filter((x) => !!x && typeof x === "object" && typeof x.id === "string")
+        .filter((x) => !!x && typeof x === "object" && sectionIdOk(x.id))
         .filter((x) => !seen.has(x.id) && !!seen.add(x.id))
         .map((x) => {
           const title = cleanTitle(x.title);
@@ -217,8 +236,12 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
     // goes whole; a section keeps only what the client reads (a module's key stays the company's)
     options: doc.options.map((o) => ({
       ...o,
-      lines: o.lines.filter((l) => !zeroQty(l) && !(l.clientVisible === false && l.unitPriceCents === 0)).map(({ unitCostCents: _c, source: _s, ...l }) => l),
-      ...(Array.isArray(o.sections) ? { sections: countedSections(o).map(({ module: _m, ...x }) => x) } : {}),
+      // a sectionId longer than an id may be (64) is no link: not passed (the server the same)
+      lines: o.lines
+        .filter((l) => !zeroQty(l) && !(markedHidden(l) && l.unitPriceCents === 0))
+        .map(({ unitCostCents: _c, source: _s, sectionId, ...l }) => (sectionIdOk(sectionId) ? { ...l, sectionId } : l)),
+      // sections that are not a list (a broken copy) never reach the client (as app.client_sections)
+      sections: Array.isArray(o.sections) ? countedSections(o).map(clientSection) : undefined,
     })),
   };
 }
