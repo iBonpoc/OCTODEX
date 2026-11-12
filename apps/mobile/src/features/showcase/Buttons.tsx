@@ -3,6 +3,7 @@ import { View } from "react-native";
 import { component, motion, size, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Fab } from "@/nav/Fab";
+import { ActionBar } from "@/ui/actionBar";
 import { Button, IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
@@ -35,6 +36,16 @@ export function ButtonsSection() {
           <T v="heading">{t("ds.btn.pressed", { n })}</T>
         </View>
         <T v="caption" tone="mut">{t("ds.btn.hint", { scale: motion.pressScale, hit: size.hitMin })}</T>
+      </Card>
+      <Card>
+        <View testID="showcase-btn-actionbar" style={{ gap: space[2] }}>
+          <T v="heading">{t("ds.btn.bar")}</T>
+          <T v="caption" tone="mut">{t("ds.btn.barHint")}</T>
+          <ActionBar summary={<T v="body" w="semibold">{t("ds.btn.barSummary")}</T>}>
+            <Button label={t("ds.btn.primary")} full onPress={press} />
+            <Button label={t("ds.btn.secondary")} variant="secondary" full onPress={press} />
+          </ActionBar>
+        </View>
       </Card>
       <Card>
         <T v="heading">{t("ds.btn.kinds")}</T>
