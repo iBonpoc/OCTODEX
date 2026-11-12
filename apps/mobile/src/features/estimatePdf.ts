@@ -22,6 +22,10 @@ import { clientRows } from "./clientLayout";
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
   showUnitPrices?: boolean;
+  /** the client's current choice on the page /p/ («Download PDF»): that option and those add-ons — the PDF repeats the page, the chosen
+   *  add-ons are in the lines and the total. Not given (the company's own PDF of an unsigned estimate): every add-on is there as
+   *  «(add-on) + $X» and none is in the total. A signed estimate always shows the signed choice. */
+  choice?: { optionId: string; addonIds: string[] };
 }
 
 export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
@@ -33,22 +37,24 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
   const unit = opts.showUnitPrices !== false;
   const doc = p.doc;
   const options = doc?.options ?? [];
-  const chosen = p.approval ? options.filter((o) => o.id === p.approval!.optionId) : options;
+  // the choice that counts: the signed one, else the client's on the page, else none (every option, every add-on as an offer)
+  const pick = p.approval ? { optionId: p.approval.optionId, addonIds: p.approval.addonIds } : opts.choice;
+  const chosen = pick ? options.filter((o) => o.id === pick.optionId) : options;
   const cols = unit ? 4 : 3;
   const blocks = chosen
     .map((o0) => {
-      const o = p.approval ? withAddons(o0, p.approval.addonIds) : o0;
+      const o = pick ? withAddons(o0, pick.addonIds) : o0;
       const tot = optionTotals(doc!, o);
       const act = activeLines(o.lines);
       const row = (i: number, depth: 0 | 1) => {
         const l = act[i]!;
         return `<tr class="${[l.optional && !l.selected ? "opt" : "", depth ? "d1" : ""].filter(Boolean).join(" ")}"><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
           l.description ? `<div class="mut">${esc(l.description)}</div>` : ""
-        }</td><td class="r">${esc(shownQty(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
+        }</td><td class="r">${esc(shownQty(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${l.optional && !l.selected ? "+ " : ""}${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
       };
       // sections (when the option has them) with their lines, subsections and subtotals, then «Other items»; else the lines by kind.
       // Every word a person typed (a section's title, a line's name) goes through esc(); the dictionary's words are the client's language.
-      const groups = clientRows(o, doc!.settings, t, "selected")
+      const groups = clientRows(o, doc!.settings, t, p.approval ? "selected" : "all")
         .map((r) => {
           if (r.type === "group") return `<tr class="grp"><td colspan="${cols}">${esc(t(`ue.group.${r.group}` as DictKey))}</td></tr>`;
           if (r.type === "section") return `<tr class="grp${r.depth ? " d1" : ""}"><td colspan="${cols}">${esc(r.title)}</td></tr>`;

@@ -536,6 +536,9 @@ export const es: Dict = {
   "est.pdf.contractor": "Contratista",
   "est.pdf.forCompany": "por {company}",
   "est.pdf.awaitingSignature": "Pendiente de firma",
+  // РС-7b: what the client's document says about sections (PDF and the page /p/)
+  "est.client.subtotal": "Subtotal: {title}",
+  "est.client.other": "Otros conceptos",
   "est.pdf.record": "Registro de firmas",
   "est.pdf.signer": "Firmante",
   "est.pdf.when": "Fecha y hora",
@@ -816,8 +819,6 @@ export const es: Dict = {
   "est.sec.labor": "Mano de obra",
   "est.sec.service": "Servicios",
   "est.sec.untitled": "Sin nombre",
-  "est.client.subtotal": "Subtotal: {title}",
-  "est.client.other": "Otros conceptos",
   "est.sec.loose": "Sin sección",
   "est.sec.count": "Artículos: {n}",
   "est.sec.addSection": "Sección",

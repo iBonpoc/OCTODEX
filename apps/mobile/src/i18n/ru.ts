@@ -535,6 +535,9 @@ export const ru = {
   "est.pdf.contractor": "Подрядчик",
   "est.pdf.forCompany": "от имени {company}",
   "est.pdf.awaitingSignature": "Ждёт подписи",
+  // РС-7b: what the client's document says about sections (PDF and the page /p/)
+  "est.client.subtotal": "Итого: {title}",
+  "est.client.other": "Прочее",
   "est.pdf.record": "Журнал подписи",
   "est.pdf.signer": "Кто подписал",
   "est.pdf.when": "Дата и время",
@@ -815,8 +818,6 @@ export const ru = {
   "est.sec.labor": "Работа",
   "est.sec.service": "Услуги",
   "est.sec.untitled": "Без названия",
-  "est.client.subtotal": "Итого: {title}",
-  "est.client.other": "Прочее",
   "est.sec.loose": "Без раздела",
   "est.sec.count": "Позиций: {n}",
   "est.sec.addSection": "Раздел",

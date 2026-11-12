@@ -16,7 +16,7 @@ export type ClientRow =
   /** `i` — the index among `activeLines(option.lines)` */
   | { type: "line"; i: number; depth: 0 | 1 }
   /** the total of a top section (its own lines and its subsections') */
-  | { type: "subtotal"; title: string; cents: number }
+  | { type: "subtotal"; id: string; title: string; cents: number }
   /** the heading over the lines that belong to no section, when there are sections */
   | { type: "other"; title: string };
 
@@ -62,7 +62,7 @@ export function clientRows(option: CustomOption, settings: CustomSettings, t: Tr
       rows.push({ type: "section", id: c.id, title: sectionTitle(c, t), depth: 1 });
       for (const i of idx) rows.push({ type: "line", i, depth: 1 });
     }
-    rows.push({ type: "subtotal", title: sectionTitle(top, t), cents: sub.bySection[top.id] ?? 0 });
+    rows.push({ type: "subtotal", id: top.id, title: sectionTitle(top, t), cents: sub.bySection[top.id] ?? 0 });
   }
   const loose = act.map((l, i) => (show(l) && !(sectionIdOk(l.sectionId) && known.has(l.sectionId)) ? i : -1)).filter((i) => i >= 0);
   if (loose.length) {
