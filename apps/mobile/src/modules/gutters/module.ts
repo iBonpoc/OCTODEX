@@ -63,11 +63,13 @@ const gutters: ModuleDef = {
   // the measurement's tables (spec 33 П19) and its changes (П21): DB.moduleData.gutters
   load: loadGutters,
   ops: guttersOps,
-  // starter checklist templates (docs/specs/08 §2, §11.11; CH3b): the office adds them on «Компания → Чек-листы»; they
-  // come into no visit by themselves — the office ties them to services of its catalog or adds them to a visit
+  // starter checklist templates (docs/specs/08 §2, §11.11; CH3b): the office adds them on «Компания → Чек-листы»; once added, «Перед монтажом» and «Сдача
+  // работы» come into every «работа» visit by themselves (#607); «Чистка» not (a cleaning is not part of every job: it would
+  // bring its required items into every installation) — the office ties it to a service of its catalog; the office may change any
   checklistTemplates: [
     {
       key: "pre",
+      visitKinds: ["work"],
       nameKey: "mod.gutters.chk.pre",
       items: [
       { id: "69385b0b-9477-4163-a2ae-2f60f172261c", labelKey: "mod.gutters.chk.pre1", kind: "check", required: true },
@@ -78,6 +80,7 @@ const gutters: ModuleDef = {
     },
     {
       key: "handover",
+      visitKinds: ["work"],
       nameKey: "mod.gutters.chk.handover",
       items: [
       { id: "4c70b085-e445-47ac-80e9-949a63c7b31e", labelKey: "mod.gutters.chk.handover1", kind: "check", required: true },

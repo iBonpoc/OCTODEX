@@ -1,0 +1,365 @@
+{
+  "about": "РС-6: the sections of an option as the client reads them — the engine (countedSections), the phone (normalizeDoc / clientDoc) and the server (app.client_sections) the same: the first 40 places, then a broken entry and a repeated id go; title cleaned (control characters → spaces, 60 characters, trimmed, blank left out); a subsection only under a top section that counts; no module key. Read by apps/mobile/test/clientSections.test.ts and T199.",
+  "cases": [
+    {
+      "name": "a repeated id once (the first), a broken entry skipped, a subsection under a lost parent gone, the module key dropped",
+      "sections": [
+        {
+          "id": "roof",
+          "title": "Roof"
+        },
+        {
+          "id": "roof",
+          "title": "Roof again",
+          "parentId": "x"
+        },
+        null,
+        {
+          "title": "no id"
+        },
+        {
+          "id": "mat",
+          "kind": "material",
+          "parentId": "roof"
+        },
+        {
+          "id": "lost",
+          "parentId": "nope"
+        },
+        {
+          "id": "gut",
+          "kind": "module",
+          "module": "gutters",
+          "title": "Gutters"
+        },
+        {
+          "id": "bad",
+          "kind": "deck",
+          "title": "   "
+        }
+      ],
+      "client": [
+        {
+          "id": "roof",
+          "title": "Roof"
+        },
+        {
+          "id": "mat",
+          "kind": "material",
+          "parentId": "roof"
+        },
+        {
+          "id": "gut",
+          "kind": "module",
+          "title": "Gutters"
+        },
+        {
+          "id": "bad"
+        }
+      ]
+    },
+    {
+      "name": "a title with a control character and longer than 60",
+      "sections": [
+        {
+          "id": "t",
+          "title": "Front\u0007yard and the long side of the house along the street — all of it"
+        }
+      ],
+      "client": [
+        {
+          "id": "t",
+          "title": "Front yard and the long side of the house along the street —"
+        }
+      ]
+    },
+    {
+      "name": "41 sections: the first 40 places count, a repeat among them once, the 41st gone",
+      "sections": [
+        {
+          "id": "s0"
+        },
+        {
+          "id": "s1"
+        },
+        {
+          "id": "s0"
+        },
+        {
+          "id": "s3"
+        },
+        {
+          "id": "s4"
+        },
+        {
+          "id": "s5"
+        },
+        {
+          "id": "s6"
+        },
+        {
+          "id": "s7"
+        },
+        {
+          "id": "s8"
+        },
+        {
+          "id": "s9"
+        },
+        {
+          "id": "s10"
+        },
+        {
+          "id": "s11"
+        },
+        {
+          "id": "s12"
+        },
+        {
+          "id": "s13"
+        },
+        {
+          "id": "s14"
+        },
+        {
+          "id": "s15"
+        },
+        {
+          "id": "s16"
+        },
+        {
+          "id": "s17"
+        },
+        {
+          "id": "s18"
+        },
+        {
+          "id": "s19"
+        },
+        {
+          "id": "s20"
+        },
+        {
+          "id": "s21"
+        },
+        {
+          "id": "s22"
+        },
+        {
+          "id": "s23"
+        },
+        {
+          "id": "s24"
+        },
+        {
+          "id": "s25"
+        },
+        {
+          "id": "s26"
+        },
+        {
+          "id": "s27"
+        },
+        {
+          "id": "s28"
+        },
+        {
+          "id": "s29"
+        },
+        {
+          "id": "s30"
+        },
+        {
+          "id": "s31"
+        },
+        {
+          "id": "s32"
+        },
+        {
+          "id": "s33"
+        },
+        {
+          "id": "s34"
+        },
+        {
+          "id": "s35"
+        },
+        {
+          "id": "s36"
+        },
+        {
+          "id": "s37"
+        },
+        {
+          "id": "s38"
+        },
+        {
+          "id": "s39"
+        },
+        {
+          "id": "s40"
+        }
+      ],
+      "client": [
+        {
+          "id": "s0"
+        },
+        {
+          "id": "s1"
+        },
+        {
+          "id": "s3"
+        },
+        {
+          "id": "s4"
+        },
+        {
+          "id": "s5"
+        },
+        {
+          "id": "s6"
+        },
+        {
+          "id": "s7"
+        },
+        {
+          "id": "s8"
+        },
+        {
+          "id": "s9"
+        },
+        {
+          "id": "s10"
+        },
+        {
+          "id": "s11"
+        },
+        {
+          "id": "s12"
+        },
+        {
+          "id": "s13"
+        },
+        {
+          "id": "s14"
+        },
+        {
+          "id": "s15"
+        },
+        {
+          "id": "s16"
+        },
+        {
+          "id": "s17"
+        },
+        {
+          "id": "s18"
+        },
+        {
+          "id": "s19"
+        },
+        {
+          "id": "s20"
+        },
+        {
+          "id": "s21"
+        },
+        {
+          "id": "s22"
+        },
+        {
+          "id": "s23"
+        },
+        {
+          "id": "s24"
+        },
+        {
+          "id": "s25"
+        },
+        {
+          "id": "s26"
+        },
+        {
+          "id": "s27"
+        },
+        {
+          "id": "s28"
+        },
+        {
+          "id": "s29"
+        },
+        {
+          "id": "s30"
+        },
+        {
+          "id": "s31"
+        },
+        {
+          "id": "s32"
+        },
+        {
+          "id": "s33"
+        },
+        {
+          "id": "s34"
+        },
+        {
+          "id": "s35"
+        },
+        {
+          "id": "s36"
+        },
+        {
+          "id": "s37"
+        },
+        {
+          "id": "s38"
+        },
+        {
+          "id": "s39"
+        }
+      ]
+    },
+    {
+      "name": "parentId: an empty string or a number is a top section; an id longer than 64 does not count; a title with Cf marks and odd spaces",
+      "sections": [
+        {
+          "id": "top1",
+          "parentId": ""
+        },
+        {
+          "id": "top2",
+          "parentId": 7
+        },
+        {
+          "id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "title": "Too long id"
+        },
+        {
+          "id": "sub",
+          "parentId": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        },
+        {
+          "id": "cf",
+          "title": "  Ro​of‮ deck　 "
+        },
+        {
+          "id": "",
+          "title": "empty id"
+        }
+      ],
+      "client": [
+        {
+          "id": "top1"
+        },
+        {
+          "id": "top2"
+        },
+        {
+          "id": "cf",
+          "title": "Roof  deck"
+        }
+      ]
+    }
+  ]
+}

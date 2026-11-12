@@ -13437,6 +13437,57 @@ select tst.fails_like($q$insert into public.payments (company_id, invoice_id, cu
 \echo 'T198 the payment check: nothing to another company, no amounts, no payment into a voided invoice'
 
 -- ======================================================================================================================
+-- T199 (РС-6 of the estimate editor): what the client reads of an estimate carries the sections.
+-- (а) app.client_sections on the shared examples (apps/mobile/test/fixtures/clientSections.json — the engine the same).
+-- (б) app.client_doc: an option passes its sections, a line its sectionId; a hidden line goes only at $0 (a priced one
+--     marked hidden is shown, as the engine counts it); costs and a module's source never pass.
+-- ======================================================================================================================
+\set sections_json `cat :client_sections`
+:as_super
+select tst.ok(coalesce(string_agg(c ->> 'name', '; '), '') = '',
+              format('T199 the server passes the sections as the engine counts them: %s', coalesce(string_agg((c ->> 'name') || ' → ' || app.client_sections(c -> 'sections')::text, '; '), '')))
+  from jsonb_array_elements((:'sections_json')::jsonb -> 'cases') c
+ where app.client_sections(c -> 'sections') is distinct from c -> 'client';
+select tst.ok(jsonb_array_length((:'sections_json')::jsonb -> 'cases') >= 3, 'T199 (at least three shared examples)');
+do $$
+declare d jsonb := app.client_doc(jsonb_build_object('options', jsonb_build_array(jsonb_build_object(
+  'id', 'o1', 'name', 'A',
+  'sections', jsonb_build_array(jsonb_build_object('id', 's1', 'title', 'Roof', 'module', 'gutters', 'secret', 'x')),
+  'lines', jsonb_build_array(
+    jsonb_build_object('id', 'l1', 'name', 'Work', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 1000, 'sectionId', 's1', 'unitCostCents', 400,
+                       'source', jsonb_build_object('module', 'gutters', 'key', 'k')),
+    jsonb_build_object('id', 'l2', 'name', 'Kit', 'group', 'material', 'quantity', '1', 'unitPriceCents', 0, 'clientVisible', false),
+    jsonb_build_object('id', 'l3', 'name', 'Old hidden', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 500, 'clientVisible', false),
+    jsonb_build_object('id', 'l4', 'name', 'Kit 2', 'group', 'material', 'quantity', '1', 'unitPriceCents', 0, 'clientVisible', 'false'))))));
+  o jsonb := d -> 'options' -> 0;
+begin
+  perform tst.ok(o -> 'sections' = '[{"id": "s1", "title": "Roof"}]'::jsonb, 'T199 an option passes its sections, no module key: ' || (o -> 'sections')::text);
+  perform tst.ok((select array_agg(l ->> 'id' order by n) from jsonb_array_elements(o -> 'lines') with ordinality x(l, n)) = array['l1', 'l3'],
+                 'T199 a hidden $0 line goes; a priced one marked hidden is shown (the engine counts it): ' || (o -> 'lines')::text);
+  perform tst.ok(o -> 'lines' -> 0 ->> 'sectionId' = 's1', 'T199 a line passes its sectionId');
+  perform tst.ok(not (o -> 'lines' -> 0) ?| array['unitCostCents', 'source', 'clientVisible'], 'T199 no cost, source or mark reaches the client');
+end $$;
+-- a signed (locked) version is read as it was signed: a line marked hidden goes whatever its price; a sectionId past 64 is
+-- no link; «false» as a string hides at $0
+do $$
+declare doc jsonb := jsonb_build_object('options', jsonb_build_array(jsonb_build_object('id', 'o1', 'name', 'A', 'lines', jsonb_build_array(
+  jsonb_build_object('id', 'l1', 'name', 'Old hidden', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 500, 'clientVisible', false),
+  jsonb_build_object('id', 'l2', 'name', 'Long', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 100, 'sectionId', repeat('y', 65)),
+  jsonb_build_object('id', 'l3', 'name', 'Kit', 'group', 'material', 'quantity', '1', 'unitPriceCents', 0, 'clientVisible', 'false')))));
+begin
+  perform tst.ok((select array_agg(l ->> 'id') from jsonb_array_elements(app.client_doc(doc, true) -> 'options' -> 0 -> 'lines') l) = array['l2'],
+                 'T199 a signed version as it was signed: a line marked hidden goes whatever its price');
+  perform tst.ok((select array_agg(l ->> 'id') from jsonb_array_elements(app.client_doc(doc) -> 'options' -> 0 -> 'lines') l) = array['l1', 'l2'],
+                 'T199 unsigned: the priced one is shown, «false» as a string hides at $0');
+  perform tst.ok(not (app.client_doc(doc) -> 'options' -> 0 -> 'lines' -> 1) ? 'sectionId', 'T199 a sectionId longer than 64 is no link');
+end $$;
+select tst.ok(not has_function_privilege('authenticated', 'app.client_doc(jsonb,boolean)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.client_title(text)', 'EXECUTE'), 'T199 rule 18: the new forms are closed too');
+select tst.ok(not has_function_privilege('authenticated', 'app.client_sections(jsonb)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE'), 'T199 rule 18: only the page functions read it');
+\echo 'T199 the client reads the sections; a hidden line only at $0'
+
+-- ======================================================================================================================
 -- T200 (#1220): an estimate's save in one transaction (public.save_estimate_version) — a refusal in the middle leaves the
 -- version (its document), the estimate's current version and title, its options and lines as they were.
 -- ======================================================================================================================
