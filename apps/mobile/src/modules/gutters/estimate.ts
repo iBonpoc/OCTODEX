@@ -33,6 +33,8 @@ export interface LineSource extends CoreLineSource {
   section: string;
   /** the quantity the module wrote (decimal text) */
   qty: string;
+  /** the engine's version the quantity was computed with (#1165): an estimate computed by an older engine says «расчёт изменился» */
+  engineVersion?: string;
   /** the client price per unit the module wrote, cents */
   priceCents: number;
   name: string;
@@ -64,7 +66,7 @@ export const billQty = (q: string, unit: string) => (unit === "ft" ? dec(q).toDe
  * The module's lines for the parts of one measurement: one per item (the same item's parts add up — end caps left and
  * right), in section order. `name(p)` — the part's name in the app's language when no item has one; `uid()` — new ids.
  */
-export function linesFromParts(parts: readonly PartQty[], catalog: readonly CatalogItem[], name: (p: PartQty) => string, uid: () => string, revisionId?: string, measurementId?: string, at?: string): ModuleLine[] {
+export function linesFromParts(parts: readonly PartQty[], catalog: readonly CatalogItem[], name: (p: PartQty) => string, uid: () => string, revisionId?: string, measurementId?: string, at?: string, engineVersion?: string): ModuleLine[] {
   const byKey = new Map<string, { part: PartQty; qty: ReturnType<typeof dec> }>();
   for (const p of parts) {
     if (p.use === "purchase") continue; // the supplier order's (stage 2), never the client's price
@@ -96,7 +98,7 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
       ...(it ? { catalogItemId: it.id } : {}),
       source: {
         module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, unit: part.unit,
-        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}), ...(at ? { at } : {}),
+        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}), ...(at ? { at } : {}), ...(engineVersion ? { engineVersion } : {}),
       },
     };
   });
@@ -135,6 +137,8 @@ const touched = (l: ModuleLine & { source: LineSource }) => Object.values(handCh
  */
 export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLine[], other: (l: ModuleLine) => boolean = () => false): ModuleLine[] {
   const nextByKey = new Map(next.filter(isOurs).map((l) => [l.source.key, l]));
+  // the engine this update computed with: a line kept by hand but no longer computed was looked at too (#1165)
+  const engineNow = next.find(isOurs)?.source.engineVersion;
   const ownItems = new Set(old.filter((l) => !isOurs(l) && !other(l) && l.catalogItemId).map((l) => l.catalogItemId!));
   const mine = (l: ModuleLine): l is ModuleLine & { source: LineSource } => isOurs(l) && !other(l);
   const seen = new Set<string>();
@@ -151,7 +155,7 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
     }
     const n = nextByKey.get(l.source.key);
     if (!n) {
-      if (touched(l)) out.push({ ...l, source: { ...l.source, gone: true } });
+      if (touched(l)) out.push({ ...l, source: { ...l.source, gone: true, ...(engineNow ? { engineVersion: engineNow } : {}) } });
       continue;
     }
     seen.add(l.source.key);

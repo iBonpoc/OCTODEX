@@ -116,6 +116,11 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
             <StatusChip status="warn" label={t(v.state === "signed" ? "mod.gutters.list.s.changedSigned" : "mod.gutters.list.s.changed")} />
           </View>
         ) : null}
+        {v.engineChanged ? (
+          <View testID="view-engine-changed">
+            <StatusChip status="warn" label={t(v.state === "signed" ? "mod.gutters.list.s.engineSigned" : "mod.gutters.list.s.engine")} />
+          </View>
+        ) : null}
         <View testID="view-accuracy">
           <StatusChip status={tape ? "ok" : "warn"} soft label={t(tape ? "mod.gutters.card.tape" : "mod.gutters.card.rough")} />
         </View>
