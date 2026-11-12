@@ -87,7 +87,7 @@ exports.run = async (h) => {
 
   // remove → «Отменить»
   const ownId = (await photos()).find((f) => !f.elementId).id;
-  await tid("draw-photos").getByRole("button", { name: "Фото 1" }).click();
+  await tid("draw-photos").locator('[data-testid^="photo-thumb-"]').first().click();
   await p.getByRole("button", { name: "Удалить фото" }).click();
   await waitFor(async () => !(await photos()).some((f) => f.id === ownId), "removed");
   await p.waitForTimeout(400); // the toast ignores a press in its first 300 ms
@@ -124,7 +124,7 @@ exports.run = async (h) => {
   await tid("draw-photos").waitFor({ timeout: 5000 });
   h.expect(/Фото замера · 1/.test(await tid("draw-photos").innerText()), "past the trial: the measurement's photo is shown");
   h.expect((await tid("draw-photos").getByRole("button", { name: "Добавить фото" }).count()) === 0, "…and nothing can be added");
-  await tid("draw-photos").getByRole("button", { name: "Фото 1" }).click();
+  await tid("draw-photos").locator('[data-testid^="photo-thumb-"]').first().click();
   await p.waitForTimeout(400);
   h.expect((await p.getByRole("button", { name: "Удалить фото" }).count()) === 0, "…nor removed");
   await h.shot("read-only");

@@ -234,3 +234,40 @@ describe("design system: the tape's yellow (founder 09.11, #674 — an exception
     expect(hits).toEqual([join("modules", "gutters", "draw", "Tape.tsx")]);
   });
 });
+
+/** founder 12.11.2026 (#1166, «Добавить фото»): in a tile where an icon stands over a text, the text is centred too — else a two-line
+ *  caption sits at the left under a centred icon. A tile = a column whose items are centred (alignItems center), with an icon and a text in it. */
+describe("design system: a text under a centred icon is centred", () => {
+  it("every <T> in such a tile has `center` (or is one line, or says ds-allow)", () => {
+    const hits: string[] = [];
+    for (const f of code) {
+      const src = readFileSync(f, "utf8");
+      for (const m of src.matchAll(/style=\{\{([^{}]*)\}\}\s*>/g)) {
+        const st = m[1] ?? "";
+        // any column whose items are centred (a tile, a ToolCell): an icon over a text — the text is centred too
+        if (!st.includes('alignItems: "center"') || st.includes('flexDirection: "row"')) continue;
+        // the direct children of the tile: depth 0 until the tile closes (a nested View is one child — an icon in a circle counts)
+        const rest = src.slice((m.index ?? 0) + m[0].length);
+        let depth = 0;
+        let hasPicture = false;
+        const texts: string[] = [];
+        for (const tk of rest.matchAll(/<(\/?)([A-Za-z]*View|Press|Icon|T)\b([^>]*?)(\/?)>/g)) {
+          const [, close, name, attrs, selfClose] = tk;
+          if (name === "T") {
+            if (depth === 0 && !close) texts.push(attrs ?? "");
+            continue;
+          }
+          if (close) { depth--; if (depth < 0) break; continue; }
+          if (depth <= 1 && name === "Icon") hasPicture = true;
+          if (name !== "Icon" && !selfClose) depth++;
+        }
+        if (!hasPicture) continue;
+        for (const a of texts) {
+          if (/\bcenter\b/.test(a) || /numberOfLines=\{1\}/.test(a) || a.includes("ds-allow")) continue;
+          hits.push(`${relative(ROOT, f)}: <T${a.slice(0, 50)}>`);
+        }
+      }
+    }
+    expect([...new Set(hits)], "add `center` to the text (DS §18, #1166)").toEqual([]);
+  });
+});

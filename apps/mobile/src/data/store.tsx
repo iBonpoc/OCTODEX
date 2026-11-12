@@ -41,7 +41,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
-import { contractInvoice, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
+import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
@@ -1491,7 +1491,8 @@ export function StoreProvider({
         // the amount is the same rule as the server's record_visit_payment (#757, audit A-17 / B-05): the job's final
         // invoice takes its balance; with none, a new final invoice bills what is not yet billed (a deposit off)
         const job = v.jobId ? findJob(d0, v.jobId) : undefined;
-        const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
+        // #1193 п.1: the contract's own invoices (a standalone one is outside the contract) — as the server
+        const jobInvoices = v.jobId ? contractInvoices(d0, v.jobId) : [];
         // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
         const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
         // the final invoice the engine counted (void ones never reach the phone: repo.ts loads live invoices only)

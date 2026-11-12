@@ -4,6 +4,7 @@ import { space } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button, Toggle } from "@/ui/controls";
 import { Labeled, RatePctField } from "@/features/fields";
+import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
 import { T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
@@ -81,6 +82,13 @@ export function RowsSection() {
           <T v="caption">{last ? t("ds.hap.last", { name: last }) : t("ds.hap.none")}</T>
         </View>
         <T v="caption" tone="mut">{t("ds.rows.dragNone")}</T>
+      </Card>
+      <Card>
+        <View testID="showcase-rows-photoTile" style={{ gap: space[1] }}>
+          <T v="heading">{t("ds.rows.photoTile")}</T>
+          <T v="caption" tone="mut">{t("ds.rows.photoTileHint")}</T>
+          <PhotoStrip photos={[]} onAdd={() => {}} />
+        </View>
       </Card>
       <TaxSample />
       {PLANNED.map((p) => (

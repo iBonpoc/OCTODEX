@@ -80,14 +80,14 @@ describe("app tokens mirror the founder's DS css", () => {
     });
   });
   it("drawing canvas sizes", () => {
-    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap"), pullSidePx: px("draw-pull-side-px") });
+    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap") });
   });
   it("dialog, sheet and popover sizes, the brand splash", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
     expect(motion.durBrand).toBe(px("dur-brand"));
   });
   it("motion", () => {
-    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart")]);
+    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart, motion.longPressMs]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart"), px("long-press-ms")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
     expect([...motion.easeOut]).toEqual(bez("ease-out"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));

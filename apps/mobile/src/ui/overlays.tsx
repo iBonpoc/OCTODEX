@@ -764,9 +764,11 @@ function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => voi
           maxWidth: component.modalW + space[8],
         }}
       >
-        <T v="body" w="medium" style={{ flexShrink: 1 }} numberOfLines={2}>
-          {item.text}
-        </T>
+        <View testID="toast-text" style={{ flexShrink: 1 }}>
+          <T v="body" w="medium" numberOfLines={2}>
+            {item.text}
+          </T>
+        </View>
         {item.undo ? (
           <UndoButton
             onPress={() => {

@@ -29,9 +29,8 @@ export function contractTaxOf(d: D, job: Pick<Job, "id" | "estimateId" | "amount
   return Math.max(0, Math.min(tax, job.amountCents));
 }
 
-/** what counts against the contract: its sent deposit / progress / final invoices (a standalone one is outside it) */
-const contractInvoices = (d: Pick<DB, "invoices">, jobId: ID): Invoice[] =>
-  d.invoices.filter((i) => i.jobId === jobId && (i.kind === undefined || i.kind === "deposit" || i.kind === "progress" || i.kind === "final"));
+export { contractInvoices, isContractKind } from "@/features/contractKind";
+import { contractInvoices } from "@/features/contractKind";
 
 /** a new invoice of `amountCents` on the job: refused (null) above the contract; else its subtotal and tax */
 export function contractInvoice(d: D, job: Pick<Job, "id" | "estimateId" | "amountCents" | "taxEnabled" | "taxRateBps" | "contractTaxCents">, amountCents: number): { subtotalCents: number; taxCents: number } | null {

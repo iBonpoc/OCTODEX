@@ -3,6 +3,7 @@
  * The painter (SvgPainter today; Skia only if the device check fails — rule 17) draws exactly this, nothing else,
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
+import { drawing as DT } from "@octo/design-tokens";
 import { dsCode } from "./attrs";
 import { capSide, cornerCut, findCorners, houseSides, isOpenEnd, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen, type LenFormat } from "./format";
@@ -38,7 +39,7 @@ export interface SceneRun {
 /** an end cap (founder 08.11): left or right, looking at the face; a tap swaps both caps of the line */
 export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean }
 /** a corner: outside / inside (a tap swaps); an inside one gets a splash guard by itself */
-export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number }
+export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean }
 export interface SceneDs {
   id: string; at: [number, number]; story: Story; selected: boolean;
   /** «D1» inside the mark (founder 08.11) */
@@ -108,6 +109,11 @@ export interface SceneOpts {
   layers?: SceneLayers;
 }
 
+/** the angle's arc (#818): its radius is `ARC_R_TIMES` × the mark's radius (a token), at most `ARC_SIDE_SHARE` of the shorter side on the screen; sides this close to one line (|sin|) have no arc. Scene constants derived from `drawing.dsR`, not tokens of their own */
+const ARC_R_TIMES = 3;
+const ARC_SIDE_SHARE = 0.45;
+const ARC_PARALLEL_EPS = 0.02;
+
 /** the layers of the view (#930): a layer is hidden, never deleted — the drawing itself is as it was; all on when not said */
 export interface SceneLayers { grid?: boolean; labels?: boolean; ds?: boolean }
 
@@ -151,11 +157,28 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at, side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected });
     });
   }
-  const corners: SceneCorner[] = found.map((f) => ({
-    id: f.id, runId: f.runs[0].id, at: toScreen(o.view, f.at), kind: f.kind,
-    splash: d.corners?.[f.id]?.splashGuard ?? (f.kind === "in" && !splashOff(d, f)),
-    angleDeg: Math.round(cornerCut(d, f, found).angleDeg),
-  }));
+  const corners: SceneCorner[] = found.map((f) => {
+    const at = toScreen(o.view, f.at);
+    // the arc of the angle: from one gutter's direction to the other's, the short way, at a radius that fits the shorter side
+    const far = f.runs.map((x) => {
+      const r = runs[d.runs.findIndex((q) => q.id === x.id)]!;
+      return x.end === 0 ? r.b : r.a;
+    });
+    const us = far.map((q) => {
+      const L = Math.hypot(q[0] - at[0], q[1] - at[1]);
+      return { L, u: [(q[0] - at[0]) / (L || 1), (q[1] - at[1]) / (L || 1)] as [number, number] };
+    });
+    const R = Math.min(DT.dsR * ARC_R_TIMES, us[0]!.L * ARC_SIDE_SHARE, us[1]!.L * ARC_SIDE_SHARE);
+    const cross = us[0]!.u[0] * us[1]!.u[1] - us[0]!.u[1] * us[1]!.u[0];
+    const arc = R >= DT.dsR && Math.abs(cross) > ARC_PARALLEL_EPS ? { from: [at[0] + us[0]!.u[0] * R, at[1] + us[0]!.u[1] * R] as [number, number], to: [at[0] + us[1]!.u[0] * R, at[1] + us[1]!.u[1] * R] as [number, number], r: R, sweep: (cross > 0 ? 1 : 0) as 0 | 1 } : null;
+    return {
+      id: f.id, runId: f.runs[0].id, at, kind: f.kind,
+      splash: d.corners?.[f.id]?.splashGuard ?? (f.kind === "in" && !splashOff(d, f)),
+      angleDeg: Math.round(cornerCut(d, f, found).angleDeg),
+      arc,
+      handle: f.runs.some((x) => x.id === o.selected),
+    };
+  });
   const ds: SceneDs[] = [];
   for (const s of d.downspouts) {
     const r = byId.get(s.runId);
