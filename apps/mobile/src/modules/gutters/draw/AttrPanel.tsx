@@ -306,7 +306,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
  * A choice folded into one row (founder 09.11: «выпадающее меню»): the field's name and what is picked; a tap opens the
  * choices, a pick closes them. For the long lists — the size and the colour.
  */
-function Select<K extends string>({ label, testID, items, value, onChange, offered }: { label: string; testID: string; items: { key: K; label: string }[]; value: K; onChange: (v: K) => void; offered?: readonly string[] }) {
+function Select<K extends string>({ label, testID, items, value, onChange, offered, fit }: { fit?: boolean; label: string; testID: string; items: { key: K; label: string }[]; value: K; onChange: (v: K) => void; offered?: readonly string[] }) {
   const { t } = useI18n();
   const { c } = useTheme();
   const [open, setOpen] = useState(false);
@@ -314,12 +314,14 @@ function Select<K extends string>({ label, testID, items, value, onChange, offer
   const cur = items.find((it) => it.key === value);
   return (
     <Field label={label} testID={testID}>
+      <View style={fit ? { alignSelf: "flex-start" } : undefined}>
       <Press testID={`${testID}-open`} onPress={() => setOpen((x) => !x)} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }}>
-        <RowView style={{ justifyContent: "space-between", minHeight: sizes.hitMin, paddingHorizontal: space[3], borderRadius: radius.field, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.in }}>
-          <View testID={`${testID}-value`} style={{ flex: 1 }}><T v="body">{cur ? off(cur).label : value}</T></View>
+        <RowView style={{ justifyContent: "space-between", gap: space[2], minHeight: sizes.hitMin, paddingHorizontal: space[3], borderRadius: radius.field, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.in }}>
+          <View testID={`${testID}-value`} style={fit ? undefined : { flex: 1 }}><T v="body">{cur ? off(cur).label : value}</T></View>
           <Icon name="chevronDown" s={sizes.iconSm} color={c.mut} />
         </RowView>
       </Press>
+      </View>
       {open ? <ChoiceChips items={items.map(off)} value={value} onChange={(v) => { setOpen(false); onChange(v); }} /> : null}
     </Field>
   );
@@ -363,8 +365,8 @@ function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "
   const color = part !== "rest";
   return (
     <>
-      {rest ? <Pick label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} /> : null}
-      {rest && gauges.length ? <Pick label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
+      {rest ? <Select label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} /> : null}
+      {rest && gauges.length ? <Select label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
       {/* the colour: one folded choice with «Без покраски» among them (founder 09.11) */}
       {color && !mill ? <ColorPick a={a} set={set} ch={ch} run={run} /> : null}
     </>
@@ -420,11 +422,11 @@ export function RunAttrsView({
       {compact ? (
         <>
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
-      <Select label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
+      <Select fit label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
         <Stock a={a} set={onAttrs} ch={ch} part="color" />
       <Tape run={run} onLength={onLength} />
           <More open0={false} id={run.id} label={t(k("moreRun"))}>
-      <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
+      <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
             <Stock a={a} set={onAttrs} ch={ch} part="rest" />
       <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
       <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
@@ -435,8 +437,8 @@ export function RunAttrsView({
         <>
       <Tape run={run} onLength={onLength} />
       <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />
-      <Pick label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
-      <Select label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
+      <Select label={t(k("profile"))} testID="attr-profile" offered={ch.offer.profiles} items={profiles.map((p) => ({ key: p, label: t(k(`p.${p}`)) }))} value={a.profile} onChange={(profile) => onAttrs({ profile })} />
+      <Select fit label={t(k("size"))} testID="attr-size" offered={ch.offer.sizes[a.profile]} items={sizes.map((s) => ({ key: s, label: inch(s) }))} value={a.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={a} set={onAttrs} ch={ch} />
       <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
       <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
@@ -512,7 +514,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
       <T v="heading" w="semibold">{t(k("ds"))}</T>
       {compact ? (
         <>
-      <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+      <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
           <Stock a={ds} set={onAttrs} ch={ch} part="color" run={run} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
@@ -528,7 +530,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
       ) : (
         <>
       <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
-      <Select label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
+      <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={ds} set={onAttrs} ch={ch} run={run} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
