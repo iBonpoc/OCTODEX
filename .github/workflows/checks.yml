@@ -165,7 +165,13 @@ jobs:
           echo "::warning::Expo versions differ from the SDK's expected patches, but this PR changed no dependencies: not red (task «Обновить патчи Expo» is kept by expo-patches.yml)"
       - name: expo-doctor (pinned, rule 17 checked in #225)
         working-directory: apps/mobile
-        run: npx -y expo-doctor@1.21.5
+        env:
+          DEPS_CHANGED: ${{ needs.changes.outputs.deps }}
+        # #1074 again: expo-doctor repeats the same «versions match the SDK» check, so a fresh Expo patch turned every PR red
+        # (12.11.2026). The step above already decides that check; doctor skips it unless this PR changed the dependencies.
+        run: |
+          if [ "$DEPS_CHANGED" != "true" ]; then export EXPO_DOCTOR_SKIP_DEPENDENCY_VERSION_CHECK=1; fi
+          npx -y expo-doctor@1.21.5
       - name: Export the iOS and Android bundles
         working-directory: apps/mobile
         run: npx expo export --platform ios --platform android --output-dir "$RUNNER_TEMP/bundle"
