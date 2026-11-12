@@ -57,7 +57,7 @@ export function toElements(d: Drawing, measurementId: string): ElementRow[] {
     id: r.id,
     measurementId,
     kind: "run",
-    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: Math.round(r.lengthIn * DENOM) / DENOM } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}), ...(r.dsAutoOff ? { dsAutoOff: true } : {}), ...(r.unit ? { unit: r.unit } : {}) },
+    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: Math.round(r.lengthIn * DENOM) / DENOM } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}), ...(r.unit ? { unit: r.unit } : {}) },
     attrs: { ...r.attrs },
     confidence: r.lengthIn !== undefined ? "taped" : "drawn",
   }));
@@ -81,8 +81,8 @@ export function fromElements(rows: readonly ElementRow[]): Drawing {
   const downspouts: DrawnDownspout[] = [];
   for (const e of rows) {
     if (e.kind === "run" && isPt(e.geom.a) && isPt(e.geom.b)) {
-      const g = e.geom as { a: P; b: P; lengthIn?: number; houseSide?: "L" | "R"; noCap?: [boolean, boolean]; dsAutoOff?: unknown; unit?: unknown };
-      runs.push({ id: e.id, a: g.a, b: g.b, ...(typeof g.lengthIn === "number" ? { lengthIn: g.lengthIn } : {}), ...(g.houseSide ? { houseSide: g.houseSide } : {}), ...(g.noCap ? { noCap: g.noCap } : {}), ...(g.dsAutoOff === true ? { dsAutoOff: true as const } : {}), ...(g.unit === "in" || g.unit === "m" || g.unit === "cm" || g.unit === "mm" ? { unit: g.unit } : {}), attrs: { ...RUN_BASE, ...(e.attrs as Partial<DrawnRun["attrs"]>) } });
+      const g = e.geom as { a: P; b: P; lengthIn?: number; houseSide?: "L" | "R"; noCap?: [boolean, boolean]; unit?: unknown };
+      runs.push({ id: e.id, a: g.a, b: g.b, ...(typeof g.lengthIn === "number" ? { lengthIn: g.lengthIn } : {}), ...(g.houseSide ? { houseSide: g.houseSide } : {}), ...(g.noCap ? { noCap: g.noCap } : {}), ...(g.unit === "in" || g.unit === "m" || g.unit === "cm" || g.unit === "mm" ? { unit: g.unit } : {}), attrs: { ...RUN_BASE, ...(e.attrs as Partial<DrawnRun["attrs"]>) } });
     }
   }
   const runIds = new Set(runs.map((r) => r.id));

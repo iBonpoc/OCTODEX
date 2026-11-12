@@ -4,7 +4,7 @@
  * chain — still one; a separate gutter has its own; one taken off by hand is not put back. Every view. Finds things by testID /
  * stored elements; waits on what it checks (no pauses).
  */
-const { skipLength, closeDsMenu } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, viewTotal } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.autoDs = true; // this spec is about them (the runner switches them off for the others)
@@ -48,7 +48,11 @@ exports.run = async (h) => {
   const right = caps.sort((u, v) => v[0] - u[0])[0];
   await stroke(right, [right[0], right[1] + 120]);
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 2, KEY, { timeout: 8000 });
-  h.expect((await dsOf()).length === 1, `a corner of two gutters has ONE downspout (${(await dsOf()).length})`);
+  await waitDs(1, "a corner of two gutters has ONE downspout");
+  // …and it is put again where it belongs: 12″ from a FREE end — on the gutter drawn last, not left at the corner (review Б1)
+  const r2 = (await runsOf()).find((r) => r.id !== r1.id);
+  const L2 = Math.round(Math.hypot(r2.geom.b[0] - r2.geom.a[0], r2.geom.b[1] - r2.geom.a[1]));
+  await p.waitForFunction(([k, id, want]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => !e.deletedAt && e.kind === "downspout" && e.geom.runId === id && Math.abs(e.geom.atIn - want) <= 2), [KEY, r2.id, L2 - 12], { timeout: 8000 });
 
   // a separate gutter has its own
   const y3 = b.y + b.height * 0.78;
@@ -65,12 +69,31 @@ exports.run = async (h) => {
   await tid("draw-tool-line").getByRole("button").click();
   const circles = await svg().locator("circle").evaluateAll((cs) => cs.map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const target = circles.sort((u, v) => v[1] - u[1])[0]; // the lowest: the third gutter's
+  // the money (К1): the automatic downspout is in the estimate — taking it off lowers the total (downspout, its outlet, elbows)
+  const withDs = (await viewTotal(p)).total;
+  h.expect(withDs > 0, `the drawing has a total with its automatic downspouts (${withDs})`);
   await p.mouse.click(target[0], target[1]);
   await tid("draw-delete").getByRole("button").click();
   await waitDs(1, "the downspout is taken off");
+  const withoutDs = (await viewTotal(p)).total;
+  h.expect(withoutDs < withDs, `…and taking one off lowers it (${withDs} → ${withoutDs})`);
   await p.getByRole("button", { name: /Отменить/ }).locator("visible=true").last().waitFor({ timeout: 3000 }); // the toast: it is undoable
   await stroke([b.x + b.width * 0.55, y3], [b.x + b.width * 0.8, y3 - 4]); // another change on the same row
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length >= 4, KEY, { timeout: 8000 });
   const after = await dsOf();
   h.expect(!after.some((s) => s.geom.runId === third.id), "the downspout taken off by hand is not put back on its gutter");
+
+  // the company's setting (Gutters → Правила): off — a new line has no downspout by itself
+  const have = (await dsOf()).length;
+  await h.go("/module/gutters/settings");
+  await tid("gset-rule-dsAuto").scrollIntoViewIfNeeded();
+  await tid("gset-rule-dsAuto").click();
+  await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.settings?.rules?.dsAuto) === false, KEY, { timeout: 8000 });
+  await h.go("/module/gutters/draw");
+  await tid("draw-surface").waitFor({ timeout: 8000 });
+  const nRuns = (await runsOf()).length;
+  const b2 = await p.getByTestId("draw-surface").boundingBox();
+  await stroke([b2.x + b2.width * 0.55, b2.y + b2.height * 0.12], [b2.x + b2.width * 0.9, b2.y + b2.height * 0.12]);
+  await p.waitForFunction(([k, want]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === want, [KEY, nRuns + 1], { timeout: 8000 });
+  h.expect((await dsOf()).length === have, "setting off: the new line has no downspout by itself");
 };

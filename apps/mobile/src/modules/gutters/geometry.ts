@@ -23,11 +23,13 @@ export interface DrawnRun {
     noSplash?: { a?: true; b?: true };
     /** the join at its start (a) / end (b) was split by the user («Разъединить угол», #933): two end caps, no corner — both runs carry it; the lengths are not touched */
     openEnds?: { a?: true; b?: true };
+    /** the program puts downspouts on this gutter's chain by itself (#1246): written where an old phone copies it whole (rule 16); a drawing without it from before the feature gets none by an edit */
+    dsAuto?: true;
+    /** the user took off the downspout the program had put on this gutter: none is put on it again (#1246) */
+    dsAutoOff?: true;
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
-  /** the user took off the downspout the program had put on this chain: it is not put back (#1246) */
-  dsAutoOff?: true;
   /** how its length is shown on the drawing (founder 09.11): feet + inches (none), inches, mm — a view, not a size */
   unit?: "in" | "m" | "cm" | "mm";
 }
@@ -356,7 +358,7 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
   const ends = runEnds(d, found);
   const runs: MeasuredRun[] = d.runs.map((r) => {
     // the corner methods are the drawing's, not the engine's run input
-    const { cornerMethod: _cm, noSplash: _ns, openEnds: _oe, ...attrs } = r.attrs;
+    const { cornerMethod: _cm, noSplash: _ns, openEnds: _oe, dsAuto: _da, dsAutoOff: _dao, ...attrs } = r.attrs;
     return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: side(r), ends: ends[r.id]! };
   });
   const byId = new Map(d.runs.map((r) => [r.id, r]));

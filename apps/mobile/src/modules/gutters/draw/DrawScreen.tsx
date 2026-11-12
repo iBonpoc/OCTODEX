@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { autoDownspouts } from "../canvas/autoDs";
+import { autoDownspouts, autoManaged } from "../canvas/autoDs";
 import { addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
@@ -124,7 +124,7 @@ export default function DrawScreen() {
   // the company's rules and use (M7c) and its corner method: the $ under the drawing counts by them
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
   /** the downspouts it puts by itself (#1246): the company's setting — one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
-  const autoDs = useMemo(() => { const r = readRules(settings); /* a test seam like globalThis.__octoSheetLeave: the specs written before the automatic downspouts count their own */ if ((globalThis as { __octoAutoDs?: string }).__octoAutoDs === "off") return null; return r.dsAuto ? { spacingIn: r.runPerDsFt * 12, edgeIn: r.dsEdgeIn } : null; }, [settings]);
+  const autoDs = useMemo(() => { const r = readRules(settings); return r.dsAuto ? { spacingIn: r.runPerDsFt * 12, edgeIn: r.dsEdgeIn } : null; }, [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -267,12 +267,14 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (made: Drawing, prev = cur.current.drawing) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false) => {
       // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
-      const next = cur.current.canSave && cur.current.autoDs
+      const next = !placed && cur.current.canSave && cur.current.autoDs
         ? autoDownspouts(made, { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, prev)
         : made;
       if (next === prev) return;
+      // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
+      if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
       setHint(null);
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
@@ -722,6 +724,14 @@ export default function DrawScreen() {
       setSheet(false);
     }
   };
+  /** «Расставить водостоки»: every chain of an old measurement gets its downspouts — one step of «Назад» (#1246) */
+  const placeAutoDs = () => {
+    const o = cur.current.autoDs;
+    if (!o) return;
+    const next = autoDownspouts(cur.current.drawing, { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, undefined, true);
+    if (!layers.ds) setLayers((x) => ({ ...x, ds: true }));
+    commit(next, cur.current.drawing, true);
+  };
   const pick = (tl: Tool) => {
     // «Водосток» needs the downspouts seen: the layer comes back on (a downspout is never put in the dark, #930 review)
     if (tl === "ds" && !layers.ds) setLayers((x) => ({ ...x, ds: true }));
@@ -740,7 +750,7 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "layers" | "relink" | "unlink" | "delete";
+  type WhoKey = "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
@@ -748,11 +758,14 @@ export default function DrawScreen() {
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
+    // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
+    ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
     if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);

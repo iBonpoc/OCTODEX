@@ -518,15 +518,10 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
 
 /** remove a line (with its downspouts) or a downspout */
 export function removeElement(d: Drawing, id: string): Drawing {
-  const line = d.runs.find((r) => r.id === id);
-  if (line) {
-    // the «no more by itself» of its chain does not go with it: a gutter of the chain that is left takes it (#1246 review)
-    const heir = line.dsAutoOff ? [...chainOf(d, id)].find((x) => x !== id) : undefined;
-    return { ...d, runs: d.runs.filter((r) => r.id !== id).map((r) => (r.id === heir ? { ...r, dsAutoOff: true as const } : r)), downspouts: d.downspouts.filter((s) => s.runId !== id) };
-  }
+  if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
   // a downspout the program had put, taken off by hand: its chain is not given another by itself (#1246)
   const gone = d.downspouts.find((s) => s.id === id);
-  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, dsAutoOff: true as const } : r)) : d.runs;
+  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, attrs: { ...r.attrs, dsAutoOff: true as const } } : r)) : d.runs;
   return { ...d, runs, downspouts: d.downspouts.filter((s) => s.id !== id) };
 }
 
@@ -557,7 +552,8 @@ export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?:
   if (!s) return d;
   const { id: _id, runId, atIn, ...was } = s;
   const attrs = changeDs(was, patch, ch);
-  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, id, runId, atIn } : x)) };
+  // changed by hand it is the user's own now (no more `auto`): the program does not move it or count it as its own
+  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, auto: undefined, id, runId, atIn } : x)) };
 }
 
 /**
@@ -623,8 +619,8 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
   const downspouts = back.downspouts.filter((s) => !haveD.has(s.id) && ids.has(s.runId));
   // an automatic downspout taken off and brought back: its gutter is not «off» any more (removeElement had set that)
   const asked = before.downspouts.find((s) => s.id === removedId);
-  const unflag = asked?.auto && downspouts.some((s) => s.id === removedId) && !before.runs.find((r) => r.id === asked.runId)?.dsAutoOff;
-  const base = unflag ? cur.runs.map((r) => (r.id === asked!.runId && r.dsAutoOff ? { ...r, dsAutoOff: undefined } : r)) : cur.runs;
+  const unflag = asked?.auto && downspouts.some((s) => s.id === removedId) && !before.runs.find((r) => r.id === asked.runId)?.attrs.dsAutoOff;
+  const base = unflag ? cur.runs.map((r) => { if (r.id !== asked!.runId || !r.attrs.dsAutoOff) return r; const { dsAutoOff: _o, ...rest } = r.attrs; return { ...r, attrs: rest }; }) : cur.runs;
   return runs.length || downspouts.length ? { ...cur, runs: [...base, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
 }
 
