@@ -1875,3 +1875,23 @@ describe("unit:storeSync — voiding an invoice (В1-5, #1107)", () => {
     expect(v.voidInvoice(inv.id, "again")).toBe("gone");
   });
 });
+
+describe("unit:storeSync — a saved estimate is normalized before it is counted (normalizeDoc, Р3)", () => {
+  it("a priced line marked hidden is saved visible; its total counts it", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo, the director
+    await settle();
+    type V = { db: { estimates: { id: string; totalCents: number; doc?: { options: { lines: { id: string; clientVisible?: false }[] }[] } }[] }; saveEstimate: (e: object) => void };
+    const doc = {
+      options: [{ id: "o-n", name: "A", lines: [
+        { id: "l-n1", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 10000, clientVisible: false },
+        { id: "l-n2", name: "Kit", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: false },
+      ] }],
+      settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" } },
+    };
+    (valueOf(r) as unknown as V).saveEstimate({ id: "e-norm", customerId: "c1", propertyId: "p1", title: "Norm", doc });
+    await settle();
+    const e = (valueOf(r) as unknown as V).db.estimates.find((x) => x.id === "e-norm")!;
+    expect(e.totalCents).toBe(10000);
+    expect(e.doc!.options[0]!.lines.map((l) => l.clientVisible)).toEqual([undefined, false]);
+  });
+});

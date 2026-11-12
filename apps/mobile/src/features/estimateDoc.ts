@@ -15,6 +15,9 @@ import {
   type CustomTotals,
   type LineGroup,
   type LineSource,
+  SECTIONS_MAX,
+  SECTION_TITLE_MAX,
+  countedSections,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
 import { clientPages, pagesProblem } from "./docPages";
@@ -57,7 +60,62 @@ export function newDoc(defaultDepositBps?: number | null): EstimateDoc {
 
 /** A copy of an option with fresh ids (for "add option"). */
 export function cloneOption(o: CustomOption, i: number): CustomOption {
-  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })) };
+  // the sections go with it (the same ids — unique within an option): the lines keep their sectionId (Р4)
+  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })), ...(o.sections ? { sections: o.sections.map((x) => ({ ...x })) } : {}) };
+}
+
+/** a section's title as it may be kept: no control characters, at most SECTION_TITLE_MAX (the server cuts the same) */
+const cleanTitle = (t: unknown): string | undefined => {
+  if (typeof t !== "string") return undefined;
+  // eslint-disable-next-line no-control-regex
+  const x = t.replace(/[\u0000-\u001f\u007f]/g, "").slice(0, SECTION_TITLE_MAX);
+  return x.trim() ? x : undefined;
+};
+
+/**
+ * A document as it may be counted and shown (spec 2026-11-12-estimate-editor Р3, Р4) — on every way in (the cloud, a
+ * draft, a template, a module, the save): a line hidden from the client with a price is visible again (the founder: a
+ * hidden line never changes the client's total) — its id in `unhidden` for the «Снова видна клиенту» mark; sections
+ * past SECTIONS_MAX and a repeated id go (the engine's countedSections, the same order), a title is cleaned. A line whose
+ * section is not there keeps its sectionId («без раздела» only where it is shown and counted). Unchanged — the same object.
+ */
+export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: string[] } {
+  const unhidden: string[] = [];
+  let changed = false;
+  const options = doc.options.map((o) => {
+    let oc = false;
+    const lines = o.lines.map((l) => {
+      if (l.clientVisible === false && l.unitPriceCents !== 0) {
+        unhidden.push(l.id);
+        oc = true;
+        const { clientVisible: _v, ...rest } = l;
+        return rest;
+      }
+      return l;
+    });
+    let sections = o.sections;
+    if (o.sections) {
+      const seen = new Set<string>();
+      const kept = o.sections
+        .filter((x) => x && typeof x.id === "string")
+        .slice(0, SECTIONS_MAX)
+        .filter((x) => !seen.has(x.id) && !!seen.add(x.id))
+        .map((x) => {
+          const title = cleanTitle(x.title);
+          if (title === x.title) return x;
+          const { title: _t, ...rest } = x;
+          return title === undefined ? rest : { ...rest, title };
+        });
+      if (kept.length !== o.sections.length || kept.some((x, i) => x !== o.sections![i])) {
+        sections = kept;
+        oc = true;
+      }
+    }
+    if (!oc) return o;
+    changed = true;
+    return { ...o, lines, ...(sections ? { sections } : {}) };
+  });
+  return { doc: changed ? { ...doc, options } : doc, unhidden };
 }
 
 /** Unit price of a catalog item (materials: purchase + supplier tax + markup). */
@@ -146,7 +204,13 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
     // the attached pages as app.client_doc passes them (spec 33 П24.7): a broken shape or page never reaches the client
     ...(pages.length ? { pages } : {}),
     // a line with quantity 0 bills nothing and is how a part is left out (spec 33 П23.8а №4, П23.9): never shown as a $0 row
-    options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !zeroQty(l)).map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
+    // a line hidden from the client (only at $0 — the engine and the server the same, Р3) goes whole; a section keeps only
+    // what the client reads (a module's key stays the company's), as app.client_doc
+    options: doc.options.map((o) => ({
+      ...o,
+      lines: o.lines.filter((l) => !zeroQty(l) && !(l.clientVisible === false && l.unitPriceCents === 0)).map(({ unitCostCents: _c, source: _s, ...l }) => l),
+      ...(o.sections ? { sections: countedSections(o).map(({ module: _m, ...x }) => x) } : {}),
+    })),
   };
 }
 

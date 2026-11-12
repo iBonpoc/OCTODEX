@@ -225,10 +225,16 @@ export function marginPctOf(priceCents: number, costCents: number | null): strin
   return dec(priceCents - costCents).mul(100).div(priceCents).toDecimalPlaces(1).toFixed(1);
 }
 
-/** A line's profit before the discount: its total − its cost (only for who sees costs; never on /p/ or the PDF) */
-export function lineProfit(l: CustomLine): number {
-  const x = toLine(l, DEFAULT_TAX);
-  return lineTotal(x) - lineCost(x);
+/** A line's profit before the discount: its total − its cost (only for who sees costs; never on /p/ or the PDF); null
+ *  while the quantity is not a number */
+export function lineProfit(l: CustomLine): number | null {
+  // a quantity being typed ("abc", "") is no number yet: no profit, never an error (called on every keystroke)
+  try {
+    const x = toLine(l, DEFAULT_TAX);
+    return lineTotal(x) - lineCost(x);
+  } catch {
+    return null;
+  }
 }
 
 /** the sections that count (the first SECTIONS_MAX, in order, a repeated id once; a subsection only under a top section that counts) */
@@ -270,13 +276,15 @@ export function sectionSubtotals(o: CustomOption, s: CustomSettings): { bySectio
  * «Сохранить в каталог» for a material (Р1): the catalog prices a material from its cost and markup
  * (catalogPrice(cost, 0, markup)) — a whole-bps markup that gives exactly the line's price: the nearest to the line's own
  * (m0 = round((P − C) × 10000 / C)), else m0 − 1 or m0 + 1.
- * No cost (or no right to see it), a price below the cost, no exact markup (a cost above $100, rare) or one above the
- * server's limit (markup_bps ≤ 100000) — not saved, and why.
+ * No cost (or no right to see it), a price below the cost, a price above the server's limit (markup_bps ≤ 100000:
+ * more than 11 × the cost) or no exact markup (a cost above $100, rare) — not saved, and why.
  */
 export const CATALOG_MARKUP_MAX_BPS = 100000;
-export function catalogMarkupFor(costCents: number | undefined, priceCents: number): { ok: true; markupBps: number } | { ok: false; reason: "noCost" | "belowCost" | "noExact" } {
+export function catalogMarkupFor(costCents: number | undefined, priceCents: number): { ok: true; markupBps: number } | { ok: false; reason: "noCost" | "belowCost" | "aboveMax" | "noExact" } {
   if (costCents === undefined || !(costCents > 0)) return { ok: false, reason: "noCost" };
   if (priceCents < costCents) return { ok: false, reason: "belowCost" };
+  // above the server's markup (1000%): price more than 11 × the cost — its own reason, not «no exact markup»
+  if (priceCents > roundCents(dec(costCents).mul(bps(CATALOG_MARKUP_MAX_BPS).add(1)))) return { ok: false, reason: "aboveMax" };
   const m0 = Math.round(((priceCents - costCents) * 10000) / costCents);
   // the markup closest to the line's (m0 first, then its neighbours): $10 at $11 is 10%, not 9.99% — a later change of the
   // cost keeps the percent the person meant (review of РС-3 №1)
