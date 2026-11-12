@@ -117,6 +117,9 @@ const CREATES: Creates = {
 export const UNSURE_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
   "source.save", "tag.save", "catalog.save", "contact.save", "license.save", "property.save", "task.save", "lead.contactSave",
   "customer.people", "lead.people", "estimate.save", "chk.template.save", "est.template.save", "supplier.save",
+  // the deposit: the job and its deposit invoice are the signature's when they are on the phone already — only the payment
+  // is the deposit's own then (review of #1061: «Отменить изменение…» took the job's and the invoice's later ops with it)
+  "estimate.deposit",
 ]);
 
 /**

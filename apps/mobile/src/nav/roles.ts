@@ -49,8 +49,9 @@ export const routeRoles: Record<string, readonly Role[]> = {
 /** the first part of an address: "/company/hours?x=1" → "company", "/" → "" */
 export const routeKey = (path: string) => path.split(/[?#]/)[0]!.split("/").filter(Boolean)[0] ?? "";
 
-/** «Прибыль» of a job (revenue − expenses, margin): office only — the technician never sees the company's money (13 §3.4, §4). */
-export const canSeeProfit = (role: Role) => role !== "tech";
+/** «Прибыль» of a job (revenue − expenses, margin): owner, admin, office — the technician never sees the company's money,
+ *  sales see no expenses of the company (13 §3.4, §4; #868, founder's #1042: «no» by default) */
+export const canSeeProfit = (role: Role) => role === "director" || role === "dispatcher";
 
 /** may this role open the screen at `path` */
 export const canOpen = (role: Role, path: string) => (routeRoles[routeKey(path)] ?? ALL).includes(role);
