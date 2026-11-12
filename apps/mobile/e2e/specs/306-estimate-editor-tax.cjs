@@ -81,6 +81,8 @@ exports.run = async (h) => {
   await tid("est-tax-partial").getByRole("button").click();
   const ask = tid("est-tax-ask");
   await ask.waitFor({ timeout: 3000 });
+  // the question is a page of the same sheet: one window at a time (a second Modal does not show on iOS)
+  h.expect((await p.locator('[aria-modal="true"]').locator("visible=true").count()) === 1, "one sheet open while the question stands");
   h.expect(/Было \$/.test(await ask.innerText()) && /станет \$/.test(await ask.innerText()), `the question has «было / станет» (${(await ask.innerText()).replace(/\n/g, " ")})`);
   await tid("est-tax-ask-no").getByRole("button").click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="est-tax-ask"]').length === 0, null, { timeout: 3000 });
@@ -90,11 +92,13 @@ exports.run = async (h) => {
   await tid("est-tax-rate").waitFor({ timeout: 3000 });
   h.expect((await tid("est-tax-partial").count()) === 0, "«Пересчитать»: the whole amount now");
 
-  // a signed estimate: the tax row does not open
-  const raw2 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
-  raw2.db.estimates.find((x) => x.id === saved.id).status = "approved";
-  await h.seed(DB_KEY, raw2);
-  await h.go(`/estimate/new?id=${saved.id}`);
-  await tid("ue-save").waitFor({ timeout: 8000 });
-  h.expect((await p.getByRole("button", { name: "Налог с продаж" }).count()) === 0, "a signed estimate: the tax row does not open");
+  // a signed estimate (awaiting the company's signature, and signed by both): the tax row does not open
+  for (const status of ["awaiting_countersign", "approved"]) {
+    const raw2 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+    raw2.db.estimates.find((x) => x.id === saved.id).status = status;
+    await h.seed(DB_KEY, raw2);
+    await h.go(`/estimate/new?id=${saved.id}`);
+    await tid("ue-save").waitFor({ timeout: 8000 });
+    h.expect((await p.getByRole("button", { name: "Налог с продаж" }).count()) === 0, `a signed estimate (${status}): the tax row does not open`);
+  }
 };

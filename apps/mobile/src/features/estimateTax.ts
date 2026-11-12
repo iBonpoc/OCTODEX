@@ -44,6 +44,16 @@ export function taxChange(doc: EstimateDoc, patch: { enabled?: boolean; ratePpm?
   return { tax, ask: diffs.length ? diffs : null };
 }
 
+/**
+ * When an estimate was last SAVED: the phone's own mark in the document (`calc_inputs.savedAt`); one saved before the mark existed —
+ * when it was sent; the last resort is estimates.updated_at, which the server also moves for a client's view, a signature or the
+ * trash (so a client opening an old estimate must not make it «the last»). The server's version rows have no save time of their own.
+ */
+export function estimateSavedAt(calcInputs: unknown, sentAt?: string, updatedAt?: string): string | undefined {
+  const mark = (calcInputs as { savedAt?: unknown } | null | undefined)?.savedAt;
+  return typeof mark === "string" && mark !== "" ? mark : sentAt || updatedAt || undefined;
+}
+
 /** «as in the last estimate»: the rate (ppm) of the estimate SAVED last with the tax on — by the time of its last save (the list's
  *  own order is the order of the ids in the cloud, not of time); not the one being edited; never filled in by itself */
 export function lastTaxRatePpm(estimates: Estimate[], exceptId?: string): number | null {

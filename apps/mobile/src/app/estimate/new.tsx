@@ -747,9 +747,33 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onClose={() => setMoveFor(null)}
         testID="est-move-picker"
       />
-      <Sheet visible={setting !== null} onClose={() => setSetting(null)} title={setting ? t(`ue.${setting}` as DictKey) : undefined}>
+      {/* the question of the tax is a PAGE of this sheet (one window at a time: a second Modal does not show on iOS, #743) */}
+      <Sheet
+        visible={setting !== null}
+        onClose={() => {
+          setTaxAsk(null);
+          setSetting(null);
+        }}
+        title={taxAsk ? t("ue.taxAskTitle") : setting ? t(`ue.${setting}` as DictKey) : undefined}
+        onBack={taxAsk ? () => setTaxAsk(null) : undefined}
+      >
         <View style={{ gap: space[3] }}>
-          {setting === "discount" ? (
+          {taxAsk ? (
+            <View testID="est-tax-ask" style={{ gap: space[3] }}>
+              {taxAsk.diffs.map((d, i) => (
+                <T key={i} v="body" tone="mut">
+                  {taxAsk.diffs.length > 1 ? t("ue.taxAskOption", { name: d.name, was: money(d.was), will: money(d.will) }) : t("ue.taxAskBody", { was: money(d.was), will: money(d.will) })}
+                </T>
+              ))}
+              <View testID="est-tax-ask-yes">
+                <Button label={t("ue.taxAskYes")} full onPress={() => { setSettings({ tax: taxAsk.tax }); setTaxAsk(null); }} />
+              </View>
+              <View testID="est-tax-ask-no">
+                <Button label={t("ue.taxAskNo")} variant="secondary" full onPress={() => setTaxAsk(null)} />
+              </View>
+            </View>
+          ) : null}
+          {!taxAsk && setting === "discount" ? (
             <>
               <Segmented
                 full
@@ -768,7 +792,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               ) : null}
             </>
           ) : null}
-          {setting === "tax" ? (
+          {!taxAsk && setting === "tax" ? (
             <>
               <RowView style={{ minHeight: size.hitMin }}>
                 <T v="body" style={{ flex: 1 }}>
@@ -807,7 +831,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               ) : null}
             </>
           ) : null}
-          {setting === "deposit" ? (
+          {!taxAsk && setting === "deposit" ? (
             <>
               <Segmented
                 full
@@ -833,21 +857,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             </>
           ) : null}
           <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
-        </View>
-      </Sheet>
-      <Sheet visible={taxAsk !== null} onClose={() => setTaxAsk(null)} title={t("ue.taxAskTitle")}>
-        <View testID="est-tax-ask" style={{ gap: space[3] }}>
-          {(taxAsk?.diffs ?? []).map((d) => (
-            <T key={d.name} v="body" tone="mut">
-              {taxAsk && taxAsk.diffs.length > 1 ? t("ue.taxAskOption", { name: d.name, was: money(d.was), will: money(d.will) }) : t("ue.taxAskBody", { was: money(d.was), will: money(d.will) })}
-            </T>
-          ))}
-          <View testID="est-tax-ask-yes">
-            <Button label={t("ue.taxAskYes")} full onPress={() => { if (taxAsk) setSettings({ tax: taxAsk.tax }); setTaxAsk(null); }} />
-          </View>
-          <View testID="est-tax-ask-no">
-            <Button label={t("ue.taxAskNo")} variant="secondary" full onPress={() => setTaxAsk(null)} />
-          </View>
         </View>
       </Sheet>
       <Sheet visible={askRestart} onClose={() => setAskRestart(false)} title={t("est.draft.ask")}>

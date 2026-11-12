@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TAX, taxRatePpm, type CustomLine, type CustomOption } from "@octo/estimating-engine";
 import { newDoc, optionTotals } from "../src/features/estimateDoc";
-import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax } from "../src/features/estimateTax";
+import { estimateSavedAt, isPartialTax, lastTaxRatePpm, taxChange, wholeTax } from "../src/features/estimateTax";
 import type { Estimate, EstimateDoc } from "../src/data/types";
 
 const L = (id: string, group: CustomLine["group"], cents: number): CustomLine => ({ id, name: id, group, quantity: "1", unit: "ea", unitPriceCents: cents });
@@ -88,5 +88,22 @@ describe("unit:estimateTax — «as in the last estimate»", () => {
     expect(lastTaxRatePpm([])).toBeNull();
     expect(lastTaxRatePpm([E("s1", { enabled: true, rateBps: 700 }, undefined, "2026-11-02T00:00:00Z"), E("s2", { enabled: true, rateBps: 750 }, undefined, "2026-11-03T00:00:00Z")])).toBe(75000);
     expect(lastTaxRatePpm([E("x", { enabled: true, rateBps: 700 }), E("y", { enabled: true, rateBps: 750 })])).toBe(75000);
+  });
+});
+
+describe("unit:estimateTax — «the last estimate» is the last SAVED, not the last touched", () => {
+  it("the document's own save mark wins; then the send time; updated_at is the last resort", () => {
+    expect(estimateSavedAt({ savedAt: "2026-11-01T10:00:00Z" }, "2026-11-03T00:00:00Z", "2026-11-12T00:00:00Z")).toBe("2026-11-01T10:00:00Z");
+    expect(estimateSavedAt({}, "2026-11-03T00:00:00Z", "2026-11-12T00:00:00Z")).toBe("2026-11-03T00:00:00Z");
+    expect(estimateSavedAt(null, undefined, "2026-11-12T00:00:00Z")).toBe("2026-11-12T00:00:00Z");
+    expect(estimateSavedAt({ savedAt: 5 }, undefined, undefined)).toBeUndefined();
+  });
+  it("a client opening an old estimate moves its updated_at, not its save mark: the other estimate stays the last", () => {
+    const E = (id: string, rateBps: number, calc: { savedAt?: string }, updatedAt: string) =>
+      ({ id, savedAt: estimateSavedAt(calc, undefined, updatedAt), doc: docWith({ enabled: true, rateBps }) }) as unknown as Estimate;
+    const old = E("old-viewed-today", 800, { savedAt: "2026-11-01T10:00:00Z" }, "2026-11-12T09:00:00Z"); // viewed by the client today
+    const recent = E("recent", 1025, { savedAt: "2026-11-08T10:00:00Z" }, "2026-11-08T10:00:00Z");
+    expect(lastTaxRatePpm([old, recent])).toBe(102500);
+    expect(lastTaxRatePpm([recent, old])).toBe(102500);
   });
 });
