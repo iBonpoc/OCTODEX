@@ -206,3 +206,12 @@ export function autoDownspouts(d: Drawing, o: AutoDsOptions, before?: Drawing, f
   }
   return next;
 }
+
+/**
+ * What a finished edit becomes (the one place `DrawScreen.commit` asks): the chains it touched get their downspouts — unless it is a
+ * put-back (`placed`: «Отменить» of a toast, the drawing as it was), which is set as it is: the recount would see the old drawing as
+ * «a join» and zero the counts (review of the director on #1264).
+ */
+export function commitAuto(made: Drawing, prev: Drawing, placed: boolean, o: AutoDsOptions | null): Drawing {
+  return placed || !o ? made : autoDownspouts(made, o, prev);
+}

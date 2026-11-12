@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 import { computeGutterParts } from "@octo/estimating-engine";
-import { autoDownspouts, autoManaged, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN, chains } from "../src/modules/gutters/canvas/autoDs";
+import { autoDownspouts, autoManaged, commitAuto, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN, chains } from "../src/modules/gutters/canvas/autoDs";
 import { hitTest, moveDs, moveEndAlong, removeElement, restoreRemoved, setDsAttrs, setLength } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_DS_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { runLengthIn, toMeasurement, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../src/modules/gutters/geometry";
@@ -264,5 +264,37 @@ describe("edgeOf is the free end", () => {
   it("the downspout of a lone line is 12″ from its end", () => {
     const d = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
     expect(edgeOf(d, d.downspouts[0]!)).toBe(AUTO_DS_EDGE_IN);
+  });
+});
+
+describe("review (director): every put-back sets the drawing as it was — no recount (it would see the old drawing as a «join» and zero the counts)", () => {
+  const opts = O;
+  it("A–B–C, one removed on A, B deleted, «Отменить»: the same downspouts and counts as before the delete (1, not 2)", () => {
+    const A = run("A", [0, 0], [300, 0]), B = run("B", [300, 0], [300, 300]), C = run("C", [300, 300], [600, 300]);
+    const base0 = auto({ runs: [A, B, C], downspouts: [] }, none);
+    expect(base0.downspouts).toHaveLength(2);
+    const aDs = base0.downspouts.find((s) => s.runId === "A") ?? base0.downspouts[0]!;
+    const before = auto(removeElement(base0, aDs.id), base0); // one taken off by hand: the counted
+    const after = commitAuto(removeElement(before, "B"), before, false, opts);
+    const undo = restoreRemoved(after, before, "B");
+    const put = commitAuto(undo, after, true, opts);
+    expect(put).toBe(undo); // as it is
+    expect(put.downspouts.map((s) => s.id).sort()).toEqual(before.downspouts.map((s) => s.id).sort());
+    expect(put.runs.map((r) => Number(r.attrs.dsAutoOff) || 0)).toEqual(before.runs.map((r) => Number(r.attrs.dsAutoOff) || 0));
+    // (before the fix the put-back went through the recount: it sees a «join» and zeroes the counts)
+    const recount = commitAuto(undo, after, false, opts);
+    expect(recount.downspouts.length !== before.downspouts.length || recount.runs.some((r, i) => (Number(r.attrs.dsAutoOff) || 0) !== (Number(before.runs[i]!.attrs.dsAutoOff) || 0))).toBe(true);
+  });
+  it("a corner A+B, the only downspout taken off, the corner split, «Отменить»: 0 downspouts as before the split (not 1 on B)", () => {
+    const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]);
+    const base = auto({ runs: [A, B], downspouts: [] }, none);
+    const before = removeElement(base, base.downspouts[0]!.id);
+    expect(before.downspouts).toHaveLength(0);
+    const split = commitAuto({ ...before, runs: [{ ...before.runs[0]!, attrs: { ...before.runs[0]!.attrs, openEnds: { b: true as const } } }, { ...before.runs[1]!, attrs: { ...before.runs[1]!.attrs, openEnds: { a: true as const } } }] }, before, false, opts);
+    const put = commitAuto(before, split, true, opts);
+    expect(put).toBe(before);
+    expect(put.downspouts).toHaveLength(0);
+    // (before the fix the put-back went through the recount: the re-join zeroed the count and a downspout came back on B)
+    expect(commitAuto(before, split, false, opts).downspouts).toHaveLength(1);
   });
 });
