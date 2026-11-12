@@ -11,7 +11,7 @@ import type { PartQty } from "@octo/estimating-engine";
 import type { DictKey } from "@/i18n";
 import { docPage, esc, type DocOpts } from "@/features/docPdf";
 import type { PortalData } from "@/cloud/portal";
-import { ftIn } from "../canvas/format";
+import { fmtLen, type LenFormat } from "../canvas/format";
 import type { Drawing } from "../geometry";
 import { blueprint } from "./blueprint";
 import { sheetSvg } from "@/features/docPages";
@@ -41,26 +41,30 @@ export interface DrawingPdfInput {
   rough: boolean;
   /** today, as the document's date (US format) */
   date: string;
+  /** the company's format of lengths (#1092): feet-inches when not said */
+  fmt?: LenFormat;
 }
 
 export function drawingPdfHtml(x: DrawingPdfInput): string {
   const { t, spec } = x;
   const crew = x.kind === "crew";
+  const fmt = x.fmt ?? "ftin";
+  const len = (inches: number) => fmtLen(inches, fmt);
   // the drawing as on paper (#739): the same sheet as «Просмотр замера», in this document's language
-  const sheet = x.drawing.runs.length ? blueprint(x.drawing, t, { company: x.company.name, address: x.address ?? x.who, date: x.date, rough: x.rough }) : null;
+  const sheet = x.drawing.runs.length ? blueprint(x.drawing, t, { company: x.company.name, address: x.address ?? x.who, date: x.date, rough: x.rough, fmt }) : null;
   const th = (k: DictKey) => `<th>${esc(t(k))}</th>`;
   const gutterOf = (r: MeasureSpec["runs"][number]) => `${word(t, `mod.gutters.attr.p.${r.profile}`, r.profile)} ${esc(r.size)}″`;
   const runs = spec.runs
     .map(
       (r) =>
-        `<tr><td>${r.n}</td>${crew ? `<td>${esc(ftIn(r.backIn))}</td><td><b>${esc(ftIn(r.frontIn))}</b></td>` : `<td>${esc(ftIn(r.backIn))}</td>`}<td>${esc(t("mod.gutters.story", { n: r.story }))}</td><td>${esc(gutterOf(r))}</td><td>${esc(r.color ? word(t, `mod.gutters.attr.c.${r.color}`, r.color) : "")}</td></tr>`,
+        `<tr><td>${r.n}</td>${crew ? `<td>${esc(len(r.backIn))}</td><td><b>${esc(len(r.frontIn))}</b></td>` : `<td>${esc(len(r.backIn))}</td>`}<td>${esc(t("mod.gutters.story", { n: r.story }))}</td><td>${esc(gutterOf(r))}</td><td>${esc(r.color ? word(t, `mod.gutters.attr.c.${r.color}`, r.color) : "")}</td></tr>`,
     )
     .join("");
   const runsTable = `<h2>${esc(t("mod.gutters.view.runs"))}</h2><table><tr>${th("mod.gutters.pdf.n")}${crew ? th("mod.gutters.pdf.wall") + th("mod.gutters.pdf.face") : th("mod.gutters.pdf.len")}${th("mod.gutters.pdf.story")}${th("mod.gutters.pdf.gutter")}${th("mod.gutters.pdf.color")}</tr>${runs}</table>`;
   const kindWord = (k: string) => t(k === "in" ? "mod.gutters.draw.cornerIn" : k === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
   const corners = crew && spec.corners.length
     ? `<h2>${esc(t("mod.gutters.view.corners"))}</h2>${spec.corners
-        .map((c) => `<p><b>${esc(t("mod.gutters.view.cornerTitle", { k: kindWord(c.kind), deg: c.angleDeg }))}</b><br>${c.runs.map((r) => esc(t("mod.gutters.view.cornerRun", { n: r.n, back: ftIn(r.backIn), front: ftIn(r.frontIn) }))).join("<br>")}</p>`)
+        .map((c) => `<p><b>${esc(t("mod.gutters.view.cornerTitle", { k: kindWord(c.kind), deg: c.angleDeg }))}</b><br>${c.runs.map((r) => esc(t("mod.gutters.view.cornerRun", { n: r.n, back: len(r.backIn), front: len(r.frontIn) }))).join("<br>")}</p>`)
         .join("")}`
     : "";
   const ds = spec.ds.length
@@ -69,7 +73,7 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
       : `<p>${esc(t("mod.gutters.pdf.dsCount", { n: spec.ds.length }))}</p>`
     : "";
   const partsTable = crew && spec.parts.length
-    ? `<h2>${esc(t("mod.gutters.view.parts"))}</h2><table>${spec.parts.map((p: PartQty) => `<tr><td>${esc(partName(t, p))}</td><td class="r">${esc(partQty(t, p))}</td></tr>`).join("")}</table>`
+    ? `<h2>${esc(t("mod.gutters.view.parts"))}</h2><table>${spec.parts.map((p: PartQty) => `<tr><td>${esc(partName(t, p, fmt))}</td><td class="r">${esc(partQty(t, p, fmt))}</td></tr>`).join("")}</table>`
     : "";
   const rough = x.rough ? `<p class="note"><b>${esc(t("mod.gutters.view.rough"))}</b></p>` : "";
   const title = t(crew ? "mod.gutters.pdf.titleCrew" : "mod.gutters.pdf.title");
