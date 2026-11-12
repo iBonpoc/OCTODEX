@@ -56,6 +56,7 @@ export function Menu<K extends string>({
   onSelect,
   onClose,
   title,
+  matchWidth,
 }: {
   visible: boolean;
   anchor: { x: number; y: number; w: number; h: number } | null;
@@ -63,6 +64,8 @@ export function Menu<K extends string>({
   onSelect: (k: K) => void;
   onClose: () => void;
   title?: string;
+  /** a menu of a field: not narrower than its row, not wider than `modalW` (DS А2) */
+  matchWidth?: boolean;
 }) {
   const { c } = useTheme();
   const { width: winW, height: winH } = useWindowDimensions();
@@ -88,6 +91,19 @@ export function Menu<K extends string>({
       }),
     [],
   );
+  // web: the focus goes back to what opened the menu when it closes — Esc, a pick or a tap outside (DS А2, З6)
+  const opener = useRef<Element | null>(null);
+  const isOpen = visible && !!anchor;
+  useEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    if (isOpen) {
+      opener.current = document.activeElement;
+      return;
+    }
+    const el = opener.current as HTMLElement | null;
+    opener.current = null;
+    if (el && el.isConnected && typeof el.focus === "function") el.focus();
+  }, [isOpen]);
   // the Modal stays mounted after it closes (visible false), so iOS can say when it is gone; it keeps where it stood
   const last = useRef(anchor);
   if (anchor) last.current = anchor;
@@ -96,11 +112,13 @@ export function Menu<K extends string>({
   const open = visible && !!anchor;
   // the edges: 16 from the window, and clear of the notch and the home indicator (docs/specs/32)
   const e = { l: Math.max(insets.left, space[4]), r: Math.max(insets.right, space[4]), t: Math.max(insets.top, space[4]), b: Math.max(insets.bottom, space[4]) };
-  const w = Math.min(component.menuW, winW - e.l - e.r);
+  const w = Math.min(matchWidth ? Math.min(Math.max(component.menuW, at.w), component.modalW) : component.menuW, winW - e.l - e.r);
   const left = Math.max(e.l, Math.min(at.x, winW - w - e.r));
   const below = at.y + at.h + space[1];
-  const estH = (items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2;
-  const top = below + estH > winH - e.b ? Math.max(e.t, at.y - estH - space[1]) : below;
+  // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
+  const room = winH - e.t - e.b;
+  const estH = Math.min((items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2, room);
+  const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - space[1], winH - e.b - estH)) : below;
   return (
     <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? ""} />
@@ -116,6 +134,7 @@ export function Menu<K extends string>({
               {title}
             </T>
           ) : null}
+          <ScrollView style={{ maxHeight: room - space[2] * 2 - (title ? size.hitMin : 0) }} testID="menu-items" bounces={false}>
           {items.map((it) => (
             <Press
               key={it.key}
@@ -133,6 +152,7 @@ export function Menu<K extends string>({
               {it.icon ? <Icon name={it.icon} /> : null}
             </Press>
           ))}
+          </ScrollView>
         </Glass>
       </Animated.View>
     </Modal>
