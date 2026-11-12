@@ -48,7 +48,10 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
   const { t, money, day } = useI18n();
   const toast = useToast();
   const [method, setMethod] = useState<PaymentMethod>("card");
-  const [sendOpen, setSendOpen] = useState(!!openSend);
+  // #1113: who may send — the office side (a tech with the link could sign as the client, spec 35 §4д п.10); `?send=1`
+  // opens the sheet only for them
+  const maySend = canServe(db, e.customerId) && canSeeClientLink(store.role);
+  const [sendOpen, setSendOpen] = useState(!!openSend && maySend);
   const [pdfOpen, setPdfOpen] = useState(false);
   const [tplOpen, setTplOpen] = useState(false);
   const customer = db.customers.find((c) => c.id === e.customerId);
@@ -138,7 +141,8 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
             {/* a client-signed estimate changes only through «don't sign — change it» (with a reason) */}
             {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
             {/* sending (and its «Copy link») is the office side's: a tech with the link could sign as the client (spec 35 §4д п.10) */}
-            {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) && canSeeClientLink(store.role) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
+            {(e.status === "draft" || e.status === "sent") && maySend ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
+            {e.status === "draft" && store.role === "tech" && canServe(db, e.customerId) ? <View testID="est-send-office"><T v="caption" tone="mut">{t("est.tech.officeSends")}</T></View> : null}
             {/* the client's page only for the office side: a tech with the link could sign as the client (spec 35 §4д п.10) */}
             {e.token && canSeeClientLink(store.role) ? <View testID="est-open-client"><Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /></View> : null}
             {/* E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued) */}
@@ -201,7 +205,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
         </Card>
       ) : null}
 
-      {universal ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
+      {universal && maySend ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
       {universal && tplOpen ? <SaveTemplateSheet e={e} onClose={() => setTplOpen(false)} /> : null}
       {pdfIssues ? (
         <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
@@ -532,6 +536,15 @@ function LegacyBody({ e }: { e: Estimate }) {
             {t("est.countersign.noRightOnSite")}
           </T>
         </Card>
+      ) : e.status === "draft" && !canSignDraftOnSite(store.role, e.status) ? (
+        // #1126: a tech has a draft signed only after the office sends it (the server signs a sent, locked version only)
+        <Card>
+          <View testID="est-sign-after-send">
+            <T v="body" tone="mut">
+              {t("est.signOnSite.afterSend")}
+            </T>
+          </View>
+        </Card>
       ) : e.status === "draft" || e.status === "sent" ? (
         <>
           <SectionTitle title={t("est.signOnSite")} />
@@ -542,12 +555,15 @@ function LegacyBody({ e }: { e: Estimate }) {
             <T v="caption" tone="warn">
               {t("est.rescission")}
             </T>
-            <SignaturePad
-              onConfirm={(path) => {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                toast.show(q(t("est.signedToast", { name: customer?.name ?? "" })), store.signEstimate(e.id, path));
-              }}
-            />
+            <View testID="est-sign-on-site">
+              <SignaturePad
+                consent="est.signConsent"
+                onConfirm={(path) => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  toast.show(q(t("est.signedToast", { name: customer?.name ?? "" })), store.signEstimate(e.id, path));
+                }}
+              />
+            </View>
           </Card>
         </>
       ) : e.status === "awaiting_countersign" ? (
@@ -612,6 +628,7 @@ function CountersignCard({ e }: { e: Estimate }) {
             </T>
             <SignaturePad
               label={t("est.countersign.padLabel")}
+              consent={null}
               confirmLabel={t("est.countersign.sign")}
               onConfirm={(path) => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
