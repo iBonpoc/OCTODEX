@@ -48,7 +48,6 @@ exports.run = async (h) => {
   const right = caps.sort((u, v) => v[0] - u[0])[0];
   await stroke(right, [right[0], right[1] + 120]);
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 2, KEY, { timeout: 8000 });
-  await p.waitForTimeout(0);
   h.expect((await dsOf()).length === 1, `a corner of two gutters has ONE downspout (${(await dsOf()).length})`);
 
   // a separate gutter has its own
