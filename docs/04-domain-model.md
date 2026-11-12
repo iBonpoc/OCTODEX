@@ -285,7 +285,7 @@
 | is_placeholder_price | bool | (v0.3) Тестовая цена стартового price book (бейдж «тестовая»); снимается при правке цены/себестоимости, импорте, скане или кнопке «Цена проверена» |
 | taxable | bool | Значение по умолчанию для флажка `taxable` строки документа. **Сам по себе налог не включает** — налог считается, только если режим профиля документа его предусматривает и он включён на документе (§6). Для новых позиций ставится по `default_taxable_scope` профиля по умолчанию |
 | category_id | → ServiceCategory | |
-| supplier_item_id | → SupplierItem | Основной поставщик материала |
+| supplier_item_id | → SupplierItem | Основной поставщик материала. **Заменено:** спека 36 — `supplier_id` и `supplier_sku` на позиции (один основной); после 1.0 — источники `catalog_item_sources` с одним основным (`docs/specs/39-item-sources-stock.md` §4.1) |
 | module | `core`, `gutters`, `roofing`… | Какой модуль поставил позицию |
 | attributes | json | Стандартные ключи: `profile`, `gauge`, `color`, `coil_width_in`, `ds_size` (`2x3`, `3x4`, `round_3`, `round_4`…), `noncombustible`, `hanger_type`; (v0.3) справочник колен: `component` (`elbow`…), `elbow_style` (`A`, `B`…), `angle_deg` (селекторы сборок, PRD 06). Новые варианты колен добавляются позициями каталога (импорт), без изменения формул |
 | is_active | bool | Архив вместо удаления |
@@ -312,6 +312,8 @@
 `name`, `contact`, `email_for_orders`, `phone`, `account_number`, `purchase_tax_rate_id` → TaxRate (v0.3: налог при покупке по умолчанию; новая запись — из `Company.tax_settings.default_purchase_tax_rate_id`, заглушка «LA area 10.25% — проверить»), `branches[]` (структура: `name`, `address`, `phone`, `email`, `purchase_tax_rate_id?` — своя ставка филиала, например Santa Monica), `delivery_notes`, `payment_terms` (`cod`, `prepaid`, `net_15`, `net_30`, `net_60`, `custom`; печатается в PO) (из анализа внешней CRM), `is_active`.
 
 ### SupplierItem — позиция в прайсе поставщика
+
+> **Заменено** (12.11.2026): отдельной таблицы `SupplierItem` нет. Сейчас — поставщик и артикул на позиции (спека 36); после 1.0 — `catalog_item_sources`: поставщик, артикул, фасовка, закупочная цена, один основной (`docs/specs/39-item-sources-stock.md`). Описание ниже — историческое.
 `supplier_id`, `supplier_sku` (уникален в рамках поставщика), `name`, `unit` (текст поставщика: roll, box, lb, stick), `cost_cents` (**без налога**, v0.3), `pack_size` (сколько **единиц каталога** в одной единице поставщика: коробка 50 hangers → 50), `valid_from`, `valid_to` (текущая = `valid_to IS NULL`; смена цены = новая запись), `price_source` (v0.3: `manual`, `import_file`, `ai_scan`, `shelf_tag`, `rfq_quote`, `ai_command`), `import_job_id` → ImportJob (v0.3, вместо `source_import_id`).
 
 ### ImportJob — массовый импорт и обновление цен (v0.3, вместо PriceListImport)
@@ -685,7 +687,7 @@
 `Supplier.verified_emails[]`: адреса, с которых принимаются ответы поставщика.
 
 ### PurchaseOrderLine — строка заказа (новая, вместо `lines[]` json)
-`po_id`, `supplier_item_id`, `catalog_item_id`, `description`, `attributes` (цвет, gauge, ширина), `bom_qty` (из BOM в единицах каталога), `qty` (в единицах поставщика = `ceil(bom_qty / pack_size)`), `unit`, `unit_cost_cents`, `line_cost_cents`, `received_qty`, `position`.
+`po_id`, `supplier_item_id` (**заменено**: в базе его нет; после 1.0 — `source_id` → `catalog_item_sources`, спека 39 §4.3), `catalog_item_id`, `description`, `attributes` (цвет, gauge, ширина), `bom_qty` (из BOM в единицах каталога), `qty` (в единицах поставщика = `ceil(bom_qty / pack_size)`), `unit`, `unit_cost_cents`, `line_cost_cents`, `received_qty`, `position`.
 
 ---
 
