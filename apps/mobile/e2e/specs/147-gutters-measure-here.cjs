@@ -7,7 +7,7 @@
  * Finds things by testID; waits on what it checks.
  */
 const { pressEscUntilClosed, waited } = require("../sheet.cjs");
-const { skipLength, pressWhenStill, sheetGone } = require("../gutters.cjs");
+const { skipLength, pressWhenStill } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -41,7 +41,6 @@ exports.run = async (h) => {
   await here().click();
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });
-  await sheetGone(p); // the «＋» sheet goes out while the screen changes (#1163): the first stroke must not meet it
   h.expect((await tid("draw-to-lead").count()) === 0, "nothing saved yet: no «Сделать заявкой»");
 
   const b = await p.getByTestId("draw-surface").boundingBox();

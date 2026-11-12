@@ -57,6 +57,43 @@ exports.run = async (h) => {
   await vis("showcase-windows").waitFor({ timeout: 5000 });
   await check("reduce motion (the runner's setting): a dissolve");
 
+  // the owner empties its data when it closes: the sheet goes out with what it showed (its height and title stay)
+  await vis("showcase-sheet-empties").getByRole("button").first().click();
+  await p.getByTestId("sheet-title").locator("visible=true").first().waitFor({ timeout: 3000 });
+  await p.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-testid="sheet-panel"]')].pop();
+    const ti = [...document.querySelectorAll('[data-testid="sheet-title"]')].pop();
+    window.__empt = { hs: [], titles: [], done: false };
+    const tick = () => {
+      if (!document.body.contains(el)) { window.__empt.done = true; return; }
+      window.__empt.hs.push(Math.round(el.getBoundingClientRect().height));
+      window.__empt.titles.push(ti.textContent);
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await vis("sheet-close").click();
+  await p.waitForFunction(() => window.__empt && window.__empt.done, null, { timeout: 5000 });
+  const emp = await p.evaluate(() => window.__empt);
+  h.expect(new Set(emp.hs).size === 1 && emp.hs.length >= 2, `the sheet does not collapse on the way out (heights ${[...new Set(emp.hs)]})`);
+  h.expect(new Set(emp.titles).size === 1 && emp.titles[0] === "Карточка работы", `…nor change its title (${[...new Set(emp.titles)]})`);
+
+  // a tap under the leaving sheet works at once (web: the layer lets it through) — no waiting for the sheet to be gone
+  await openSheet("fit");
+  await vis("sheet-close").click();
+  // (a click by Playwright waits for the target to be free — so ask the page what is under the finger right now)
+  const under = await p.evaluate(() => {
+    const b = [...document.querySelectorAll('[data-testid="showcase-sheet-medium"] [role="button"]')].find((e) => e.getBoundingClientRect().height > 0);
+    const r = b.getBoundingClientRect();
+    const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+    return !!e && !!e.closest('[data-testid="showcase-sheet-medium"]');
+  });
+  h.expect(under, "the leaving sheet takes no tap: what is under it is under the finger at once");
+  await vis("showcase-sheet-medium").getByRole("button").first().click();
+  await p.getByTestId("sheet-title").filter({ hasText: "Шторка половинная" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+  await vis("sheet-close").click();
+  await gone("the second sheet closes too");
+
   // the owner will not close it: it comes straight back, and is asked once per press
   await openSheet("stuck");
   const t0 = await top();
@@ -67,6 +104,9 @@ exports.run = async (h) => {
   h.expect((await askedText()) === 1, "«✕»: the owner is asked once");
   await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, t0, { timeout: 3000 });
   h.expect((await p.getByTestId("sheet-panel").count()) === 1, "…and the sheet is back in its place");
+  const inPlace = () => p.evaluate(() => [document.querySelector('[data-testid="sheet-panel"]'), document.querySelector('[data-testid="sheet-scrim"]')].map((e) => Number(getComputedStyle(e).opacity)));
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="sheet-panel"],[data-testid="sheet-scrim"]')].every((e) => Number(getComputedStyle(e).opacity) === 1), null, { timeout: 3000 });
+  h.expect((await inPlace()).every((o) => o === 1), "…fully visible (the sheet and the background)");
   await p.getByTestId("sheet-scrim").getByRole("button").first().click({ position: { x: 5, y: 5 } });
   await p.waitForFunction(() => /(\d+)/.exec(document.querySelector('[data-testid="showcase-stuck-asked"]')?.textContent ?? "")?.[1] === "2", null, { timeout: 3000 });
   await p.waitForFunction((y) => Math.round(document.querySelector('[data-testid="sheet-panel"]').getBoundingClientRect().y) === y, t0, { timeout: 3000 });

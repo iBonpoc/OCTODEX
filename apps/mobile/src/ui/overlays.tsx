@@ -185,13 +185,13 @@ const releaseRule = {
 export function Sheet({
   visible,
   onClose,
-  title,
-  children,
+  title: titleNow,
+  children: childrenNow,
   dirty,
   onSave,
-  footer,
-  height = "fit",
-  onBack,
+  footer: footerNow,
+  height: heightNow = "fit",
+  onBack: onBackNow,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -209,6 +209,11 @@ export function Sheet({
   /** "Save" in the unsaved-changes question */
   onSave?: () => void;
 }) {
+  // While the sheet goes out the owner has often already emptied what it showed (`visible={!!x}`, `{x ? … : null}`):
+  // it keeps showing the last render from while it was open, so it does not collapse or jump on the way out
+  const seen = useRef({ title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow });
+  if (visible) seen.current = { title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow };
+  const { title, children, footer, height, onBack } = seen.current;
   const { c } = useTheme();
   const { wide } = useDevice();
   const insets = useSafeAreaInsets();
@@ -236,6 +241,8 @@ export function Sheet({
   useEffect(() => {
     if (visible) {
       session.current++;
+      exitSpeed.current = 0;
+      passThrough(false);
       drag.value = 0;
       fade.value = 1;
       leaving.current = false;
@@ -244,6 +251,23 @@ export function Sheet({
       setAsk(false);
     }
   }, [visible, drag, fade]);
+  // web: the Modal's root is a fixed layer that takes every tap; while the sheet goes out it lets them through (DS §10:
+  // do not wait for an animation to press). Native: the Modal is its own window — ⬜ (DS Б1)
+  const rootRef = useRef<React.ComponentRef<typeof Animated.View>>(null);
+  const passThrough = useCallback((on: boolean) => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    let el = rootRef.current as unknown as HTMLElement | null;
+    // the ref of an animated view is not always the DOM node: then by the test id (the top sheet is the last one)
+    if (!(el instanceof Element)) el = Array.from(document.querySelectorAll<HTMLElement>('[data-testid="sheet-panel"]')).pop() ?? null;
+    if (!el) return;
+    // every fixed layer above the sheet (the Modal has two); `important`: react-native-web puts
+    // `pointer-events: auto !important` in the layer's class
+    for (; el; el = el.parentElement) {
+      if (getComputedStyle(el).position !== "fixed") continue;
+      if (on) el.style.setProperty("pointer-events", "none", "important");
+      else el.style.removeProperty("pointer-events");
+    }
+  }, []);
   const mounted = useRef(true);
   useEffect(() => () => void (mounted.current = false), []);
   const gone = useCallback((id: number) => {
@@ -257,6 +281,7 @@ export function Sheet({
     (speed: number) => {
       const id = ++session.current;
       leaving.current = true;
+      passThrough(true);
       const done = (finished?: boolean) => {
         "worklet";
         if (finished) runOnJS(gone)(id);
@@ -274,7 +299,7 @@ export function Sheet({
       drag.value = withTiming(h, { duration: ms, easing: speed > 0 ? Easing.linear : Easing.out(Easing.cubic) }, done);
       setTimeout(() => gone(id), ms + motion.durBase);
     },
-    [reduce, wide, winH, drag, fade, sheetH, gone],
+    [reduce, wide, winH, drag, fade, sheetH, gone, passThrough],
   );
   const exitNow = useRef(exit);
   exitNow.current = exit;
@@ -291,9 +316,9 @@ export function Sheet({
     fade.value = withTiming(1, { duration: motion.durFast, reduceMotion: ReduceMotion.Never });
   }, [asked, drag, fade]);
   const requestClose = useCallback(
-    (v?: number) => {
+    (v?: number, discard?: boolean) => {
       if (leaving.current) return;
-      if (live.current.dirty) {
+      if (live.current.dirty && !discard) {
         drag.value = withSpring(0, motion.spring);
         setAsk(true);
         return;
@@ -406,6 +431,7 @@ export function Sheet({
         </Animated.View>
         <Animated.View
           entering={reduce ? undefined : SlideInDown.duration(motion.durSlow)}
+          ref={rootRef}
           testID="sheet-panel"
           onLayout={(e) => {
             sheetH.value = e.nativeEvent.layout.height;
@@ -489,7 +515,7 @@ export function Sheet({
                   </Press>
                 ) : null}
                 <Press
-                  onPress={() => { setAsk(false); onClose(); }}
+                  onPress={() => { setAsk(false); requestClose(0, true); }}
                   visibleHeight={component.button.phone}
                   accessibilityRole="button"
                   accessibilityLabel={t("sheet.discard")}

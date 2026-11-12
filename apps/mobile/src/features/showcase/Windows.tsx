@@ -15,6 +15,7 @@ export function WindowsSection() {
   const { t } = useI18n();
   const [open, setOpen] = useState<Which>(null);
   const [page, setPage] = useState(1);
+  const [item, setItem] = useState<string | null>(null); // the owner that empties its data when it closes
   const [asked, setAsked] = useState(0); // how many times the stubborn sheet was asked to close
   const s = SECTIONS.find((x) => x.id === "windows")!;
   const close = () => {
@@ -40,6 +41,12 @@ export function WindowsSection() {
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
         {row("stuck", t("ds.sheet.stuck"), t("ds.sheet.stuckHint"))}
+        <View testID="showcase-sheet-empties" style={{ gap: space[1] }}>
+          <Button label={t("ds.sheet.empties")} variant="secondary" onPress={() => setItem(t("ds.sheet.emptiesTitle"))} />
+          <T v="caption" tone="mut">
+            {t("ds.sheet.emptiesHint")}
+          </T>
+        </View>
       </Card>
       <Card>
         <View testID="showcase-sheet-leave">
@@ -48,6 +55,14 @@ export function WindowsSection() {
           </T>
         </View>
       </Card>
+      <Sheet visible={!!item} onClose={() => setItem(null)} title={item ?? ""}>
+        {item ? (
+          <>
+            <T v="body">{t("ds.sheet.emptiesBody")}</T>
+            <T v="body">{t("ds.sheet.emptiesBody2")}</T>
+          </>
+        ) : null}
+      </Sheet>
       <Sheet visible={open === "stuck"} onClose={() => setAsked((n) => n + 1)} title={t("ds.sheet.stuck")}>
         <T v="body">{t("ds.sheet.stuckBody")}</T>
         <View testID="showcase-stuck-asked">
