@@ -110,11 +110,15 @@ async function waitPastCompanyMidnight() {
     // every navigation; when it had to be written the page is loaded again so the app reads it.
     if (!spec.autoDs) {
       const go = h.go;
-      const patch = () => page.evaluate((k) => {
+      // a record of the module that is not there is made only for the gutter specs (they switch it on themselves later); a spec about the
+      // modules page (141: «nothing stored after «Отменить»») must not find a record it did not make
+      const makeIt = /gutter/i.test(file);
+      const patch = () => page.evaluate(([k, make]) => {
         try {
           const s = JSON.parse(localStorage.getItem(k) || "null");
           if (!s || !s.db || !s.db.company) return false;
           const m = s.db.company.modules || {};
+          if (!m.gutters && !make) return false;
           const g = m.gutters || { enabled: false, rowVersion: 0 };
           if (g.settings && g.settings.rules && g.settings.rules.dsAuto === false) return false;
           m.gutters = { ...g, settings: { ...(g.settings || {}), rules: { ...((g.settings || {}).rules || {}), dsAuto: false } } };
@@ -122,7 +126,7 @@ async function waitPastCompanyMidnight() {
           localStorage.setItem(k, JSON.stringify(s));
           return true;
         } catch (e) { return false; }
-      }, "octo.db.v5").catch(() => false);
+      }, ["octo.db.v5", makeIt]).catch(() => false);
       h.go = async (...a) => {
         await patch();
         await go(...a);
