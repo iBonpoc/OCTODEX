@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { contractInvoice, contractTaxOf } from "../src/features/contractInvoice";
+import { contractInvoice, contractTaxOf, withTaxSplit } from "../src/features/contractInvoice";
 import { newDoc, optionTotals } from "../src/features/estimateDoc";
 import { withJobLine, withJobTax } from "../src/features/jobLines";
 import { rejectedOf } from "../src/data/outboxRejected";
@@ -64,7 +64,19 @@ describe("#865 contract invoices on the phone", () => {
     expect(t.tax).toBe(1_900);
     expect(contractTaxOf(withEst({ ...approval, taxCents: 1_234 }), job)).toBe(1_234);
   });
-  it("the server's refusal above the contract: the card says why", () => {
+  it("the deposit made at the signature and the final of a visit: split as the server splits them (review №3)", () => {
+    const d0 = linesJob();
+    const dep: Invoice = { id: "dep", customerId: "c1", jobId: "j3", kind: "deposit", totalCents: 5_100, paidCents: 0, dueDate: "2026-11-12" };
+    const d1 = withTaxSplit({ ...d0, invoices: [...d0.invoices, dep] }, "dep");
+    expect(d1.invoices.find((i) => i.id === "dep")).toMatchObject({ subtotalCents: 5_000, taxCents: 100 });
+    const fin: Invoice = { id: "fin", customerId: "c1", jobId: "j3", kind: "final", totalCents: 45_900, paidCents: 0, dueDate: "2026-11-12" };
+    const d2 = withTaxSplit({ ...d1, invoices: [...d1.invoices, fin] }, "fin");
+    expect(d2.invoices.find((i) => i.id === "fin")).toMatchObject({ subtotalCents: 45_000, taxCents: 900 });
+    // already split (the server's copy) or not an invoice of the contract: as it is
+    expect(withTaxSplit(d2, "fin")).toBe(d2);
+    expect(withTaxSplit(d2, "nope")).toBe(d2);
+  });
+  it("the server's refusal above the contract (В1-4б): the card says why", () => {
     const op = { k: "invoice.issue" as const, id: "i9", jobId: "j3", customerId: "c1", kind: "progress" as const, title: "Progress", totalCents: 100, dueDate: "2026-11-12" };
     const r = rejectedOf({ id: "o1", op } as never, "the job's invoices would be more than its contract", Date.parse("2026-11-12T12:00:00Z"), null, "invoice_over_contract");
     expect(r).toMatchObject({ what: "invoice", reason: "invoice_over_contract", href: "/job/j3", amountCents: 100 });

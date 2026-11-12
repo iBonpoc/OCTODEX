@@ -40,7 +40,7 @@ export const REJECT_REASONS = {
   po_stale: "po.rej.stale",
   po_received_office: "po.rej.officeOnly",
   po_not_open: "po.rej.notOpen",
-  // #865 (migration 20261112060000): the job's invoices would be more than its contract
+  // #865 В1-4б (the server refusal comes with voiding, #1107): the job's invoices would be more than its contract
   invoice_over_contract: "inv.rej.overContract",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;

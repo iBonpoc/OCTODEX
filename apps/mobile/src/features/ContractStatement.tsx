@@ -94,11 +94,12 @@ export function ContractStatement({ jobId }: { jobId: string }) {
           {!hasFinal ? (
             <Button
               label={t("inv.billBalance", { amount: money(st.toInvoice) })}
+              testID="statement-bill-balance"
               icon="invoice"
               onPress={() => toast.show(q(t("inv.issued")), store.issueInvoice(jobId, "final", st.toInvoice, "Final balance"))}
             />
           ) : null}
-          <Button label={t("inv.progress")} icon="plus" variant="secondary" onPress={() => setSheet(true)} />
+          <Button label={t("inv.progress")} testID="statement-progress" icon="plus" variant="secondary" onPress={() => setSheet(true)} />
         </RowView>
       ) : null}
       <Sheet visible={sheet} onClose={() => setSheet(false)} title={t("inv.progress")}>
@@ -124,6 +125,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
           </RowView>
           <Button
             label={t("inv.issue")}
+            testID="statement-progress-issue"
             icon="check"
             full
             disabled={progress <= 0}

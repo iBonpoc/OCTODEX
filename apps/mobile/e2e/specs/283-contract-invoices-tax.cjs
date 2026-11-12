@@ -1,8 +1,9 @@
 /**
- * #865 (audit X-01..X-03): a contract's invoices on the phone — the tax inside each invoice, Σ = the contract's tax, never
+ * #865 В1-4а (audit X-01..X-03): a contract's invoices on the phone — the tax inside each invoice, Σ = the contract's tax, never
  * more than the contract. A job of its own lines (test prices): $400 labor + $100 taxable part, 10% → contract $510 with $10
  * tax. «Счёт на этап» 50% = $255 → $250 + $5 tax; «Выставить остаток» $255 → the rest of the tax $5; then nothing left to
- * bill. Revenue (the report's subtotal) is $500, without the tax. The server splits the same (t41_invoice_contract, db T196).
+ * bill (the phone bills nothing above the contract, engine canIssue). Revenue (the report's subtotal) is $500, without the
+ * tax. The server splits the same (t41_invoice_contract, db T196).
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -15,32 +16,27 @@ exports.run = async (h) => {
   raw.db.invoices = raw.db.invoices.filter((i) => i.jobId !== "j3");
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
-  await p.getByRole("tab", { name: "Деньги", exact: true }).locator("visible=true").click();
+  await p.getByTestId("job-tab-money").locator("visible=true").click();
   await h.expectText(/Договор \| \$510/, "the contract with its tax");
 
-  await p.getByRole("button", { name: "Счёт на этап" }).click();
-  await h.sheet().getByRole("button", { name: "Выставить счёт" }).click();
+  await p.getByTestId("statement-progress").click();
+  await h.sheet().getByTestId("statement-progress-issue").click();
   await h.expectText(/Выставлено \| \$255/, "a stage invoice of 50%");
   // the store writes its copy a moment after the screen shows it: wait for the invoices themselves
   const pick = async (n) => {
-    let mine = [];
-    for (let k = 0; k < 25; k++) {
-      mine = ((await h.db())?.invoices ?? []).filter((i) => i.jobId === "j3");
-      if (mine.length >= n) break;
-      await p.waitForTimeout(200);
-    }
-    return mine;
+    await p.waitForFunction((k) => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.invoices ?? []).filter((i) => i.jobId === "j3").length >= k, n);
+    return ((await h.db())?.invoices ?? []).filter((i) => i.jobId === "j3");
   };
   let mine = await pick(1);
   h.expect(mine.length === 1 && mine[0].totalCents === 25500 && mine[0].taxCents === 500 && mine[0].subtotalCents === 25000, `the stage invoice: $250 + $5 tax (${JSON.stringify(mine)})`);
 
-  await p.getByRole("button", { name: /Выставить остаток \$255/ }).click();
+  await p.getByTestId("statement-bill-balance").click();
   await h.expectText(/Выставлено \| \$510/, "the rest billed");
   mine = await pick(2);
   const fin = mine.find((i) => i.kind === "final");
   h.expect(fin && fin.totalCents === 25500 && fin.taxCents === 500, `the balance takes the rest of the tax (${JSON.stringify(fin)})`);
   h.expect(mine.reduce((s, i) => s + i.taxCents, 0) === 1000 && mine.reduce((s, i) => s + i.subtotalCents, 0) === 50000, "Σ tax = $10, revenue = $500");
   // nothing left to bill: no button bills above the contract
-  h.expect((await p.getByRole("button", { name: /Выставить остаток|Счёт на этап/ }).count()) === 0, "nothing left to bill");
+  h.expect((await p.getByTestId("statement-bill-balance").count()) + (await p.getByTestId("statement-progress").count()) === 0, "nothing left to bill");
   await h.shot("billed");
 };

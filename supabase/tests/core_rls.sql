@@ -4157,7 +4157,7 @@ select tst.ok((select status = 'void' from public.invoices where id = '15300000-
 -- ---------------------------------------------------------------- T54: the simulated card payment only for a demo company (security audit 06.11, item 2)
 :as_super
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
-select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'standalone', 'sent', 'T54 extra work', 5400, 5400, now()
+select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'progress', 'sent', 'T54 progress', 5400, 5400, now()
   from public.jobs j join public.estimates e on e.id = j.estimate_id,
        (values ('15400000-0000-4000-8000-000000000001'), ('15400000-0000-4000-8000-000000000002')) x(id)
  where e.id = tst.est_of('tok_inv_0123456789abcdef');
@@ -5651,12 +5651,9 @@ update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0
 do $$ begin
   insert into public.jobs (id, company_id, title, customer_id, property_id, status, contract_total_cents) values
     ('e6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T69 old', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', 10000);
+  insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
 end $$;
--- old data made before #865 (now the server refuses invoices above the contract, T196): the check is off for this row only
-alter table public.invoices disable trigger t41_invoice_contract;
-insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
-  ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
-alter table public.invoices enable trigger t41_invoice_contract;
 :as_office_a
 update public.jobs set title = 'T69 old renamed', description = 'still fine' where id = 'e6900000-0000-4000-8000-000000000002';
 select tst.ok((select title from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 'T69 old renamed', 'old data over-invoiced: an edit that keeps the total passes');
@@ -10104,7 +10101,7 @@ select tst.ok(not has_function_privilege('anon', 'public.stripe_pay_open(text,uu
   'T131 only the Edge Function (service_role) opens an attempt and keeps its PaymentIntent');
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
 select '11310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T131-1', 'c1a00000-0000-0000-0000-000000000001',
-       j.id, 'standalone', 'sent', 'T131 extra work', 150000, 150000, now()
+       j.id, 'progress', 'sent', 'T131 progress', 150000, 150000, now()
   from public.jobs j where j.estimate_id = '0e1a0000-0000-0000-0000-000000000088';
 :as_service
 select tst.fails_like($q$select public.stripe_pay_open('tok_lead_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
@@ -13061,12 +13058,13 @@ drop function tst.t195_sent(uuid);
 \echo 'T195 the client signs on the phone the total the server keeps; another total is refused'
 
 -- ======================================================================================================================
--- T196 (#865, audit X-01..X-03): the invoices of a contract — never more than the contract; the tax split inside each.
+-- T196 (#865 В1-4а, audit X-01, X-02): the tax split inside each invoice of a contract.
 -- (а) a job of its own lines with tax (test prices): $400 + $100 taxable, 10% → contract $510, tax $10. The app's
 --     invoice.issue (subtotal = total, no tax — as every app version writes it): the server splits it, the one that bills
 --     the rest takes the rest of the tax — Σ tax = $10, the same as the engine (invoiceTaxShare, contract.test.ts).
--- (б) one cent above the contract: refused (23514, hint invoice_over_contract), nothing written; a void one does not count;
---     a draft is not billed; a standalone invoice is outside the contract.
+-- (б) a void one does not count; a draft is split when it is sent; a standalone invoice is outside the contract; someone
+--     of another company is refused by the policy as before (the trigger counts nothing for them). The server's refusal
+--     above the contract is В1-4б (with voiding, #1107).
 -- (в) every contract invoice the other tests made (signature deposits, visit finals): its tax ≤ the contract's, and a
 --     fully billed contract has all of its tax in its invoices.
 -- ======================================================================================================================
@@ -13095,22 +13093,16 @@ insert into public.invoices (id, company_id, number, customer_id, job_id, kind, 
   ('01960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress payment', 17000, 17000, now());
 select tst.ok((select (subtotal_cents, tax_cents, total_cents) = (16667, 333, 17000) from public.invoices where id = '01960000-0000-4000-8000-000000000001'),
               'T196 a progress invoice of $170 keeps its total: $166.67 + tax $3.33 (17000 × 1000 / 51000 = 333.3)');
--- a draft is not billed: it neither holds the contract nor takes tax yet
+-- a draft is not billed: no tax yet; sent later, it is split then (and once only)
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
-  ('01960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'draft', 'T196 draft', 99999, 99999);
-select tst.ok((select tax_cents = 0 from public.invoices where id = '01960000-0000-4000-8000-000000000004'), 'T196 a draft holds nothing');
--- one cent over: refused with our hint, nothing written
-do $$ declare h text; begin
-  insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
-    ('01960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'final', 'sent', 'Final balance', 34001, 34001, now());
-  raise exception 'FAILED: T196 an invoice above the contract was written';
-exception when check_violation then
-  get stacked diagnostics h = pg_exception_hint;
-  perform tst.ok(h = 'invoice_over_contract', 'T196 one cent above the contract: refused (invoice_over_contract)');
-end $$;
--- the draft sent now would bill above the contract: refused the same
-select tst.fails_like($q$update public.invoices set status = 'sent', sent_at = now() where id = '01960000-0000-4000-8000-000000000004'$q$,
-       '%more than its contract%', 'T196 a draft above the contract is not sent');
+  ('01960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'draft', 'T196 draft', 5100, 5100);
+select tst.ok((select tax_cents = 0 from public.invoices where id = '01960000-0000-4000-8000-000000000004'), 'T196 a draft takes no tax');
+update public.invoices set status = 'sent', sent_at = now() where id = '01960000-0000-4000-8000-000000000004';
+select tst.ok((select (subtotal_cents, tax_cents) = (5000, 100) from public.invoices where id = '01960000-0000-4000-8000-000000000004'),
+              'T196 the draft sent now: $50 + $1 tax');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T196 a test draft' where id = '01960000-0000-4000-8000-000000000004';
+:as_office_a
 -- a standalone invoice of the job (extra work) is outside the contract
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('01960000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T196 extra', 5000, 5000, now());
@@ -13123,9 +13115,6 @@ select tst.ok((select (subtotal_cents, tax_cents) = (33333, 667) from public.inv
 select tst.ok((select sum(tax_cents) = 1000 and sum(total_cents) = 51000 from public.invoices
                 where job_id = 'e1960000-0000-4000-8000-000000000001' and kind in ('deposit', 'progress', 'final') and status = 'sent'),
               'T196 Σ tax of the invoices = the contract''s tax, Σ totals = the contract');
-select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
-         ('ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'T196 more', 1, now())$q$,
-       '%more than its contract%', 'T196 a fully billed contract takes no more');
 -- a void invoice does not count: voided (owner, no payments), the same amount is billed again with the same tax
 :as_owner_a
 update public.invoices set status = 'void', void_reason = 'T196 wrong stage' where id = '01960000-0000-4000-8000-000000000001';
@@ -13133,6 +13122,11 @@ update public.invoices set status = 'void', void_reason = 'T196 wrong stage' whe
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('01960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress payment', 17000, 17000, now());
 select tst.ok((select tax_cents = 333 from public.invoices where id = '01960000-0000-4000-8000-000000000003'), 'T196 a void invoice frees its part and its tax');
+-- another company: the policy refuses as before, whatever the amount
+:as_owner_b
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+         ('ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'T196 B', 1, now())$q$,
+       '%row-level security%', 'T196 another company: only the policy''s refusal');
 -- (в) every contract the other tests billed
 :as_super
 select tst.ok(coalesce(string_agg(x.title, '; '), '') = '', format('T196 the invoices of every contract keep its tax: %s', coalesce(string_agg(x.title, '; '), '')))
@@ -13143,6 +13137,6 @@ select tst.ok(coalesce(string_agg(x.title, '; '), '') = '', format('T196 the inv
 select tst.ok((select count(*) >= 1 from public.invoices i join public.jobs j on j.id = i.job_id
                 where i.kind = 'deposit' and i.tax_cents > 0 and j.estimate_id is not null),
               'T196 a signature''s deposit carries its share of the tax');
-\echo 'T196 the invoices of a contract: never above it, the tax split inside, Σ = the contract''s'
+\echo 'T196 the invoices of a contract: the tax split inside, Σ = the contract''s'
 
 \echo 'ALL TESTS PASSED'

@@ -89,7 +89,7 @@ export function visitPayment(
 
 /**
  * #865 (X-03): may an invoice of `amountCents` be issued on this contract — Σ live invoices (void ones do not count) plus
- * it never more than the contract. The server refuses the same (trigger t41_invoice_contract, hint invoice_over_contract).
+ * it never more than the contract. The server refuses the same from В1-4б (hint invoice_over_contract, with voiding #1107).
  */
 export function canIssue(contractCents: number, invoices: InvoiceLike[], amountCents: number): boolean {
   if (!(amountCents > 0)) return false;

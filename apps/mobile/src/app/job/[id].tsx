@@ -396,6 +396,7 @@ export default function JobScreen() {
       <RelatedBlock of={{ type: "job", id: j.id }} />
       <Segmented
         full
+        testID="job-tab"
         value={tab}
         onChange={setTab}
         items={[

@@ -40,7 +40,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
-import { contractInvoice } from "@/features/contractInvoice";
+import { contractInvoice, withTaxSplit } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
@@ -1494,7 +1494,7 @@ export function StoreProvider({
             const billed =
               plan.into === "final"
                 ? next
-                : { ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] };
+                : withTaxSplit({ ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] }, invoiceId);
             return withPayment(
               billed,
               // the invoice's client, as the server writes it (record_visit_payment, #857 С4) — review of #1103 №3
@@ -1879,7 +1879,7 @@ export function StoreProvider({
         const job = d0.jobs.find((j) => j.id === jobId);
         const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
         if (!job || !customerId || amountCents <= 0) return () => {};
-        // #865: never more than the contract (the server refuses the same: t41_invoice_contract); the tax inside the total
+        // #865: never more than the contract (engine canIssue; the server refuses the same from В1-4б); the tax inside the total
         const split = contractInvoice(d0, job, amountCents);
         if (!split) return () => {};
         const id = uid();
@@ -1993,7 +1993,7 @@ export function StoreProvider({
         const token = e.token ?? newToken();
         const ids = { jobId: jobOfEstimate(dbRef.current, id)?.id ?? uid(), invoiceId: uid() };
         const now = new Date().toISOString();
-        return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
+        return mutate("estimate.approve", (d) => withTaxSplit(clientSigned(d, id, a, ids, now, token), ids.invoiceId), {
           k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
           // #1147: on site, the total the client saw (the option with its add-ons, as summarize counts it — the server the same)
           ...(a.channel === "on_site" ? { totalCents: summarize(e.doc, a).totalCents } : {}),
@@ -2012,7 +2012,7 @@ export function StoreProvider({
         const svg = typeof signature === "string" ? signature : saved!.svg;
         return mutate(
           "estimate.countersign",
-          (d) => companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn", title: saved?.title }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined), (x) => (modeRef.current === "demo" ? nextJobNumber(x) : undefined)),
+          (d) => withTaxSplit(companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn", title: saved?.title }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined), (x) => (modeRef.current === "demo" ? nextJobNumber(x) : undefined)), ids.invoiceId),
           { k: "estimate.countersign", id, svg: saved ? undefined : svg, memberSignatureId: saved?.id, jobId: ids.jobId, invoiceId: ids.invoiceId },
         );
       },

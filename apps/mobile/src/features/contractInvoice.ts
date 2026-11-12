@@ -1,6 +1,7 @@
 /**
  * The invoices of a contract on the phone (#865): never more than the contract, the tax split inside — the engine's
- * canIssue / invoiceTaxShare, the same rule the server keeps (trigger t41_invoice_contract, db T196). Pure: the store calls
+ * canIssue / invoiceTaxShare; the server splits the tax the same (trigger t41_invoice_contract, db T196) and refuses above
+ * the contract with voiding (В1-4б, #1107). Pure: the store calls
  * it (issueInvoice), test/contractInvoice.test.ts checks it. The server's numbers win once they are loaded.
  */
 import { canIssue, invoiceTaxShare } from "@octo/estimating-engine";
@@ -36,4 +37,18 @@ export function contractInvoice(d: D, job: Pick<Job, "id" | "estimateId" | "amou
   if (!canIssue(job.amountCents, live, amountCents)) return null;
   const taxCents = invoiceTaxShare(job.amountCents, contractTaxOf(d, job), live, amountCents);
   return { subtotalCents: amountCents - taxCents, taxCents };
+}
+
+/**
+ * an invoice the phone just made of a contract (the deposit at the signature, the final of a visit payment): its tax
+ * split as the server splits it when it gets it (t41_invoice_contract) — so the reports and a refund count it the same
+ * before the server's copy comes back (review of #865 №3). Another invoice or an unknown one — the DB as it is.
+ */
+export function withTaxSplit<T extends D & Pick<DB, "jobs">>(d: T, invoiceId: ID | undefined): T {
+  const inv = invoiceId ? d.invoices.find((i) => i.id === invoiceId) : undefined;
+  const job = inv ? d.jobs.find((j) => j.id === inv.jobId) : undefined;
+  if (!inv || !job || inv.taxCents !== undefined || !(inv.kind === "deposit" || inv.kind === "progress" || inv.kind === "final")) return d;
+  const others = contractInvoices(d, job.id).filter((i) => i.id !== inv.id).map((i) => ({ totalCents: i.totalCents, paidCents: i.paidCents, taxCents: i.taxCents }));
+  const taxCents = invoiceTaxShare(job.amountCents, contractTaxOf(d, job), others, inv.totalCents);
+  return { ...d, invoices: d.invoices.map((i) => (i.id === inv.id ? { ...i, subtotalCents: inv.totalCents - taxCents, taxCents } : i)) };
 }
