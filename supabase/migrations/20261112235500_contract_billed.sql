@@ -8,12 +8,15 @@
 --   longer holds it up).
 -- * app.invoice_tax_split (the cap and the tax) already counts so (20261112090000) — left as it is; T204 checks the two
 --   agree. The phone the same: visitPayment takes the contract's invoices only (features/contractInvoice).
--- Rule 16: the same signatures, only bodies; a new function. Rule 18: app.job_contract_billed revoked from everyone (the
--- definer functions above call it).
+-- Rule 16: the same signatures, only bodies; a new function. Rule 18: app.job_contract_billed revoked from everyone, and
+-- security invoker (security-check of #1252): only the definer functions above call it, with their owner's rights — a
+-- grant some day would give nobody a company's numbers past its RLS.
+-- Release: the migration goes before (or with) the app — a new app on an older server would bill a visit's whole rest
+-- and the older server refuse it «above the rest» (release.yml: migrations first, then the Expo update).
 -- Tests: supabase/tests/core_rls.sql T204, apps/mobile/test/contractBilled.test.ts.
 
 create or replace function app.job_contract_billed(p_company uuid, p_job uuid)
-returns bigint language sql stable security definer set search_path = '' as $$
+returns bigint language sql stable security invoker set search_path = '' as $$
   select coalesce(sum(i.total_cents), 0)::bigint from public.invoices i
    where i.company_id = p_company and i.job_id = p_job and i.kind in ('deposit', 'progress', 'final')
      and i.status = 'sent' and i.deleted_at is null

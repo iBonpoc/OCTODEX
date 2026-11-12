@@ -7,6 +7,7 @@
 import { bpsFromPpm, caWrittenContractRequired, dec, jobLineQty, jobLinesBelowInvoiced, jobLinesTotals, parsePctToPpm, ppmToPctText, roundCents, taxRatePpm } from "@octo/estimating-engine";
 import type { DB, ID, Job, JobLineItem } from "@/data/types";
 import { findJob } from "@/data/jobs";
+import { contractInvoices } from "@/features/contractKind";
 
 type D = Pick<DB, "jobs" | "jobLines" | "invoices" | "customers" | "properties">;
 
@@ -113,7 +114,8 @@ export function lineChangeRefusal(before: D, after: D, jobId: ID): LineRefusal |
   if (j.estimateId) return "estimate";
   if (j.status === "done") return "done";
   const next = after.jobs.find((x) => x.id === jobId)?.amountCents ?? 0;
-  if (next < j.amountCents && jobLinesBelowInvoiced(next, before.invoices.filter((i) => i.jobId === jobId))) return "belowInvoiced";
+  // #1193 п.1: only what the contract billed holds its total up (a standalone invoice is outside it) — as the server's t19
+  if (next < j.amountCents && jobLinesBelowInvoiced(next, contractInvoices(before, jobId))) return "belowInvoiced";
   return null;
 }
 

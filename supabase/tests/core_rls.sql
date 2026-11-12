@@ -14003,7 +14003,9 @@ select tst.ok((select kind = 'final' and total_cents = 80000 from public.invoice
               and app.job_contract_billed('ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001') = 100000,
               'T204 the final of $800: the contract fully billed ($1000), the standalone outside it');
 select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE')
-              and not has_function_privilege('anon', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE'), 'T204 rule 18: the count is the definer functions'' own');
+              and not has_function_privilege('anon', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.job_contract_billed(uuid,uuid)'::regprocedure),
+              'T204 rule 18: the count is the definer functions'' own; it runs with its caller''s rights (invoker)');
 \echo 'T204 what a contract billed is counted one way'
 
 \echo 'ALL TESTS PASSED'
