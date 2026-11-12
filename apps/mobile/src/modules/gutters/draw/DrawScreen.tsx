@@ -29,10 +29,11 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, pulledSide, pullSideIn, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
+import { haptics } from "@/ui/haptics";
 import { SAVE_ICON, saveMark } from "./saveMark";
 import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
@@ -79,6 +80,25 @@ const dsSizeText = (s: string) => (s.includes("x") ? s.replace("x", "×") : `${s
 
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
+/** the chip with the angle beside a swung end: the same look and place as the live length of a new gutter */
+function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number }) {
+  const [chip, setChip] = useState({ w: 0, h: 0 });
+  const a = toScreen(view, swing.a), b = toScreen(view, swing.b);
+  return (
+    <View
+      pointerEvents="none"
+      testID="draw-swing-chip"
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        if (width !== chip.w || height !== chip.h) setChip({ w: width, h: height });
+      }}
+      style={{ position: "absolute", opacity: chip.w ? 1 : 0, ...ghostChipAt(a, b, chip, box, gap) }}
+    >
+      <StatusChip status="neutral" label={`${swing.deg}°`} />
+    </View>
+  );
+}
+
 export default function DrawScreen() {
   const { t, money } = useI18n();
   const { c } = useTheme();
@@ -113,6 +133,8 @@ export default function DrawScreen() {
   const [view, setView] = useState<PlanView | null>(null);
   const [ghost, setGhost] = useState<{ a: P; b: P } | null>(null);
   const [ghostChip, setGhostChip] = useState({ w: 0, h: 0 });
+  // a free end being swung (#818): the standing end, the end under the finger and the angle between — the chip beside it
+  const [swing, setSwing] = useState<{ a: P; b: P; deg: number } | null>(null);
   /** 390: the attribute sheet is open (820/1280 show the panel whenever something is picked) */
   const [sheet, setSheet] = useState(false);
   /** 390: the sheet of the measurement's photos */
@@ -283,13 +305,15 @@ export default function DrawScreen() {
       // once on the picked gutter's handle — the end follows the finger along its gutter, longer or
       // shorter. A corner's end is not taken (it would break the corner). «Желоб» without a hold goes on from the end, as before
       if (h?.kind === "end" && cur.current.canSave && tl !== "line" && (held || h.id === cur.current.selected) && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap") {
-        dragRef.current = { kind: "pull", id: h.id, end: h.end, before: d };
+        dragRef.current = { kind: "pull", id: h.id, end: h.end, before: d, from: p0, held: null };
+        haptics.light(); // picked up
         setSelected(h.id);
         return;
       }
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
         dragRef.current = { kind: "ds", id: h.id, before: d };
+        haptics.light();
         setSelected(h.id);
         return;
       }
@@ -314,6 +338,7 @@ export default function DrawScreen() {
         const far = Math.hypot(p[0] - g.a[0], p[1] - g.a[1]) > tolIn();
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
           dragRef.current = { kind: "pull", ...g.pullable, fromLine: true };
+          haptics.light(); // picked up (the «Желоб» stroke turned into a pull)
           setGhost(null);
           setSelected(g.pullable.id);
           setDrawing(moveEndAlong(g.pullable.before, g.pullable.id, g.pullable.end, p));
@@ -323,13 +348,30 @@ export default function DrawScreen() {
       }
       if (g.kind === "line") setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
       else if (g.kind === "ds") setDrawing(moveDs(g.before, g.id, p));
-      else if (g.kind === "pull") setDrawing(moveEndAlong(g.before, g.id, g.end, p));
+      else if (g.kind === "pull") {
+        const run = g.before.runs.find((x) => x.id === g.id);
+        // the finger left the gutter's axis (#818): the end swings round the other one, free, held at 45° steps, till the lift;
+        // only the move from where it touched down counts (a cap is taken within a finger's radius, off the axis)
+        if (!g.swung && !g.fromLine && run && pulledSide(run, g.end, p, pullSideIn(cur.current.view?.k ?? 1), g.from)) g.swung = true;
+        if (g.swung) {
+          const sw = swingEnd(g.before, g.id, g.end, p, g.held ?? null);
+          // none: the end would land on another gutter's end — the last frame stays (and is what the lift keeps)
+          if (sw) {
+            setDrawing(sw.drawing);
+            const mv = sw.drawing.runs.find((x) => x.id === g.id);
+            if (mv) setSwing({ a: g.end === 0 ? mv.b : mv.a, b: g.end === 0 ? mv.a : mv.b, deg: sw.deg });
+            if (sw.snapped && g.held == null) haptics.selection(); // once on entering a step, not on every move at its edge
+            g.held = sw.step;
+          }
+        } else setDrawing(moveEndAlong(g.before, g.id, g.end, p));
+      }
       else setDrawing(moveEnd(g.before, g.id, g.end, p, tolIn()));
     },
     onDeactivate: (e) => {
       const g = dragRef.current;
       dragRef.current = null;
       setGhost(null);
+      setSwing(null);
       if (!g) return;
       // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
       const d = cur.current.drawing;
@@ -339,6 +381,7 @@ export default function DrawScreen() {
         if (e.canceled) setDrawing(g.before);
         else {
           commit(next, g.before);
+          if (next !== g.before) haptics.medium(); // set down (DS §15.6) — only when something moved
           // «Желоб»: drawn on / pulled out straight from the end → its length window, as growing a gutter always did (founder 09.11)
           if (g.kind === "pull" && g.fromLine && next !== g.before) {
             setQuickRun(g.id);
@@ -823,6 +866,9 @@ export default function DrawScreen() {
           <StatusChip status="neutral" label={fmtLen(ghostLen, ch.lenFormat)} />
         </View>
       ) : null}
+
+      {/* the angle beside a free end being swung (#818): «90°» when it is held at a step */}
+      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} /> : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       {/* where the toolbar sticks if let go now (founder 09.11): that edge outlined */}
