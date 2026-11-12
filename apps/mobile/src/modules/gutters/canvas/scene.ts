@@ -4,7 +4,7 @@
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
 import { dsCode } from "./attrs";
-import { capSide, cornerCut, findCorners, houseSides, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
+import { capSide, cornerCut, findCorners, houseSides, isOpenEnd, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen } from "./format";
 import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./labels";
 
@@ -124,7 +124,15 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
     const side = sideOf(r);
     ([0, 1] as const).forEach((e) => {
       if (ends[r.id]?.[e]?.kind !== "cap") return;
-      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at: toScreen(o.view, e ? r.b : r.a), side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected });
+      let at = toScreen(o.view, e ? r.b : r.a);
+      // a split corner (#933): two caps stand at one point — each is drawn a little along its own gutter, so both are seen (the drawing only, not the data)
+      if (isOpenEnd(r, e) && o.dsPad) {
+        const to = toScreen(o.view, e ? r.a : r.b);
+        const n = Math.hypot(to[0] - at[0], to[1] - at[1]) || 1;
+        const k = Math.min(o.dsPad * 2, n / 2) / n;
+        at = [at[0] + (to[0] - at[0]) * k, at[1] + (to[1] - at[1]) * k];
+      }
+      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at, side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected });
     });
   }
   const corners: SceneCorner[] = found.map((f) => ({

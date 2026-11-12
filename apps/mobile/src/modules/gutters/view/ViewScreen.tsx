@@ -24,7 +24,7 @@ import { useToast } from "@/ui/overlays";
 import { Card, CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
-import { ftIn } from "../canvas/format";
+import { fmtLen } from "../canvas/format";
 import { fromElements } from "../canvas/model";
 import { gutterData, KEY, measurementOf } from "../data";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, pageIdOf } from "../estimateLink";
@@ -32,7 +32,7 @@ import { CardHead } from "./CardHead";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
 import { listPreview, partName, partQty } from "../prices";
-import { readRules, toRulesOverride } from "../settings";
+import { readLenFormat, readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
 import { measureSpec } from "./spec";
 import { drawingPdfHtml, drawingPdfName } from "./drawingPdf";
@@ -78,6 +78,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const elements = found?.elements;
   const drawing = useMemo(() => fromElements(elements ?? []), [elements]);
   const settings = store.db.company?.modules?.gutters?.settings;
+  // #1092: the company's format of lengths — the sheet, the lists, the parts and the PDFs follow it
+  const fmt = readLenFormat((settings as { lenFormat?: unknown } | undefined)?.lenFormat);
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
   const parts = useMemo<PartQty[]>(() => (drawing.runs.length ? computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts : []), [drawing, rules]);
   const spec = useMemo(() => measureSpec(drawing, parts), [drawing, parts]);
@@ -116,10 +118,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           pageIdOf(m.id),
           tc("mod.gutters.pdf.title"),
           // one sheet for the phone (/p/) and the paper: built for the narrow one (pageW), the PDF scales it up
-          blueprint(drawing, tc, { company: company.name, address: placeText(), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape" }, DP.pageW),
+          blueprint(drawing, tc, { company: company.name, address: placeText(), date: docDay(new Date().toISOString(), company.timezone), rough: m.accuracy !== "tape", fmt }, DP.pageW),
         )
       : undefined;
-    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
+    const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
     if (!r.ok) {
       busy.current = false;
       toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : r.reason === "notHere" ? "est.tech.notHere" : "mod.gutters.est.off"));
@@ -146,8 +148,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       address: placeText(),
       date: docDay(new Date().toISOString(), company.timezone),
       rough: m?.accuracy !== "tape",
+      fmt,
     }, w);
-  }, [drawing, t, m, store.db, store.companyName, w]);
+  }, [drawing, t, m, store.db, store.companyName, w, fmt]);
 
   /** a word of the dictionary, or the value itself when the company named it its own way (a colour of its own) */
   const word = (key: string, raw: string) => {
@@ -181,6 +184,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined,
       rough,
       date: docDay(new Date().toISOString(), company.timezone),
+      fmt,
     });
     saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
   };
@@ -274,7 +278,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
                   <T v="body" w="semibold">{t("mod.gutters.draw.cutRun", { n: r.n })}</T>
                   <T v="caption" tone="mut">{[t("mod.gutters.story", { n: r.story }), `${word(`mod.gutters.attr.p.${r.profile}`, r.profile)} ${r.size}″`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
                 </RowView>
-                <T v="body" tabular>{t("mod.gutters.view.runLine", { back: ftIn(r.backIn), front: ftIn(r.frontIn) })}</T>
+                <T v="body" tabular>{t("mod.gutters.view.runLine", { back: fmtLen(r.backIn, fmt), front: fmtLen(r.frontIn, fmt) })}</T>
               </View>
             ))}
           </Card>
@@ -287,7 +291,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <View key={c.id} testID={`view-corner-${c.id}`} style={{ gap: space[1] }}>
                 <T v="body" w="semibold">{t("mod.gutters.view.cornerTitle", { k: kindWord(c.kind), deg: c.angleDeg })}</T>
                 {c.runs.map((x) => (
-                  <T key={x.n} v="caption" tabular>{t("mod.gutters.view.cornerRun", { n: x.n, back: ftIn(x.backIn), front: ftIn(x.frontIn) })}</T>
+                  <T key={x.n} v="caption" tabular>{t("mod.gutters.view.cornerRun", { n: x.n, back: fmtLen(x.backIn, fmt), front: fmtLen(x.frontIn, fmt) })}</T>
                 ))}
               </View>
             ))}
@@ -313,8 +317,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             <View testID="view-parts"><T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T></View>
             {spec.parts.map((p) => (
               <RowView key={p.key} style={{ justifyContent: "space-between", gap: space[2] }}>
-                <T v="caption" style={{ flexShrink: 1 }}>{partName(t, p)}</T>
-                <T v="caption" tabular>{partQty(t, p)}</T>
+                <T v="caption" style={{ flexShrink: 1 }}>{partName(t, p, fmt)}</T>
+                <T v="caption" tabular>{partQty(t, p, fmt)}</T>
               </RowView>
             ))}
           </Card>

@@ -99,7 +99,7 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
   const at = endAt(d, fixed, p, tolIn, runId);
   if (Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) < MIN_RUN_IN) return d;
   const { lengthIn: _typed, ...rest } = r;
-  const moved: DrawnRun = end === 0 ? { ...rest, a: at } : { ...rest, b: at };
+  const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, a: at } : { ...rest, b: at }, end);
   // downspouts stay on the line: at most its new length
   const L = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
   return {
@@ -142,7 +142,7 @@ export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawi
   const { lengthIn: typed, ...rest } = r;
   const shift = Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) - L;
   const keep = typed !== undefined ? { lengthIn: Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round((typed + shift) * 8) / 8)) } : {};
-  const moved: DrawnRun = end === 0 ? { ...rest, ...keep, a: at } : { ...rest, ...keep, b: at };
+  const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, ...keep, a: at } : { ...rest, ...keep, b: at }, end);
   // never ends on another gutter's end by rounding (a corner only by the user's own act — drawing a line to it)
   if (d.runs.some((x) => x.id !== runId && sameStory(x, r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return d;
   const n = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
@@ -158,6 +158,26 @@ export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawi
     }),
   };
 }
+
+/**
+ * «Разъединить угол» (#933): the corner is made two free ends — NOT by moving anything: both gutters keep their points
+ * and lengths (a measured length is the estimate's input), and carry `openEnds` at the meeting ends, so the corner is not
+ * found there and each end is an end cap. Moving that end later drops the mark (`closeEnd`).
+ */
+export function splitCorner(d: Drawing, corner: Pick<FoundCorner, "runs">): Drawing {
+  const ids = new Map(corner.runs.map((x) => [x.id, x.end] as const));
+  if (!corner.runs.every((x) => d.runs.some((r) => r.id === x.id))) return d;
+  return { ...d, runs: d.runs.map((r) => (ids.has(r.id) ? { ...r, attrs: { ...r.attrs, openEnds: { ...r.attrs.openEnds, [ids.get(r.id) ? "b" : "a"]: true } } } : r)) };
+}
+
+/** the split mark of an end that moved away is gone (the end is its own again) */
+const closeEnd = (r: DrawnRun, end: 0 | 1): DrawnRun => {
+  const k = end ? "b" : "a";
+  if (!r.attrs.openEnds?.[k]) return r;
+  const { [k]: _gone, ...rest } = r.attrs.openEnds;
+  const { openEnds: _old, ...attrs } = r.attrs;
+  return { ...r, attrs: Object.keys(rest).length ? { ...attrs, openEnds: rest } : attrs };
+};
 
 /** a downspout on the nearest line under the finger (none if no line is near) */
 export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs: Omit<DrawnDownspout, "id" | "runId" | "atIn">, ch?: Choices): Drawing {
