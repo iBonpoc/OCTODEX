@@ -231,9 +231,11 @@ export function lineProfit(l: CustomLine): number {
   return lineTotal(x) - lineCost(x);
 }
 
-/** the sections that count (at most SECTIONS_MAX, in order; a subsection only under a top section that counts) */
+/** the sections that count (the first SECTIONS_MAX, in order, a repeated id once; a subsection only under a top section that counts) */
 export function countedSections(o: Pick<CustomOption, "sections">): EstimateSection[] {
-  const first = (o.sections ?? []).slice(0, SECTIONS_MAX);
+  // a repeated id counts once, the first (the document comes from a phone: no check of it on the way)
+  const seen = new Set<string>();
+  const first = (o.sections ?? []).slice(0, SECTIONS_MAX).filter((x) => !seen.has(x.id) && !!seen.add(x.id));
   const tops = new Set(first.filter((x) => !x.parentId).map((x) => x.id));
   return first.filter((x) => !x.parentId || tops.has(x.parentId));
 }
@@ -266,7 +268,8 @@ export function sectionSubtotals(o: CustomOption, s: CustomSettings): { bySectio
 
 /**
  * «Сохранить в каталог» for a material (Р1): the catalog prices a material from its cost and markup
- * (catalogPrice(cost, 0, markup)) — the markup that gives exactly the line's price, the smallest whole bps that does.
+ * (catalogPrice(cost, 0, markup)) — a whole-bps markup that gives exactly the line's price: the nearest to the line's own
+ * (m0 = round((P − C) × 10000 / C)), else m0 − 1 or m0 + 1.
  * No cost (or no right to see it), a price below the cost, no exact markup (a cost above $100, rare) or one above the
  * server's limit (markup_bps ≤ 100000) — not saved, and why.
  */
@@ -275,7 +278,9 @@ export function catalogMarkupFor(costCents: number | undefined, priceCents: numb
   if (costCents === undefined || !(costCents > 0)) return { ok: false, reason: "noCost" };
   if (priceCents < costCents) return { ok: false, reason: "belowCost" };
   const m0 = Math.round(((priceCents - costCents) * 10000) / costCents);
-  for (const m of [m0 - 1, m0, m0 + 1]) {
+  // the markup closest to the line's (m0 first, then its neighbours): $10 at $11 is 10%, not 9.99% — a later change of the
+  // cost keeps the percent the person meant (review of РС-3 №1)
+  for (const m of [m0, m0 - 1, m0 + 1]) {
     if (m >= 0 && m <= CATALOG_MARKUP_MAX_BPS && catalogPrice(costCents, 0, m) === priceCents) return { ok: true, markupBps: m };
   }
   return { ok: false, reason: "noExact" };

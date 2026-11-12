@@ -85,6 +85,9 @@ describe("Р4: section subtotals", () => {
     // a subsection under a parent that does not count is not counted either
     const lost: CustomOption = { id: "o", name: "A", sections: [{ id: "sub", parentId: "nope" }], lines: [line({ id: "y", sectionId: "sub" })] };
     expect(sectionSubtotals(lost, settings())).toEqual({ bySection: {}, unsectioned: 10000 });
+    // a repeated id counts once, the first: Σ stays the subtotal
+    const twice: CustomOption = { id: "o", name: "A", sections: [{ id: "a" }, { id: "a", parentId: "b" }, { id: "b" }], lines: [line({ id: "w", sectionId: "a" })] };
+    expect(sectionSubtotals(twice, settings())).toEqual({ bySection: { a: 10000, b: 0 }, unsectioned: 0 });
   });
 });
 
@@ -104,13 +107,20 @@ describe("Р1: a line's profit; «Сохранить в каталог» for a m
     }
     expect(bad).toEqual([]);
   });
+  it("the edge: a cost of exactly $100.00 (one bp is one cent), every price up to 11 × cost", () => {
+    for (const c of [9999, 10000]) {
+      for (let p = c; p <= c * 11; p++) {
+        const r = catalogMarkupFor(c, p);
+        if (!r.ok || catalogPrice(c, 0, r.markupBps) !== p) throw new Error(`${c}/${p}`);
+      }
+    }
+  });
   it("not saved: no cost, a price below the cost, no exact markup", () => {
     expect(catalogMarkupFor(undefined, 100)).toEqual({ ok: false, reason: "noCost" });
     expect(catalogMarkupFor(0, 100)).toEqual({ ok: false, reason: "noCost" });
     expect(catalogMarkupFor(500, 499)).toEqual({ ok: false, reason: "belowCost" });
     // $1,000.03 cost: one bp is 10 cents, $1,000.08 is between two steps
     expect(catalogMarkupFor(100003, 100008)).toEqual({ ok: false, reason: "noExact" });
-    // $10.00 at $11.00: 10% is m0 = 1000; 999 already rounds to $11.00
-    expect(catalogMarkupFor(1000, 1100)).toEqual({ ok: true, markupBps: 999 }); // the smallest of m0 − 1, m0, m0 + 1 that gives the price (Р1)
+    expect(catalogMarkupFor(1000, 1100)).toEqual({ ok: true, markupBps: 1000 }); // the line's own 10%, not 9.99% (999 rounds to $11.00 too)
   });
 });
