@@ -39,7 +39,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 81;
+const LEGACY_MAX = 72;
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];
