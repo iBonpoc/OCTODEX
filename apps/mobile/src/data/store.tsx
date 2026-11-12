@@ -61,6 +61,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { undoOwn } from "@/data/undoOwn";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
@@ -978,8 +979,9 @@ export function StoreProvider({
       return () => {
         // dropped by the server as built on a lost base: nothing to take back (review #374 №2)
         if (oid && deadOps.current.has(oid)) return;
-        dbRef.current = prev;
-        setDb(prev);
+        // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays
+        dbRef.current = undoOwn(prev, next, dbRef.current);
+        setDb(dbRef.current);
         if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
         if (oid) {
           outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
