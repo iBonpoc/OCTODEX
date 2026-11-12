@@ -209,7 +209,10 @@ export interface GutterRules {
   touchUpPaint: boolean;
   /** end caps of these profiles come left and right */
   sidedCapProfiles: string[];
+  /** elbows of a downspout without its own (a rectangular one: A, B) */
   defaultElbows: { style: string; qty: number }[];
+  /** …of a round one (45°…90°; «A» is not a round elbow, #871): not set — as many 45° as `defaultElbows` has elbows */
+  defaultElbowsRound?: { style: string; qty: number }[];
   /** offsets sold ready-made; others are marked custom */
   stdOffsetsIn: number[];
   /** advice: max gutter length one downspout drains */
@@ -652,7 +655,8 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
 
     // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above
     let pieces = Math.ceil(lenIn / rules.dsStickIn);
-    for (const e of ds.elbows ?? rules.defaultElbows) {
+    const byDefault = ds.shape === "round" ? rules.defaultElbowsRound ?? [{ style: "45", qty: rules.defaultElbows.reduce((n, x) => n + Math.max(0, x.qty), 0) }] : rules.defaultElbows;
+    for (const e of ds.elbows ?? byDefault) {
       if (e.qty <= 0) continue;
       pieces += e.qty;
       acc.add({ key: `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style } }, e.qty);

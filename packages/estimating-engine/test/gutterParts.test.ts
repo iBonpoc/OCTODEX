@@ -511,8 +511,9 @@ describe("fittings carry metal and color", () => {
       corners: [],
       downspouts: [ds({ id: "a", runId: "1", shape: "round", size: "3", material: "aluminum", color: undefined }), ds({ id: "b", runId: "2", shape: "round", size: "3", material: "copper", color: undefined })],
     });
-    expect(q(parts, "elbow.A.round.3.aluminum.-")).toBe("3");
-    expect(q(parts, "elbow.A.round.3.copper.-")).toBe("3");
+    // #871: a round downspout without elbows of its own gets 45° ones — «A» is a rectangular elbow
+    expect(q(parts, "elbow.45.round.3.aluminum.-")).toBe("3");
+    expect(q(parts, "elbow.45.round.3.copper.-")).toBe("3");
     expect(q(parts, "outlet.k.6.copper.-.round.3")).toBe("1");
     expect(q(parts, "hanger.hidden.copper.k.6")).toBe("11");
     expect(q(parts, "hinged_hook.copper.round.3")).toBe("2");
@@ -570,5 +571,43 @@ describe("consumable rules a company can change", () => {
     const { parts } = one({ profile: "half_round", material: "copper", color: undefined, hanger: "hr_shank_fascia" }, [], { solderedMaterials: [] });
     expect(q(parts, "sealant")).toBe("1");
     expect(q(parts, "solder")).toBeUndefined();
+  });
+});
+
+describe("elbows by default follow the shape (#871, X-07)", () => {
+  const job = (shape: "rect" | "round", extra: Partial<MeasuredDownspout> = {}): MeasurementInput => ({
+    runs: [run({ id: "1", lengthIn: 240 })],
+    corners: [],
+    downspouts: [ds({ id: "d", runId: "1", ...(shape === "round" ? { shape: "round", size: "3" } : {}), ...extra })],
+  });
+  const elbowKeys = (i: MeasurementInput, rules?: Parameters<typeof computeGutterParts>[1]) => computeGutterParts(i, rules).parts.filter((p) => p.attrs.part === "elbow").map((p) => `${p.key}=${p.qty}`);
+  it("round without elbows: 3 × 45°, no «A» anywhere", () => {
+    expect(elbowKeys(job("round"))).toEqual(["elbow.45.round.3.alu.white=3"]);
+    expect(keys(computeGutterParts(job("round")).parts).some((k) => k.startsWith("elbow.A.round"))).toBe(false);
+  });
+  it("rectangular without elbows: 3 × A as before", () => {
+    expect(elbowKeys(job("rect"))).toEqual(["elbow.A.rect.3x4.alu.white=3"]);
+  });
+  it("the company's number of elbows carries to the round one, the style is 45°", () => {
+    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.45.round.3.alu.white=5"]);
+    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }] })).toEqual(["elbow.45.round.3.alu.white=3"]);
+    expect(elbowKeys(job("rect"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.A.rect.3x4.alu.white=5"]);
+  });
+  it("a round default of its own wins; zero elbows is none", () => {
+    expect(elbowKeys(job("round"), { defaultElbowsRound: [{ style: "90", qty: 2 }] })).toEqual(["elbow.90.round.3.alu.white=2"]);
+    expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 0 }] })).toEqual([]);
+  });
+  it("elbows given by the drawing are not touched (rect A/B, round 75/90)", () => {
+    expect(elbowKeys(job("rect", { elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }] }))).toEqual(["elbow.A.rect.3x4.alu.white=2", "elbow.B.rect.3x4.alu.white=1"]);
+    expect(elbowKeys(job("round", { elbows: [{ style: "75", qty: 2 }, { style: "90", qty: 1 }] }))).toEqual(["elbow.75.round.3.alu.white=2", "elbow.90.round.3.alu.white=1"]);
+  });
+  it("mixed shapes on one job: each has its own", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 }), run({ id: "2", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "a", runId: "1" }), ds({ id: "b", runId: "2", shape: "round", size: "3" })] };
+    expect(elbowKeys(i).sort()).toEqual(["elbow.45.round.3.alu.white=3", "elbow.A.rect.3x4.alu.white=3"]);
+  });
+  it("the joints count the 45° elbows as pieces, like the A ones (the same number of joints)", () => {
+    const a = computeGutterParts(job("rect")).parts, b = computeGutterParts(job("round")).parts;
+    const rivets = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "rivet").map((p) => p.qty).join();
+    expect(rivets(b)).toBe(rivets(a));
   });
 });
