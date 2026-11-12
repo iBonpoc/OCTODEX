@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
-import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory } from "@/cloud/repo";
+import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
@@ -408,6 +408,8 @@ interface StoreCtx {
   receivePurchaseOrder: (id: ID, lines: { id: ID; received: string }[]) => Undo;
   /** spec 36: read the newest history of one item or one supplier from the server (cloud, online, who sees costs) */
   loadCostHistory: (where: { itemId?: ID; supplierId?: ID }) => void;
+  /** РС-10: the item's price and markup changes, read when its card opens (only who sees costs; offline — none) */
+  loadPriceHistory: (itemId: ID) => void;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
    *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
    *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
@@ -2421,6 +2423,18 @@ export function StoreProvider({
             // another company signed in meanwhile: nothing
             if (whoRef.current?.companyId !== cid) return;
             dbRef.current = { ...dbRef.current, costHistory: mergeHistory(dbRef.current, where, rows) };
+            setDb(dbRef.current);
+          })
+          .catch(() => undefined);
+      },
+      loadPriceHistory: (itemId) => {
+        const cid = whoRef.current?.companyId;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        void loadPriceHistory(cid, itemId)
+          .then((rows) => {
+            if (whoRef.current?.companyId !== cid) return;
+            // the item's rows as the server has them now; other items' stay
+            dbRef.current = { ...dbRef.current, priceHistory: [...(dbRef.current.priceHistory ?? []).filter((h) => h.itemId !== itemId), ...rows] };
             setDb(dbRef.current);
           })
           .catch(() => undefined);

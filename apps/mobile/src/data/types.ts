@@ -711,6 +711,20 @@ export interface CatalogItem {
   supplierId?: ID;
   /** the supplier's own code of the item */
   supplierSku?: string;
+  /* ---- РС-10 (the item's card, spec 2026-11-12-estimate-editor Р11): absent = not set, and not sent ---- */
+  /** our own code of the item (catalog_items.sku) */
+  sku?: string;
+  /** letters, digits, space . _ / -; at most 64 (catalog_items.barcode) */
+  barcode?: string;
+  /** only https:// with a host (catalog_items.product_url; features/catalogCard normalizeProductUrl) */
+  productUrl?: string;
+  /** the direction of the business (catalog_items.service_category_id → ServiceCategory) */
+  serviceCategoryId?: ID;
+  /** when and by whom the item was made and last changed (the server's own columns; read only) */
+  createdAt?: string;
+  createdBy?: ID;
+  updatedAt?: string;
+  updatedBy?: ID;
 }
 
 /** how a supplier wants to be paid (printed on the supplier order, spec 36 §5) */
@@ -791,6 +805,20 @@ export interface CostHistoryEntry {
   at: string;
   /** made by this phone at a save (shown at once); the server's rows replace it when the screen reads them */
   local?: boolean;
+}
+
+/** РС-10: one change of an item's selling price or markup, before and after (server: catalog_price_history — only who
+ *  sees costs). A price row has no markup, a markup row no price. */
+export interface PriceHistoryEntry {
+  id: ID;
+  itemId: ID;
+  priceCents?: number;
+  prevPriceCents?: number;
+  markupBps?: number;
+  prevMarkupBps?: number;
+  source: string;
+  at: string;
+  by?: ID;
 }
 
 /** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */
@@ -1093,6 +1121,8 @@ export interface DB {
   suppliers?: Supplier[];
   /** spec 36: the history of the items' costs, newest first (only who sees costs; absent → []) */
   costHistory?: CostHistoryEntry[];
+  /** РС-10: the newest price / markup changes of the items whose card was opened (catalog_price_history; absent → []) */
+  priceHistory?: PriceHistoryEntry[];
   /** spec 37: purchase orders (the office all; a tech those of his jobs, without costs; absent → []) */
   purchaseOrders?: PurchaseOrder[];
   /** the server has no purchase_orders yet (before 20261110090000): orders are not written */
