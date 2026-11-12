@@ -37,7 +37,7 @@ beforeEach(() => {
     { id: "p2", customer_id: "c2", address_line1: "2 Oak St", address_city: "Pasadena", geo_lat: null, geo_lng: null },
   ];
   rows.jobs = [
-    { id: "j1", property_id: "p1", customer_id: "c1", number: "JOB-0001", title: null, status: "scheduled", description: "Two downspouts", job_type_id: "t2", tax_enabled: true, tax_rate_bps: 1025 },
+    { id: "j1", property_id: "p1", customer_id: "c1", number: "JOB-0001", title: null, status: "scheduled", description: "Two downspouts", job_type_id: "t2", tax_enabled: true, tax_rate_bps: 888, tax_rate_ppm: 88750 },
     { id: "j2", property_id: "p1", customer_id: "c1", number: "JOB-0002", title: "Gutter cleaning", status: "completed" },
     { id: "j3", property_id: "p2", customer_id: "c2", number: "JOB-0003", title: "Cancelled roof", status: "cancelled" },
   ];
@@ -141,7 +141,8 @@ describe("loadCompanyDB — money fields (wave П-2a)", () => {
   });
   it("job: tags and tax", async () => {
     const db = await loadCompanyDB(CO, "u1");
-    expect(db.jobs.find((j) => j.id === "j1")).toMatchObject({ tagIds: ["tag-a", "tag-b"], taxEnabled: true, taxRateBps: 1025 });
+    // #1219: the rate in ppm beside the basis points (8.875 %)
+    expect(db.jobs.find((j) => j.id === "j1")).toMatchObject({ tagIds: ["tag-a", "tag-b"], taxEnabled: true, taxRateBps: 888, taxRatePpm: 88750 });
     expect(db.jobs.find((j) => j.id === "j2")!.tagIds).toEqual([]);
   });
   it("job lines in their order, the line total from the server", async () => {

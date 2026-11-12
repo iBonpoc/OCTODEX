@@ -89,6 +89,7 @@
       "rows": {
         "taxEnabled": true,
         "taxRateBps": 950,
+        "taxRatePpm": 95000,
         "options": [
           {
             "id": "o1",
@@ -249,6 +250,7 @@
       "rows": {
         "taxEnabled": true,
         "taxRateBps": 825,
+        "taxRatePpm": 82500,
         "options": [
           {
             "id": "o1",
@@ -380,6 +382,7 @@
       "rows": {
         "taxEnabled": false,
         "taxRateBps": 0,
+        "taxRatePpm": 0,
         "options": [
           {
             "id": "o1",
@@ -518,6 +521,7 @@
       "rows": {
         "taxEnabled": true,
         "taxRateBps": 1025,
+        "taxRatePpm": 102500,
         "options": [
           {
             "id": "c1",
@@ -599,6 +603,79 @@
       },
       "totalCents": 64037,
       "depositCents": 6404
+    },
+    {
+      "name": "#1219: New York 8.875% on every group, one $1000 line, no deposit — $88.75 tax (8.88% gave $88.80)",
+      "doc": {
+        "options": [
+          {
+            "id": "o1",
+            "name": "Only",
+            "lines": [
+              {
+                "id": "n1",
+                "name": "Line n1",
+                "group": "labor",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 100000
+              }
+            ]
+          }
+        ],
+        "settings": {
+          "tax": {
+            "enabled": true,
+            "rateBps": 888,
+            "ratePpm": 88750,
+            "groups": {
+              "service": true,
+              "labor": true,
+              "material": true
+            }
+          },
+          "deposit": {
+            "kind": "none"
+          },
+          "discount": null
+        }
+      },
+      "sel": {
+        "optionId": "o1",
+        "addonIds": []
+      },
+      "rows": {
+        "taxEnabled": true,
+        "taxRateBps": 888,
+        "taxRatePpm": 88750,
+        "options": [
+          {
+            "id": "o1",
+            "position": 0,
+            "name": "Only",
+            "isRecommended": false,
+            "discountMode": null,
+            "discountValue": null
+          }
+        ],
+        "lines": [
+          {
+            "id": "n1",
+            "optionId": "o1",
+            "position": 0,
+            "group": "labor",
+            "name": "Line n1",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 100000,
+            "taxable": true,
+            "isOptional": false
+          }
+        ]
+      },
+      "totalCents": 108875,
+      "depositCents": 0
     }
   ],
   "quick": [

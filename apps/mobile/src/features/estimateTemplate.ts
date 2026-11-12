@@ -105,6 +105,8 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
     if (s.discount.kind === "fixed" ? !cents(s.discount.cents) : !SHARE.test(String(s.discount.value))) return false;
   }
   if (!cents(s.tax.rateBps, 10000)) return false;
+  // #1219: the rate in ppm, when there is one — a whole 0..1000000 (the server the same, app.valid_estimate_template_doc)
+  if (s.tax.ratePpm !== undefined && !cents(s.tax.ratePpm, 1_000_000)) return false;
   if (s.deposit.kind === "pct" ? !cents(s.deposit.bps, 10000) : s.deposit.kind === "fixed" ? !cents(s.deposit.cents) : false) return false;
   return true;
 }

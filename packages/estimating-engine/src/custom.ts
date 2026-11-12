@@ -1,4 +1,4 @@
-import { dec, bps, roundCents, type DecLike } from "./decimal.js";
+import { dec, bps, bpsFromPpm, roundCents, type DecLike } from "./decimal.js";
 import { computeOption, lineCost, lineTotal, type Discount, type Line, type OptionTotals } from "./estimate.js";
 import { jobLineQty } from "./jobLines.js";
 
@@ -89,6 +89,8 @@ export interface CustomOption {
 export interface TaxSettings {
   enabled: boolean;
   rateBps: number;
+  /** #1219: the rate in ppm (8.875 % = 88750) — the rate when present; rateBps stays its rounded copy for older phones */
+  ratePpm?: number;
   groups: Record<LineGroup, boolean>;
 }
 
@@ -169,7 +171,7 @@ export function computeCustomOption(option: CustomOption, s: CustomSettings): Cu
   const anyGroup = s.tax.enabled && LINE_GROUPS.some((g) => s.tax.groups[g]);
   const totals = computeOption(
     lines.map((l) => toLine(l, s.tax)),
-    { mode: "added_on_top", enabled: anyGroup, rateBps: s.tax.rateBps },
+    { mode: "added_on_top", enabled: anyGroup, rateBps: s.tax.rateBps, ratePpm: s.tax.ratePpm },
     s.discount,
   );
   const groupSubtotals: Record<LineGroup, number> = { service: 0, labor: 0, material: 0 };
@@ -204,6 +206,18 @@ export function parsePctToBps(input: string): number | null {
   if (!/^\d*(\.\d*)?$/.test(s) || s === "" || s === ".") return null;
   return roundCents(dec(s).mul(100));
 }
+/** #1219: a tax rate input with up to four decimals: "8.875", "8,875 %" → 88750 ppm; null when not a number, more than
+ *  four decimals (the rate would be cut silently) or above 100 %. */
+export function parsePctToPpm(input: string): number | null {
+  const s = input.replace(/[%\s]/g, "").replace(",", ".");
+  if (!/^\d*(\.\d{0,4})?$/.test(s) || s === "" || s === ".") return null;
+  const p = dec(s).mul(10000).toNumber();
+  return p <= 1_000_000 ? p : null;
+}
+/** the tax with a new rate in ppm: ratePpm and its rounded basis points beside it (older phones read those) */
+export const taxWithRatePpm = <T extends { rateBps: number; ratePpm?: number }>(t: T, p: number): T => ({ ...t, ratePpm: p, rateBps: bpsFromPpm(p) });
+/** a ppm rate as the percent people write: 88750 → "8.875", 95000 → "9.5", 0 → "0" (no trailing zeros, en-US dot) */
+export const ppmToPctText = (p: number): string => dec(p).div(10000).toString();
 /** Quantity input: "2", "2.5", "1,5" → decimal string; null when not a positive number. */
 export function parseQty(input: string): string | null {
   const s = input.trim().replace(",", ".");

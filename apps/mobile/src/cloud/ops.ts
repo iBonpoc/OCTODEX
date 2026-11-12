@@ -11,7 +11,7 @@ import { supplierToRow } from "@/features/suppliers";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
 import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
-import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
+import { ENGINE_VERSION, bpsFromPpm, jobLineQty, taxRatePpm } from "@octo/estimating-engine";
 import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
@@ -238,7 +238,7 @@ export type Op =
   | { k: "job.complete"; id: string }
   | { k: "job.create"; id: string; customerId: string; propertyId: string; title: string; description: string | null; jobTypeId: string | null; serviceCategoryId: string | null }
   // wave П-1 (13 §5): description and type of a job; the company's list of job types
-  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number }
+  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number; taxRatePpm?: number }
   // wave П-2a: tags and own lines of a job (the server counts line and job totals)
   | { k: "job.tags"; id: string; tagIds: string[] }
   | { k: "jobLine.save"; line: Omit<JobLineItem, "totalCents">; isNew: boolean }
@@ -964,9 +964,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const cols: Record<string, string | null> = {};
       if (op.description !== undefined) cols.description = op.description?.trim() || null;
       if (op.jobTypeId !== undefined) cols.job_type_id = op.jobTypeId;
-      const money: Record<string, boolean | number> = {};
+      const money: Record<string, boolean | number | null> = {};
       if (op.taxEnabled !== undefined) money.tax_enabled = op.taxEnabled;
       if (op.taxRateBps !== undefined) money.tax_rate_bps = op.taxRateBps;
+      // #1219: the rate in ppm when set (the server writes its basis points); a rate in basis points only (an older
+      // queued change, «Отменить» back to a job without ppm) says ppm is gone — the server keeps a ppm it is not told
+      // about while the basis points stay the same (888 for 8.875 % and 8.88 %)
+      if (op.taxRatePpm !== undefined) money.tax_rate_ppm = op.taxRatePpm;
+      else if (op.taxRateBps !== undefined) money.tax_rate_ppm = null;
       if (Object.keys(money).length) return run(supabase.from("jobs").update({ ...cols, ...money }).eq("id", op.id));
       return Object.keys(cols).length ? run(supabase.from("jobs").update(cols).eq("id", op.id)) : undefined;
     }
@@ -1227,7 +1232,9 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     calc_inputs: doc, engine_version: ENGINE_VERSION,
     source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
     totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
-    tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
+    // #1219: the rate in ppm and its basis points (a ppm left behind by an editor that writes only the basis points
+    // does not count — taxRatePpm)
+    tax_enabled: taxOn, tax_rate_ppm: taxRatePpm(s.tax), tax_rate_bps: bpsFromPpm(taxRatePpm(s.tax)), tax_mode: "added_on_top", deposit_rule: s.deposit,
     contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
   });
   const optionRows = rows.options.map((o) => ({
@@ -1276,7 +1283,9 @@ async function saveLegacy(op: Extract<Op, { k: "estimate.save" }>, c: string, ve
           // E3: the server counts a use on version 1 (estimate_template_uses); every save keeps the same source
           source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
           totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
-          tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
+          // #1219: the rate in ppm and its basis points (a ppm left behind by an editor that writes only the basis points
+          // does not count — taxRatePpm)
+          tax_enabled: taxOn, tax_rate_ppm: taxRatePpm(s.tax), tax_rate_bps: bpsFromPpm(taxRatePpm(s.tax)), tax_mode: "added_on_top", deposit_rule: s.deposit,
           contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
         })
         .eq("id", versionId),
