@@ -22,11 +22,15 @@ describe("swipe down on the body of a sheet", () => {
   it("upward never moves the sheet", () => {
     expect(run([[0, 0], [0, -80]])).toBe(0);
   });
-  it("let go: far or fast closes; a short slow one springs back; not moved never closes", () => {
-    expect(swipeCloses(130, 0, 120, 0.8)).toBe(true);
-    expect(swipeCloses(30, 1.2, 120, 0.8)).toBe(true);
-    expect(swipeCloses(30, 0.2, 120, 0.8)).toBe(false);
-    expect(swipeCloses(0, 3, 120, 0.8)).toBe(false);
+  it("let go: a flick always leaves; otherwise the nearer place, counted from where the finger would take it; not moved never closes", () => {
+    const r = { settle: 0.5, project: 100, slow: 0.25, flick: 1 };
+    expect(swipeCloses(30, 1.2, 600, r)).toBe(true); // a flick, from a tiny drag
+    expect(swipeCloses(0, 3, 600, r)).toBe(false);
+    expect(swipeCloses(310, 0, 600, r)).toBe(true); // slow, past the half
+    expect(swipeCloses(290, 0, 600, r)).toBe(false); // slow, short of the half
+    expect(swipeCloses(250, 0.6, 600, r)).toBe(true); // 250 + 0.6 × 100 = 310: the speed carries it past the half
+    expect(swipeCloses(250, 0.2, 600, r)).toBe(false); // below the slow speed it does not count
+    expect(swipeCloses(300, -0.4, 600, r)).toBe(false); // back up
   });
 });
 
@@ -65,9 +69,10 @@ describe("how the sheet leaves (#1163, DS Б1)", () => {
     expect(scrimLevel(-30, 500)).toBe(1);
     expect(scrimLevel(10, 0)).toBe(1);
   });
-  it("the share of the height decides: 40 % of a tall sheet is far, of a short one is near", () => {
-    expect(swipeCloses(0.4 * 700 + 1, 0, 0.4 * 700, 0.8)).toBe(true);
-    expect(swipeCloses(0.4 * 300 + 1, 0, 0.4 * 300, 0.8)).toBe(true);
-    expect(swipeCloses(0.4 * 700 - 1, 0.3, 0.4 * 700, 0.8)).toBe(false);
+  it("the share of the height decides: half of a tall sheet is far, of a short one is near", () => {
+    const r = { settle: 0.5, project: 100, slow: 0.25, flick: 1 };
+    expect(swipeCloses(0.5 * 700 + 1, 0, 700, r)).toBe(true);
+    expect(swipeCloses(0.5 * 300 + 1, 0, 300, r)).toBe(true);
+    expect(swipeCloses(0.5 * 700 - 1, 0.1, 700, r)).toBe(false);
   });
 });

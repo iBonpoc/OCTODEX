@@ -2230,7 +2230,7 @@ export const es: Dict = {
   "ds.sheet.stuckBody": "Esta hoja no se cierra con «✕», el fondo ni Esc: necesita una clave o hay una operación en curso. Vuelve con un resorte, sin saltos.",
   "ds.sheet.stuckAsked": "Se pidió cerrar: {n}",
   "ds.sheet.stuckDone": "Listo",
-  "ds.sheet.leave": "Cierre (#1163): desliza una hoja hacia abajo — sigue al dedo y el fondo se apaga con ella; suelta rápido o pasado el 40 % de su altura — se va a la velocidad del dedo, si no vuelve con un resorte. «✕», el fondo y Esc — baja en {s} s. Con «Reducir movimiento» — se disuelve.",
+  "ds.sheet.leave": "Cierre (#1163): desliza una hoja hacia abajo — sigue al dedo y el fondo se apaga con ella; suelta con un golpe rápido o pasada la mitad de su altura — se va a la velocidad del dedo, si no vuelve con un resorte. «✕», el fondo y Esc — baja en {s} s. Con «Reducir movimiento» — se disuelve.",
   "ds.sheet.fit": "Hoja según el contenido",
   "ds.sheet.fitHint": "Una pista, un estado, el menú «＋»: alto según el texto, como máximo el 88 % de la pantalla.",
   "ds.sheet.footer": "Hoja con barra inferior",

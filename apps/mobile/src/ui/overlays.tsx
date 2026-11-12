@@ -175,6 +175,13 @@ export const useSheetHold = () => useContext(SheetHold);
  * an upward drag stays a scroll.
  * `dirty` (unsaved changes): any way of closing asks "Save / Don't save / Cancel" first (DS rule 10).
  */
+const releaseRule = {
+  settle: component.sheetDismissRatio,
+  project: component.sheetProjectMs,
+  slow: component.sheetSlowVelocity,
+  flick: component.sheetFlickVelocity,
+};
+
 export function Sheet({
   visible,
   onClose,
@@ -237,8 +244,10 @@ export function Sheet({
       setAsk(false);
     }
   }, [visible, drag, fade]);
+  const mounted = useRef(true);
+  useEffect(() => () => void (mounted.current = false), []);
   const gone = useCallback((id: number) => {
-    if (id !== session.current) return;
+    if (id !== session.current || !mounted.current) return;
     leaving.current = false;
     setPresent(false);
   }, []);
@@ -252,14 +261,18 @@ export function Sheet({
         "worklet";
         if (finished) runOnJS(gone)(id);
       };
+      // the animation's end can fail to come (the screen under the sheet went to the background, the frames stopped):
+      // the sheet is taken off by this safety net too, once the exit has had its time
       if (reduce || wide) {
         // a dissolve is what reduce motion allows: it must not be skipped by the system setting
         fade.value = withTiming(0, { duration: motion.durFast, reduceMotion: ReduceMotion.Never }, done);
+        setTimeout(() => gone(id), motion.durFast + motion.durBase);
         return;
       }
       const h = sheetH.value || winH;
       const ms = exitDuration(Math.max(h - drag.value, 0), speed, motion.durFast, motion.durSlow, motion.durBase);
       drag.value = withTiming(h, { duration: ms, easing: speed > 0 ? Easing.linear : Easing.out(Easing.cubic) }, done);
+      setTimeout(() => gone(id), ms + motion.durBase);
     },
     [reduce, wide, winH, drag, fade, sheetH, gone],
   );
@@ -303,9 +316,9 @@ export function Sheet({
         },
         onPanResponderRelease: (_, g) => {
           const h = sheetH.value || winH;
-          if (swipeCloses(g.dy, g.vy, component.sheetDismissRatio * h, component.sheetDismissVelocity)) requestClose(g.vy);
+          if (swipeCloses(g.dy, g.vy, h, releaseRule)) requestClose(g.vy);
           else {
-            if (g.dy < -component.sheetExpandDrag || g.vy < -component.sheetDismissVelocity) setFull(true);
+            if (g.dy < -component.sheetExpandDrag || g.vy < -component.sheetFlickVelocity) setFull(true);
             drag.value = withSpring(0, motion.spring);
           }
         },
@@ -353,7 +366,7 @@ export function Sheet({
       swipe.current = { base: null };
       // Gesture Handler counts pt per second, the grabber pt per ms
       const v = e.velocityY / 1000;
-      if (swipeCloses(r.drag, v, component.sheetDismissRatio * (sheetH.value || winH), component.sheetDismissVelocity)) requestClose(v);
+      if (swipeCloses(r.drag, v, sheetH.value || winH, releaseRule)) requestClose(v);
       else drag.value = withSpring(0, motion.spring);
     },
   });
@@ -372,6 +385,7 @@ export function Sheet({
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
+        pointerEvents={visible ? "auto" : "none"}
         behavior={avoidBehavior}
         // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32) — without one, as before;
         // the phone sheet runs to the edge
