@@ -4,7 +4,10 @@
  *   the tax on the whole amount ($100.00 × 8.875 % = $8.88, once);
  * - «Как в прошлой смете: …» offers the rate of the last saved estimate and fills it in only when pressed;
  * - an old estimate with the tax only on some kinds says so; «Считать на всю сумму…» asks «Было … станет …»:
- *   «Не менять» keeps it, «Пересчитать» makes it the whole amount.
+ *   «Не менять» keeps it, «Пересчитать» makes it the whole amount;
+ * - a text that is not a rate («abc») changes nothing and says what to write; leaving the field shows the saved rate;
+ * - with a 10 % discount the tax is on the amount after it ($90.00 × 8.875 % = $7.99, total $97.99);
+ * - a signed estimate: the tax row does not open (the estimate does not change).
  */
 const DB_KEY = "octo.db.v5";
 
@@ -33,8 +36,20 @@ exports.run = async (h) => {
   await rate.waitFor({ timeout: 3000 });
   await rate.fill("8.875");
   h.expect((await rate.inputValue()) === "8.875", "the rate keeps three decimals (8.875)");
+  // not a rate: nothing changes, the field says what to write; leaving it shows the rate that is saved
+  await rate.fill("abc");
+  await tid("est-tax-rate").getByText("Впишите ставку, например 10.25").waitFor({ timeout: 3000 });
+  await rate.blur();
+  await p.waitForFunction(() => document.querySelector('[data-testid="est-tax-rate"] input')?.value === "8.875", null, { timeout: 3000 });
   await closeSheet();
   await h.expectText(/\$8\.88 · 8\.875%/, "the tax on the whole amount: $100.00 × 8.875 % = $8.88");
+  // a 10 % discount: the tax is on the amount after it
+  await p.getByRole("button", { name: "Скидка" }).click();
+  await h.sheet().getByRole("tab", { name: "%", exact: true }).click();
+  await h.sheet().locator('input[inputmode="decimal"]').first().fill("10");
+  await h.sheet().getByRole("button", { name: "Понятно" }).click();
+  await h.expectText(/\$7\.99 · 8\.875%/, "the tax after the discount: $90.00 × 8.875 % = $7.99");
+  await h.expectText(/Итого \| \$97\.99/, "the total agrees");
 
   // saved: the next estimate offers «как в прошлой»
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click();
@@ -74,4 +89,12 @@ exports.run = async (h) => {
   await tid("est-tax-ask-yes").getByRole("button").click();
   await tid("est-tax-rate").waitFor({ timeout: 3000 });
   h.expect((await tid("est-tax-partial").count()) === 0, "«Пересчитать»: the whole amount now");
+
+  // a signed estimate: the tax row does not open
+  const raw2 = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+  raw2.db.estimates.find((x) => x.id === saved.id).status = "approved";
+  await h.seed(DB_KEY, raw2);
+  await h.go(`/estimate/new?id=${saved.id}`);
+  await tid("ue-save").waitFor({ timeout: 8000 });
+  h.expect((await p.getByRole("button", { name: "Налог с продаж" }).count()) === 0, "a signed estimate: the tax row does not open");
 };

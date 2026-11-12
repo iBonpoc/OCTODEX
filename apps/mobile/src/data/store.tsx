@@ -2010,6 +2010,7 @@ export function StoreProvider({
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
               // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
               createdBy: prev ? prev.createdBy : d.me,
+              savedAt: new Date().toISOString(),
               // E3: an estimate keeps the template it was made from; a new one from a template counts one use (demo too)
               templateId: prev ? prev.templateId : templateId0,
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)

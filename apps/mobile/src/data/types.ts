@@ -652,6 +652,8 @@ export interface Estimate {
   totalCents: number;
   status: EstimateStatus;
   sentAt?: string;
+  /** when this version was last saved (the server's estimates.updated_at; the phone's own clock until it is read back) — «the last estimate» */
+  savedAt?: string;
   approvedAt?: string;
   /** client-visible lines of the chosen option (hidden BOM lines stay in the engine) */
   lines?: { name: string; qty: string; totalCents: number; optional?: boolean }[];
