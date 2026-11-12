@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
-import { finishStroke, MIN_RUN_IN, pulledSide, swingEnd } from "../src/modules/gutters/canvas/edit";
+import { finishStroke, MIN_RUN_IN, pulledSide, pullSideIn, SNAP_LEAVE_EXTRA_DEG, swingEnd } from "../src/modules/gutters/canvas/edit";
 import { SNAP_ANGLE_DEG, runLengthIn, type Drawing, type DrawnRun, type P } from "../src/modules/gutters/geometry";
 
 const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
@@ -79,10 +79,10 @@ describe("swingEnd: the other end stands, the end follows the finger", () => {
     expect(runLengthIn(nr)).toBeGreaterThanOrEqual(MIN_RUN_IN);
     expect(Math.round(runLengthIn(nr))).toBe(Math.round(Math.hypot(10, 20)));
   });
-  it("a typed length is dropped (it no longer matches); the downspout stays on the line, not past the new end", () => {
+  it("a typed length is replaced by the finger's distance (whole inches); the downspout stays on the line, not past the new end", () => {
     const d: Drawing = { runs: [run("a", [0, 0], [600, 0], { lengthIn: 600 })], downspouts: [{ id: "d", runId: "a", atIn: 590, shape: "rect", size: "2x3", material: "aluminum" } as never] };
     const s = swingEnd(d, "a", 1, [150, 260])!;
-    expect(s.drawing.runs[0]!.lengthIn).toBeUndefined();
+    expect(s.drawing.runs[0]!.lengthIn).toBe(Math.round(Math.hypot(150, 260)));
     const n = Math.round(runLengthIn(s.drawing.runs[0]!));
     expect(s.drawing.downspouts[0]!.atIn).toBe(n);
   });
@@ -105,5 +105,62 @@ describe("the stroke: lift keeps the swing; «Отменить» has the drawing
     const next = finishStroke(g, before, [700, 9], 20, false, { id: "x", attrs });
     expect(next.runs[0]!.b[1]).toBe(0);
     expect(next.runs[0]!.b[0]).toBe(700);
+  });
+});
+
+describe("review of #1205", () => {
+  const r = one().runs[0]!;
+  it("the touch itself off the axis is not a sideways move: only the change from it counts", () => {
+    const from: P = [600, 18]; // a cap is taken within a finger's radius (22 px), here 18 above the axis
+    expect(pulledSide(r, 1, [700, 18], 14, from)).toBe(false); // along, keeping its offset: a pull, the length changes
+    expect(pulledSide(r, 1, [700, 30], 14, from)).toBe(false); // 12 more: under the threshold
+    expect(pulledSide(r, 1, [700, 33], 14, from)).toBe(true); // 15 more: across
+    expect(pulledSide(r, 1, [700, 3], 14, from)).toBe(true); // 15 back across the axis
+    expect(pulledSide(r, 1, [700, 18], 14)).toBe(true); // without the touch point (as before) the offset alone would turn it
+  });
+  it("the threshold is 14 screen px at any zoom", () => {
+    expect(pullSideIn(1)).toBe(14);
+    expect(pullSideIn(0.5)).toBe(28);
+    expect(pullSideIn(2)).toBe(7);
+    const from: P = [600, 0];
+    expect(pulledSide(r, 1, [700, 27], pullSideIn(0.5), from)).toBe(false);
+    expect(pulledSide(r, 1, [700, 29], pullSideIn(0.5), from)).toBe(true);
+    expect(pulledSide(r, 1, [700, 6], pullSideIn(2), from)).toBe(false);
+    expect(pulledSide(r, 1, [700, 8], pullSideIn(2), from)).toBe(true);
+  });
+  it("on another gutter's end there is no new frame; the lift keeps the last one, not the drawing from before", () => {
+    // another gutter ends at (300, 300): the end swung to it would land on it
+    const d: Drawing = { runs: [run("a", [0, 0], [600, 0]), run("o", [300, 300], [300, 900])], downspouts: [] };
+    expect(swingEnd(d, "a", 1, [300, 300])).toBeNull();
+    const last = swingEnd(d, "a", 1, [200, 200])!.drawing; // the previous frame
+    const g = { kind: "pull" as const, id: "a", end: 1 as const, before: d, swung: true, held: null };
+    expect(finishStroke(g, last, [300, 300], 20, false, { id: "x", attrs })).toBe(last);
+  });
+  it("the length is the finger's distance, whole: 405″ at 45° is 405″ (not 404.46″ of the rounded point)", () => {
+    const s = swingEnd(one(), "a", 1, at(45, 405))!;
+    expect(s.snapped).toBe(true);
+    expect(s.drawing.runs[0]!.lengthIn).toBe(405);
+    expect(runLengthIn(s.drawing.runs[0]!)).toBe(405);
+  });
+  it("hysteresis: entered within 7°, held to 9°, left beyond; not entered between 7° and 9° from outside", () => {
+    const out = SNAP_ANGLE_DEG + 1; // 8° off the step
+    expect(swingEnd(one(), "a", 1, at(45 + out, 400))!.snapped).toBe(false); // from outside: not entered
+    const entered = swingEnd(one(), "a", 1, at(45 + SNAP_ANGLE_DEG - 0.5, 400))!;
+    expect(entered.snapped).toBe(true);
+    expect(entered.step).toBeCloseTo(Math.PI / 4, 6);
+    const held = swingEnd(one(), "a", 1, at(45 + out, 400), entered.step)!; // 8° off, held: stays
+    expect(held.snapped).toBe(true);
+    expect(dirOf(held.drawing.runs[0]!, 1)).toBeCloseTo(45, 0);
+    const left = swingEnd(one(), "a", 1, at(45 + SNAP_ANGLE_DEG + SNAP_LEAVE_EXTRA_DEG + 0.5, 400), entered.step)!;
+    expect(left.snapped).toBe(false);
+    expect(left.step).toBeNull();
+  });
+  it("sideways stays swung until the lift: the finger back on the axis keeps the swing (the stroke's `swung` is sticky)", () => {
+    const before = one();
+    const g = { kind: "pull" as const, id: "a", end: 1 as const, before, swung: true, held: null };
+    const next = finishStroke(g, before, [700, 0], 20, false, { id: "x", attrs });
+    // on the axis the end is at the old direction, 700 away: a swung stroke measures from the standing end, as a swing
+    expect(next.runs[0]!.b).toEqual([700, 0]);
+    expect(next.runs[0]!.lengthIn).toBe(700);
   });
 });
