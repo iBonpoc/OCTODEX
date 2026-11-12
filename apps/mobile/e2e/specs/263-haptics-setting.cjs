@@ -9,7 +9,7 @@ const { expectOneAccent } = require("../accent.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/settings");
-  await p.getByText("Язык", { exact: true }).locator("visible=true").first().waitFor({ timeout: 5000 });
+  await p.getByTestId("settings-about").locator("visible=true").first().waitFor({ timeout: 5000 });
   const text = await h.text();
   h.expect(!/Вибрация/.test(text), "no «Вибрация» row on the web");
   h.expect((await p.getByRole("switch", { name: "Вибрация", exact: true }).count()) === 0, "no vibration switch on the web");

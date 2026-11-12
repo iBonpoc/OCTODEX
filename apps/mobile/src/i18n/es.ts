@@ -2328,7 +2328,6 @@ export const es: Dict = {
   "ds.hap.errorWhere": "Falló: el servidor lo rechazó, el envío no salió.",
   "ds.hap.last": "Última respuesta: {name}",
   "ds.hap.none": "Aún no se ha pulsado nada.",
-  "ds.hap.drag": "Arrastrar con respuesta (levantar — ligera, soltar — media) — en «Gestos» y en el tablero de visitas del Plan.",
   "ds.choice.title": "Elegir uno: las fichas no se parten",
   "ds.choice.hint": "Hasta 4 opciones cortas: un segmento en una línea; más o más largas: un campo con menú. No hay segunda línea de fichas.",
   "ds.choice.few": "Tres opciones",

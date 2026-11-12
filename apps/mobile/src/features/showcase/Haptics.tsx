@@ -62,9 +62,6 @@ export function HapticsSection() {
           <T v="caption">{last ? t("ds.hap.last", { name: t(KINDS.find((k) => k.kind === last)!.name) }) : t("ds.hap.none")}</T>
         </View>
       </Card>
-      <Card>
-        <T v="caption" tone="mut">{t("ds.hap.drag")}</T>
-      </Card>
     </View>
   );
 }

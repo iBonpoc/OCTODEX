@@ -2328,7 +2328,6 @@ export const en: Dict = {
   "ds.hap.errorWhere": "It failed: the server refused, the send did not go.",
   "ds.hap.last": "Last response: {name}",
   "ds.hap.none": "Nothing pressed yet.",
-  "ds.hap.drag": "Dragging with a response (lift — light, drop — medium) — in «Gestures» and on the Plan’s visit board.",
   "ds.choice.title": "Choosing one: chips never wrap",
   "ds.choice.hint": "Up to 4 short options — a segment in one line; more or longer — a field with a menu. There is no second line of chips.",
   "ds.choice.few": "Three options",

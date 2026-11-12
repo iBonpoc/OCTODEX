@@ -51,8 +51,7 @@ describe("design system: components", () => {
   });
   it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
-    // ds-allow: visit/[id].tsx is held by #868 — moves to haptics in a small follow-up PR after it lands
-    expect(hits.filter((f) => f !== join("app", "visit", "[id].tsx"))).toEqual([]);
+    expect(hits).toEqual([]);
   });
   it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
     const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");

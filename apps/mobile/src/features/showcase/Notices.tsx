@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -13,11 +13,15 @@ import { SECTIONS } from "./registry";
 export function NoticesSection() {
   const { t } = useI18n();
   const toast = useToast();
-  const { online, setOnline } = useStore();
+  const { online, setOnline, mode } = useStore();
+  const cloud = mode === "cloud";
+  const was = useRef<boolean | null>(null); // the network value before this screen changed it (null: not changed here)
+  const onlineNow = useRef(online);
+  onlineNow.current = online;
   const s = SECTIONS.find((x) => x.id === "notices")!;
   const [undone, setUndone] = useState(0);
-  // leaving the screen puts the network back: the sample must not leave the app offline
-  useEffect(() => () => void setOnline(true), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // leaving the screen puts the network back — only if this screen changed it (the demo queue must not be reset otherwise)
+  useEffect(() => () => { if (was.current !== null) void setOnline(was.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View testID="showcase-notices">
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
@@ -41,9 +45,18 @@ export function NoticesSection() {
       <Card>
         <T v="heading">{t("ds.note.offline")}</T>
         <T v="caption" tone="mut">{t("ds.note.offlineHint")}</T>
-        <View testID="showcase-note-offline">
-          <Button label={online ? t("ds.note.offlineOn") : t("ds.note.offlineOff")} variant="secondary" onPress={() => void setOnline(!online)} />
-        </View>
+        {cloud ? null : (
+          <View testID="showcase-note-offline">
+            <Button
+              label={online ? t("ds.note.offlineOn") : t("ds.note.offlineOff")}
+              variant="secondary"
+              onPress={() => {
+                if (was.current === null) was.current = onlineNow.current;
+                void setOnline(!online);
+              }}
+            />
+          </View>
+        )}
         <View testID="showcase-note-badge" style={{ minHeight: space[6] }}>
           <SyncBadge />
         </View>
