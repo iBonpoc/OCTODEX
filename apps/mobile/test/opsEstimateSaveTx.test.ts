@@ -57,6 +57,11 @@ describe("unit:opsEstimateSaveTx", () => {
     expect(Array.from(t)).toHaveLength(500);
     expect(t.startsWith("😀x")).toBe(true);
   });
+  it("#1219: the version carries the rate in ppm and its basis points (8.875 % → 88750 / 888)", async () => {
+    const d = { ...doc(), settings: { tax: { enabled: true, rateBps: 888, ratePpm: 88750, groups: { labor: true } }, deposit: { kind: "none" }, discount: null } };
+    await applyOp(op(d as never), "co-1", "u-1");
+    expect((rpcs[0]!.args as { p_version: Record<string, unknown> }).p_version).toMatchObject({ tax_enabled: true, tax_rate_ppm: 88750, tax_rate_bps: 888 });
+  });
   it("a refusal is the op's (for good) — never the separate requests after it", async () => {
     answers = [{ error: { code: "23514", message: "check", hint: "x" }, status: 400 }];
     const e = await applyOp(op(), "co-1", "u-1").then(() => undefined, (x: unknown) => x);

@@ -6,7 +6,8 @@ import type { CustomLine, LineGroup } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
-import { Menu, type MenuItem } from "@/ui/overlays";
+import { Menu, useToast, type MenuItem } from "@/ui/overlays";
+import { ReadOnly } from "@/ui/readOnly";
 import { NumberField } from "@/ui/numberField";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import type { RequiredForm } from "@/ui/requiredForm";
@@ -57,6 +58,8 @@ export interface LineRowProps {
   checkPrice?: boolean;
   /** a signed estimate: the row does not open (DS §8.3) */
   locked?: boolean;
+  /** the template editor: a hidden line is not kept in a template yet (the server does not take it) — no «Скрыть» */
+  noHide?: boolean;
   /** the open row's place in the catalog (not for the tech): in it already, or the choice to save it and what the engine says */
   catalog?: { linked: boolean; want: boolean; offer: "offered" | "later" | "refused"; reason?: CatalogRefusal };
   /** the estimate came from a template / a module with this line hidden and priced: it was shown again */
@@ -70,6 +73,7 @@ function LineRowView(p: LineRowProps) {
   const { t, money } = useI18n();
   const { c } = useTheme();
   const reduce = useReducedMotion();
+  const toast = useToast();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
   const [more, setMore] = useState(false);
@@ -268,19 +272,29 @@ function LineRowView(p: LineRowProps) {
               </T>
               <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
             </RowView>
-            <View testID={`est-hide-${l.id}`} style={{ gap: space[1] }}>
-              <RowView style={{ minHeight: size.hitMin }}>
-                <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
-                  {t("est.row.hide")}
-                </T>
-                <Toggle label={t("est.row.hide")} on={isHidden(l)} onChange={(on) => (on ? canHide(l) && p.api.change(l.id, { clientVisible: false }) : p.api.change(l.id, { clientVisible: undefined }))} />
-              </RowView>
-              {!canHide(l) ? (
-                <T v="caption" tone="mut">
-                  {t("est.row.hideNeedZero")}
-                </T>
-              ) : null}
-            </View>
+            {p.noHide ? (
+              <T v="caption" tone="mut">
+                {t("est.row.hideTpl")}
+              </T>
+            ) : (
+              <View testID={`est-hide-${l.id}`}>
+                <RowView style={{ minHeight: size.hitMin }}>
+                  <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
+                    {t("est.row.hide")}
+                  </T>
+                  {isHidden(l) || canHide(l) ? (
+                    <Toggle label={t("est.row.hide")} on={isHidden(l)} onChange={(on) => p.api.change(l.id, { clientVisible: on ? false : undefined })} />
+                  ) : (
+                    // a price on the line: the switch is pale and does not turn; a press says why (DS §8.3, Б13)
+                    <Press onPress={() => toast.show(t("est.row.hideNeedZero"))} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={`${t("est.row.hide")}. ${t("est.row.hideNeedZero")}`} testID={`est-hide-why-${l.id}`}>
+                      <ReadOnly value>
+                        <Toggle label={t("est.row.hide")} on={false} onChange={() => {}} />
+                      </ReadOnly>
+                    </Press>
+                  )}
+                </RowView>
+              </View>
+            )}
           </>
         ) : null}
       </View>
