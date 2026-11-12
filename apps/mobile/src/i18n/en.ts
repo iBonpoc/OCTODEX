@@ -2528,6 +2528,8 @@ export const en: Dict = {
   "ds.rows.swipeHint": "Left — «Replace», «Delete» (no confirmation, «Undo»); right — «Hide». No full swipe, no vibration (Б13).",
   "ds.rows.swipeWeb": "The web has no swipe: the same actions are in «⋯» of the estimate row. On a phone: left — «Replace», «Delete»; right — «Hide» (Б13).",
   "ds.rows.swipeRow": "Estimate row",
+  "ds.rows.swipeToneCard": "Card",
+  "ds.rows.swipeToneSolid": "Row tone (surfSolid) — must match",
   "ds.rows.section": "Estimate section",
   "ds.rows.sectionHint": "A header with a total, subsections, «⋯», a handle; collapsed — «Roof · 5 items · $2,340.00» (§8.5).",
   "ds.rows.required": "Required field",

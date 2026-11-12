@@ -2528,6 +2528,8 @@ export const es: Dict = {
   "ds.rows.swipeHint": "A la izquierda — «Reemplazar», «Eliminar» (sin confirmación, «Deshacer»); a la derecha — «Ocultar». Sin deslizar completo, sin vibración (Б13).",
   "ds.rows.swipeWeb": "En la web no hay deslizar: las mismas acciones están en «⋯» de la fila. En el teléfono: izquierda — «Reemplazar», «Eliminar»; derecha — «Ocultar» (Б13).",
   "ds.rows.swipeRow": "Fila de la estimación",
+  "ds.rows.swipeToneCard": "Tarjeta",
+  "ds.rows.swipeToneSolid": "Tono de la fila (surfSolid) — debe coincidir",
   "ds.rows.section": "Sección del presupuesto",
   "ds.rows.sectionHint": "Un encabezado con total, subsecciones, «⋯», un asa; plegada — «Techo · 5 partidas · $2,340.00» (§8.5).",
   "ds.rows.required": "Campo obligatorio",

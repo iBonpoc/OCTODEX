@@ -69,7 +69,7 @@ describe("screen reader actions go to the row's own list", () => {
 describe("SwipeRow source guards", () => {
   const src = readFileSync(new URL("../src/features/estimate/SwipeRow.tsx", import.meta.url), "utf8");
   it("the row is opaque (the buttons lie under it) and the left edge is kept", () => {
-    expect(src).toMatch(/childrenContainerStyle=\{\{\s*backgroundColor:\s*c\.bg\s*\}\}/);
+    expect(src).toMatch(/childrenContainerStyle=\{\{\s*backgroundColor:\s*c\.surfSolid\s*\}\}/);
     expect(src).toMatch(/hitSlop=\{\{\s*left:\s*-space\[4\]\s*\}\}/);
   });
 });

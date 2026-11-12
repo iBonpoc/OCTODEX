@@ -246,6 +246,8 @@ export interface ThemeColors {
   mut: string;
   surf: string;
   surf2: string;
+  /** `surf` laid over `bg`, opaque: the tone a card shows to the eye, for a thing that must hide what is under it (a swiped row) */
+  surfSolid: string;
   in: string;
   bd: string;
   track: string;
@@ -279,6 +281,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     mut: "#CDD1DA",
     surf: "rgba(255,255,255,0.07)",
     surf2: "rgba(255,255,255,0.11)",
+    surfSolid: "#33363C",
     in: "rgba(255,255,255,0.05)",
     bd: "rgba(255,255,255,0.14)",
     track: "rgba(255,255,255,0.12)",
@@ -312,6 +315,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     mut: "#575C68",
     surf: "rgba(255,255,255,0.62)",
     surf2: "rgba(255,255,255,0.85)",
+    surfSolid: "#F9F7F5",
     in: "rgba(255,255,255,0.55)",
     bd: "rgba(20,22,30,0.1)",
     track: "rgba(20,22,30,0.09)",

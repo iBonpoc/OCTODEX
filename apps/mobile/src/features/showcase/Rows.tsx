@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { size, space } from "@octo/design-tokens";
+import { radius, size, space } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
 import { SwipeRow } from "@/features/estimate/SwipeRow";
@@ -28,6 +29,7 @@ const demoLines = (): CustomLine[] => [1, 2, 3, 4].map((n) => ({ id: `demo${n}`,
 /** the swipe of an estimate row (DS Б13): on a phone — swipe it; the web has no swipe, its actions are in «⋯» of the row */
 function SwipeSample() {
   const { t } = useI18n();
+  const { c } = useTheme();
   const [last, setLast] = useState<string | null>(null);
   return (
     <Card>
@@ -47,6 +49,15 @@ function SwipeSample() {
             <T v="caption" tone="mut">120 LF × $8.50</T>
           </View>
         </SwipeRow>
+        {/* the row of a swiped list is opaque: its tone must be the card's (`surfSolid` = `surf` over `bg`) */}
+        <RowView>
+          <Card style={{ flex: 1 }}>
+            <T v="caption">{t("ds.rows.swipeToneCard")}</T>
+          </Card>
+          <View testID="showcase-swipe-solid" style={{ flex: 1, backgroundColor: c.surfSolid, borderRadius: radius.card, padding: space[3] }}>
+            <T v="caption">{t("ds.rows.swipeToneSolid")}</T>
+          </View>
+        </RowView>
         <View testID="showcase-swipe-last">
           <T v="caption">{last ? t("ds.hap.last", { name: last }) : t("ds.hap.none")}</T>
         </View>

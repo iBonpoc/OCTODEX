@@ -91,7 +91,7 @@ export function SwipeRow({
       // not closer than space[4] to the left edge: the system «back» of iOS owns it (DS Б13)
       hitSlop={{ left: -space[4] }}
       // the buttons lie under the whole row: only an opaque row hides them at rest
-      childrenContainerStyle={{ backgroundColor: c.bg }}
+      childrenContainerStyle={{ backgroundColor: c.surfSolid }}
       onSwipeableOpenStartDrag={swipes.touched}
       onSwipeableCloseStartDrag={swipes.touched}
       onSwipeableWillOpen={() => {
