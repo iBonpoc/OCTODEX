@@ -116,6 +116,8 @@ export const gesture = {
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
   autoScrollEdge: 64,
+  /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
+  slop: 10,
 } as const;
 
 /* ---------- components.css ---------- */
@@ -175,6 +177,8 @@ export const component = {
   statusEdge: 3,
   /** selected card / drop target border */
   selectedBorder: 2,
+  /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
+  swipeAction: { w: 80, full: 0.6 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */

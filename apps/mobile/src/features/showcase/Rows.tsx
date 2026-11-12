@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { size, space } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
+import { SwipeRow } from "@/features/estimate/SwipeRow";
 import { SortableList } from "@/features/SortableList";
 import { moveLine, sameLayout, viewRows } from "@/features/sectionLayout";
 import { Button, Toggle } from "@/ui/controls";
@@ -16,7 +17,6 @@ import { SECTIONS } from "./registry";
 /** the samples of the estimate editor (DS §8.3–8.5, Б13, §14.6): what is shown now, what comes with its component */
 const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
-  { id: "swipe", title: "ds.rows.swipe", hint: "ds.rows.swipeHint" },
   { id: "section", title: "ds.rows.section", hint: "ds.rows.sectionHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
@@ -24,6 +24,36 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
 ];
 
 const demoLines = (): CustomLine[] => [1, 2, 3, 4].map((n) => ({ id: `demo${n}`, name: String(n), group: "service", quantity: "1", unit: "ea", unitPriceCents: 0 }));
+
+/** the swipe of an estimate row (DS Б13): on a phone — swipe it; the web has no swipe, its actions are in «⋯» of the row */
+function SwipeSample() {
+  const { t } = useI18n();
+  const [last, setLast] = useState<string | null>(null);
+  return (
+    <Card>
+      <View testID="showcase-rows-swipe" style={{ gap: space[1] }}>
+        <T v="heading">{t("ds.rows.swipe")}</T>
+        <T v="caption" tone="mut">{Platform.OS === "web" ? t("ds.rows.swipeWeb") : t("ds.rows.swipeHint")}</T>
+        <SwipeRow
+          left={[{ key: "hide", label: t("est.row.hide"), icon: "eye", testID: "showcase-swipe-hide" }]}
+          right={[
+            { key: "replace", label: t("est.row.replace"), icon: "refresh", testID: "showcase-swipe-replace" },
+            { key: "delete", label: t("est.row.delete"), icon: "trash", tone: "bad", testID: "showcase-swipe-delete" },
+          ]}
+          onAct={setLast}
+        >
+          <View style={{ minHeight: size.rowMax, justifyContent: "center" }}>
+            <T v="body" w="semibold">{t("ds.rows.swipeRow")}</T>
+            <T v="caption" tone="mut">120 LF × $8.50</T>
+          </View>
+        </SwipeRow>
+        <View testID="showcase-swipe-last">
+          <T v="caption">{last ? t("ds.hap.last", { name: last }) : t("ds.hap.none")}</T>
+        </View>
+      </View>
+    </Card>
+  );
+}
 
 /** the tax sheet of the estimate (DS §8.7): the switch, the rate by hand, «as in the last estimate» (nothing is saved) */
 function TaxSample() {
@@ -122,6 +152,7 @@ export function RowsSection() {
         </View>
       </Card>
       <TaxSample />
+      <SwipeSample />
       <LiveDrag />
       {PLANNED.map((p) => (
         <Card key={p.id}>

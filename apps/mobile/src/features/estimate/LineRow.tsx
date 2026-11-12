@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import Animated, { Easing, useReducedMotion, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
 import { motion, size, space } from "@octo/design-tokens";
 import type { CustomLine, LineGroup } from "@octo/estimating-engine";
@@ -14,8 +14,9 @@ import type { RequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { RowView } from "@/ui/surfaces";
 import { shownQty, lineMarks } from "@/features/estimateDoc";
-import { canHide, isHidden, rowFigures, rowSummary, type CatalogRefusal } from "@/features/estimateRows";
+import { canHide, isHidden, rowActions, rowFigures, rowSummary, type CatalogRefusal, type RowAct } from "@/features/estimateRows";
 import { LineMarks } from "@/features/LineMarks";
+import { SwipeRow, swipedJustNow, type SwipeBtn } from "./SwipeRow";
 
 /**
  * A line of the estimate, in place (DS §8.3, spec 2026-11-12-estimate-editor Р1): folded — the name, «120 LF × $8.50», the
@@ -28,7 +29,7 @@ const KIND_ICON: Record<LineGroup, IconKey> = { service: "wrench", labor: "user"
 /** the id of the choice «Своя…» in the unit list */
 const OWN = "__own__";
 
-export type RowAction = "replace" | "duplicate" | "move" | "delete";
+export type RowAction = RowAct;
 
 /** what the rows ask of the screen: ONE object with stable functions (the rows are memoised: a row redraws when its own data does) */
 export interface RowApi {
@@ -93,17 +94,24 @@ function LineRowView(p: LineRowProps) {
 
   const marks = lineMarks(l);
   const figures = open ? rowFigures(l, p.costsVisible) : null;
-  const items: MenuItem<RowAction>[] = [
-    { key: "replace", label: t("est.row.replace"), icon: "refresh", testID: `est-act-replace-${l.id}` },
-    { key: "duplicate", label: t("est.row.duplicate"), icon: "copy", testID: `est-act-duplicate-${l.id}` },
-    ...(l.source ? [] : ([{ key: "move", label: t("est.sec.moveTitle"), icon: "route", testID: `est-act-move-${l.id}` }] as MenuItem<RowAction>[])),
-    { key: "delete", label: t("est.row.delete"), icon: "trash", destructive: true, testID: `est-act-delete-${l.id}` },
-  ];
+  // one list of what can be done: the «⋯» menu, the swipe and the screen reader's actions all take it (DS Б13, Р2)
+  const acts = rowActions(l, { locked: p.locked, noHide: p.noHide });
+  const META: Record<RowAct, { label: string; icon: IconKey }> = {
+    replace: { label: t("est.row.replace"), icon: "refresh" },
+    duplicate: { label: t("est.row.duplicate"), icon: "copy" },
+    hide: { label: t("est.row.hide"), icon: "eye" },
+    show: { label: t("est.row.show"), icon: "eye" },
+    move: { label: t("est.sec.moveTitle"), icon: "route" },
+    delete: { label: t("est.row.delete"), icon: "trash" },
+  };
+  const items: MenuItem<RowAction>[] = acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", testID: `est-act-${k}-${l.id}` }));
+  const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
 
   if (!open) {
-    return (
-      <Press onPress={p.locked ? undefined : () => p.api.open(l.id)} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} testID={`est-line-${l.id}`}>
+    const web = Platform.OS === "web";
+    const body = (
+      <Press onPress={p.locked ? undefined : () => (swipedJustNow(motion.durSlow) ? undefined : p.api.open(l.id))} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={acts.menu.map((k) => ({ name: k, label: META[k].label }))} onAccessibilityAction={(e) => p.api.action(l.id, e.nativeEvent.actionName as RowAct)} testID={`est-line-${l.id}`} containerStyle={web && acts.menu.length ? { flex: 1 } : undefined}>
         <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1] }}>
           <RowView style={{ alignItems: "flex-start" }}>
             <View style={{ paddingTop: space[1] }}>
@@ -143,8 +151,28 @@ function LineRowView(p: LineRowProps) {
         </View>
       </Press>
     );
+    if (web) {
+      // the web has no swipe: the same actions are in «⋯» (DS Б13), next to the row
+      return acts.menu.length ? (
+        <RowView>
+          {body}
+          <View ref={moreRef} collapsable={false}>
+            <View testID={`est-menu-${l.id}`}>
+              <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
+            </View>
+          </View>
+          <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />
+        </RowView>
+      ) : (
+        body
+      );
+    }
+    return (
+      <SwipeRow left={acts.swipeRight.map(swipeBtn)} right={acts.swipeLeft.map(swipeBtn)} onAct={(k) => p.api.action(l.id, k as RowAct)}>
+        {body}
+      </SwipeRow>
+    );
   }
-
   const unitItems = [...UNITS, ...(l.unit && !(UNITS as readonly string[]).includes(l.unit) ? [l.unit] : [])].map((u) => ({ key: u as string, label: u }));
   unitItems.push({ key: OWN, label: t("est.row.unitOwn") });
   return (

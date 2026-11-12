@@ -18,7 +18,7 @@ import { SortableList, type DropResult } from "@/features/SortableList";
 import type { Drop } from "@/features/sortable";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
-import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
@@ -309,6 +309,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (a === "delete") return removeLine(id);
     if (a === "replace") return setPicker({ replace: id });
     if (a === "move") return setMoveFor(id);
+    if (a === "hide" || a === "show") {
+      if (signed || tplEdit) return;
+      const r = setHidden(option.lines, id, a);
+      if (r === "needZero") return void toast.show(t("est.row.hideNeedZero"));
+      setOption((o) => {
+        const next = setHidden(o.lines, id, a);
+        return next === "needZero" ? o : { ...o, lines: next };
+      });
+      return;
+    }
     const d = duplicateLine(option.lines, id);
     if (!d) return;
     setOption((o) => ({ ...o, lines: duplicateLine(o.lines, id, () => d.copyId)?.lines ?? o.lines }));
