@@ -19,7 +19,20 @@ import { MEMBER_PREFS_DEFAULT, type Customer, type DB, type Job, type Property, 
 
 type Legacy = { source?: string; sourceId?: string };
 
+/** #1189: the lists of a store (every list the seed has): a record of an older version without one gets it empty */
+let listKeys: string[] | null = null;
+function withLists(d: DB): DB {
+  listKeys ??= Object.entries(makeSeed()).filter(([, v]) => Array.isArray(v)).map(([k]) => k);
+  const missing = listKeys.filter((k) => !Array.isArray((d as unknown as Record<string, unknown>)[k]));
+  return missing.length ? ({ ...d, ...Object.fromEntries(missing.map((k) => [k, []])) } as DB) : d;
+}
+
 export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
+  // the lists it does not build itself, filled at the end (what it builds from older fields — jobs from visits — first)
+  return withLists(normalizeFields(d, mode));
+}
+
+function normalizeFields(d: DB, mode: "demo" | "cloud"): DB {
   const sources = Array.isArray(d.sources) && d.sources.length ? d.sources : mode === "demo" ? SEED_SOURCES : [];
   const byName = new Map(sources.map((s) => [s.name.toLowerCase(), s.id]));
   const fallback = sources.find((s) => s.name === "Other")?.id ?? sources[0]?.id ?? "";

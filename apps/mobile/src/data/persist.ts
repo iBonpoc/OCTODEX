@@ -135,6 +135,71 @@ export interface StorageHealth {
 /** where a broken record is kept (never sent, wiped with the account — DEVICE_PREFIXES) */
 export const BROKEN_PREFIX = "octo.broken.";
 export const brokenKeyOf = (key: string, at: number) => `${BROKEN_PREFIX}${key}.${at}`;
+/** #1189 (the director): the copies of one key do not pile up — the newest this many stay */
+export const BROKEN_KEEP = 3;
+
+/**
+ * #1189: a record the phone is about to start over (unreadable, not of the expected shape, or read again before the first
+ * write after a failed read) is first copied to its own key (`brokenKeyOf`). Only the newest BROKEN_KEEP copies of a key
+ * stay. A full device (the web's localStorage: about 5 MB) — the older copies of that key go and the copy is tried once
+ * more. true — the copy is on the device.
+ */
+export async function keepBrokenCopy(key: string, raw: string, now = Date.now()): Promise<boolean> {
+  const prefix = `${BROKEN_PREFIX}${key}.`;
+  const copiesOf = async () => {
+    try {
+      return ((await AsyncStorage.getAllKeys()) as string[]).filter((k) => k.startsWith(prefix)).sort((a, b) => Number(a.slice(prefix.length)) - Number(b.slice(prefix.length)));
+    } catch {
+      return [];
+    }
+  };
+  const drop = async (ks: string[]) => {
+    if (!ks.length) return;
+    try {
+      await AsyncStorage.multiRemove(ks);
+    } catch {
+      /* nothing more to free */
+    }
+  };
+  const k = brokenKeyOf(key, now);
+  try {
+    await AsyncStorage.setItem(k, raw);
+  } catch {
+    // full: the older copies of this key make room, then once more
+    await drop((await copiesOf()).filter((x) => x !== k));
+    try {
+      await AsyncStorage.setItem(k, raw);
+    } catch {
+      return false;
+    }
+  }
+  const all = await copiesOf();
+  await drop(all.slice(0, Math.max(0, all.length - BROKEN_KEEP)));
+  return true;
+}
+
+/** #1189 (the director): where the phone notes a record it had to start over without a copy — the key, when, why; the
+ *  newest STORAGE_LOG_KEEP entries (no data in them, only the key's name) */
+export const STORAGE_LOG_KEY = "octo.storageLog.v1";
+export const STORAGE_LOG_KEEP = 50;
+export async function noteStorageLoss(key: string, what: string, at = new Date().toISOString()): Promise<void> {
+  // eslint-disable-next-line no-console
+  console.warn(`[storage] ${key}: ${what}`);
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_LOG_KEY);
+    const list = (() => {
+      try {
+        const v = raw ? (JSON.parse(raw) as unknown) : [];
+        return Array.isArray(v) ? v : [];
+      } catch {
+        return [];
+      }
+    })();
+    await AsyncStorage.setItem(STORAGE_LOG_KEY, JSON.stringify([...list, { key, at, what }].slice(-STORAGE_LOG_KEEP)));
+  } catch {
+    /* the device refuses even this: the console line is all there is */
+  }
+}
 /** a failed read is tried again this many times in all, with a growing pause (A-01) */
 export const READ_TRIES = 3;
 export const READ_PAUSE_MS = 300;
@@ -207,6 +272,10 @@ export function usePersistentState<T>(
   keyRef.current = key;
   /** grows when this state is wiped: a read still running for it is dropped */
   const wiped = useRef(0);
+  /** #1189: the key whose read failed — its record is copied before the first write over it */
+  const copyBeforeWrite = useRef<string | null>(null);
+  /** the copy under way: writes wait for it */
+  const copying = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -241,20 +310,32 @@ export function usePersistentState<T>(
       }
     };
     read()
-      .then((raw) => {
+      .then(async (raw) => {
         if (!alive || w !== wiped.current) return;
         let value = init();
+        let fresh = false;
         if (raw != null) {
           try {
             const parsed = JSON.parse(raw) as T;
             if (!validate.current || validate.current(parsed)) value = parsed;
+            else fresh = true;
           } catch {
             // the outbox (strict) is never started fresh: what it holds stays on the device, the store shows the error
             if (strict) {
               broken.current = { key, raw };
               return setState({ key, value: init(), loaded: false, readError: "corrupt" });
             }
-            /* corrupted cache: start fresh */
+            fresh = true;
+          }
+        }
+        if (fresh) {
+          // #1189: a cache that cannot be read as it is (not JSON, not of the expected shape) is copied before it is started
+          // over; the copy refused (the device is full) — the empty start is not written over it until a real change
+          const copied = await keepBrokenCopy(key, raw!);
+          if (!alive || w !== wiped.current) return;
+          if (!copied) {
+            void noteStorageLoss(key, "unreadable record: no copy could be kept, started over");
+            return setState({ key, value, loaded: true, forgotten: true });
           }
         }
         setState({ key, value, loaded: true });
@@ -266,6 +347,8 @@ export function usePersistentState<T>(
         // for good (review of #910, second round №2)
         // — but its empty start is never written over the copy the device may still hold (#926: one SQLITE_BUSY without
         // the network wiped the company's data until the network came back): only the next real change is
+        // #1189: before the first write over it, the record is read once more and copied (a passing SQLITE_BUSY)
+        if (!strict) copyBeforeWrite.current = key;
         setState(strict ? { key, value: init(), loaded: false, readError: "read" } : { key, value: init(), loaded: true, forgotten: true });
       });
     return () => {
@@ -292,7 +375,27 @@ export function usePersistentState<T>(
   const ready = state.loaded && state.key === key;
   useEffect(() => {
     if (!ready || state.forgotten) return;
-    writer.current!.schedule(state.key, JSON.stringify(state.value));
+    const k = state.key;
+    const raw = JSON.stringify(state.value);
+    // #1189: the first write after a failed read — what the device holds is read once more and copied first; the writes
+    // after it wait for the copy (in order). Read again failed: written all the same (the app must not lock, #910/#926)
+    // and the loss is noted (the key, when) so it can be found later
+    if (copyBeforeWrite.current === k) {
+      copyBeforeWrite.current = null;
+      const p = AsyncStorage.getItem(k).then(
+        async (old) => {
+          if (old != null && old !== raw && !(await keepBrokenCopy(k, old))) await noteStorageLoss(k, "written over after a failed read: no copy could be kept");
+        },
+        () => noteStorageLoss(k, "written over after a failed read: read again failed, no copy"),
+      );
+      copying.current = p;
+      void p.then(() => {
+        if (copying.current === p) copying.current = null;
+      });
+    }
+    const wait = copying.current;
+    if (wait) void wait.then(() => (keyRef.current === k ? writer.current!.schedule(k, raw) : undefined));
+    else writer.current!.schedule(k, raw);
   }, [state, ready]);
 
   const setValue = useCallback(
@@ -306,8 +409,9 @@ export function usePersistentState<T>(
     if (!b || b.key !== k) return;
     const w = wiped.current;
     // the copy first: the broken record is overwritten only once its copy is on the device
-    AsyncStorage.setItem(brokenKeyOf(k, Date.now()), b.raw).then(
-      () => {
+    keepBrokenCopy(k, b.raw).then(
+      (ok) => {
+        if (!ok) return setWriteFailed(true);
         if (w !== wiped.current || keyRef.current !== k || broken.current !== b) return;
         broken.current = null;
         setState((s) => (s.key === k && s.readError === "corrupt" ? { key: k, value: initRef.current(), loaded: true } : s));

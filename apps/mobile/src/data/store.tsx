@@ -488,8 +488,10 @@ export function StoreProvider({
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
     {
+      // #1189: only the shape — the record is an object of this mode; a list it lacks (an older version's record) is filled
+      // by normalizeDB, never a reason to start the demo over (that wiped the person's own records)
       validate: (v) =>
-        Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : typeof v?.day === "string" && v.day !== "cloud"),
+        typeof v?.db === "object" && v.db !== null && !Array.isArray(v.db) && (mode === "cloud" ? v.day === "cloud" : typeof v?.day === "string" && v.day !== "cloud"),
       // an empty start shows an empty company: tried longer before it (#926)
       patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
