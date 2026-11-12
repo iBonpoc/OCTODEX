@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { contractInvoice, contractTaxOf, withTaxSplit } from "../src/features/contractInvoice";
+import { contractInvoice, contractTaxOf, voidRefusal, withTaxSplit } from "../src/features/contractInvoice";
 import { newDoc, optionTotals } from "../src/features/estimateDoc";
 import { withJobLine, withJobTax } from "../src/features/jobLines";
 import { rejectedOf } from "../src/data/outboxRejected";
@@ -94,5 +94,31 @@ describe("#865 contract invoices on the phone", () => {
     const op = { k: "invoice.issue" as const, id: "i9", jobId: "j3", customerId: "c1", kind: "progress" as const, title: "Progress", totalCents: 100, dueDate: "2026-11-12" };
     const r = rejectedOf({ id: "o1", op } as never, "the job's invoices would be more than its contract", Date.parse("2026-11-12T12:00:00Z"), null, "invoice_over_contract");
     expect(r).toMatchObject({ what: "invoice", reason: "invoice_over_contract", href: "/job/j3", amountCents: 100 });
+  });
+});
+
+describe("В1-5 (#1107): who may void which invoice (as the server: tg_invoice_guard)", () => {
+  const d = (paid = 0, pays: { invoiceId: string; amountCents: number }[] = []) =>
+    ({ invoices: [{ id: "i", customerId: "c", jobId: "j", totalCents: 100, paidCents: paid, dueDate: "2026-11-12" }], payments: pays }) as never;
+  it("the director, no payment, a reason → yes", () => expect(voidRefusal(d(), "i", "wrong amount", "director")).toBeNull());
+  it("office, sales, tech → no", () => {
+    for (const r of ["dispatcher", "sales", "tech"] as const) expect(voidRefusal(d(), "i", "x", r)).toBe("role");
+  });
+  it("paid in part, or a receipt on it → no (refund first)", () => {
+    expect(voidRefusal(d(10), "i", "x", "director")).toBe("paid");
+    expect(voidRefusal(d(0, [{ invoiceId: "i", amountCents: 5 }]), "i", "x", "director")).toBe("paid");
+  });
+  it("no reason, or an invoice not live (already void) → no", () => {
+    expect(voidRefusal(d(), "i", "   ", "director")).toBe("reason");
+    expect(voidRefusal(d(), "other", "x", "director")).toBe("gone");
+  });
+});
+
+describe("В1-5: the server's refusal of a void — the card says why", () => {
+  it("a payment came in meanwhile: «refund first»; the person may not: «only the owner or an admin»", () => {
+    const op = { k: "invoice.void" as const, id: "i9", jobId: "j3", reason: "wrong", totalCents: 100 };
+    const at = Date.parse("2026-11-12T12:00:00Z");
+    expect(rejectedOf({ id: "o1", op } as never, "has payments", at, null, "invoice_has_payments")).toMatchObject({ what: "invoice", href: "/invoice/i9", reason: "invoice_has_payments", labelKey: "inv.void.rej.title" });
+    expect(rejectedOf({ id: "o2", op } as never, "only owner/admin", at, null, "invoice_void_forbidden")).toMatchObject({ reason: "invoice_void_forbidden" });
   });
 });

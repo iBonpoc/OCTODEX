@@ -12,6 +12,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 
 export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey } {
   if (i.paidCents >= i.totalCents) return { s: "ok", l: "money.paid" };
@@ -98,6 +99,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
           })}
         </CardGrid>
       ) : null}
+      <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
       {st.toInvoice > 0 ? (
         <RowView style={{ flexWrap: "wrap" }}>
           {!hasFinal ? (

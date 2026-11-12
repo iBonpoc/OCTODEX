@@ -4157,7 +4157,7 @@ select tst.ok((select status = 'void' from public.invoices where id = '15300000-
 -- ---------------------------------------------------------------- T54: the simulated card payment only for a demo company (security audit 06.11, item 2)
 :as_super
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
-select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'progress', 'sent', 'T54 progress', 5400, 5400, now()
+select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'standalone', 'sent', 'T54 extra work', 5400, 5400, now()   -- the contract is billed in full: extra work outside it (В1-4б)
   from public.jobs j join public.estimates e on e.id = j.estimate_id,
        (values ('15400000-0000-4000-8000-000000000001'), ('15400000-0000-4000-8000-000000000002')) x(id)
  where e.id = tst.est_of('tok_inv_0123456789abcdef');
@@ -5651,9 +5651,12 @@ update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0
 do $$ begin
   insert into public.jobs (id, company_id, title, customer_id, property_id, status, contract_total_cents) values
     ('e6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T69 old', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', 10000);
-  insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
-    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
 end $$;
+-- old data made before В1-4б (now the server refuses invoices above the contract, T197): the check is off for this row only
+alter table public.invoices disable trigger t41_invoice_contract;
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+  ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
+alter table public.invoices enable trigger t41_invoice_contract;
 :as_office_a
 update public.jobs set title = 'T69 old renamed', description = 'still fine' where id = 'e6900000-0000-4000-8000-000000000002';
 select tst.ok((select title from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 'T69 old renamed', 'old data over-invoiced: an edit that keeps the total passes');
@@ -10101,7 +10104,7 @@ select tst.ok(not has_function_privilege('anon', 'public.stripe_pay_open(text,uu
   'T131 only the Edge Function (service_role) opens an attempt and keeps its PaymentIntent');
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
 select '11310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T131-1', 'c1a00000-0000-0000-0000-000000000001',
-       j.id, 'progress', 'sent', 'T131 progress', 150000, 150000, now()
+       j.id, 'standalone', 'sent', 'T131 extra work', 150000, 150000, now()   -- outside the billed-in-full contract (В1-4б)
   from public.jobs j where j.estimate_id = '0e1a0000-0000-0000-0000-000000000088';
 :as_service
 select tst.fails_like($q$select public.stripe_pay_open('tok_lead_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
@@ -13185,5 +13188,134 @@ select tst.ok((select count(*) >= 1 from public.invoices i join public.jobs j on
                 where i.kind = 'deposit' and i.tax_cents > 0 and j.estimate_id is not null),
               'T196 a signature''s deposit carries its share of the tax');
 \echo 'T196 the invoices of a contract: the tax split inside, Σ = the contract''s'
+
+-- ======================================================================================================================
+-- T197 (#865 В1-4б + #1107 В1-5, audit X-03, П-07, П-09): never more than the contract; a wrong invoice is voided.
+-- (а) one cent above the contract: refused (23514, hint invoice_over_contract), nothing written; a draft above it is not
+--     sent; a standalone invoice is outside the contract; a void one frees its part — the right invoice goes through.
+-- (б) two phones at once (two sessions, dblink): of two invoices that together go over, one passes.
+-- (в) the visit's payment into the office's draft final above the rest of the contract: billed as that rest, paid.
+-- (г) void: owner / admin only (office, sales — no: invoice_void_forbidden), never with a payment (invoice_has_payments),
+--     never without a reason, once — a void invoice never changes again.
+-- ======================================================================================================================
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T197 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1970000-0000-4000-8000-000000000001', '197 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T197 cap', 'c1970000-0000-4000-8000-000000000001', 'd1970000-0000-4000-8000-000000000001', 'draft'),
+    ('e1970000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T197 two phones', 'c1970000-0000-4000-8000-000000000001', 'd1970000-0000-4000-8000-000000000001', 'draft'),
+    ('e1970000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T197 visit', 'c1970000-0000-4000-8000-000000000001', 'd1970000-0000-4000-8000-000000000001', 'draft');
+end $$;
+:as_office_a
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000001', 0, 'T197 work (test price)', 1, 100000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000002', 0, 'T197 work (test price)', 1, 50000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000003', 0, 'T197 work (test price)', 1, 50000, false);
+select tst.ok((select array_agg(contract_total_cents order by id) = array[100000, 50000, 50000]::bigint[] from public.jobs where id::text like 'e1970000%'), 'T197 (fixture: contracts $1,000, $500, $500)');
+-- (а) a deposit $100 and a wrong progress $900 instead of $90 — then nothing more fits
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Deposit part', 10000, 10000, now()),
+  ('01970000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress: wrong', 90000, 90000, now());
+do $$ declare h text; begin
+  insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+    ('01970000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'final', 'sent', 'Final balance', 1, 1, now());
+  raise exception 'FAILED: T197 an invoice above the contract was written';
+exception when check_violation then
+  get stacked diagnostics h = pg_exception_hint;
+  perform tst.ok(h = 'invoice_over_contract', 'T197 one cent above the contract: refused (invoice_over_contract), red before В1-4б');
+end $$;
+select tst.ok(not exists (select 1 from public.invoices where id = '01970000-0000-4000-8000-000000000003'), 'T197 nothing written');
+-- a draft above the contract is not sent
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01970000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'final', 'draft', 'T197 draft', 500, 500);
+select tst.fails_like($q$update public.invoices set status = 'sent', sent_at = now() where id = '01970000-0000-4000-8000-000000000004'$q$,
+       '%more than its contract%', 'T197 a draft above the contract is not sent');
+-- extra work outside the contract (standalone) still goes
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T197 extra', 5000, 5000, now());
+select tst.ok(exists (select 1 from public.invoices where id = '01970000-0000-4000-8000-000000000005' and status = 'sent'), 'T197 a standalone invoice is outside the contract');
+-- (г) void: office and sales may not; the owner may, with a reason; then the right invoice fits
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+do $$ declare h text; begin
+  update public.invoices set status = 'void', void_reason = 'T197 office' where id = '01970000-0000-4000-8000-000000000002';
+  raise exception 'FAILED: T197 the office voided an invoice';
+exception when insufficient_privilege then
+  get stacked diagnostics h = pg_exception_hint;
+  perform tst.ok(h = 'invoice_void_forbidden', 'T197 the office does not void (invoice_void_forbidden)');
+end $$;
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.fails($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void');
+:as_owner_a
+select tst.fails($q$update public.invoices set status = 'void' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 no void without a reason');
+update public.invoices set status = 'void', void_reason = 'T197 wrong amount: $900 instead of $90' where id = '01970000-0000-4000-8000-000000000002';
+select tst.ok((select status = 'void' and voided_by = 'a0000000-0000-0000-0000-000000000001' and voided_at is not null from public.invoices where id = '01970000-0000-4000-8000-000000000002'),
+              'T197 the owner voids the wrong invoice: who and when kept');
+select tst.fails_like($q$update public.invoices set status = 'sent' where id = '01970000-0000-4000-8000-000000000002'$q$, '%void -> sent%', 'T197 a void invoice never comes back');
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress: right', 90000, 90000, now());
+select tst.ok(exists (select 1 from public.invoices where id = '01970000-0000-4000-8000-000000000006'), 'T197 the void one freed its part: the right invoice goes through');
+-- a paid invoice is not voided (refund first)
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000001', 'c1970000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't197-pay');
+:as_owner_a
+do $$ declare h text; begin
+  update public.invoices set status = 'void', void_reason = 'T197 paid' where id = '01970000-0000-4000-8000-000000000001';
+  raise exception 'FAILED: T197 a paid invoice was voided';
+exception when check_violation then
+  get stacked diagnostics h = pg_exception_hint;
+  perform tst.ok(h = 'invoice_has_payments', 'T197 an invoice with a payment is not voided (invoice_has_payments)');
+end $$;
+-- (б) two phones at once: $300 + $300 on a $500 contract — the job's lock lets one through
+:as_super
+create extension if not exists dblink;
+select set_config('tst.t197_conn', format('host=%s port=%s dbname=%s user=%s', split_part(current_setting('unix_socket_directories'), ',', 1),
+                  current_setting('port'), current_database(), current_user), false);
+do $$
+declare c text := current_setting('tst.t197_conn'); n int; set_who text :=
+  'set request.jwt.claim.sub = ''a0000000-0000-0000-0000-000000000002''; set role authenticated;';
+begin
+  perform dblink_connect('t197a', c);
+  perform dblink_connect('t197b', c);
+  perform dblink_exec('t197a', 'begin');
+  perform dblink_exec('t197a', set_who);
+  perform dblink_exec('t197a', $q$insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+    ('01970000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'progress', 'sent', 'Phone A', 30000, now())$q$);
+  -- the second phone waits on the job's lock while the first is not committed
+  perform dblink_send_query('t197b', 'begin; ' || set_who || $q$ insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+    ('01970000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'progress', 'sent', 'Phone B', 30000, now()); commit;$q$);
+  perform pg_sleep(0.3);
+  perform tst.ok(dblink_is_busy('t197b') = 1, 'T197 (the second phone waits on the job)');
+  perform dblink_exec('t197a', 'commit');
+  -- the second one goes on once the first is in: it is refused (over the contract); its connection is dropped (rolled back)
+  for i in 1..100 loop exit when dblink_is_busy('t197b') = 0; perform pg_sleep(0.05); end loop;
+  perform dblink_disconnect('t197a');
+  perform dblink_disconnect('t197b');
+  select count(*) into n from public.invoices where job_id = 'e1970000-0000-4000-8000-000000000002' and status = 'sent';
+  perform tst.ok(n = 1, format('T197 two phones at once: one invoice of the two passes (%s)', n));
+end $$;
+-- (в) the visit's payment into the office's draft final above the rest: billed as the rest, paid
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'progress', 'sent', 'Progress', 30000, 30000, now());
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01970000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'final', 'draft', 'Final balance', 30000, 30000);
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, status) values ('f1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000003', now(), 'scheduled');
+update public.visits set status = 'on_site' where id = 'f1970000-0000-4000-8000-000000000001';
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1970000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(((public.record_visit_payment('f1970000-0000-4000-8000-000000000001', '01970000-0000-4000-8000-0000000000c1', '21970000-0000-4000-8000-0000000000c1', 'cash', null, 20000) ->> 'amount_cents')::bigint) = 20000,
+              'T197 the money in hand ($200) is taken, not refused for the office''s draft of $300');
+:as_super
+select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 20000 from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
+              'T197 the draft final is billed as the rest of the contract ($200) and paid');
+\echo 'T197 the invoices of a contract: never above it; a wrong one is voided by the owner, without payments, with a reason'
 
 \echo 'ALL TESTS PASSED'

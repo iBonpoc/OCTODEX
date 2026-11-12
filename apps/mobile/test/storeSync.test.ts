@@ -1841,3 +1841,37 @@ describe("unit:storeSync — an invoice above the contract is refused before any
     expect((valueOf(r) as unknown as V).db.invoices.filter((i) => i.jobId === "j1")).toHaveLength(before + 1);
   });
 });
+
+describe("unit:storeSync — voiding an invoice (В1-5, #1107)", () => {
+  type V = {
+    db: { invoices: { id: string; jobId: string; customerId: string; totalCents: number; paidCents: number }[]; voidInvoices?: { id: string; voidReason?: string }[]; jobs: { id: string; amountCents: number }[] };
+    voidInvoice: (id: string, r: string) => string | null; issueInvoice: (j: string, k: "progress", a: number, t: string) => (() => void) | null; setRole: (r: string) => void;
+  };
+  it("the director voids a wrong invoice: it leaves every sum, and the right one can be issued", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo, the director
+    await settle();
+    let v = valueOf(r) as unknown as V;
+    const job = v.db.jobs.find((j) => j.id === "j6")!; // no invoices yet
+    const wrong = v.issueInvoice("j6", "progress", job.amountCents, "Progress payment");
+    expect(wrong).toBeTypeOf("function");
+    await settle();
+    v = valueOf(r) as unknown as V;
+    const inv = v.db.invoices.find((i) => i.jobId === "j6")!;
+    expect(v.issueInvoice("j6", "progress", 100, "Progress payment")).toBeNull(); // the contract is full
+    expect(v.voidInvoice(inv.id, "")).toBe("reason");
+    expect(v.voidInvoice(inv.id, "Wrong amount")).toBeNull();
+    await settle();
+    v = valueOf(r) as unknown as V;
+    expect(v.db.invoices.some((i) => i.id === inv.id)).toBe(false);
+    expect(v.db.voidInvoices?.find((i) => i.id === inv.id)?.voidReason).toBe("Wrong amount");
+    // the sums: the contract is free again, the client owes nothing for it
+    const { contractStatement, clientMoney } = await import("@octo/estimating-engine");
+    expect(contractStatement(job.amountCents, v.db.invoices.filter((i) => i.jobId === "j6")).toInvoice).toBe(job.amountCents);
+    expect(clientMoney(v.db.invoices.filter((i) => i.customerId === inv.customerId), []).owesCents).toBe(
+      clientMoney(v.db.invoices.filter((i) => i.customerId === inv.customerId && i.jobId !== "j6"), []).owesCents,
+    );
+    expect(v.issueInvoice("j6", "progress", 1000, "Progress payment")).toBeTypeOf("function");
+    // already void: nothing more
+    expect(v.voidInvoice(inv.id, "again")).toBe("gone");
+  });
+});

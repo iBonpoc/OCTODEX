@@ -28,6 +28,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     notices: d.notices ?? [],
     notes: d.notes ?? [],
     payments: d.payments ?? [],
+    ...invoicesApart(d),
     company: d.company ?? null,
     sources,
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
@@ -53,6 +54,18 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
       (d.customers ?? []).map((c) => (c.sourceId ? c : { ...c, sourceId: sourceIdOf(c as Legacy) })),
       mode,
     ),
+  };
+}
+
+/** В1-5 (#1107): a voided invoice never stays among the live ones (an older record, a copy from the server) — it moves
+ *  to voidInvoices, so no sum counts it; an old record without voidInvoices gets [] */
+function invoicesApart(d: DB): Pick<DB, "invoices" | "voidInvoices"> {
+  const all = d.invoices ?? [];
+  const moved = all.filter((i) => i.status === "void");
+  const kept = Array.isArray(d.voidInvoices) ? d.voidInvoices : [];
+  return {
+    invoices: moved.length ? all.filter((i) => i.status !== "void") : all,
+    voidInvoices: moved.length ? [...kept.filter((k) => !moved.some((m) => m.id === k.id)), ...moved] : kept,
   };
 }
 

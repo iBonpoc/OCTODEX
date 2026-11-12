@@ -55,6 +55,20 @@ describe("old saved data after an app update", () => {
     expect(cloud.customers.find((c) => c.id === "c1")!.number).toBeUndefined();
     expect(peopleOf(cloud.customers.find((c) => c.id === "c1")!)).toHaveLength(1);
   });
+  it("В1-5: an old record without voidInvoices gets []", () => {
+    const d = makeSeed() as unknown as Record<string, unknown>;
+    delete d.voidInvoices;
+    expect(normalizeDB(d as unknown as DB, "cloud").voidInvoices).toEqual([]);
+  });
+  it("В1-5: a voided invoice among the live ones (an old record, a server copy) moves to voidInvoices — no sum sees it", () => {
+    const d = makeSeed();
+    const i1 = d.invoices[0]!;
+    const n = normalizeDB({ ...d, invoices: d.invoices.map((i) => (i.id === i1.id ? { ...i, status: "void" as const, voidReason: "wrong" } : i)) }, "cloud");
+    expect(n.invoices.some((i) => i.id === i1.id)).toBe(false);
+    expect(n.voidInvoices).toEqual([{ ...i1, status: "void", voidReason: "wrong" }]);
+    // already apart and copied again: one card, not two
+    expect(normalizeDB({ ...n, invoices: [...n.invoices, n.voidInvoices![0]!] }, "cloud").voidInvoices).toHaveLength(1);
+  });
   it("today's data is left as is", () => {
     const d = makeSeed();
     expect(normalizeDB(d, "demo")).toEqual(d);

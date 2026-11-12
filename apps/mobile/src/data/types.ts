@@ -919,6 +919,10 @@ export interface Invoice {
   /** the invoice's tax and its mode (server: tax_cents, tax_mode) — a refund's tax part (step 20д, PRD 19 §7.9) */
   taxCents?: number;
   taxMode?: "included_in_price" | "added_on_top" | "tax_inclusive_display" | "exempt";
+  /** В1-5 (#1107): voided (server: status void, void_reason, voided_at) — such an invoice lives in DB.voidInvoices */
+  status?: "void";
+  voidReason?: string;
+  voidedAt?: string;
 }
 
 /** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */
@@ -1076,7 +1080,11 @@ export interface DB {
   visits: Visit[];
   leads: Lead[];
   estimates: Estimate[];
+  /** live invoices only (sent; a draft is not loaded): every sum reads these */
   invoices: Invoice[];
+  /** В1-5 (#1107): voided invoices — apart, so no sum, «к оплате», «собрано» or «Требует внимания» ever counts them;
+   *  shown only as «Аннулирован» cards on the job's statement and the client's invoices (absent in old data → []) */
+  voidInvoices?: Invoice[];
   expenses: Expense[];
   catalog: CatalogItem[];
   /** spec 36: the company's suppliers (absent in old saved data → []; a tech and sales read none) */

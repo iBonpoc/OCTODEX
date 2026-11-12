@@ -36,7 +36,7 @@ export function stuckKindKey(kind: string): DictKey {
 }
 
 /** ops that carry money: when one of them leaves with a discarded change, the confirmation says so (review #259) */
-export const MONEY_KINDS: ReadonlySet<string> = new Set(["payment.record", "visit.pay", "estimate.deposit", "invoice.issue", "invoice.pay", "expense.add"]);
+export const MONEY_KINDS: ReadonlySet<string> = new Set(["payment.record", "visit.pay", "estimate.deposit", "invoice.issue", "invoice.pay", "invoice.void", "expense.add"]);
 
 /**
  * What leaves with a discarded change, for its confirmation (rule 5): each kind of change and how many, in the order

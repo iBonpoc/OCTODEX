@@ -271,3 +271,16 @@ describe("repo: the invoices of a contract (#865 review З3, З5)", () => {
     expect(db.jobs.find((j) => j.id === "j1")?.contractTaxCents).toBeUndefined();
   });
 });
+
+describe("repo: a voided invoice (В1-5, #1107)", () => {
+  it("goes apart with its reason; the live list and its sums never see it", async () => {
+    rows.invoices = [
+      { id: "iv-live", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "sent", total_cents: 1000, paid_cents: 0, sent_at: "2026-11-05T10:00:00Z" },
+      { id: "iv-void", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "void", total_cents: 9000, paid_cents: 0, sent_at: "2026-11-05T09:00:00Z", void_reason: "Wrong amount", voided_at: "2026-11-05T09:30:00Z" },
+      { id: "iv-draft", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "draft", total_cents: 500, paid_cents: 0 },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id)).toEqual(["iv-live"]);
+    expect(db.voidInvoices).toEqual([expect.objectContaining({ id: "iv-void", status: "void", voidReason: "Wrong amount", voidedAt: "2026-11-05T09:30:00Z", totalCents: 9000 })]);
+  });
+});
