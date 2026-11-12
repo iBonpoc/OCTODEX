@@ -624,7 +624,10 @@ export default function DrawScreen() {
   const [dropAt, setDropAt] = useState<ToolbarPlace | null>(null);
   const gripPan = usePanGesture({
     runOnJS: true,
-    onActivate: () => setGripping(true),
+    onActivate: () => {
+      setGripping(true);
+      haptics.light(); // picked up (DS §15.6, #1159)
+    },
     onUpdate: (e) => {
       setGripAt([e.translationX, e.translationY]);
       setDropAt(placeAt(e.absoluteX, e.absoluteY, win.width, win.height));
@@ -638,6 +641,7 @@ export default function DrawScreen() {
       setGripping(false);
       if (e.canceled) return;
       const p = placeAt(e.absoluteX, e.absoluteY, win.width, win.height);
+      if (p !== place) haptics.medium(); // set down on another edge — only when it moved (DS §15.6)
       setPlace(p);
       void saveToolbarPlace(p);
     },

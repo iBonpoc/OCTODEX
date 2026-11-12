@@ -106,6 +106,19 @@ describe("design system: components", () => {
     expect(early).toEqual([]);
     expect(flipKey).toEqual([]);
   });
+  it("the Gutters toolbar's grip is a drag: lift = light, set down on another edge = medium (DS §15.6, #1159)", () => {
+    const src = readFileSync(join(ROOT, "modules", "gutters", "draw", "DrawScreen.tsx"), "utf8");
+    const grip = src.slice(src.indexOf("const gripPan = usePanGesture"), src.indexOf("const pickPlace"));
+    expect(grip).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
+    expect(grip).toMatch(/onDeactivate:[\s\S]*?haptics\.medium\(\)/);
+    // not on every move, and nothing when it stays at its edge
+    expect(grip.slice(grip.indexOf("onUpdate:"), grip.indexOf("onFinalize:"))).not.toMatch(/haptics\./);
+    expect(grip).toMatch(/if \(p !== place\) haptics\.medium\(\)/);
+  });
+  it("the canvas's own pan and pinch (CanvasView) are navigation of the view, not dragging a thing: no haptics, no Draggable (the exception is written here)", () => {
+    const src = readFileSync(join(ROOT, "modules", "gutters", "canvas", "CanvasView.tsx"), "utf8");
+    expect(src).not.toMatch(/haptics/);
+  });
   it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
     const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");
     expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
