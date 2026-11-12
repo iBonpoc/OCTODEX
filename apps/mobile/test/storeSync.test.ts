@@ -1421,7 +1421,7 @@ describe("unit:storeSync — two people one after the other on one phone (#864, 
     await wait(50);
     await settle();
     expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
-    expect(Array.isArray(valueOf(r).db.visits) && Array.isArray(valueOf(r).db.expenses)).toBe(true);
+    expect(Array.isArray((valueOf(r).db as unknown as { visits?: unknown; expenses?: unknown }).visits) && Array.isArray((valueOf(r).db as unknown as { visits?: unknown; expenses?: unknown }).expenses)).toBe(true);
     server.loads[0]!.resolve(secret());
     await settle();
     await wait(1800);
