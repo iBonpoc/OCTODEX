@@ -13,7 +13,7 @@ import type { RequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { RowView } from "@/ui/surfaces";
 import { shownQty, lineMarks } from "@/features/estimateDoc";
-import { rowFigures, rowSummary } from "@/features/estimateRows";
+import { canHide, isHidden, rowFigures, rowSummary, type CatalogRefusal } from "@/features/estimateRows";
 import { LineMarks } from "@/features/LineMarks";
 
 /**
@@ -37,6 +37,10 @@ export interface RowApi {
   action: (id: string, a: RowAction) => void;
   /** a number field of the row holds text that is not a number (the line itself keeps the last right value) */
   bad: (id: string, field: "qty" | "price" | "cost", bad: boolean) => void;
+  /** «Сохранить в каталог» on / off for the row */
+  wantCatalog: (id: string, on: boolean) => void;
+  /** «Открыть в каталоге ›» */
+  openInCatalog: (id: string) => void;
 }
 
 export interface LineRowProps {
@@ -53,6 +57,10 @@ export interface LineRowProps {
   checkPrice?: boolean;
   /** a signed estimate: the row does not open (DS §8.3) */
   locked?: boolean;
+  /** the open row's place in the catalog (not for the tech): in it already, or the choice to save it and what the engine says */
+  catalog?: { linked: boolean; want: boolean; offer: "offered" | "later" | "refused"; reason?: CatalogRefusal };
+  /** the estimate came from a template / a module with this line hidden and priced: it was shown again */
+  unhiddenMark?: boolean;
 }
 
 export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
@@ -109,6 +117,16 @@ function LineRowView(p: LineRowProps) {
                 {money(p.total)}
               </T>
               {l.optional ? <StatusChip status="neutral" label={t("ue.addonChip")} /> : null}
+              {isHidden(l) ? (
+                <View testID={`est-hidden-${l.id}`}>
+                  <StatusChip status="neutral" label={t("est.row.hidden")} />
+                </View>
+              ) : null}
+              {p.unhiddenMark ? (
+                <View testID={`est-unhidden-${l.id}`}>
+                  <StatusChip status="info" label={t("est.row.unhiddenMark")} />
+                </View>
+              ) : null}
             </View>
           </RowView>
           <LineMarks marks={marks} lineId={l.id} />
@@ -200,6 +218,38 @@ function LineRowView(p: LineRowProps) {
           ) : null}
         </View>
       ) : null}
+      {p.catalog ? (
+        p.catalog.linked ? (
+          <View testID={`est-open-catalog-${l.id}`}>
+            <Press onPress={() => p.api.openInCatalog(l.id)} visibleHeight={size.rowMin} accessibilityRole="link">
+              <RowView style={{ minHeight: size.rowMin }}>
+                <T v="body" style={{ flex: 1 }}>
+                  {t("est.row.openInCatalog")}
+                </T>
+                <Icon name="chevronRight" s={size.iconSm} color={c.mut} />
+              </RowView>
+            </Press>
+          </View>
+        ) : (
+          <View testID={`est-save-catalog-${l.id}`} style={{ gap: space[1] }}>
+            <RowView style={{ minHeight: size.hitMin }}>
+              <T v="body" tone={p.catalog.offer === "refused" ? "mut" : "ink"} style={{ flex: 1 }}>
+                {t("est.row.saveCatalog")}
+              </T>
+              <Toggle label={t("est.row.saveCatalog")} on={p.catalog.want && p.catalog.offer !== "refused"} onChange={(on) => p.catalog?.offer !== "refused" && p.api.wantCatalog(l.id, on)} />
+            </RowView>
+            {p.catalog.offer === "refused" && p.catalog.reason ? (
+              <T v="caption" tone="mut">
+                {t(`est.row.refuse.${p.catalog.reason}` as DictKey)}
+              </T>
+            ) : p.catalog.want && p.catalog.offer === "later" ? (
+              <T v="caption" tone="mut">
+                {t("est.row.catalogNeed")}
+              </T>
+            ) : null}
+          </View>
+        )
+      ) : null}
       <View>
         <Press onPress={() => setMore((m) => !m)} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityState={{ expanded: more }} testID={`est-more-${l.id}`}>
           <RowView style={{ minHeight: size.rowMin }}>
@@ -210,12 +260,27 @@ function LineRowView(p: LineRowProps) {
           </RowView>
         </Press>
         {more ? (
-          <RowView style={{ minHeight: size.hitMin }}>
-            <T v="body" style={{ flex: 1 }}>
-              {t("ue.addon")}
-            </T>
-            <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
-          </RowView>
+          <>
+            <RowView style={{ minHeight: size.hitMin }}>
+              <T v="body" style={{ flex: 1 }}>
+                {t("ue.addon")}
+              </T>
+              <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
+            </RowView>
+            <View testID={`est-hide-${l.id}`} style={{ gap: space[1] }}>
+              <RowView style={{ minHeight: size.hitMin }}>
+                <T v="body" tone={isHidden(l) || canHide(l) ? "ink" : "mut"} style={{ flex: 1 }}>
+                  {t("est.row.hide")}
+                </T>
+                <Toggle label={t("est.row.hide")} on={isHidden(l)} onChange={(on) => (on ? canHide(l) && p.api.change(l.id, { clientVisible: false }) : p.api.change(l.id, { clientVisible: undefined }))} />
+              </RowView>
+              {!canHide(l) ? (
+                <T v="caption" tone="mut">
+                  {t("est.row.hideNeedZero")}
+                </T>
+              ) : null}
+            </View>
+          </>
         ) : null}
       </View>
       <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />

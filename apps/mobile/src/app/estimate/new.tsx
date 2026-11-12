@@ -7,14 +7,14 @@ import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
-import type { EstimateDoc, EstimateTemplate } from "@/data/types";
+import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import { canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
-import { clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField } from "@/features/fields";
@@ -78,6 +78,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts, !!given.module) : null));
   const [templateId, setTemplateId] = useState<string | undefined>(draft ? draft.templateId : given?.id);
   const [checkPrice, setCheckPrice] = useState<string[]>(draft?.checkPrice ?? fromTpl?.checkPrice ?? []);
+  // lines that were hidden and came priced (a template line took the catalog price): shown to the client again — the mark stays until the row is opened
+  const [unhiddenIds, setUnhiddenIds] = useState<string[]>(() => fromTpl?.unhidden ?? []);
+  // «Сохранить в каталог» chosen on rows (by line id); done when the row folds with a right line
+  const [wantCatalog, setWantCatalog] = useState<string[]>([]);
   const [startOpen, setStartOpen] = useState(() => !existing && !draft && !given && !tplEdit && templates.length > 0);
   const [doc, setDoc] = useState<EstimateDoc>(() =>
     existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
@@ -138,6 +142,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       setCur(Math.max(0, r.doc.options.findIndex((o) => o.recommended)));
       setTemplateId(x.id);
       setCheckPrice(r.checkPrice);
+      setUnhiddenIds(r.unhidden);
       if (!title.trim()) setTitle(x.name);
       toast.show(r.checkPrice.length ? t("est.tpl.checkPrice", { n: r.checkPrice.length }) : t("est.tpl.applied", { name: x.name }));
     }
@@ -157,7 +162,27 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const setOption = (fn: (o: CustomOption) => CustomOption) =>
     setDoc((d) => ({ ...d, options: d.options.map((o) => (o.id === option.id ? fn(o) : o)) }));
   const setSettings = (patch: Partial<EstimateDoc["settings"]>) => setDoc((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
-  const patchLine = (id: string, patch: Partial<CustomLine>) => setOption((o) => ({ ...o, lines: o.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+  const patchLine = (id: string, patch: Partial<CustomLine>) => {
+    // a price typed into a hidden line shows it again, and the person is told (the founder's #1100); no «Отменить»: erase the price and hide again
+    const was = option.lines.find((l) => l.id === id);
+    if (was && applyPatch(was, patch).unhidden) toast.show(t("est.row.unhiddenToast"));
+    setOption((o) => ({ ...o, lines: o.lines.map((l) => (l.id === id ? applyPatch(l, patch).line : l)) }));
+    if (unhiddenIds.includes(id)) setUnhiddenIds((ids) => ids.filter((x) => x !== id));
+  };
+  // the row folds: «Сохранить в каталог» was chosen and the line is right → it goes to the catalog, the row gets the link
+  const commitCatalog = (l: CustomLine) => {
+    if (!wantCatalog.includes(l.id)) return;
+    const offer = catalogOffer(l, seeCosts);
+    if (offer.state !== "offered") return;
+    const item: CatalogItem = { id: uid(), ...offer.item };
+    const undoSave = store.saveCatalogItem(item);
+    setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === l.id ? { ...x, catalogItemId: item.id } : x)) }));
+    setWantCatalog((ids) => ids.filter((x) => x !== l.id));
+    toast.show(t("est.row.catalogAdded"), () => {
+      undoSave();
+      setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === l.id && x.catalogItemId === item.id ? { ...x, catalogItemId: undefined } : x)) }));
+    });
+  };
   // «Отменить» of an action takes back THAT action only (a row edited since stays as edited)
   const removeLine = (id: string) => {
     const index = option.lines.findIndex((l) => l.id === id);
@@ -191,6 +216,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const what = leaveDecision(l, problems.length, quiet);
     if (what === "remove") setOption((o) => ({ ...o, lines: dropLine(o.lines, openId) }));
     if (what === "stay-loud") rowForm.submit(problems, () => {});
+    if (what === "fold") commitCatalog(l);
     if (what === "remove" || what === "fold") setOpenId(null);
     return what === "remove" || what === "fold";
   };
@@ -257,8 +283,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     toast.show(t("est.row.duplicated"), () => setOption((o) => ({ ...o, lines: dropLine(o.lines, d.copyId) })));
   };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
-  const latest = useRef({ openRow, leaveRow, patchLine, rowAction });
-  latest.current = { openRow, leaveRow, patchLine, rowAction };
+  const openInCatalog = (id: string) => {
+    const cid = option.lines.find((l) => l.id === id)?.catalogItemId;
+    if (cid) router.push(`/catalog/${cid}`);
+  };
+  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog });
+  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog };
   const rowApi = useMemo<RowApi>(
     () => ({
       open: (id) => latest.current.openRow(id),
@@ -266,6 +296,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       change: (id, patch) => latest.current.patchLine(id, patch),
       action: (id, a) => latest.current.rowAction(id, a),
       bad: (id, field, bad) => void (bad ? badFields.current.add(`${id}:${field}`) : badFields.current.delete(`${id}:${field}`)),
+      wantCatalog: (id, on) => setWantCatalog((ids) => (on ? [...ids.filter((x) => x !== id), id] : ids.filter((x) => x !== id))),
+      openInCatalog: (id) => latest.current.openInCatalog(id),
     }),
     [],
   );
@@ -337,6 +369,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     router.replace("/estimate/templates");
   };
 
+  // the open row's place in the catalog (not for the tech): linked, or the choice and what the engine says of it
+  const catalogStateOf = (l: CustomLine) => {
+    const linked = !!l.catalogItemId && db.catalog.some((x) => x.id === l.catalogItemId);
+    const offer = catalogOffer(l, seeCosts);
+    return { linked, want: wantCatalog.includes(l.id), offer: offer.state, reason: offer.state === "refused" ? offer.reason : undefined };
+  };
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
@@ -429,6 +467,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   form={rowForm}
                   api={rowApi}
                   locked={signed}
+                  unhiddenMark={unhiddenIds.includes(l.id)}
+                  catalog={openId === l.id && store.role !== "tech" ? catalogStateOf(l) : undefined}
                   autoFocus={focusRow?.id === l.id ? focusRow.field : undefined}
                   checkPrice={checkPrice.includes(l.id)}
                 />

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine } from "@octo/estimating-engine";
-import { clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowFigures, rowProblems, rowSummary } from "../src/features/estimateRows";
+import type { CatalogItem } from "../src/data/types";
+import { catalogUnitPrice } from "../src/features/estimateDoc";
+import { applyPatch, canHide, catalogOffer, clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowFigures, rowProblems, rowSummary } from "../src/features/estimateRows";
 
 const line = (over: Partial<CustomLine> = {}): CustomLine => ({ id: "l1", name: "Gutter 5in", group: "material", quantity: "120", unit: "LF", unitPriceCents: 850, ...over });
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -113,5 +115,56 @@ describe("the open row is asked to close (DS §8.3)", () => {
   it("a wrong row stays; it speaks (errors, scroll, vibration) only when the ask is not a finger starting to scroll", () => {
     expect(leaveDecision(typed, 2, false)).toBe("stay-loud");
     expect(leaveDecision(typed, 2, true)).toBe("stay-quiet");
+  });
+});
+
+describe("«Скрыть от клиента» (Р3)", () => {
+  it("only a line priced $0 may be hidden", () => {
+    expect(canHide(line({ unitPriceCents: 0 }))).toBe(true);
+    expect(canHide(line({ unitPriceCents: 1 }))).toBe(false);
+  });
+  it("a price typed into a hidden line shows it again", () => {
+    const hidden = line({ unitPriceCents: 0, clientVisible: false });
+    const r = applyPatch(hidden, { unitPriceCents: 500 });
+    expect(r.unhidden).toBe(true);
+    expect(r.line.clientVisible).toBeUndefined();
+    expect(r.line.unitPriceCents).toBe(500);
+  });
+  it("a price of $0 or another field keeps it hidden; a visible line is never touched", () => {
+    const hidden = line({ unitPriceCents: 0, clientVisible: false });
+    expect(applyPatch(hidden, { name: "x" })).toMatchObject({ unhidden: false, line: { clientVisible: false } });
+    expect(applyPatch(line({ unitPriceCents: 100 }), { unitPriceCents: 200 }).unhidden).toBe(false);
+  });
+});
+
+describe("«Сохранить в каталог» (Р1, К1)", () => {
+  it("a service / labor goes as the line says", () => {
+    const o = catalogOffer(line({ group: "labor", name: " Install ", unit: "hr", unitPriceCents: 6500, description: "two people" }), true);
+    expect(o).toEqual({ state: "offered", item: { kind: "labor", name: "Install", unit: "hr", priceCents: 6500, description: "two people" } });
+  });
+  it("a row that is not finished waits (no name, a wrong price)", () => {
+    expect(catalogOffer(line({ name: " " }), true)).toEqual({ state: "later" });
+    expect(catalogOffer(line({ unitPriceCents: -1 }), true)).toEqual({ state: "later" });
+  });
+  it("a material: the price in the catalog is the line's price (a grid of costs and prices)", () => {
+    let n = 0;
+    for (const cost of [1, 2, 7, 99, 100, 333, 1000, 1213, 4999, 10000]) {
+      for (const factor of [1, 1.0001, 1.05, 1.3333, 2, 3.5, 7, 10.99, 11]) {
+        const price = Math.round(cost * factor);
+        const o = catalogOffer(line({ group: "material", unitCostCents: cost, unitPriceCents: price }), true);
+        if (o.state !== "offered") continue;
+        n += 1;
+        expect(catalogUnitPrice({ id: "x", ...o.item } as CatalogItem), `cost ${cost} price ${price}`).toBe(price);
+      }
+    }
+    expect(n).toBeGreaterThan(50);
+  });
+  it("a material is refused with the reason: no cost, below the cost, above 11 ×, no cost for who does not see costs", () => {
+    const m = (over: Partial<CustomLine>, costs = true) => catalogOffer(line({ group: "material", unitCostCents: 1000, unitPriceCents: 1500, ...over }), costs);
+    expect(m({ unitCostCents: undefined })).toEqual({ state: "refused", reason: "noCost" });
+    expect(m({}, false)).toEqual({ state: "refused", reason: "noCost" });
+    expect(m({ unitPriceCents: 900 })).toEqual({ state: "refused", reason: "belowCost" });
+    expect(m({ unitPriceCents: 12000 })).toEqual({ state: "refused", reason: "aboveMax" });
+    expect(m({}).state).toBe("offered");
   });
 });

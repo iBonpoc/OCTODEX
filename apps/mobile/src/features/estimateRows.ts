@@ -2,7 +2,8 @@
  * The pure part of the estimate's row in place (DS §8.3, spec 2026-11-12-estimate-editor Р1–Р2): what a line says when it
  * is folded, what is wrong in it, and the replace / duplicate of a line. Money is the engine's (rule 8).
  */
-import { computeCustomOption, lineProfit, marginPctOf, parseQty, type CustomLine } from "@octo/estimating-engine";
+import { catalogMarkupFor, computeCustomOption, lineProfit, marginPctOf, parseQty, type CustomLine } from "@octo/estimating-engine";
+import type { CatalogItem } from "@/data/types";
 import { DEFAULT_SETTINGS, uid } from "./estimateDoc";
 
 /** «120 LF × $8.50» — the line under the name of a folded row */
@@ -108,4 +109,45 @@ export function leaveDecision(l: Pick<CustomLine, "name" | "unitPriceCents" | "d
   if (isBlank(l)) return "remove";
   if (problems === 0) return "fold";
   return quiet ? "stay-quiet" : "stay-loud";
+}
+
+/* ---- «Скрыть от клиента» (Р3): only a line priced $0 may be hidden ---- */
+
+export const canHide = (l: Pick<CustomLine, "unitPriceCents">): boolean => l.unitPriceCents === 0;
+export const isHidden = (l: Pick<CustomLine, "clientVisible">): boolean => l.clientVisible === false;
+
+/** a patch on a line: a price typed into a hidden line shows it again (the founder's #1100: a hidden line never changes the client's total) */
+export function applyPatch(l: CustomLine, patch: Partial<CustomLine>): { line: CustomLine; unhidden: boolean } {
+  const next = { ...l, ...patch } as CustomLine;
+  if (isHidden(next) && next.unitPriceCents !== 0) {
+    const { clientVisible: _v, ...rest } = next;
+    return { line: rest, unhidden: true };
+  }
+  return { line: next, unhidden: false };
+}
+
+/* ---- «Сохранить в каталог» (Р1, К1): the thing the row describes, or why not ---- */
+
+export type CatalogRefusal = "noCost" | "belowCost" | "aboveMax" | "noExact";
+export type CatalogOffer =
+  /** the line is right and can go: this is the catalog item (without id) */
+  | { state: "offered"; item: Omit<CatalogItem, "id"> }
+  /** the row is not finished (no name, a wrong price): the choice waits, the hint says what to write */
+  | { state: "later" }
+  /** a material the catalog cannot hold in its own terms: the toggle is pale, the reason under it */
+  | { state: "refused"; reason: CatalogRefusal };
+
+/**
+ * A service / labor: `{ kind, name, description, unit, priceCents }` as the line says. A material: the catalog computes its
+ * price (cost × (1 + vendor tax) × (1 + markup)), so the line's price is written as cost + the whole-bps markup that gives
+ * exactly that price (the engine's `catalogMarkupFor`); no cost, a price below it, above 11 × it, or no exact markup — refused.
+ * The price of the saved item is always the line's own (tested over a grid of costs and prices).
+ */
+export function catalogOffer(l: CustomLine, costsVisible: boolean): CatalogOffer {
+  if (l.name.trim() === "" || !Number.isFinite(l.unitPriceCents) || l.unitPriceCents < 0) return { state: "later" };
+  const base = { kind: l.group, name: l.name.trim(), unit: l.unit, ...(l.description?.trim() ? { description: l.description.trim() } : {}) };
+  if (l.group !== "material") return { state: "offered", item: { ...base, priceCents: l.unitPriceCents } };
+  const m = catalogMarkupFor(costsVisible ? l.unitCostCents : undefined, l.unitPriceCents);
+  if (!m.ok) return { state: "refused", reason: m.reason };
+  return { state: "offered", item: { ...base, priceCents: l.unitPriceCents, costCents: l.unitCostCents!, vendorTaxBps: 0, markupBps: m.markupBps } };
 }
