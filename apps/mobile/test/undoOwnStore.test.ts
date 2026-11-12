@@ -22,11 +22,12 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 const auth = { ready: true, session: null as object | null, company: null as object | null, userId: null as string | null };
 vi.mock("@/cloud/auth", () => ({ useAuth: () => auth }));
-type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void };
+type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void };
 const deferred = <T,>(): Deferred<T> => {
   let resolve!: (v: T) => void;
-  const promise = new Promise<T>((a) => (resolve = a));
-  return { promise, resolve };
+  let reject!: (e: unknown) => void;
+  const promise = new Promise<T>((a, b) => ((resolve = a), (reject = b)));
+  return { promise, resolve, reject };
 };
 const server = { loads: [] as Deferred<unknown>[], sends: [] as { op: { k: string } & Record<string, unknown>; d: Deferred<void> }[] };
 vi.mock("@/cloud/repo", async (orig) => ({
@@ -54,7 +55,7 @@ vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), back
 import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
-import type { CatalogItem, DB, EstimateDoc, Supplier } from "../src/data/types";
+import type { CatalogItem, DB, EstimateDoc, EstimateTemplate, Supplier } from "../src/data/types";
 import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
 
 type Value = {
@@ -68,6 +69,7 @@ type Value = {
   refresh: () => Promise<void>;
   saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: EstimateDoc }) => () => boolean;
   recordPayment: (invoiceId: string, amountCents: number, method: string) => () => boolean;
+  [k: string]: unknown;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -97,6 +99,18 @@ async function signedIn(over: Partial<DB> = {}, role = "owner"): Promise<Root<P>
   expect(valueOf(r).mode).toBe("cloud");
   return r;
 }
+
+/** the demo: no session — the seed company on the phone */
+async function demo(): Promise<Root<P>> {
+  const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+  await settle();
+  expect(valueOf(r).mode).toBe("demo");
+  return r;
+}
+type Fn = (...a: unknown[]) => unknown;
+const call = (r: Root<P>, name: string, ...a: unknown[]) => (valueOf(r)[name] as Fn)(...a);
+/** what an action returns → its «Отменить» */
+const undoOf = (x: unknown): (() => unknown) => (typeof x === "function" ? (x as () => unknown) : (x as { undo: () => unknown }).undo);
 
 beforeEach(() => {
   storage.clear();
@@ -176,5 +190,135 @@ describe("unit:undoOwnStore — #1193 п.6", () => {
     await settle();
     await tick();
     expect(server.sends.filter((x) => x.op.k === "payment.record").length).toBe(2);
+  });
+  it("an action the server dropped (a template changed on another phone first) → «Отменить»: nothing to take back, the toast just closes — not «too late» (remark 2)", async () => {
+    const settings = { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: false, labor: false, material: false } }, deposit: { kind: "none" as const } };
+    const tpl = { id: "tpl-1", name: "Visit (test)", rowVersion: 3, doc: { options: [{ id: "o", name: "A", lines: [{ id: "l", name: "Call (test)", group: "service", quantity: "1", unit: "ea", unitPriceCents: 100 }] }], settings } } as unknown as EstimateTemplate;
+    const r = await signedIn({ estimateTemplates: [tpl] });
+    const undo = call(r, "saveEstimateTemplate", { ...tpl, name: "E1 (test)" }) as () => boolean | undefined;
+    await tick();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    server.sends.find((x) => x.op.k === "est.template.save")!.d.reject(new PermanentError("the template was changed on another phone", 409, "40001", "row_version_conflict"));
+    await settle();
+    expect(undo()).toBeUndefined();
+  });
+});
+
+describe("unit:undoOwnStore — «Отменить» of several actions together: all or none (remark 1, DS §15.2)", () => {
+  it("a client's edit (name + address) → the server changed the address → «Отменить»: nothing goes back, the name stays new", async () => {
+    const r = await signedIn();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const undos = [call(r, "updateCustomer", c.id, { name: "Renamed (test)" }), call(r, "updateProperty", prop.id, { address: "2 New St (test)", city: prop.city })];
+    const undo = call(r, "undoTogether", undos) as () => boolean | undefined;
+    // the queue sends one at a time: both answered
+    for (let k = 0; k < 2; k++) {
+      await tick();
+      server.sends.splice(0).forEach((x) => x.d.resolve());
+      await settle();
+    }
+    // the server's fresh copy: someone else changed the address again
+    const p = valueOf(r).refresh();
+    await settle();
+    const fresh = company();
+    server.loads.splice(0).forEach((d) =>
+      d.resolve({ ...fresh, customers: fresh.customers.map((x) => (x.id === c.id ? { ...x, name: "Renamed (test)" } : x)), properties: fresh.properties.map((x) => (x.id === prop.id ? { ...x, address: "3 Their St (test)" } : x)) }),
+    );
+    await p;
+    await settle();
+    expect(undo()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+    expect(valueOf(r).db.properties.find((x) => x.id === prop.id)!.address).toBe("3 Their St (test)");
+  });
+  it("the same edit, nothing changed since → «Отменить»: both go back, neither op is sent", async () => {
+    const r = await signedIn();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const undos = [call(r, "updateCustomer", c.id, { name: "Renamed (test)" }), call(r, "updateProperty", prop.id, { address: "2 New St (test)", city: prop.city })];
+    await settle();
+    expect((call(r, "undoTogether", undos) as () => unknown)()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
+    expect(valueOf(r).db.properties.find((x) => x.id === prop.id)!.address).toBe(prop.address);
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "customer.update" || x.op.k === "property.update")).toEqual([]);
+  });
+  it("one part already taken back on its own → «Отменить» of all: nothing more (false), the other part stays", async () => {
+    const r = await signedIn();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const a = call(r, "updateCustomer", c.id, { name: "Renamed (test)" }) as () => boolean;
+    const b = call(r, "updateProperty", prop.id, { address: "2 New St (test)", city: prop.city }) as () => boolean;
+    await settle();
+    expect(b()).toBe(true);
+    await settle();
+    expect((call(r, "undoTogether", [a, b]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+  });
+});
+
+describe("unit:undoOwnStore — the demo: what an action adds is what the store shows (the director's Б3)", () => {
+  it("a lead won → «Отменить»: the lead is not won, its client and address are gone (red before: the client had no number)", async () => {
+    const r = await demo();
+    const lead = valueOf(r).db.leads.find((l) => !l.customerId && l.status !== "won")!;
+    const before = { customers: valueOf(r).db.customers.length, properties: valueOf(r).db.properties.length };
+    const undo = call(r, "convertLead", lead.id, "Signed (test)") as () => boolean;
+    await settle();
+    const won = valueOf(r).db.leads.find((l) => l.id === lead.id)!;
+    expect(won.status).toBe("won");
+    expect(valueOf(r).db.customers.find((c) => c.id === won.customerId)?.number).toMatch(/^CLT-\d{4}$/);
+    expect(undo()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.leads.find((l) => l.id === lead.id)!.status).toBe(lead.status);
+    expect(valueOf(r).db.customers.length).toBe(before.customers);
+    expect(valueOf(r).db.properties.length).toBe(before.properties);
+  });
+  it("an estimate for a lead without a client (lead.prospect) → «Отменить»: the prospect client is gone", async () => {
+    const r = await demo();
+    const lead = valueOf(r).db.leads.find((l) => !l.customerId && l.status !== "won")!;
+    const n = valueOf(r).db.customers.length;
+    const t = call(r, "leadEstimateTarget", lead.id) as { undo: () => boolean };
+    await settle();
+    expect(valueOf(r).db.customers.length).toBe(n + 1);
+    expect(t.undo()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.customers.length).toBe(n);
+  });
+  it("every action that adds a record: «Отменить» right after it works — mutate's check (normalizeDB changes nothing) passes", async () => {
+    const r = await demo();
+    const d = () => valueOf(r).db;
+    const c = d().customers[0]!;
+    const prop = d().properties.find((p) => p.customerId === c.id)!;
+    const job = d().jobs[0]!;
+    const visit = d().visits[0]!;
+    const inv = d().invoices.find((i) => i.totalCents > i.paidCents)!;
+    const src = d().sources[0]!.id;
+    const doc = { options: [{ id: "o1", name: "Good", lines: [{ id: "l1", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }], settings: DEFAULT_SETTINGS } as unknown as EstimateDoc;
+    const actions: [string, () => unknown][] = [
+      ["addLead", () => call(r, "addLead", { name: "New lead (test)", phone: "(818) 555-0101", city: "Encino", sourceId: src })],
+      ["addCustomer", () => call(r, "addCustomer", { name: "New client (test)", phone: "(818) 555-0102", sourceId: src, address: "1 Test St", city: "Encino" })],
+      ["addJob", () => call(r, "addJob", { customerId: c.id, propertyId: prop.id, title: "New job (test)" })],
+      ["saveEstimate", () => call(r, "saveEstimate", { id: "00000000-0000-4000-8000-00000000e0e2", customerId: c.id, propertyId: prop.id, title: "New estimate (test)", doc })],
+      ["addExpense", () => call(r, "addExpense", { jobId: job.id, amountCents: 1234, category: "materials", note: "Test" })],
+      ["addNote", () => call(r, "addNote", { subjectType: "customer", subjectId: c.id, body: "Note (test)", visibility: "team" })],
+      ["saveTask", () => call(r, "saveTask", { title: "Task (test)", subjectType: "customer", subjectId: c.id, done: false })],
+      ["saveTag", () => call(r, "saveTag", { name: "Tag (test)", color: "neutral" })],
+      ["saveSource", () => call(r, "saveSource", { name: "Source (test)", active: true })],
+      ["addInspection", () => call(r, "addInspection", prop.id, { start: new Date().toISOString(), durationMin: 60, techId: null })],
+      ["addCheckItem", () => call(r, "addCheckItem", visit.id, "Check (test)")],
+      ["logCall", () => call(r, "logCall", { subjectType: "customer", subjectId: c.id, outcome: "reached" })],
+      ["recordPayment", () => call(r, "recordPayment", inv.id, 100, "cash")],
+      ["saveCatalogItem", () => call(r, "saveCatalogItem", { id: "00000000-0000-4000-8000-0000000005c1", kind: "material", name: "New item (test)", unit: "ea", priceCents: 500 })],
+    ];
+    const dead: string[] = [];
+    for (const [name, act] of actions) {
+      const undo = undoOf(act());
+      await settle();
+      if (undo() === false) dead.push(name);
+      await settle();
+    }
+    expect(dead).toEqual([]);
   });
 });

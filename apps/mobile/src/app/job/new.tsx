@@ -107,7 +107,8 @@ export default function NewJob() {
     undos.push(job.undo);
     // «Отменить» takes back everything this form made and leaves the job's screen (it would show an empty job)
     const undoAll = () => {
-      undos.reverse().forEach((u) => u());
+      // all or nothing (DS §15.2): too late for one part — nothing goes back, the toast says so
+      if (store.undoTogether(undos)() === false) return false;
       setNotifyId(null);
       setCreatedId(null);
       setSaved(false);

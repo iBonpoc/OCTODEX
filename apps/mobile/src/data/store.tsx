@@ -61,7 +61,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
-import { undoOwn } from "@/data/undoOwn";
+import { sameValue, undoOwn } from "@/data/undoOwn";
 import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
@@ -120,8 +120,53 @@ import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/esti
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, templatesOfActiveModules, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
-/** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
-export type GuardedUndo = () => boolean;
+/** an undo that may be refused: false = too late, nothing changed (the toast says so); undefined = nothing to take back
+ *  (the server already dropped the action — the toast just closes, as before #1244: the director's review, remark 2) */
+export type GuardedUndo = () => boolean | undefined;
+
+/**
+ * What an undo would do now, without doing it (the director's review of #1244, remark 1): the store's value after it and
+ * the rest of its work (the queue, the outbox) — or why not: "done" (already taken back), "dead" (the server dropped the
+ * action: nothing to take back), null (changed since: too late). Kept for every undo mutate and undoTogether make, so a
+ * screen's undo of several actions is all or nothing (DS §15.2 «Полуотката не бывает»).
+ */
+type UndoPlan = (cur: DB) => { value: DB; commit: () => void } | "done" | "dead" | null;
+const undoPlans = new WeakMap<object, UndoPlan>();
+
+/** the plan of undos in the order they were made: the last first, each on what the one after it left; a function the
+ *  store did not make (a screen's own reset, a «nothing to undo») runs after, when all of them went back */
+function planTogether(undos: readonly unknown[]): UndoPlan {
+  return (cur) => {
+    let value = cur;
+    const commits: (() => void)[] = [];
+    const others: (() => unknown)[] = [];
+    let live = 0;
+    for (const u of [...undos].reverse()) {
+      if (typeof u !== "function") continue;
+      const plan = undoPlans.get(u);
+      if (!plan) {
+        others.push(u as () => unknown);
+        continue;
+      }
+      const r = plan(value);
+      if (r === "dead") continue;
+      if (r === "done" || r === null) return r;
+      value = r.value;
+      commits.push(r.commit);
+      live++;
+    }
+    if (!live && !others.length) return "dead";
+    return { value, commit: () => [...commits, ...others].forEach((f) => f()) };
+  };
+}
+
+/** tests only: an action's result is already what the store will show — normalizeDB changes nothing in it (Б3) */
+function assertNormalized(label: string, next: DB, mode: "demo" | "cloud") {
+  const shown = normalizeDB(next, mode) as unknown as Record<string, unknown>;
+  const raw = next as unknown as Record<string, unknown>;
+  const off = Object.keys(shown).filter((k) => !sameValue(shown[k], raw[k]));
+  if (off.length) throw new Error(`mutate «${label}»: normalizeDB changes ${off.join(", ")} — «Отменить» would see a conflict`);
+}
 export type Mode = "demo" | "cloud";
 export type Link = "ok" | "offline" | "server";
 export interface StuckOp {
@@ -274,6 +319,9 @@ interface StoreCtx {
    *  (offline — the queue). A newer change with the same coalesceKey replaces a waiting one. null = not saved: the module
    *  is not active (trial over, not paid — founder О2) */
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: DB) => DB; coalesceKey?: string; made?: string[] }) => Undo | null;
+  /** «Отменить» of several actions made together (each the undo a store action returned, in the order they were made):
+   *  all of them go back or none — false: too late, nothing changed (DS §15.2) */
+  undoTogether: (undos: readonly unknown[]) => GuardedUndo;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
   setLocationConsent: (on: boolean) => ConsentChange;
@@ -952,12 +1000,38 @@ export function StoreProvider({
     };
   }, [mode, refresh, flush]);
 
+  /** an undo that runs a plan: the store's value once, then the rest — true; too late — false; nothing to take back —
+   *  undefined (the toast just closes) */
+  const runnable = useCallback(
+    (plan: UndoPlan): GuardedUndo => {
+      const undo: GuardedUndo = () => {
+        const r = plan(dbRef.current);
+        if (r === "dead") return undefined;
+        if (r === "done" || r === null) return false;
+        dbRef.current = r.value;
+        setDb(dbRef.current);
+        r.commit();
+        return true;
+      };
+      undoPlans.set(undo, plan);
+      return undo;
+    },
+    [setDb],
+  );
+  /** «Отменить» of several actions made together (a new client and its name parts, a job and its visit): all of them go
+   *  back or none (remark 1 of the director's review of #1244) */
+  const undoTogether = useCallback((undos: readonly unknown[]): GuardedUndo => runnable(planTogether(undos)), [runnable]);
+
   /* ---------- mutations ---------- */
   /** Apply locally; in cloud mode record the op; return undo. */
   const mutate = useCallback(
     (label: string, fn: (d: DB) => DB, op?: Op): GuardedUndo => {
       const prev = dbRef.current;
       const next = fn(prev);
+      // the director's review of #1244 Б3: the store shows normalizeDB(next) — a record the action writes that the render
+      // fills in (a demo client's number, a source) differs from it at once, and «Отменить» sees a conflict and is dead.
+      // Every store test runs every action through this check (test/undoOwnStore.test.ts makes one of each kind)
+      if (process.env.NODE_ENV === "test") assertNormalized(label, next, modeRef.current);
       dbRef.current = next;
       setDb(next);
       let qid: string | null = null;
@@ -980,28 +1054,30 @@ export function StoreProvider({
         setQueue((q) => [...q, { id: qid!, label, at: new Date().toISOString() }]);
       }
       let done = false;
-      return () => {
+      return runnable((cur) => {
         // a second «Отменить» of the same action: nothing more to take back
-        if (done) return false;
-        // dropped by the server as built on a lost base: nothing to take back (review #374 №2)
-        if (oid && deadOps.current.has(oid)) return false;
+        if (done) return "done";
+        // dropped by the server as built on a lost base: nothing to take back, the toast just closes (review #374 №2)
+        if (oid && deadOps.current.has(oid)) return "dead";
         // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays;
         // all or nothing: when a part of it was changed since, nothing is taken back and its op stays in the queue (the
         // toast says it is too late — never a half undo, the director's review of #1244 Б2)
-        const r = undoOwn(prev, next, dbRef.current);
-        if (!r.ok) return false;
-        done = true;
-        dbRef.current = r.value;
-        setDb(dbRef.current);
-        if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
-        if (oid) {
-          outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
-          setOutbox(outboxRef.current);
-        }
-        return true;
-      };
+        const r = undoOwn(prev, next, cur);
+        if (!r.ok) return null;
+        return {
+          value: r.value,
+          commit: () => {
+            done = true;
+            if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
+            if (oid) {
+              outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
+              setOutbox(outboxRef.current);
+            }
+          },
+        };
+      });
     },
-    [setDb, setQueue, setOutbox],
+    [runnable, setQueue, setOutbox],
   );
 
   const patchVisit = (d: DB, id: ID, fn: (v: Visit) => Visit): DB => ({
@@ -1146,7 +1222,7 @@ export function StoreProvider({
       (d) => ({
         ...d,
         // the lead's people become the client's (S3; the server moves them the same way, app.move_lead_people)
-        customers: [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "prospect", people: clientPeopleFromLead(l, ids.contactId) }],
+        customers: [...d.customers, { id: ids.customerId, number: modeRef.current === "demo" ? nextClientNumber(d) : undefined, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "prospect", people: clientPeopleFromLead(l, ids.contactId) }],
         properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }],
         leads: d.leads.map((x) => (x.id === leadId ? { ...x, customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
       }),
@@ -1292,7 +1368,7 @@ export function StoreProvider({
       }),
     );
     if (snap.mins) undos.push(mutate("check.mins", same, { k: "chk.visit.mins", visitId, before: snap.mins.before ?? null, after: snap.mins.after ?? null }));
-    return () => [...undos].reverse().forEach((u) => u());
+    return undoTogether(undos);
   };
 
   const value = useMemo<StoreCtx>(
@@ -1677,6 +1753,7 @@ export function StoreProvider({
           },
           { k: "module.disable", module: key },
         ),
+      undoTogether,
       moduleOp: (module, { kind, payload, apply, coalesceKey, made }) => {
         if (!moduleActive(dbRef.current.company, module)) return null;
         const op: Op = { k: "module.op", module, kind, payload, ...(coalesceKey ? { coalesceKey } : {}), ...(made?.length ? { made } : {}) };
@@ -2130,7 +2207,7 @@ export function StoreProvider({
           (d) => ({
             ...d,
             customers: needCustomer
-              ? [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active", people: clientPeopleFromLead(l, ids.contactId) }]
+              ? [...d.customers, { id: ids.customerId, number: modeRef.current === "demo" ? nextClientNumber(d) : undefined, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active", people: clientPeopleFromLead(l, ids.contactId) }]
               : d.customers.map((c) => (c.id === ids.customerId ? { ...c, status: statusAfterManualWin(c.status) } : c)),
             properties: needCustomer ? [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }] : d.properties,
             leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "won", wonVia: "manual", customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
@@ -2520,11 +2597,7 @@ export function StoreProvider({
           }),
           { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope, allDay: !!sch.allDay },
         );
-        const undoSnap = snapshotOps(visitId, snap);
-        return () => {
-          undoSnap();
-          undo0();
-        };
+        return undoTogether([undo0, snapshotOps(visitId, snap)]);
       },
       saveCompany: (patch) => {
         const cur = dbRef.current.company;
@@ -2652,7 +2725,7 @@ export function StoreProvider({
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],
   );
 
   // nothing is written while a state is not loaded: the screen only reads again (A-01)

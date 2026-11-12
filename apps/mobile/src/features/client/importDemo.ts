@@ -83,10 +83,15 @@ export const demoImports = (): ImportJobRow[] => [...jobs.values()].map((j) => (
 export async function demoUndo(jobId: string): Promise<{ undone: number; kept: number }> {
   const job = jobs.get(jobId);
   if (!job || job.row.status === "undone") return { undone: job?.row.counts.undone ?? 0, kept: 0 };
-  const n = job.undos.length;
-  for (const u of job.undos.reverse()) u();
+  // each card is its own: one changed since stays (kept, as the server's undo counts it) — the others go back
+  let undone = 0;
+  let kept = 0;
+  for (const u of job.undos.reverse()) {
+    if ((u as () => unknown)() === false) kept++;
+    else undone++;
+  }
   job.undos = [];
   job.row.status = "undone";
-  job.row.counts = { ...job.row.counts, undone: n, kept: 0 };
-  return { undone: n, kept: 0 };
+  job.row.counts = { ...job.row.counts, undone, kept };
+  return { undone, kept };
 }

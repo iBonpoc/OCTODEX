@@ -86,15 +86,32 @@ describe("unit:undoOwn", () => {
     expect(ok(undoOwn({ a: 1, b: 2 } as Record<string, number>, { a: 1 }, { a: 1, c: 3 }))).toEqual({ a: 1, b: 2, c: 3 });
   });
   it("a large store, the big list itself merged: fast; untouched parts keep their references", () => {
-    const big = Array.from({ length: 20000 }, (_, i) => ({ id: `c${i}`, name: `Client ${i}` }));
-    const prev = { customers: big, jobs: [{ id: "j" }] };
-    // the action renamed one client; then the server's copy rebuilt every client (new objects, the same values) and a job
-    const next = { ...prev, customers: big.map((c, i) => (i === 10 ? { ...c, name: "Mine" } : c)) };
-    // (another phone added a client too, so the big list itself is merged record by record)
-    const cur = { customers: [...next.customers.map((c) => ({ ...c })), { id: "c-new", name: "Theirs" }], jobs: [{ id: "j", title: "theirs" }] };
-    const t0 = Date.now();
+    const store = (n: number) => {
+      const big = Array.from({ length: n }, (_, i) => ({ id: `c${i}`, name: `Client ${i}` }));
+      const prev = { customers: big, jobs: [{ id: "j" }] };
+      // the action renamed one client; then the server's copy rebuilt every client (new objects, the same values) and a job
+      const next = { ...prev, customers: big.map((c, i) => (i === 10 ? { ...c, name: "Mine" } : c)) };
+      // (another phone added a client too, so the big list itself is merged record by record)
+      const cur = { customers: [...next.customers.map((c) => ({ ...c })), { id: "c-new", name: "Theirs" }], jobs: [{ id: "j", title: "theirs" }] };
+      return { prev, next, cur };
+    };
+    // the best of a few runs (a GC pause is not the merge's)
+    const timeOf = (n: number) => {
+      const s = store(n);
+      let best = Infinity;
+      for (let k = 0; k < 5; k++) {
+        const t0 = performance.now();
+        undoOwn(s.prev, s.next, s.cur);
+        best = Math.min(best, performance.now() - t0);
+      }
+      return best;
+    };
+    // linear (the director's remark 5): 10 times the records — not 100 times the time (a merge by scanning would be);
+    // 30× leaves room for a slow runner, the floor for a timer that cannot see under a millisecond
+    const small = timeOf(2000), large = timeOf(20000);
+    expect(large).toBeLessThan(Math.max(small, 0.5) * 30);
+    const { prev, next, cur } = store(20000);
     const out = ok(undoOwn(prev, next, cur));
-    expect(Date.now() - t0).toBeLessThan(500);
     expect(out.customers[10]!.name).toBe("Client 10");
     expect(out.customers).toHaveLength(20001);
     expect(out.customers[11]).toBe(cur.customers[11]);
