@@ -14,8 +14,10 @@ import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, esti
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
+import { SortableList, type DropResult } from "@/features/SortableList";
+import type { Drop } from "@/features/sortable";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, putBack, layoutUndo, renameSection, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -98,6 +100,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // sections (DS §8.5): the folded ones are the phone's own state; the one being renamed in place; the row to move (its sheet)
   const [collapsedIds, setCollapsedIds] = useState<string[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [holdSection, setHoldSection] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
   const rowForm = useRequiredForm();
   // what a pick in the catalog sheet opens next (a row with the cursor in it) waits until the sheet is gone: the web would give the
@@ -349,6 +352,41 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setOption(() => r.option);
     toast.show(t("est.sec.moved"), back);
   };
+  /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
+  const dropRow = (d: Drop): DropResult => {
+    if (signed) return "same";
+    const refuse = (why: string): DropResult => {
+      toast.show(t("est.sec.moduleBlocked"));
+      void why;
+      return "refused";
+    };
+    if (d.kind === "line") {
+      const index = option.lines.findIndex((l) => l.id === d.id);
+      const line = option.lines[index];
+      if (!line) return "same";
+      const r = moveLine(option, d.id, d.to);
+      if (!r.ok) return r.reason === "module" || r.reason === "moduleLine" ? refuse(r.reason) : "same";
+      // it came to the same order (the drop at the end of its own section, a slot just above itself…): not a move
+      if (sameLayout(option, r.option)) return "same";
+      setOption(() => r.option);
+      toast.show(t("est.sec.moved"), () => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index })));
+      return "moved";
+    }
+    const all = option.sections ?? [];
+    const was = all.find((x) => x.id === d.id);
+    const r = moveSection(option, d.id, d.to);
+    if (!r.ok) return r.reason === "module" ? refuse(r.reason) : "same";
+    if (!was || sameLayout(option, r.option)) return "same";
+    setOption(() => r.option);
+    // «Вернуть» puts this section (with its subsections) back before the one that stood after its family — nothing else changes
+    const family = new Set([d.id, ...all.filter((x) => x.parentId === d.id).map((x) => x.id)]);
+    const next = all.slice(all.findIndex((x) => x.id === d.id) + 1).find((x) => !family.has(x.id) && (x.parentId ?? undefined) === (was.parentId ?? undefined));
+    toast.show(t("est.sec.moved"), () => setOption((o) => {
+      const back = moveSection(o, d.id, { parentId: was.parentId, beforeId: next?.id });
+      return back.ok ? back.option : o;
+    }));
+    return "moved";
+  };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
   const openInCatalog = (id: string) => {
     const cid = option.lines.find((l) => l.id === id)?.catalogItemId;
@@ -472,7 +510,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
-  const view = useMemo(() => viewRows(option, new Set(collapsedIds)), [option, collapsedIds]);
+  // a section that is carried folds while it is held (its lines go with it)
+  const view = useMemo(() => viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), [option, collapsedIds, holdSection]);
   const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
@@ -553,7 +592,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 </T>
               </View>
             ) : null}
-            {view.map((r, i) =>
+            <SortableList
+              rows={view}
+              openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}
+              locked={signed}
+              onDrop={dropRow}
+              onHold={setHoldSection}
+              beforeBegin={(r) => r.type !== "section" || leaveRow(true)}
+              renderRow={(r, i) =>
+
               r.type === "section" ? (
                 <View key={`s-${r.section.id}`}>
                   {i > 0 ? <Divider /> : null}
@@ -594,8 +641,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     checkPrice={checkPrice.includes(r.line.id)}
                   />
                 </View>
-              ),
-            )}
+              )
+              }
+            />
           </Card>
           <RowView>
             <View style={{ flex: 1 }} testID="est-add-new">
