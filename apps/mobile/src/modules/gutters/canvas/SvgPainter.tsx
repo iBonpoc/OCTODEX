@@ -57,7 +57,7 @@ const CapMark = memo(function CapMark({ k, color, fill, halo }: { k: SceneCap; c
 });
 
 /** a corner: a diamond — filled inside, hollow outside (its chip says it in words) */
-const CornerMark = memo(function CornerMark({ k, color, fill }: { k: SceneCorner; color: string; fill: string }) {
+const CornerMark = memo(function CornerMark({ k, color, fill, halo }: { k: SceneCorner; color: string; fill: string; halo: string }) {
   const [x, y] = k.at;
   const r = drawing.dsR;
   const R = r * 2;
@@ -65,6 +65,10 @@ const CornerMark = memo(function CornerMark({ k, color, fill }: { k: SceneCorner
     <G id={k.id}>
       {/* a splash guard (founder 09.11: seen on the drawing): a dashed square round the corner's mark */}
       {k.splash ? <Path id={`splash-${k.id}`} d={`M${x} ${y - R}L${x + R} ${y}L${x} ${y + R}L${x - R} ${y}Z`} fill="none" stroke={color} strokeWidth={drawing.runW / 2} strokeDasharray={`${drawing.runW} ${drawing.runW}`} /> : null}
+      {/* the angle marked as in a drawing: a dash-dot arc across it (founder 12.11); its chip says the words and the degrees */}
+      {k.arc ? <Path id={`arc-${k.id}`} d={`M${k.arc.from[0]} ${k.arc.from[1]}A${k.arc.r} ${k.arc.r} 0 0 ${k.arc.sweep} ${k.arc.to[0]} ${k.arc.to[1]}`} fill="none" stroke={color} strokeWidth={drawing.runW / 4} strokeDasharray={`${drawing.runW} ${drawing.runW / 2} ${drawing.runW / 4} ${drawing.runW / 2}`} /> : null}
+      {/* a picked gutter's joint is a handle (#818): a ring round the mark, a rect like the caps' */}
+      {k.handle ? <Rect id={`handle-${k.id}`} x={x - R} y={y - R} width={R * 2} height={R * 2} rx={radius.chip} fill="none" stroke={halo} strokeWidth={drawing.labelGap} /> : null}
       <Path d={`M${x} ${y - r}L${x + r} ${y}L${x} ${y + r}L${x - r} ${y}Z`} fill={k.kind === "in" ? color : fill} stroke={color} strokeWidth={drawing.runW / 2} />
     </G>
   );
@@ -95,7 +99,7 @@ export function SvgPainter({ scene, w, h, testID }: { scene: Scene; w: number; h
         <RunLine key={r.id} r={r} color={story[r.story - 1]!} halo={c.drawing.node} />
       ))}
       {scene.corners.map((k) => (
-        <CornerMark key={k.id} k={k} color={c.drawing.node} fill={c.bg} />
+        <CornerMark key={k.id} k={k} color={c.drawing.node} fill={c.bg} halo={c.drawing.node} />
       ))}
       {scene.caps.map((k) => (
         <CapMark key={k.id} k={k} color={story[k.story - 1]!} fill={c.bg} halo={c.drawing.node} />
