@@ -4,6 +4,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 import { buildScene, fitView } from "../src/modules/gutters/canvas/scene";
+import { hitTest, withoutDs } from "../src/modules/gutters/canvas/edit";
 import { choicesFor, DEFAULT_OVERHANG_FT, MODULE_CHOICES, OVERHANG_FT, readOverhangFt } from "../src/modules/gutters/settings";
 import type { Drawing } from "../src/modules/gutters/geometry";
 
@@ -50,6 +51,22 @@ describe("layers", () => {
     const s = buildScene(d, { ...base, selected: "d1", layers: { ds: false } });
     expect(s.runs.every((r) => !r.selected)).toBe(true);
     expect(s.ds).toEqual([]);
+  });
+});
+
+describe("a hidden downspout cannot be touched (#930 review)", () => {
+  // the downspout stands at 300 in of run «a»: the finger on it
+  const onDs: [number, number] = [300, 0];
+  it("with the layer on the touch picks the downspout (it is first); with it off — the gutter under it", () => {
+    expect(hitTest(d, onDs, 20)).toMatchObject({ kind: "ds", id: "d1" });
+    expect(hitTest(withoutDs(d, true), onDs, 20)).toMatchObject({ id: "a" });
+    expect(hitTest(withoutDs(d, true), onDs, 20)?.kind).not.toBe("ds");
+  });
+  it("nothing else changes: the drawing is the same object when nothing is hidden, the gutters are the same when hidden", () => {
+    expect(withoutDs(d, false)).toBe(d);
+    expect(withoutDs(d, true).runs).toBe(d.runs);
+    expect(withoutDs(d, true).downspouts).toEqual([]);
+    expect(d.downspouts).toHaveLength(1);
   });
 });
 

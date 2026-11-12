@@ -24,7 +24,7 @@ import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIA
 import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
@@ -239,11 +239,8 @@ export default function GutterSettingsScreen() {
           </Part>
           {/* #932 (founder 11.11): where the roof's overhang is set */}
           <Part title={t(k("house"))} hint={t(k("houseHint"))} testID="gset-house">
-            <View style={{ gap: space[2] }}>
-              <ChoiceChips label={t(k("roofOverhang"))} testID="gset-roof-overhang" items={OVERHANG_FT.map((n) => ({ key: String(n), label: fmtLen(n * 12, ch.lenFormat) }))} value={String(ch.roofOverhangFt)} onChange={(v) => put("gset-roof-overhang", ["roofOverhangFt"], Number(v))} />
-              <FieldWarn at="gset-roof-overhang" />
-              <T v="caption" tone="mut">{t(k("roofOverhangHint"))}</T>
-            </View>
+            <ChoiceWarn label={t(k("roofOverhang"))} testID="gset-roof-overhang" items={OVERHANG_FT.map((n) => ({ key: String(n), label: fmtLen(n * 12, ch.lenFormat) }))} value={String(ch.roofOverhangFt)} onChange={(v) => put("gset-roof-overhang", ["roofOverhangFt"], Number(v))} />
+            <T v="caption" tone="mut">{t(k("roofOverhangHint"), { def: fmtLen(DEFAULT_OVERHANG_FT * 12, ch.lenFormat) })}</T>
           </Part>
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">

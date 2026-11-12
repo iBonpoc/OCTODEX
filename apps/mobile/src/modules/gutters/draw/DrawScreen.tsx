@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -158,8 +158,8 @@ export default function DrawScreen() {
   const canvas = useCanvasGestures(viewNow, setView, live, 2);
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -277,7 +277,7 @@ export default function DrawScreen() {
     onActivate: () => {
       const { drawing: d, tool: tl } = cur.current;
       const p0 = plan(downAt.current[0], downAt.current[1]);
-      const h = hitTest(d, p0, tolIn());
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p0, tolIn());
       const held = Date.now() - downTime.current >= motion.durSlow;
       // a free end cap taken (#504, founder 11.11: «долгое нажатие на эндкапу — тяни за край»): held, with any tool but «Желоб», or at
       // once on the picked gutter's handle — the end follows the finger along its gutter, longer or
@@ -388,7 +388,7 @@ export default function DrawScreen() {
       }
       // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
       // in a tap on the web)
-      const onDs = hitTest(d, p, tolIn());
+      const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (tl === "ds" && onDs?.kind === "ds") {
         setSelected(onDs.id);
         setSheet(true); // its menu (founder 09.11)
@@ -406,7 +406,7 @@ export default function DrawScreen() {
         }
         return;
       }
-      const h = hitTest(d, p, tolIn());
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (h) setHint(null);
       // an end (founder 08.11): an end cap swaps left ↔ right (the whole line's face); a corner asks inside / outside
       if (h?.kind === "end" && cur.current.canSave && !liftTap.current) {
@@ -604,7 +604,18 @@ export default function DrawScreen() {
     setMoreSheet(null);
     void saveToolbarPlace(p);
   };
+  /** a layer on or off (#930): off with the downspouts — no downspout stays picked, and the downspout tool gives way to «Желоб» */
+  const toggleLayer = (l: "grid" | "labels" | "ds", on: boolean) => {
+    setLayers((x) => ({ ...x, [l]: on }));
+    if (l === "ds" && !on) {
+      if (cur.current.drawing.downspouts.some((x) => x.id === cur.current.selected)) setSelected(null);
+      if (cur.current.tool === "ds") setTool("line");
+      setSheet(false);
+    }
+  };
   const pick = (tl: Tool) => {
+    // «Водосток» needs the downspouts seen: the layer comes back on (a downspout is never put in the dark, #930 review)
+    if (tl === "ds" && !layers.ds) setLayers((x) => ({ ...x, ds: true }));
     setTool(tl);
     setHint(tl);
   };
@@ -992,7 +1003,7 @@ export default function DrawScreen() {
                     <T v="body">{t(`mod.gutters.draw.layer.${l}`)}</T>
                     {l === "ds" ? <T v="caption" tone="mut">{t("mod.gutters.draw.layer.dsHint")}</T> : null}
                   </View>
-                  <View testID={`draw-layer-${l}`}><Toggle on={layers[l]} onChange={(on) => setLayers((x) => ({ ...x, [l]: on }))} label={t(`mod.gutters.draw.layer.${l}`)} /></View>
+                  <View testID={`draw-layer-${l}`}><Toggle on={layers[l]} onChange={(on) => toggleLayer(l, on)} label={t(`mod.gutters.draw.layer.${l}`)} /></View>
                 </RowView>
               ))}
               <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>

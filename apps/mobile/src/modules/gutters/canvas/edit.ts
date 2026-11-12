@@ -180,6 +180,9 @@ const closeEnd = (r: DrawnRun, end: 0 | 1): DrawnRun => {
   return { ...r, attrs: Object.keys(rest).length ? { ...attrs, openEnds: rest } : attrs };
 };
 
+/** the drawing as the finger sees it: with the downspouts layer off the downspouts are not there to pick, move or tap (#930 review) */
+export const withoutDs = (d: Drawing, hidden: boolean): Drawing => (hidden && d.downspouts.length ? { ...d, downspouts: [] } : d);
+
 /** a downspout on the nearest line under the finger (none if no line is near) */
 export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs: Omit<DrawnDownspout, "id" | "runId" | "atIn">, ch?: Choices): Drawing {
   const n = nearestRun(d, p, tolIn);
