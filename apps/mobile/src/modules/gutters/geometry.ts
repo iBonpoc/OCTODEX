@@ -26,6 +26,8 @@ export interface DrawnRun {
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
+  /** the user took off the downspout the program had put on this chain: it is not put back (#1246) */
+  dsAutoOff?: true;
   /** how its length is shown on the drawing (founder 09.11): feet + inches (none), inches, mm — a view, not a size */
   unit?: "in" | "m" | "cm" | "mm";
 }
@@ -34,6 +36,12 @@ export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
   runId: string;
   /** distance from the run's start, inches */
   atIn: number;
+  /** put by the program (spec 33-gutters-ds-auto, #1246), not by hand: it is recounted when the chain changes; moved or edited by hand — it is yours */
+  auto?: true;
+  /** only the outlet, no pipe (water goes to another gutter or hangs on a chain — #1247); no field = a pipe with its outlet */
+  pipe?: false;
+  /** where the water of an outlet without a pipe goes */
+  to?: "chain" | "gutter";
 }
 
 export interface CornerChoice {
@@ -365,7 +373,7 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
     const splashGuard = choice.splashGuard ?? (f.kind === "in" && !splashOff(d, f) ? true : undefined);
     return { id: f.id, kind: f.kind, method: choice.method, ...(splashGuard !== undefined ? { splashGuard } : {}), profile, size, material, gauge, finish, color, story };
   });
-  const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);
+  const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, auto: _auto, ...x }) => x);
   return { runs, corners, downspouts };
 }
 

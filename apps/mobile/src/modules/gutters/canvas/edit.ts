@@ -286,7 +286,10 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
 /** remove a line (with its downspouts) or a downspout */
 export function removeElement(d: Drawing, id: string): Drawing {
   if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
-  return { ...d, downspouts: d.downspouts.filter((s) => s.id !== id) };
+  // a downspout the program had put, taken off by hand: its chain is not given another by itself (#1246)
+  const gone = d.downspouts.find((s) => s.id === id);
+  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, dsAutoOff: true as const } : r)) : d.runs;
+  return { ...d, runs, downspouts: d.downspouts.filter((s) => s.id !== id) };
 }
 
 /** the same drawing back when nothing changes (no empty «назад» step) */
@@ -392,7 +395,8 @@ export function moveDs(d: Drawing, id: string, p: P): Drawing {
   const r = s && d.runs.find((x) => x.id === s.runId);
   if (!s || !r) return d;
   const atIn = Math.min(runLengthIn(r), Math.max(0, projectOnRun(r, p).atIn));
-  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn } : x)) };
+  // moved by hand it is the user's own now (no more `auto`): the program does not take it away or count it as its own
+  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn, auto: undefined } : x)) };
 }
 
 /**

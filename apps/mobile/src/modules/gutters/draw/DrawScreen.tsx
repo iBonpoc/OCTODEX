@@ -29,6 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
+import { autoDownspouts, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN } from "../canvas/autoDs";
 import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, pulledSide, pullSideIn, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
@@ -262,7 +263,11 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (next: Drawing, prev = cur.current.drawing) => {
+    (made: Drawing, prev = cur.current.drawing) => {
+      // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
+      const next = cur.current.canSave
+        ? autoDownspouts(made, { spacingIn: AUTO_DS_SPACING_IN, edgeIn: AUTO_DS_EDGE_IN, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, prev)
+        : made;
       if (next === prev) return;
       setHint(null);
       setHist((h) => pushHistory(h, prev));
