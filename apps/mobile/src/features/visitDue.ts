@@ -6,10 +6,12 @@
  */
 import { visitPayment } from "@octo/estimating-engine";
 import type { DB, Visit } from "@/data/types";
+import { contractInvoices } from "@/features/contractInvoice";
 
 export function visitDueCents(db: Pick<DB, "jobs" | "invoices">, v: Pick<Visit, "jobId">): number {
   if (!v.jobId) return 0; // an inspection takes no payment
   const job = db.jobs.find((j) => j.id === v.jobId);
   if (!job) return 0;
-  return visitPayment(job.amountCents, db.invoices.filter((i) => i.jobId === v.jobId)).amountCents;
+  // #1193 п.1: the contract's own invoices (a standalone one never eats the contract's rest) — as record_visit_payment
+  return visitPayment(job.amountCents, contractInvoices(db, v.jobId)).amountCents;
 }

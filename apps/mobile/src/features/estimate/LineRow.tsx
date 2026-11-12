@@ -28,7 +28,7 @@ const KIND_ICON: Record<LineGroup, IconKey> = { service: "wrench", labor: "user"
 /** the id of the choice «Своя…» in the unit list */
 const OWN = "__own__";
 
-export type RowAction = "replace" | "duplicate" | "delete";
+export type RowAction = "replace" | "duplicate" | "move" | "delete";
 
 /** what the rows ask of the screen: ONE object with stable functions (the rows are memoised: a row redraws when its own data does) */
 export interface RowApi {
@@ -96,6 +96,7 @@ function LineRowView(p: LineRowProps) {
   const items: MenuItem<RowAction>[] = [
     { key: "replace", label: t("est.row.replace"), icon: "refresh", testID: `est-act-replace-${l.id}` },
     { key: "duplicate", label: t("est.row.duplicate"), icon: "copy", testID: `est-act-duplicate-${l.id}` },
+    ...(l.source ? [] : ([{ key: "move", label: t("est.sec.moveTitle"), icon: "route", testID: `est-act-move-${l.id}` }] as MenuItem<RowAction>[])),
     { key: "delete", label: t("est.row.delete"), icon: "trash", destructive: true, testID: `est-act-delete-${l.id}` },
   ];
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));

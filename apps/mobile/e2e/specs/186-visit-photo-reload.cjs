@@ -43,7 +43,7 @@ exports.run = async (h) => {
     Object.defineProperty(HTMLImageElement.prototype, "src", { ...d, set(v) { seen.push(String(v)); d.set.call(this, v); } });
   });
   await p.reload();
-  const tile = p.getByRole("button", { name: "Фото 1" }).locator("visible=true").first();
+  const tile = p.locator('[data-testid^="photo-thumb-"]').locator("visible=true").first();
   await tile.waitFor({ timeout: 8000 });
   h.expect(!!(await photo()), "after a reload: the photo is still in the data");
   await p.waitForTimeout(500);

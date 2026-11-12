@@ -70,9 +70,9 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { ic
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ selected: !!active }} containerStyle={grow ? { flex: 1 } : undefined} style={{ alignItems: "center", gap: space[1], minWidth: sizes.hitMin }}>
       <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" w="semibold" center>{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
       </View>
-      <T v="micro" w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={grow ? 1 : undefined} center>{label}</T>
+      <T v="micro" center w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={grow ? 1 : undefined}>{label}</T>
     </Press>
   );
 }
