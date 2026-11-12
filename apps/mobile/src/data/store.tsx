@@ -28,7 +28,8 @@ import { leadStatusToDb } from "@/cloud/statusMap";
 const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
-import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { cleanPeople, docLanguageFor, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { tFor } from "@/i18n/translate";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
@@ -2556,7 +2557,8 @@ export function StoreProvider({
             jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, number: modeRef.current === "demo" ? nextJobNumber(d) : undefined, customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
             invoices: [
               ...d.invoices,
-              { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: "Deposit" },
+              // В1-7б (rule 7): what goes to the client is named in the client's language, not the app's and not English
+              { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: tFor(docLanguageFor(d, { customerId: e.customerId }))("path.inv.deposit") },
             ],
             payments: [
               { id: paymentId, invoiceId, customerId: e.customerId, amountCents: e.depositCents!, method, at: now, receiptNumber: modeRef.current === "demo" ? nextReceipt(d) : undefined },

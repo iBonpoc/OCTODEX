@@ -57,6 +57,32 @@ export function scaleBarIn(k: number, fmt: LenFormat = "ftin"): number {
   return scaleBarFt(k) * 12;
 }
 
+/** two gutters whose ends are this close (inches) are one contour: a corner, a bay, a gap for a downspout */
+const SAME_CONTOUR_IN = 36;
+
+/**
+ * The drawing's contours (#1091): runs joined end to end (or nearly) are one house, the rest stand apart. Indexes into
+ * `d.runs`, the biggest contour first; a run is in exactly one. Pure.
+ */
+export function contours(d: Drawing): number[][] {
+  const n = d.runs.length;
+  const up = d.runs.map((_, i) => i);
+  const find = (i: number): number => (up[i] === i ? i : (up[i] = find(up[i]!)));
+  for (let i = 0; i < n; i++)
+    for (let j = i + 1; j < n; j++) {
+      const a = d.runs[i]!, b = d.runs[j]!;
+      if ([a.a, a.b].some((p) => [b.a, b.b].some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= SAME_CONTOUR_IN))) up[find(j)] = find(i);
+    }
+  const by = new Map<number, number[]>();
+  d.runs.forEach((_, i) => by.set(find(i), [...(by.get(find(i)) ?? []), i]));
+  const extent = (ix: number[]) => {
+    const pts = ix.flatMap((i) => [d.runs[i]!.a, d.runs[i]!.b]);
+    const xs = pts.map((q) => q[0]), ys = pts.map((q) => q[1]);
+    return Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  };
+  return [...by.values()].sort((x, y) => extent(y) - extent(x) || x[0]! - y[0]!);
+}
+
 /** `width`: the sheet's width in its own units — the screen's width on «Просмотр» (the text stays its true size on a
  *  phone), the paper's (sheetW) in a PDF */
 export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = DP.sheetW): Sheet {
@@ -85,22 +111,52 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
 
   // the sheet: the drawing area keeps the drawing's shape (wide house — a low sheet), the title block under it
   const pts = d.runs.flatMap((r) => [r.a, r.b]);
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const spanX = pts.length ? Math.max(...xs) - Math.min(...xs) : 1;
-  const spanY = pts.length ? Math.max(...ys) - Math.min(...ys) : 1;
   const inner = W - 2 * m;
   // room around the drawing for the dimension lines and their texts (both sides)
   const pad = DP.dimOff + DP.font * 2.2;
+  // one scale for all, unless a contour would come out too small to read next to a big one (#1091): then every contour
+  // gets its own panel and its own scale bar
+  const all = contours(d);
+  const kAll = fitView(pts, { w: inner, h: inner }, pad).k;
+  const spanOf = (ix: number[]) => {
+    const q = ix.flatMap((i) => [d.runs[i]!.a, d.runs[i]!.b]);
+    const x = q.map((v) => v[0]), y = q.map((v) => v[1]);
+    return [pts.length ? Math.max(...x) - Math.min(...x) : 1, pts.length ? Math.max(...y) - Math.min(...y) : 1] as const;
+  };
+  const split = all.length > 1 && all.some((g) => Math.max(...spanOf(g)) * kAll < DP.panelMin);
+  const panels = split ? all : [d.runs.map((_, i) => i)];
+  const panelOf: number[] = [];
+  panels.forEach((g, pi) => g.forEach((i) => (panelOf[i] = pi)));
   // a tall house gets a tall area, but never taller than the sheet is wide — nor than a page shows at once (a desktop)
-  const drawH = Math.round(Math.min(inner, DP.sheetW * 0.7, Math.max(inner * 0.45, ((inner - 2 * pad) * spanY) / Math.max(spanX, 1) + 2 * pad)));
+  const titleH = split ? DP.fontSm * 3.4 : 0;
+  const areaH = (ix: number[]) => {
+    const [spanX, spanY] = spanOf(ix);
+    return Math.round(Math.min(inner, DP.sheetW * 0.7, Math.max(inner * 0.45, ((inner - 2 * pad) * spanY) / Math.max(spanX, 1) + 2 * pad)));
+  };
+  const heights = panels.map((g) => (g.length ? areaH(g) : areaH([])));
+  const tops: number[] = [];
+  let acc = m;
+  heights.forEach((h, pi) => {
+    tops[pi] = acc;
+    acc += titleH + h + (pi < heights.length - 1 ? DP.panelGap : 0);
+  });
+  const drawH = acc - m;
   // the title block grows with its rows (company, address, how measured, date) — stampH is its least
   const stampRows = [stamp.company, stamp.address, true, stamp.date].filter(Boolean).length;
   const stampH = Math.max(DP.stampH, DP.font * 1.5 * stampRows + DP.font);
   const H = m + drawH + stampH + m;
-  const view = fitView(pts, { w: inner, h: drawH }, pad);
-  const at = (p: P): [number, number] => {
-    const s = toScreen(view, p);
-    return [s[0] + m, s[1] + m];
+  const views = panels.map((g, pi) => fitView(g.length ? g.flatMap((i) => [d.runs[i]!.a, d.runs[i]!.b]) : pts, { w: inner, h: heights[pi]! }, pad));
+  const at = (p: P, pi = 0): [number, number] => {
+    const s = toScreen(views[pi]!, p);
+    return [s[0] + m, s[1] + tops[pi]! + titleH];
+  };
+  /** the scale bar from (x1, y) to the left: a nice length near scalePx, its ends and middle ticked */
+  const scaleBar = (view: (typeof views)[number], x1: number, y: number) => {
+    const barIn = scaleBarIn(view.k, fmt);
+    const x0 = x1 - barIn * view.k;
+    line([x0, y], [x1, y], DP.thinW * 1.5);
+    for (const x of [x0, (x0 + x1) / 2, x1]) line([x, y - DP.tick], [x, y + DP.tick], DP.thinW);
+    text(x0 - DP.extGap * 2, y + DP.fontSm * 0.35, t("mod.gutters.sheet.scale", { len: fmtLen(barIn, fmt) }), DP.fontSm, "end");
   };
 
   // the frame and the title block's line
@@ -108,6 +164,14 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   frame.forEach((p, i) => line(p, frame[(i + 1) % 4]!, DP.thinW));
   const stampY = H - m / 2 - stampH;
   line([m / 2, stampY], [W - m / 2, stampY], DP.thinW);
+  if (split)
+    panels.forEach((g, pi) => {
+      if (pi) line([m / 2, tops[pi]! - DP.panelGap / 2], [W - m / 2, tops[pi]! - DP.panelGap / 2], DP.thinW, "mut");
+      const nums = g.map((i) => i + 1);
+      const first = nums[0]!, last = nums[nums.length - 1]!;
+      text(m, tops[pi]! + DP.fontSm * 1.2, t("mod.gutters.sheet.panel", { n: pi + 1, runs: nums.length > 1 && last - first === nums.length - 1 ? `${first}–${last}` : nums.join(", ") }), DP.fontSm, "start");
+      scaleBar(views[pi]!, W - m, tops[pi]! + DP.fontSm * 2.6);
+    });
 
   const sideOf = houseSides(d);
   const stories = new Set(d.runs.map((r) => storyOf(r.attrs.story)));
@@ -117,7 +181,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
 
   // the gutters: the line itself first (their boxes keep texts off them)
   const geo = d.runs.map((r, i) => {
-    const a = at(r.a), b = at(r.b);
+    const a = at(r.a, panelOf[i]), b = at(r.b, panelOf[i]);
     const L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
     const u: [number, number] = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
     // away from the house on the sheet: plan «right of a→b» is (vy, −vx); y is flipped on the sheet
@@ -192,7 +256,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
 
   // corners: «outside 90°» inside the angle
   for (const f of found) {
-    const p = at(f.at);
+    const p = at(f.at, panelOf[d.runs.findIndex((x) => x.id === f.runs[0].id)]);
     const ga = byId.get(f.runs[0].id), gb = byId.get(f.runs[1].id);
     if (!ga || !gb) continue;
     const dir: [number, number] = [-(ga.out[0] + gb.out[0]), -(ga.out[1] + gb.out[1])];
@@ -201,7 +265,13 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     const s = `${word} ${Math.round(cornerCut(d, f, found).angleDeg)}°`;
     const w = textW(s, DP.fontSm) / 2 + DP.numR;
     let q: [number, number] = [p[0] + (dir[0] / dl) * w, p[1] + (dir[1] / dl) * w];
-    for (let k = 1; k < 4 && !free(boxAt(q[0], q[1], s, DP.fontSm)); k++) q = [p[0] + (dir[0] / dl) * w * (1 + k * 0.6), p[1] + (dir[1] / dl) * w * (1 + k * 0.6)];
+    let moved = false;
+    for (let k = 1; k < 8 && !free(boxAt(q[0], q[1], s, DP.fontSm)); k++) {
+      q = [p[0] + (dir[0] / dl) * w * (1 + k * 0.6), p[1] + (dir[1] / dl) * w * (1 + k * 0.6)];
+      moved = true;
+    }
+    // a word that had to move away from its corner keeps a thin leader to it (#1091)
+    if (moved) line([p[0] + (dir[0] / dl) * DP.numR, p[1] + (dir[1] / dl) * DP.numR], [q[0] - (dir[0] / dl) * (textW(s, DP.fontSm) / 2), q[1] - (dir[1] / dl) * DP.fontSm * 0.65], DP.thinW, "mut");
     label(q[0], q[1], s, DP.fontSm);
   }
 
@@ -213,13 +283,8 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     y += r.fs * 1.5;
   }
   if (stamp.date) text(m, y, stamp.date, DP.fontSm, "start");
-  // the scale bar on the date's row, right: a nice length near scalePx, its ends and middle ticked
-  const barIn = scaleBarIn(view.k, fmt);
-  const bw = barIn * view.k;
-  const bx1 = W - m, bx0 = bx1 - bw, by = y - DP.fontSm * 0.3;
-  line([bx0, by], [bx1, by], DP.thinW * 1.5);
-  for (const x of [bx0, (bx0 + bx1) / 2, bx1]) line([x, by - DP.tick], [x, by + DP.tick], DP.thinW);
-  text(bx0 - DP.extGap * 2, by + DP.fontSm * 0.35, t("mod.gutters.sheet.scale", { len: fmtLen(barIn, fmt) }), DP.fontSm, "end");
+  // the scale bar on the date's row, right (one scale for the sheet); with panels each has its own, under its title
+  if (!split) scaleBar(views[0]!, W - m, y - DP.fontSm * 0.3);
 
   return { w: W, h: Math.round(H), items };
 }
