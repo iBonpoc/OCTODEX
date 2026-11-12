@@ -797,6 +797,7 @@ export const ru = {
   "est.row.openCatalog": "Открыть каталог",
   "est.row.hide": "Скрыть от клиента",
   "est.row.hideNeedZero": "Скрыть можно позицию с ценой $0",
+  "est.row.hideTpl": "В шаблоне скрытие позиции пока не сохраняется",
   "est.row.hidden": "Скрыта",
   "est.row.unhiddenMark": "Снова видна клиенту",
   "est.row.unhiddenToast": "Позиция снова видна клиенту",

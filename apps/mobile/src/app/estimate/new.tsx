@@ -14,7 +14,7 @@ import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, esti
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
-import { applyPatch, catalogOffer, clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField } from "@/features/fields";
@@ -81,7 +81,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // lines that were hidden and came priced (a template line took the catalog price): shown to the client again — the mark stays until the row is opened
   const [unhiddenIds, setUnhiddenIds] = useState<string[]>(() => fromTpl?.unhidden ?? []);
   // «Сохранить в каталог» chosen on rows (by line id); done when the row folds with a right line
-  const [wantCatalog, setWantCatalog] = useState<string[]>([]);
+  const [wantCatalog, setWantCatalog] = useState<string[]>(() => draft?.wantCatalog ?? []);
   const [startOpen, setStartOpen] = useState(() => !existing && !draft && !given && !tplEdit && templates.length > 0);
   const [doc, setDoc] = useState<EstimateDoc>(() =>
     existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
@@ -105,13 +105,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // (#859 №1); nothing worth keeping — no draft (#760)
   const keyOfDrafts = drafts.key;
   const setDrafts = drafts.setList;
-  const held = { estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+  const held = { estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog };
   const [opened, setOpened] = useState(() => ({ snapshot: draftSnapshot(held), restored: !!draft }));
   useEffect(() => {
     if (!ctx) return;
-    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice };
+    const d: EstimateDraft = { ctx, at: new Date().toISOString(), estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog };
     setDrafts((list) => nextDrafts(list, d, opened, Date.now()), keyOfDrafts);
-  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, opened, setDrafts, keyOfDrafts]);
+  }, [ctx, estimateId, customerId, propertyId, title, doc, templateId, checkPrice, wantCatalog, opened, setDrafts, keyOfDrafts]);
   const dropDraft = () => {
     if (ctx) setDrafts((list) => removeDraft(list, ctx), keyOfDrafts);
   };
@@ -131,6 +131,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setPropertyId(fresh.propertyId);
     setTemplateId(fresh.templateId);
     setCheckPrice(fresh.checkPrice);
+    setWantCatalog([]);
     // no next sheet here: one over the leaving «Удалить черновик?» never shows on iPhone (#743) — the client and a
     // template are picked from the builder itself
   };
@@ -169,20 +170,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setOption((o) => ({ ...o, lines: o.lines.map((l) => (l.id === id ? applyPatch(l, patch).line : l)) }));
     if (unhiddenIds.includes(id)) setUnhiddenIds((ids) => ids.filter((x) => x !== id));
   };
-  // the row folds: «Сохранить в каталог» was chosen and the line is right → it goes to the catalog, the row gets the link
-  const commitCatalog = (l: CustomLine) => {
-    if (!wantCatalog.includes(l.id)) return;
-    const offer = catalogOffer(l, seeCosts);
-    if (offer.state !== "offered") return;
-    const item: CatalogItem = { id: uid(), ...offer.item };
-    const undoSave = store.saveCatalogItem(item);
-    setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === l.id ? { ...x, catalogItemId: item.id } : x)) }));
-    setWantCatalog((ids) => ids.filter((x) => x !== l.id));
-    toast.show(t("est.row.catalogAdded"), () => {
-      undoSave();
-      setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === l.id && x.catalogItemId === item.id ? { ...x, catalogItemId: undefined } : x)) }));
-    });
-  };
   // «Отменить» of an action takes back THAT action only (a row edited since stays as edited)
   const removeLine = (id: string) => {
     const index = option.lines.findIndex((l) => l.id === id);
@@ -205,20 +192,36 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // the open row closes (and keeps what is typed) — unless something in it is wrong: then the errors, the scroll to the first,
   // the vibration, and it stays open (DS §8.3). `quiet` (a finger starts to scroll): nothing of that — the page must be able
   // to scroll; a row with an error just stays open. A row with nothing typed in it disappears without a trace.
+  // The open row is asked to close: ONE pure step (`settleOpenRow`) gives the option as the closed row leaves it — a blank row
+  // gone, «Сохранить в каталог» done (the thing made, the link on the line). The screen and «Сохранить» both go through it,
+  // so what is saved is what is shown, and the link is in the saved estimate.
+  const settleNow = (quiet: boolean) => {
+    const open = option.lines.find((x) => x.id === openId);
+    const problems = open ? problemsOf(open) : [];
+    const r = settleOpenRow(option, { openId, wantCatalog, costsVisible: seeCosts, catalog: db.catalog, problems: problems.length, quiet, newId: uid });
+    // a wrong row speaks (the errors, the scroll, the vibration) — but not when a finger only starts to scroll
+    if (r.decision === "stay-loud") rowForm.submit(problems, () => {});
+    return r;
+  };
+  const docWith = (o: CustomOption): EstimateDoc => ({ ...doc, options: doc.options.map((x) => (x.id === o.id ? o : x)) });
+  const writeCatalog = (items: CatalogItem[]) => items.forEach((i) => store.saveCatalogItem(i));
+  // «Отменить» takes out exactly the things this action made (not the whole store: that would undo the server's read and other edits)
+  const unwriteCatalog = (items: CatalogItem[]) => items.forEach((i) => store.removeCatalogItem(i.id));
   const leaveRow = (quiet = false): boolean => {
-    if (!openId) return true;
-    const l = option.lines.find((x) => x.id === openId);
-    if (!l) {
-      setOpenId(null);
-      return true;
+    const r = settleNow(quiet);
+    if (!r.closed) return false;
+    if (r.option !== option) setOption(() => r.option);
+    setWantCatalog(r.wantCatalog);
+    setOpenId(null);
+    if (r.newItems.length) {
+      writeCatalog(r.newItems);
+      const ids = new Set(r.newItems.map((i) => i.id));
+      toast.show(t("est.row.catalogAdded"), () => {
+        unwriteCatalog(r.newItems);
+        setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.catalogItemId && ids.has(x.catalogItemId) ? { ...x, catalogItemId: undefined } : x)) }));
+      });
     }
-    const problems = problemsOf(l);
-    const what = leaveDecision(l, problems.length, quiet);
-    if (what === "remove") setOption((o) => ({ ...o, lines: dropLine(o.lines, openId) }));
-    if (what === "stay-loud") rowForm.submit(problems, () => {});
-    if (what === "fold") commitCatalog(l);
-    if (what === "remove" || what === "fold") setOpenId(null);
-    return what === "remove" || what === "fold";
+    return true;
   };
   const openRow = (id: string) => {
     if (signed) return;
@@ -247,8 +250,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       const old = option.lines.find((x) => x.id === target);
       if (!old || !made[0]) return;
       setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === target ? replaceLine(x, made[0]!) : x)) }));
-      // the price was to be checked — it is a new thing now
+      // the price was to be checked — it is a new thing now; it is in the catalog already, nothing to save there; a hidden row that takes a price is shown again
       setCheckPrice((ids) => ids.filter((x) => x !== target));
+      setWantCatalog((ids) => ids.filter((x) => x !== target));
+      if (old.clientVisible === false && replaceLine(old, made[0]!).clientVisible === undefined) toast.show(t("est.row.unhiddenToast"));
       toast.show(t("est.row.replaced"), () => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) })));
       return;
     }
@@ -267,6 +272,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (!old) return;
     setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.id === id ? clearLine(x) : x)) }));
     setCheckPrice((ids) => ids.filter((x) => x !== id));
+    setWantCatalog((ids) => ids.filter((x) => x !== id));
     setPicker(null);
     afterPicker.current = () => {
       setFocusRow({ id, field: "name" });
@@ -326,9 +332,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // #1138: the main button stays active (DS §11 п.3, the director's review of #1169): where the tech may not make one, it says why
     if (!mayHere) return void toast.show(t("est.tech.notHere"));
     if (!customer || !property) return;
-    if (!leaveRow()) return;
+    // the open row settles first: a wrong one keeps the screen; a right one folds — and the thing it sends to the catalog is
+    // in the document that is saved (the link), and «Отменить» of the save takes the thing out as well
+    const settled = settleNow(false);
+    if (!settled.closed) return;
     haptics.success();
-    const clean: EstimateDoc = exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
+    const clean: EstimateDoc = exemptDoc({ ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
+    writeCatalog(settled.newItems);
     const undo = store.saveEstimate({
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
@@ -336,7 +346,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // saved: the store holds it now. «Отменить» on the toast takes the saved estimate back out of the store; the builder
     // is closed by then, so its content does not come back as a draft (#860)
     dropDraft();
-    toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);
+    const saved = store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued");
+    toast.show(settled.newItems.length ? `${saved} · ${t("est.row.catalogAdded")}` : saved, () => {
+      undo();
+      unwriteCatalog(settled.newItems);
+    });
     router.replace(`/estimate/${estimateId}${send && canSeeClientLink(store.role) ? "?send=1" : ""}`);
   };
 
@@ -355,17 +369,22 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     }
     const name = title.trim() === tplEdit.name ? live.name : title.trim();
     // the open row first (a wrong number keeps it open), a row with nothing typed in it is not part of the template
-    if (!leaveRow()) return;
-    const tplDoc: EstimateDoc = { ...doc, options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !isBlank(l)) })) };
+    const settled = settleNow(false);
+    if (!settled.closed) return;
+    const tplDoc: EstimateDoc = { ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: o.lines.filter((l) => !isBlank(l)) })) };
     const next = editedTemplate(live, tplDoc, seeCosts, name);
     if (!next) {
       toast.show(t("est.tpl.cannot"));
       return;
     }
     // the server checks the same: over the version this screen opened on, else «не сохранено» (row_version_conflict)
+    writeCatalog(settled.newItems);
     const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, tplDoc, seeCosts) });
     // «Отменить» (rule 5): the edit waits on the phone while the toast is up (SEND_AFTER_MS) — taken out of the queue
-    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), undo);
+    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), () => {
+      undo();
+      unwriteCatalog(settled.newItems);
+    });
     router.replace("/estimate/templates");
   };
 
@@ -467,6 +486,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                   form={rowForm}
                   api={rowApi}
                   locked={signed}
+                  noHide={!!tplEdit}
                   unhiddenMark={unhiddenIds.includes(l.id)}
                   catalog={openId === l.id && store.role !== "tech" ? catalogStateOf(l) : undefined}
                   autoFocus={focusRow?.id === l.id ? focusRow.field : undefined}

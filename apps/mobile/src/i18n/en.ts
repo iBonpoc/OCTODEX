@@ -798,6 +798,7 @@ export const en: Dict = {
   "est.row.openCatalog": "Open catalog",
   "est.row.hide": "Hide from the client",
   "est.row.hideNeedZero": "A line can be hidden when its price is $0",
+  "est.row.hideTpl": "Hiding a line is not kept in a template yet",
   "est.row.hidden": "Hidden",
   "est.row.unhiddenMark": "Shown to the client again",
   "est.row.unhiddenToast": "The item is shown to the client again",

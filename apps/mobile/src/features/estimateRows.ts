@@ -151,3 +151,48 @@ export function catalogOffer(l: CustomLine, costsVisible: boolean): CatalogOffer
   if (!m.ok) return { state: "refused", reason: m.reason };
   return { state: "offered", item: { ...base, priceCents: l.unitPriceCents, costCents: l.unitCostCents!, vendorTaxBps: 0, markupBps: m.markupBps } };
 }
+
+/* ---- the open row is asked to close: one pure step, so «Сохранить» sees the same document the screen will ---- */
+
+export interface SettleCtx {
+  /** the row that is open (none — nothing to settle) */
+  openId: string | null;
+  /** rows where «Сохранить в каталог» is on */
+  wantCatalog: string[];
+  costsVisible: boolean;
+  /** the catalog as it is now (a link to a thing that is there is a link: nothing is created twice) */
+  catalog: Pick<CatalogItem, "id">[];
+  /** problems of the open row (wrong fields) */
+  problems: number;
+  /** a finger starts to scroll: no errors, no vibration, the row only stays */
+  quiet: boolean;
+  newId: () => string;
+}
+export interface Settled<O extends { lines: CustomLine[] }> {
+  /** closed (folded or gone) — the document below may go on to be saved; false — the row stays open */
+  closed: boolean;
+  decision: "none" | "remove" | "fold" | "stay-loud" | "stay-quiet";
+  /** the option as the closed row leaves it: a blank row gone, the catalog link on the line */
+  option: O;
+  /** things to put into the catalog now (the link to them is already in `option`) */
+  newItems: CatalogItem[];
+  /** rows that still want to go to the catalog */
+  wantCatalog: string[];
+}
+export function settleOpenRow<O extends { lines: CustomLine[] }>(o: O, c: SettleCtx): Settled<O> {
+  const none: Settled<O> = { closed: true, decision: "none", option: o, newItems: [], wantCatalog: c.wantCatalog };
+  if (!c.openId) return none;
+  const line = o.lines.find((l) => l.id === c.openId);
+  if (!line) return { ...none, decision: "fold" };
+  const decision = leaveDecision(line, c.problems, c.quiet);
+  if (decision === "stay-loud" || decision === "stay-quiet") return { ...none, closed: false, decision };
+  if (decision === "remove") return { ...none, decision, option: { ...o, lines: o.lines.filter((l) => l.id !== c.openId) }, wantCatalog: c.wantCatalog.filter((x) => x !== c.openId) };
+  // folded: «Сохранить в каталог» was on and the line is right and not in the catalog yet → the thing goes, the line gets the link
+  const rest = c.wantCatalog.filter((x) => x !== c.openId);
+  const linked = !!line.catalogItemId && c.catalog.some((x) => x.id === line.catalogItemId);
+  if (!c.wantCatalog.includes(c.openId!) || linked) return { ...none, decision, wantCatalog: rest };
+  const offer = catalogOffer(line, c.costsVisible);
+  if (offer.state !== "offered") return { ...none, decision };
+  const item: CatalogItem = { id: c.newId(), ...offer.item };
+  return { closed: true, decision, option: { ...o, lines: o.lines.map((l) => (l.id === line.id ? { ...l, catalogItemId: item.id } : l)) }, newItems: [item], wantCatalog: rest };
+}
