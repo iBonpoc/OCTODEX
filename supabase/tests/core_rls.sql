@@ -13300,12 +13300,14 @@ begin
   select count(*) into n from public.invoices where job_id = 'e1970000-0000-4000-8000-000000000002' and status = 'sent';
   perform tst.ok(n = 1, format('T197 two phones at once: one invoice of the two passes (%s)', n));
 end $$;
+drop extension dblink;   -- only for this test (its functions are open to everyone by default)
 -- (в) the visit's payment into the office's draft final above the rest: billed as the rest, paid
 :as_office_a
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('01970000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'progress', 'sent', 'Progress', 30000, 30000, now());
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
-  ('01970000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'final', 'draft', 'Final balance', 30000, 30000);
+  ('01970000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'final', 'draft', 'Final balance', 35000, 30000);
+update public.invoices set discount_cents = 5000 where id = '01970000-0000-4000-8000-000000000008';   -- the office's own discount
 :as_super
 insert into public.visits (id, company_id, job_id, starts_at, status) values ('f1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000003', now(), 'scheduled');
 update public.visits set status = 'on_site' where id = 'f1970000-0000-4000-8000-000000000001';
@@ -13316,6 +13318,27 @@ select tst.ok(((public.record_visit_payment('f1970000-0000-4000-8000-00000000000
 :as_super
 select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 20000 from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
               'T197 the draft final is billed as the rest of the contract ($200) and paid');
+select tst.ok((select discount_cents = 0 and subtotal_cents + tax_cents = total_cents from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
+              'T197 billed as the rest: no discount of the draft''s own left, subtotal + tax = total (security-check of #1203 №2)');
+-- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1)
+:as_sales_a
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at, deleted_at) values
+         ('ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'T197 hidden', 999900, now(), now())$q$,
+       '%created removed%', 'T197 an invoice is never inserted removed (the way past the cap)');
+:as_super
+-- and never brought back from removed (a row of before, made by hand): the cap would not see it come back
+alter table public.invoices disable trigger t05_forbid_delete;
+update public.invoices set deleted_at = now() where id = '01970000-0000-4000-8000-000000000005';
+alter table public.invoices enable trigger t05_forbid_delete;
+:as_office_a
+select tst.fails_like($q$update public.invoices set deleted_at = null where id = '01970000-0000-4000-8000-000000000005'$q$,
+       '%does not come back%', 'T197 a removed invoice is never brought back');
+-- the reason of a void: written and not a book
+:as_owner_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T197 to void', 100, 100, now());
+select tst.fails($q$update public.invoices set status = 'void', void_reason = '   ' where id = '01970000-0000-4000-8000-000000000009'$q$, 'T197 a blank reason is not one');
+select tst.fails(format($q$update public.invoices set status = 'void', void_reason = %L where id = '01970000-0000-4000-8000-000000000009'$q$, repeat('x', 501)), 'T197 nor a reason of 501 characters');
 \echo 'T197 the invoices of a contract: never above it; a wrong one is voided by the owner, without payments, with a reason'
 
 \echo 'ALL TESTS PASSED'

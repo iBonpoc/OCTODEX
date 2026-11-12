@@ -13,6 +13,8 @@
 --    invoice with no payment, the reason required (check), once — a void invoice never changes again.
 -- Old app versions: an invoice above the contract is now refused for good (it went through before); the phone of this
 --    version never sends one (engine canIssue). Rule 16: only replaced bodies, nothing renamed or dropped.
+-- 4) A void's reason is text (1–500 characters, not blank); an invoice is never born removed nor brought back from
+--    removed (either would pass the contract check — security-check of #1203).
 -- Tests: supabase/tests/core_rls.sql T197.
 
 create or replace function app.invoice_tax_split(p_company uuid, p_job uuid, p_invoice uuid, p_total bigint)
@@ -97,6 +99,7 @@ declare
   v_amount   bigint;
   v_invoiced bigint;
   v_today    date;
+  v_hint     text;
 begin
   if v_uid is null then raise exception 'visit payment: sign in' using errcode = '42501'; end if;
   if p_visit_id is null or p_invoice_id is null or p_payment_id is null then
@@ -151,7 +154,10 @@ begin
       update public.invoices set status = 'sent', sent_at = coalesce(sent_at, now()) where id = inv.id returning * into inv;
     exception when check_violation then
       -- В1-4б: the draft is above what is left of the contract (app.invoice_tax_split refuses it) — billed as that rest,
-      -- never a refusal that drops the money in hand (#857 С6); nothing left — the money goes to the office (below)
+      -- never a refusal that drops the money in hand (#857 С6); nothing left — the money goes to the office (below).
+      -- Only that refusal: any other check stays a refusal (security-check of #1203, finding 2б)
+      get stacked diagnostics v_hint = pg_exception_hint;
+      if v_hint is distinct from 'invoice_over_contract' then raise; end if;
       select coalesce(sum(i.total_cents), 0) into v_invoiced from public.invoices i
        where i.company_id = j.company_id and i.job_id = j.id and i.kind in ('deposit', 'progress', 'final')
          and i.status = 'sent' and i.deleted_at is null;
@@ -159,7 +165,9 @@ begin
       if v_amount <= 0 or v_amount < inv.paid_cents then
         raise exception 'visit payment: more in hand than due' using errcode = '22023';
       end if;
-      update public.invoices set subtotal_cents = v_amount, total_cents = v_amount, status = 'sent', sent_at = coalesce(sent_at, now())
+      -- the rest as it is: no discount of the draft's own left on it, the tax split again as it is sent (t41; finding 2а)
+      update public.invoices set subtotal_cents = v_amount, discount_cents = 0, tax_cents = 0, total_cents = v_amount, status = 'sent',
+                                 sent_at = coalesce(sent_at, now())
        where id = inv.id returning * into inv;
     end;
   end if;
@@ -219,6 +227,11 @@ declare
   v_merge boolean := false;
 begin
   if tg_op = 'INSERT' then
+    -- an invoice is never removed (t05), so never born removed: such a row would pass every check and come back later
+    -- (security-check of #1203, finding 1)
+    if new.deleted_at is not null then
+      raise exception 'invoice cannot be created removed' using errcode = 'check_violation';
+    end if;
     new.paid_cents := 0;
     new.payment_status := 'unpaid';
     if new.status = 'void' then
@@ -238,6 +251,10 @@ begin
     new.payment_status := old.payment_status;
   end if;
 
+  -- and never brought back from removed: the contract check and the tax split saw it as gone (finding 1)
+  if old.deleted_at is not null and new.deleted_at is null then
+    raise exception 'a removed invoice does not come back' using errcode = 'check_violation';
+  end if;
   if old.status = 'void' and not v_merge then
     raise exception 'void invoice % is immutable', old.number using errcode = '42501';
   end if;
@@ -294,3 +311,8 @@ begin
 end;
 $$;
 revoke all on function app.tg_invoice_guard() from public, anon, authenticated;
+
+-- 4) the reason of a void: written, not a whole book (security-check of #1203, finding 3). NOT VALID — the rows of
+-- before stay as they are (rule 16: no rewrite of old data), every new void and every change of a row is checked.
+alter table public.invoices add constraint invoices_void_reason_text
+  check (status <> 'void' or length(btrim(void_reason)) between 1 and 500) not valid;
