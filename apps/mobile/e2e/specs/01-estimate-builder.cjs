@@ -14,7 +14,8 @@ exports.run = async (h) => {
   // 150 + 120×1.50 + 250 + 12×12.13 = 725.56; a new estimate taxes the whole amount (the founder 12.11, РС-3):
   // 9.5% of 725.56 = 68.93 → 794.49; deposit 10% = 79.45
   await h.expectText(/Сумма \| \$725\.56/, "subtotal");
-  await h.expectText(/\$68\.93 · 9\.5% · услуги, работа, материалы/, "tax on the whole amount");
+  await h.expectText(/\$68\.93 · 9\.5%/, "tax on the whole amount");
+  h.expect(!/9\.5% · /.test(await h.text()), "no kinds listed after the rate (the tax is on the whole amount, Р6)");
   await h.expectText(/Итого \| \$794\.49/, "total");
   await h.expectText(/10% · \$79\.45/, "deposit");
   await h.shot("builder");

@@ -2092,7 +2092,11 @@ export function StoreProvider({
         // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
         if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return () => {};
         // as it may be counted and shown (Р3, Р4) before it is counted and saved
-        const { doc, linesFrom } = docForSave(prev?.status, normalizeDoc(doc0).doc, uid);
+        const saved = docForSave(prev?.status, normalizeDoc(doc0).doc, uid);
+        const linesFrom = saved.linesFrom;
+        // the mark of «the last estimate» goes into the document itself (the server's rows have no save time of their own)
+        const savedAt = new Date().toISOString();
+        const doc: EstimateDoc = { ...saved.doc, savedAt };
         const sum = summarize(doc);
         const versionId = uid();
         return mutate(
@@ -2103,6 +2107,7 @@ export function StoreProvider({
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
               // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
               createdBy: prev ? prev.createdBy : d.me,
+              savedAt,
               // E3: an estimate keeps the template it was made from; a new one from a template counts one use (demo too)
               templateId: prev ? prev.templateId : templateId0,
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
