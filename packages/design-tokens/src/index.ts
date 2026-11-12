@@ -167,7 +167,6 @@ export const component = {
   /** checklist checkbox */
   checkbox: { size: 22, radius: 7, border: 1.5 },
   /** gap between photo thumbnails */
-  photoGap: 2,
   /** photo thumbnail side */
   photoThumb: 72,
   /** bottom sheet: share of the screen height before it is pulled up to full height */
