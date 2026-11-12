@@ -2,7 +2,8 @@ import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
-import { scrollTargetY } from "./requiredLogic";
+import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
+import { setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
@@ -513,6 +514,8 @@ export function Screen({
   const go = goTo;
   const goUp = () => (up ? go(up.href) : back?.());
   const { wide, device } = useDevice();
+  /** the pinned bar stands only where the phone has no tab bar (docs: NO_TAB_BAR — a form, a full-screen flow), else the two would meet */
+  const footerOn = !!footer && !wide && !showsTabBar(routeName);
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
   const pinned = wide && !!up && !isTabScreen(routeName);
@@ -751,7 +754,11 @@ export function Screen({
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;
   coveredTop.current = pinned ? 0 : navInsets.top;
-  coveredBottom.current = kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0);
+  coveredBottom.current = coveredBottomOf({ keyboard: !!kb, keyboardMargin: space[6], navBottom: navInsets.bottom, fab: floatFab ? component.fab + space[3] : 0, footer: footerOn ? footH : 0 });
+  useEffect(() => {
+    setFooterInset(footerOn && !kb ? footH : 0);
+    return () => setFooterInset(0);
+  }, [footerOn, kb, footH]);
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
   return (
@@ -773,7 +780,7 @@ export function Screen({
             <ScrollView
               ref={scrollRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footer && !wide ? footH : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
               // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
               // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.
@@ -829,12 +836,14 @@ export function Screen({
             <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
           </Animated.View>
         ) : null}
-        {footer && !wide && !kb ? (
+        {footerOn && !kb ? (
           <View
             onLayout={(e) => setFootH(e.nativeEvent.layout.height)}
-            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: z.nav, paddingBottom: safe.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right, backgroundColor: c.ov }}
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: z.nav, paddingLeft: navInsets.left, paddingRight: navInsets.right }}
           >
             {footer}
+            {/* under the home indicator the bar goes on in one fill (the glass has its own, the corners above stay round) */}
+            {safe.bottom > 0 ? <View style={{ height: safe.bottom, backgroundColor: c.ov }} /> : null}
           </View>
         ) : null}
         {floatFab && !kb ? (

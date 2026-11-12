@@ -44,3 +44,12 @@ export function afterBlur(errors: Record<string, string>, id: string, v: string,
 export function scrollTargetY(a: { offset: number; nodeY: number; viewY: number; covered: number; margin: number }): number {
   return Math.max(0, a.offset + (a.nodeY - a.viewY) - a.covered - a.margin);
 }
+
+/**
+ * The bottom of the window that the page's own content cannot reach, for the held row's autoscroll and for `measureVisible`: under the keyboard
+ * a small margin; else the room kept for the tab bar and «＋» (`navBottom`, `fab`) and the pinned action bar (`footer`) — the last rows of a
+ * long list must be reachable ABOVE the bar, not under its glass (review of #1277).
+ */
+export function coveredBottomOf(o: { keyboard: boolean; keyboardMargin: number; navBottom: number; fab: number; footer: number }): number {
+  return o.keyboard ? o.keyboardMargin : o.navBottom + o.fab + o.footer;
+}

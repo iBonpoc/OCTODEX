@@ -21,6 +21,7 @@ import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveS
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { ActionBar } from "@/ui/actionBar";
+import { useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
@@ -463,9 +464,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [revealTick, setRevealTick] = useState(0);
   const clientRef = useRef<ComponentRef<typeof View>>(null);
   const linesRef = useRef<ComponentRef<typeof View>>(null);
+  // each hint goes when ITS thing is there (the client chosen, a line made), not only when everything is
   useEffect(() => {
-    if (ok) setMissing(null);
-  }, [ok]);
+    if (missing === "client" && customer && property) setMissing(null);
+    if (missing === "lines" && hasContent(doc)) setMissing(null);
+  }, [missing, customer, property, doc]);
+  /** a second press while the first one saves (the buttons are always active) does nothing: no second estimate write, no second catalog item */
+  const savingRef = useRef(false);
   const { wide } = useDevice();
   const { c } = useTheme();
   const save = (send: boolean) => {
@@ -482,6 +487,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // in the document that is saved (the link), and «Отменить» of the save takes the thing out as well
     const settled = settleNow(false);
     if (!settled.closed) return;
+    if (savingRef.current) return;
+    savingRef.current = true;
     haptics.success();
     const clean: EstimateDoc = exemptDoc({ ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
     const catalogUndos = writeCatalog(settled.newItems);
@@ -1011,8 +1018,9 @@ function SumRow({ label, value, onPress }: { label: string; value: string; onPre
 /** the page scrolls to the thing a press of «Сохранить» found missing (the screen's scroll is for its children: this is one) */
 function RevealOnTick({ tick, target }: { tick: number; target: React.RefObject<ComponentRef<typeof View> | null> }) {
   const scroll = useScreenScroll();
+  const reduce = useReducedMotion();
   useEffect(() => {
-    if (tick > 0 && target.current && scroll) scroll.scrollToNode(target.current, space[6], true);
+    if (tick > 0 && target.current && scroll) scroll.scrollToNode(target.current, space[6], !reduce);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
   return null;
