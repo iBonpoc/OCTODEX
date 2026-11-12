@@ -33,6 +33,21 @@ const rules: { name: string; re: RegExp }[] = [
 
 const outsideUi = code.filter((f) => !f.includes(`${join("src", "ui")}`));
 
+/** #816 (C-08): the general rule lets a bare 0 and 1 through; the module's screens carry no such border — `component.hairline` */
+describe("design system: the module's hairline is a token", () => {
+  it("no «borderWidth: 1» (nor a 1 in another border width) in modules/gutters", () => {
+    const hits: string[] = [];
+    for (const f of code.filter((x) => x.includes(join("src", "modules", "gutters")))) {
+      readFileSync(f, "utf8")
+        .split("\n")
+        .forEach((l, i) => {
+          if (/\bborder(Top|Bottom|Left|Right)?Width:\s*1\b(?![.\w])/.test(l)) hits.push(`${relative(ROOT, f)}:${i + 1}`);
+        });
+    }
+    expect(hits, hits.join("\n")).toEqual([]);
+  });
+});
+
 describe("design system: components", () => {
   it("text only through <T> (no raw react-native Text outside src/ui)", () => {
     const hits = outsideUi.filter((f) => {

@@ -314,7 +314,7 @@ function Select<K extends string>({ label, testID, items, value, onChange, offer
   return (
     <Field label={label} testID={testID}>
       <Press testID={`${testID}-open`} onPress={() => setOpen((x) => !x)} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ expanded: open }}>
-        <RowView style={{ justifyContent: "space-between", minHeight: sizes.hitMin, paddingHorizontal: space[3], borderRadius: radius.field, borderWidth: 1, borderColor: c.bd, backgroundColor: c.in }}>
+        <RowView style={{ justifyContent: "space-between", minHeight: sizes.hitMin, paddingHorizontal: space[3], borderRadius: radius.field, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.in }}>
           <View testID={`${testID}-value`} style={{ flex: 1 }}><T v="body">{cur ? off(cur).label : value}</T></View>
           <Icon name="chevronDown" s={sizes.iconSm} color={c.mut} />
         </RowView>

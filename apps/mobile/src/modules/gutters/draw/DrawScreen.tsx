@@ -770,7 +770,7 @@ export default function DrawScreen() {
             ) : null}
           </RowView>
         ) : (
-          <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+          <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <StatusChip status="warn" label={t("mod.gutters.draw.notSaved")} />
             <T v="caption">{t(access === "expired" ? "mod.gutters.draw.expired" : "mod.gutters.draw.off")}</T>
             <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
@@ -829,26 +829,26 @@ export default function DrawScreen() {
       ) : null}
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
         {gripping ? (
-          <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+          <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
           </View>
         ) : null}
         {/* what next (П20.9): gutters drawn, no downspout yet → put them — a bubble, not a row of the total (09.11) */}
         {nextDs && !hintText && !gripping && !flat ? (
-          <View testID="draw-next" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[1], paddingLeft: space[3], paddingRight: space[1], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+          <View testID="draw-next" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[1], paddingLeft: space[3], paddingRight: space[1], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" tone="mut">{t("mod.gutters.draw.nextDs")}</T>
             <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
           </View>
         ) : null}
         {hintText && !gripping ? (
-          <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+          <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
         ) : null}
         {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         {selText ? (
-        <View testID="draw-sel-bar" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
+        <View testID="draw-sel-bar" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
           {/* one row (founder 09.11: the block took too much room): what is picked and «Свойства»; the total and the
               estimate are on «Просмотр замера» now (#700) */}
             <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
@@ -869,7 +869,7 @@ export default function DrawScreen() {
 
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
       {wide ? (
-        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[2] }}>
+        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
           {attrs ? (
             <>
               <RowView style={{ justifyContent: "flex-end" }}>
@@ -925,7 +925,7 @@ export default function DrawScreen() {
                   <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>
                 </RowView>
                 {cut.runs.map((r) => (
-                  <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[1], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: c.bd }}>
+                  <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[1], padding: space[3], borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd }}>
                     <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: drawing.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
                     <RowView style={{ justifyContent: "space-between" }}>
                       <T v="caption" tone="mut">{t("mod.gutters.draw.cutBack")}</T>
