@@ -2,15 +2,27 @@
 # The database tests' tools WITHOUT depending on Ubuntu's mirrors (#1060, 11.11.2026): for hours no Ubuntu domain resolved on the
 # runners (azure.archive.ubuntu.com, then archive.ubuntu.com), while GitHub and npm worked.
 #   bash scripts/dbTools.sh postgres faketime        (any of the two; no argument = both)
-# postgres: the ubuntu-24.04 image has PostgreSQL 16 in /usr/lib/postgresql/16/bin — then apt is not called; otherwise apt with retries.
+# postgres: PostgreSQL 17 — the version of the live database (17.x, #806 P-03). The ubuntu-24.04 image has only 16, so 17 comes
+#   from the PostgreSQL project's own apt repository (apt.postgresql.org, «PGDG»): its signing key is fetched and checked
+#   against the pinned fingerprint (rule 17), then apt with retries. Already there (a cached or newer image) — apt is not called.
 # faketime (libfaketime, for the 23:40 Los Angeles run): the system package if it is there; else ONE quick apt try; else it is
 #   built from the source on GitHub — the tag v0.9.10 of github.com/wolfcw/libfaketime, the commit checked against the pinned
 #   sha (rule 17), `make` in src/ — and FAKETIME_LIB is written to $GITHUB_ENV (supabase/tests/run.sh reads it).
 # Every choice is printed as «dbtools: <tool>: <path>». Paths and commands can be replaced by DBTOOLS_* variables (the test does).
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PGBIN_DIR="${DBTOOLS_PGBIN:-/usr/lib/postgresql/16/bin}"
-PGSHARE_EXT="${DBTOOLS_PGEXT:-/usr/share/postgresql/16/extension}"
+PG_MAJOR=17
+PGBIN_DIR="${DBTOOLS_PGBIN:-/usr/lib/postgresql/$PG_MAJOR/bin}"
+PGSHARE_EXT="${DBTOOLS_PGEXT:-/usr/share/postgresql/$PG_MAJOR/extension}"
+# the PGDG signing key, by its full fingerprint (www.postgresql.org/download/linux/ubuntu): another key is not trusted
+PGDG_FPR="B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8"
+PGDG_KEY="${DBTOOLS_PGDG_KEY:-/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc}"
+PGDG_SETUP="${DBTOOLS_PGDG_SETUP:-sudo install -d /usr/share/postgresql-common/pgdg && sudo curl -fsS --retry 3 -o $PGDG_KEY https://www.postgresql.org/media/keys/ACCC4CF8.asc && echo \"deb [signed-by=$PGDG_KEY] https://apt.postgresql.org/pub/repos/apt noble-pgdg main\" | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null}"
+PGDG_FPR_CMD="${DBTOOLS_PGDG_FPR_CMD:-gpg --show-keys --with-colons $PGDG_KEY}"
+# the packages apt downloaded for it, kept between runs (actions/cache in checks.yml): the next run installs them with dpkg,
+# without any mirror (#1060); a cache that no longer fits the image — apt again
+PG_DEBS="${DBTOOLS_PG_DEBS:-${HOME}/pg$PG_MAJOR-debs}"
+DPKG_INSTALL="${DBTOOLS_DPKG_INSTALL:-sudo dpkg -i}"
 LIBROOT="${DBTOOLS_LIBROOT:-/usr/lib}"
 APT_INSTALL="${DBTOOLS_APT_INSTALL:-sudo apt-get install -y -qq}"
 APT_UPDATE="${DBTOOLS_APT_UPDATE:-sudo apt-get update -qq}"
@@ -33,22 +45,36 @@ system_faketime() { ls "$LIBROOT"/*/faketime/libfaketime.so.1 2>/dev/null | head
 
 if has postgres; then
   if [ -x "$PGBIN_DIR/initdb" ]; then
-    echo "dbtools: postgresql-16: preinstalled on the image ($("$PGBIN_DIR/postgres" --version 2>/dev/null || echo "$PGBIN_DIR"))"
+    echo "dbtools: postgresql-$PG_MAJOR: already there ($("$PGBIN_DIR/postgres" --version 2>/dev/null || echo "$PGBIN_DIR"))"
   else
-    echo "dbtools: postgresql-16: not on the image — apt with retries"
-    bash "$HERE/retry.sh" "apt: postgresql-16" bash -c "$APT_UPDATE && $APT_INSTALL postgresql-16 >/dev/null" || exit 1
+    cached=$(ls "$PG_DEBS"/postgresql-"$PG_MAJOR"_*.deb 2>/dev/null | head -1)
+    if [ -n "$cached" ] && $DPKG_INSTALL "$PG_DEBS"/*.deb >/dev/null 2>&1 && [ -x "$PGBIN_DIR/initdb" ]; then
+      echo "dbtools: postgresql-$PG_MAJOR: from the cached packages ($PG_DEBS), no mirror"
+    else
+      [ -n "$cached" ] && echo "::warning::dbtools: the cached packages of PostgreSQL $PG_MAJOR did not install (the image changed?) — apt"
+      echo "dbtools: postgresql-$PG_MAJOR: not on the image — the PGDG repository, then apt with retries"
+      bash "$HERE/retry.sh" "PGDG: the signing key and the list" bash -c "$PGDG_SETUP" || exit 1
+      if ! bash -c "$PGDG_FPR_CMD" 2>/dev/null | grep -q "^fpr:*$PGDG_FPR:"; then
+        echo "::error::the PGDG signing key is not $PGDG_FPR — not trusted, PostgreSQL $PG_MAJOR not installed (rule 17: check the key before moving the pin)"; exit 1
+      fi
+      rm -rf "$PG_DEBS" && mkdir -p "$PG_DEBS/partial"
+      # downloaded into the cache dir first (what the image lacks), then installed from it: the next run needs no mirror
+      bash "$HERE/retry.sh" "apt: postgresql-$PG_MAJOR" bash -c "$APT_UPDATE && $APT_INSTALL --no-install-recommends --download-only -o Dir::Cache::archives=$PG_DEBS postgresql-$PG_MAJOR >/dev/null" || exit 1
+      $DPKG_INSTALL "$PG_DEBS"/*.deb >/dev/null || { echo "::error::the downloaded PostgreSQL $PG_MAJOR packages did not install (dpkg -i $PG_DEBS)"; exit 1; }
+      echo "dbtools: postgresql-$PG_MAJOR: installed from PGDG (packages kept in $PG_DEBS)"
+    fi
   fi
 fi
 
-# The first thing the job checks (audit condition, #1060): the server is really 16.x and has the extension the tests need
+# The first thing the job checks (audit condition, #1060): the server is really 17.x — the live database's version (#806) — and has the extension the tests need
 # (pgcrypto — the tests do without pg_cron / pg_net: they skip them as «not here»). A wrong image fails here, plainly.
 if has postgres; then
   ver="$("$PGBIN_DIR/postgres" --version 2>&1)"
-  if ! echo "$ver" | grep -Eq '(^|[^0-9])16\.[0-9]'; then
-    echo "::error::the database tests need PostgreSQL 16.x in $PGBIN_DIR, found: '$ver'. The image must stay ubuntu-24.04 (not ubuntu-latest)."; exit 1
+  if ! echo "$ver" | grep -Eq "(^|[^0-9])$PG_MAJOR\\.[0-9]"; then
+    echo "::error::the database tests need PostgreSQL $PG_MAJOR.x (the live database's version) in $PGBIN_DIR, found: '$ver'. The image must stay ubuntu-24.04 (not ubuntu-latest), $PG_MAJOR from the PGDG repository."; exit 1
   fi
   if [ ! -f "$PGSHARE_EXT/pgcrypto.control" ]; then
-    echo "::error::PostgreSQL 16 has no pgcrypto extension ($PGSHARE_EXT/pgcrypto.control is missing): the tests create it. Check the image / the postgresql-16 package."; exit 1
+    echo "::error::PostgreSQL $PG_MAJOR has no pgcrypto extension ($PGSHARE_EXT/pgcrypto.control is missing): the tests create it. Check the postgresql-$PG_MAJOR package."; exit 1
   fi
   echo "dbtools: checked — $ver, pgcrypto present"
 fi
