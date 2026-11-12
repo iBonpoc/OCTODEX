@@ -361,9 +361,9 @@ export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4 } as
 /** the drawing on paper (foundation.css --draw-print-*; a module's measurement sheet, its PDFs, the estimate's page, #739):
  *  sizes in sheet units — the sheet is `sheetW` wide and scales to the screen or the page; colours are `print`;
  *  `pageW`: the estimate's page — one sheet for the phone (/p/) and the paper, so built for the narrow one;
- *  `panelMin`: a contour drawn smaller than this on the shared scale gets its own panel and scale (#1091), `panelGap`: between panels */
+ *  `panelMin`: a contour drawn smaller than this on the shared scale gets its own panel and scale (#1091), `panelGap`: between panels; `insetFrac`: a section drawn shorter than this part of the panel's width gets an enlarged inset (#1190), `insetW` × `insetH`: its frame, `insetSheetFrac`: at most this part of a narrow sheet's width (wider only for long words) */
 export const drawingPrint = {
-  sheetW: 800, pageW: 420, margin: 24, runW: 2.5, thinW: 1, dimOff: 30, dimStep: 18, extGap: 4, tick: 5, numR: 10, dsR: 6, font: 13, fontSm: 11, stampH: 76, scalePx: 120, panelMin: 120, panelGap: 28,
+  sheetW: 800, pageW: 420, margin: 24, runW: 2.5, thinW: 1, dimOff: 30, dimStep: 18, extGap: 4, tick: 5, numR: 10, dsR: 6, font: 13, fontSm: 11, stampH: 76, scalePx: 120, panelMin: 120, panelGap: 28, insetFrac: 0.1, insetW: 190, insetH: 96, insetSheetFrac: 0.5,
 } as const;
 
 export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close" | "note"> = {

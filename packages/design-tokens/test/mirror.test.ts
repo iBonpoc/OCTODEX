@@ -76,7 +76,7 @@ describe("app tokens mirror the founder's DS css", () => {
       sheetW: px("draw-print-sheet-w"), pageW: px("draw-print-page-w"), margin: px("draw-print-margin"), runW: px("draw-print-run-w"), thinW: px("draw-print-thin-w"),
       dimOff: px("draw-print-dim-off"), dimStep: px("draw-print-dim-step"), extGap: px("draw-print-ext-gap"), tick: px("draw-print-tick"),
       numR: px("draw-print-num-r"), dsR: px("draw-print-ds-r"), font: px("draw-print-font"), fontSm: px("draw-print-font-sm"),
-      stampH: px("draw-print-stamp-h"), scalePx: px("draw-print-scale-px"), panelMin: px("draw-print-panel-min"), panelGap: px("draw-print-panel-gap"),
+      stampH: px("draw-print-stamp-h"), scalePx: px("draw-print-scale-px"), panelMin: px("draw-print-panel-min"), panelGap: px("draw-print-panel-gap"), insetFrac: px("draw-print-inset-frac"), insetW: px("draw-print-inset-w"), insetH: px("draw-print-inset-h"), insetSheetFrac: px("draw-print-inset-sheet-frac"),
     });
   });
   it("drawing canvas sizes", () => {
