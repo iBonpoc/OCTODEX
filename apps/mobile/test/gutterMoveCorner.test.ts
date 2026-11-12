@@ -58,7 +58,7 @@ describe("moveCorner", () => {
     expect(moveCorner(W(), ID, aAt(out))!.held[0]).toBe(false);
     expect(moveCorner(W(), ID, aAt(SNAP_ANGLE_DEG - 0.5))!.held[0]).toBe(true);
     expect(moveCorner(W(), ID, aAt(out), [true, false])!.held[0]).toBe(true);
-    expect(moveCorner(W(), ID, aAt(SNAP_ANGLE_DEG + 2.6), [true, false])!.held[0]).toBe(false);
+    expect(moveCorner(W(), ID, aAt(SNAP_ANGLE_DEG + 5), [true, false])!.held[0]).toBe(false);
   });
   it("lengths are the distances from the far ends to the joint in whole inches, written as lengthIn; a typed one is replaced", () => {
     const d: Drawing = { runs: [run("A", [0, 0], [310, 290], { lengthIn: 425.5 }), run("B", [310, 290], [600, 0])], downspouts: [] };
@@ -81,9 +81,12 @@ describe("moveCorner", () => {
     const nB = Math.round(Math.hypot(350, 100));
     expect(mv.drawing.downspouts[0]!.atIn).toBe(Math.min(nB, Math.max(0, 100 + (nB - was))));
   });
-  it("on another gutter's end there is no frame (the caller keeps the last one); the same place — the same drawing", () => {
+  it("on another gutter's end the joint snaps onto it exactly (a three-ended joint forms on release); the same place — the same drawing", () => {
     const d: Drawing = { ...V(), runs: [...V().runs, run("O", [200, 80], [200, 600])] };
-    expect(moveCorner(d, ID, [200, 80])).toBeNull();
+    const mv = moveCorner(d, ID, [203, 83])!;
+    expect(mv.end).toEqual([200, 80]);
+    expect(mv.drawing.runs[0]!.b).toEqual([200, 80]);
+    expect(mv.drawing.runs[1]!.a).toEqual([200, 80]);
     const square: Drawing = { runs: [run("A", [0, 0], [300, 300]), run("B", [300, 300], [600, 0])], downspouts: [] };
     const same = moveCorner(square, ID, [300, 300])!; // both sides already at their steps: nothing moves
     expect(same.drawing).toEqual(square);
@@ -119,11 +122,12 @@ describe("a side's own old direction is a magnet; the corner moves by the finger
 });
 
 describe("the stroke of a corner", () => {
-  it("the lift keeps the last frame when the lift itself would land on another end; a canceled one keeps nothing", () => {
+  it("the lift keeps the last frame when the lift itself would be blocked; at another end it snaps there; a canceled one keeps nothing", () => {
     const d: Drawing = { ...V(), runs: [...V().runs, run("O", [200, 80], [200, 600])] };
     const last = moveCorner(d, ID, [250, 100])!.drawing;
     const g = { kind: "corner" as const, cornerId: ID, before: d, held: [false, false] as [boolean, boolean] };
-    expect(finishStroke(g, last, [200, 80], 20, false, { id: "x", attrs })).toBe(last);
+    expect(finishStroke(g, last, [3, 2], 20, false, { id: "x", attrs })).toBe(last); // a side shorter than the least: no frame
+    expect(finishStroke(g, last, [203, 83], 20, false, { id: "x", attrs }).runs[0]!.b).toEqual([200, 80]);
     expect(finishStroke(g, last, [250, 100], 20, true, { id: "x", attrs })).toBe(d);
     expect(finishStroke(g, last, [250, 100], 20, false, { id: "x", attrs }).runs[0]!.b).toEqual([250, 100]);
   });

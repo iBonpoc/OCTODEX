@@ -47,7 +47,7 @@ exports.run = async (h) => {
   await p.mouse.move(corner[0], corner[1]);
   await p.mouse.down();
   const t0 = await p.evaluate(() => performance.now());
-  await p.waitForFunction((t) => performance.now() - t > 450, t0); // held: a long press takes the corner
+  await p.waitForFunction((t) => performance.now() - t > 650, t0); // held: a long press takes the corner
   for (let i = 1; i <= 10; i++) await p.mouse.move(corner[0] + (120 * i) / 10, corner[1], { steps: 3 });
   await tid("draw-swing-chip").waitFor({ timeout: 5000 });
   h.expect(/°$/.test((await tid("draw-swing-chip").innerText()).trim()), "the chip says the angle: " + (await tid("draw-swing-chip").innerText()));

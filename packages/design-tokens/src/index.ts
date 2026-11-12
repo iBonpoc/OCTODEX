@@ -67,6 +67,8 @@ export const motion = {
   durFast: 160,
   durBase: 220,
   durSlow: 350,
+  /** a press held this long is a long press (iOS 0.5 s): Gutters takes an end or a corner by it (founder 12.11, #818) */
+  longPressMs: 500,
   durChart: 900,
   easeOut: [0.2, 0.8, 0.2, 1] as const,
   /** components.css --ease-spring (overrides foundation's .3,1.4,.5,1) */

@@ -11,7 +11,7 @@
  --control-md-phone:36px;--field-phone:44px;
  --icon-xs:12px;--icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
  --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:36px;--sheet-radius:24px;
- --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;
+ --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;--long-press-ms:500ms;
  --menu-scale:.96;--alert-scale:1.06;--skeleton-cycle:1800ms;
  --ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.25,.5,1);
  --toast-info-ms:2600ms;--toast-undo-a11y-ms:10000ms;--spinner-delay-ms:300ms;--action-timeout-ms:10000ms;

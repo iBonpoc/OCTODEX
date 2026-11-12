@@ -25,6 +25,20 @@ export function endAt(d: Drawing, a: P, p: P, tolIn: number, except?: string): P
   return snapped ? s : snapDirection(a, s);
 }
 
+/**
+ * What a line being drawn is held by right now (for the tick under the finger, DS §15.6): another gutter's end (its point as the key),
+ * a step of 45° from the start (the step as the key), or nothing (null). The same rules as `endAt`.
+ */
+export function drawSnap(d: Drawing, a: P, p: P, tolIn: number, except?: string): string | null {
+  const ends = endsOf(d, except).filter((e) => e[0] !== a[0] || e[1] !== a[1]);
+  const s = snapPoint(p, ends, tolIn);
+  const onEnd = ends.find((e) => e[0] === s[0] && e[1] === s[1]);
+  if (onEnd) return `e:${onEnd[0]},${onEnd[1]}`;
+  const t = snapDirection(a, s);
+  if (t[0] === s[0] && t[1] === s[1]) return null;
+  return `s:${Math.round((Math.atan2(t[1] - a[1], t[0] - a[0]) * 180) / Math.PI)}`;
+}
+
 export function addRun(d: Drawing, id: string, a: P, b: P, attrs: DrawnRun["attrs"]): Drawing {
   if (Math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_RUN_IN) return d;
   const next: Drawing = { ...d, runs: [...d.runs, { id, a, b, attrs: { ...attrs } }] };
@@ -179,10 +193,46 @@ export interface Swing {
   snapped: boolean;
   /** the step held, radians from the reference (a multiple of 45°), else null: given back to the next frame so the window has a hysteresis */
   step: number | null;
+  /** the end snapped onto another gutter's end (the point of it): given back to the next frame so the snap has a hysteresis */
+  end?: P;
 }
 
-/** the window to enter a step of 45° is ±SNAP_ANGLE_DEG; once held it is left only past this much more (no jitter at its edge, #818) */
-export const SNAP_LEAVE_EXTRA_DEG = 2;
+/**
+ * The windows of the magnets (45° steps, the gutter's own direction) are WIDTHS across the ray, in the finger's pixels (the caller
+ * gives `tolIn` = px / scale), not angles at the far end: an angle of 7° is 4 ft wide on a 30 ft gutter and nothing on a 3 ft one
+ * (founder 12.11: «стоит на месте, потом прыгает»). The angle is only capped, so that the windows of two steps never touch.
+ */
+export const SNAP_MAX_DEG = 12;
+/** a magnet already held is left only past this much more than it is entered (no jitter at its edge, #818) */
+export const SNAP_LEAVE_RATIO = 1.5;
+/** the width of a window in plan inches when the caller gives none (tests, ≈ 7° at 400″; the screen passes its own: pixels ÷ scale) */
+export const SNAP_TOL_DEFAULT_IN = 50;
+
+/** the finger `dist` from the standing end, `diff` rad off a magnet's direction: inside its window? (`leave`: it is held already) */
+export function inWindow(diff: number, dist: number, tolIn: number, leave = false): boolean {
+  if (diff > Math.PI / 2) return false;
+  const k = leave ? SNAP_LEAVE_RATIO : 1;
+  return diff <= (SNAP_MAX_DEG * k * Math.PI) / 180 && dist * Math.sin(diff) <= tolIn * k;
+}
+
+/**
+ * The end of ANOTHER gutter (same storey) the finger is near — an end is a magnet in every mode: along, across, and a corner's joint
+ * (founder 12.11: «прилипает всегда»). Entered within `tolIn`, a held one (`held`) is left only past SNAP_LEAVE_RATIO × that.
+ * `skip` — gutters that move (their own ends are no magnet), `except` — points that are no magnet (the standing end).
+ */
+export function endNear(d: Drawing, story: DrawnRun, skip: Set<string>, p: P, tolIn: number, held: P | null, except: P[] = []): P | null {
+  let best: P | null = null, bd = Infinity;
+  for (const x of d.runs) {
+    if (skip.has(x.id) || !sameStory(x, story)) continue;
+    for (const q of [x.a, x.b]) {
+      if (except.some((e) => Math.hypot(e[0] - q[0], e[1] - q[1]) <= 1.5)) continue;
+      const dist = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      const lim = held && Math.hypot(held[0] - q[0], held[1] - q[1]) <= 1.5 ? tolIn * SNAP_LEAVE_RATIO : tolIn;
+      if (dist <= lim && dist < bd) { best = q; bd = dist; }
+    }
+  }
+  return best;
+}
 
 /** `Swing.step` of a side held in its OWN old direction (the end only grows or shrinks; a typed length keeps its fraction, as moveEndAlong) */
 export const HELD_ORIGINAL = Infinity;
@@ -206,7 +256,7 @@ export function grabbedCorner(d: Drawing, cornerId: string, from: P | undefined,
  * direction free, but held at a step of 45° relative to the neighbouring gutter at the standing end (else to the gutter's old
  * direction) within ±SNAP_ANGLE_DEG. The length is kept as the finger's distance in whole inches (`lengthIn`): the point is rounded to an inch on the plan, a diagonal's hypotenuse would not be. Downspouts stay on the line.
  */
-export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: number | null = null): Swing | null {
+export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: number | null = null, tolIn: number = SNAP_TOL_DEFAULT_IN, onEnd: P | null = null): Swing | null {
   const r = d.runs.find((x) => x.id === runId);
   if (!r) return null;
   const fixed = end === 0 ? r.b : r.a;
@@ -222,8 +272,36 @@ export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: numb
   let delta = ((raw - ref + Math.PI * 3) % (Math.PI * 2)) - Math.PI; // (−180°, 180°]
   const step = Math.PI / 4;
   const m = Math.round(delta / step) * step;
-  // entered within SNAP_ANGLE_DEG of a step; a step already held is kept a little further (hysteresis)
-  const deg1 = (SNAP_ANGLE_DEG * Math.PI) / 180, deg2 = ((SNAP_ANGLE_DEG + SNAP_LEAVE_EXTRA_DEG) * Math.PI) / 180;
+  // entered within a width of `tolIn` across the ray; one already held is kept a little further (hysteresis)
+  const put = (at: P, len: number, delta1: number, snapped: boolean, step: number | null, snapEnd?: P): Swing => {
+    const moved: DrawnRun = closeEnd(end === 0 ? { ...r, a: at, lengthIn: len } : { ...r, b: at, lengthIn: len }, end);
+    const n = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
+    const was0 = Math.round(Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]));
+    return {
+      drawing: {
+        ...d,
+        runs: d.runs.map((x) => (x.id === runId ? moved : x)),
+        downspouts: d.downspouts.map((s) => {
+          if (s.runId !== runId) return s;
+          const atIn = end === 0 ? s.atIn + (n - was0) : s.atIn;
+          return { ...s, atIn: Math.min(n, Math.max(0, atIn)) };
+        }),
+      },
+      deg: Math.round((Math.abs(delta1) * 180) / Math.PI),
+      snapped,
+      step,
+      ...(snapEnd ? { end: snapEnd } : {}),
+    };
+  };
+  // another gutter's end beats every direction: the end lands exactly on it (a corner forms on release)
+  const tgt = endNear(d, r, new Set([runId]), p, tolIn, onEnd, [fixed]);
+  if (tgt) {
+    const len = Math.round(Math.hypot(tgt[0] - fixed[0], tgt[1] - fixed[1]));
+    if (len >= MIN_RUN_IN && len <= MAX_RUN_IN) {
+      const dl = ((Math.atan2(tgt[1] - fixed[1], tgt[0] - fixed[0]) - ref + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      return put(tgt, len, dl, true, null, tgt);
+    }
+  }
   // the gutter's OWN old direction is a magnet too (founder 12.11: it stays straight while pulled along; no corridor of pixels): within
   // the window the end only grows or shrinks, as before — the finger's wobble does not bend it. It holds while it is held (the start
   // of a pull is held in it: nothing jumps at the touch); a step of 45° wins when the end comes from the free air
@@ -233,10 +311,10 @@ export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: numb
     const dOrig = Math.abs(((origAng - ref + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
     return { drawing: moveEndAlong(d, runId, end, p), deg: Math.round((dOrig * 180) / Math.PI), snapped: true, step: HELD_ORIGINAL };
   };
-  if (held === HELD_ORIGINAL && offOrig <= deg2) return alongNow();
-  const stay = held !== null && held !== HELD_ORIGINAL && Math.abs(delta - held) <= deg2;
-  const stepIn = stay || Math.abs(delta - m) <= deg1;
-  if (!stepIn && offOrig <= deg1) return alongNow();
+  if (held === HELD_ORIGINAL && inWindow(offOrig, dist, tolIn, true)) return alongNow();
+  const stay = held !== null && held !== HELD_ORIGINAL && inWindow(Math.abs(delta - held), dist, tolIn, true);
+  const stepIn = stay || inWindow(Math.abs(delta - m), dist, tolIn);
+  if (!stepIn && inWindow(offOrig, dist, tolIn)) return alongNow();
   const snapped = stepIn;
   const stepHeld = stay ? held : snapped ? m : null;
   if (snapped) delta = stepHeld!;
@@ -247,24 +325,21 @@ export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: numb
   // never ends on another gutter's end by rounding (a corner only by the user's own act — drawing a line to it): no new frame — the caller keeps the last one
   if (d.runs.some((x) => x.id !== runId && sameStory(x, r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return null;
   // the finger's distance is the length, whole inches, whatever the rounding of the point to an inch does to the hypotenuse
-  const moved: DrawnRun = closeEnd(end === 0 ? { ...r, a: at, lengthIn: len } : { ...r, b: at, lengthIn: len }, end);
-  const n = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
-  const was0 = Math.round(Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]));
-  return {
-    drawing: {
-      ...d,
-      runs: d.runs.map((x) => (x.id === runId ? moved : x)),
-      downspouts: d.downspouts.map((s) => {
-        if (s.runId !== runId) return s;
-        const atIn = end === 0 ? s.atIn + (n - was0) : s.atIn;
-        return { ...s, atIn: Math.min(n, Math.max(0, atIn)) };
-      }),
-    },
-    deg: Math.round((Math.abs(delta) * 180) / Math.PI),
-    snapped,
-    step: stepHeld,
-  };
+  return put(at, len, delta, snapped, stepHeld);
 }
+
+/**
+ * The haptic ticks of a drag (DS §15.6, table «место → вибрация» in spec 33): `selection` on EVERY snap on entering it — a step of 45°,
+ * the gutter's own direction, another gutter's end — and never twice at the edge of one (the windows have a hysteresis).
+ * `prev` is the state the last frame gave back (held step, held end), `next` the frame now.
+ */
+export const pullTick = (next: Pick<Swing, "snapped" | "step" | "end">, prev: { held?: number | null; onEnd?: P | null }): boolean =>
+  next.end ? !samePt(next.end, prev.onEnd) : next.snapped && next.step !== (prev.held ?? null);
+export const cornerTick = (next: Pick<CornerMove, "held" | "end">, prev: { held: [boolean, boolean]; onEnd?: P | null }): boolean =>
+  (next.held[0] && !prev.held[0]) || (next.held[1] && !prev.held[1]) || (!!next.end && !samePt(next.end, prev.onEnd));
+/** a line being drawn: the key of what holds it (`drawSnap`) changed to a snap */
+export const drawTick = (key: string | null, prev: string | null): boolean => !!key && key !== prev;
+const samePt = (a: P, b: P | null | undefined): boolean => !!b && Math.hypot(a[0] - b[0], a[1] - b[1]) <= 1.5;
 
 export interface CornerMove {
   drawing: Drawing;
@@ -272,6 +347,8 @@ export interface CornerMove {
   deg: number;
   /** which of the two sides (the corner's runs[0], runs[1]) is held at a step of 45° now — given back to the next frame (hysteresis) */
   held: [boolean, boolean];
+  /** the joint snapped onto another gutter's end (its point): given back to the next frame (hysteresis) */
+  end?: P;
 }
 
 /**
@@ -299,7 +376,7 @@ export function sameDirection(before: Pick<Drawing, "runs">, next: Pick<Drawing,
   return Math.abs(ux * vy - uy * vx) <= 1e-6 * Math.hypot(ux, uy) * Math.hypot(vx, vy) + 1e-9 && ux * vx + uy * vy > 0;
 }
 
-export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, boolean] = [false, false]): CornerMove | null {
+export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, boolean] = [false, false], tolIn: number = SNAP_TOL_DEFAULT_IN, onEnd: P | null = null): CornerMove | null {
   const f = findCorners(d).find((c) => c.id === cornerId);
   if (!f) return null;
   const rs = f.runs.map((x) => ({ x, r: d.runs.find((r) => r.id === x.id)! }));
@@ -308,7 +385,6 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
   if (d.runs.some((x) => !rs.some((q) => q.r.id === x.id) && sameStory(x, rs[0]!.r) && [x.a, x.b].some((q) => Math.hypot(q[0] - f.at[0], q[1] - f.at[1]) <= 1.5))) return null;
   const far = rs.map((q) => (q.x.end === 0 ? q.r.b : q.r.a));
   const step = Math.PI / 4;
-  const win = (i: number) => ((SNAP_ANGLE_DEG + (held[i] ? SNAP_LEAVE_EXTRA_DEG : 0)) * Math.PI) / 180;
   // each side's ray: its own old direction, else the nearest step of 45°, when the finger is within the window of it
   // a side's OWN old direction is a magnet too: pulled along a wall it stays straight, only the other side swings. A side held keeps
   // it first (the start of a pull holds both: nothing jumps at the touch); a free one is caught by a step of 45° first
@@ -317,15 +393,19 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
     const orig = Math.atan2(f.at[1] - q[1], f.at[0] - q[0]);
     const dOrig = Math.abs(((ang - orig + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
     const m = Math.round(ang / step) * step;
-    const onStep = Math.abs(ang - m) <= win(i);
-    const onOrig = dOrig <= win(i);
+    const dist = Math.hypot(p[0] - q[0], p[1] - q[1]);
+    const onStep = inWindow(Math.abs(ang - m), dist, tolIn, held[i]);
+    const onOrig = inWindow(dOrig, dist, tolIn, held[i]);
     const ray = (a: number) => [Math.cos(a), Math.sin(a)] as P;
     if (held[i] && onOrig) return ray(orig);
     if (onStep) return ray(m);
     return onOrig ? ray(orig) : null;
   });
+  // another gutter's end beats the rays: the joint lands exactly on it (a three-ended joint forms on release)
+  const tgt = endNear(d, rs[0]!.r, new Set(rs.map((q) => q.r.id)), p, tolIn, onEnd);
   let at: P = p;
-  if (rays[0] && rays[1]) {
+  if (tgt) at = tgt;
+  else if (rays[0] && rays[1]) {
     // the crossing of the two rays: far[0] + t·u0 = far[1] + s·u1
     const [u0, u1] = [rays[0], rays[1]];
     const den = u0[0] * u1[1] - u0[1] * u1[0];
@@ -341,16 +421,16 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
   const lens = far.map((q) => Math.round(Math.hypot(at[0] - q[0], at[1] - q[1])));
   if (lens.some((n) => n < MIN_RUN_IN || n > MAX_RUN_IN)) return null;
   // a side never turns inside out: the joint stays on the finger's side of each far end (the crossing of two rays may land behind one)
-  if (far.some((q) => (at[0] - q[0]) * (p[0] - q[0]) + (at[1] - q[1]) * (p[1] - q[1]) < 0)) return null;
+  if (!tgt && far.some((q) => (at[0] - q[0]) * (p[0] - q[0]) + (at[1] - q[1]) * (p[1] - q[1]) < 0)) return null;
   const same = at[0] === f.at[0] && at[1] === f.at[1];
   // never ends on another gutter's end of the same storey by rounding (a corner only by the user's own act — drawing a line to it)
-  if (!same && d.runs.some((x) => !rs.some((q) => q.r.id === x.id) && sameStory(x, rs[0]!.r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return null;
+  if (!same && !tgt && d.runs.some((x) => !rs.some((q) => q.r.id === x.id) && sameStory(x, rs[0]!.r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return null;
   const angle = Math.round((Math.abs(Math.atan2(cross2(sub2(far[0]!, at), sub2(far[1]!, at)), dot2(sub2(far[0]!, at), sub2(far[1]!, at)))) * 180) / Math.PI);
   // a corner stays a corner: the frame that would lay the two sides almost in one line (a turn under MIN_TURN_DEG) is not drawn — it would
   // stop being found, and its method and splash guard would be orphaned
   if (180 - angle < MIN_TURN_DEG) return null;
-  const nowHeld: [boolean, boolean] = [!!rays[0], !!rays[1]];
-  if (same) return { drawing: d, deg: angle, held: nowHeld };
+  const nowHeld: [boolean, boolean] = tgt ? [false, false] : [!!rays[0], !!rays[1]];
+  if (same) return { drawing: d, deg: angle, held: nowHeld, ...(tgt ? { end: tgt } : {}) };
   const ids = new Map(rs.map((q, i) => [q.r.id, { end: q.x.end, len: lens[i]! }]));
   const runs = d.runs.map((r) => {
     const m = ids.get(r.id);
@@ -373,6 +453,7 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
     },
     deg: angle,
     held: nowHeld,
+    ...(tgt ? { end: tgt } : {}),
   };
 }
 const sub2 = (a: P, b: P): P => [a[0] - b[0], a[1] - b[1]];
@@ -511,7 +592,7 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "corner"; cornerId: string; before: Drawing; /** where the finger touched down: the joint moves by the finger's move from it, never jumps to it */ from?: P; /** the sides held (at 45° steps or in their own direction) by the last frame */ held: [boolean, boolean] } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean; /** where the finger touched down: the end moves by the finger's move from it */ from?: P; /** the step of 45° held by the last frame (the window's hysteresis) */ held?: number | null };
+export type Stroke = { kind: "line"; a: P; /** a long press on a free cap: along the gutter's axis it turns into a pull (#504) */ pullable?: { id: string; end: 0 | 1; before: Drawing } } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing } | { kind: "corner"; cornerId: string; before: Drawing; /** where the finger touched down: the joint moves by the finger's move from it, never jumps to it */ from?: P; /** the sides held (at 45° steps or in their own direction) by the last frame */ held: [boolean, boolean]; /** the width of the magnets' windows in plan inches (pixels ÷ scale, taken with the corner) and the end snapped to by the last frame */ tol?: number; onEnd?: P | null } | { kind: "pull"; id: string; end: 0 | 1; before: Drawing; /** begun with «Желоб»: like drawing on straight, the length window opens after it */ fromLine?: boolean; /** where the finger touched down: the end moves by the finger's move from it */ from?: P; /** the step of 45° held by the last frame (the window's hysteresis) */ held?: number | null; /** as the corner's: the window's width in plan inches, the end snapped to by the last frame */ tol?: number; onEnd?: P | null };
 
 /** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
 export function moveDs(d: Drawing, id: string, p: P): Drawing {
@@ -530,8 +611,8 @@ export function moveDs(d: Drawing, id: string, p: P): Drawing {
 export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, canceled: boolean, newRun: { id: string; attrs: DrawnRun["attrs"] }): Drawing {
   if (g.kind === "end") return canceled ? g.before : moveEnd(g.before, g.id, g.end, p, tolIn);
   if (g.kind === "ds") return canceled ? g.before : moveDs(g.before, g.id, p);
-  if (g.kind === "corner") return canceled ? g.before : (moveCorner(g.before, g.cornerId, grabbedCorner(g.before, g.cornerId, g.from, p), g.held)?.drawing ?? d);
-  if (g.kind === "pull") return canceled ? g.before : (swingEnd(g.before, g.id, g.end, grabbedEnd(g.before, g.id, g.end, g.from, p), g.held ?? null)?.drawing ?? d);
+  if (g.kind === "corner") return canceled ? g.before : (moveCorner(g.before, g.cornerId, grabbedCorner(g.before, g.cornerId, g.from, p), g.held, g.tol, g.onEnd ?? null)?.drawing ?? d);
+  if (g.kind === "pull") return canceled ? g.before : (swingEnd(g.before, g.id, g.end, grabbedEnd(g.before, g.id, g.end, g.from, p), g.held ?? null, g.tol, g.onEnd ?? null)?.drawing ?? d);
   if (canceled) return d;
   const b = endAt(d, g.a, p, tolIn);
   return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);

@@ -40,7 +40,7 @@ exports.run = async (h) => {
   await p.mouse.move(c18[0], c18[1] - 18);
   await p.mouse.down();
   const t0 = await p.evaluate(() => performance.now()); // held: a long press takes the cap (the touch is not a tap that puts a downspout)
-  await p.waitForFunction((t) => performance.now() - t > 450, t0);
+  await p.waitForFunction((t) => performance.now() - t > 650, t0);
   for (let i = 1; i <= 8; i++) await p.mouse.move(c18[0] + (40 * i) / 8, c18[1] - 18, { steps: 3 });
   await p.mouse.up();
   await p.waitForFunction(([k, bx]) => { const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt)[0]?.geom; return !!g && g.b[0] > bx + 1; }, [KEY, g0.b[0]], { timeout: 8000 });
@@ -55,7 +55,7 @@ exports.run = async (h) => {
   await p.mouse.move(c[0], c[1]);
   await p.mouse.down();
   const t1 = await p.evaluate(() => performance.now());
-  await p.waitForFunction((t) => performance.now() - t > 450, t1); // held (the gutter may not be picked after «Назад»)
+  await p.waitForFunction((t) => performance.now() - t > 650, t1); // held (the gutter may not be picked after «Назад»)
   for (let i = 1; i <= 10; i++) await p.mouse.move(c[0] + ((left[0] + 2 - c[0]) * i) / 10, c[1] + (90 * i) / 10, { steps: 3 });
   const chip = tid("draw-swing-chip");
   await chip.waitFor({ timeout: 5000 });

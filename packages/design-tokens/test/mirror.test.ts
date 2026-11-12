@@ -87,7 +87,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(motion.durBrand).toBe(px("dur-brand"));
   });
   it("motion", () => {
-    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart")]);
+    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart, motion.longPressMs]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart"), px("long-press-ms")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
     expect([...motion.easeOut]).toEqual(bez("ease-out"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));

@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
-import { finishStroke, grabbedEnd, HELD_ORIGINAL, MIN_RUN_IN, SNAP_LEAVE_EXTRA_DEG, swingEnd } from "../src/modules/gutters/canvas/edit";
+import { finishStroke, grabbedEnd, HELD_ORIGINAL, MIN_RUN_IN, SNAP_LEAVE_RATIO, swingEnd } from "../src/modules/gutters/canvas/edit";
 import { SNAP_ANGLE_DEG, runLengthIn, type Drawing, type DrawnRun, type P } from "../src/modules/gutters/geometry";
 
 const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
@@ -99,13 +99,14 @@ describe("the stroke: lift keeps the swing; «Отменить» has the drawing
 
 describe("review of #1205", () => {
   const r = one().runs[0]!;
-  it("on another gutter's end there is no new frame; the lift keeps the last one, not the drawing from before", () => {
-    // another gutter ends at (300, 300): the end swung to it would land on it
+  it("another gutter's end is a magnet: the end lands exactly on it, and the lift keeps that (a corner forms)", () => {
     const d: Drawing = { runs: [run("a", [0, 0], [600, 0]), run("o", [300, 300], [300, 900])], downspouts: [] };
-    expect(swingEnd(d, "a", 1, [300, 300])).toBeNull();
-    const last = swingEnd(d, "a", 1, [200, 200])!.drawing; // the previous frame
-    const g = { kind: "pull" as const, id: "a", end: 1 as const, before: d, swung: true, held: null };
-    expect(finishStroke(g, last, [300, 300], 20, false, { id: "x", attrs })).toBe(last);
+    const sw = swingEnd(d, "a", 1, [303, 302])!;
+    expect(sw.end).toEqual([300, 300]);
+    expect(sw.snapped).toBe(true);
+    expect(sw.drawing.runs[0]!.b).toEqual([300, 300]);
+    const g = { kind: "pull" as const, id: "a", end: 1 as const, before: d, held: null };
+    expect(finishStroke(g, d, [303, 302], 20, false, { id: "x", attrs }).runs[0]!.b).toEqual([300, 300]);
   });
   it("the length is the finger's distance, whole: 405″ at 45° is 405″ (not 404.46″ of the rounded point)", () => {
     const s = swingEnd(one(), "a", 1, at(45, 405))!;
@@ -122,7 +123,7 @@ describe("review of #1205", () => {
     const held = swingEnd(one(), "a", 1, at(45 + out, 400), entered.step)!; // 8° off, held: stays
     expect(held.snapped).toBe(true);
     expect(dirOf(held.drawing.runs[0]!, 1)).toBeCloseTo(45, 0);
-    const left = swingEnd(one(), "a", 1, at(45 + SNAP_ANGLE_DEG + SNAP_LEAVE_EXTRA_DEG + 0.5, 400), entered.step)!;
+    const left = swingEnd(one(), "a", 1, at(45 + SNAP_ANGLE_DEG + 5, 400), entered.step)!;
     expect(left.snapped).toBe(false);
     expect(left.step).toBeNull();
   });
@@ -146,8 +147,8 @@ describe("the end is taken by the ring or a long press and follows the finger (#
     }
   });
   it("held in the old direction to ±9°, then it leaves for a step or the air; from the air a step of 45° wins over the old direction", () => {
-    expect(swingEnd(one(), "a", 1, at(8, 700), HELD_ORIGINAL)!.step).toBe(HELD_ORIGINAL);
-    expect(swingEnd(one(), "a", 1, at(10, 700), HELD_ORIGINAL)!.step).toBeNull();
+    expect(swingEnd(one(), "a", 1, at(5, 700), HELD_ORIGINAL)!.step).toBe(HELD_ORIGINAL);
+    expect(swingEnd(one(), "a", 1, at(8, 700), HELD_ORIGINAL)!.step).toBeNull();
     // with a neighbour at the standing end the steps are its (a right angle to it), the gutter itself 3° off one: the finger near the
     // step, not held in the old direction, is caught by the STEP
     const slant: Drawing = { runs: [run("n", [0, 0], [0, -500]), run("a", [0, 0], [599, 31])], downspouts: [] };

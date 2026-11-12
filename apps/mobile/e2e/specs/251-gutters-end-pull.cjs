@@ -57,7 +57,7 @@ exports.run = async (h) => {
   };
   const labelText = async () => (await svg().locator("text").allTextContents()).filter((x) => /′|″/.test(x)).join("|");
   let midLabel = "";
-  const pull = async (at, dx, dy = 0, hold = 500) => {
+  const pull = async (at, dx, dy = 0, hold = 650) => {
     await p.mouse.move(at[0], at[1]);
     await p.mouse.down();
     if (hold) await p.waitForTimeout(hold); // held: longer than the long-press time
