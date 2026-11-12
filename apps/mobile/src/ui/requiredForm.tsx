@@ -1,10 +1,13 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { TextInput, View } from "react-native";
+import { AccessibilityInfo, Platform, TextInput, View } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { motion, size, space } from "@octo/design-tokens";
+import { motion, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { haptics } from "./haptics";
 import { Icon, T } from "./primitives";
+import { afterBlur, afterEdit, errorsOf, firstProblem, type Check, type Problem } from "./requiredLogic";
+
+export { scrollTargetY, firstProblem, type Problem } from "./requiredLogic";
 
 /**
  * Required fields of a form (DS §11 п.3–4, спека редактора сметы Р10): the main button is always on; pressed with an empty
@@ -30,19 +33,17 @@ export interface FieldBinding {
   error?: string;
   anchorRef: (n: ViewNode | null) => void;
   inputRef: (n: InputNode | null) => void;
-  /** the person edits the field: its error goes */
+  /** the person edits the field: its error goes — or stays with the new text, while the value is still wrong (`check`) */
   clear: () => void;
-}
-
-export interface Problem {
-  /** the field's id — as in `form.field(id)` and in the registry (`features/requiredFields.ts`) */
-  id: string;
-  /** what to enter: the text under the field */
-  text: string;
+  /** a text field was edited to `v` */
+  edit: (v: string) => void;
+  /** the person leaves a text field: a filled but wrong value shows its error at once (DS §11 п.1) */
+  blur: (v: string) => void;
 }
 
 export interface RequiredForm {
-  field: (id: string) => FieldBinding;
+  /** `check` — a filled field that can be wrong (an email): its error text, or nothing when it is right */
+  field: (id: string, check?: Check) => FieldBinding;
   errors: Record<string, string>;
   /**
    * The main button: no problems — `ok()`; else the errors, the scroll to the first (in the order given), the focus, the
@@ -52,9 +53,11 @@ export interface RequiredForm {
   clearAll: () => void;
 }
 
-/** the scroll to the first wrong field: pure, so the order and the margin are tested */
-export function firstProblem(problems: Problem[]): Problem | undefined {
-  return problems[0];
+/** the web would scroll the page by itself to the focused field — our own smooth scroll has already done it */
+function focusNoScroll(n: InputNode | null | undefined) {
+  if (!n) return;
+  if (Platform.OS === "web") (n as unknown as { focus: (o?: { preventScroll: boolean }) => void }).focus({ preventScroll: true });
+  else n.focus?.();
 }
 
 export function useRequiredForm(): RequiredForm {
@@ -73,8 +76,10 @@ export function useRequiredForm(): RequiredForm {
       return rest;
     });
   }, []);
+  const checks = useRef<Record<string, Check | undefined>>({});
   const field = useCallback(
-    (id: string): FieldBinding => {
+    (id: string, check?: Check): FieldBinding => {
+      checks.current[id] = check;
       const have = bindings.current[id];
       // the binding is stable per id; its `error` is read at each render
       const b: FieldBinding = {
@@ -84,6 +89,9 @@ export function useRequiredForm(): RequiredForm {
         anchorRef: have?.anchorRef ?? ((n: ViewNode | null) => void (nodes.current[id] = n)),
         inputRef: have?.inputRef ?? ((n: InputNode | null) => void (inputs.current[id] = n)),
         clear: have?.clear ?? (() => clearOne(id)),
+        // an error on the field stays while the value is still wrong, with the right text; else it goes
+        edit: have?.edit ?? ((v: string) => setErrors((e) => afterEdit(e, id, v, checks.current[id]))),
+        blur: have?.blur ?? ((v: string) => setErrors((e) => afterBlur(e, id, v, checks.current[id]))),
       };
       bindings.current[id] = b;
       return b;
@@ -98,14 +106,16 @@ export function useRequiredForm(): RequiredForm {
         ok();
         return true;
       }
-      setErrors(Object.fromEntries(problems.map((p) => [p.id, p.text])));
+      setErrors(errorsOf(problems));
       haptics.warning();
+      // VoiceOver / TalkBack: the first thing to fix is read aloud (the web reads the live region under the field)
+      if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(first.text);
       reveal?.(first.id);
       // after the block has opened and the errors are on the screen: scroll, then the focus (the keyboard comes last)
       setTimeout(() => {
         const node = nodes.current[first.id];
         if (node && scroll) scroll.scrollToNode(node, space[6], !reduce);
-        setTimeout(() => inputs.current[first.id]?.focus?.(), reduce ? 0 : motion.durBase);
+        setTimeout(() => focusNoScroll(inputs.current[first.id]), reduce ? 0 : motion.durBase);
       }, 0);
       return false;
     },
@@ -131,9 +141,11 @@ export function FieldError({ text, testID }: { text?: string; testID?: string })
 
 /** a required field that brings its own control: the place for the scroll, the error under it */
 export function Anchored({ field, children }: { field: FieldBinding; children: ReactNode }) {
+  const { c } = useTheme();
   return (
     <View ref={field.anchorRef} collapsable={false} testID={field.testID} style={{ gap: space[1] }}>
-      {children}
+      {/* the frame of a wrong field is `status.bad` (Р10 п.2), as on a text field */}
+      <View style={{ borderRadius: radius.field, borderWidth: field.error ? 1 : 0, borderColor: c.status.bad.fill }}>{children}</View>
       <FieldError text={field.error} testID={`${field.testID}-error`} />
     </View>
   );

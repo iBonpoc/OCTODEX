@@ -149,7 +149,7 @@ export default function NewLead() {
         </View>
       ) : null}
 
-      <Button label={t("lead.save")} icon="check" full onPress={submit} />
+      <Button label={t("lead.save")} icon="check" full testID="lead-save" onPress={submit} />
     </Screen>
   );
 }

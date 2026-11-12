@@ -2,6 +2,7 @@ import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
+import { scrollTargetY } from "./requiredLogic";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
@@ -698,13 +699,15 @@ export function Screen({
   const tabsY = useRef(0);
   const offset = useRef(0);
   // the forms under the screen scroll it to a field (DS §11 п.3): the view's place in the window, then to `margin` below the top
+  // the top of the content lies under the status bar / header (`top`, below): the field stops below it, not at the very top
+  const coveredTop = useRef(0);
   const screenScroll = useRef<ScreenScroll>({
     scrollToNode: (node, margin, animated) => {
       const sv = scrollRef.current;
       if (!sv) return;
       sv.measureInWindow((_sx, sy) => {
         node.measureInWindow((_x, y) => {
-          sv.scrollTo({ y: Math.max(0, offset.current + (y - sy) - margin), animated });
+          sv.scrollTo({ y: scrollTargetY({ offset: offset.current, nodeY: y, viewY: sy, covered: coveredTop.current, margin }), animated });
         });
       });
     },
@@ -714,6 +717,7 @@ export function Screen({
   }, [tabKey, tabs]);
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;
+  coveredTop.current = pinned ? 0 : navInsets.top;
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
   return (

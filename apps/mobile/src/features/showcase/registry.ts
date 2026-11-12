@@ -49,7 +49,7 @@ export const SCREENS: ShowcaseScreen[] = [
 
 export const SECTIONS: ShowcaseSection[] = [
   { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet"] },
-  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField", "PickerSheet"] },
+  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press"] },
   { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge"] },
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
@@ -68,7 +68,7 @@ export const UI_PENDING: readonly string[] = [
   "Columns", "Meter", "ReadOnly", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
   "TextField", "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
   "ListPanel", "Glass", "Menu", "HelpButton", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
-  "Divider", "Empty", "Screen", "FieldError", "Anchored",
+  "Divider", "Empty", "Screen",
 ];
 
 /** components that are plumbing, not something a person sees — each with the reason */

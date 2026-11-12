@@ -108,7 +108,7 @@ export default function SupplierScreen() {
         <View testID="sup-phone">
           <TextField type="phone" value={s.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder={t("sup.phone")} />
         </View>
-        <TextField type="email" value={s.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder={t("sup.email")} field={form.field("email")} />
+        <TextField type="email" value={s.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder={t("sup.email")} field={form.field("email", (v) => (emailBad(v) ? t("sup.emailBad") : undefined))} />
         <View testID="sup-account">
           <TextField type="identifier" value={s.accountNumber ?? ""} onChangeText={(v) => set({ accountNumber: v })} placeholder={t("sup.account")} />
         </View>
@@ -161,7 +161,7 @@ export default function SupplierScreen() {
       </Card>
 
       <View testID="sup-save">
-        <Button label={t("ue.save")} icon="check" full onPress={submit} />
+        <Button label={t("ue.save")} icon="check" full testID="supplier-save" onPress={submit} />
       </View>
 
       {found ? (

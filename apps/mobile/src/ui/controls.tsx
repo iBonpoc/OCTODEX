@@ -540,10 +540,12 @@ export function TextField({
         value={value}
         editable={!ro}
         onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
+        onBlur={field ? () => field.blur(value) : undefined}
         aria-disabled={ro || undefined}
         onChangeText={(v) => {
-          if (field?.error) field.clear();
-          onChangeText(f.fmt ? f.fmt(v) : v);
+          const nv = f.fmt ? f.fmt(v) : v;
+          field?.edit(nv);
+          onChangeText(nv);
         }}
         placeholder={placeholder}
         placeholderTextColor={c.mut}

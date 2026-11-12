@@ -61,6 +61,7 @@ export default function NewExpense() {
         label={t("exp.save")}
         icon="check"
         full
+        testID="expense-save"
         onPress={() =>
           form.submit(ok ? [] : [{ id: "amount", text: t("form.req.amount") }], () => {
           const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor, category, amountCents: cents, receiptUri: photo });
