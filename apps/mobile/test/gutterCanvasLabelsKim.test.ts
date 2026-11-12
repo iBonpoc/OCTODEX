@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
-import { layoutLabels, overlaps, segmentHitsBox, type LabelWant } from "../src/modules/gutters/canvas/labels";
+import { layoutLabels, overlaps, segmentHitsBox, work, type LabelWant } from "../src/modules/gutters/canvas/labels";
 import { buildScene, fitView } from "../src/modules/gutters/canvas/scene";
 import { kim } from "./fixtures/kimSheet";
 
@@ -42,15 +42,16 @@ describe("words off the lines", () => {
     expect(placed.length).toBeGreaterThan(0);
     for (const p of placed) expect(lines.some((l) => segmentHitsBox(l.a, l.b, boxOf(p))), p.id).toBe(false);
   });
-  it("speed: 150 words among 400 lines stay far under a frame", () => {
+  it("work: 150 words among 400 lines — a word looks at the few lines of its own cells, not at all of them", () => {
     let seed = 11;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     const lines = Array.from({ length: 400 }, () => { const x = rnd() * 800, y = rnd() * 800; return { a: [x, y] as [number, number], b: [x + rnd() * 120, y + rnd() * 120] as [number, number] }; });
     const ws = Array.from({ length: 150 }, (_, i) => want(`w${i}`, [rnd() * 800, rnd() * 800], [rnd() * 800, rnd() * 800], i));
-    layoutLabels(ws, { w: 800, h: 800 }, 4, false, [], lines); // warm
-    const t = performance.now();
-    for (let i = 0; i < 5; i++) layoutLabels(ws, { w: 800, h: 800 }, 4, false, [], lines);
-    expect((performance.now() - t) / 5).toBeLessThan(16);
+    work.segTests = 0;
+    layoutLabels(ws, { w: 800, h: 800 }, 4, false, [], lines);
+    // looking at every line for every place tried would be at least 150 words × 400 lines = 60 000 checks (and ~28 places each:
+    // over 1.6 million); the grid keeps it to about one pass
+    expect(work.segTests, `segment checks: ${work.segTests}`).toBeLessThan(150 * 400 * 2);
   });
   it("a tiny gutter between two others with no clear place is hidden; a long one keeps its length", () => {
     const lines: { a: [number, number]; b: [number, number] }[] = [];

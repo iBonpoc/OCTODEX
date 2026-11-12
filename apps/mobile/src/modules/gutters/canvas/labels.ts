@@ -32,6 +32,8 @@ export interface PlacedLabel {
 export interface Box { x0: number; y0: number; x1: number; y1: number }
 
 const boxOf = (x: number, y: number, w: number, h: number): Box => ({ x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 });
+/** the work of the last layouts, for the speed test: how many segment-vs-box checks were made (a count does not depend on the machine) */
+export const work = { segTests: 0 };
 export const overlaps = (p: Box, q: Box) => p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1;
 
 /** does the segment a–b cross the box (Liang–Barsky)? */
@@ -114,7 +116,10 @@ export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; 
   }
   const offLines = (b: Box) => {
     if (lines.length === 0) return true;
-    for (const k of keys(b)) for (const q of lineGrid.get(k) ?? []) if (segmentHitsBox(q.a, q.b, b)) return false;
+    for (const k of keys(b)) for (const q of lineGrid.get(k) ?? []) {
+      work.segTests++;
+      if (segmentHitsBox(q.a, q.b, b)) return false;
+    }
     return true;
   };
   const order = [...want].sort((p, q) => q.priority - p.priority || (p.id < q.id ? -1 : 1));
