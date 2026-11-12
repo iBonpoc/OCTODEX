@@ -13436,4 +13436,75 @@ select tst.fails_like($q$insert into public.payments (company_id, invoice_id, cu
        '%void invoice%', 'T198 a server path pays no voided invoice either');
 \echo 'T198 the payment check: nothing to another company, no amounts, no payment into a voided invoice'
 
+-- ======================================================================================================================
+-- T200 (#1220): an estimate's save in one transaction (public.save_estimate_version) — a refusal in the middle leaves the
+-- version (its document), the estimate's current version and title, its options and lines as they were.
+-- ======================================================================================================================
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e2000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T200 before');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2000000-0000-4000-8000-000000000001', 1);
+create function tst.t200_save(p_title text, p_doc text, p_lines jsonb, p_costs jsonb default '[]', p_options jsonb default null) returns void language sql as $$
+  select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', p_title,
+    jsonb_build_object('calc_inputs', jsonb_build_object('mark', p_doc), 'engine_version', 't', 'tax_enabled', false, 'tax_mode', 'added_on_top'),
+    coalesce(p_options, '[{"id": "a2000000-0000-4000-8000-0000000000a1", "name": "A", "position": 0}]'::jsonb), p_lines, p_costs)
+$$;
+grant execute on function tst.t200_save(text, text, jsonb, jsonb, jsonb) to authenticated;
+:as_office_a
+select tst.t200_save('T200 one', 'doc1', '[{"id": "b2000000-0000-4000-8000-0000000000b1", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Work", "quantity": "2.5", "unit": "ea", "unit_price_cents": 1000, "client_visible": true}]',
+                     '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b1", "unit_cost_cents": 600}]');
+:as_super
+select tst.ok((select title = 'T200 one' and current_version_id = 'f2000000-0000-4000-8000-000000000001' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
+              and (select calc_inputs ->> 'mark' = 'doc1' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and (select count(*) = 1 and sum(line_total_cents) = 2500 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b1')
+              and (select unit_cost_cents = 600 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b1'),
+              'T200 the version, its current version and title, the lines and the cost — in one call');
+-- a refusal in the middle (a priced line hidden from the client: the table's check) — nothing of it is written
+:as_office_a
+select tst.fails($q$select tst.t200_save('T200 two', 'doc2', '[{"id": "b2000000-0000-4000-8000-0000000000b2", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Hidden", "quantity": "1", "unit": "ea", "unit_price_cents": 500, "client_visible": false}]')$q$,
+                 'T200 a line the table refuses: the save is refused');
+:as_super
+select tst.ok((select title = 'T200 one' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
+              and (select calc_inputs ->> 'mark' = 'doc1' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and (select count(*) = 1 from public.estimate_line_items li join public.estimate_options o on o.id = li.option_id where o.version_id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b1'),
+              'T200 refused in the middle: the document, the title, the current version, the options and lines are as they were (red before #1220)');
+-- another company: nothing
+:as_owner_b
+select tst.fails($q$select tst.t200_save('T200 B', 'docB', '[]')$q$, 'T200 another company cannot save our estimate');
+-- sales without the right to costs: the lines are saved, the cost left out (as before on 42501)
+:as_sales_a
+select tst.t200_save('T200 sales', 'doc3', '[{"id": "b2000000-0000-4000-8000-0000000000b3", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Work", "quantity": "1", "unit": "ea", "unit_price_cents": 700}]',
+                     '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b3", "unit_cost_cents": 300}]');
+:as_super
+select tst.ok(exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b3')
+              and not exists (select 1 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b3')
+              and not exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b1'),
+              'T200 without the right to costs: the lines replaced, no cost written');
+-- the caps and the shape
+:as_office_a
+select tst.fails_like(format($q$select tst.t200_save('T200 big', 'doc4', '[]', '[]', %L::jsonb)$q$,
+         (select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'name', 'O', 'position', i)) from generate_series(1, 11) i)::text),
+       '%too large%', 'T200 more than 10 options: refused (estimate_save_size)');
+select tst.fails_like(format($q$select tst.t200_save('T200 big', 'doc4', %L::jsonb)$q$,
+         (select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'option_id', 'a2000000-0000-4000-8000-0000000000a1', 'name', repeat('x', 3000), 'quantity', 1, 'unit', 'ea', 'unit_price_cents', 1)) from generate_series(1, 1500) i)::text),
+       '%too large%', 'T200 more than 4 MB: refused');
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', 'x', '[]', '[]', '[]', '[]')$q$,
+       '%expected shape%', 'T200 not the expected shape: refused');
+-- a locked (sent) version: its lines do not change
+:as_super
+update public.estimate_versions set locked_at = now() where id = 'f2000000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.fails($q$select tst.t200_save('T200 locked', 'doc5', '[]')$q$, 'T200 a locked version is not changed');
+:as_super
+select tst.ok((select calc_inputs ->> 'mark' = 'doc3' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b3'), 'T200 the locked version is as it was');
+select tst.ok(not has_function_privilege('anon', 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE')
+              and has_function_privilege('authenticated', 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)'::regprocedure),
+              'T200 rule 18; the caller''s own rights (security invoker)');
+drop function tst.t200_save(text, text, jsonb, jsonb, jsonb);
+\echo 'T200 an estimate is saved in one transaction: a refusal leaves it as it was'
+
 \echo 'ALL TESTS PASSED'
