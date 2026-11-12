@@ -15,7 +15,6 @@ exports.run = async (h) => {
   for (let i = 0; i < 20 && (await p.getByText("Уже не отменить: это успели изменить").count()) === 0; i++) {
     if ((await undo.count()) === 0) break;
     await undo.click({ timeout: 1000 }).catch(() => {});
-    await p.waitForFunction(() => document.body.innerText.includes("Уже не отменить"), null, { timeout: 300 }).catch(() => {});
   }
   await h.expectText(/Уже не отменить: это успели изменить/, "the late undo says so");
   h.expect((await p.getByTestId("toast-undo").locator("visible=true").count()) === 0, "the new toast has no «Отменить» of its own");
