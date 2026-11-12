@@ -9,6 +9,7 @@ import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "re
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN } from "react-native-worklets";
 import type { View as PlanView } from "./scene";
+import { beginGesture, endGesture, panStep, pinchStep, type LiveState } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
 export interface Live { tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number> }
@@ -34,28 +35,59 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const now = useRef({ view, onView });
   now.current = { view, onView };
   const commit = (a: number, b: number, k: number, x: number, y: number) => now.current.onView(commitView(now.current.view, a, b, k, x, y));
+  // one gesture of the two is one commit (gestureState.ts, #1271): pan and pinch both end, the first one commits and closes it
+  const phase = useSharedValue<0 | 1 | 2>(0);
+  const pinched = useSharedValue(false);
+  const state = (): LiveState => {
+    "worklet";
+    return { tx: tx.value, ty: ty.value, s: s.value, phase: phase.value, pinched: pinched.value };
+  };
+  const put = (st: LiveState) => {
+    "worklet";
+    tx.value = st.tx;
+    ty.value = st.ty;
+    s.value = st.s;
+    phase.value = st.phase;
+    pinched.value = st.pinched;
+  };
+  const begin = () => {
+    "worklet";
+    const st = state();
+    beginGesture(st);
+    put(st);
+  };
   const end = () => {
     "worklet";
-    if (tx.value !== 0 || ty.value !== 0 || s.value !== 1) scheduleOnRN(commit, tx.value, ty.value, s.value, fx.value, fy.value);
+    const st = state();
+    const go = endGesture(st);
+    phase.value = st.phase;
+    if (go) scheduleOnRN(commit, st.tx, st.ty, st.s, fx.value, fy.value);
   };
   const pan = usePanGesture({
     minPointers: panPointers,
+    onBegin: begin,
+    onActivate: begin,
     onUpdate: (e) => {
       "worklet";
-      tx.value += e.changeX;
-      ty.value += e.changeY;
+      const st = state();
+      panStep(st, e);
+      put(st);
     },
     onDeactivate: end,
   });
   const pinch = usePinchGesture({
+    onBegin: begin,
     onActivate: (e) => {
       "worklet";
+      begin();
       fx.value = e.focalX;
       fy.value = e.focalY;
     },
     onUpdate: (e) => {
       "worklet";
-      s.value *= e.scaleChange;
+      const st = state();
+      pinchStep(st, e);
+      put(st);
     },
     onDeactivate: end,
   });
