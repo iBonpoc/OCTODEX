@@ -80,6 +80,8 @@ const cleanTitle = (t: unknown): string | undefined => {
   const x = Array.from(t.replace(TITLE_CC, " ").replace(TITLE_CF, "")).slice(0, SECTION_TITLE_MAX).join("").replace(TITLE_EDGE, "");
   return x ? x : undefined;
 };
+/** a section title as the editor keeps it (the same cleaning as normalizeDoc) */
+export const cleanSectionTitle = cleanTitle;
 /** hidden from the client as the server reads it: false, or «false» / 0 written by another copy */
 const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
 

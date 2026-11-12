@@ -803,6 +803,7 @@ function UndoButton({ onPress }: { onPress: () => void }) {
   return (
     <Press
       onPress={onPress}
+      testID="toast-undo"
       visibleHeight={component.button.md}
       accessibilityRole="button"
       accessibilityLabel={t("common.undo")}
