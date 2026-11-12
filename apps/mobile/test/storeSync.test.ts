@@ -1411,6 +1411,39 @@ describe("unit:storeSync — two people one after the other on one phone (#864, 
     expect(storage.has("octo.cloud.v1.c1.u1")).toBe(false);
     expect(storage.get("octo.cloud.v1.rejected")).toBe("[]");
   });
+  it("#1260 З3: an older version's cloud cache without some lists opens, and its load makes no op at all", async () => {
+    const old = { ...secret(), me: "u1" } as unknown as Record<string, unknown>;
+    for (const k of ["visits", "expenses", "suppliers", "purchaseOrders", "costHistory", "checklistTemplates", "tasks"]) delete old[k];
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: old }));
+    signIn("u1", "c1"); // no network yet: the reload waits
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(50);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("SECRET"))).toBe(true);
+    expect(Array.isArray((valueOf(r).db as unknown as { visits?: unknown; expenses?: unknown }).visits) && Array.isArray((valueOf(r).db as unknown as { visits?: unknown; expenses?: unknown }).expenses)).toBe(true);
+    server.loads[0]!.resolve(secret());
+    await settle();
+    await wait(1800);
+    await settle();
+    expect(server.sends).toEqual([]);
+    expect(JSON.parse(storage.get("octo.outbox.v1") ?? "[]")).toEqual([]);
+  });
+  it("#1260 Б1: the previous person's kept copies (octo.broken.…) leave the device when the next one signs in — mine stay", async () => {
+    storage.set("octo.broken.octo.cloud.v1.c1.u1.1700000000000", JSON.stringify({ day: "cloud", db: secret() }));
+    storage.set("octo.broken.octo.cloud.v1.c1.1700000000001", JSON.stringify({ day: "cloud", db: secret() })); // an older person-less one
+    storage.set("octo.broken.octo.cloud.v1.c1.u2.1700000000002", "mine");
+    storage.set("octo.broken.octo.outbox.v1.1700000000003", "[]");
+    signIn("u2", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads[0]!.resolve(makeSeed());
+    await settle();
+    await wait(300);
+    await settle();
+    expect(valueOf(r).mode).toBe("cloud");
+    expect([...storage.keys()].filter((k) => k.startsWith("octo.broken.")).sort()).toEqual(["octo.broken.octo.cloud.v1.c1.u2.1700000000002", "octo.broken.octo.outbox.v1.1700000000003"]);
+  });
   it("the first start of this version without the network: the older person-less cache is taken over when it is mine", async () => {
     const mine = { ...secret(), me: "u1" };
     storage.set("octo.cloud.v1.c1", JSON.stringify({ day: "cloud", db: mine }));
