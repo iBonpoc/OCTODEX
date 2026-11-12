@@ -3,15 +3,39 @@
 -- and the option's sections: a template made from an estimate lost «Скрыта» and its layout by sections.
 -- * A line: clientVisible (a boolean; false only at $0 — the engine counts a priced line as visible), sectionId (a
 --   non-empty id of at most 64 characters, the engine's sectionIdOk).
--- * An option: sections, already in the form the client reads (app.client_sections of them = them): one rule, shared
---   with the client page and the PDF (test/fixtures/clientSections.json); the phone sends them so (estimateTemplate.ts).
+-- * An option: sections, in the form the client reads (app.client_sections of them = them): one rule, shared with the
+--   client page and the PDF (test/fixtures/clientSections.json). The trigger t02 puts them so before the check, so a
+--   template is never refused for a section's form — only for sections that are not a list.
 -- * The check runs as the member who saves the template (the table's check, the trigger): app.client_sections and
 --   app.client_title — pure functions of their argument, they read nothing — are granted to authenticated (rule 18:
 --   explicit grant for what the app's own writes call).
+-- * app.tg_template_sections: invoker (the member's own rights), revoked from everyone (rule 18).
 -- Rule 16: the same signature; a template without these keys is valid as before; older phones never send them.
 -- Tests: supabase/tests/core_rls.sql T203, apps/mobile/test/estimateTemplate.test.ts.
 
+revoke all on function app.client_sections(jsonb), app.client_title(text) from public, anon;
 grant execute on function app.client_sections(jsonb), app.client_title(text) to authenticated, service_role;
+
+-- the server puts a template's sections in the client's form itself, before the check (code-reviewer of #1232): a phone
+-- with an older or newer cleaning of titles, or a later change of app.client_sections, never makes a template
+-- unsaveable (a refused save is a permanent error in the phone's queue — a rename or an archive would fail for good).
+-- Only sections that are a list are put so; anything else is left for the check to refuse.
+create or replace function app.tg_template_sections()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if jsonb_typeof(new.doc -> 'options') = 'array' then
+    new.doc := jsonb_set(new.doc, '{options}', (
+      select coalesce(jsonb_agg(case when jsonb_typeof(o) = 'object' and jsonb_typeof(o -> 'sections') = 'array'
+                                     then jsonb_set(o, '{sections}', app.client_sections(o -> 'sections')) else o end order by n), '[]'::jsonb)
+        from jsonb_array_elements(new.doc -> 'options') with ordinality x(o, n)));
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_template_sections() from public, anon, authenticated;
+drop trigger if exists t02_template_sections on public.estimate_templates;
+create trigger t02_template_sections before insert or update of doc on public.estimate_templates
+  for each row execute function app.tg_template_sections();
 
 create or replace function app.valid_estimate_template_doc(p jsonb)
 returns boolean language plpgsql immutable set search_path = '' as $$

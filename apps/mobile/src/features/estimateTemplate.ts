@@ -9,7 +9,7 @@ import type { DictKey } from "@/i18n";
 import type { StarterEstimate } from "@/modules/registry";
 import { catalogMatch } from "./catalogMatch";
 import { canEditTemplates, stableUuid } from "./checklist";
-import { catalogUnitCost, catalogUnitPrice, clientSectionsOf, mainOption, newDoc, optionTotals, uid } from "./estimateDoc";
+import { catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, optionTotals, uid } from "./estimateDoc";
 
 /** The keys of a template line the server takes (app.valid_estimate_template_doc); a module's `source` never rides along */
 type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected" | "clientVisible" | "sectionId">;
@@ -37,7 +37,8 @@ function templateLine(l: CustomLine, withCost: boolean, keepIds = false): Templa
   }
   // #1232: its section, and «hidden from the client» — only at $0 (the engine and the server: a priced line is visible)
   if (sectionIdOk(l.sectionId)) out.sectionId = l.sectionId;
-  if (l.clientVisible === false && l.unitPriceCents === 0) out.clientVisible = false;
+  // hidden as the phone reads it (false, or «false» / 0 written by another copy) — always a boolean false to the server
+  if (markedHidden(l) && l.unitPriceCents === 0) out.clientVisible = false;
   // who does not see costs sends no key: the server then keeps what it had (spec 07 §11, E3b duty)
   if (withCost && l.unitCostCents !== undefined) out.unitCostCents = l.unitCostCents;
   return out;
@@ -76,8 +77,6 @@ export function splitCosts(doc: EstimateDoc): { doc: EstimateDoc; costs: Record<
   return { doc: { ...doc, options }, costs };
 }
 
-/** a section as the server compares it (jsonb: the order of keys does not count) */
-const canon = (xs: unknown[]) => xs.map((x) => Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1))));
 const QTY = /^([0-9]{1,12}([.][0-9]{1,12})?|[.][0-9]{1,12})$/;
 const SHARE = /^(0([.][0-9]{1,6})?|1([.]0{1,6})?|[.][0-9]{1,6})$/;
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -96,8 +95,8 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
   for (const o of doc.options) {
     if (!ID.test(o.id) || optIds.has(o.id) || !text(o.name, 120) || o.lines.length > 200) return false;
     optIds.add(o.id);
-    // #1232: sections already as the client reads them (app.client_sections of them = them)
-    if (o.sections != null && (!Array.isArray(o.sections) || JSON.stringify(canon(clientSectionsOf(o))) !== JSON.stringify(canon(o.sections)))) return false;
+    // #1232: sections — a list (the server puts them in the client's form itself, trigger t02, before its check)
+    if (o.sections != null && !Array.isArray(o.sections)) return false;
     for (const l of o.lines) {
       if (!ID.test(l.id) || lineIds.has(l.id)) return false;
       lineIds.add(l.id);
@@ -107,6 +106,8 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
       const c = l.unitCostCents ?? costs[l.id];
       if (c !== undefined && !cents(c)) return false;
       if (l.catalogItemId != null && !ID.test(l.catalogItemId)) return false;
+      // a boolean or none (the server's jsonb_typeof); false only at $0
+      if (l.clientVisible != null && typeof l.clientVisible !== "boolean") return false;
       if (l.clientVisible === false && l.unitPriceCents !== 0) return false;
       if (l.sectionId != null && !sectionIdOk(l.sectionId)) return false;
     }

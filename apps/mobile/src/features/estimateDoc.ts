@@ -81,7 +81,7 @@ const cleanTitle = (t: unknown): string | undefined => {
   return x ? x : undefined;
 };
 /** hidden from the client as the server reads it: false, or «false» / 0 written by another copy */
-const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
+export const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
 
 const SECTION_KINDS: readonly string[] = ["service", "labor", "material", "module"];
 /** what the client reads of a section — the same keys app.client_sections passes: id, title, a known kind, parentId */

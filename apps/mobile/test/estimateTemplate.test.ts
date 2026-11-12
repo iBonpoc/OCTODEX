@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("../src/cloud/client", () => ({ supabase: {} }));
 import { computeCustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateDoc } from "@/data/types";
+import { clientSectionsOf } from "@/features/estimateDoc";
 import { cleanEstimateTemplate, fromTemplate, pickableTemplates, splitCosts, templateFromCents, toTemplateDoc, validTemplateDoc } from "@/features/estimateTemplate";
 import { estimateTemplateFromDb } from "../src/cloud/repo";
 import { estimateTemplateToDb } from "../src/cloud/ops";
@@ -169,21 +170,39 @@ describe("unit:estimateTemplate — #1232: the hidden $0 lines and the sections 
     const tpl = toTemplateDoc(withSections, true);
     const { doc } = fromTemplate(tpl, [], {}, true);
     const o = doc.options[0]!;
-    expect(o.sections?.map((x) => x.id)).toEqual(["s1", "s1b", "s2", "s3"]);
+    expect(o.sections).toEqual([{ id: "s1", title: "Roof work" }, { id: "s1b", title: "Flashing", parentId: "s1" }, { id: "s2", kind: "labor" }, { id: "s3", title: "Gutters", kind: "module" }]);
     expect(o.lines.map((l) => [l.name, l.sectionId, l.clientVisible])).toEqual([["Shingles", "s1b", undefined], ["Hanger kit", "s3", false], ["Hidden but priced", "s2", undefined], ["No section", undefined, undefined]]);
   });
-  it("the check on the phone refuses what the server would: sections not in the client's form, hidden with a price, a long sectionId", () => {
+  it("the check on the phone refuses what the server would: sections not a list, hidden with a price or not a boolean, a long sectionId", () => {
     const tpl = toTemplateDoc(withSections, true);
     const opt = (x: object) => ({ ...tpl, options: [{ ...tpl.options[0]!, ...x }] }) as EstimateDoc;
     const line0 = (x: object) => opt({ lines: [{ ...tpl.options[0]!.lines[0]!, ...x }] });
-    expect(validTemplateDoc(opt({ sections: withSections.options[0]!.sections }))).toBe(false);
-    expect(validTemplateDoc(opt({ sections: [{ id: "s1", title: "Roof", module: "gutters" }] }))).toBe(false);
     expect(validTemplateDoc(opt({ sections: "s1" }))).toBe(false);
     expect(validTemplateDoc(line0({ clientVisible: false }))).toBe(false);
+    expect(validTemplateDoc(line0({ clientVisible: "false" }))).toBe(false);
+    expect(validTemplateDoc(line0({ clientVisible: 0 }))).toBe(false);
     expect(validTemplateDoc(line0({ sectionId: "x".repeat(65) }))).toBe(false);
-    // the order of a section's keys does not count (jsonb on the server)
-    const reordered = tpl.options[0]!.sections!.map((x) => Object.fromEntries(Object.entries(x).reverse()));
-    expect(Object.keys(reordered[1]!)[0]).toBe("parentId");
-    expect(validTemplateDoc(opt({ sections: reordered }))).toBe(true);
+    // sections in another form (an older or newer phone's cleaning): the server puts them in the client's form itself
+    // (trigger t02, db T203) — never a refusal for that
+    expect(validTemplateDoc(opt({ sections: withSections.options[0]!.sections }))).toBe(true);
   });
+  it("a $0 line hidden the way another copy writes it («false», 0) stays hidden in the template, as a boolean", () => {
+    const d = { ...withSections, options: [{ ...withSections.options[0]!, lines: [
+      { id: "a", name: "Kit", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: "false" },
+      { id: "b", name: "Kit 2", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: 0 },
+    ] }] } as unknown as EstimateDoc;
+    const tpl = toTemplateDoc(d, true);
+    expect(tpl.options[0]!.lines.map((l) => l.clientVisible)).toEqual([false, false]);
+    expect(validTemplateDoc(tpl)).toBe(true);
+  });
+  it("the shared examples (test/fixtures/clientSections.json, the server's T199 and T203 the same): the phone's client form is the server's", async () => {
+    const fx = (await import("./fixtures/clientSections.json")).default as { cases: { name: string; sections: unknown; client: unknown }[] };
+    for (const c of fx.cases) {
+      expect(clientSectionsOf({ sections: c.sections as never }), c.name).toEqual(c.client);
+      const tpl = toTemplateDoc({ ...withSections, options: [{ ...withSections.options[0]!, sections: c.sections as never }] }, true);
+      expect(tpl.options[0]!.sections ?? [], c.name).toEqual(c.client);
+      expect(validTemplateDoc(tpl), c.name).toBe(true);
+    }
+  });
+
 });

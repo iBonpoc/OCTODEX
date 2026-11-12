@@ -13921,9 +13921,36 @@ select tst.ok(not app.valid_estimate_template_doc(tst.t203_doc('{"sections": "s1
               'T203 refused: sections not as the client reads them — not a list, a module key, an invisible character, an id twice, an orphan subsection, past 40, an unknown kind');
 select tst.ok(app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"kind": "labor", "id": "s2"}, {"parentId": "s2", "title": "Gutters", "id": "s3"}]}', '{"sectionId": "s3"}')),
               'T203 the order of a section''s keys does not count');
+-- the server puts the sections in the client's form itself before its check (t02, code-reviewer of #1232): a phone
+-- with another cleaning never meets a refusal for it; only sections that are not a list are refused
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('e2030000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T203 raw',
+   tst.t203_doc(jsonb_build_object('sections', jsonb_build_array(
+     jsonb_build_object('id', 's1', 'title', E'  Roof\u200Bwork  ', 'module', 'gutters', 'kind', 'roof'), jsonb_build_object('id', 's1', 'title', 'Twice'),
+     jsonb_build_object('id', 'orphan', 'parentId', 'nope'), jsonb_build_object('id', 's2', 'parentId', 's1'))), '{"sectionId": "s2"}'));
+select tst.ok((select doc #> '{options,0,sections}' = '[{"id": "s1", "title": "Roofwork"}, {"id": "s2", "parentId": "s1"}]'::jsonb
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000002'),
+              'T203 sections in another form: kept in the client''s form (title cleaned, no module key or unknown kind, an id once, no orphan)');
+select tst.fails($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'T203 bad', tst.t203_doc('{"sections": "s1"}', '{}'))$q$,
+                 'T203 sections that are not a list — refused');
+-- the update path (t02, t30 and the check as the member): the office renames the template and changes its sections
+update public.estimate_templates set name = 'T203 Roof renamed' where id = 'e2030000-0000-4000-8000-000000000001';
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,sections}', '[{"id": "s9", "title": " New\u0007 "}]'::jsonb) where id = 'e2030000-0000-4000-8000-000000000001';
+select tst.ok((select name = 'T203 Roof renamed' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb and doc #>> '{options,0,lines,1,clientVisible}' = 'false'
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 the office renames and edits a template with sections; the hidden line stays');
+-- the shared examples (apps/mobile/test/fixtures/clientSections.json): what the phone sends is what the server keeps
+:as_super
+select tst.ok(coalesce(string_agg(c ->> 'name', '; '), '') = '', format('T203 a template keeps every example in the client''s form: %s', coalesce(string_agg(c ->> 'name', '; '), '')))
+  from jsonb_array_elements((:'sections_json')::jsonb -> 'cases') c
+ where not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', c -> 'client'), '{}'))
+    or app.client_sections(c -> 'sections') is distinct from c -> 'client';
 select tst.ok(has_function_privilege('authenticated', 'app.client_sections(jsonb)', 'EXECUTE') and has_function_privilege('authenticated', 'app.client_title(text)', 'EXECUTE')
-              and not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'app.client_title(text)', 'EXECUTE'),
-              'T203 rule 18: the template check''s helpers — the member who saves, never anon');
+              and not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'app.client_title(text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_template_sections()', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_template_sections()'::regprocedure),
+              'T203 rule 18: the template check''s helpers — the member who saves, never anon; the trigger as the writer');
 drop function tst.t203_doc(jsonb, jsonb);
 \echo 'T203 a template keeps the hidden $0 lines and the sections'
 
