@@ -81,11 +81,7 @@ exports.run = async (h) => {
   // S16, estimate side: an estimate made from the lead takes it
   await h.clickText("Сметы");
   await h.click("Смета");
-  await p.getByRole("button", { name: "Добавить позицию" }).first().click(); await p.waitForTimeout(300);
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("Wash the driveway");
-  await h.sheet().getByText(/Своя позиция:/).click(); await p.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("350");
-  await h.sheet().getByRole("button", { name: "Готово" }).click(); await p.waitForTimeout(250);
+  await require("../estimateLine.cjs").addCustom(h, "Wash the driveway", "350");
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(700);
   db = await h.db();
   const est = db.estimates.find((e) => e.leadId === lead.id);

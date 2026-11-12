@@ -40,10 +40,19 @@ type Common = {
   onNext?: () => void;
   autoFocus?: boolean;
   selectOnFocus?: boolean;
+  /** the text is not a number now (the value did not move): a row that holds it must not close over it */
+  onBad?: (bad: boolean) => void;
 };
 export type NumberFieldProps = Common &
   (
-    | { kind: "money"; cents: number; onChange: (cents: number) => void }
+    | {
+        kind: "money";
+        /** none (undefined) = unknown, shown empty (a cost the person has not written) */
+        cents: number | undefined;
+        onChange: (cents: number) => void;
+        /** the field may stand empty and then the value is none, not $0 (a cost); without it an empty field is $0 */
+        onClear?: () => void;
+      }
     | { kind: "percent"; bps: number; onChange: (bps: number) => void }
     | { kind: "qty"; qty: string; onChange: (qty: string) => void }
     | { kind: "integer"; value: number; onChange: (n: number) => void }
@@ -60,7 +69,7 @@ type Spec = {
 function specOf(p: NumberFieldProps): Spec {
   switch (p.kind) {
     case "money":
-      return { value: p.cents, parse: parseCents, toText: (v) => formatCents(v as number), empty: 0, emit: (v) => p.onChange(v as number) };
+      return { value: p.cents as number, parse: parseCents, toText: (v) => (v === undefined ? "" : formatCents(v as number)), empty: p.onClear ? undefined : 0, emit: (v) => p.onChange(v as number) };
     case "percent":
       return { value: p.bps, parse: parseBps, toText: (v) => formatBps(v as number), empty: 0, emit: (v) => p.onChange(v as number) };
     case "qty":
@@ -88,6 +97,12 @@ export function NumberField(props: NumberFieldProps) {
   // text must not stand empty while the row thinks it is 2.5 — the row cannot close over it (onBad)
   const needed = props.kind === "qty" && parsed.state === "empty";
   const bad = parsed.state === "bad" || needed;
+  const onBad = props.onBad;
+  useEffect(() => {
+    onBad?.(bad);
+    return () => onBad?.(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bad]);
   const sign = SIGN[props.kind];
   const unit = props.unit ?? sign.after;
   return (
@@ -102,7 +117,10 @@ export function NumberField(props: NumberFieldProps) {
           setText(s);
           const p = spec.parse(s);
           if (p.state === "ok") spec.emit(p.value);
-          else if (p.state === "empty" && spec.empty !== undefined) spec.emit(spec.empty);
+          else if (p.state === "empty") {
+            if (props.kind === "money" && props.onClear) props.onClear();
+            else if (spec.empty !== undefined) spec.emit(spec.empty);
+          }
         }}
         placeholder={props.placeholder ?? "0"}
         label={props.label}
