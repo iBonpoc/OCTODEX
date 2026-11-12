@@ -457,11 +457,11 @@ interface StoreCtx {
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
-  saveSupplier: (x: Supplier) => Undo;
+  saveSupplier: (x: Supplier) => GuardedUndo;
   /** spec 36: archive or bring back a supplier («Отменить» 5 s) */
-  setSupplierActive: (id: ID, active: boolean) => Undo;
+  setSupplierActive: (id: ID, active: boolean) => GuardedUndo;
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
-  applySupplierTax: (id: ID) => Undo;
+  applySupplierTax: (id: ID) => GuardedUndo;
   /** spec 37: the job's drafts per supplier (an open draft of that supplier is kept, not doubled); the ids to open */
   makeJobOrders: (jobId: ID) => { ids: ID[]; made: number; undo: Undo };
   /** spec 37: a new empty draft (for stock, or a job), or a changed order (lines of a draft / sent order) */
@@ -1317,7 +1317,7 @@ export function StoreProvider({
    * cost change and the phone's history row; «Отменить» takes them all back from the phone and the queue, or none
    * (#1244 Б1).
    */
-  const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): Undo => {
+  const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): GuardedUndo => {
     if (!pairs.length) return noop;
     const go = (from: CatalogItem, to: CatalogItem, at: string) => {
       const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);

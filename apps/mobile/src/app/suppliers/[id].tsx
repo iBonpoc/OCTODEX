@@ -13,7 +13,7 @@ import { useStore } from "@/data/store";
 import type { PaymentTerms, Supplier } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { emailBad, historyOf, itemsOfSupplier, itemsWithOtherTax, PAYMENT_TERMS } from "@/features/suppliers";
+import { applyTaxUndo, emailBad, historyOf, itemsOfSupplier, itemsWithOtherTax, PAYMENT_TERMS } from "@/features/suppliers";
 import { mailtoHref, telHref } from "@/features/contactLinks";
 import { Labeled } from "@/features/fields";
 import { parsePctToBps } from "@octo/estimating-engine";
@@ -73,8 +73,9 @@ export default function SupplierScreen() {
     const n = ask?.n ?? 0;
     const undoApply = store.applySupplierTax(s.id);
     const undoSave = undoRef.current;
-    // one «Отменить» for both: the items' tax and the supplier's own (review SUP1 №6 — the second toast replaces the first)
-    toast.show(t("sup.applied", { n }), store.undoTogether([undoSave, undoApply]));
+    // one «Отменить» for both: the items' tax and the supplier's own (review SUP1 №6 — the second toast replaces the first);
+    // the supplier's save already sent — only «Применить» (applyTaxUndo)
+    toast.show(t("sup.applied", { n }), applyTaxUndo(store.undoTogether, undoSave, undoApply));
     setAsk(null);
     back();
   };

@@ -53,6 +53,7 @@ vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), back
 
 import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
+import { applyTaxUndo } from "../src/features/suppliers";
 import { makeSeed } from "../src/data/seed";
 import type { CatalogItem, DB, Supplier } from "../src/data/types";
 
@@ -192,6 +193,24 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
     await tick();
     expect(server.sends.filter((x) => x.op.k === "catalog.save" || x.op.k === "supplier.save")).toEqual([]);
   }, 15000);
+  it("the supplier's save already sent (the «Применить?» sheet was up longer than SEND_AFTER_MS) → «Применить» → «Отменить»: only «Применить» goes back — true, the items' tax 0 (the director's 5th review)", async () => {
+    const r = await signedIn();
+    const undoSave = valueOf(r).saveSupplier({ id: SUP, name: "ABC Supply (test)", taxBps: 1025, active: true });
+    await tick();
+    server.sends.forEach((x) => x.d.resolve());
+    await settle();
+    expect(server.sends.some((x) => x.op.k === "supplier.save")).toBe(true);
+    const undoApply = valueOf(r).applySupplierTax(SUP) as () => boolean | undefined;
+    await settle();
+    expect(itemOf(r).vendorTaxBps).toBe(1025);
+    // on main all of it went back; with all or nothing alone, nothing would (the save is too late)
+    expect(applyTaxUndo(valueOf(r).undoTogether, undoSave, undoApply)()).toBe(true);
+    await settle();
+    expect(itemOf(r).vendorTaxBps).toBe(0);
+    expect(supOf(r).taxBps).toBe(1025);
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "catalog.save")).toEqual([]);
+  }, 20000);
   it("the same, the item's tax changed since (by hand) → false: nothing goes back, every op stays", async () => {
     const r = await signedIn();
     const undoSave = valueOf(r).saveSupplier({ id: SUP, name: "ABC Supply (test)", taxBps: 1025, active: true });
