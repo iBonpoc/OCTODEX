@@ -27,3 +27,6 @@ export function placeAt(x: number, y: number, w: number, h: number): ToolbarPlac
   const d = { left: x, right: w - x, bottom: h - y, top: y };
   return (Object.entries(d) as [ToolbarPlace, number][]).sort((a, b) => a[1] - b[1])[0]![0];
 }
+
+/** the haptic when the toolbar is let go (DS §15.6, #1159): «set down» only when it landed on another edge; at its own edge — nothing */
+export const dropHaptic = (prev: ToolbarPlace, next: ToolbarPlace): "medium" | null => (prev === next ? null : "medium");

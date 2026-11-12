@@ -39,7 +39,7 @@ import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { fmtLen } from "../canvas/format";
-import { forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "../data";
 import { makeSaver } from "../canvas/draftStore";
@@ -641,7 +641,8 @@ export default function DrawScreen() {
       setGripping(false);
       if (e.canceled) return;
       const p = placeAt(e.absoluteX, e.absoluteY, win.width, win.height);
-      if (p !== place) haptics.medium(); // set down on another edge — only when it moved (DS §15.6)
+      const dh = dropHaptic(place, p); // set down on another edge — only when it moved (DS §15.6)
+      if (dh) haptics[dh]();
       setPlace(p);
       void saveToolbarPlace(p);
     },
