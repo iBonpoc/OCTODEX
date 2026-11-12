@@ -2829,7 +2829,6 @@ export const ru = {
   "mod.gutters.attr.unit.cm": "см",
   "mod.gutters.attr.unitTitle": "Единица длины",
   "mod.gutters.attr.unitPick": "Единица: {u} — сменить",
-  "mod.gutters.attr.unitShow": "Показывать длину в",
   "mod.gutters.attr.colorAsRun": "Как у желоба ({c})",
   "mod.gutters.attr.offsetOwn": "Свой",
   "mod.gutters.attr.quickTitle": "Длина желоба",

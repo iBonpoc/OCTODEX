@@ -14,7 +14,7 @@ import { Button, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { tapeIn } from "../canvas/attrs";
-import { ftIn } from "../canvas/format";
+import { fmtLen, type LenFormat } from "../canvas/format";
 import { labelWidth } from "../canvas/labels";
 import { countOnKeyboardHide, triKey } from "./triangleCount";
 import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
@@ -25,7 +25,7 @@ import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Dra
  * the corner to where the faces meet; on each gutter two labels in their own chips — «стена …» on the house side,
  * «лицевая …» beyond the face — and the gutter's letter (A, B) at its end, as in the triangle below.
  */
-export function CornerSketch({ d, f, cut, w }: { d: Drawing; f: FoundCorner; cut: CornerCutRun[]; w: number }) {
+export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: FoundCorner; cut: CornerCutRun[]; w: number; /** the company's format of lengths (#1092) */ fmt?: LenFormat }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const FS = font.size.caption;
@@ -120,8 +120,8 @@ export function CornerSketch({ d, f, cut, w }: { d: Drawing; f: FoundCorner; cut
             <G key={l.id}>
               <Path d={`M${geo.corner[0]} ${geo.corner[1]}L${l.far[0]} ${l.far[1]}`} stroke={c.ink} strokeWidth={dt.runW} strokeLinecap="round" fill="none" />
               <Path d={`M${geo.m[0]} ${geo.m[1]}L${l.far[0] + l.n[0]} ${l.far[1] + l.n[1]}`} stroke={c.ink} strokeWidth={dt.runW / 2} strokeDasharray={`${dt.runW} ${dt.runW}`} fill="none" />
-              {chipOn(i, -1, `${t("mod.gutters.draw.cutWall")} ${ftIn(x.backIn)}`, false, `b${i}`, GAP_WALL)}
-              {chipOn(i, 1, `${t("mod.gutters.draw.cutFace")} ${ftIn(x.frontIn)}`, true, `f${i}`, GAP_FACE)}
+              {chipOn(i, -1, `${t("mod.gutters.draw.cutWall")} ${fmtLen(x.backIn, fmt)}`, false, `b${i}`, GAP_WALL)}
+              {chipOn(i, 1, `${t("mod.gutters.draw.cutFace")} ${fmtLen(x.frontIn, fmt)}`, true, `f${i}`, GAP_FACE)}
               <SvgText x={l.far[0] + l.u[0] * FS * 1.4} y={l.far[1] + l.u[1] * FS * 1.4 + FS * 0.35} fontSize={FS} fontFamily={font.families.bold} fill={c.ink} textAnchor="middle">{letters[i]}</SvgText>
             </G>
           );
