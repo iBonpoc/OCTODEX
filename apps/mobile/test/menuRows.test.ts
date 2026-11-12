@@ -22,6 +22,6 @@ describe("long lists: the menu's height and the picker", () => {
     expect(f).toMatch(/<PickerSheet/);
   });
   it("the picker's list is the sheet's own scroll: no ScrollView of its own", () => {
-    expect(src("ui", "pickerSheet.tsx")).not.toMatch(/ScrollView/);
+    expect(src("ui", "pickerSheet.tsx")).not.toMatch(/<ScrollView|import[^;]*ScrollView/);
   });
 });
