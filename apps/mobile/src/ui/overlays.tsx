@@ -287,6 +287,8 @@ export function Sheet({
   const before = leaveBefore();
   const [present, setPresent] = useState(visible);
   const open = before ? visible : visible || present;
+  // iOS: the sheet is going out by the person's close — its body takes no touches meanwhile (a second answer must not be possible)
+  const [goingOut, setGoingOut] = useState(false);
   const session = useRef(0);
   const exitSpeed = useRef(0);
   const [asked, setAsked] = useState(0);
@@ -302,11 +304,22 @@ export function Sheet({
       drag.value = 0;
       fade.value = 1;
       leaving.current = false;
+      setGoingOut(false);
       setPresent(true);
       setFull(false);
       setAsk(false);
     }
   }, [visible, drag, fade]);
+  // iOS: the owner closed it (by itself, or at a moment of its own while the sheet was going out): the exit that was under
+  // way is void — a late end of it asks nothing — and the owner may let the data go now (the Modal is gone at once)
+  useEffect(() => {
+    if (!before || visible) return;
+    session.current++;
+    leaving.current = false;
+    setGoingOut(false);
+    live.current.onExited?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
   // web: the Modal's root is a fixed layer that takes every tap; while the sheet goes out it lets them through (DS §10:
   // do not wait for an animation to press). Native: the Modal is its own window — ⬜ (DS Б1)
   const rootRef = useRef<React.ComponentRef<typeof Animated.View>>(null);
@@ -344,6 +357,7 @@ export function Sheet({
     (speed: number, then: (id: number) => void) => {
       const id = ++session.current;
       leaving.current = true;
+      if (before) setGoingOut(true);
       let ran = false;
       const finish = () => {
         if (ran || id !== session.current || !mounted.current) return;
@@ -367,7 +381,7 @@ export function Sheet({
       drag.value = withTiming(h, { duration: ms, easing: speed > 0 ? Easing.linear : Easing.bezier(...motion.easeOut) }, done);
       setTimeout(finish, ms + motion.durBase);
     },
-    [reduce, wide, winH, drag, fade, sheetH],
+    [reduce, wide, winH, drag, fade, sheetH, before],
   );
   // after-way: the owner closed it (after its own «Сохранить», or because we asked): now it goes out
   useEffect(() => {
@@ -380,6 +394,7 @@ export function Sheet({
   useEffect(() => {
     if (asked === 0 || !shown.current) return;
     leaving.current = false;
+    setGoingOut(false);
     exitSpeed.current = 0;
     drag.value = withSpring(0, motion.spring);
     fade.value = withTiming(1, { duration: motion.durFast, reduceMotion: ReduceMotion.Never });
@@ -491,7 +506,7 @@ export function Sheet({
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
-        pointerEvents={visible ? "auto" : "none"}
+        pointerEvents={visible && !goingOut ? "auto" : "none"}
         behavior={avoidBehavior}
         // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32) — without one, as before;
         // the phone sheet runs to the edge

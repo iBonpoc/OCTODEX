@@ -132,6 +132,32 @@ exports.run = async (h) => {
     const chainedC = await chain(`${mode} chain C`, "showcase-chain-next-c", "Шаг 3");
     if (mode === "before") h.expect(chainedC.firstGone, "the chain, the next sheet recreated: the first is gone as soon as the next shows");
 
+    // iOS: the person's close is under way when the owner closes the sheet by itself (a result, a timer): the late end of the
+    // exit asks nothing (no second answer), and the sheet's own buttons take no touch while it goes out
+    if (mode === "before") {
+      await vis("showcase-sheet-self").getByRole("button").first().click();
+      await p.getByTestId("sheet-title").filter({ hasText: "Владелец закрывает сам" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+      await vis("sheet-close").click();
+      const inert = await p.evaluate(() => {
+        const b = document.querySelector('[data-testid="showcase-self-yes"]');
+        if (!b) return true;
+        const r = b.getBoundingClientRect();
+        const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return !e || !e.closest('[data-testid="showcase-self-yes"]');
+      });
+      h.expect(inert, "while the sheet goes out, its buttons take no touch");
+      await p.evaluate(() => {
+        const el = document.querySelector('[data-testid="showcase-self-close-outside"]');
+        (el.matches('[role="button"]') ? el : el.querySelector('[role="button"]')).click();
+      }); // the owner closes it itself, from outside
+      await gone("the owner closed it while it was going out");
+      await p.waitForFunction(() => document.querySelectorAll('[data-testid="sheet-panel"]').length === 0, null, { timeout: 3000 });
+      const asked = await vis("showcase-self-asked").innerText();
+      h.expect(/: 0$/.test(asked.trim()) || /\b0\b/.test(asked), `the late end of the exit asks the owner nothing (${asked.replace(/\n/g, " ")})`);
+      const answered = await vis("showcase-sheet-self").innerText();
+      h.expect(!/Ответов «Да»: [1-9]/.test(answered), "and no «Да» was answered");
+    }
+
     // the owner will not close it: it comes straight back, and is asked once per press
     await openSheet("stuck");
     const t0 = await top();

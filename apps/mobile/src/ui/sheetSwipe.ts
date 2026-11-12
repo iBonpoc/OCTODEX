@@ -36,7 +36,8 @@ export interface ReleaseRule {
 export function swipeCloses(drag: number, velocity: number, height: number, r: ReleaseRule): boolean {
   if (drag <= 0 || height <= 0) return false;
   if (velocity >= r.flick) return true;
-  const where = velocity >= r.slow ? drag + velocity * r.project : drag;
+  // the speed counts from `slow` up in either direction: a finger going back up takes the sheet back
+  const where = Math.abs(velocity) >= r.slow ? drag + velocity * r.project : drag;
   return where > height * r.settle;
 }
 

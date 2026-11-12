@@ -31,6 +31,8 @@ describe("swipe down on the body of a sheet", () => {
     expect(swipeCloses(250, 0.6, 600, r)).toBe(true); // 250 + 0.6 × 100 = 310: the speed carries it past the half
     expect(swipeCloses(250, 0.2, 600, r)).toBe(false); // below the slow speed it does not count
     expect(swipeCloses(300, -0.4, 600, r)).toBe(false); // back up
+    expect(swipeCloses(350, -1, 600, r)).toBe(false); // past the half, but the finger flicks back up: it takes the sheet back
+    expect(swipeCloses(350, -0.2, 600, r)).toBe(true); // a drift upward below the slow speed does not count
   });
 });
 
