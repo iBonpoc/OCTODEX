@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
 import { canSeeLead, canSeeLeadCost, filterLeads, isOpenLead, leadStatusView as statusOf, needsNextStep, openTasks, sourceName, waitingMinutes, waitStatus, type LeadFilter } from "@/features/leads";
@@ -75,6 +76,7 @@ function LeadsBoard() {
   const toggle = (ids: string[], set: (v: string[]) => void) => (id: string) => set(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   const [picking, setPicking] = useState<Lead | null>(null);
   const [calling, setCalling] = useState<Lead | null>(null);
+  const callHeld = useHeldSheet(calling); // the sheet goes out before it is unmounted (#1163)
   /** the same records as the lead page (ContactActions): a call asks «did you get through?», SMS / email count as a reply */
   const contact = (l: Lead) => (a: ContactAction) => {
     openContact(a);
@@ -181,7 +183,7 @@ function LeadsBoard() {
         </>
       )}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
-      {calling ? <CallResultSheet key={calling.id} l={calling} visible onClose={() => setCalling(null)} onAnswered={() => panel.open(calling.id)} /> : null}
+      {callHeld.value ? <CallResultSheet key={`${callHeld.value.id}-${callHeld.opening}`} l={callHeld.value} visible={callHeld.visible} onExited={callHeld.onExited} onClose={() => setCalling(null)} onAnswered={() => panel.open(callHeld.value!.id)} /> : null}
       {picking ? (
         <StatusPicker
           visible

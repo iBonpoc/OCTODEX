@@ -37,7 +37,7 @@ export function CallSheet({ preset, onClose }: { preset: CallPreset | null; onCl
   const h = useHeldSheet(preset);
   if (!h.value) return null;
   const p = h.value;
-  return <CallSheetBody key={`${p.subjectType ?? ""}-${p.subjectId ?? ""}-${p.contactId ?? ""}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
+  return <CallSheetBody key={`${p.subjectType ?? ""}-${p.subjectId ?? ""}-${p.contactId ?? ""}-${h.opening}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
 function CallSheetBody({ preset, onClose, visible, onExited }: { preset: CallPreset; onClose: () => void; visible: boolean; onExited: () => void }) {

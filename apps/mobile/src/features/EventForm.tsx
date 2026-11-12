@@ -42,7 +42,7 @@ export function EventSheet({ state, onClose }: { state: EventSheetState; onClose
   const h = useHeldSheet(state);
   if (!h.value) return null;
   // a new key per opening: the fields start from the event (or empty) every time
-  return <EventSheetBody key={h.value.event?.id ?? `new-${h.value.kind}`} state={h.value} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
+  return <EventSheetBody key={`${h.value.event?.id ?? `new-${h.value.kind}`}-${h.opening}`} state={h.value} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
 function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNullable<EventSheetState>; onClose: () => void; visible: boolean; onExited: () => void }) {

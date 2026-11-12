@@ -41,7 +41,7 @@ export function ClientDupCards({ c }: { c: Customer }) {
           />
         ))}
       </CardGrid>
-      {held.value ? <MergeSheet here={c} other={held.value.customer} visible={held.visible} onExited={held.onExited} onClose={() => setOpen(null)} /> : null}
+      {held.value ? <MergeSheet key={held.opening} here={c} other={held.value.customer} visible={held.visible} onExited={held.onExited} onClose={() => setOpen(null)} /> : null}
     </>
   );
 }

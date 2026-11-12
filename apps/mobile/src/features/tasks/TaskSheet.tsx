@@ -53,7 +53,7 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 export function TaskSheet({ value, onClose }: { value: TaskDraft | null; onClose: () => void }) {
   const h = useHeldSheet(value);
   if (!h.value) return null;
-  return <TaskSheetBody key={h.value.id ?? `new-${h.value.subjectId}`} value={h.value} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
+  return <TaskSheetBody key={`${h.value.id ?? `new-${h.value.subjectId}`}-${h.opening}`} value={h.value} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
 function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft; onClose: () => void; visible: boolean; onExited: () => void }) {

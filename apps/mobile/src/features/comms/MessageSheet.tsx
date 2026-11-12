@@ -40,7 +40,7 @@ export function MessageSheet({ preset, onClose }: { preset: MessagePreset | null
   const h = useHeldSheet(preset);
   if (!h.value) return null;
   const p = h.value;
-  return <MessageSheetBody key={`${p.owner?.id ?? ""}-${p.person?.id ?? ""}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
+  return <MessageSheetBody key={`${p.owner?.id ?? ""}-${p.person?.id ?? ""}-${h.opening}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
 function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: MessagePreset; onClose: () => void; visible: boolean; onExited: () => void }) {

@@ -294,7 +294,7 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
         </View>
       </Sheet>
 
-      {editHeld.value ? <EditItemSheet v={v} item={editHeld.value} visible={editHeld.visible} onExited={editHeld.onExited} onClose={() => setEditing(null)} /> : null}
+      {editHeld.value ? <EditItemSheet key={editHeld.opening} v={v} item={editHeld.value} visible={editHeld.visible} onExited={editHeld.onExited} onClose={() => setEditing(null)} /> : null}
     </View>
   );
 }

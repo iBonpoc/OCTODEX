@@ -208,7 +208,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
       ) : null}
 
       {universal && maySend ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
-      {tplHeld.value ? <SaveTemplateSheet e={tplHeld.value} visible={tplHeld.visible} onExited={tplHeld.onExited} onClose={() => setTplOpen(false)} /> : null}
+      {tplHeld.value ? <SaveTemplateSheet key={tplHeld.opening} e={tplHeld.value} visible={tplHeld.visible} onExited={tplHeld.onExited} onClose={() => setTplOpen(false)} /> : null}
       {pdfIssues ? (
         <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
           <SendCheck
