@@ -63,7 +63,8 @@ describe("the cut of a corner", () => {
 
 describe("the tape to 1/16″", () => {
   it("8′ 9¼″ typed: 105.25″; shown back the same", () => {
-    expect(tapeIn("8", "9", 2)).toBe(105.25);
+    expect(tapeIn("8", "9", 4)).toBe(105.25);
+    expect(tapeIn("8", "9", 3)).toBe(105.1875);
     expect(ftIn(105.25)).toBe("8′ 9¼″");
     expect(ftIn(96.5)).toBe("8′ ½″");
     expect(ftIn(0.375)).toBe("⅜″");

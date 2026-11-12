@@ -12,7 +12,7 @@ import { storyOf, type Story } from "../canvas/scene";
 export interface SpecRun {
   n: number;
   id: string;
-  /** along the wall (the back), inches to 1/8″ */
+  /** along the wall (the back), inches to 1/16″ */
   backIn: number;
   /** along the face — longer at an outside corner, shorter at an inside one */
   frontIn: number;

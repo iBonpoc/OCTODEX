@@ -13,8 +13,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Button, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { tapeIn } from "../canvas/attrs";
-import { fmtLen, type LenFormat } from "../canvas/format";
+import { asFields, tapeIn } from "../canvas/attrs";
+import { DENOM, fmtLen, type LenFormat } from "../canvas/format";
 import { labelWidth } from "../canvas/labels";
 import { countOnKeyboardHide, triKey } from "./triangleCount";
 import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
@@ -135,7 +135,7 @@ export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: Fo
   );
 }
 
-/** a length typed in feet and inches (inches may be decimal — to 1/8″) */
+/** a length typed in feet and inches (inches may be decimal — to 1/16″) */
 function Len({ label, value, onChange, testID }: { label: string; value: { ft: string; inch: string }; onChange: (v: { ft: string; inch: string }) => void; testID: string }) {
   const { t } = useI18n();
   return (
@@ -150,8 +150,6 @@ function Len({ label, value, onChange, testID }: { label: string; value: { ft: s
     </View>
   );
 }
-
-const asFields = (n: number) => ({ ft: String(Math.floor(n / 12)), inch: String(Math.round((n % 12) * 8) / 8) });
 
 /** the triangle: along gutter 1 and gutter 2 from the corner (the whole gutters by default), and between the marks */
 export function CornerTriangle({ d, f, onAngle }: { d: Drawing; f: FoundCorner; onAngle: (deg: number) => void }) {

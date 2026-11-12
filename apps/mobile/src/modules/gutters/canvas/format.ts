@@ -1,8 +1,6 @@
 /** lengths are kept and shown to 1/16″ (founder 11.11: «хранить с точностью до 1/16»); old data is in eighths, which fit */
 export const DENOM = 16;
 const EIGHTHS = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"] as const;
-/** the tape's fraction (eighths, 0–7): ⅜ — nothing at 0 */
-export const eighthLabel = (k: number) => EIGHTHS[k] || "0";
 /** a fraction in sixteenths (1–15): a glyph for the eighths (⅜), text for the odd ones («3/16») — no glyph exists for those */
 export const fracLabel = (k16: number) => (k16 % 2 === 0 ? EIGHTHS[k16 / 2] ?? "" : `${k16}/16`);
 /** whole inches and a fraction written together: 5½, 5 3/16, ½, 3/16, 5 */
@@ -26,8 +24,8 @@ export function ftIn(inches: number): string {
 }
 
 /** how a gutter's length is shown on the drawing (founder 09.11, chosen in its properties): feet + inches, inches, mm */
-/** how a length is typed and shown (founder 09.11: feet + inches + eighths, inches, also metres, centimetres, millimetres);
- *  kept in inches to 1/8″ whatever is chosen */
+/** how a length is typed and shown (founder 09.11: feet + inches + sixteenths, inches, also metres, centimetres, millimetres);
+ *  kept in inches to 1/16″ whatever is chosen */
 export type LenUnit = "ftin" | "in" | "m" | "cm" | "mm";
 export const LEN_UNITS: readonly LenUnit[] = ["ftin", "in", "m", "cm", "mm"];
 export const MM_PER_IN = 25.4;

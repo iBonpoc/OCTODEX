@@ -5,8 +5,12 @@ import { Platform } from "react-native";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, type MenuItem } from "./overlays";
+import { PickerSheet } from "./pickerSheet";
 import { Icon, Press, T } from "./primitives";
 import { useReadOnly } from "./readOnly";
+
+/** a longer list is not a menu (DS А2: more than 12 → PickerSheet) */
+export const MENU_MAX = 12;
 
 /**
  * One of 5–12 values, kept in a form row (DS А2, #947): a row — the label on the left, the value (`mut`) and a chevron
@@ -42,7 +46,22 @@ export function SelectField<K extends string>({
   const chosen = items.find((i) => i.key === value);
   const shown = chosen?.label ?? placeholder ?? t("ui.select.choose");
   const menu: MenuItem<K>[] = items.map((i) => ({ key: i.key, label: i.label, selected: i.key === value, testID: testID ? `${testID}-${i.key}` : undefined }));
-  const open = () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }));
+  // more than 12 values are not a menu: a sheet with search (DS А2 → А3)
+  const long = items.length > MENU_MAX;
+  const [picker, setPicker] = useState(false);
+  // web: the focus goes back to the row when the sheet closes — Esc, a pick or the ✕ (DS А3), as the menu does
+  const opener = useRef<Element | null>(null);
+  const openPicker = () => {
+    if (Platform.OS === "web" && typeof document !== "undefined") opener.current = document.activeElement;
+    setPicker(true);
+  };
+  const closePicker = () => {
+    setPicker(false);
+    const el = opener.current as HTMLElement | null;
+    opener.current = null;
+    if (Platform.OS === "web" && el && typeof el.focus === "function") requestAnimationFrame(() => el.isConnected && el.focus());
+  };
+  const open = () => (long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View style={{ gap: space[1] }} testID={testID}>
       <View ref={ref} collapsable={false}>
@@ -55,8 +74,8 @@ export function SelectField<K extends string>({
           // the web reads the label instead of the button's text and ignores the value: the chosen one goes into the label
           accessibilityLabel={Platform.OS === "web" ? `${label}, ${shown}` : label}
           accessibilityValue={{ text: shown }}
-          accessibilityState={{ expanded: !!anchor, disabled: !!(disabled || ro) }}
-          aria-haspopup="menu"
+          accessibilityState={{ expanded: !!anchor || picker, disabled: !!(disabled || ro) }}
+          aria-haspopup={long ? "dialog" : "menu"}
           style={{
             minHeight: size.fieldPhone,
             flexDirection: "row",
@@ -86,7 +105,11 @@ export function SelectField<K extends string>({
           </T>
         </View>
       ) : null}
-      <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={onChange} onClose={() => setAnchor(null)} title={label} matchWidth />
+      {long ? (
+        <PickerSheet visible={picker} title={label} items={items} value={value} onSelect={onChange} onClose={closePicker} testID={testID ? `${testID}-picker` : undefined} />
+      ) : (
+        <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={onChange} onClose={() => setAnchor(null)} title={label} matchWidth />
+      )}
     </View>
   );
 }

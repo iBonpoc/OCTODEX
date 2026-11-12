@@ -1,6 +1,7 @@
 import { toastArmed } from "./toastArm";
+import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
 import { avoidBehavior } from "./keyboard";
 import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, useNativeGesture, usePanGesture } from "react-native-gesture-handler";
 import { menuPick } from "./menuPick";
@@ -106,6 +107,15 @@ export function Menu<K extends string>({
     if (el && el.isConnected && typeof el.focus === "function") el.focus();
   }, [isOpen]);
   // the Modal stays mounted after it closes (visible false), so iOS can say when it is gone; it keeps where it stood
+  const listRef = useRef<ScrollViewInstance>(null);
+  const scrolled = useRef(false);
+  const rowAt = useRef<Record<string, { y: number; h: number }>>({});
+  const contentSize = useRef(0);
+  if (!(visible && !!anchor)) {
+    scrolled.current = false;
+    rowAt.current = {};
+    contentSize.current = 0;
+  }
   const last = useRef(anchor);
   if (anchor) last.current = anchor;
   const at = anchor ?? last.current;
@@ -118,7 +128,21 @@ export function Menu<K extends string>({
   const below = at.y + at.h + space[1];
   // the menu never grows past the window (a phone on its side): it scrolls inside, every item can be reached
   const room = winH - e.t - e.b;
-  const estH = Math.min((items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2, room);
+  // at most `menuMaxRows` rows show (the last one half: it scrolls); a window shorter than that cuts it further
+  const listH = menuListHeight({ count: items.length, rowH: size.hitMin, maxRows: component.menuMaxRows, room, pad: space[2], titleH: title ? size.hitMin : 0 });
+  const scrollToChosen = () => {
+    if (scrolled.current) return;
+    const rows = Object.values(rowAt.current);
+    if (rows.length < items.length) return; // every row has its place: the content is as high as the last one ends
+    const contentH = Math.max(contentSize.current, ...rows.map((r) => r.y + r.h));
+    if (contentH <= listH) return;
+    const at = items.find((it) => it.selected);
+    const row = at ? rowAt.current[at.key as string] : undefined;
+    if (!row) return;
+    scrolled.current = true;
+    listRef.current?.scrollTo({ y: menuScrollTo({ rowY: row.y, rowH: row.h, viewH: listH, contentH }), animated: false });
+  };
+  const estH = Math.min(listH + (title ? size.hitMin : 0) + space[2] * 2, room);
   const top = below + estH > winH - e.b ? Math.max(e.t, Math.min(at.y - estH - space[1], winH - e.b - estH)) : below;
   return (
     <Modal transparent visible={open} animationType="none" onRequestClose={onClose} onDismiss={picker.dismissed} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
@@ -135,11 +159,27 @@ export function Menu<K extends string>({
               {title}
             </T>
           ) : null}
-          <ScrollView style={{ maxHeight: room - space[2] * 2 - (title ? size.hitMin : 0) }} testID="menu-items" bounces={false}>
+          <ScrollView
+            ref={listRef}
+            style={{ maxHeight: listH }}
+            testID="menu-items"
+            bounces={false}
+            showsVerticalScrollIndicator
+            // opens at the chosen item (in the middle of the window when the list is longer than it): by the rows' real
+            // places (a long label wraps), once the content has its size (on a phone it can come after the first layout)
+            onContentSizeChange={(_, contentH) => {
+              contentSize.current = contentH;
+              scrollToChosen();
+            }}
+          >
           {items.map((it) => (
             <Press
               key={it.key}
               testID={it.testID}
+              onLayout={(e) => {
+                rowAt.current[it.key as string] = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
+                scrollToChosen(); // every row has its place, or not yet: tried at each
+              }}
               onPress={() => picker.pick(it.key)}
               visibleHeight={size.hitMin}
               accessibilityRole="menuitem"
@@ -182,6 +222,7 @@ export function Sheet({
   children,
   dirty,
   onSave,
+  onEscape,
   footer,
   height = "fit",
   onBack,
@@ -201,6 +242,8 @@ export function Sheet({
   dirty?: boolean;
   /** "Save" in the unsaved-changes question */
   onSave?: () => void;
+  /** Esc / Android «Назад» first asks the content: true — it took the key (a search to clear), the sheet stays (DS А3) */
+  onEscape?: () => boolean;
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
@@ -211,8 +254,8 @@ export function Sheet({
   const drag = useSharedValue(0);
   const [full, setFull] = useState(false);
   const [ask, setAsk] = useState(false);
-  const live = useRef({ dirty, onClose });
-  live.current = { dirty, onClose };
+  const live = useRef({ dirty, onClose, onEscape });
+  live.current = { dirty, onClose, onEscape };
   useEffect(() => {
     if (visible) {
       drag.value = 0;
@@ -296,7 +339,7 @@ export function Sheet({
   const fullH = winH - insets.top - space[2];
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onBack ?? requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onBack ?? (() => (live.current.onEscape?.() ? undefined : requestClose()))} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       {/* a Modal is its own native root: gestures in it need their own root view (Gesture Handler) */}
       <GestureHandlerRootView style={{ flex: 1 }}>
       <KeyboardAvoidingView
