@@ -162,7 +162,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
 }
 
 /* ---------- Toggle (spring knob) ---------- */
-export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; /** the switch is there but does not answer (a client without tax): pale, skipped by Tab, read as «disabled» */ disabled?: boolean }) {
   const { c } = useTheme();
   const ro = useReadOnly();
   const reduce = useReducedMotion();
@@ -177,12 +177,12 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return (
     <Press
       onPress={() => onChange(!on)}
-      disabled={ro}
+      disabled={ro || disabled}
       visibleHeight={h}
       accessibilityRole="switch"
-      accessibilityState={{ checked: on, disabled: ro }}
+      accessibilityState={{ checked: on, disabled: ro || !!disabled }}
       // web: a switch is read by aria-checked (as the radio below); without it the state is silent there (P4c)
-      {...({ "aria-checked": on } as object)}
+      {...({ "aria-checked": on, "aria-disabled": ro || !!disabled || undefined } as object)}
       accessibilityLabel={label}
       style={{
         width: w,
@@ -193,6 +193,7 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
         backgroundColor: on ? c.acc : c.track,
         padding: pad,
         justifyContent: "center",
+        opacity: disabled ? component.dimOpacity : 1,
       }}
     >
       <Animated.View

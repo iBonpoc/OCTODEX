@@ -94,7 +94,6 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Налог с продаж" }).click(); await p.waitForTimeout(250);
   await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");
-  for (const g of await h.sheet().getByRole("switch", { name: /^Налог с продаж: / }).all()) if ((await g.getAttribute("aria-checked")) !== "true") await g.click();
   await h.sheet().getByRole("button", { name: "Понятно" }).click(); await p.waitForTimeout(300);
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(800);
   const est = (await h.db()).estimates.filter((e) => e.customerId === "c2" && e.doc).at(-1);
