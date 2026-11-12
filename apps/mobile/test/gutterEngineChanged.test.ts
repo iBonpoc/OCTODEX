@@ -103,9 +103,9 @@ describe("the note on the estimate (module.estimateNotes)", () => {
     const gutters = (await import("../src/modules/gutters/module")).default;
     const e = estimate(linesAt("0.0.1") as ModuleLine[]);
     const mk = (status: "ready" | "draft") => ({ estimates: [e], moduleData: { gutters: { measurements: [{ id: M, status }], elements: [{ id: "x", measurementId: M, kind: "run", geom: {}, attrs: {} }] } } }) as never;
-    const ready = gutters.estimateNotes!(e, mk("ready"));
+    const ready = gutters.estimateNotes!(e, mk("ready"), undefined);
     expect(ready.map((x) => x.id)).toEqual(["engine"]);
-    const draft = gutters.estimateNotes!(e, mk("draft"));
+    const draft = gutters.estimateNotes!(e, mk("draft"), undefined);
     expect(draft.map((x) => x.id)).toEqual(["stale"]);
   });
 });
