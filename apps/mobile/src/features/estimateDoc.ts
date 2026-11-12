@@ -84,6 +84,8 @@ export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: st
   const unhidden: string[] = [];
   let changed = false;
   const options = doc.options.map((o) => {
+    // a broken option (an older or damaged copy) is left as it is: one estimate never stops the phone's start
+    if (!o || typeof o !== "object" || !Array.isArray(o.lines)) return o;
     let oc = false;
     const lines = o.lines.map((l) => {
       if (l.clientVisible === false && l.unitPriceCents !== 0) {
