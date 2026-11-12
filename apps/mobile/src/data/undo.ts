@@ -2,7 +2,7 @@
  * #1261 (the director's 4th review of #1244): «Отменить» is all or nothing, and the types hold it. A GuardedUndo carries a
  * brand only the store gives (mutate, undoTogether — store.tsx) and this file (NO_UNDO, withAfter): the toast takes only
  * it, so a screen's own wrapper `() => { a(); b(); }` — a silent half undo when one part is refused — does not compile.
- * Several actions taken back as one go through store.undoTogether (a module: gutters undoAll).
+ * Several actions taken back as one go through store.undoTogether (a module: its own helper over it).
  *
  * The result: true — taken back; false — too late, nothing changed (the toast says so); undefined — nothing to take back
  * (the server dropped it, or the action did nothing): the toast just closes.
