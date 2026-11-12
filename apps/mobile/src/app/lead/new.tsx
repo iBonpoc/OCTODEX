@@ -14,6 +14,7 @@ import { formatPhoneUS } from "@/ui/inputFormat";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
+import { useRequiredForm } from "@/ui/requiredForm";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { moduleDef } from "@/modules/registry";
 
@@ -41,7 +42,16 @@ export default function NewLead() {
   }, [sourceId, fallbackSource]);
   const [message, setMessage] = useState("");
   const dup = phoneKey(phone).length === 10 ? findDuplicates(db, { phone }) : { customers: [], leads: [] };
-  const ok = name.trim().length > 1 && phoneKey(phone).length === 10 && !!sourceId;
+  const form = useRequiredForm();
+  const submit = () =>
+    form.submit(
+      [
+        ...(phoneKey(phone).length === 10 ? [] : [{ id: "phone", text: t("form.req.phone") }]),
+        ...(name.trim().length > 1 ? [] : [{ id: "name", text: t("form.req.name") }]),
+        ...(sourceId ? [] : [{ id: "source", text: t("form.req.source") }]),
+      ],
+      save,
+    );
   const paste = async () => {
     const s = await Clipboard.getStringAsync().catch(() => "");
     if (s) setPhone(formatPhoneUS(s));
@@ -68,13 +78,13 @@ export default function NewLead() {
         <Labeled label={t("lead.phone")}>
           <RowView>
             <View style={{ flex: 1 }}>
-              <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" label={t("lead.phone")} icon="phone" />
+              <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" label={t("lead.phone")} icon="phone" field={form.field("phone")} />
             </View>
             <Button label={t("lead.paste")} icon="copy" size="sm" variant="secondary" onPress={paste} />
           </RowView>
         </Labeled>
         <Labeled label={t("lead.name")}>
-          <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
+          <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" field={form.field("name")} />
         </Labeled>
         <Labeled label={t("co.street")}>
           <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
@@ -82,7 +92,7 @@ export default function NewLead() {
         <Labeled label={t("co.city")}>
           <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena" />
         </Labeled>
-        <SourceField value={sourceId} onChange={setSourceId} />
+        <SourceField value={sourceId} onChange={setSourceId} field={form.field("source")} />
         <Labeled label={t("lead.need")}>
           <TextField type="note" value={message} onChangeText={setMessage} placeholder={t("lead.messagePh")} />
         </Labeled>
@@ -139,12 +149,7 @@ export default function NewLead() {
         </View>
       ) : null}
 
-      <Button label={t("lead.save")} icon="check" full disabled={!ok} onPress={save} />
-      {!ok ? (
-        <T v="caption" tone="mut">
-          {t("lead.needFields")}
-        </T>
-      ) : null}
+      <Button label={t("lead.save")} icon="check" full onPress={submit} />
     </Screen>
   );
 }

@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import type { FieldBinding } from "./requiredForm";
 import { View } from "react-native";
 import { component, radius, size, space } from "@octo/design-tokens";
 import { Platform } from "react-native";
@@ -26,6 +27,7 @@ export function SelectField<K extends string>({
   error,
   testID,
   disabled,
+  field,
 }: {
   label: string;
   value: K | null | undefined;
@@ -37,6 +39,8 @@ export function SelectField<K extends string>({
   error?: string;
   testID?: string;
   disabled?: boolean;
+  /** a required field of a form (`useRequiredForm().field(id)`): its error and its place for the scroll */
+  field?: FieldBinding;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
@@ -44,6 +48,7 @@ export function SelectField<K extends string>({
   const ref = useRef<React.ComponentRef<typeof View>>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const chosen = items.find((i) => i.key === value);
+  const shownError = error ?? field?.error;
   const shown = chosen?.label ?? placeholder ?? t("ui.select.choose");
   const menu: MenuItem<K>[] = items.map((i) => ({ key: i.key, label: i.label, selected: i.key === value, testID: testID ? `${testID}-${i.key}` : undefined }));
   // more than 12 values are not a menu: a sheet with search (DS А2 → А3)
@@ -63,7 +68,7 @@ export function SelectField<K extends string>({
   };
   const open = () => (long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
-    <View style={{ gap: space[1] }} testID={testID}>
+    <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
       <View ref={ref} collapsable={false}>
         <Press
           testID={testID ? `${testID}-button` : undefined}
@@ -84,7 +89,7 @@ export function SelectField<K extends string>({
             paddingHorizontal: space[3],
             borderRadius: radius.field,
             borderWidth: component.hairline,
-            borderColor: error ? c.status.bad.fill : c.bd,
+            borderColor: shownError ? c.status.bad.fill : c.bd,
             backgroundColor: c.in,
           }}
         >
@@ -97,18 +102,18 @@ export function SelectField<K extends string>({
           <Icon name="chevronDown" s={size.iconSm} color={c.mut} />
         </Press>
       </View>
-      {error ? (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite">
+      {shownError ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={(testID ?? field?.testID) ? `${testID ?? field?.testID}-error` : undefined}>
           <Icon name="alert" s={size.iconSm} color={c.status.bad.text} />
           <T v="caption" tone="bad">
-            {error}
+            {shownError}
           </T>
         </View>
       ) : null}
       {long ? (
-        <PickerSheet visible={picker} title={label} items={items} value={value} onSelect={onChange} onClose={closePicker} testID={testID ? `${testID}-picker` : undefined} />
+        <PickerSheet visible={picker} title={label} items={items} value={value} onSelect={(k) => { field?.clear(); onChange(k); }} onClose={closePicker} testID={testID ? `${testID}-picker` : undefined} />
       ) : (
-        <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={onChange} onClose={() => setAnchor(null)} title={label} matchWidth />
+        <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={(k) => { field?.clear(); onChange(k); }} onClose={() => setAnchor(null)} title={label} matchWidth />
       )}
     </View>
   );

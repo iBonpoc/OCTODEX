@@ -1,3 +1,4 @@
+import { Anchored, type FieldBinding } from "@/ui/requiredForm";
 import { useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
@@ -14,12 +15,12 @@ import { Divider, ListRow, RowView } from "@/ui/surfaces";
 export const sourceKindLabel = (k: SourceKind): DictKey => `src.kind.${k}` as DictKey;
 
 /** Field that shows the chosen source; tap opens the picker. */
-export function SourceField({ value, onChange, label }: { value: string; onChange: (id: string) => void; label?: string }) {
+export function SourceField({ value, onChange, label, field }: { value: string; onChange: (id: string) => void; label?: string; field?: FieldBinding }) {
   const { db } = useStore();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const s = sourceOf(db, value);
-  return (
+  const body = (
     <Labeled label={label ?? t("lead.source")}>
       <ListRow
         title={s?.name ?? t("src.choose")}
@@ -27,9 +28,10 @@ export function SourceField({ value, onChange, label }: { value: string; onChang
         left={<Icon name="star" />}
         onPress={() => setOpen(true)}
       />
-      <SourceSheet visible={open} value={value} onClose={() => setOpen(false)} onPick={(id) => { onChange(id); setOpen(false); }} />
+      <SourceSheet visible={open} value={value} onClose={() => setOpen(false)} onPick={(id) => { onChange(id); field?.clear(); setOpen(false); }} />
     </Labeled>
   );
+  return field ? <Anchored field={field}>{body}</Anchored> : body;
 }
 
 /**

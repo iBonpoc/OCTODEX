@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import type { FieldBinding } from "./requiredForm";
 import { Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -470,6 +471,9 @@ export function TextField({
   onSubmit,
   autoFocus,
   selectOnFocus,
+  field,
+  error,
+  testID,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -486,6 +490,11 @@ export function TextField({
   autoFocus?: boolean;
   /** the text is selected when the field gets the focus: a typed digit replaces a prefilled value */
   selectOnFocus?: boolean;
+  /** a required field of a form (`useRequiredForm().field(id)`): its error, its place for the scroll, its focus */
+  field?: FieldBinding;
+  /** «что вписать» under the field: alert + text, the frame `status.bad` (DS §11 п.2; the form gives it through `field`) */
+  error?: string;
+  testID?: string;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -499,18 +508,21 @@ export function TextField({
   // a field that opens in a sheet: on a phone focus once the sheet is up and select by hand (#691, ./fieldFocus)
   const plan = focusPlan(Platform.OS, { autoFocus, selectOnFocus, readOnly: ro });
   const selectAll = () => input.current?.setSelection?.(0, len.current);
+  const shownError = error ?? field?.error;
+  const tid = testID ?? field?.testID;
   useEffect(() => {
     if (plan.focusAfterMs === null) return;
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
     return () => clearTimeout(id);
   }, [plan.focusAfterMs]);
   return (
+    <View ref={field?.anchorRef} testID={tid} collapsable={false} style={{ gap: space[1] }}>
     <View
       style={{
         minHeight: h,
         borderRadius: radius.field,
         borderWidth: 1,
-        borderColor: c.bd,
+        borderColor: shownError ? c.status.bad.fill : c.bd,
         backgroundColor: c.in,
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",
@@ -521,12 +533,18 @@ export function TextField({
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
       <TextInput
-        ref={input}
+        ref={(n) => {
+          input.current = n;
+          field?.inputRef(n);
+        }}
         value={value}
         editable={!ro}
         onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
         aria-disabled={ro || undefined}
-        onChangeText={(v) => onChangeText(f.fmt ? f.fmt(v) : v)}
+        onChangeText={(v) => {
+          if (field?.error) field.clear();
+          onChangeText(f.fmt ? f.fmt(v) : v);
+        }}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
         multiline={multi}
@@ -545,6 +563,7 @@ export function TextField({
         selectTextOnFocus={selectOnFocus}
         submitBehavior={multi ? "newline" : "blurAndSubmit"}
         accessibilityLabel={label ?? placeholder}
+        aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
           minHeight: multi ? h * 2 : h,
@@ -555,6 +574,15 @@ export function TextField({
           outlineStyle: "none",
         } as object}
       />
+    </View>
+    {shownError ? (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={tid ? `${tid}-error` : undefined}>
+        <Icon name="alert" s={sizes.iconSm} color={c.status.bad.text} />
+        <T v="caption" tone="bad">
+          {shownError}
+        </T>
+      </View>
+    ) : null}
     </View>
   );
 }

@@ -1,3 +1,4 @@
+import { useRequiredForm } from "@/ui/requiredForm";
 import { useState } from "react";
 import { Image, View } from "react-native";
 import { router } from "expo-router";
@@ -31,6 +32,7 @@ export default function NewExpense() {
   const [photo, setPhoto] = useState<string | undefined>();
   const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100);
   const ok = Number.isFinite(cents) && cents > 0;
+  const form = useRequiredForm();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const pick = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.6 }).catch(() => null);
@@ -49,23 +51,23 @@ export default function NewExpense() {
           <T v="caption" tone="mut">
             {t("exp.aiNote")}
           </T>
-          <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" />
+          <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" field={form.field("amount")} />
           <ChoiceChips label={t("exp.vendor")} testID="expense-vendor" value={vendor} onChange={setVendor} items={VENDORS.map((v) => ({ key: v, label: v }))} />
           <ChoiceChips<ExpenseCategory> label={t("exp.category")} testID="expense-category" value={category} onChange={setCategory} items={CATS.map((c) => ({ key: c, label: t(`exp.cat.${c}`) }))} />
           <ChoiceChips label={t("exp.job")} testID="expense-job" value={jobId} onChange={setJobId} items={jobs} />
         </View>
       </Card>
-      {!ok ? <T v="caption" tone="mut">{t("exp.need")}</T> : null}
       <Button
         label={t("exp.save")}
         icon="check"
         full
-        disabled={!ok}
-        onPress={() => {
+        onPress={() =>
+          form.submit(ok ? [] : [{ id: "amount", text: t("form.req.amount") }], () => {
           const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor, category, amountCents: cents, receiptUri: photo });
           toast.show(online ? t("exp.saved", { amount: money(cents) }) : t("offline.queued"), undo);
           back();
-        }}
+          })
+        }
       />
     </Screen>
   );
