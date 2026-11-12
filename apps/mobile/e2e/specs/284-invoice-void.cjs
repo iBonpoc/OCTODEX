@@ -20,7 +20,8 @@ exports.run = async (h) => {
   let db = await pick((d) => d.invoices.some((i) => i.jobId === "j6"), "the wrong invoice is issued");
   const wrong = db.invoices.find((i) => i.jobId === "j6");
   // nothing more fits the contract: the buttons are gone
-  h.expect((await p.getByTestId("statement-bill-balance").count()) === 0, "the contract is billed in full");
+  await p.getByTestId("statement-bill-balance").waitFor({ state: "detached" });
+  h.expect(true, "the contract is billed in full: «Выставить остаток» is gone");
 
   await h.go(`/invoice/${wrong.id}`);
   await p.getByTestId("invoice-more").locator("visible=true").click();
@@ -35,7 +36,8 @@ exports.run = async (h) => {
   await h.go("/job/j6");
   await p.getByTestId("job-tab-money").locator("visible=true").click();
   await p.getByTestId(`statement-void-${wrong.id}`).waitFor();
-  await h.expectText(/Выставлено \| \$0 \|/, "the statement counts nothing for it");
+  await p.waitForFunction(() => /\$0(\.00)?$/.test((document.querySelector('[data-testid="statement-invoiced"]')?.textContent ?? "").trim()));
+  h.expect(true, "the statement counts nothing for it (Выставлено $0)");
   await p.getByTestId("statement-bill-balance").click();
   db = await pick((d) => d.invoices.some((i) => i.jobId === "j6"), "the right invoice goes through");
   h.expect(db.invoices.filter((i) => i.jobId === "j6").length === 1 && db.voidInvoices.filter((i) => i.jobId === "j6").length === 1, "one live, one voided");

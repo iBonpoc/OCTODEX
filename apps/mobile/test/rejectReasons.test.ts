@@ -27,6 +27,7 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       invoice_over_contract: "inv.rej.overContract",
       invoice_has_payments: "inv.void.rej.paid",
       invoice_void_forbidden: "inv.void.rej.role",
+      invoice_void: "inv.void.rej.payment",
       // step 17 C3: the merge of two clients (migration 20261109120000, db T134)
       merge_payment_in_flight: "clientDup.rej.inFlight",
       merge_already_merged: "clientDup.rej.merged",

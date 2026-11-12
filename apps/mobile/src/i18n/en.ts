@@ -3555,6 +3555,8 @@ export const en: Dict = {
   "inv.void.rej.title": "The invoice was not voided on the server",
   "inv.void.rej.paid": "The invoice was not voided: a payment came in. Refund it first, then void.",
   "inv.void.rej.role": "The invoice was not voided: only the company's owner or an admin can do it.",
+  "inv.void.rej.payment": "The payment was not recorded: the invoice is void. Check the job's invoices and record it on the right one.",
+  "inv.void.why.long": "The reason is 500 characters at most",
   "po.rej.officeOnly": "Only the office changes a received order",
   "po.rej.notOpen": "The order is not sent or is cancelled — nothing was marked",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)

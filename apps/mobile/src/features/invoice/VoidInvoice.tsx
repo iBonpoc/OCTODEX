@@ -10,7 +10,7 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Invoice } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { voidRefusal } from "@/features/contractInvoice";
+import { VOID_REASON_MAX, voidRefusal } from "@/features/contractInvoice";
 import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -39,7 +39,7 @@ export function VoidInvoiceMenu({ inv }: { inv: Invoice }) {
     const why = store.voidInvoice(inv.id, reason);
     if (why) {
       toast.show(t(`inv.void.why.${why}` as DictKey));
-      if (why !== "reason") close();
+      if (why !== "reason" && why !== "long") close();
       return;
     }
     close();
@@ -78,7 +78,7 @@ export function VoidInvoiceMenu({ inv }: { inv: Invoice }) {
               {t("inv.void.body")}
             </T>
             <View testID="invoice-void-reason">
-              <TextField type="note" value={reason} onChangeText={setReason} label={t("inv.void.reason")} placeholder={t("inv.void.reasonPh")} autoFocus />
+              <TextField type="note" value={reason} onChangeText={(x) => setReason(x.slice(0, VOID_REASON_MAX))} label={t("inv.void.reason")} placeholder={t("inv.void.reasonPh")} autoFocus />
             </View>
           </View>
         )}

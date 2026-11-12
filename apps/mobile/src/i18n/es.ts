@@ -3555,6 +3555,8 @@ export const es: Dict = {
   "inv.void.rej.title": "La factura no se anuló en el servidor",
   "inv.void.rej.paid": "La factura no se anuló: llegó un pago. Primero haga el reembolso y luego anule.",
   "inv.void.rej.role": "La factura no se anuló: solo el dueño o un administrador de la empresa puede hacerlo.",
+  "inv.void.rej.payment": "El pago no se registró: la factura está anulada. Revise las facturas del trabajo y regístrelo en la correcta.",
+  "inv.void.why.long": "El motivo tiene como máximo 500 caracteres",
   "po.rej.officeOnly": "Solo la oficina cambia un pedido recibido",
   "po.rej.notOpen": "El pedido no está enviado o está cancelado: no se marcó nada",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)

@@ -52,7 +52,8 @@ export function ContractStatement({ jobId }: { jobId: string }) {
     return !!undo;
   };
 
-  const row = (label: string, v: number, strong?: boolean) => (
+  const row = (label: string, v: number, strong?: boolean, testID?: string) => (
+    <View testID={testID}>
     <RowView style={{ justifyContent: "space-between" }}>
       <T v={strong ? "heading" : "body"} tone={strong ? "ink" : "mut"}>
         {label}
@@ -61,6 +62,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
         {money(v)}
       </T>
     </RowView>
+    </View>
   );
 
   return (
@@ -68,7 +70,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
       <SectionTitle title={t("inv.statement")} />
       <Card>
         {row(t("inv.contract"), st.contract)}
-        {row(t("inv.invoiced"), st.invoiced)}
+        {row(t("inv.invoiced"), st.invoiced, false, "statement-invoiced")}
         {row(t("inv.paid"), st.paid)}
         <Divider />
         {row(t("inv.remaining"), st.remaining, true)}

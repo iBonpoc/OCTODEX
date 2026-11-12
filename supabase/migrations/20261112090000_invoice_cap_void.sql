@@ -15,6 +15,11 @@
 --    version never sends one (engine canIssue). Rule 16: only replaced bodies, nothing renamed or dropped.
 -- 4) A void's reason is text (1–500 characters, not blank); an invoice is never born removed nor brought back from
 --    removed (either would pass the contract check — security-check of #1203).
+-- 5) No payment into a voided invoice (trigger t06_payment_not_void) — it took one before (T197). After the invoice's lock
+--    (t05_not_above_balance): a void and a payment at the same moment go one after the other.
+-- A job whose contract is $0 now takes no contract invoice at all (Σ + any amount > 0); one with no contract amount (null)
+--    is not checked. A void and a payment at the same moment: the payment locks the invoice first (t05_not_above_balance,
+--    for update) — the void waits and then sees it (refused); a payment after the void is refused (5) — T197.
 -- Tests: supabase/tests/core_rls.sql T197.
 
 create or replace function app.invoice_tax_split(p_company uuid, p_job uuid, p_invoice uuid, p_total bigint)
@@ -316,3 +321,26 @@ revoke all on function app.tg_invoice_guard() from public, anon, authenticated;
 -- before stay as they are (rule 16: no rewrite of old data), every new void and every change of a row is checked.
 alter table public.invoices add constraint invoices_void_reason_text
   check (status <> 'void' or length(btrim(void_reason)) between 1 and 500) not valid;
+
+-- 5) no payment into a voided invoice (a payment waiting on the invoice's lock went in after the void — T197). A trigger of
+-- its own, security invoker: current_user is the person paying (authenticated) or the owner of a server function
+-- (record_visit_payment, record_estimate_deposit, which pay for their caller). Someone who may not record a payment in the
+-- company is refused by the RLS check after this trigger, as before (sales — T191; another company), nothing said to them.
+-- It runs after t05_not_above_balance, which locks the invoice (for update): the status read here is the latest.
+create or replace function app.tg_payment_not_void()
+returns trigger language plpgsql security invoker set search_path = '' as $$
+begin
+  if new.invoice_id is null or new.status not in ('pending', 'succeeded') then return new; end if;
+  if current_user in ('authenticated', 'anon') and not app.has_role(new.company_id, array['owner', 'admin', 'office', 'tech']) then
+    return new;
+  end if;
+  if exists (select 1 from public.invoices i where i.id = new.invoice_id and i.status = 'void') then
+    raise exception 'payment into a void invoice' using errcode = 'check_violation', hint = 'invoice_void';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_payment_not_void() from public, anon, authenticated;
+drop trigger if exists t06_payment_not_void on public.payments;
+create trigger t06_payment_not_void before insert on public.payments
+  for each row execute function app.tg_payment_not_void();

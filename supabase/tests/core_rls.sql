@@ -12592,8 +12592,11 @@ update public.expenses set amount_cents = 2500 where id = 'e1910000-0000-4000-80
 select tst.ok((select amount_cents = 2500 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'), 'T191 sales change their own expense');
 select tst.ok((select amount_cents = 1000 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'), 'T191 another person''s expense is untouched');
 :as_office_a
+-- a live invoice of its own (01a…001 is void by now: no payment goes into a void invoice — В1-5, T197)
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T191 office', 1000, 1000, now());
 insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
-  values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 100, 'succeeded', 't191-office-pay');
+  values ('ca000000-0000-0000-0000-000000000000', '01910000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 100, 'succeeded', 't191-office-pay');
 select tst.ok(tst.cnt($q$select 1 from public.expenses where id in ('e1910000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-000000000002')$q$) = 2, 'T191 the office sees every expense');
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = 't191-office-pay'$q$) = 1, 'T191 the office still takes a payment on an invoice');
@@ -13257,6 +13260,12 @@ update public.invoices set status = 'void', void_reason = 'T197 wrong amount: $9
 select tst.ok((select status = 'void' and voided_by = 'a0000000-0000-0000-0000-000000000001' and voided_at is not null from public.invoices where id = '01970000-0000-4000-8000-000000000002'),
               'T197 the owner voids the wrong invoice: who and when kept');
 select tst.fails_like($q$update public.invoices set status = 'sent' where id = '01970000-0000-4000-8000-000000000002'$q$, '%void -> sent%', 'T197 a void invoice never comes back');
+-- a payment that comes after the void (it waited on the invoice's lock while the void went in) is refused: nothing is paid
+:as_office_a
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+         ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000002', 'c1970000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't197-after-void')$q$,
+       '%void invoice%', 'T197 no payment goes into a voided invoice (red before: it was taken)');
+:as_owner_a
 :as_office_a
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
   ('01970000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress: right', 90000, 90000, now());
