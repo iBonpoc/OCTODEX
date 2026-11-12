@@ -2,7 +2,8 @@ import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
-import { scrollTargetY } from "./requiredLogic";
+import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
+import { setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
@@ -25,7 +26,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindow
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
-import { component, layout, motion, radius, size, space, type StatusName } from "@octo/design-tokens";
+import { component, layout, motion, radius, size, space, z, type StatusName } from "@octo/design-tokens";
 import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
@@ -444,6 +445,7 @@ export function Screen({
   fabCtx,
   fabOn,
   home,
+  footer,
   aside,
   testID,
 }: {
@@ -474,12 +476,20 @@ export function Screen({
   fabOn?: Partial<Record<NonNullable<FabItem["act"]>, () => void>>;
   /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
   home?: boolean;
+  /** the pinned panel of the screen's main action (ui/actionBar.tsx, DS §8.9): phone — at the bottom over the content, which leaves room
+   *  for it; hidden while the keyboard is up (the keys cover it, the field is what the person is in). From 820 the screen puts the same
+   *  buttons in its own column. */
+  footer?: ReactNode;
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
   testID?: string;
 }) {
   const kb = useKeyboardHeight();
+  /** the pinned panel stands on a phone only, and not under the keyboard */
+  const [footH, setFootH] = useState(0);
+  // the pinned bar stands on the screen's own bottom edge (the home indicator), not on the room kept for the tab bar and «＋»
+  const safe = useSafeAreaInsets();
   const hints = useHints();
   const { c } = useTheme();
   const { t } = useI18n();
@@ -504,6 +514,8 @@ export function Screen({
   const go = goTo;
   const goUp = () => (up ? go(up.href) : back?.());
   const { wide, device } = useDevice();
+  /** the pinned bar stands only where the phone has no tab bar (docs: NO_TAB_BAR — a form, a full-screen flow), else the two would meet */
+  const footerOn = !!footer && !wide && !showsTabBar(routeName);
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
   const pinned = wide && !!up && !isTabScreen(routeName);
@@ -742,7 +754,11 @@ export function Screen({
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;
   coveredTop.current = pinned ? 0 : navInsets.top;
-  coveredBottom.current = kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0);
+  coveredBottom.current = coveredBottomOf({ keyboard: !!kb, keyboardMargin: space[6], navBottom: navInsets.bottom, fab: floatFab ? component.fab + space[3] : 0, footer: footerOn ? footH : 0 });
+  useEffect(() => {
+    setFooterInset(footerOn && !kb ? footH : 0);
+    return () => setFooterInset(0);
+  }, [footerOn, kb, footH]);
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
   return (
@@ -764,7 +780,7 @@ export function Screen({
             <ScrollView
               ref={scrollRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
               // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
               // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.
@@ -819,6 +835,16 @@ export function Screen({
           >
             <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
           </Animated.View>
+        ) : null}
+        {footerOn && !kb ? (
+          <View
+            onLayout={(e) => setFootH(e.nativeEvent.layout.height)}
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: z.nav, paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+          >
+            {footer}
+            {/* under the home indicator the bar goes on in one fill (the glass has its own, the corners above stay round) */}
+            {safe.bottom > 0 ? <View style={{ height: safe.bottom, backgroundColor: c.ov }} /> : null}
+          </View>
         ) : null}
         {floatFab && !kb ? (
           <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
