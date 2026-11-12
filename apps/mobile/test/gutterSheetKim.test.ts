@@ -48,4 +48,53 @@ describe("the founder's sample on the sheet", () => {
       }
     }
   });
+
+  describe("numbers, header rows and the rectangle (review of #1192)", () => {
+    type Prim = DocPrim;
+    const sheet = () => blueprint(kim, tFor("ru"), stamp, DP.sheetW).items;
+    const circlesOf = (items: Prim[]) => items.filter((p): p is Extract<DocPrim, { t: "c" }> => p.t === "c" && p.r === DP.numR);
+    /** the number written in a circle: the text standing at its centre */
+    const numberOf = (items: Prim[], c: { cx: number; cy: number }) => {
+      const x = items.find((p): p is Extract<DocPrim, { t: "x" }> => p.t === "x" && /^\d+$/.test(p.s) && Math.abs(p.x - c.cx) < 0.6 && Math.abs(p.y - (c.cy + DP.fontSm * 0.35)) < 0.6);
+      return x ? Number(x.s) : NaN;
+    };
+    const dist = (px: number, py: number, l: { x1: number; y1: number; x2: number; y2: number }) => {
+      const vx = l.x2 - l.x1, vy = l.y2 - l.y1;
+      const t = Math.max(0, Math.min(1, ((px - l.x1) * vx + (py - l.y1) * vy) / (vx * vx + vy * vy || 1)));
+      return Math.hypot(px - (l.x1 + t * vx), py - (l.y1 + t * vy));
+    };
+    for (const width of [390, DP.pageW, DP.sheetW]) {
+      it(`width ${width}: no circle or label in a panel's header row; circles clear of labels and of each other; each number nearest its own gutter`, () => {
+        const items = blueprint(kim, tFor("ru"), stamp, width).items;
+        const titles = items.filter((p): p is Extract<DocPrim, { t: "x" }> => p.t === "x" && /^Контур \d/.test(p.s));
+        const bands = titles.map((x) => ({ y0: x.y - DP.fontSm * 1.2, y1: x.y - DP.fontSm * 1.2 + DP.fontSm * 3.4 }));
+        const circles = circlesOf(items);
+        const rs = rects(items);
+        const inBand = (y0: number, y1: number) => bands.some((b) => y0 < b.y1 && b.y0 < y1);
+        for (const c of circles) expect(inBand(c.cy - c.r, c.cy + c.r), `circle ${numberOf(items, c)} in a header row`).toBe(false);
+        for (const r of rs) expect(inBand(r.y, r.y + r.h), "a label in a header row").toBe(false);
+        for (let i = 0; i < circles.length; i++) {
+          const a = circles[i]!;
+          for (const r of rs) expect(overlap({ x: a.cx - a.r, y: a.cy - a.r, w: 2 * a.r, h: 2 * a.r }, r), `circle ${numberOf(items, a)} on a label`).toBe(false);
+          for (let j = i + 1; j < circles.length; j++) expect(Math.hypot(a.cx - circles[j]!.cx, a.cy - circles[j]!.cy) >= 2 * a.r, `circles ${numberOf(items, a)} and ${numberOf(items, circles[j]!)} touch`).toBe(true);
+        }
+        const lines = items.filter((p): p is Extract<DocPrim, { t: "l" }> => p.t === "l" && p.sw === DP.runW);
+        expect(lines).toHaveLength(10);
+        for (const c of circles) {
+          const n = numberOf(items, c);
+          const near = lines.map((l, i) => ({ n: i + 1, d: dist(c.cx, c.cy, l) })).sort((p, q) => p.d - q.d)[0]!;
+          expect(near.n, `the number ${n} stands nearest gutter ${near.n}`).toBe(n);
+        }
+      });
+    }
+    it("the rectangle (gutters 7–10) has exactly three «наруж. 90°», the open corner none", () => {
+      const items = sheet();
+      const titles = items.filter((p): p is Extract<DocPrim, { t: "x" }> => p.t === "x" && /^Контур \d/.test(p.s));
+      const at = titles.findIndex((x) => /\b10\b/.test(x.s));
+      expect(at).toBeGreaterThanOrEqual(0);
+      const y0 = titles[at]!.y, y1 = titles[at + 1] ? titles[at + 1]!.y : Infinity;
+      const words = items.filter((p): p is Extract<DocPrim, { t: "x" }> => p.t === "x" && p.s === "наруж. 90°" && p.y > y0 && p.y < y1);
+      expect(words).toHaveLength(3);
+    });
+  });
 });

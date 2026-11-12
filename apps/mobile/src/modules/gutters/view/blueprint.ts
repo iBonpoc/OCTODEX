@@ -187,7 +187,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   };
 
   // a panel's title row (its name and scale bar) is taken: no word or number is put there (#1091)
-  if (split) tops.forEach((y0) => boxes.push({ x0: 0, y0: y0 - 1, x1: W, y1: y0 + titleH }));
+  if (split) tops.forEach((y0) => boxes.push({ x0: 0, y0: y0 - DP.thinW, x1: W, y1: y0 + titleH }));
 
   // the frame and the title block's line
   const frame: [number, number][] = [[m / 2, m / 2], [W - m / 2, m / 2], [W - m / 2, H - m / 2], [m / 2, H - m / 2]];
@@ -236,12 +236,30 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   for (const g of geo) {
     const len = fmtLen(runLengthIn(g.r), fmt);
     const s = many ? `${len} · ${t("mod.gutters.story", { n: storyOf(g.r.attrs.story) })}` : len;
+    // the dimension line stands off the gutter by dimOff, one dimStep further each time the text's place is taken; the text
+    // may also slide along the line. No place at all — the text goes far out and a leader brings it back to its line (#1091)
+    const mid0 = (o: number): [number, number] => [(g.a[0] + g.b[0]) / 2 + g.out[0] * o, (g.a[1] + g.b[1]) / 2 + g.out[1] * o];
+    const slide = textW(s, DP.font) / 2 + DP.tick;
     let off = DP.dimOff;
     let tp: [number, number] = [0, 0];
-    for (let k = 0; k < 4; k++, off += DP.dimStep) {
-      const mid: [number, number] = [(g.a[0] + g.b[0]) / 2 + g.out[0] * off, (g.a[1] + g.b[1]) / 2 + g.out[1] * off];
-      tp = [mid[0] + g.out[0] * DP.font * 0.9, mid[1] + g.out[1] * DP.font * 0.9];
-      if (free(boxAt(tp[0], tp[1], s, DP.font))) break;
+    let found = false;
+    for (let k = 0; k < 6 && !found; k++) {
+      for (const al of [0, 1, -1, 2, -2]) {
+        const m = mid0(DP.dimOff + k * DP.dimStep);
+        const c: [number, number] = [m[0] + g.out[0] * DP.font * 0.9 + g.u[0] * al * slide, m[1] + g.out[1] * DP.font * 0.9 + g.u[1] * al * slide];
+        if (free(boxAt(c[0], c[1], s, DP.font))) {
+          off = DP.dimOff + k * DP.dimStep;
+          tp = c;
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      const far = mid0(DP.dimOff + 6 * DP.dimStep);
+      tp = [far[0] + g.out[0] * DP.font * 0.9, far[1] + g.out[1] * DP.font * 0.9];
+      const from = mid0(off);
+      line(from, [tp[0] - g.out[0] * DP.font * 0.7, tp[1] - g.out[1] * DP.font * 0.7], DP.thinW, "mut");
     }
     const A: [number, number] = [g.a[0] + g.out[0] * off, g.a[1] + g.out[1] * off];
     const B: [number, number] = [g.b[0] + g.out[0] * off, g.b[1] + g.out[1] * off];
@@ -262,9 +280,32 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     const off = DP.numR + DP.extGap * 2;
     const step = DP.numR * 2 + DP.extGap;
     const place = (along: number, away: number): [number, number] => [(g.a[0] + g.b[0]) / 2 + g.u[0] * along - g.out[0] * away, (g.a[1] + g.b[1]) / 2 + g.u[1] * along - g.out[1] * away];
-    const tries: [number, number][] = [];
-    for (const k of [0, 1, 2, 3]) for (const along of [0, 1, -1, 2, -2, 3, -3]) tries.push([along * step, off + k * step]);
-    const spot = tries.map(([al, aw]) => place(al, aw)).find((c) => free({ x0: c[0] - DP.numR, y0: c[1] - DP.numR, x1: c[0] + DP.numR, y1: c[1] + DP.numR })) ?? place(0, off);
+    const segDist = (c: [number, number], h: (typeof geo)[number]) => {
+      const vx = h.b[0] - h.a[0], vy = h.b[1] - h.a[1];
+      const t = Math.max(0, Math.min(1, ((c[0] - h.a[0]) * vx + (c[1] - h.a[1]) * vy) / (vx * vx + vy * vy || 1)));
+      return Math.hypot(c[0] - (h.a[0] + t * vx), c[1] - (h.a[1] + t * vy));
+    };
+    /** free, and this gutter is the nearest one to it: the number never points at its neighbour (#1091) */
+    const fits = (c: [number, number]) =>
+      free({ x0: c[0] - DP.numR, y0: c[1] - DP.numR, x1: c[0] + DP.numR, y1: c[1] + DP.numR }) && geo.every((h) => h === g || segDist(c, h) > segDist(c, g));
+    // near its gutter only: along it no further than the gutter itself reaches (a number beside another gutter points at the
+    // wrong one, #1091), and a little further off the line; where nothing is free there, far out with a leader to the gutter
+    const reach = Math.max(0, g.L / 2 - DP.numR);
+    const near: [number, number][] = [];
+    // the house side first, then the other side of the line (a short run in a bend has no room on the house side)
+    for (const side of [1, -1]) for (const k of [0, 1, 2, 3]) for (const along of [0, 1, -1, 2, -2, 3, -3]) if (Math.abs(along * step) <= reach) near.push([along * step, side * (off + k * step)]);
+    const own = (c: [number, number]) => geo.every((h) => h === g || segDist(c, h) > segDist(c, g));
+    let spot = near.map(([al, aw]) => place(al, aw)).find(fits);
+    if (!spot) {
+      // nowhere near it: the nearest free place all round, still nearest to this gutter, with a leader back to it
+      const mx = (g.a[0] + g.b[0]) / 2, my = (g.a[1] + g.b[1]) / 2;
+      const ring: [number, number][] = [];
+      for (let r = off; r <= off + 10 * step; r += 4) for (let deg = 0; deg < 360; deg += 15) ring.push([mx + r * Math.cos((deg * Math.PI) / 180), my + r * Math.sin((deg * Math.PI) / 180)]);
+      const last = ring.find(fits) ?? ring.find(own) ?? place(0, off);
+      spot = last;
+      const lx = last[0] - mx, ly = last[1] - my, ll = Math.hypot(lx, ly) || 1;
+      line([mx + (lx / ll) * DP.extGap, my + (ly / ll) * DP.extGap], [last[0] - (lx / ll) * DP.numR, last[1] - (ly / ll) * DP.numR], DP.thinW, "mut");
+    }
     items.push({ t: "c", cx: r1(spot[0]), cy: r1(spot[1]), r: DP.numR, sw: DP.thinW, fill: "paper" });
     text(spot[0], spot[1] + DP.fontSm * 0.35, String(g.n), DP.fontSm);
     boxes.push({ x0: spot[0] - DP.numR, y0: spot[1] - DP.numR, x1: spot[0] + DP.numR, y1: spot[1] + DP.numR });
@@ -308,7 +349,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
       const c = Math.cos((turn * Math.PI) / 180), sn = Math.sin((turn * Math.PI) / 180);
       tries.push([p[0] + (ux * c - uy * sn) * w * r, p[1] + (ux * sn + uy * c) * w * r]);
     }
-    let q = tries.find((c) => free(boxAt(c[0], c[1], s, DP.fontSm))) ?? tries[0]!;
+    let q = tries.find((c) => free(boxAt(c[0], c[1], s, DP.fontSm))) ?? tries[tries.length - 1]!;
     // a word that had to move far from its corner keeps a thin leader to it
     if (Math.hypot(q[0] - p[0], q[1] - p[1]) > w * 1.6) {
       const lx = q[0] - p[0], ly = q[1] - p[1], ll = Math.hypot(lx, ly) || 1;
