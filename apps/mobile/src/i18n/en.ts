@@ -2647,6 +2647,8 @@ export const en: Dict = {
   "mod.gutters.draw.cornerIn": "inside",
   "mod.gutters.draw.cornerBay": "bay",
   "mod.gutters.draw.cornerSplash": "{k} · splash guard",
+  "mod.gutters.draw.cornerSplit": "Split the corner",
+  "mod.gutters.draw.cornerSplit.done": "Corner split: each gutter has its own end cap",
   "mod.gutters.draw.cornerTitle": "Corner",
   "mod.gutters.draw.cornerNote": "The whole line's face flips: the L/R end caps and the other corners too. An inside corner gets a splash guard.",
   "mod.gutters.draw.redoShort": "Redo",

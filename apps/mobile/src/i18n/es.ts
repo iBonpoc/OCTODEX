@@ -2647,6 +2647,8 @@ export const es: Dict = {
   "mod.gutters.draw.cornerIn": "interior",
   "mod.gutters.draw.cornerBay": "bahía",
   "mod.gutters.draw.cornerSplash": "{k} · protector",
+  "mod.gutters.draw.cornerSplit": "Separar la esquina",
+  "mod.gutters.draw.cornerSplit.done": "Esquina separada: cada canaleta tiene su tapa",
   "mod.gutters.draw.cornerTitle": "Esquina",
   "mod.gutters.draw.cornerNote": "Cambia el frente de toda la línea: las tapas L/R y las otras esquinas también. Una esquina interior lleva protector.",
   "mod.gutters.draw.redoShort": "Rehacer",
