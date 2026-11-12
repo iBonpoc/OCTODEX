@@ -20,6 +20,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
+import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
 /** app lead status → public.leads.status */
@@ -1989,6 +1990,8 @@ export function StoreProvider({
         const now = new Date().toISOString();
         return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
           k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
+          // #1147: on site, the total the client saw (the option with its add-ons, as summarize counts it — the server the same)
+          ...(a.channel === "on_site" ? { totalCents: summarize(e.doc, a).totalCents } : {}),
         });
       },
       countersignEstimate: (id, signature) => {
@@ -2512,6 +2515,11 @@ export function StoreProvider({
           {
             k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client",
             sent: dbRef.current.estimates.find((x) => x.id === id)?.status === "sent",
+            // #1147: the total the client saw on the phone — the server refuses another (the office changed it meanwhile).
+            // Not while this phone's own estimate.add of it is still queued: that op writes its lines' prices as
+            // round(total / qty), cents off the phone's total — a refusal that only looks like a change; the door without
+            // the total then, as before (#1153 removes that door once no such op is left)
+            ...(signTotalFor(dbRef.current.estimates.find((x) => x.id === id), outboxRef.current.some((x) => x.op.k === "estimate.add" && x.op.id === id))),
           },
         ),
       payDeposit: (id, method, fromClient) => {
