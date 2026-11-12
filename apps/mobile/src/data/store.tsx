@@ -20,6 +20,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
+import { canMakeEstimateAt, leadEstimatePropertyId } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -320,6 +321,8 @@ interface StoreCtx {
   saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
+  /** #1138: may the person make a NEW estimate at this property (a tech: only where he works, as the server) */
+  mayMakeEstimateAt: (propertyId: ID | undefined) => boolean;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
   convertLead: (leadId: ID, reasonText: string) => Undo;
   /** New client entered by hand (not from a lead): active client with one property. */
@@ -1111,7 +1114,7 @@ export function StoreProvider({
     const l = d0.leads.find((x) => x.id === leadId);
     if (!l) return null;
     if (l.customerId) {
-      const propertyId = l.propertyId ?? d0.properties.find((p) => p.customerId === l.customerId)?.id;
+      const propertyId = leadEstimatePropertyId(d0, l);
       if (propertyId) return { customerId: l.customerId, propertyId, undo: () => {} };
     }
     const ids = { customerId: uid(), contactId: uid(), propertyId: uid() };
@@ -1844,7 +1847,7 @@ export function StoreProvider({
       addEstimate: (e) => {
         const id = uid();
         const serviceCategoryId = inheritCategory(dbRef.current, { kind: "estimate", leadId: e.leadId, customerId: e.customerId }, e.serviceCategoryId);
-        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId }] }), {
+        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId, createdBy: d.me }] }), {
           k: "estimate.add", id, versionId: uid(), optionId: uid(), customerId: e.customerId, propertyId: e.propertyId, title: e.title,
           totalCents: e.totalCents, depositCents: e.depositCents, marginPct: e.marginPct ?? null, lines: e.lines ?? [],
         });
@@ -1959,6 +1962,9 @@ export function StoreProvider({
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
+        // #1138: a tech makes a new estimate only where the server lets him (estimates_insert — a property he works at);
+        // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
+        if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return () => {};
         const { doc, linesFrom } = docForSave(prev?.status, doc0, uid);
         const sum = summarize(doc);
         const versionId = uid();
@@ -1968,6 +1974,8 @@ export function StoreProvider({
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
+              createdBy: prev ? prev.createdBy : d.me,
               // E3: an estimate keeps the template it was made from; a new one from a template counts one use (demo too)
               templateId: prev ? prev.templateId : templateId0,
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
@@ -2061,6 +2069,9 @@ export function StoreProvider({
         });
       },
       leadEstimateTarget: (leadId) => leadTarget(leadId),
+      // #1138: may the person make a new estimate at this property (a tech: where he works — estimates_insert); a module
+      // asks before it writes anything for an estimate (review of #1169 Б1)
+      mayMakeEstimateAt: (propertyId) => canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId),
       convertLead: (leadId, reasonText) => {
         const d0 = dbRef.current;
         const l = d0.leads.find((x) => x.id === leadId);

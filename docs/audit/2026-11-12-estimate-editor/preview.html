@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Редактор сметы GoRix</title>
+<style>
+/* Цвета — токены «Наряда» (packages/design-tokens/src/index.ts, themes.light / themes.dark). Шрифт Onest заменён системным: страница без внешних файлов. */
+:root{
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;
+  --surf:rgba(255,255,255,0.62);--surf2:rgba(255,255,255,0.85);--in:rgba(255,255,255,0.55);
+  --bd:rgba(20,22,30,0.1);--track:rgba(20,22,30,0.09);--acc:#FBFF00;--onAcc:#0B0C0F;--scrim:rgba(20,22,30,0.25);
+  --bad-fill:#FF6B6B;--bad-text:#B4232A;--ok-text:#176428;--info-text:#3647C4;--warn-text:#944600;
+  --paper:#FFFFFF;--p-ink:#15161A;--p-mut:#575C68;--p-rule:rgba(20,22,30,0.14);
+  --r-card:24px;--r-inner:18px;--r-field:12px;--r-pill:999px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s6:24px;
+  --body:13px;--cap:11.5px;--head:15px;--title:20px;--btn:12.5px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;
+    --surf:rgba(255,255,255,0.07);--surf2:rgba(255,255,255,0.11);--in:rgba(255,255,255,0.05);
+    --bd:rgba(255,255,255,0.14);--track:rgba(255,255,255,0.12);--scrim:rgba(0,0,0,0.42);
+    --bad-text:#FFAAAA;--ok-text:#9CF0A8;--info-text:#C2CCFF;--warn-text:#FFB47E;
+  }
+}
+:root[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;
+  --surf:rgba(255,255,255,0.07);--surf2:rgba(255,255,255,0.11);--in:rgba(255,255,255,0.05);
+  --bd:rgba(255,255,255,0.14);--track:rgba(255,255,255,0.12);--scrim:rgba(0,0,0,0.42);
+  --bad-text:#FFAAAA;--ok-text:#9CF0A8;--info-text:#C2CCFF;--warn-text:#FFB47E;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--ink);font:var(--body)/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+.wrap{max-width:1100px;margin:0 auto;padding:var(--s6) 16px}
+h1{font-size:var(--title);margin:0 0 var(--s2)}
+h2{font-size:var(--head);margin:var(--s6) 0 var(--s2)}
+.lead{color:var(--mut);margin:0 0 var(--s4)}
+.box{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r-inner);padding:var(--s3) var(--s4);margin-bottom:var(--s3)}
+.box ol,.box ul{margin:0;padding-left:20px}
+.box li{margin:2px 0}
+table.dec{width:100%;border-collapse:collapse;font-size:var(--body)}
+table.dec td{border-top:1px solid var(--bd);padding:6px 4px;vertical-align:top}
+table.dec td:first-child{width:34px;color:var(--mut);font-weight:600}
+.hint{color:var(--mut);font-size:var(--cap)}
+/* лента эскизов */
+.rail{display:flex;gap:var(--s4);overflow-x:auto;scroll-snap-type:x mandatory;padding:var(--s2) 0 var(--s4);-webkit-overflow-scrolling:touch}
+.shot{flex:0 0 auto;width:320px;scroll-snap-align:start}
+.cap{font-weight:600;margin:0 0 2px}
+.capn{color:var(--mut);font-size:var(--cap);margin:0 0 var(--s2);min-height:34px}
+.phone{width:320px;height:640px;background:var(--bg);border:1px solid var(--bd);border-radius:36px;overflow:hidden;position:relative;display:flex;flex-direction:column}
+.status{height:28px;flex:0 0 auto}
+.hdr{padding:0 var(--s4) var(--s2);flex:0 0 auto}
+.back{color:var(--mut);font-size:var(--cap)}
+.hrow{display:flex;align-items:center;gap:var(--s2)}
+.htitle{font-size:var(--title);font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ib{width:30px;height:30px;border-radius:var(--r-pill);background:var(--surf2);display:inline-flex;align-items:center;justify-content:center;font-size:13px;color:var(--ink);flex:0 0 auto}
+.body{flex:1;overflow:hidden;padding:0 12px;position:relative}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r-card);padding:4px 12px;margin-bottom:var(--s2)}
+.row{display:flex;align-items:center;gap:var(--s2);min-height:44px;padding:5px 0;border-top:1px solid var(--bd)}
+.row:first-child{border-top:0}
+.ki{width:16px;height:16px;flex:0 0 auto;color:var(--mut)}
+.rt{flex:1;min-width:0}
+.rn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs{color:var(--mut);font-size:var(--cap)}
+.amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+.grip{color:var(--mut);width:20px;text-align:center;font-size:15px;flex:0 0 auto}
+.sec{display:flex;align-items:center;gap:6px;min-height:40px;border-top:1px solid var(--bd);font-weight:700;font-size:var(--head)}
+.sec .amt{font-size:var(--body)}
+.sub{display:flex;align-items:center;gap:6px;min-height:32px;color:var(--mut);font-size:var(--cap);font-weight:600;text-transform:uppercase;letter-spacing:.03em;border-top:1px solid var(--bd);padding-left:8px}
+.ind{padding-left:8px}
+.chev{color:var(--mut);font-size:11px}
+.btns{display:flex;gap:var(--s3);margin:var(--s2) 0}
+.btn{flex:1;height:36px;border-radius:var(--r-pill);display:flex;align-items:center;justify-content:center;font-size:var(--btn);font-weight:600;border:1px solid var(--bd);background:var(--surf2);color:var(--ink);white-space:nowrap;padding:0 10px}
+.btn.pri{background:var(--acc);color:var(--onAcc);border-color:transparent}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--ink)}
+.panel{flex:0 0 auto;padding:var(--s2) 12px 18px;border-top:1px solid var(--bd);background:var(--surf)}
+.tot{display:flex;justify-content:space-between;font-weight:700;margin-bottom:6px}
+.tl{display:flex;justify-content:space-between;color:var(--mut);font-size:var(--cap);font-variant-numeric:tabular-nums}
+.tl.b{color:var(--ink);font-weight:700;font-size:var(--body)}
+.lbl{font-size:var(--cap);color:var(--mut);margin:6px 0 2px}
+.fld{height:40px;border-radius:var(--r-field);background:var(--in);border:1px solid var(--bd);display:flex;align-items:center;padding:0 10px;font-variant-numeric:tabular-nums;gap:4px}
+.fld.ta{height:auto;min-height:40px;padding:8px 10px;display:block}
+.fld .u{color:var(--mut);margin-left:auto}
+.fld.err{border:2px solid var(--bad-fill)}
+.errt{color:var(--bad-text);font-size:var(--cap);margin-top:3px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg{display:flex;background:var(--track);border-radius:var(--r-pill);padding:3px;height:32px;margin:6px 0}
+.seg span{flex:1;display:flex;align-items:center;justify-content:center;font-size:var(--btn);border-radius:var(--r-pill);color:var(--ink)}
+.seg span.on{background:var(--surf2);border:1px solid var(--ink);font-weight:700}
+.tg{display:flex;align-items:center;min-height:44px;border-top:1px solid var(--bd);gap:8px}
+.tg .rt{font-size:var(--body)}
+.sw{width:42px;height:24px;border-radius:12px;background:var(--track);position:relative;flex:0 0 auto}
+.sw::after{content:"";position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:8px;background:var(--ink)}
+.sw.on{background:var(--acc)}
+.sw.on::after{left:22px;background:var(--onAcc)}
+.sw.dim{opacity:.45}
+.open{background:var(--surf2);border-radius:var(--r-inner);margin:4px -6px;padding:6px 8px 8px;border:1px solid var(--bd)}
+.prof{font-size:var(--cap);color:var(--mut);margin-top:6px;font-variant-numeric:tabular-nums}
+.link{color:var(--info-text);font-size:var(--cap);font-weight:600}
+.tag{display:inline-flex;align-items:center;gap:3px;font-size:10.5px;color:var(--mut);border:1px solid var(--bd);border-radius:var(--r-pill);padding:0 6px;margin-left:4px}
+/* смахивание */
+.swrow{position:relative;overflow:hidden;border-top:1px solid var(--bd)}
+.swrow .front{position:relative;background:var(--bg);display:flex;align-items:center;gap:8px;min-height:48px;padding:5px 12px}
+.acts{position:absolute;top:0;bottom:0;display:flex}
+.acts.r{right:0}.acts.l{left:0}
+.act{width:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:var(--cap);font-weight:600;gap:2px}
+.act.rep{background:var(--surf2);color:var(--ink)}
+.act.del{background:var(--bad-fill);color:var(--onAcc)}
+.act.hide{background:var(--surf2);color:var(--ink)}
+.act.dim{opacity:.45}
+/* шторка и меню */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:90px;background:var(--bg);border-radius:24px 24px 0 0;padding:6px 12px 14px;display:flex;flex-direction:column}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--track);margin:2px auto 8px}
+.chk{width:22px;height:22px;border-radius:7px;border:1.5px solid var(--bd);flex:0 0 auto;display:flex;align-items:center;justify-content:center;font-size:12px}
+.chk.on{border-color:var(--ink);background:var(--surf2)}
+.menu{position:absolute;right:14px;top:150px;width:220px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--r-inner);box-shadow:0 10px 30px rgba(0,0,0,.25);padding:4px 0}
+.mi{display:flex;justify-content:space-between;padding:0 14px;min-height:40px;align-items:center;border-top:1px solid var(--bd)}
+.mi:first-child{border-top:0}
+.mi.d{color:var(--bad-text);font-weight:600}
+.mi.dim{opacity:.45}
+.note{position:absolute;left:12px;right:12px;bottom:12px;background:var(--surf2);border:1px solid var(--bd);border-radius:var(--r-inner);padding:8px 10px;font-size:var(--cap)}
+/* перетаскивание */
+.lift{transform:scale(1.05) rotate(-2deg);border:2px solid var(--acc);border-radius:var(--r-inner);background:var(--bg);box-shadow:0 16px 30px rgba(0,0,0,.3);padding:5px 10px;position:relative;z-index:2}
+.drop{height:0;border-top:2px solid var(--ink);margin:2px 0}
+.target{outline:2px solid var(--ink);outline-offset:-2px;border-radius:10px}
+.toast{position:absolute;left:12px;right:12px;bottom:100px;height:44px;border-radius:var(--r-pill);background:var(--surf2);border:1px solid var(--bd);display:flex;align-items:center;padding:0 6px 0 14px;font-weight:500;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+.toast .btn{flex:0 0 auto;height:30px}
+/* PDF */
+.paper{background:var(--paper);color:var(--p-ink);margin:0 10px;border-radius:6px;padding:12px;font-size:9.5px;line-height:1.35;flex:1;overflow:hidden}
+.paper .ph{display:flex;justify-content:space-between;border-bottom:1px solid var(--p-rule);padding-bottom:6px;margin-bottom:6px}
+.paper .t{font-size:13px;font-weight:700}
+.paper .m{color:var(--p-mut)}
+.paper .s{font-weight:700;font-size:10.5px;margin-top:6px}
+.paper .ss{color:var(--p-mut);font-weight:600;margin:3px 0 1px 6px;text-transform:uppercase;font-size:8.5px}
+.paper .l{display:flex;gap:4px;padding:2px 0 2px 6px;border-bottom:1px solid var(--p-rule)}
+.paper .l span:first-child{flex:1}
+.paper .l span{font-variant-numeric:tabular-nums}
+.paper .st{display:flex;justify-content:space-between;font-weight:600;padding:2px 0 2px 6px}
+.paper .tt{display:flex;justify-content:space-between;margin-left:40%;padding:1px 0}
+.paper .tt.b{font-weight:700;border-top:1px solid var(--p-rule);margin-top:2px;padding-top:3px}
+.empty{text-align:center;color:var(--mut);padding:22px 8px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0}
+.tile{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r-inner);padding:6px 8px;min-width:78px}
+.tile .k{font-size:var(--cap);color:var(--mut)}
+.tile .v{font-weight:700;font-variant-numeric:tabular-nums}
+.kv{display:flex;justify-content:space-between;min-height:30px;align-items:center;border-top:1px solid var(--bd);gap:8px}
+.kv:first-child{border-top:0}
+.kv .k{color:var(--mut)}
+.kv .v{font-variant-numeric:tabular-nums;text-align:right}
+.stitle{font-size:var(--cap);font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:8px 4px 4px}
+.later{border:1px dashed var(--bd);border-radius:var(--r-inner);padding:8px 10px;color:var(--mut);font-size:var(--cap);margin-bottom:8px}
+.sheet>.btn{flex:0 0 36px}
+.dl{display:inline-block;font-size:10.5px;font-weight:600;color:var(--mut);border:1px solid var(--bd);border-radius:999px;padding:0 6px;margin-left:6px;vertical-align:middle}
+svg.ki{fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+@media (max-width:420px){.wrap{padding:16px}}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="mat" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/></symbol>
+  <symbol id="lab" viewBox="0 0 24 24"><path d="M14 4l6 6-3 3-6-6z"/><path d="M11 7L4 14l3 3 7-7"/><path d="M4 20h7"/></symbol>
+  <symbol id="srv" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></symbol>
+</svg>
+<div class="wrap">
+<h1>Редактор сметы — как будет</h1>
+<p class="lead">Эскизы для телефона. Листайте вбок. Цвета — из «Наряда», светлая или тёмная тема — как на вашем телефоне. Суммы — тестовые.</p>
+<div class="box"><b>Две поставки.</b> Первая — всё, без чего нельзя нормально составить смету (кадры 1–10). Вторая — новая карточка позиции в каталоге (кадры 11–13). Склад — после выпуска.</div>
+
+<h2>Что меняется</h2>
+<div class="box"><ol>
+<li>Нажали на позицию — она раскрывается прямо в списке. Отдельного окна нет. Открыта всегда одна; начали листать — закрылась и сохранилась.</li>
+<li>Под списком: «＋ Новая позиция» и «Из каталога» (поиск, можно отметить несколько). Ниже — «Разложить по видам» и «＋ Раздел».</li>
+<li>На строке есть кнопка с тремя точками «⋯». Она открывает список действий: заменить, дублировать, скрыть, удалить. То же самое можно сделать, сдвинув строку пальцем.</li>
+<li>Держите строку пальцем или возьмитесь за «≡» — она приподнимется с лёгкой вибрацией, переносите куда нужно.</li>
+<li>Разделы и подразделы с итогом в заголовке, сворачиваются. Клиент видит их в PDF и на странице подписи.</li>
+<li>Налог: в смете выключатель, выключен. Включили — ставка вручную, налог на всю сумму после скидки.</li>
+<li>«Сохранить» нажимается всегда. Не заполнили нужное — экран плавно прокрутит к полю и подскажет.</li>
+<li>Вторая поставка — карточка позиции в каталоге: поставщик, направление, артикул, штрих-код, ссылка, заработок с одной штуки, история цены.</li>
+</ol></div>
+
+<h2>Решено за вас (можно отменить одним словом)</h2>
+<div class="box"><table class="dec">
+<tr><td>а</td><td>О сдвиге строки вы оба раза написали «вправо». Мы поняли так: «Заменить» и «Удалить» появляются справа, если сдвинуть строку пальцем влево; «Скрыть» — если сдвинуть пальцем вправо.</td></tr>
+<tr><td>б</td><td>«Удалить» — сразу, без вопроса, и 5 секунд на «Вернуть». Длинным сдвигом строка не удаляется.</td></tr>
+<tr><td>в</td><td>«Скрыть» — только у позиции с ценой $0. Вписали цену — позиция снова видна клиенту, приложение об этом скажет.</td></tr>
+<tr><td>г</td><td>Налог в каждой новой смете выключен. Под полем ставки — подсказка «Как в прошлой смете: 10.25 %», нажали — вписалась.</td></tr>
+<tr><td>д</td><td>Позиции из замера водостоков — своим разделом; порядок ведёт замер; «Разложить по видам» делит его на подразделы.</td></tr>
+<tr><td>е</td><td>Итоги разделов клиент видит всегда.</td></tr>
+<tr><td>ж</td><td>«Сохранить в каталог» срабатывает, когда позиция закрывается, с её ценой. Тост «Добавлено в каталог · Вернуть».</td></tr>
+<tr><td>з</td><td>«Материалы / Работа / Услуги» клиент читает на своём языке.</td></tr>
+<tr><td>и</td><td>Кнопки обычного размера. Жёлтая — только главная кнопка внизу и включённый переключатель.</td></tr>
+</table></div>
+
+<h2>Смета</h2>
+<div class="rail">
+
+<!-- 1. Список с разделами -->
+<div class="shot">
+<p class="cap">1. Список с разделами<span class="dl">первая поставка</span></p>
+<p class="capn">Строки свёрнуты: название, «кол-во × цена», сумма. Итог раздела — в заголовке.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Смит, Джон</div><div class="hrow"><div class="htitle">Смета EST-0012</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+<div class="card">
+ <div class="sec" style="border-top:0"><span class="chev">˅</span><span style="flex:1">Крыша</span><span class="amt">$2,200.00</span><span class="grip">≡</span></div>
+ <div class="sub">Материалы</div>
+ <div class="row ind"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Gutter 5″ K-style</div><div class="rs">120 LF × $8.50</div></div><div class="amt">$1,020.00</div><div class="grip">≡</div></div>
+ <div class="row ind"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Downspout 3×4</div><div class="rs">40 LF × $7.00</div></div><div class="amt">$280.00</div><div class="grip">≡</div></div>
+ <div class="sub">Работа</div>
+ <div class="row ind"><svg class="ki"><use href="#lab"/></svg><div class="rt"><div class="rn">Монтаж водостоков</div><div class="rs">1 lot × $900.00</div></div><div class="amt">$900.00</div><div class="grip">≡</div></div>
+ <div class="sec"><span class="chev">›</span><span style="flex:1">Электрика <span class="hint">· 3 позиции</span></span><span class="amt">$640.00</span><span class="grip">≡</span></div>
+ <div class="sec"><span class="chev">˅</span><span style="flex:1">Без раздела</span><span class="amt">$150.00</span></div>
+ <div class="row"><svg class="ki"><use href="#srv"/></svg><div class="rt"><div class="rn">Вывоз старых водостоков</div><div class="rs">1 ea × $150.00</div></div><div class="amt">$150.00</div><div class="grip">≡</div></div>
+</div>
+<div class="btns"><div class="btn">＋ Новая позиция</div><div class="btn">Из каталога</div></div>
+<div class="btns" style="margin-top:0"><div class="btn ghost">Разложить по видам</div><div class="btn ghost">＋ Раздел</div></div>
+</div>
+<div class="panel"><div class="tot"><span>Итого ˅</span><span class="amt">$2,990.00</span></div><div class="btns" style="margin:0"><div class="btn">Сохранить</div><div class="btn pri">Сохранить и отправить</div></div></div>
+</div></div>
+
+<!-- 2. Раскрытая строка -->
+<div class="shot">
+<p class="cap">2. Раскрытая строка<span class="dl">первая поставка</span></p>
+<p class="capn">Всё в самой строке. Себестоимость и заработок видите вы (мастер — нет).</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Смит, Джон</div><div class="hrow"><div class="htitle">Смета EST-0012</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+<div class="card">
+ <div class="sub" style="border-top:0">Крыша · Материалы</div>
+ <div class="open">
+  <div class="hrow"><svg class="ki"><use href="#mat"/></svg><span class="hint" style="flex:1">Позиция</span><span class="ib">⋯</span><span class="ib">˄</span></div>
+  <div class="fld ta" style="margin-top:6px"><b>Gutter 5″ K-style</b><div class="hint" style="border-top:1px solid var(--bd);margin-top:6px;padding-top:6px">Алюминий, белый, бесшовный</div></div>
+  <div class="seg"><span class="on">Материал</span><span>Работа</span><span>Услуга</span></div>
+  <div class="g2">
+   <div><div class="lbl">Количество</div><div class="fld">120</div></div>
+   <div><div class="lbl">Единица</div><div class="fld">LF <span class="u">˅</span></div></div>
+   <div><div class="lbl">Цена за ед.</div><div class="fld">$ 8.50</div></div>
+   <div><div class="lbl">Себестоимость за ед.</div><div class="fld">$ 5.40</div></div>
+  </div>
+  <div class="prof">Сумма $1,020.00 · Заработок $372.00 · 36.5 %</div>
+  <div style="margin-top:6px"><span class="link">Открыть в каталоге ›</span></div>
+  <div class="tg"><div class="rt">Ещё</div><span class="chev">˅</span></div>
+ </div>
+ <div class="row"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Downspout 3×4</div><div class="rs">40 LF × $7.00</div></div><div class="amt">$280.00</div><div class="grip">≡</div></div>
+</div>
+<p class="hint" style="margin:4px">У новой позиции, которой нет в каталоге, вместо ссылки — переключатель «Сохранить в каталог». В «Ещё»: «Допуслуга», «Скрыть от клиента».</p>
+</div>
+<div class="panel"><div class="tot"><span>Итого ˅</span><span class="amt">$2,990.00</span></div><div class="btns" style="margin:0"><div class="btn">Сохранить</div><div class="btn pri">Сохранить и отправить</div></div></div>
+</div></div>
+
+
+<!-- 3. Сохранить в каталог -->
+<div class="shot">
+<p class="cap">3. «Сохранить в каталог»<span class="dl">первая поставка</span></p>
+<p class="capn">Новой позиции нет в каталоге — переключатель. Закрыли строку — позиция ушла в каталог с той же ценой.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Смит, Джон</div><div class="hrow"><div class="htitle">Смета EST-0012</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+<div class="card">
+ <div class="open">
+  <div class="hrow"><svg class="ki"><use href="#srv"/></svg><span class="hint" style="flex:1">Новая позиция</span><span class="ib">⋯</span><span class="ib">˄</span></div>
+  <div class="fld ta" style="margin-top:6px"><b>Чистка водостоков</b><div class="hint" style="border-top:1px solid var(--bd);margin-top:6px;padding-top:6px">Описание (необязательно)</div></div>
+  <div class="seg"><span>Материал</span><span>Работа</span><span class="on">Услуга</span></div>
+  <div class="g2">
+   <div><div class="lbl">Количество</div><div class="fld">1</div></div>
+   <div><div class="lbl">Единица</div><div class="fld">ea <span class="u">˅</span></div></div>
+   <div><div class="lbl">Цена за ед.</div><div class="fld">$ 180.00</div></div>
+   <div><div class="lbl">Себестоимость за ед. (необязательно)</div><div class="fld">$ 60.00</div></div>
+  </div>
+  <div class="prof">Сумма $180.00 · Заработок $120.00 · 66.7 %</div>
+  <div class="tg"><div class="rt">Сохранить в каталог</div><span class="sw on"></span></div>
+  <div class="tg"><div class="rt">Ещё</div><span class="chev">˅</span></div>
+ </div>
+</div>
+<p class="hint" style="margin:4px">Без названия или цены в каталог ничего не уйдёт — под переключателем будет подсказка. Материал без себестоимости в каталог не сохраняется.</p>
+</div>
+<div class="toast"><span style="flex:1">Добавлено в каталог</span><span class="btn">Вернуть</span></div>
+<div class="panel"><div class="tot"><span>Итого ˅</span><span class="amt">$3,170.00</span></div><div class="btns" style="margin:0"><div class="btn">Сохранить</div><div class="btn pri">Сохранить и отправить</div></div></div>
+</div></div>
+
+<!-- 4. Действия -->
+<div class="shot">
+<p class="cap">4. Действия со строкой<span class="dl">первая поставка</span></p>
+<p class="capn">Кнопка с тремя точками на строке открывает список действий. То же самое можно сделать, сдвинув строку пальцем.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Смит, Джон</div><div class="hrow"><div class="htitle">Смета EST-0012</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body" style="padding:0">
+ <p class="hint" style="margin:4px 16px">Сдвинули пальцем влево ←</p>
+ <div class="swrow"><div class="acts r"><div class="act rep">⇄<span>Заменить</span></div><div class="act del">✕<span>Удалить</span></div></div>
+  <div class="front" style="transform:translateX(-160px)"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Gutter 5″ K-style</div><div class="rs">120 LF × $8.50</div></div><div class="amt">$1,020.00</div></div></div>
+ <p class="hint" style="margin:10px 16px 4px">Сдвинули пальцем вправо → (цена $0)</p>
+ <div class="swrow"><div class="acts l"><div class="act hide">◌<span>Скрыть</span></div></div>
+  <div class="front" style="transform:translateX(80px)"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Крепёж (наш)</div><div class="rs">60 ea × $0.00</div></div><div class="amt">$0.00</div></div></div>
+ <p class="hint" style="margin:10px 16px 4px">Сдвинули пальцем вправо → (цена не $0)</p>
+ <div class="swrow"><div class="acts l"><div class="act hide dim">◌<span>Скрыть</span></div></div>
+  <div class="front" style="transform:translateX(80px)"><svg class="ki"><use href="#lab"/></svg><div class="rt"><div class="rn">Монтаж</div><div class="rs">1 lot × $900.00</div></div><div class="amt">$900.00</div></div></div>
+ <div class="menu" style="top:300px"><div class="mi">Заменить из каталога… <span>⇄</span></div><div class="mi">Дублировать <span>⧉</span></div><div class="mi dim">Скрыть от клиента <span>◌</span></div><div class="mi">Переместить… <span>≡</span></div><div class="mi d">Удалить <span>✕</span></div></div>
+ <div class="note">Кнопка с тремя точками на строке открывает этот список. Бледное «Скрыть» — подсказка: «Скрыть можно позицию с ценой $0».</div>
+</div>
+</div></div>
+
+<!-- 4. Добавление и каталог -->
+<div class="shot">
+<p class="cap">5. «Из каталога»<span class="dl">первая поставка</span></p>
+<p class="capn">Поиск, отметить несколько, «Добавить · N». Нет нужной — «Своя позиция».</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="hrow"><div class="htitle">Смета EST-0012</div></div></div>
+<div class="body"><div class="card" style="opacity:.5"><div class="row" style="border-top:0"><div class="rt"><div class="rn">Gutter 5″ K-style</div></div></div></div></div>
+<div class="scrim"></div>
+<div class="sheet">
+ <div class="grab"></div>
+ <div class="hrow"><b style="flex:1;font-size:var(--head)">Из каталога</b><span class="ib">✕</span></div>
+ <div class="fld" style="margin:8px 0">⌕ <span>down</span></div>
+ <div class="row"><span class="link" style="font-size:var(--body)">＋ Своя позиция «down»</span></div>
+ <div class="row"><div class="rt"><div class="rn">Downspout 3×4</div><div class="rs">Материал · $7.00 / LF</div></div><div class="chk on">✓</div></div>
+ <div class="row"><div class="rt"><div class="rn">Downspout elbow A</div><div class="rs">Материал · $6.50 / ea</div></div><div class="chk on">✓</div></div>
+ <div class="row"><div class="rt"><div class="rn">Downspout 2×3</div><div class="rs">Материал · $5.80 / LF</div></div><div class="chk"></div></div>
+ <div class="row"><div class="rt"><div class="rn">Downspout strap</div><div class="rs">Материал · $0.90 / ea</div></div><div class="chk"></div></div>
+ <div style="flex:1"></div>
+ <div class="btn pri">Добавить · 2</div>
+</div>
+</div></div>
+
+<!-- 5. Перетаскивание -->
+<div class="shot">
+<p class="cap">6. Перетаскивание<span class="dl">первая поставка</span></p>
+<p class="capn">Держите строку или возьмите за «≡» — лёгкая вибрация, строка приподнята. Полоса — куда встанет.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="hrow"><div class="htitle">Смета EST-0012</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+<div class="card">
+ <div class="sec" style="border-top:0"><span class="chev">˅</span><span style="flex:1">Крыша</span><span class="amt">$2,200.00</span></div>
+ <div class="row ind"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Gutter 5″ K-style</div><div class="rs">120 LF × $8.50</div></div><div class="amt">$1,020.00</div><div class="grip">≡</div></div>
+ <div class="drop"></div>
+ <div class="lift"><div class="hrow"><svg class="ki"><use href="#srv"/></svg><div class="rt"><div class="rn">Вывоз мусора</div><div class="rs">1 ea × $150.00</div></div><div class="amt">$150.00</div><div class="grip">≡</div></div></div>
+ <div class="row ind"><svg class="ki"><use href="#lab"/></svg><div class="rt"><div class="rn">Монтаж водостоков</div><div class="rs">1 lot × $900.00</div></div><div class="amt">$900.00</div><div class="grip">≡</div></div>
+ <div class="sec target"><span class="chev">›</span><span style="flex:1">Электрика <span class="hint">· 3</span></span><span class="amt">$640.00</span></div>
+ <div class="sec"><span class="chev">›</span><span style="flex:1">Замер Gutters <span class="hint">· 11</span></span><span class="amt">$3,410.00</span></div>
+</div>
+<p class="hint" style="margin:4px">Отпустили над свёрнутым разделом — строка ляжет в его конец. В раздел замера вручную не кладётся: порядок там ведёт замер.</p>
+</div>
+</div></div>
+
+<!-- 6. Итоги и налог -->
+<div class="shot">
+<p class="cap">7. Итоги и налог<span class="dl">первая поставка</span></p>
+<p class="capn">Налог выключен по умолчанию. Включили — ставка вручную или подсказкой. Жёлтый — включённый переключатель (так в «Наряде», DS А5) и главная кнопка.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="hrow"><div class="htitle">Смета EST-0012</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+<div class="card">
+ <div class="kv" style="min-height:44px"><span class="k">Скидка</span><span class="v">5 % ›</span></div>
+ <div class="tg"><div class="rt">Налог</div><span class="sw on"></span></div>
+ <div style="padding-bottom:8px"><div class="lbl">Ставка, %</div><div class="fld">10.25 <span class="u">%</span></div><div style="margin-top:4px"><span class="btn" style="display:inline-flex;height:28px;flex:none">Как в прошлой смете: 10.25 %</span></div><div class="hint" style="margin-top:3px">Ставка вписывается вручную. Налог — на всю сумму после скидки. Налог поставщика уже в себестоимости позиций.</div></div>
+ <div class="kv" style="min-height:44px"><span class="k">Задаток</span><span class="v">10 % ›</span></div>
+</div>
+</div>
+<div class="panel">
+ <div class="tl"><span>Подытог</span><span>$2,990.00</span></div>
+ <div class="tl"><span>Скидка 5 %</span><span>−$149.50</span></div>
+ <div class="tl"><span>Налог 10.25 %</span><span>$291.15</span></div>
+ <div class="tl b"><span>Итого ˄</span><span>$3,131.65</span></div>
+ <div class="tl"><span>Задаток</span><span>$313.17</span></div>
+ <div class="tl"><span>Заработок (видите вы)</span><span>$1,012.00 · 35.6 %</span></div>
+ <div class="btns" style="margin:8px 0 0"><div class="btn">Сохранить</div><div class="btn pri">Сохранить и отправить</div></div>
+</div>
+</div></div>
+
+<!-- 7. Обязательное поле -->
+<div class="shot">
+<p class="cap">8. Не заполнено нужное<span class="dl">первая поставка</span></p>
+<p class="capn">Нажали «Сохранить» — экран плавно прокрутил к полю, подсветил его и написал, что вписать.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Сметы</div><div class="hrow"><div class="htitle">Новая смета</div><span class="ib">?</span></div></div>
+<div class="body">
+ <div class="lbl">Клиент</div><div class="fld">Смит, Джон <span class="u">›</span></div>
+ <div class="lbl">Адрес работ</div><div class="fld err"><span style="color:var(--mut)">Выберите</span><span class="u">›</span></div>
+ <div class="errt">⚠ Выберите адрес работ</div>
+ <div class="lbl" style="margin-top:10px">Позиции</div>
+ <div class="card"><div class="row" style="border-top:0"><svg class="ki"><use href="#mat"/></svg><div class="rt"><div class="rn">Gutter 5″ K-style</div><div class="rs">120 LF × $8.50</div></div><div class="amt">$1,020.00</div></div></div>
+ <p class="hint">Так работает каждая форма приложения. Кнопка не бывает серой. Поле в свёрнутой строке — строка раскроется сама.</p>
+</div>
+<div class="panel"><div class="tot"><span>Итого ˅</span><span class="amt">$1,020.00</span></div><div class="btns" style="margin:0"><div class="btn">Сохранить</div><div class="btn pri">Сохранить и отправить</div></div></div>
+</div></div>
+
+<!-- 8. Вид клиента -->
+<div class="shot">
+<p class="cap">9. Что видит клиент (PDF и /p/)<span class="dl">первая поставка</span></p>
+<p class="capn">Разделы и итоги всегда, на языке клиента. Выбранная допуслуга — в своём разделе. Себестоимости и скрытых строк нет.</p>
+<div class="phone" style="background:var(--page)"><div class="status"></div>
+<div class="paper">
+ <div class="ph"><div><div class="t">Estimate EST-0012</div><div class="m">Smith, John · 12 Oak St, Pasadena, CA</div></div><div class="m">11/12/2026</div></div>
+ <div class="s">Roof</div>
+ <div class="ss">Materials</div>
+ <div class="l"><span>Gutter 5″ K-style</span><span>120 LF</span><span>$8.50</span><span>$1,020.00</span></div>
+ <div class="l"><span>Downspout 3×4</span><span>40 LF</span><span>$7.00</span><span>$280.00</span></div>
+ <div class="l"><span>Gutter guards (optional) ✓</span><span>120 LF</span><span>$4.00</span><span>$480.00</span></div>
+ <div class="ss">Labor</div>
+ <div class="l"><span>Install gutters</span><span>1 lot</span><span>$900.00</span><span>$900.00</span></div>
+ <div class="st"><span>Roof subtotal</span><span>$2,680.00</span></div>
+ <div class="s">Electrical</div>
+ <div class="l"><span>Heat cable</span><span>80 ft</span><span>$8.00</span><span>$640.00</span></div>
+ <div class="st"><span>Electrical subtotal</span><span>$640.00</span></div>
+ <div class="s">Other items</div>
+ <div class="l"><span>Haul away old gutters</span><span>1 ea</span><span>$150.00</span><span>$150.00</span></div>
+ <div style="height:6px"></div>
+ <div class="tt"><span>Subtotal</span><span>$3,470.00</span></div>
+ <div class="tt"><span>Discount 5%</span><span>−$173.50</span></div>
+ <div class="tt"><span>Sales tax 10.25%</span><span>$337.89</span></div>
+ <div class="tt b"><span>Total</span><span>$3,634.39</span></div>
+ <div class="tt"><span>Deposit (10%)</span><span>$363.44</span></div>
+ <p class="m" style="margin-top:8px">Скрытая строка клиенту не видна. Если налог выключен, строки налога нет.</p>
+</div><div style="height:14px"></div>
+</div></div>
+
+<!-- 9. Пустая смета -->
+<div class="shot">
+<p class="cap">10. Пустая смета<span class="dl">первая поставка</span></p>
+<p class="capn">Сразу видно, с чего начать. Пустой каталог — ссылка «Открыть каталог».</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Смит, Джон</div><div class="hrow"><div class="htitle">Новая смета</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+ <div class="lbl">Клиент</div><div class="fld">Смит, Джон <span class="u">›</span></div>
+ <div class="lbl">Адрес работ</div><div class="fld">12 Oak St, Pasadena <span class="u">›</span></div>
+ <div class="card" style="margin-top:12px"><div class="empty">Позиций пока нет</div></div>
+ <div class="btns"><div class="btn">＋ Новая позиция</div><div class="btn">Из каталога</div></div>
+ <div class="btns" style="margin-top:0"><div class="btn ghost">Разложить по видам</div><div class="btn ghost">＋ Раздел</div></div>
+</div>
+<div class="panel"><div class="tot"><span>Итого</span><span class="amt">$0.00</span></div><div class="btns" style="margin:0"><div class="btn">Сохранить</div><div class="btn pri">Сохранить и отправить</div></div></div>
+</div></div>
+
+</div>
+
+<h2>Карточка позиции в каталоге</h2>
+<div class="rail">
+
+<!-- 11. Просмотр: верх -->
+<div class="shot">
+<p class="cap">11. Позиция — просмотр<span class="dl">вторая поставка</span></p>
+<p class="capn">Сверху — заработок с одной штуки и наценка (видите вы). Дальше главное, поставщик, цены.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Каталог</div><div class="hrow"><div class="htitle">Gutter 5″ K-style</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+ <div class="tiles"><div class="tile"><div class="k">Цена</div><div class="v">$12.13</div></div><div class="tile"><div class="k">Себест.</div><div class="v">$11.03</div></div><div class="tile"><div class="k">Заработок</div><div class="v">$1.10 · 9.1 %</div></div></div>
+ <div class="hint" style="margin:0 4px 6px">Наценка 10 % · с одной штуки</div>
+ <div class="stitle">Главное</div>
+ <div class="card"><div class="kv"><span class="k">Вид</span><span class="v">Материал</span></div><div class="kv"><span class="k">Направление</span><span class="v">Кровля</span></div><div class="kv"><span class="k">Единица</span><span class="v">LF</span></div><div class="kv"><span class="k">Описание</span><span class="v">Алюминий 0.027″, белый</span></div></div>
+ <div class="stitle">Поставщик</div>
+ <div class="card"><div class="kv"><span class="k">Поставщик</span><span class="v link">ABC Supply ›</span></div><div class="kv"><span class="k">Артикул поставщика</span><span class="v">G5K-WH</span></div><div class="kv"><span class="k">Свой артикул</span><span class="v">GUT-5K</span></div><div class="kv"><span class="k">Штрих-код</span><span class="v">012345678905</span></div><div class="kv"><span class="k">Ссылка на товар</span><span class="v link">abcsupply.com ↗</span></div></div>
+ <div class="stitle">Цена и себестоимость</div>
+ <div class="card"><div class="kv"><span class="k">Закупка без налога</span><span class="v">$10.00</span></div><div class="kv"><span class="k">Налог поставщика</span><span class="v">10.25 % · как у поставщика</span></div><div class="kv"><span class="k">Полная себестоимость</span><span class="v">$11.03</span></div></div>
+</div>
+<div class="panel"><div class="btn pri">Изменить позицию</div></div>
+</div></div>
+
+<!-- 12. Просмотр: низ -->
+<div class="shot">
+<p class="cap">12. Позиция — использование и история<span class="dl">вторая поставка</span></p>
+<p class="capn">В скольких сметах, сколько продано и куплено. Склад — место на будущее. История: кто и когда менял.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Каталог</div><div class="hrow"><div class="htitle">Gutter 5″ K-style</div><span class="ib">?</span><span class="ib">⋯</span></div></div>
+<div class="body">
+ <div class="card"><div class="kv"><span class="k">Наценка</span><span class="v">10 %</span></div><div class="kv"><span class="k">Цена продажи</span><span class="v">$12.13</span></div></div>
+ <div class="stitle">Использование</div>
+ <div class="card"><div class="kv"><span class="k">В сметах</span><span class="v">14</span></div><div class="kv"><span class="k">Продано</span><span class="v">320 LF</span></div><div class="kv"><span class="k">Выручка · заработок</span><span class="v">$3,881.60 · $352.00</span></div><div class="kv"><span class="k">Куплено (по заказам)</span><span class="v">300 LF</span></div></div>
+ <div class="hint" style="margin:0 4px 6px">По сметам и заказам на этом устройстве.</div>
+ <div class="later">Склад и остатки — после выпуска (здесь появится блок).</div>
+ <div class="stitle">История</div>
+ <div class="card">
+  <div class="kv"><span class="k">Создана</span><span class="v">11/03/2026 · Мария</span></div>
+  <div class="kv"><span class="k">Изменена</span><span class="v">11/10/2026 · Алексей</span></div>
+  <div class="kv"><span class="k">11/10 · Алексей</span><span class="v">Цена $11.90 → $12.13</span></div>
+  <div class="kv"><span class="k">11/10 · Алексей</span><span class="v">Закупка $9.50 → $10.00</span></div>
+ </div>
+</div>
+<div class="panel"><div class="btn pri">Изменить позицию</div></div>
+</div></div>
+
+<!-- 13. Правка -->
+<div class="shot">
+<p class="cap">13. Позиция — правка<span class="dl">вторая поставка</span></p>
+<p class="capn">Поля по порядку. Налог подставлен от поставщика, можно своё. Расчёт — под полями.</p>
+<div class="phone"><div class="status"></div>
+<div class="hdr"><div class="back">‹ Отмена</div><div class="hrow"><div class="htitle">Изменить позицию</div><span class="ib">?</span></div></div>
+<div class="body">
+ <div class="seg" style="margin-top:0"><span class="on">Материал</span><span>Работа</span><span>Услуга</span><span>Комплект</span></div>
+ <div class="lbl">Название</div><div class="fld">Gutter 5″ K-style</div>
+ <div class="g2"><div><div class="lbl">Направление (необяз.)</div><div class="fld">Кровля <span class="u">˅</span></div></div><div><div class="lbl">Единица</div><div class="fld">LF <span class="u">˅</span></div></div></div>
+ <div class="lbl">Описание (необязательно)</div><div class="fld">Алюминий 0.027″, белый</div>
+ <div class="lbl">Поставщик (необязательно)</div><div class="fld">ABC Supply <span class="u">›</span></div>
+ <div class="g2"><div><div class="lbl">Артикул поставщика</div><div class="fld">G5K-WH</div></div><div><div class="lbl">Свой артикул</div><div class="fld">GUT-5K</div></div></div>
+ <div class="g2"><div><div class="lbl">Штрих-код</div><div class="fld">012345678905</div></div><div><div class="lbl">Ссылка на товар</div><div class="fld">https://…</div></div></div>
+ <div class="g2"><div><div class="lbl">Закупка без налога</div><div class="fld">$ 10.00</div></div><div><div class="lbl">Налог поставщика</div><div class="fld">10.25 <span class="u">%</span></div></div></div>
+ <div class="g2"><div><div class="lbl">Наценка</div><div class="fld">10 <span class="u">%</span></div></div><div><div class="lbl">Цена продажи</div><div class="fld" style="background:transparent">$12.13</div></div></div>
+ <div class="prof">Полная себестоимость $11.03 · Заработок $1.10 · 9.1 %</div>
+</div>
+<div class="panel"><div class="btn pri">Сохранить позицию</div></div>
+</div></div>
+
+</div>
+<p class="hint">Эскизы показывают состав и порядок, не точный вид. Точный вид — снимки «было / стало» в каждом PR.</p>
+</div>
+</body>
+</html>

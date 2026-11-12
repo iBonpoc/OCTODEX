@@ -638,6 +638,8 @@ export interface MemberSignature {
 }
 export interface Estimate {
   id: ID;
+  /** who made it (server: estimates.created_by) — a tech sees his own estimate (estimates_select, #1138) */
+  createdBy?: ID;
   /** direction of the business (docs/specs/11-trade.md): from the lead, else the client's latest, else the only one */
   serviceCategoryId?: ID;
   customerId: ID;
