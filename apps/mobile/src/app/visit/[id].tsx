@@ -4,10 +4,10 @@ import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { space, size } from "@octo/design-tokens";
 import { jobProfit, useStore, visitContext } from "@/data/store";
 import { canSeeProfit } from "@/nav/roles";
+import { haptics } from "@/ui/haptics";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { CancelNotifySheet, WhenWho } from "@/features/VisitForm";
@@ -34,7 +34,7 @@ import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
 import { canTakeVisitPayment } from "@/features/moneyLists";
 
-const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+const haptic = () => haptics.medium();
 
 /** Technician visit flow: En route → On site → Work (photos, checklist) → Signature → Payment. Works offline. */
 export default function VisitScreen() {

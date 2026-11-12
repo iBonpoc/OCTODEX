@@ -5,7 +5,7 @@
  */
 import { useState } from "react";
 import { View } from "react-native";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { ChecklistItem, Visit } from "@/data/types";
@@ -105,7 +105,7 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
       testID={`chk-item-${item.id}`}
       disabled={!may}
       onPress={() => {
-        Haptics.selectionAsync().catch(() => {});
+        haptics.selection();
         store.toggleCheck(v.id, item.id);
       }}
       accessibilityRole="checkbox"

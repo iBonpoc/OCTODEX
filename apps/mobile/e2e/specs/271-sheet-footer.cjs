@@ -13,7 +13,7 @@ exports.run = async (h) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
   const top = () => p.locator('[aria-modal="true"]').last();
   const titleOf = async () => (await top().getByTestId("sheet-title").innerText()).trim();
-  await h.go("/settings/design-system");
+  await h.go("/settings/design-system/windows");
   await vis("showcase-windows").waitFor({ timeout: 5000 });
 
   const open = async (id) => {

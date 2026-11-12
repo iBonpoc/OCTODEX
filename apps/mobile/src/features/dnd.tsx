@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { motion, radius, component } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 
@@ -125,7 +125,7 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       setDragging(id);
       setDragFrom(from);
       lift.value = reduce ? 1 : withTiming(1, { duration: motion.durSlow });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      haptics.light();
     },
     onUpdate: (e) => {
       tx.value = e.translationX;
@@ -145,7 +145,7 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       setDragFrom(null);
       lastDragEnd = Date.now();
       if (z) {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+        haptics.medium();
         onDrop(z);
       }
       tx.value = reduce ? 0 : withSpring(0, motion.spring);

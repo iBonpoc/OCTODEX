@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
@@ -176,7 +176,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const ok = !!customer && !!property && hasContent(doc) && mayHere;
   const save = (send: boolean) => {
     if (!customer || !property) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    haptics.success();
     const clean: EstimateDoc = exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines) })) }, customer.taxExempt);
     const undo = store.saveEstimate({
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,

@@ -9,7 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import { PanResponder, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
-import { drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
+import { component, drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -226,7 +226,7 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
           },
         } as object)}
         // a drag with a mouse must not select the numbers (the web)
-        style={{ height: H, borderRadius: radius.field, overflow: "hidden", backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, ...({ userSelect: "none" } as object) }}
+        style={{ height: H, borderRadius: radius.field, overflow: "hidden", backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, ...({ userSelect: "none" } as object) }}
         {...pan.panHandlers}
       >
         {w > 0 ? (
