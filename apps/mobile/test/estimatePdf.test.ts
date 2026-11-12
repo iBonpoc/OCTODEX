@@ -244,6 +244,61 @@ describe("estimate PDF: in the client's language for every app language", () => 
   });
 });
 
+describe("estimate PDF: sections for the client (РС-7b, §5)", () => {
+  const sectioned = (title: string): EstimateDoc => ({
+    ...doc,
+    options: [
+      {
+        id: "o1", name: "Good", recommended: true,
+        sections: [{ id: "R", title }, { id: "RM", kind: "material", parentId: "R" }],
+        lines: [
+          { id: "l1", group: "labor", name: "Install", quantity: "2", unit: "hr", unitPriceCents: 12000, sectionId: "R" },
+          { id: "l2", group: "material", name: "Board", quantity: "3", unit: "ea", unitPriceCents: 1550, sectionId: "RM" },
+          { id: "l3", group: "material", name: "Guards", quantity: "1", unit: "ea", unitPriceCents: 4000, sectionId: "RM", optional: true },
+          { id: "l4", group: "service", name: "Haul away", quantity: "1", unit: "ea", unitPriceCents: 5000 },
+        ],
+      },
+    ],
+  }) as unknown as EstimateDoc;
+  const htmlOf = (d: EstimateDoc, lang: DocLang = "en") => {
+    const { db, e } = dbWith(lang);
+    const e2: Estimate = { ...e, doc: d };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? e2 : x));
+    return estimateHtml(portalFromEstimate(db, e2, "Acme"), { lang });
+  };
+  it("a section, its subsection (named from the dictionary), the subtotal and «Other items»; the add-on is not there until chosen", () => {
+    const h = htmlOf(sectioned("Roof"));
+    expect(h).toContain(">Roof<");
+    expect(h).toContain(">Materials<");
+    expect(h).toContain("Roof subtotal");
+    expect(h).toContain(">Other items<");
+    expect(h).not.toContain("Guards");
+    // $240.00 + $46.50 = $286.50 in Roof; the haul away $50.00 is «Other items»
+    expect(h).toContain("$286.50");
+  });
+  it("the client's language: the dictionary's words follow it, the typed title stays as typed", () => {
+    const h = htmlOf(sectioned("Roof"), "es");
+    expect(h).toContain(">Materiales<");
+    expect(h).toContain(">Otros conceptos<");
+    expect(h).toContain(">Roof<");
+    expect(h).toContain("Subtotal: Roof");
+  });
+  it("a section's title is escaped: markup in it never reaches the page as markup (stored XSS)", () => {
+    const bad = `<img src=x onerror=alert(1)>"&'`;
+    const h = htmlOf(sectioned(bad));
+    expect(h).not.toContain("<img src=x");
+    expect(h).not.toMatch(/<img[^>]*onerror/i);
+    expect(h).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    // the same in the subtotal line, which repeats the title
+    expect(h.split("&lt;img src=x onerror=alert(1)&gt;").length - 1).toBeGreaterThanOrEqual(2);
+  });
+  it("with no sections nothing changes: the lines by kind", () => {
+    const h = estimateHtml(portalFromEstimate(dbWith("en").db, dbWith("en").e, "Acme"), { lang: "en" });
+    expect(h).toContain(">Labor<");
+    expect(h).not.toContain("subtotal");
+  });
+});
+
 describe("invoice and receipt: the same header, in the client's language", () => {
   for (const client of DOC_LANGS)
     it(`client ${client}`, () => {

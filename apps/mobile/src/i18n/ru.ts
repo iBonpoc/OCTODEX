@@ -815,6 +815,8 @@ export const ru = {
   "est.sec.labor": "Работа",
   "est.sec.service": "Услуги",
   "est.sec.untitled": "Без названия",
+  "est.client.subtotal": "Итого: {title}",
+  "est.client.other": "Прочее",
   "est.sec.loose": "Без раздела",
   "est.sec.count": "Позиций: {n}",
   "est.sec.addSection": "Раздел",

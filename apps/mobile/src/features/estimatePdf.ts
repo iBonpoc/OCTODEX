@@ -8,7 +8,7 @@
 import { Platform } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { LINE_GROUPS, activeLines, ppmToPctText, taxRatePpm } from "@octo/estimating-engine";
+import { activeLines, ppmToPctText, taxRatePpm } from "@octo/estimating-engine";
 import { print as P } from "@octo/design-tokens";
 import { SIG_BOX, fitSignature } from "./signaturePath";
 import type { DictKey } from "@/i18n";
@@ -17,6 +17,7 @@ import type { PortalData } from "@/cloud/portal";
 import { optionTotals, shownQty, withAddons } from "./estimateDoc";
 import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf";
 import { pagesHtml } from "./docPages";
+import { clientRows } from "./clientLayout";
 
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
@@ -39,17 +40,23 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
       const o = p.approval ? withAddons(o0, p.approval.addonIds) : o0;
       const tot = optionTotals(doc!, o);
       const act = activeLines(o.lines);
-      const row = (i: number) => {
+      const row = (i: number, depth: 0 | 1) => {
         const l = act[i]!;
-        return `<tr${l.optional && !l.selected ? ' class="opt"' : ""}><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
+        return `<tr class="${[l.optional && !l.selected ? "opt" : "", depth ? "d1" : ""].filter(Boolean).join(" ")}"><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
           l.description ? `<div class="mut">${esc(l.description)}</div>` : ""
         }</td><td class="r">${esc(shownQty(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
       };
-      const groups = LINE_GROUPS.map((g) => {
-        const idx = act.map((l, i) => (l.group === g ? i : -1)).filter((i) => i >= 0);
-        if (!idx.length) return "";
-        return `<tr class="grp"><td colspan="${cols}">${esc(t(`ue.group.${g}` as DictKey))}</td></tr>${idx.map(row).join("")}`;
-      }).join("");
+      // sections (when the option has them) with their lines, subsections and subtotals, then «Other items»; else the lines by kind.
+      // Every word a person typed (a section's title, a line's name) goes through esc(); the dictionary's words are the client's language.
+      const groups = clientRows(o, doc!.settings, t, "selected")
+        .map((r) => {
+          if (r.type === "group") return `<tr class="grp"><td colspan="${cols}">${esc(t(`ue.group.${r.group}` as DictKey))}</td></tr>`;
+          if (r.type === "section") return `<tr class="grp${r.depth ? " d1" : ""}"><td colspan="${cols}">${esc(r.title)}</td></tr>`;
+          if (r.type === "other") return `<tr class="grp"><td colspan="${cols}">${esc(r.title)}</td></tr>`;
+          if (r.type === "subtotal") return `<tr class="subt"><td colspan="${cols - 1}">${esc(t("est.client.subtotal", { title: r.title }))}</td><td class="r">${money(r.cents)}</td></tr>`;
+          return row(r.i, r.depth);
+        })
+        .join("");
       const s = doc!.settings;
       const sums = [
         `<tr><td>${esc(t("ue.subtotal"))}</td><td class="r">${money(tot.subtotal)}</td></tr>`,

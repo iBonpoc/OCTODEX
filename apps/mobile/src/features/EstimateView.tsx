@@ -4,11 +4,12 @@
  */
 import { View } from "react-native";
 import { space, component, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, ppmToPctText, taxRatePpm, type CustomOption } from "@octo/estimating-engine";
+import { activeLines, ppmToPctText, taxRatePpm, type CustomOption } from "@octo/estimating-engine";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { optionTotals, shownQty, withAddons } from "./estimateDoc";
+import { clientRows } from "./clientLayout";
 import { DocPagesView } from "./DocPagesView";
 import { StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -30,6 +31,8 @@ export function EstimateView({
   readOnly?: boolean;
 }) {
   const { t, money } = useI18n();
+  // the words of the document are the page's (the client page already speaks the client's language: the i18n provider there)
+  const ct = t;
   const { c } = useTheme();
   const base = doc.options.find((o) => o.id === optionId) ?? doc.options[0]!;
   const option: CustomOption = withAddons(base, addonIds);
@@ -77,64 +80,57 @@ export function EstimateView({
 
       <Card>
         {many ? <T v="heading">{option.name}</T> : null}
-        {LINE_GROUPS.map((g) => {
-          const idx = act.map((l, i) => (l.group === g && !l.optional ? i : -1)).filter((i) => i >= 0);
-          if (!idx.length) return null;
-          return (
-            <View key={g} style={{ gap: space[1] }}>
-              <T v="caption" tone="mut" w="semibold">
-                {t(`ue.group.${g}` as DictKey)}
+        {/* the lines by section (own words as written, the dictionary's in the client's language) or by kind; an add-on stands in its own
+            place with its switch (no separate block); a section's subtotal counts the chosen add-ons only */}
+        {clientRows(option, s, ct, "all").map((r, k) => {
+          if (r.type === "group") {
+            return (
+              <T key={`g${r.group}`} v="caption" tone="mut" w="semibold">
+                {t(`ue.group.${r.group}` as DictKey)}
               </T>
-              {idx.map((i) => {
-                const l = act[i]!;
-                return (
-                  <RowView key={l.id} style={{ justifyContent: "space-between", alignItems: "flex-start", minHeight: component.rowCompact }}>
-                    <View style={{ flex: 1 }}>
-                      <T v="body">{l.name}</T>
-                      <T v="caption" tone="mut" tabular>
-                        {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
-                      </T>
-                    </View>
-                    <T v="body" tabular>
-                      {money(tot.lineTotals[i] ?? 0)}
-                    </T>
-                  </RowView>
-                );
-              })}
-              <Divider />
-            </View>
+            );
+          }
+          if (r.type === "section" || r.type === "other") {
+            return (
+              <View key={r.type === "section" ? `s${r.id}` : "other"} style={{ gap: space[1], paddingLeft: r.type === "section" && r.depth ? space[4] : 0 }}>
+                <T v="caption" tone="mut" w="semibold">
+                  {r.title}
+                </T>
+              </View>
+            );
+          }
+          if (r.type === "subtotal") {
+            return (
+              <View key={`t${k}`} style={{ gap: space[1] }}>
+                <Line label={ct("est.client.subtotal", { title: r.title })} v={money(r.cents)} />
+                <Divider />
+              </View>
+            );
+          }
+          const l = act[r.i]!;
+          return (
+            <RowView key={l.id} style={{ justifyContent: "space-between", alignItems: "flex-start", minHeight: l.optional && !readOnly && onAddons ? size.hitMin : component.rowCompact, paddingLeft: r.depth ? space[4] : 0 }}>
+              <View style={{ flex: 1 }}>
+                <T v="body">{l.name}</T>
+                <T v="caption" tone="mut" tabular>
+                  {l.optional ? `${t("portal.addons")} · ` : ""}
+                  {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
+                </T>
+              </View>
+              <T v="body" tabular>
+                {l.optional && !l.selected ? `+ ${money(tot.lineTotals[r.i] ?? 0)}` : money(tot.lineTotals[r.i] ?? 0)}
+              </T>
+              {l.optional ? (
+                readOnly || !onAddons ? (
+                  l.selected ? <StatusChip status="ok" label={t("est.chosen")} /> : null
+                ) : (
+                  <Toggle label={l.name} on={!!l.selected} onChange={(on) => onAddons(on ? [...addonIds, l.id] : addonIds.filter((x) => x !== l.id))} />
+                )
+              ) : null}
+            </RowView>
           );
         })}
-
-        {act.some((l) => l.optional) ? (
-          <View style={{ gap: space[1] }}>
-            <T v="caption" tone="mut" w="semibold">
-              {t("portal.addons")}
-            </T>
-            {act.map((l, i) =>
-              l.optional ? (
-                <RowView key={l.id} style={{ minHeight: size.hitMin }}>
-                  <View style={{ flex: 1 }}>
-                    <T v="body">{l.name}</T>
-                    <T v="caption" tone="mut" tabular>
-                      + {money(tot.lineTotals[i] ?? 0)}
-                    </T>
-                  </View>
-                  {readOnly || !onAddons ? (
-                    l.selected ? <StatusChip status="ok" label={t("est.chosen")} /> : null
-                  ) : (
-                    <Toggle
-                      label={l.name}
-                      on={!!l.selected}
-                      onChange={(on) => onAddons(on ? [...addonIds, l.id] : addonIds.filter((x) => x !== l.id))}
-                    />
-                  )}
-                </RowView>
-              ) : null,
-            )}
-            <Divider />
-          </View>
-        ) : null}
+        <Divider />
 
         <Line label={t("ue.subtotal")} v={money(tot.subtotal)} />
         {tot.discount ? <Line label={t("ue.discount")} v={`−${money(tot.discount)}`} /> : null}

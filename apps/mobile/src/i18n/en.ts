@@ -816,6 +816,8 @@ export const en: Dict = {
   "est.sec.labor": "Labor",
   "est.sec.service": "Services",
   "est.sec.untitled": "Untitled",
+  "est.client.subtotal": "{title} subtotal",
+  "est.client.other": "Other items",
   "est.sec.loose": "No section",
   "est.sec.count": "Items: {n}",
   "est.sec.addSection": "Section",
