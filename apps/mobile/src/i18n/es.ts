@@ -298,6 +298,8 @@ export const es: Dict = {
   "att.rejected.estimate": "Presupuesto no enviado",
   "sync.stuck.reason.estimateLines": "Las líneas del presupuesto en el servidor no coincidían con su documento, así que el servidor no lo envió al cliente. El presupuesto vuelve a ser borrador: ábralo, guárdelo y envíelo de nuevo.",
   "sync.stuck.reason.estimateLinesSigned": "Las líneas del presupuesto en el servidor no coincidieron con su documento: el servidor no aceptó la firma y la firma del cliente no se guardó. Abra el presupuesto, guárdelo y tome la firma del cliente de nuevo.",
+  // «Данные и деньги» #1147
+  "sync.stuck.reason.estimateTotalChanged": "La firma del cliente no se guardó: el presupuesto cambió mientras se enviaba y el cliente firmó otro total. Abra el presupuesto y pida al cliente que firme de nuevo.",
   "sync.stuck.retry": "Reintentar ahora",
   "sync.stuck.discard": "Descartar cambio…",
   "sync.stuck.sure": "¿Descartar este cambio? No llegará al servidor; el teléfono vuelve a mostrar los datos del servidor.",

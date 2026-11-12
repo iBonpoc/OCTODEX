@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const calls: { fn: string; args: Record<string, unknown> }[] = [];
 let answers: Record<string, { error: { message: string; code?: string; hint?: string } | null }> = {};
+/** a server without the door with the total (#1147): the call with p_total_cents is «no such function» (PGRST202) */
+let noTotalDoor = false;
 const chain = (): Record<string, unknown> => {
   const done = Promise.resolve({ data: null, error: null });
   const c: Record<string, unknown> = { then: (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => done.then(r, j) };
@@ -21,6 +23,7 @@ vi.mock("../src/cloud/client", () => ({
     from: () => chain(),
     rpc: (fn: string, args: Record<string, unknown>) => {
       calls.push({ fn, args });
+      if (noTotalDoor && "p_total_cents" in args) return Promise.resolve({ data: null, error: { message: "Could not find the function", code: "PGRST202" }, status: 404 });
       return Promise.resolve({ data: null, error: answers[fn]?.error ?? null, status: answers[fn]?.error ? 400 : 200 });
     },
   },
@@ -37,6 +40,7 @@ const approve = (channel: "on_site" | "portal"): Op => ({
 afterEach(() => {
   calls.length = 0;
   answers = {};
+  noTotalDoor = false;
 });
 
 describe("estimate.approve on site", () => {
@@ -79,7 +83,7 @@ describe("estimate.approve on site", () => {
 
 import { canSeeClientLink, canSignDraftOnSite } from "../src/features/estimateSign";
 import { tFor } from "../src/i18n/translate";
-import { rejectedOf } from "../src/data/outboxRejected";
+import { rejectedOf, rejectReasonKey } from "../src/data/outboxRejected";
 
 describe("estimate.sign — an older quick estimate signed on site (#1126)", () => {
   const sign: Op = { k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann Client", sent: true };
@@ -114,6 +118,40 @@ describe("estimate.sign — an older quick estimate signed on site (#1126)", () 
     expect(err).toBeInstanceOf(PermanentError);
     expect((err as PermanentError).code).toBe("42501");
     expect(calls.some((c) => c.fn === "sign_estimate_on_site")).toBe(false);
+  });
+});
+
+describe("the total the client saw goes with the signature (#1147)", () => {
+  const mismatch = { message: "the estimate changed: the client saw another total", code: "22023", hint: "estimate_total_mismatch" };
+  it("the quick estimate: sign_estimate_on_site gets the total (before: no total — the server signed whatever version it had)", async () => {
+    await applyOp({ k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann Client", sent: true, totalCents: 172216 }, "co-1", "u-office");
+    expect(calls.find((c) => c.fn === "sign_estimate_on_site")?.args).toEqual({ p_estimate_id: E, p_signer: "Ann Client", p_svg: "M0 0 L1 1", p_total_cents: 172216 });
+  });
+  it("on site, the universal one: accept_on_site gets the total", async () => {
+    await applyOp({ ...approve("on_site"), totalCents: 50653 } as Op, "co-1", "u-office");
+    expect(calls.find((c) => c.fn === "accept_on_site")?.args.p_total_cents).toBe(50653);
+  });
+  it("another total on the server: refused for good (PermanentError with its hint — never retried, the card says why)", async () => {
+    answers = { sign_estimate_on_site: { error: mismatch } };
+    const err = await applyOp({ k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann", sent: true, totalCents: 1 }, "co-1", "u-office").then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(PermanentError);
+    expect((err as PermanentError).hint).toBe("estimate_total_mismatch");
+    const r = rejectedOf({ id: "x", op: { k: "estimate.sign", id: E, svg: "", sent: true, totalCents: 1 } } as never, "refused", Date.parse("2026-11-12T12:00:00Z"), null, (err as PermanentError).hint);
+    expect(r).toMatchObject({ what: "estimate", href: `/estimate/${E}`, reason: "estimate_total_mismatch" });
+    expect(tFor("ru")(rejectReasonKey(r!.reason!, r!.kind))).toMatch(/клиент подписал другую сумму/);
+  });
+  it("a server without the new door (PGRST202): the old one, without the total — nothing hangs", async () => {
+    noTotalDoor = true;
+    await applyOp({ k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann", sent: true, totalCents: 5 }, "co-1", "u-office");
+    const signs = calls.filter((c) => c.fn === "sign_estimate_on_site");
+    expect(signs.map((c) => "p_total_cents" in c.args)).toEqual([true, false]);
+  });
+  it("an older op without the total: the old door, as before", async () => {
+    await applyOp({ k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann", sent: true }, "co-1", "u-office");
+    expect(calls.filter((c) => c.fn === "sign_estimate_on_site").map((c) => "p_total_cents" in c.args)).toEqual([false]);
+  });
+  it("the lines changed (estimate_lines_mismatch) still says so in its own words", () => {
+    expect(rejectReasonKey("estimate_lines_mismatch", "estimate.sign")).toBe("sync.stuck.reason.estimateLinesSigned");
   });
 });
 
