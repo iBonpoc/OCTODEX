@@ -30,6 +30,8 @@ export const ru = {
   "path.leadNew": "Создать лид",
   "path.clientNew": "Создать клиента",
   "path.expenseNew": "Создать расход",
+  // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
+  "path.inv.deposit": "Задаток",
   "path.visitAdd": "Добавить выезд",
   "path.photoAdd": "Добавить фото",
   "path.estimateNew": "Создать смету",
