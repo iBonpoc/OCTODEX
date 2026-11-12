@@ -1,5 +1,5 @@
 /**
- * e2e 276 — #818 (founder 12.11: «заглушка свободно перемещалась и прилипала под 90°»). Every view.
+ * e2e 292 — #818 (founder 12.11: «заглушка свободно перемещалась и прилипала под 90°»). Every view.
  * A picked gutter's free end handle: pulled along — only the length (e2e 251); pulled sideways past the threshold — the end
  * follows the finger, the other end stays; near a right angle it is held there and the chip says «90°»; «Назад» puts it back.
  * Finds things by testID / id; waits on what it checks (no pauses).
