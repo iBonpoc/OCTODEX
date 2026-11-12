@@ -28,3 +28,16 @@ exports.fold = async (h) => {
   await vis(h, '[data-testid^="est-collapse-"]').first().getByRole("button").click();
   await h.page.waitForFunction(() => document.querySelectorAll('[data-testid^="est-collapse-"]').length === 0, null, { timeout: 3000 });
 };
+
+/**
+ * «Отменить» of the toast (by testID): it works a moment after the toast shows (a double tap is not an undo), so press until
+ * the toast is gone, then answer whether the thing is back — no fixed pause, it waits for what it checks.
+ */
+exports.undo = async (h) => {
+  const btn = h.page.getByTestId("toast-undo").locator("visible=true");
+  for (let i = 0; i < 10 && (await btn.count()) > 0; i++) {
+    await btn.last().click();
+    if (await h.page.waitForFunction(() => document.querySelectorAll('[data-testid="toast-undo"]').length === 0, null, { timeout: 400 }).then(() => true, () => false)) return true;
+  }
+  return (await btn.count()) === 0;
+};

@@ -9,7 +9,7 @@ import type { DictKey } from "@/i18n";
 import type { StarterEstimate } from "@/modules/registry";
 import { catalogMatch } from "./catalogMatch";
 import { canEditTemplates, stableUuid } from "./checklist";
-import { catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, optionTotals, uid } from "./estimateDoc";
+import { catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, normalizeDoc, optionTotals, uid } from "./estimateDoc";
 
 /** The keys of a template line the server takes (app.valid_estimate_template_doc); a module's `source` never rides along */
 type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected" | "clientVisible" | "sectionId">;
@@ -127,6 +127,8 @@ export interface FromTemplate {
   doc: EstimateDoc;
   /** ids (in the new doc) of lines whose catalog item is gone: the template's price, «нет в каталоге, проверьте цену» */
   checkPrice: string[];
+  /** ids of lines that were hidden and got a price from the catalog: shown to the client again (the mark «Снова видна клиенту») */
+  unhidden: string[];
 }
 
 /**
@@ -158,7 +160,9 @@ export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Re
       return line;
     }),
   }));
-  return { doc: { options, settings: { ...tpl.settings }, ...(tpl.note ? { note: tpl.note } : {}) }, checkPrice };
+  // a hidden line takes the catalog price → it is priced, so it is shown again (Р3 п.2: normalizeDoc on every entrance of a document)
+  const made = normalizeDoc({ options, settings: { ...tpl.settings }, ...(tpl.note ? { note: tpl.note } : {}) });
+  return { doc: made.doc, checkPrice, unhidden: made.unhidden };
 }
 
 /** «от $X» in the picker: the recommended option's total at today's catalog prices (the engine sums) */
