@@ -474,13 +474,15 @@ export function StoreProvider({
   // the cache is the person's in the company (#864): the next person on a shared phone never reads it
   const cacheKey = mode === "cloud" ? cloudCacheKey(company!.companyId, auth.userId!) : "octo.db.v5";
 
-  // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
+  // Demo data is kept as the person left it, any day — never reseeded silently at midnight (the founder's measurement was
+  // wiped that way, 12.11; К1). Only «Сбросить тестовые данные» starts it over (with «Отменить»). Cloud data is a cache
+  // of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
     {
       validate: (v) =>
-        Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+        Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : typeof v?.day === "string" && v.day !== "cloud"),
       // an empty start shows an empty company: tried longer before it (#926)
       patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is

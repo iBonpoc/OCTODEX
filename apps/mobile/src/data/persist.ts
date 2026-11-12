@@ -321,5 +321,6 @@ export function usePersistentState<T>(
 }
 
 /** the day the demo was seeded: the demo company's calendar day (its «today» is built from its midnight, seed.ts —
- *  docs/specs/03 П4b), so the demo is reseeded at midnight in Los Angeles, not at the phone's */
+ *  docs/specs/03 П4b). Only a mark of when it was made: the demo is never reseeded by itself at midnight (#1182 — the
+ *  founder's demo records were lost so); it starts over only by «Сбросить тестовые данные» */
 export const todayKey = demoToday;
