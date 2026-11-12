@@ -6,6 +6,7 @@
  * - «нет сети» shows the badge and the network comes back on the next press.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
+const { settle } = require("../settle.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -45,7 +46,7 @@ exports.run = async (h) => {
   // the toast ignores a tap in its first moments (the second tap of a double tap): press until it takes it and goes
   for (let i = 0; i < 20 && (await undo.count()) > 0; i++) {
     await undo.click({ timeout: 1000 }).catch(() => {});
-    await undo.waitFor({ state: "detached", timeout: 300 }).catch(() => {});
+    await settle(p, { quietMs: 100, maxMs: 500 });
   }
   await p.getByText("Отменено раз: 1", { exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
 
