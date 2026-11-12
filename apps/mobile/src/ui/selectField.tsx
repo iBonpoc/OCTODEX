@@ -49,7 +49,19 @@ export function SelectField<K extends string>({
   // more than 12 values are not a menu: a sheet with search (DS А2 → А3)
   const long = items.length > MENU_MAX;
   const [picker, setPicker] = useState(false);
-  const open = () => (long ? setPicker(true) : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
+  // web: the focus goes back to the row when the sheet closes — Esc, a pick or the ✕ (DS А3), as the menu does
+  const opener = useRef<Element | null>(null);
+  const openPicker = () => {
+    if (Platform.OS === "web" && typeof document !== "undefined") opener.current = document.activeElement;
+    setPicker(true);
+  };
+  const closePicker = () => {
+    setPicker(false);
+    const el = opener.current as HTMLElement | null;
+    opener.current = null;
+    if (Platform.OS === "web" && el && typeof el.focus === "function") requestAnimationFrame(() => el.isConnected && el.focus());
+  };
+  const open = () => (long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View style={{ gap: space[1] }} testID={testID}>
       <View ref={ref} collapsable={false}>
@@ -94,7 +106,7 @@ export function SelectField<K extends string>({
         </View>
       ) : null}
       {long ? (
-        <PickerSheet visible={picker} title={label} items={items} value={value} onSelect={onChange} onClose={() => setPicker(false)} testID={testID ? `${testID}-picker` : undefined} />
+        <PickerSheet visible={picker} title={label} items={items} value={value} onSelect={onChange} onClose={closePicker} testID={testID ? `${testID}-picker` : undefined} />
       ) : (
         <Menu visible={!!anchor} anchor={anchor} items={menu} onSelect={onChange} onClose={() => setAnchor(null)} title={label} matchWidth />
       )}

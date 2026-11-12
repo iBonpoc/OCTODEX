@@ -28,9 +28,19 @@ exports.run = async (h) => {
   await vis("showcase-select-tenth").getByRole("button").first().click();
   const m2 = p.getByTestId("menu-items").locator("visible=true").last();
   await m2.waitFor({ timeout: 3000 });
-  const mb = await m2.boundingBox();
-  const it = await p.getByRole("menuitem", { name: "a10", exact: true }).locator("visible=true").last().boundingBox();
-  h.expect(it.y >= mb.y - 1 && it.y + it.height <= mb.y + mb.height + 1, `the chosen item is inside the menu window at once (${Math.round(it.y)}..${Math.round(it.y + it.height)} in ${Math.round(mb.y)}..${Math.round(mb.y + mb.height)})`);
+  // the menu opens at the chosen item: within a moment (the rows are placed first) the tenth is in the window
+  const inWindow = () => p.evaluate(() => {
+    const win = [...document.querySelectorAll('[data-testid="menu-items"]')].pop().getBoundingClientRect();
+    const it = [...document.querySelectorAll('[role="menuitem"]')].find((e) => e.getAttribute("aria-label") === "a10" || e.textContent.trim() === "a10").getBoundingClientRect();
+    return { ok: it.top >= win.top - 1 && it.bottom <= win.bottom + 1, it: [Math.round(it.top), Math.round(it.bottom)], win: [Math.round(win.top), Math.round(win.bottom)] };
+  });
+  await p.waitForFunction(() => {
+    const win = [...document.querySelectorAll('[data-testid="menu-items"]')].pop().getBoundingClientRect();
+    const it = [...document.querySelectorAll('[role="menuitem"]')].find((e) => e.getAttribute("aria-label") === "a10" || e.textContent.trim() === "a10").getBoundingClientRect();
+    return it.top >= win.top - 1 && it.bottom <= win.bottom + 1;
+  }, null, { timeout: 3000 });
+  const w = await inWindow();
+  h.expect(w.ok, `the chosen item is inside the menu window (${w.it} in ${w.win})`);
   await pressEscUntilClosed(p, p.getByRole("menu").locator("visible=true").last());
 
   // twenty: a sheet with search
@@ -48,4 +58,23 @@ exports.run = async (h) => {
   await search.fill("n17");
   await vis("showcase-select-search-picker-n17").getByRole("button").first().click();
   await p.waitForFunction(() => /n17/.test(document.querySelector('[data-testid="showcase-select-search"]')?.textContent ?? ""), null, { timeout: 3000 });
+  // after a pick the focus is back on the field (web)
+  await p.waitForFunction(() => document.activeElement?.closest('[data-testid="showcase-select-search-button"]') !== null && document.activeElement?.closest('[data-testid="showcase-select-search-button"]') !== undefined, null, { timeout: 3000 });
+
+  // reopened: the chosen row is read out as selected, shows no «›»; Esc clears the search first, then closes; focus returns
+  await vis("showcase-select-search").getByRole("button").first().click();
+  await vis("showcase-select-search-picker").waitFor({ timeout: 3000 });
+  const row = vis("showcase-select-search-picker-n17").getByRole("button").first();
+  const rowHtml = await vis("showcase-select-search-picker-n17").evaluate((e) => e.innerHTML.slice(0, 400));
+  h.expect((await row.getAttribute("aria-selected")) === "true", `the chosen row is selected for a screen reader (${rowHtml})`);
+  h.expect((await p.getByTestId("showcase-select-search-picker-n3").getByRole("button").first().getAttribute("aria-selected")) !== "true", "…and the others are not");
+  await vis("showcase-select-search-picker-search").locator("input").fill("n1");
+  await p.evaluate(() => {
+    window.__esc = [];
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") window.__esc.push(document.querySelector('[data-testid="showcase-select-search-picker-search"] input')?.value ?? "gone"); }, true);
+  });
+  await pressEscUntilClosed(p, p.getByTestId("showcase-select-search-picker").locator("visible=true").first());
+  const esc = await p.evaluate(() => window.__esc);
+  h.expect(esc.length >= 2 && esc[0] === "n1" && esc[1] === "", `Esc: the first press clears the search, the second closes (${esc.join("|")})`);
+  await p.waitForFunction(() => !!document.activeElement?.closest('[data-testid="showcase-select-search-button"]'), null, { timeout: 3000 });
 };

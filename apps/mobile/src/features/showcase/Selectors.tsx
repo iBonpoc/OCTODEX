@@ -8,7 +8,7 @@ import { Card, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 const UNITS = ["ft", "in", "yd", "m", "cm", "mm"] as const;
-const FIFTEEN = Array.from({ length: 20 }, (_, i) => `n${i + 1}`);
+const TWENTY = Array.from({ length: 20 }, (_, i) => `n${i + 1}`);
 const MANY = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12"] as const;
 type Unit = (typeof UNITS)[number];
 
@@ -39,7 +39,7 @@ export function SelectorsSection() {
         </ReadOnly>
         <SelectField testID="showcase-select-long" label={t("ds.select.twelve")} value={long} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setLong} />
         <SelectField testID="showcase-select-tenth" label={t("ds.select.tenth")} value={tenth} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setTenth} />
-        <SelectField testID="showcase-select-search" label={t("ds.select.twenty")} value={twenty} items={FIFTEEN.map((m) => ({ key: m, label: m }))} onChange={setTwenty} />
+        <SelectField testID="showcase-select-search" label={t("ds.select.twenty")} value={twenty} items={TWENTY.map((m) => ({ key: m, label: m }))} onChange={setTwenty} />
       </Card>
       <Card>
         <T v="heading">{t("ds.choice.title")}</T>

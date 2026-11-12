@@ -160,33 +160,45 @@ export function ListRow({
   left,
   right,
   onPress,
+  selected,
+  chevron = true,
+  minHeight = size.rowMax,
+  lines = 1,
 }: {
   title: string;
   subtitle?: string;
   left?: ReactNode;
   right?: ReactNode;
   onPress?: () => void;
+  /** a chosen row of a list of choices: read out as selected (a mark is `right`) */
+  selected?: boolean;
+  /** the «›» of a row that opens something; a row that CHOOSES shows its own mark instead (default: shown with `onPress`) */
+  chevron?: boolean;
+  /** the row's least height (`rowMax` 52; a choice row — `rowOption` 48) */
+  minHeight?: number;
+  /** how many lines the title and the subtitle may take (default 1; long addresses — 2) */
+  lines?: number;
 }) {
   const { c } = useTheme();
   const body = (
-    <RowView style={{ minHeight: size.rowMax, paddingVertical: space[2], gap: space[3] }}>
+    <RowView style={{ minHeight, paddingVertical: space[2], gap: space[3] }}>
       {left}
       <View style={{ flex: 1 }}>
-        <T v="body" w="semibold" numberOfLines={1}>
+        <T v="body" w="semibold" numberOfLines={lines}>
           {title}
         </T>
         {subtitle ? (
-          <T v="caption" tone="mut" numberOfLines={1}>
+          <T v="caption" tone="mut" numberOfLines={lines}>
             {subtitle}
           </T>
         ) : null}
       </View>
       {right}
-      {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
+      {onPress && chevron ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
   return onPress ? (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={title}>
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={title} accessibilityState={selected === undefined ? undefined : { selected }} aria-selected={selected}>
       {body}
     </Press>
   ) : (

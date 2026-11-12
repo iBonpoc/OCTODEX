@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
@@ -7,6 +7,9 @@ import { Sheet } from "./overlays";
 import { Icon, T } from "./primitives";
 import { Card, ListRow } from "./surfaces";
 import { component, space } from "@octo/design-tokens";
+
+/** an Esc this soon after the field emptied itself is the one that emptied it (the browser clears a search field on Esc) */
+const ESC_AFTER_CLEAR_MS = 400;
 
 export interface PickerItem<K extends string> {
   key: K;
@@ -40,6 +43,14 @@ export function PickerSheet<K extends string>({
   const { c } = useTheme();
   const { t } = useI18n();
   const [q, setQ] = useState("");
+  const qNow = useRef(q);
+  qNow.current = q;
+  // a search field clears itself on Esc in the browser, before the key reaches the sheet: that press is still the first
+  const clearedAt = useRef(0);
+  const change = (v: string) => {
+    if (!v && qNow.current) clearedAt.current = Date.now();
+    setQ(v);
+  };
   const found = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return needle ? items.filter((i) => `${i.label} ${i.subtitle ?? ""}`.toLowerCase().includes(needle)) : items;
@@ -49,10 +60,11 @@ export function PickerSheet<K extends string>({
     onClose();
   };
   return (
-    <Sheet visible={visible} onClose={close} title={title} height="large">
+    // Esc: the first press clears the search, the second closes (DS А3)
+    <Sheet visible={visible} onClose={close} title={title} height="large" onEscape={() => (qNow.current ? (change(""), true) : Date.now() - clearedAt.current < ESC_AFTER_CLEAR_MS)}>
       <View testID={testID} style={{ gap: space[2] }}>
-        <View testID={`${testID}-search`}>
-          <TextField type="search" icon="search" value={q} onChangeText={setQ} placeholder={t("ui.picker.search")} label={t("ui.picker.search")} />
+        <View testID={`${testID}-search`} accessibilityRole="search">
+          <TextField type="search" icon="search" value={q} onChangeText={change} placeholder={t("ui.picker.search")} label={t("ui.picker.search")} />
         </View>
         {found.length === 0 ? (
           <View testID={`${testID}-empty`} accessibilityLiveRegion="polite">
@@ -63,10 +75,14 @@ export function PickerSheet<K extends string>({
         ) : (
           <Card>
             {found.map((i) => (
-              <View key={i.key} testID={`${testID}-${i.key}`} style={{ minHeight: component.rowOption }}>
+              <View key={i.key} testID={`${testID}-${i.key}`}>
                 <ListRow
                   title={i.label}
                   subtitle={i.subtitle}
+                  selected={i.key === value}
+                  chevron={false}
+                  minHeight={component.rowOption}
+                  lines={2}
                   right={i.key === value ? <Icon name="check" color={c.ink} /> : undefined}
                   onPress={() => {
                     setQ("");
