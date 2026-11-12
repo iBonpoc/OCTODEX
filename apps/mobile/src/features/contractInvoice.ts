@@ -5,7 +5,7 @@
  * it (issueInvoice), test/contractInvoice.test.ts checks it. The server's numbers win once they are loaded.
  */
 import { canIssue, invoiceTaxShare } from "@octo/estimating-engine";
-import type { DB, ID, Invoice, Job } from "@/data/types";
+import type { DB, ID, Invoice, Job, Role } from "@/data/types";
 import { optionTotals, withAddons } from "@/features/estimateDoc";
 import { linesOf, totalOf } from "@/features/jobLines";
 
@@ -53,4 +53,20 @@ export function withTaxSplit<T extends D & Pick<DB, "jobs">>(d: T, invoiceId: ID
   const others = contractInvoices(d, job.id).filter((i) => i.id !== inv.id).map((i) => ({ totalCents: i.totalCents, paidCents: i.paidCents, taxCents: i.taxCents }));
   const taxCents = invoiceTaxShare(job.amountCents, contractTaxOf(d, job), others, inv.totalCents);
   return { ...d, invoices: d.invoices.map((i) => (i.id === inv.id ? { ...i, subtotalCents: inv.totalCents - taxCents, taxCents } : i)) };
+}
+
+/** why an invoice may not be voided (В1-5, #1107) — the same the server checks (tg_invoice_guard): only the director
+ *  (owner / admin), only a live invoice with no payment (paid or any receipt), the reason written */
+export type VoidRefusal = "role" | "gone" | "paid" | "reason" | "long";
+/** the longest reason the server takes (invoices_void_reason_text) */
+export const VOID_REASON_MAX = 500;
+export function voidRefusal(d: Pick<DB, "invoices" | "payments" | "pendingPayments">, id: ID, reason: string, role: Role): VoidRefusal | null {
+  if (role !== "director") return "role";
+  const inv = d.invoices.find((i) => i.id === id);
+  if (!inv) return "gone";
+  // a payment on its way (ACH processing) counts as a payment, as on the server (pending — review of #1203 №2)
+  if (inv.paidCents > 0 || (d.payments ?? []).some((p) => p.invoiceId === id && p.amountCents > 0) || (d.pendingPayments ?? []).some((p) => p.invoiceId === id)) return "paid";
+  if (!reason.trim()) return "reason";
+  if (reason.trim().length > VOID_REASON_MAX) return "long";
+  return null;
 }

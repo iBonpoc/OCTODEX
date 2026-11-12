@@ -161,6 +161,8 @@ export type Op =
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
+  /** В1-5 (#1107): void a sent invoice without payments, with the reason (owner / admin; the server checks the same) */
+  | { k: "invoice.void"; id: string; jobId: string; reason: string; totalCents: number }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
   | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean }
   | { k: "license.save"; license: CompanyLicense }
@@ -907,6 +909,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
         }),
       );
+    case "invoice.void":
+      // only a sent one: a retry after the server already voided it changes nothing (a void invoice is immutable)
+      return run(supabase.from("invoices").update({ status: "void", void_reason: op.reason }).eq("id", op.id).eq("status", "sent"));
     case "lead.prospect": {
       await createCustomer(c, op, "prospect");
       return run(supabase.from("leads").update({ customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));

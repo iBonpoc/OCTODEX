@@ -29,9 +29,10 @@ export function canSeeJob(db: Pick<DB, "visits">, w: Who, jobId: ID | undefined)
   return !!jobId && db.visits.some((v) => v.jobId === jobId && isAssigned(v, w.me));
 }
 /** an invoice is the tech's when its job is */
-export function canSeeInvoice(db: Pick<DB, "visits" | "invoices">, w: Who, invoiceId: ID): boolean {
+export function canSeeInvoice(db: Pick<DB, "visits" | "invoices" | "voidInvoices">, w: Who, invoiceId: ID): boolean {
   if (free(w)) return true;
-  const inv = db.invoices.find((x) => x.id === invoiceId);
+  // a voided one (В1-5) the same: the tech's job's only
+  const inv = db.invoices.find((x) => x.id === invoiceId) ?? (db.voidInvoices ?? []).find((x) => x.id === invoiceId);
   return !!inv && canSeeJob(db, w, inv.jobId);
 }
 /** an estimate is the tech's as the server's estimates_select says (T33): made by him (created_by), or on a property where
