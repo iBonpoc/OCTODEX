@@ -75,14 +75,30 @@ export const motion = {
   liquidStretch: 160,
   liquidSettle: 420,
   pressScale: 0.95,
+  /** DS §14 (Н-10): a menu grows from this scale to 1 when it opens */
+  menuScale: 0.96,
+  /** DS §14 (Н-11): a dialog shrinks from this scale to 1 when it opens */
+  alertScale: 1.06,
+  /** DS §14.2 (Н-26): one pulse of a skeleton, ms */
+  skeletonCycle: 1800,
   /** Reanimated spring roughly equal to the CSS spring curve above. */
   spring: { damping: 16, stiffness: 220, mass: 0.9 },
   toastUndoMs: 5000,
+  /** DS §15.2 (Н-02): a plain toast stays this long, ms */
+  toastInfoMs: 2600,
+  /** DS Б8 (Н-06): a toast with an action stays this long for a screen-reader user */
+  toastUndoA11yMs: 10000,
+  /** DS §13 (Н-07): a spinner / skeleton shows only after this delay, so a fast load does not flash */
+  spinnerDelayMs: 300,
+  /** DS §7.4 (Н-37): a button in loading says «failed» after this long */
+  actionTimeoutMs: 10000,
   /** app-only: «Отменить» on a toast ignores taps this long after it shows — the second tap of a double tap
    *  must not undo what the first one made (reduced motion shows the toast at once, under the finger) */
   toastArmMs: 300,
   /** app-only (spec 24 A4): delay between columns / bars growing one after another */
   chartStagger: 40,
+  /** DS §14.2 (#brand): the GoRix mark's splash, ms — longer than a chart's growth (durChart), only here */
+  durBrand: 1600,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8 } as const;
@@ -101,6 +117,12 @@ export const component = {
   dockBtn: 36,
   sheetRadius: 24,
   modalW: 380,
+  /** DS Б3 (Н-04): the confirm dialog's max width */
+  alertMaxW: 340,
+  /** DS Б1 (Н-08): a sheet of medium height is this share of the screen */
+  sheetMediumRatio: 0.5,
+  /** DS Б6 (Н-09): a popover's width */
+  popoverW: 360,
   panelW: 360,
   /** side menu on 820/1280 (docs/specs/13 §2.5): icon rail with labels / the open menu. Not in the DS css yet (BACKLOG). */
   navRail: 72,

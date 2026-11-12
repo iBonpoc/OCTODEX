@@ -22,6 +22,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { paymentRight } from "@/features/moneyLists";
 
 const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
 
@@ -47,6 +48,9 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   // 20в: ACH on its way (Stripe has not settled it): shown, never counted as paid
   const pendingCents = (db.pendingPayments ?? []).filter((p) => p.invoiceId === inv.id).reduce((a, p) => a + p.amountCents, 0);
+  // sales: only the whole deposit of an estimate, none while a payment of it is on its way (#868, 17; review of #1061 Б1) —
+  // no part, no reference (the server's deposit function takes neither)
+  const right = paymentRight(store.role, inv, { fromEstimate: !!job?.estimateId, pendingCents });
   const chip = invoiceChip(inv);
   const company = companyForPortal(db, store.companyName ?? "OCTODEX");
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
@@ -116,12 +120,13 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
       </Card>
 
       <RowView style={{ flexWrap: "wrap" }}>
-        {balance > 0 ? (
+        {balance > 0 && right !== "none" ? (
           <Button
             label={t("inv.takePayment")}
             icon="dollar"
             onPress={() => {
-              setAmount(Math.max(0, balance - pendingCents));   // ACH on its way: the rest, not the whole balance (review 20в №7)
+              // ACH on its way: the rest, not the whole balance (review 20в №7); sales — the whole deposit
+              setAmount(right === "wholeDeposit" ? balance : Math.max(0, balance - pendingCents));
               setPay(true);
             }}
           />
@@ -172,16 +177,18 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
 
       <Sheet visible={pay} onClose={() => setPay(false)} title={t("inv.takePayment")}>
         <View style={{ gap: space[3] }}>
-          <Labeled label={t("inv.payAmount", { max: money(balance) })}>
-            <MoneyField cents={amount} onChange={setAmount} />
-          </Labeled>
+          {right === "wholeDeposit" ? null : (
+            <Labeled label={t("inv.payAmount", { max: money(balance) })}>
+              <MoneyField cents={amount} onChange={setAmount} />
+            </Labeled>
+          )}
           {amount > balance ? (
             <T v="caption" tone="warn">
               {t("inv.capped", { max: money(balance) })}
             </T>
           ) : null}
           <ChoiceChips value={method} onChange={setMethod} items={METHODS.map((m) => ({ key: m, label: t(`pay.${m}` as DictKey) }))} />
-          <TextField type="identifier" value={ref} onChangeText={setRef} placeholder={t("inv.reference")} />
+          {right === "wholeDeposit" ? null : <TextField type="identifier" value={ref} onChangeText={setRef} placeholder={t("inv.reference")} />}
           <Button
             label={t("inv.record", { amount: money(Math.min(amount, balance)) })}
             icon="check"

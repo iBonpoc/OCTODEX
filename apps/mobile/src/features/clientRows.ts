@@ -4,6 +4,8 @@
  */
 import { peopleOf } from "@/data/people";
 import type { Customer, CustomerStatus, DB, ID, Job, Role } from "@/data/types";
+import type { Mode } from "@/data/store";
+import { canSeeEstimate } from "@/features/access";
 import { isAssigned } from "@/features/schedule";
 
 /** The rows of the client card, top to bottom (13 §3.3). */
@@ -29,7 +31,8 @@ export function clientRowsFor(role: Role): ClientRow[] {
 }
 
 /** Everything the rows list, already cut to what the role sees. */
-export function clientRecords(db: DB, c: Customer, role: Role) {
+/** `mode`: in the cloud the server already gave the tech only his own (features/access.ts) */
+export function clientRecords(db: DB, c: Customer, role: Role, mode: Mode = "demo") {
   const office = role !== "tech";
   const properties = db.properties.filter((p) => p.customerId === c.id);
   const allJobs = jobsOfClient(db, c.id);
@@ -38,7 +41,8 @@ export function clientRecords(db: DB, c: Customer, role: Role) {
   const leads = office ? db.leads.filter((l) => l.customerId === c.id) : [];
   // notes of the client's leads stay on the client for everyone who sees the client (as before wave 4)
   const leadIds = new Set(db.leads.filter((l) => l.customerId === c.id).map((l) => l.id));
-  const estimates = db.estimates.filter((e) => e.customerId === c.id);
+  // the tech: only the estimates the server shows him (estimates_select; director's review of #1134)
+  const estimates = db.estimates.filter((e) => e.customerId === c.id && canSeeEstimate(db, { role, mode, me: db.me }, e.id));
   const invoices = office ? db.invoices.filter((i) => i.customerId === c.id) : [];
   const receipts = office ? db.payments.filter((p) => p.customerId === c.id) : [];
   const tasks = db.tasks.filter((x) => x.subjectType === "customer" && x.subjectId === c.id);
