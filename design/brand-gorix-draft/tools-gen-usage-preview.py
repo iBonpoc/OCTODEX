@@ -15,15 +15,20 @@ def svg(rel, color=True):
     return s
 
 def v3(n): return svg(f'v3/{n}', color=False).replace('#F2F3F5', 'currentColor').replace('class="dr"', 'class="dr" style="fill:var(--dring)"')
-MARK = v3('mark-calm-dark.svg')
+MARK = svg('v4/gr-mark-dark.svg', color=False).replace('#F2F3F5', 'currentColor')
+GR = svg('v4/gr-dark.svg', color=False).replace('#F2F3F5', 'currentColor')
+GR_L = svg('v4/gr-light.svg', color=False)
+GR_S = svg('v4/gr-small-light.svg', color=False)
+IC_T = svg('v4/gr-icon-tinted.svg', color=False)
+IC_M = svg('v4/gr-icon-mono.svg', color=False)
 MARK_BOLD = v3('mark-bold-dark.svg')
 LOGO = v3('logo-calm-dark.svg')
 LOGO_BOLD = v3('logo-bold-dark.svg')
 GO_BTN = svg('v3/go-button-dark.svg', color=False).replace('fill="#F2F3F5"', 'fill="currentColor"')
 GO_ICON = svg('v3/go-icon.svg', color=False)
 def app_icon(mark, bg='#0B0C0F', ink='#F2F3F5', dot='#FBFF00'):
-    inner = re.sub(r'<svg[^>]*>|</svg>', '', mark).replace('currentColor', ink).replace('var(--dot)', dot).replace('fill:var(--dring)', 'fill:none').replace('#FBFF00', dot)
-    return f'<svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="{bg}"/><g transform="translate(512 512) scale(0.86) translate(-512 -512)">{inner}</g></svg>'
+    inner = mark.replace('<svg ', '<svg width="1024" height="1024" ', 1).replace('currentColor', ink).replace('#FBFF00', dot)
+    return f'<svg viewBox="0 0 1024 1024"><rect width="1024" height="1024" fill="{bg}"/>{inner}</svg>'
 WORD = svg('brand/gorix-wordmark-dark.svg')
 LOGO_V = svg('brand/gorix-logo-vertical-dark.svg')
 MADE = svg('brand/made-with-gorix.svg')
@@ -35,7 +40,7 @@ REFINE = [('Сейчас', svg('brand/gorix-mark-ink-dark.svg', color=False).rep
 DIRS = [('A · Маршрут G', svg('directions/A-route/mark-on-dark.svg', color=False)),
         ('B · Печать GR', svg('directions/B-monogram/mark-on-dark.svg', color=False)),
         ('C · Отвес', svg('directions/C-plumb/mark-on-dark.svg', color=False))]
-MOTION = {k: re.sub(r'<title>.*?</title>', '', (root / f'v3/{f}.svg').read_text()) for k, f in [('intro', 'intro-calm'), ('loading', 'loading-calm'), ('success', 'success-calm')]}
+MOTION = {k: re.sub(r'<title>.*?</title>', '', (root / f'v3/{f}.svg').read_text()) for k, f in [('intro', 'intro-calm'), ('morph', 'intro-to-gr-calm'), ('quick', 'quick-calm'), ('loading', 'loading-calm'), ('success', 'success-calm')]}
 
 def phone(inner, theme):
     return f'<div class="ph t-{theme}"><div class="scr">{inner}</div></div>'
@@ -71,12 +76,12 @@ def placements():
                        'конечный кадр анимации = полный логотип; он же статичная системная заставка'))
     login = lambda logo, note: phone(f'<div class="login">{logo}<div class="in">Email</div><div class="in">Пароль</div><span class="b primary full">Войти</span></div>', 'dark')
     out.append(fig(login(f'<span class="lg" style="width:150px">{LOGO}</span>', ''), 'Вход', 'полный логотип над формой'))
-    out.append(fig(f'<div class="wide t-light"><div class="scr"><div class="side"><span class="mk" style="width:24px">{MARK}</span><i></i><i></i><i></i><i></i></div><div class="lst"><div class="fb">Все · Активные</div><div class="cardr"></div><div class="cardr"></div></div></div></div>',
-                   'Меню слева · 820+', 'знак 24 без слова сверху меню; нажатие → «О приложении»', 300))
+    out.append(fig(f'<div class="wide t-light"><div class="scr"><div class="side"><span class="mk" style="width:40px">{GR}</span><i></i><i></i><i></i><i></i></div><div class="lst"><div class="fb">Все · Активные</div><div class="cardr"></div><div class="cardr"></div></div></div></div>',
+                   'Меню слева · 820+', 'знак GR (высота 24) сверху меню; нажатие → «О приложении»', 300))
     out.append(fig(phone(f'<div class="about"><span class="lg" style="width:140px">{LOGO}</span><p>Версия 1.0.0 · сборка 1072</p><p>hello@gorix.app</p><p>Политика · Условия</p></div>', 'dark'),
                    '«О приложении»', 'полный логотип, статично'))
-    out.append(fig(phone(empty(f'<span class="mk" style="width:48px">{MARK}</span>', 'Страницы нет', 'Возможно, ссылка устарела', 'На главную', 'secondary'), 'light'),
-                   '«Страницы нет»', 'знак 48'))
+    out.append(fig(phone(empty(f'<span class="mk" style="width:80px">{GR}</span>', 'Страницы нет', 'Возможно, ссылка устарела', 'На главную', 'secondary'), 'light'),
+                   '«Страницы нет»', 'знак GR (высота 48)'))
     out.append(fig(phone(f'<div class="pp"><div class="co">ACME Gutters</div><b>Estimate #1042</b><div class="cardr"></div><div class="cardr"></div><span class="b primary full">Sign estimate</span><span class="made" style="width:120px">{MADE}</span></div>', 'light'),
                    'Страница клиента /p/', 'сверху логотип подрядчика; внизу «Made with GoRix» (бесплатный тариф)'))
     out.append(fig(f'<div class="pdf"><div class="co">ACME Gutters</div><b>Estimate #1042</b><div class="ln"></div><div class="ln"></div><div class="ln s"></div><div class="tot">Total $2,850.00</div><span class="made" style="width:110px">{MADE}</span></div>',
@@ -91,10 +96,10 @@ def placements():
 
 motions = [
     ('intro', '(а) Появление — заставка', 'Движется: буква G открывается вдоль своего пути, точка едет впереди → точка встаёт внутри G → выезжает «oRix» → точка перелетает и садится над «i». Буква с первого кадра та же, что в логотипе.',
-     'Где: заставка. Один раз за холодный запуск, только если данных нет в телефоне.', 'durBrand = 1600 мс: G 650, пауза, перелёт к «i» 600 (будет токеном). Конечный кадр = полный логотип = статичная системная заставка, поэтому скачка нет.', 'Без движения: сразу полный логотип.', ''),
-    ('loading', '(б) Ожидание', 'Движется: жёлтая точка в тёмном ободке едет по контуру G по кругу — ободок не даёт ей слиться с буквой. Буква стоит, не вращается.',
-     'Где: только полноэкранные ожидания (первая загрузка после входа, подготовка PDF). Появляется через 300 мс.', 'Цикл 1800 мс (skeletonCycle); 10 с без ответа — «Не получилось · Повторить».', 'Без движения: знак с точкой и слово «Загружаем…».', 'Загружаем…'),
-    ('success', '(в) Готово', 'Движется: начало как у заставки — точка рисует ту же G и встаёт внутри; потом растёт, становится зелёной и в ней прорисовывается галочка.',
+     'Где: заставка. Полная — только при первом запуске и после обновления приложения. Обычный запуск — короткий вход на GR (600 мс), а если данные уже в телефоне — сразу первый экран, без заставки.', 'durBrand = 1600 мс: G 650, пауза, перелёт к «i» 600 (будет токеном). Конечный кадр = полный логотип = статичная системная заставка, поэтому скачка нет.', 'Без движения: сразу полный логотип.', ''),
+    ('loading', '(б) Ожидание', 'Движется: на знаке GR жёлтая точка в тёмном ободке едет по контуру G по кругу — ободок не даёт ей слиться с буквой. Буква стоит, не вращается.',
+     'Где: только полноэкранные ожидания (первая загрузка после входа, подготовка PDF). Появляется через 300 мс.', 'Цикл 1600 мс (durBrand), в концах пути точка гаснет и проявляется за 120 мс — без скачка. Рядом всегда слово «Загружаем…»; 10 с без ответа — «Не получилось · Повторить».', 'Без движения: знак с точкой и слово «Загружаем…».', 'Загружаем…'),
+    ('success', '(в) Готово', 'Движется: на знаке GR, начало как у заставки — точка рисует ту же G и встаёт внутри; потом растёт, становится зелёной и в ней прорисовывается галочка.',
      'Где: одно место — конец настройки новой компании. Один раз.', '1200 мс, тот же темп буквы, что у заставки.', 'Без движения: зелёная галочка и слово.', 'Компания готова'),
 ]
 no_anim = ['Загрузка списка → 300 мс ничего, потом скелетон', 'Кнопка в загрузке → маленький индикатор в кнопке', '«Потянуть, чтобы обновить» → системный индикатор',
@@ -128,7 +133,7 @@ figure{margin:0;flex:none}figcaption{font-size:12.5px;color:var(--mut);margin-to
 .pp{flex:1;display:flex;flex-direction:column;gap:8px}.co{font-weight:800;font-size:12px;border:1px dashed var(--bd);border-radius:8px;padding:6px;text-align:center}
 .pdf{width:200px;height:260px;background:#fff;color:#15161A;border-radius:6px;padding:14px;display:flex;flex-direction:column;gap:6px;font-size:10px;--mut:#575C68;--ink:#15161A;--bd:rgba(20,22,30,.15)}.ln{height:8px;background:#e8e6e1;border-radius:3px}.ln.s{width:60%}.tot{text-align:right;font-weight:700}
 .home{width:200px;padding:16px;border-radius:30px;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.app{aspect-ratio:1;border-radius:22%;background:rgba(255,255,255,.22)}.app.me{overflow:hidden;background:none}.app svg{display:block;width:100%;height:100%}.app.tint svg{filter:sepia(1) saturate(2.2) hue-rotate(-12deg) brightness(.95)}
-.mot{display:grid;grid-template-columns:96px 1fr;gap:12px;border:1px solid var(--bd);border-radius:20px;padding:12px;margin:10px 0;align-items:start;background:var(--bg)}
+.mot{display:grid;grid-template-columns:1fr;gap:12px;border:1px solid var(--bd);border-radius:20px;padding:12px;margin:10px 0;align-items:start;background:var(--bg)}
 .mot .vis{display:flex;flex-direction:column;align-items:center;gap:6px}.mot .vis svg{width:72px;height:72px;display:block}.mot .w{font-size:11px;color:var(--ink);text-align:center}.mot h3{margin:0 0 4px;font-size:15px}.mot p{margin:2px 0;font-size:13px}.mot .mv{color:var(--ink)}
 .mot button{font:inherit;font-size:12px;color:var(--ink);background:var(--surf2);border:1px solid var(--bd);border-radius:999px;padding:4px 10px;min-height:28px}
 body.rm .gx *{animation:none!important}body.rm .gx-load .run{stroke-dasharray:none!important;stroke-dashoffset:0!important}body.rm .gx-load .p{opacity:1!important}
@@ -138,9 +143,9 @@ ul.no{padding-left:18px}ul.no li{color:var(--ink);margin:4px 0;font-size:14px}
 .marks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.mc{border:1px solid var(--bd);border-radius:18px;padding:10px;background:var(--bg)}.mc .big{width:96px;color:var(--ink);margin:0 auto}.mc .big svg{display:block;width:100%;height:auto}
 .mc .sm{display:flex;gap:10px;align-items:flex-end;justify-content:center;margin-top:8px;color:var(--ink)}.mc .sm span svg{display:block;width:100%;height:auto}.mc b{display:block;font-size:12.5px;text-align:center;margin-top:6px}
 .dirs{display:flex;gap:12px}.dirs figure{width:100px}.dirs .ic{width:100px;height:100px;border-radius:22px;overflow:hidden}.dirs .ic svg{display:block;width:100%;height:100%}
-.note{font-size:13px;color:var(--mut)}
+.note{font-size:13px;color:var(--mut)}.ic2{display:inline-block;overflow:hidden}.ic2 svg{display:block;width:100%;height:auto}
 .strip{display:flex;gap:8px;align-items:center;background:var(--surf2);border:1px solid var(--bd);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--ink)}
-.mot .vis svg,.frame svg{width:100%;height:auto}.mot .vis>div{width:80px}
+.mot .vis svg,.frame svg{width:100%;height:auto}.mot .vis>div{width:200px;max-width:100%}
 .gx3.still .draw,.gx3.still .fill,.gx3.still .word{animation:none!important}
 '''
 
@@ -164,19 +169,27 @@ def mark_cards(theme):
 
 out = ['<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">',
        '<title>GoRix — размещение и движение</title><style>', css, '</style></head><body><main>',
-       '<h1>GoRix: где бренд, анимации, пустые экраны</h1><p>Итоговый вариант v3.1, 11.11.2026 · по <code>usage-map.md</code> и дизайн-системе «Наряд». Цвет бренда — главный жёлтый приложения (acc), отдельного цвета нет.</p>',
+       '<h1>GoRix: где бренд, анимации, пустые экраны</h1><p>Итоговый вариант v4, 12.11.2026 · по <code>usage-map.md</code> и дизайн-системе «Наряд». Цвет бренда — главный жёлтый приложения (acc), отдельного цвета нет.</p>',
        '<div class="seg" id="theme"><button aria-pressed="true">Как в системе</button><button data-t="dark" aria-pressed="false">Тёмная</button><button data-t="light" aria-pressed="false">Светлая</button></div>',
-       '<div class="q"><b>Нужно ваше решение (два вопроса):</b><ol><li>Силуэт буквы G: <b>спокойный</b> или <b>смелый</b>? <small>рекомендую спокойный</small></li><li>Направление: <b>«Маршрут с точкой»</b> или <b>«Кнопка Go»</b>? <small>рекомендую «Маршрут с точкой»</small></li></ol><small>Уже решено: цвет = жёлтый приложения; фон иконки почти чёрный; «Made with GoRix» — на бесплатном тарифе.</small></div>',
+       '<div class="q"><b>Решено (12.11):</b> знак — <b>GR</b> из букв логотипа (наша G + R шрифта логотипа, плотнее); у G прямой верхний конец, без косого среза (не похоже на Gatorade); направление — «Маршрут с точкой». Цвет = жёлтый приложения; фон иконки почти чёрный; «Made with GoRix» — на бесплатном тарифе. <small>Нравится или откатить — скажите.</small></div>',
        '<h2>Как выглядит запуск приложения</h2><p>Один приём на весь бренд: <b>жёлтая точка едет по пути и приезжает</b>. Точка буквы G = точка над «i» = точка в анимациях.</p>',
        f'<div class="mot t-dark" style="display:block"><div id="m-launch" style="max-width:340px;margin:8px auto">{MOTION["intro"]}</div><div style="text-align:center"><button data-replay="m-launch">Ещё раз</button> <button id="slow" aria-pressed="false">Медленно ×3</button></div></div>',
        '<div class="row" id="frames">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["intro"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(250, 'буква открывается, точка впереди'), (700, 'G готова, точка внутри'), (800, 'точка выезжает из G'), (1100, 'точка летит, выезжает «oRix»'), (1600, 'точка над «i» — конец')]) + '</div>',
-       '<h2>Полный логотип</h2><p>Знак и есть первая буква — без двойной «G». Высота и толщина как у букв. Знак отдельно — только иконка, фавикон, меню слева.</p>',
-       f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO}</div><b>спокойный · светлый</b></div><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · тёмный</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO_BOLD}</div><b>смелый · светлый</b></div></div>',
-       '<p class="note"><b>Где точка:</b> в логотипе — над «i» (туда она приезжает в заставке); в знаке отдельно (иконка, меню) — внутри G, на конце пути. Это одна и та же точка: знак = логотип до того, как выехало «oRix».</p><p class="note">Спокойный — косой срез начала пути. Смелый — начало пути стрелкой «вперёд». Точка везде жёлтая. На светлом у неё тёмный ободок цвета ink — так жёлтый виден и на светлом.</p>',
-       f'<h3>Знак отдельно: 120 · 32 · 24 · 16</h3><div class="row">' + ''.join(f'<figure style="width:150px"><div class="mc t-dark"><div class="big">{m}</div><div class="sm">' + ''.join(f'<span style="width:{px}px">{m}</span>' for px in (32, 24, 16)) + f'</div><b>{n}</b></div></figure>' for n, m in [('спокойный', MARK), ('смелый', MARK_BOLD)]) + '</div>',
-       '<h2>Второе направление: «Кнопка Go» (эскиз)</h2><p>«Go» в жёлтой пилюле, как главная кнопка приложения, + «Rix» цветом ink. Идея: единственный жёлтый в приложении — главное действие, и бренд — это оно же.</p>',
-       f'<div class="row"><figure style="width:300px"><div class="mc t-dark"><div class="lg" style="width:100%">{GO_BTN}</div></div><figcaption><b>Логотип</b></figcaption></figure><figure style="width:110px"><div class="dirs"><div class="ic">{GO_ICON}</div></div><figcaption><b>Иконка</b></figcaption></figure></div>',
-       '<p class="note">⚠ Риск: логотип выглядит как кнопка. На входе рядом с жёлтой «Войти» будет два жёлтых элемента — это ломает правило «жёлтый = одно главное действие на экране»; там логотип пришлось бы делать без заливки. Поэтому рекомендую «Маршрут с точкой».</p>']
+       '<h2>Из GoRix в GR</h2><p>После заставки логотип сворачивается в знак: «o», «i» и «x» уходят, R подъезжает к G, а точка с «i» возвращается внутрь G. Получается знак GR — тот же, что на иконке.</p>',
+       f'<div class="mot t-dark" style="display:block"><div id="m-morph" style="max-width:340px;margin:8px auto">{MOTION["morph"]}</div><div style="text-align:center"><button data-replay="m-morph">Ещё раз</button></div></div>',
+       '<div class="row">' + ''.join(f'<figure style="width:170px"><div class="t-dark frame" data-t="{t}" style="background:var(--bg);border-radius:14px;padding:14px">{MOTION["morph"]}</div><figcaption><b>{t} мс</b>{c}</figcaption></figure>' for t, c in [(1600, 'логотип готов'), (1850, '«o», «i», «x» уходят, R едет к G, точка летит назад'), (2100, 'точка почти в G'), (2200, 'знак GR — конец')]) + '</div>',
+       '<p class="note"><b>Где:</b> если после заставки данные ещё грузятся, логотип сворачивается в GR, и точка сразу переходит в ожидание (едет по G). Так заставка и ожидание — одно движение. Ещё — ролики и сайт. <b>Время:</b> логотип держится 150 мс, сворачивание 450 мс: уходят «o», «i», «x», R подъезжает к G, точка дугой над R возвращается в G (всего 2,2 с от начала, только при первом запуске и если данные ещё грузятся). Экран готов раньше — сразу растворяемся в первый экран, не ждём конца. Без движения — сразу знак GR.</p>',
+       '<h2>Обычный запуск — 600 мс</h2><p>Полную заставку видят только при первом запуске и после обновления. В обычный запуск, пока данные грузятся, сразу виден знак GR, и точка за 600 мс доезжает по G на своё место. Данные уже в телефоне — сразу первый экран, без анимации.</p>',
+       f'<div class="mot t-dark" style="display:block"><div id="m-quick" style="max-width:200px;margin:8px auto">{MOTION["quick"]}</div><div style="text-align:center"><button data-replay="m-quick">Ещё раз</button></div></div>',
+       '<h2>Полный логотип</h2><p>Знак и есть первая буква — без двойной «G». Высота и толщина как у букв. Отдельно (иконка, фавикон, меню слева) — знак <b>GR</b>: те же G и R, что в слове.</p>',
+       f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{LOGO}</div><b>тёмная тема</b></div><div class="mc t-light"><div class="lg" style="width:100%">{LOGO}</div><b>светлая тема</b></div></div>',
+       '<p class="note"><b>Где точка:</b> в логотипе — над «i» (туда она приезжает в заставке); в знаке GR — внутри G, на конце пути. Это одна и та же точка. Точка везде жёлтая; на светлом у неё ободок цвета ink, чтобы жёлтый был виден.</p>',
+       '<h3>Знак GR</h3>',
+       f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{GR}</div><b>тёмная</b></div><div class="mc t-light"><div class="lg" style="width:100%">{GR_L}</div><b>светлая</b></div></div>',
+       f'<h3>Иконка: 120 · 60 · 40 · 29 · 20</h3><div class="row" style="align-items:flex-end">' + ''.join(f'<span class="ic2" style="width:{px}px;border-radius:{round(px*.22)}px">{ICONS["dark"]}</span>' for px in (120, 60, 40, 29, 20)) + '</div>',
+       f'<h3>Варианты иконки</h3><div class="row" style="align-items:flex-end"><figure style="width:96px"><span class="ic2" style="width:96px;border-radius:21px">{ICONS["dark"]}</span><figcaption><b>обычная</b>iOS и Android</figcaption></figure><figure style="width:96px"><span class="ic2" style="width:96px;border-radius:21px">{IC_T}</span><figcaption><b>тонированная</b>iOS, один цвет</figcaption></figure><figure style="width:96px"><span class="ic2" style="width:96px;border-radius:48px;background:#3a4a5c">{IC_M}</span><figcaption><b>одноцветная</b>Android, тема</figcaption></figure></div>',
+       f'<h3>Мелко на светлом (24 px и меньше)</h3><div class="row" style="align-items:center"><span class="t-light" style="display:inline-block;padding:10px;border-radius:10px;background:var(--bg)"><span class="ic2" style="width:40px">{GR_S}</span></span><span class="t-light" style="display:inline-block;padding:10px;border-radius:10px;background:var(--bg)"><span class="ic2" style="width:28px">{GR_S}</span></span></div><p class="note">На светлом фоне при 24 px и меньше (меню, фавикон) точка цвета ink, без жёлтого: жёлтый в ободке там превращается в соринку. Жёлтая точка — на иконке, заставке, в ожидании и на крупном знаке.</p>',
+       '<p class="note">Скругления и толщина у G и R — как в слове GoRix. Зазор между G и R — как в слове (70): плотнее (30) буквы слипались на 20–29 px. Точка в знаке крупнее (r 85). «Кнопка Go» и силуэты «спокойный/смелый» сняты: выбран знак GR, у G прямой конец.</p>']
 out.append(f'<h2>1. Где виден бренд</h2><p>Бренд — там, где приложение говорит от своего имени. В рабочих экранах знака нет. Клиент подрядчика видит логотип подрядчика. Листайте вбок →</p><div class="row">{placements()}</div>')
 out.append('<p class="note">Нигде больше: ни на кнопках, ни в списках, ни в SMS. Пуш — только иконка, её ставит система.</p>')
 out.append('<h2>2. Анимации знака: три, где и когда</h2><div class="seg" id="rm"><button data-rm="0" aria-pressed="true">С движением</button><button data-rm="1" aria-pressed="false">Уменьшенное движение</button></div>')
@@ -191,7 +204,7 @@ for th in ('dark', 'light'):
     out.append(fig(list_screen(empty(icon(P_CLIENT, 36), 'Клиентов пока нет', 'Клиент появится, когда вы добавите его или превратите лид в клиента', 'Добавить клиента'), th), f'Значок 36 · {"тёмная" if th == "dark" else "светлая"}', 'рекомендую'))
 out.append(fig(list_screen(empty(icon(P_SEARCH, 36), 'В этом отборе пусто', 'Измените отбор или сбросьте его', 'Сбросить фильтр', 'ghost'), 'dark'), 'Ничего не найдено', 'без жёлтой кнопки, «Сбросить фильтр»'))
 out.append(fig(list_screen(empty(icon(P_CLOUD, 36), 'Не получилось загрузить', 'Нет сети. Данные с телефона показаны, новые подтянутся сами', 'Повторить', 'secondary'), 'light'), 'Нет сети / не загрузилось', '«Повторить», без жёлтой кнопки'))
-out.append(fig(phone('<div class="lh"><b>Главная</b></div>' + empty(f'<span class="mk" style="width:48px">{MARK}</span>', 'Начнём с первого клиента', 'Дальше — смета, работа и оплата', 'Добавить клиента') + TABS, 'dark'), 'Новая компания', 'одно из трёх мест со знаком GoRix (48)'))
+out.append(fig(phone('<div class="lh"><b>Главная</b></div>' + empty(f'<span class="mk" style="width:80px">{GR}</span>', 'Начнём с первого клиента', 'Дальше — смета, работа и оплата', 'Добавить клиента') + TABS, 'dark'), 'Новая компания', 'одно из трёх мест со знаком GoRix (48)'))
 out.append(fig(phone('<div class="lh"><b>Требует внимания</b></div>' + empty(ICO_OK, 'Всё сделано', 'Новые дела появятся здесь') + TABS, 'light'), '«Требует внимания» пусто', 'это хорошо: значок «готово» и слово'))
 out.append('</div><p class="note">Нижняя панель — как в приложении: «Главная · План · Чаты · Клиенты · Ещё», «＋» плавает справа над панелью.</p>')
 out.append('<h3>Ширины</h3><p>390 — на всю колонку · 820 — по центру над двумя колонками · 1280 — по центру списка, слева от панели карточки. Блок не шире 560.</p><div class="row">')
