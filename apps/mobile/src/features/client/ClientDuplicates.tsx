@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { router } from "expo-router";
 import { statusIcon } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -21,6 +22,7 @@ export function ClientDupCards({ c }: { c: Customer }) {
   const { db, role } = useStore();
   const { t } = useI18n();
   const [open, setOpen] = useState<ClientDup | null>(null);
+  const held = useHeldSheet(open); // the sheet goes out before it is unmounted (#1163)
   const dups = useMemo(() => (canSeeClientDups(role) ? duplicatesOf(db, c.id) : []), [role, db.customers, db.properties, c.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!dups.length) return null;
   return (
@@ -39,12 +41,12 @@ export function ClientDupCards({ c }: { c: Customer }) {
           />
         ))}
       </CardGrid>
-      {open ? <MergeSheet here={c} other={open.customer} onClose={() => setOpen(null)} /> : null}
+      {held.value ? <MergeSheet here={c} other={held.value.customer} visible={held.visible} onExited={held.onExited} onClose={() => setOpen(null)} /> : null}
     </>
   );
 }
 
-function MergeSheet({ here, other, onClose }: { here: Customer; other: Customer; onClose: () => void }) {
+function MergeSheet({ here, other, onClose, visible, onExited }: { here: Customer; other: Customer; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { db, role } = store;
   const { t } = useI18n();
@@ -74,7 +76,7 @@ function MergeSheet({ here, other, onClose }: { here: Customer; other: Customer;
     toast.show(t("clientDup.notDupDone", { name: other.name }), undo);
   };
   return (
-    <Sheet visible onClose={onClose} title={t("clientDup.sheetTitle")}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("clientDup.sheetTitle")}>
       <T v="caption" tone="mut">
         {t("clientDup.keep")}
       </T>

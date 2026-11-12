@@ -318,17 +318,22 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
       setBusy(false);
     }
   };
-  if (member?.disabled)
-    return (
-      <Sheet visible onClose={close} title={`${t("team.disabled")}: ${member.name}`}>
+  // one Sheet for both kinds: a disabled person's and a working one's — the way out is the same sheet (#1163)
+  const off = !!member?.disabled;
+  return (
+    <Sheet
+      visible={!!member}
+      onClose={close}
+      title={member ? (off ? `${t("team.disabled")}: ${member.name}` : `${t(member.kind === "sub" ? "team.sub" : "team.member.title")}: ${member.name}`) : t("team.member.title")}
+      dirty={off ? undefined : dirty}
+      onSave={off ? undefined : save}
+    >
+      {off ? (
         <View testID="member-sheet" style={{ gap: space[3] }}>
           <T v="body">{t("team.disabledHint")}</T>
           <Button label={t("team.enable")} icon="check" full disabled={busy} onPress={() => setDisabled(false)} />
         </View>
-      </Sheet>
-    );
-  return (
-    <Sheet visible={!!member} onClose={close} title={member ? `${t(member.kind === "sub" ? "team.sub" : "team.member.title")}: ${member.name}` : t("team.member.title")} dirty={dirty} onSave={save}>
+      ) : (
       <View testID="member-sheet" style={{ gap: space[3] }}>
         {member?.kind !== "sub" ? (
           <>
@@ -364,6 +369,7 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
           )
         ) : null}
       </View>
+      )}
     </Sheet>
   );
 }

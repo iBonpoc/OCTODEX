@@ -94,6 +94,14 @@ exports.run = async (h) => {
   await vis("sheet-close").click();
   await gone("the second sheet closes too");
 
+  // a chain: the first sheet's button closes it and opens the next in the same moment — the next shows and takes taps
+  await vis("showcase-sheet-chainA").getByRole("button").first().click();
+  await p.getByTestId("sheet-title").filter({ hasText: "Шаг 1" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+  await vis("showcase-chain-next").getByRole("button").first().click();
+  await p.getByTestId("sheet-title").filter({ hasText: "Шаг 2" }).locator("visible=true").first().waitFor({ timeout: 3000 });
+  await vis("sheet-close").click();
+  await gone("the chain: the second sheet closes too");
+
   // the owner will not close it: it comes straight back, and is asked once per press
   await openSheet("stuck");
   const t0 = await top();

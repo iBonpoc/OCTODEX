@@ -68,6 +68,16 @@ describe("design system: components", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
   });
+  it("a sheet is not cut away when its data goes (#1163): no «<Sheet visible>» that is always open — useHeldSheet / visible={…}", () => {
+    // `<Sheet visible={false}>{null}</Sheet>` as the empty branch keeps the same Sheet mounted (it shows its last render on the way out)
+    const hits = code
+      .filter((f) => {
+        const src = readFileSync(f, "utf8");
+        return /<Sheet\s+visible\s+onClose/.test(src) && !src.includes("<Sheet visible={false}");
+      })
+      .map((f) => relative(ROOT, f));
+    expect(hits).toEqual([]);
+  });
   it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
     const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");
     expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);

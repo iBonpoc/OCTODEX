@@ -8,7 +8,7 @@ import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck";
+type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB";
 
 /** Windows (DS §10): the sheet in every height, with the pinned bottom bar and with a page inside. */
 export function WindowsSection() {
@@ -41,6 +41,7 @@ export function WindowsSection() {
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
         {row("stuck", t("ds.sheet.stuck"), t("ds.sheet.stuckHint"))}
+        {row("chainA", t("ds.sheet.chain"), t("ds.sheet.chainHint"))}
         <View testID="showcase-sheet-empties" style={{ gap: space[1] }}>
           <Button label={t("ds.sheet.empties")} variant="secondary" onPress={() => setItem(t("ds.sheet.emptiesTitle"))} />
           <T v="caption" tone="mut">
@@ -55,6 +56,15 @@ export function WindowsSection() {
           </T>
         </View>
       </Card>
+      <Sheet visible={open === "chainA"} onClose={close} title={t("ds.sheet.chainA")}>
+        <T v="body">{t("ds.sheet.chainBody")}</T>
+        <View testID="showcase-chain-next">
+          <Button label={t("ds.sheet.chainNext")} onPress={() => setOpen("chainB")} />
+        </View>
+      </Sheet>
+      <Sheet visible={open === "chainB"} onClose={close} title={t("ds.sheet.chainB")}>
+        <T v="body">{t("ds.sheet.chainBodyB")}</T>
+      </Sheet>
       <Sheet visible={!!item} onClose={() => setItem(null)} title={item ?? ""}>
         {item ? (
           <>

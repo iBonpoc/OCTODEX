@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { ScrollView, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -33,11 +34,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function CallSheet({ preset, onClose }: { preset: CallPreset | null; onClose: () => void }) {
-  if (!preset) return null;
-  return <CallSheetBody key={`${preset.subjectType ?? ""}-${preset.subjectId ?? ""}-${preset.contactId ?? ""}`} preset={preset} onClose={onClose} />;
+  const h = useHeldSheet(preset);
+  if (!h.value) return null;
+  const p = h.value;
+  return <CallSheetBody key={`${p.subjectType ?? ""}-${p.subjectId ?? ""}-${p.contactId ?? ""}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
-function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () => void }) {
+function CallSheetBody({ preset, onClose, visible, onExited }: { preset: CallPreset; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { db, role } = store;
   const { t } = useI18n();
@@ -70,7 +73,7 @@ function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () =>
   };
 
   return (
-    <Sheet visible onClose={onClose} title={t("w6.call.title")} dirty={!!outcome || !!note.trim() || minutes > 0} onSave={ok ? save : undefined}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("w6.call.title")} dirty={!!outcome || !!note.trim() || minutes > 0} onSave={ok ? save : undefined}>
       <View style={{ gap: space[3] }}>
         <Field label={t("w6.call.to")}>
           {chosen ? (

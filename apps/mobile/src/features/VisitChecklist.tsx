@@ -3,6 +3,7 @@
  * the «Не заполнено: N» sheet. Nothing here locks a step (founder 05.11): the sheet warns and offers «Заполнить» (back to
  * the list) or «Пропустить» (the items are marked skipped — still «not done» — and the step goes on).
  */
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useState } from "react";
 import { View } from "react-native";
 import { haptics } from "@/ui/haptics";
@@ -195,6 +196,7 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
   const [extra, setExtra] = useState("");
   const [extraRequired, setExtraRequired] = useState(true);
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
+  const editHeld = useHeldSheet(editing); // the sheet goes out before it is unmounted (#1163)
   const [picking, setPicking] = useState(false);
   const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const templates = templatesForVisit(v, store.db.checklistTemplates ?? []);
@@ -292,12 +294,12 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
         </View>
       </Sheet>
 
-      {editing ? <EditItemSheet v={v} item={editing} onClose={() => setEditing(null)} /> : null}
+      {editHeld.value ? <EditItemSheet v={v} item={editHeld.value} visible={editHeld.visible} onExited={editHeld.onExited} onClose={() => setEditing(null)} /> : null}
     </View>
   );
 }
 
-function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; onClose: () => void }) {
+function EditItemSheet({ v, item, onClose, visible, onExited }: { v: Visit; item: ChecklistItem; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -317,7 +319,7 @@ function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; on
     if (dirty) say(t("chk3.edited"), store.editVisitItem(v.id, item.id, next));
   };
   return (
-    <Sheet visible onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
       <View testID="chk-edit-sheet" style={{ gap: space[2] }}>
         <TextField label={t("chk3.label")} type="text" value={label} onChangeText={(x) => setLabel(x.slice(0, LABEL_MAX))} />
         <RowView style={{ justifyContent: "space-between" }}>
