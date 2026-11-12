@@ -63,6 +63,7 @@ type Value = {
   setSupplierActive: (id: string, active: boolean) => () => void;
   applySupplierTax: (id: string) => () => void;
   saveCatalogItem: (it: CatalogItem) => () => void;
+  undoTogether: (undos: readonly unknown[]) => () => boolean | undefined;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -137,19 +138,16 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
       root = null;
     }
   });
-  it("archive and «Отменить»: the reverse op follows, the supplier is active again", async () => {
+  it("archive and «Отменить» (while its op waits — the toast is shorter than SEND_AFTER_MS): active again, nothing goes to the server (#1244)", async () => {
     const r = await signedIn();
     const undo = valueOf(r).setSupplierActive(SUP, false);
     await settle();
     expect(supOf(r).active).toBe(false);
-    undo();
+    expect((undo as () => unknown)()).toBe(true);
     await settle();
     expect(supOf(r).active).toBe(true);
     await tick();
-    server.sends.forEach((x) => x.d.resolve());
-    await tick();
-    const sent = server.sends.map((s) => (s.op as unknown as { supplier: Supplier }).supplier.active);
-    expect(sent[sent.length - 1]).toBe(true);
+    expect(server.sends.filter((x) => x.op.k === "supplier.save")).toEqual([]);
   }, 15000);
   it("«Применить налог к N позициям»: the items count with the supplier's tax, a history row each; «Отменить» puts them back", async () => {
     const r = await signedIn();
@@ -163,7 +161,7 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(0);
   });
-  it("«Отменить» after the tax already went to the server: reverse ops put the old tax back there (review SUP1 №1)", async () => {
+  it("«Отменить» after the tax already went to the server: too late — false, the phone shows what the server has (#1244: no reverse op over a price the server brought meanwhile)", async () => {
     const r = await signedIn();
     valueOf(r).saveSupplier({ id: SUP, name: "ABC Supply (test)", taxBps: 1025, active: true });
     const undo = valueOf(r).applySupplierTax(SUP);
@@ -173,17 +171,48 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
     server.sends.forEach((x) => x.d.resolve());
     await tick();
     expect(server.sends.some((x) => x.op.k === "catalog.save" && (x.op.item as CatalogItem).vendorTaxBps === 1025)).toBe(true);
-    undo();
+    const sent = server.sends.length;
+    expect((undo as () => unknown)()).toBe(false);
+    await settle();
+    expect(itemOf(r).vendorTaxBps).toBe(1025);
+    await tick();
+    expect(server.sends.length).toBe(sent);
+  }, 20000);
+  it("the supplier's tax + «Применить» as one «Отменить» (suppliers/[id]: undoTogether): true — the tax 0 on the items and the supplier, nothing sent (the director's 4th review Б1)", async () => {
+    const r = await signedIn();
+    const undoSave = valueOf(r).saveSupplier({ id: SUP, name: "ABC Supply (test)", taxBps: 1025, active: true });
+    await settle();
+    const undoApply = valueOf(r).applySupplierTax(SUP);
+    await settle();
+    expect(itemOf(r).vendorTaxBps).toBe(1025);
+    expect(valueOf(r).undoTogether([undoSave, undoApply])()).toBe(true);
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(0);
-    for (let i = 0; i < 3; i++) {
+    expect(supOf(r).taxBps ?? 0).toBe(0);
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "catalog.save" || x.op.k === "supplier.save")).toEqual([]);
+  }, 15000);
+  it("the same, the item's tax changed since (by hand) → false: nothing goes back, every op stays", async () => {
+    const r = await signedIn();
+    const undoSave = valueOf(r).saveSupplier({ id: SUP, name: "ABC Supply (test)", taxBps: 1025, active: true });
+    await settle();
+    const undoApply = valueOf(r).applySupplierTax(SUP);
+    await settle();
+    valueOf(r).saveCatalogItem({ ...itemOf(r), vendorTaxBps: 500 });
+    await settle();
+    expect(valueOf(r).undoTogether([undoSave, undoApply])()).toBe(false);
+    await settle();
+    expect(itemOf(r).vendorTaxBps).toBe(500);
+    expect(supOf(r).taxBps).toBe(1025);
+    // the queue sends one at a time: all three go
+    for (let k = 0; k < 4; k++) {
       await tick();
-      server.sends.forEach((x) => x.d.resolve());
+      server.sends.filter((x) => !(x as { done?: boolean }).done).forEach((x) => ((x as { done?: boolean }).done = true, x.d.resolve()));
+      await settle();
     }
-    const last = [...server.sends].reverse().find((x) => x.op.k === "catalog.save")!;
-    expect((last.op.item as CatalogItem).vendorTaxBps).toBe(0);
-    expect(last.op).toMatchObject({ costs: { vendorTaxBps: 0 } });
-  }, 20000);
+    expect(server.sends.filter((x) => x.op.k === "supplier.save").length).toBe(1);
+    expect(server.sends.filter((x) => x.op.k === "catalog.save").length).toBeGreaterThanOrEqual(1);
+  }, 30000);
   it("a rename: the new name goes into vendor of its items (sales, the tech and old phones read only that)", async () => {
     const r2 = await signedIn();
     valueOf(r2).saveSupplier({ id: SUP, name: "ABC Supply Co (test)", active: true });

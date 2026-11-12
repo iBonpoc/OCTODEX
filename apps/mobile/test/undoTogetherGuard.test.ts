@@ -18,41 +18,49 @@ const files = (dir: string): string[] =>
 
 /** a loop that calls every undo of a list */
 const LOOP = /\bundos\b[^;\n]*\.forEach\(|\.forEach\(\s*\(?(u\w*)\)?\s*=>\s*\1\(\)\s*\)|for\s*\(const \w+ of [^)]*\bundos\b/;
-/** two undo calls in a row: `undoA(); undoB();` (also `x.undo();`, `undoB?.();`) */
-const ROW = /\b(?:\w+\.)?undo\w*\??\.?\(\);\s*\n\s*(?:if \([^)]*\) )?(?:\w+\.)?undo\w*\??\.?\(\);/i;
+/** a call of an undo-like function: `undo()`, `undoA()`, `x.undo()`, `linked?.()`, `(linked as () => void)()`, `u2?.()` */
+const CALL = String.raw`(?:(?:\(\w+ as [^()]*(?:\(\)[^()]*)*\)|(?:\w+\.)?(?:undo\w*|\w*Undo\w*|linked|u\d+))\??\.?\(\)|unwrite\w*\([^()]*\))`;
+/** two such calls one after another: `a(); b();` (on one line or two, in an if), or `(a(), b())` */
+const ROW = new RegExp(String.raw`${CALL}\s*;\s*(?:if \([^)]*\)\s*)?(?:else\s+)?${CALL}|${CALL}\s*,\s*${CALL}`);
 
-/** on purpose, and why */
-const ALLOWED: Record<string, string> = {
-  // the fallback for an older test store without undoTogether (registry.ts: undoTogether is optional)
-  "modules/gutters/data.ts": "undoAll's fallback",
-  // a client import: each card is its own record — one changed since stays (kept), as the server's undo counts it
-  "features/client/importDemo.ts": "per card, counted as kept",
-  // reverse ops: new changes that always apply, never refused — no half undo (store.tsx saveItemsBoth, saveSupplier)
-  "data/store.tsx#reverse": "saveItemsBoth / saveSupplier reverse ops",
-};
+/**
+ * on purpose, and why — each cut out by its own words, never a whole file (the director's 4th review of #1244)
+ */
+const ALLOWED: { file: string; text: RegExp; why: string }[] = [
+  { file: "modules/gutters/data.ts", text: /\[\.\.\.undos\]\.reverse\(\)\.forEach\(\(u\) => typeof u === "function" && \(u as \(\) => unknown\)\(\)\);/, why: "undoAll's fallback for an older test store without undoTogether" },
+  { file: "features/client/importDemo.ts", text: /for \(const u of job\.undos\.reverse\(\)\) \{/, why: "a client import: each card is its own record — one changed since stays (kept), as the server's undo counts it" },
+  { file: "data/store.tsx", text: /for \(const u of \[\.\.\.undos\]\.reverse\(\)\)/, why: "planTogether itself" },
+  { file: "data/store.tsx", text: /commits\.forEach\(\(f\) => f\(\)\);/, why: "planTogether's commit" },
+];
 
 describe("unit:undoTogetherGuard — several undos only through undoTogether", () => {
   it("no screen or store code takes back several actions one by one", () => {
     const bad: string[] = [];
     for (const f of files(SRC)) {
       const rel = relative(SRC, f).split("\\").join("/");
-      if (ALLOWED[rel]) continue;
       let text = readFileSync(f, "utf8");
-      if (rel === "data/store.tsx") {
-        // the two reverse-op places, cut out by their own words
-        text = text.replace(/\[\.\.\.pairs\]\.reverse\(\)\.forEach\(\(\{ prev, next \}\) => go\(next, prev, back\)\);/, "").replace(/undoItems\(\);\s*\n\s*if \(before\) put\(before\);\s*\n\s*else undoSup\(\);/, "");
-        // planTogether itself runs what is not the store's
-        text = text.replace(/commits\.forEach\(\(f\) => f\(\)\);/, "").replace(/for \(const u of \[\.\.\.undos\]\.reverse\(\)\)/, "");
+      for (const a of ALLOWED) {
+        if (a.file !== rel) continue;
+        expect(a.text.test(text), `${rel}: the allowed place «${a.why}» is gone — take it off the list`).toBe(true);
+        text = text.replace(a.text, "");
       }
-      if (LOOP.test(text) || ROW.test(text)) bad.push(rel);
+      const m = LOOP.exec(text) ?? ROW.exec(text);
+      if (m) bad.push(`${rel}: ${m[0]}`);
     }
     expect(bad).toEqual([]);
   });
   it("the patterns catch what they are for", () => {
     expect(LOOP.test("() => [...undos].reverse().forEach((u) => u())")).toBe(true);
     expect(LOOP.test("for (const u of job.undos.reverse()) u();")).toBe(true);
-    expect(ROW.test("  undoApply();\n  undoSave?.();")).toBe(true);
-    expect(ROW.test("  undoVisit();\n  target.undo();")).toBe(true);
+    for (const x of [
+      "  undoApply();\n  undoSave?.();",
+      "  undoVisit();\n  target.undo();",
+      "() => { undoTech(); undoMove(); }",
+      "() => ((linked as () => void)(), r.undo())",
+      "done(() => (linked?.(), r.undo()), who)",
+      "undo: () => (u2?.(), x.undo())",
+      "      undo();\n      unwriteCatalog(settled.newItems);",
+    ]) expect(ROW.test(x) || LOOP.test(x), x).toBe(true);
     expect(LOOP.test("store.undoTogether(undos)") || ROW.test("store.undoTogether([a, b])")).toBe(false);
   });
 });

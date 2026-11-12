@@ -282,7 +282,7 @@ interface StoreCtx {
   /** «Просмотрено» on the «not done» card */
   reviewVisitMissed: (visitId: ID) => Undo;
   /** a checklist template, whole (new or changed; archive = archivedAt) */
-  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => Undo;
+  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => GuardedUndo;
   /** the company's photo rules (owner, admin) */
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
@@ -390,7 +390,7 @@ interface StoreCtx {
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
   /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
-  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
+  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => GuardedUndo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
   /** #1138: may the person make a NEW estimate at this property (a tech: only where he works, as the server) */
@@ -479,7 +479,7 @@ interface StoreCtx {
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
    *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
    *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
-  saveCatalogItems: (items: CatalogItem[], opts?: { onlyNew?: boolean }) => Undo;
+  saveCatalogItems: (items: CatalogItem[], opts?: { onlyNew?: boolean }) => GuardedUndo;
   readNotices: () => void;
   /** invite a person (demo: added as pending; cloud: email invites come with the email service) */
   inviteMember: (m: { name: string; email?: string; phone?: string; roles: Role[]; kind: "employee" | "sub" }) => Undo;
@@ -1075,6 +1075,9 @@ export function StoreProvider({
         if (done) return "done";
         // dropped by the server as built on a lost base: nothing to take back, the toast just closes (review #374 №2)
         if (oid && deadOps.current.has(oid)) return "dead";
+        // already on its way to the server or there (sent, being sent, or folded into a later op): taking it back on the
+        // phone only would be undone by the next read — too late (the director's 4th review of #1244)
+        if (oid && (inFlight.current === oid || !outboxRef.current.some((x) => x.id === oid))) return null;
         // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays;
         // all or nothing: when a part of it was changed since, nothing is taken back and its op stays in the queue (the
         // toast says it is too late — never a half undo, the director's review of #1244 Б2)
@@ -1292,7 +1295,8 @@ export function StoreProvider({
     return mutate(label, fn, legacy ? { k: "visit.checklist", visitId, checklist: list.map((c) => ({ id: c.id, label: c.label, done: c.done })) } : undefined);
   };
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
-  const noop: Undo = () => {};
+  /** nothing to take back: the toast just closes */
+  const noop: GuardedUndo = () => undefined;
   /** spec 37: an order on the phone and in the queue (header, lines, the lines taken out) */
   const putOrder = (o0: PurchaseOrder, removedLineIds: ID[]): Undo => {
     // the server moves row_version by one per save (a new order: the insert, then the update → 2) — mirrored here so a
@@ -1310,27 +1314,24 @@ export function StoreProvider({
   };
   /**
    * spec 36: change several price-list items at once (a supplier's tax or its new name) — each a catalog.save with its
-   * cost change and the phone's history row; «Отменить» sends the reverse ops (the change may already be on the
-   * server — review SUP1 №1), the last one wins.
+   * cost change and the phone's history row; «Отменить» takes them all back from the phone and the queue, or none
+   * (#1244 Б1).
    */
   const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): Undo => {
     if (!pairs.length) return noop;
     const go = (from: CatalogItem, to: CatalogItem, at: string) => {
       const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);
-      mutate(
+      return mutate(
         "catalog.save",
         (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
         { k: "catalog.save", item: to, costs: catalogCostChange(from, to) },
       );
     };
     const at = new Date().toISOString();
-    pairs.forEach(({ prev, next }) => go(prev, next, at));
-    // not undoOwn, on purpose: the reverse ops are new changes that always apply (no conflict, never a half undo) and reach
-    // the server even when the first save already did (review SUP1 №1)
-    return () => {
-      const back = new Date().toISOString();
-      [...pairs].reverse().forEach(({ prev, next }) => go(next, prev, back));
-    };
+    // «Отменить» takes back the store's own changes, all or none (the director's 4th review of #1244 Б1): a reverse op
+    // wrote each item whole from before and could put back over a price the server brought meanwhile; the ops are still
+    // in the queue while the toast is up (SEND_AFTER_MS is longer than it)
+    return undoTogether(pairs.map(({ prev, next }) => go(prev, next, at)));
   };
   const checkItemFn = (visitId: ID, itemId: ID, done: boolean): Undo => {
     const v = visitOf(visitId);
@@ -2421,23 +2422,15 @@ export function StoreProvider({
           ? itemsOfSupplier(dbRef.current, x.id).filter((it) => it.vendor !== x.name).map((it) => ({ prev: it, next: { ...it, vendor: x.name } }))
           : [];
         const undoItems = saveItemsBoth(renamed);
-        // «Отменить» (rule 5): a new supplier is taken back from the queue (nothing reached the server yet, or it stays
-        // as made); a changed one gets a reverse op — the change may already be on the server
-        // a changed one: reverse ops only (they always apply — not a half undo); a new one: its own undo (nothing to clash)
-        return () => {
-          undoItems();
-          if (before) put(before);
-          else undoSup();
-        };
+        // «Отменить» (rule 5): the supplier and its items' new name, all or none (Б1)
+        return undoTogether([undoSup, undoItems]);
       },
       setSupplierActive: (id, active) => {
         const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
         if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
         const next = { ...x, active };
-        mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? next : y)) }), { k: "supplier.save", supplier: next });
-        // «Отменить» (rule 5): the op may already be on the server — a reverse op, the last one wins
-        return () =>
-          void mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? x : y)) }), { k: "supplier.save", supplier: x });
+        // «Отменить» (rule 5): its own change back while its op waits in the queue (Б1: no reverse op over others' changes)
+        return mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? next : y)) }), { k: "supplier.save", supplier: next });
       },
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;

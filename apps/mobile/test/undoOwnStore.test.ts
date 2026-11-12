@@ -365,6 +365,80 @@ describe("unit:undoOwnStore — undoTogether, the director's 3rd review of #1244
   });
 });
 
+describe("unit:undoOwnStore — the director's 4th review of #1244 Б2: each screen's two parts, the later one changed since → false, nothing back, the ops stay", () => {
+  /** every op the outbox sends, one at a time, answered */
+  const sendAll = async (rounds: number) => {
+    for (let k = 0; k < rounds; k++) {
+      await tick();
+      server.sends.filter((x) => !(x as { done?: boolean }).done).forEach((x) => ((x as { done?: boolean }).done = true, x.d.resolve()));
+      await settle();
+    }
+  };
+  const kinds = () => server.sends.map((x) => x.op.k);
+  it("VisitForm «Перенести» (a new time + new people): the visit moved again since → false", async () => {
+    const r = await signedIn();
+    const v = valueOf(r).db.visits.find((x) => x.step === "scheduled")!;
+    const t1 = new Date(Date.parse(v.start) + 86_400_000).toISOString();
+    const undoMove = call(r, "rescheduleVisit", v.id, t1, v.durationMin);
+    const undoTech = call(r, "assignVisit", v.id, ["m-alex"]);
+    await settle();
+    call(r, "rescheduleVisit", v.id, new Date(Date.parse(v.start) + 2 * 86_400_000).toISOString(), v.durationMin);
+    await settle();
+    expect((call(r, "undoTogether", [undoMove, undoTech]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.visits.find((x) => x.id === v.id)!.assigneeIds).toEqual(["m-alex"]);
+    await sendAll(4);
+    expect(kinds().filter((k) => k.startsWith("visit.")).length).toBeGreaterThanOrEqual(2);
+  }, 30_000);
+  it("lead/new and the gutters LinkSheet (a lead + the module's link to it): the lead changed since → false, the module's change stays", async () => {
+    const co = company();
+    const r = await signedIn({ company: { ...co.company!, modules: { gutters: { enabled: true, trialEndsAt: new Date(Date.now() + 86_400_000).toISOString(), settings: {}, rowVersion: 1 } } } } as Partial<DB>);
+    const src = valueOf(r).db.sources[0]!.id;
+    const lead = call(r, "addLead", { name: "Linked (test)", phone: "(818) 555-0111", city: "Encino", sourceId: src }) as { id: string; undo: () => unknown };
+    const linked = call(r, "moduleOp", "gutters", { kind: "m.save", payload: { m: { id: "m-link" } }, apply: (d: DB) => ({ ...d, moduleData: { ...(d.moduleData ?? {}), gutters: { linked: lead.id } } }) });
+    expect(typeof linked).toBe("function");
+    await settle();
+    call(r, "updateLead", lead.id, { name: "Renamed (test)" });
+    await settle();
+    expect((call(r, "undoTogether", [lead.undo, linked]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.leads.some((l) => l.id === lead.id)).toBe(true);
+    expect((valueOf(r).db.moduleData as { gutters?: { linked?: string } }).gutters?.linked).toBe(lead.id);
+  });
+  it("estimate/new «Сохранить» with new price-list items: the estimate changed since → false — the estimate and its items stay, their ops too", async () => {
+    const r = await signedIn();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const item = { id: "00000000-0000-4000-8000-0000000005d1", kind: "material", name: "From the row (test)", unit: "ea", priceCents: 700 } as CatalogItem;
+    const undoItem = call(r, "saveCatalogItem", item);
+    const doc = { options: [{ id: "o1", name: "Good", lines: [{ id: "l1", name: "From the row (test)", group: "material", quantity: "1", unit: "ea", unitPriceCents: 700, catalogItemId: item.id }] }], settings: DEFAULT_SETTINGS } as unknown as EstimateDoc;
+    const id = "00000000-0000-4000-8000-00000000e0e3";
+    const undoEst = valueOf(r).saveEstimate({ id, customerId: c.id, propertyId: prop.id, title: "With items (test)", doc });
+    await settle();
+    valueOf(r).saveEstimate({ id, customerId: c.id, propertyId: prop.id, title: "Renamed (test)", doc });
+    await settle();
+    expect((call(r, "undoTogether", [undoItem, undoEst]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.catalog.some((x) => x.id === item.id)).toBe(true);
+    expect(valueOf(r).db.estimates.some((e) => e.id === id)).toBe(true);
+    await sendAll(4);
+    expect(kinds()).toContain("catalog.save");
+    expect(kinds()).toContain("estimate.save");
+  }, 30_000);
+  it("client/import (demo) — a card and its name parts: the card renamed since → false, both stay", async () => {
+    const r = await demo();
+    const src = valueOf(r).db.sources[0]!.id;
+    const x = call(r, "addCustomer", { name: "Imported (test)", phone: "(818) 555-0122", sourceId: src, address: "5 Test St", city: "Encino" }) as { id: string; undo: () => unknown };
+    const u2 = call(r, "updateCustomer", x.id, { firstName: "Imported", lastName: "Test" });
+    await settle();
+    call(r, "updateCustomer", x.id, { lastName: "Changed" });
+    await settle();
+    expect((call(r, "undoTogether", [x.undo, u2]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.customers.find((c) => c.id === x.id)?.lastName).toBe("Changed");
+  });
+});
+
 describe("unit:undoOwnStore — the demo: what an action adds is what the store shows (the director's Б3)", () => {
   it("a lead won → «Отменить»: the lead is not won, its client and address are gone (red before: the client had no number)", async () => {
     const r = await demo();
