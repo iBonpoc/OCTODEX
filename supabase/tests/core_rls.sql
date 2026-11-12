@@ -12818,6 +12818,7 @@ select tst.ok((select status = 'draft' from public.estimates where id = 'e193000
 update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T193 the client signs a sent quick estimate on a tech''s phone; a draft is refused'
 
+-- ======================================================================================================================
 -- T194 (#1135): the company's countersignature checks that the person may read the estimate (as sign_estimate_on_site /
 -- accept_on_site). A tech who may sign contracts, on an estimate at a property of nothing of his: «not found» — not signed,
 -- and its status not told.
