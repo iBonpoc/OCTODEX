@@ -103,6 +103,7 @@ exports.run = async (h) => {
   if (!wide) await tid("draw-props").getByRole("button").click();
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await more();
+  await tid("attr-profile-open").click(); // a dropdown (#677)
   h.expect((await radios("attr-profile").count()) === 4, "the panel offers 4 profiles (no Box)");
   await tid("attr-color-open").click(); // folded (founder 09.11)
   h.expect((await radios("attr-color").count()) === 9, "the panel offers the palette's 8 colours and «Без покраски»");
