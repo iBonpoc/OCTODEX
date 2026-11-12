@@ -12,6 +12,7 @@ import { SelectorsSection } from "@/features/showcase/Selectors";
 import { ButtonsSection } from "@/features/showcase/Buttons";
 import { NoticesSection } from "@/features/showcase/Notices";
 import { HapticsSection } from "@/features/showcase/Haptics";
+import { RowsSection } from "@/features/showcase/Rows";
 
 /** One section of the showcase on its own screen (#1150). The id is the registry's `SCREENS[].id`. */
 export default function DesignSystemSection() {
@@ -34,6 +35,7 @@ export default function DesignSystemSection() {
       {s.id === "windows" ? <WindowsSection /> : null}
       {s.id === "notices" ? <NoticesSection /> : null}
       {s.id === "haptics" ? <HapticsSection /> : null}
+      {s.id === "rows" ? <RowsSection /> : null}
     </Screen>
   );
 }
