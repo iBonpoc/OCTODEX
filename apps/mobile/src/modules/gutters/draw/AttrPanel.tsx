@@ -129,16 +129,18 @@ const split = (n: number) => {
 function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);
-  const [ft, setFt] = useState(String(split(cur).ft));
-  const [inc, setInc] = useState(String(split(cur).inch));
-  const [e8, setE8] = useState(split(cur).eighths);
+  // the fields show the length as it is, to the sixteenth: feet, inches (an odd sixteenth rides on them, 5.0625) and eighths
+  const f0 = unitFields(cur, "ftin");
+  const [ft, setFt] = useState(f0.ft);
+  const [inc, setInc] = useState(f0.inc);
+  const [e8, setE8] = useState(f0.e8);
   const [bad, setBad] = useState(false);
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
   useEffect(() => {
-    const x = split(cur);
-    setFt(String(x.ft));
-    setInc(String(x.inch));
-    setE8(x.eighths);
+    const x = unitFields(cur, "ftin");
+    setFt(x.ft);
+    setInc(x.inc);
+    setE8(x.e8);
     setBad(false);
   }, [run.id, cur]);
   const apply = () => {
@@ -155,7 +157,7 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         </View>
         <T v="body" tone="mut">{t(k("ft"))}</T>
         <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
-          <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
+          <TextField type="number" value={inc} onChangeText={setInc} label={t(k("in"))} onSubmit={apply} />
         </View>
         <EighthsText value={e8} testID="attr-length-frac" />
         <T v="body" tone="mut">{t(k("in"))}</T>
@@ -229,11 +231,13 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
   const { t } = useI18n();
   const drawn = start ?? drawnLengthIn(run);
   const [unit, setUnit] = useState<LenUnit>(fmt);
-  const d0 = split(drawn);
-  const [ft, setFt] = useState(String(d0.ft));
-  const [inc, setInc] = useState(String(d0.inch));
-  const [e8, setE8] = useState(d0.eighths);
-  const [one, setOne] = useState(String(drawn));
+  // the fields start from the drawn length IN THE UNIT they open in (#1092 review Б1/Б2): in mm — the millimetres, not the
+  // inches; in feet-inches — to the sixteenth, not the eighth
+  const f0 = unitFields(drawn, fmt);
+  const [ft, setFt] = useState(f0.ft);
+  const [inc, setInc] = useState(f0.inc);
+  const [e8, setE8] = useState(f0.e8);
+  const [one, setOne] = useState(f0.one);
   const [bad, setBad] = useState(false);
   // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
   const canon = useRef(drawn);

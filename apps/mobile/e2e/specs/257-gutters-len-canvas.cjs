@@ -36,6 +36,12 @@ exports.run = async (h) => {
   h.expect((await tid("quick-length-ft").count()) === 0, "mm typed from the start, no feet fields");
   const sheet = await tid("quick-length").innerText();
   h.expect(/\d+ mm/.test(sheet) && !/\d′/.test(sheet), "the window says the drawn length in mm: " + sheet.replace(/\n/g, " | ").slice(0, 120));
+  // #1181 review Б1: the field and the tape start from the drawn length in mm — not from the inches (60 in → «60», «60 mm»)
+  const drawnMm = sheet.match(/(\d+) mm/)[1];
+  const typed = await tid("quick-length-one").locator("input").inputValue();
+  h.expect(typed === drawnMm, `the field holds the drawn length in mm (${typed} vs ${drawnMm})`);
+  const tapeSays = await tid("quick-length-tape-value").innerText();
+  h.expect(tapeSays.includes(drawnMm), `the tape's big value is the drawn length in mm (${tapeSays} vs ${drawnMm})`);
   await skipLength(p);
 
   // the label on the canvas

@@ -63,6 +63,25 @@ describe("typing to 1/16″", () => {
   });
 });
 
+describe("the length window starts from the length as it is (#1181 review Б1/Б2)", () => {
+  it("in mm the field is the millimetres, not the inches", () => {
+    expect(unitFields(60, "mm")).toMatchObject({ one: "1524" });
+    expect(unitFields(60, "cm")).toMatchObject({ one: "152.4" });
+    expect(unitFields(60, "m")).toMatchObject({ one: "1.524" });
+    expect(unitFields(60, "in")).toMatchObject({ one: "60" });
+  });
+  it("5 3/16″ in the fields: editing another field keeps the sixteenth (the old fields showed 5¼)", () => {
+    const f = unitFields(36 + 5.1875, "ftin");
+    expect(f.ft).toBe("3");
+    expect(tapeIn("4", f.inc, f.e8)).toBe(48 + 5.1875);
+    expect(tapeIn(f.ft, "6", f.e8)).toBe(36 + 6 + 0.125 * (f.e8 as number));
+    for (let k = 1; k <= 192; k++) {
+      const g = unitFields(k / 16, "ftin");
+      expect(tapeIn(g.ft, g.inc, g.e8), `${k}/16`).toBe(k / 16);
+    }
+  });
+});
+
 describe("keeping to 1/16″", () => {
   const d = (lengthIn: number): Drawing => ({ runs: [{ id: "a", a: [0, 0], b: [100, 0], lengthIn, attrs: { profile: "k", size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" } }], downspouts: [] });
   it("a run's length survives the store and back to the sixteenth", () => {
