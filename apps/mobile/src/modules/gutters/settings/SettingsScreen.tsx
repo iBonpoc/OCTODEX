@@ -52,7 +52,7 @@ function FieldWarn({ at }: { at: string }) {
 function ChoiceWarn<K extends string>(p: React.ComponentProps<typeof ChoiceChips<K>> & { testID: string }) {
   return (
     <View style={{ gap: space[2] }}>
-      <ChoiceChips {...p} />
+      <ChoiceChips {...p} label={p.label} />
       <FieldWarn at={p.testID} />
     </View>
   );
