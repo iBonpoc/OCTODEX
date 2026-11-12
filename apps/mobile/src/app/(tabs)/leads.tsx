@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
 import { canSeeLead, canSeeLeadCost, filterLeads, isOpenLead, leadStatusView as statusOf, needsNextStep, openTasks, sourceName, waitingMinutes, waitStatus, type LeadFilter } from "@/features/leads";
@@ -74,7 +75,10 @@ function LeadsBoard() {
   const team = people.length > 1 && !(who.length === 1 && who[0] === db.me);
   const toggle = (ids: string[], set: (v: string[]) => void) => (id: string) => set(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   const [picking, setPicking] = useState<Lead | null>(null);
+  const pickHeld = useHeldSheet(picking); // the sheet goes out before it is unmounted (#1163)
+  const pk = pickHeld.value;
   const [calling, setCalling] = useState<Lead | null>(null);
+  const callHeld = useHeldSheet(calling); // the sheet goes out before it is unmounted (#1163)
   /** the same records as the lead page (ContactActions): a call asks «did you get through?», SMS / email count as a reply */
   const contact = (l: Lead) => (a: ContactAction) => {
     openContact(a);
@@ -181,17 +185,18 @@ function LeadsBoard() {
         </>
       )}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
-      {calling ? <CallResultSheet key={calling.id} l={calling} visible onClose={() => setCalling(null)} onAnswered={() => panel.open(calling.id)} /> : null}
-      {picking ? (
+      {callHeld.value ? <CallResultSheet key={`${callHeld.value.id}-${callHeld.opening}`} l={callHeld.value} visible={callHeld.visible} onExited={callHeld.onExited} onClose={() => setCalling(null)} onAnswered={() => panel.open(callHeld.value!.id)} /> : null}
+      {pk ? (
         <StatusPicker
-          visible
+          visible={pickHeld.visible}
+          onExited={pickHeld.onExited}
           onClose={() => setPicking(null)}
-          title={`${t("card.statusTitle")} · ${picking.name}`}
-          options={pickerOptions("lead", picking.status).map((o) => {
+          title={`${t("card.statusTitle")} · ${pk.name}`}
+          options={pickerOptions("lead", pk.status).map((o) => {
             const v = statusOf[o.status as LeadStatus];
             return { key: o.status, tone: v.status, label: t(v.label), current: o.current, enabled: o.enabled, form: o.how === "form" };
           })}
-          onPick={(k) => pickStatus(picking, k)}
+          onPick={(k) => pickStatus(pk, k)}
         />
       ) : null}
     </Screen>

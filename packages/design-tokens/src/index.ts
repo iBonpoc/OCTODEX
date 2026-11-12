@@ -172,9 +172,15 @@ export const component = {
   photoThumb: 72,
   /** bottom sheet: share of the screen height before it is pulled up to full height */
   sheetHeightRatio: 0.88,
-  /** bottom sheet: drag down this far (pt) or this fast (pt/ms) to close */
-  sheetDismissDrag: 120,
-  sheetDismissVelocity: 0.8,
+  /** bottom sheet release rule (DS Б1, from iOS 26.2 measurements, #1163): the sheet goes where it would be in
+   *  `sheetProjectMs` ms (drag + speed × time) — past `sheetDismissRatio` of its height it leaves, else it comes back;
+   *  below `sheetSlowVelocity` (pt/ms) the speed does not count; from `sheetFlickVelocity` (pt/ms) down it always leaves */
+  sheetDismissRatio: 0.5,
+  sheetProjectMs: 100,
+  sheetSlowVelocity: 0.25,
+  sheetFlickVelocity: 1,
+  /** bottom sheet: pull up this far (pt) to open it to full height */
+  sheetExpandDrag: 60,
   /** bottom sheet body: a downward move this long (pt) at the top of the scroll becomes a swipe to close, not a tap */
   sheetBodySlop: 10,
   /** width of the countdown ring around the toast Undo button */
