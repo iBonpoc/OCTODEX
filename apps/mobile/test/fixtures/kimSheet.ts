@@ -25,9 +25,13 @@ const w: P = at(q, -45, ft(25, 7));
 // the separate one: 3′ 5″
 const s0: P = [330, 2700];
 const s1: P = at(s0, 31, ft(3, 5));
-// the small rectangle: 3′ 8″ / 1′ 10″ / 3′ 7″ / 1′ 6″
-const x0: P = [338, 2632];
-const rect = [x0, [x0[0] + ft(3, 8), x0[1]], [x0[0] + ft(3, 8), x0[1] - ft(1, 10)], [x0[0] + 3, x0[1] - ft(1, 10) + 2]] as P[];
+// the small rectangle (the founder's numbers): top 3′ 8″, right 1′ 10″, bottom 3′ 7″, left 1′ 6″ — the left one stops 4″ short
+// of the top, so three corners (bottom-left, bottom-right, top-right) are outside 90° and the fourth is open
+const bl: P = [338, 2610];
+const br: P = [bl[0] + ft(3, 7), bl[1]];
+const tr: P = [br[0], br[1] + ft(1, 10)];
+const tl: P = [tr[0] - ft(3, 8), tr[1]];
+const left: P = [bl[0], bl[1] + ft(1, 6)];
 
 export const kim: Drawing = {
   runs: [
@@ -37,10 +41,10 @@ export const kim: Drawing = {
     r("k4", v1, q),
     r("k5", q, w),
     r("k6", s0, s1),
-    r("k7", rect[0]!, rect[1]!),
-    r("k8", rect[1]!, rect[2]!),
-    r("k9", rect[2]!, [rect[0]![0] + 3, rect[2]![1]]),
-    r("k10", [rect[0]![0] + 3, rect[2]![1]], rect[0]!),
+    r("k7", tr, tl),
+    r("k8", br, tr),
+    r("k9", br, bl),
+    r("k10", bl, left),
   ],
   downspouts: [],
 };
