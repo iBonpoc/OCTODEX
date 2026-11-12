@@ -31,6 +31,7 @@ import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls"
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { canSeeVisit } from "@/features/access";
 import { canTakeVisitPayment } from "@/features/moneyLists";
 
 const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
@@ -66,6 +67,13 @@ export default function VisitScreen() {
       <Screen title={t("visit.title")} back={back}>
         {cancelled ? null : <Empty icon="alert" title={t("clients.empty")} />}
         {cancelAsk}
+      </Screen>
+    );
+  // another tech's visit (#868): no access, as the server would answer
+  if (!canSeeVisit(db, { role: store.role, mode: store.mode, me: db.me }, v.id))
+    return (
+      <Screen title={t("visit.title")} back={back}>
+        <Empty icon="alert" title={t("mny.noAccess")} testID="no-access" />
       </Screen>
     );
 
@@ -130,7 +138,7 @@ export default function VisitScreen() {
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
-    <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
+    <Screen testID="visit-screen" title={customer?.name ?? t("visit.title")} back={back} subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
       <RelatedBlock of={{ type: "visit", id: v.id }} />
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -273,6 +281,7 @@ export default function VisitScreen() {
           </T>
           <Segmented
             full
+            testID="visit-method"
             value={method}
             onChange={setMethod}
             items={[

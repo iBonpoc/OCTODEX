@@ -82,12 +82,17 @@ describe("app tokens mirror the founder's DS css", () => {
   it("drawing canvas sizes", () => {
     expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap") });
   });
+  it("dialog, sheet and popover sizes, the brand splash", () => {
+    expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
+    expect(motion.durBrand).toBe(px("dur-brand"));
+  });
   it("motion", () => {
     expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
     expect([...motion.easeOut]).toEqual(bez("ease-out"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));
     expect([...motion.easeLiquid]).toEqual(bez("ease-liquid"));
+    expect([motion.toastInfoMs, motion.toastUndoA11yMs, motion.spinnerDelayMs, motion.actionTimeoutMs]).toEqual([px("toast-info-ms"), px("toast-undo-a11y-ms"), px("spinner-delay-ms"), px("action-timeout-ms")]);
     expect([motion.menuScale, motion.alertScale, motion.skeletonCycle]).toEqual([parseFloat(v("menu-scale")), parseFloat(v("alert-scale")), px("skeleton-cycle")]);
     expect([motion.liquidStretch, motion.liquidSettle]).toEqual([px("liquid-stretch"), px("liquid-settle")]);
   });

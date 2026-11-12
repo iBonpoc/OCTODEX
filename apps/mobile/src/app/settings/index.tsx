@@ -7,6 +7,7 @@ import { Button, ChoiceChips, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
+import { canSeeShowcase } from "@/features/showcase/access";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
 import { PushSettingsSection } from "@/features/PushSettings";
@@ -20,7 +21,7 @@ import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
  */
 export default function Settings() {
   const { t, lang, setLang } = useI18n();
-  const { online, setOnline, resetDemo, mode } = useStore();
+  const { online, setOnline, resetDemo, mode, role } = useStore();
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
@@ -46,6 +47,14 @@ export default function Settings() {
         <T v="heading">{t("more.language")}</T>
         <Segmented<Lang> full value={lang} onChange={setLang} items={languages.map((l) => ({ key: l.id, label: l.label }))} />
       </Card>
+      {/* «Дизайн-система» (#1093): the showcase — the owner's (and the demo's) view of every token and component */}
+      {canSeeShowcase(mode, role) ? (
+        <Card>
+          <View testID="settings-design-system">
+            <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} onPress={() => router.push("/settings/design-system")} />
+          </View>
+        </Card>
+      ) : null}
       {/* wave 7б-1: personal, the same on every device (docs/specs/03 §12) */}
       <SectionTitle title={t("pref7b.plan")} />
       <Card>

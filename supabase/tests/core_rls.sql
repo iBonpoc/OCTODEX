@@ -12744,6 +12744,40 @@ select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '11910
 \echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
 
 -- ======================================================================================================================
+-- T192 (#1113, П-23/П-44): a tech does not send an estimate to the client — not even his own draft. The app opened the send
+-- sheet by its address (?send=1) for him; the server's answer is the guard: no «sent», no locked version, no client link
+-- (a tech with the link could sign as the client, spec 35 §4д п.10). e1420000-…03 — the T142 draft the tech made.
+-- ======================================================================================================================
+:as_tech_a
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', 'T192tokenTheTechTriesToSend0123456789ab')$q$, '%only the office%',
+  'T192 the tech does not send his own draft');
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', null)$q$, '%only the office%',
+  'T192 …nor without a token of his own');
+select tst.blocked($q$update public.estimates set status = 'sent' where id = 'e1420000-0000-4000-8000-000000000003'$q$, 'T192 the tech does not mark it «sent» by hand');
+select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000003')$q$, '%only the office%', 'T192 the tech gets no client link of it');
+-- a new estimate made «sent» at once, or with a link of his own on it: not sent, no link (director's review of #1134 п.2)
+select tst.fails($q$insert into public.estimates (id, company_id, customer_id, property_id, title, status) values ('e1920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 sent at once', 'sent')$q$,
+  'T192 the tech does not insert an estimate «sent» at once');
+do $$ begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title, public_token) values ('e1920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 own link', 'T192tokenTheTechPutsOnHisDraft0123456789');
+exception when others then null;   -- refused, or kept without the link (t02_public_token_null) — both checked below
+end $$;
+do $$ begin
+  update public.estimates set public_token = 'T192tokenTheTechPutsOnHisDraft0123456789' where id = 'e1420000-0000-4000-8000-000000000003';
+exception when others then null;
+end $$;
+:as_super
+select tst.ok((select status = 'draft' and sent_version_id is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
+  'T192 the draft is still a draft: not sent');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where estimate_id = 'e1420000-0000-4000-8000-000000000003'$q$) = 0, 'T192 …no client link made');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = 'e1920000-0000-4000-8000-000000000001'$q$) = 0, 'T192 …no «sent» estimate inserted');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0
+          and tst.cnt($q$select 1 from public.estimates where public_token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0,
+  'T192 …a link the tech writes himself (on a new draft or his own) is kept nowhere');
+select tst.ok((select locked_at is null and sent_at is null from public.estimate_versions where id = 'e1420000-0000-4000-8000-0000000000a3'), 'T192 …its version not locked');
+:as_office_a
+select tst.ok(public.send_estimate('e1420000-0000-4000-8000-000000000003', null) is not null, 'T192 the office sends it as before');
+\echo 'T192 a tech does not send an estimate to the client (not his own draft either); the office as before'
 -- T193 (#1126): the client signs an older quick estimate on a tech's phone (sign_estimate_on_site). The app no longer stops
 -- at the tech's refused send (42501) — this is the server's door it then relies on: a tech who may sign contracts, not staff,
 -- who sees the estimate (his own): a SENT one is signed; a DRAFT one is refused (only a sent, locked version is signed).
