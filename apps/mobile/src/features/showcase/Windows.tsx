@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { Sheet } from "@/ui/overlays";
@@ -8,13 +8,15 @@ import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages";
+type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck";
 
 /** Windows (DS §10): the sheet in every height, with the pinned bottom bar and with a page inside. */
 export function WindowsSection() {
   const { t } = useI18n();
   const [open, setOpen] = useState<Which>(null);
   const [page, setPage] = useState(1);
+  const [item, setItem] = useState<string | null>(null); // the owner that empties its data when it closes
+  const [asked, setAsked] = useState(0); // how many times the stubborn sheet was asked to close
   const s = SECTIONS.find((x) => x.id === "windows")!;
   const close = () => {
     setOpen(null);
@@ -38,7 +40,40 @@ export function WindowsSection() {
         {row("medium", t("ds.sheet.medium"), t("ds.sheet.mediumHint"))}
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
+        {row("stuck", t("ds.sheet.stuck"), t("ds.sheet.stuckHint"))}
+        <View testID="showcase-sheet-empties" style={{ gap: space[1] }}>
+          <Button label={t("ds.sheet.empties")} variant="secondary" onPress={() => setItem(t("ds.sheet.emptiesTitle"))} />
+          <T v="caption" tone="mut">
+            {t("ds.sheet.emptiesHint")}
+          </T>
+        </View>
       </Card>
+      <Card>
+        <View testID="showcase-sheet-leave">
+          <T v="caption" tone="mut">
+            {t("ds.sheet.leave", { s: String(motion.durBase / 1000).replace(".", t("ds.decimal")) })}
+          </T>
+        </View>
+      </Card>
+      <Sheet visible={!!item} onClose={() => setItem(null)} title={item ?? ""}>
+        {item ? (
+          <>
+            <T v="body">{t("ds.sheet.emptiesBody")}</T>
+            <T v="body">{t("ds.sheet.emptiesBody2")}</T>
+          </>
+        ) : null}
+      </Sheet>
+      <Sheet visible={open === "stuck"} onClose={() => setAsked((n) => n + 1)} title={t("ds.sheet.stuck")}>
+        <T v="body">{t("ds.sheet.stuckBody")}</T>
+        <View testID="showcase-stuck-asked">
+          <T v="caption" tone="mut">
+            {t("ds.sheet.stuckAsked", { n: asked })}
+          </T>
+        </View>
+        <View testID="showcase-stuck-done">
+          <Button label={t("ds.sheet.stuckDone")} onPress={close} />
+        </View>
+      </Sheet>
       <Sheet visible={open === "fit"} onClose={close} title={t("ds.sheet.fit")}>
         <T v="body">{t("ds.sheet.body")}</T>
       </Sheet>

@@ -124,7 +124,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const r = makeEstimate(store, { m, elements: elements ?? [], parts, catalog: store.db.catalog, name: (p) => partName(tc, p, fmt), fallbackTitle: tc("mod.gutters.title"), ...(page ? { page } : {}) });
     if (!r.ok) {
       busy.current = false;
-      toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : "mod.gutters.est.off"));
+      toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : r.reason === "notHere" ? "est.tech.notHere" : "mod.gutters.est.off"));
       return;
     }
     toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);

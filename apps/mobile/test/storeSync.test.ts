@@ -1601,6 +1601,36 @@ describe("unit:storeSync — the demo keeps its data past midnight (the founder'
   });
 });
 
+describe("unit:storeSync — a tech makes an estimate only where he works, and keeps seeing it (#1138)", () => {
+  type W = { db: { me: string; estimates: { id: string; createdBy?: string }[] }; saveEstimate: (e: object) => void };
+  const doc = { options: [{ id: "o-1138", name: "A", lines: [{ id: "l-1138", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }], settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: null } };
+  const saveAs = async (propertyId: string, customerId: string) => {
+    storage.set("octo.role.v1", JSON.stringify("tech"));
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    (valueOf(r) as unknown as W).saveEstimate({ id: "e-1138", customerId, propertyId, title: "T 1138", doc });
+    await settle();
+    return valueOf(r) as unknown as W;
+  };
+  it("at a property with no visit of his (p7): not saved — it would vanish behind «нет доступа» (before: saved)", async () => {
+    const v = await saveAs("p7", "c7");
+    expect(v.db.estimates.some((e) => e.id === "e-1138")).toBe(false);
+  });
+  it("a quick estimate (addEstimate) keeps its author too", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo, the office
+    await settle();
+    const v = valueOf(r) as unknown as { db: { me: string; estimates: { title: string; createdBy?: string }[] }; addEstimate: (e: object) => void };
+    v.addEstimate({ customerId: "c1", propertyId: "p1", title: "Quick 1138", totalCents: 18500, depositCents: 0, status: "draft", lines: [{ name: "Work", qty: "1", totalCents: 18500 }] });
+    await settle();
+    const d = (valueOf(r) as unknown as typeof v).db;
+    expect(d.estimates.find((e) => e.title === "Quick 1138")?.createdBy).toBe(d.me);
+  });
+  it("at his job's property (p1): saved, and its author is him (the server's created_by)", async () => {
+    const v = await saveAs("p1", "c1");
+    expect(v.db.estimates.find((e) => e.id === "e-1138")?.createdBy).toBe(v.db.me);
+  });
+});
+
 describe("unit:storeSync — a tech has an older quick estimate signed on site (#1126)", () => {
   const signAs = async (dbRole: string, status: string) => {
     signIn("u1", "c1");
