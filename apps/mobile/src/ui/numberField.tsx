@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { InputAccessoryView, Platform, View, Keyboard } from "react-native";
+import { InputAccessoryView, Keyboard, Platform, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -9,7 +9,9 @@ import type { FieldBinding } from "./requiredForm";
 import {
   formatBps,
   formatCents,
+  finishText,
   formatWhole,
+  needsResync,
   parseBps,
   parseCents,
   parseQuantity,
@@ -38,8 +40,6 @@ type Common = {
   onNext?: () => void;
   autoFocus?: boolean;
   selectOnFocus?: boolean;
-  /** the text is not a number now (the value did not move): a row that holds it must not close over it */
-  onBad?: (bad: boolean) => void;
 };
 export type NumberFieldProps = Common &
   (
@@ -80,22 +80,21 @@ export function NumberField(props: NumberFieldProps) {
   const [text, setText] = useState(() => spec.toText(spec.value));
   const parsed = spec.parse(text);
   useEffect(() => {
-    const p = spec.parse(text);
-    if (p.state === "ok" ? p.value !== spec.value : !(p.state === "empty" && spec.value === spec.empty)) setText(spec.toText(spec.value));
+    if (needsResync(spec.parse(text), spec.value, spec.empty)) setText(spec.toText(spec.value));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spec.value]);
   const accessoryID = `num-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-  const bad = parsed.state === "bad";
-  const onBad = props.onBad;
-  useEffect(() => {
-    onBad?.(bad);
-    return () => onBad?.(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bad]);
+  // an empty quantity is an error too (a line without a quantity is no line): the screen keeps the last right value, so the
+  // text must not stand empty while the row thinks it is 2.5 — the row cannot close over it (onBad)
+  const needed = props.kind === "qty" && parsed.state === "empty";
+  const bad = parsed.state === "bad" || needed;
   const sign = SIGN[props.kind];
   const unit = props.unit ?? sign.after;
   return (
-    <>
+    <View style={{ gap: space[1] }}>
+      <T v="micro" tone="mut">
+        {props.label}
+      </T>
       <TextField
         type={props.kind === "money" ? "money" : props.kind === "percent" ? "percent" : props.kind === "integer" ? "integer" : "number"}
         value={text}
@@ -110,7 +109,7 @@ export function NumberField(props: NumberFieldProps) {
         a11yLabel={props.unitWord ? `${props.label}, ${props.unitWord}` : props.label}
         prefix={sign.before}
         suffix={unit}
-        error={bad ? t(ERROR_KEY[props.kind]) : undefined}
+        error={needed ? t("num.need.qty") : bad ? t(ERROR_KEY[props.kind]) : undefined}
         field={props.field}
         testID={props.testID}
         autoFocus={props.autoFocus}
@@ -118,12 +117,18 @@ export function NumberField(props: NumberFieldProps) {
         accessoryID={Platform.OS === "ios" ? accessoryID : undefined}
         onSubmit={props.onNext ?? (() => Keyboard.dismiss())}
         onBlurText={() => {
-          const p = spec.parse(text);
+          let p = spec.parse(text);
+          if (p.state === "partial") {
+            const done = finishText(text);
+            p = spec.parse(done);
+            if (p.state === "ok") spec.emit(p.value);
+          }
           if (p.state === "ok") setText(spec.toText(p.value));
+          else if (p.state === "partial") setText("");
         }}
       />
       {Platform.OS === "ios" ? <NumberBar id={accessoryID} onPrev={props.onPrev} onNext={props.onNext} /> : null}
-    </>
+    </View>
   );
 }
 
@@ -133,7 +138,7 @@ function NumberBar({ id, onPrev, onNext }: { id: string; onPrev?: () => void; on
   const { c } = useTheme();
   const arrow = (name: "chevronLeft" | "chevronRight", on: (() => void) | undefined, label: string) => (
     <Press onPress={on} disabled={!on} accessibilityLabel={label} visibleHeight={component.field.phone}>
-      <View style={{ paddingHorizontal: space[3] }}>
+      <View style={{ paddingHorizontal: space[3], minHeight: component.field.phone, justifyContent: "center" }}>
         <Icon name={name} color={on ? c.ink : c.mut} />
       </View>
     </Press>
@@ -141,15 +146,15 @@ function NumberBar({ id, onPrev, onNext }: { id: string; onPrev?: () => void; on
   return (
     <InputAccessoryView nativeID={id}>
       <View
-        testID="number-bar"
-        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: c.ov, paddingHorizontal: space[2], borderTopWidth: component.hairline, borderTopColor: c.bd }}
+        testID={`${id}-bar`}
+        style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", backgroundColor: c.bg, paddingHorizontal: space[2], borderTopWidth: component.hairline, borderTopColor: c.bd }}
       >
         <View style={{ flexDirection: "row" }}>
           {arrow("chevronLeft", onPrev, t("num.prev"))}
           {arrow("chevronRight", onNext, t("num.next"))}
         </View>
         <Press onPress={() => Keyboard.dismiss()} accessibilityLabel={t("num.done")} visibleHeight={component.field.phone}>
-          <View style={{ paddingHorizontal: space[3] }}>
+          <View style={{ paddingHorizontal: space[3], minHeight: component.field.phone, justifyContent: "center" }}>
             <T w="semibold">{t("num.done")}</T>
           </View>
         </Press>
