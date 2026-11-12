@@ -170,6 +170,7 @@ export default function NewJob() {
           {!newClient ? (
             <ChoiceChips
               label={t("job3.new.address")}
+              testID="job-new-address"
               items={[...props.map((p) => ({ key: p.id, label: p.address })), { key: NEW, label: t("job3.new.newAddress") }]}
               value={(propertyId ?? "") as string}
               onChange={(k) => setPropertyId(k)}
@@ -198,6 +199,7 @@ export default function NewJob() {
         {types.length ? (
           <ChoiceChips
             label={t("job3.type")}
+            testID="job-new-type"
             items={types.map((x) => ({ key: x.id, label: x.name ?? (x.seedKey ? t(`job3.jt.${x.seedKey}` as DictKey) : "") }))}
             value={jobTypeId}
             onChange={setJobTypeId}

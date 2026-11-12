@@ -2252,6 +2252,7 @@ export const en: Dict = {
   "ds.choice.a": "First",
   "ds.choice.b": "Second",
   "ds.choice.c": "Third",
+  "ds.select.readonly": "Read only",
   "ds.title": "Design system",
   "ds.intro": "The same tokens and components as the app, as live samples. Theme and width follow this screen — change them in Settings. Each sample shows its token key and the design-system section.",
   "ds.moduleOnly": "Niche module only (the drawing canvas, the tape) — this colour is not used outside it.",

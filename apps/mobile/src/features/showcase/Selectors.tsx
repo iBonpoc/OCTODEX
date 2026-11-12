@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { useI18n } from "@/i18n";
-import { ChoiceChips } from "@/ui/controls";
+import { ChoiceChips, ReadOnly } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
@@ -31,6 +31,9 @@ export function SelectorsSection() {
         <SelectField testID="showcase-select-chosen" label={t("ds.select.unit")} value={unit} items={items} onChange={setUnit} />
         <SelectField testID="showcase-select-empty" label={t("ds.select.unit")} value={none} items={items} onChange={setNone} />
         <SelectField testID="showcase-select-error" label={t("ds.select.unit")} value={err} items={items} onChange={setErr} error={err ? undefined : t("ds.select.error")} />
+        <ReadOnly value>
+          <SelectField testID="showcase-select-readonly" label={t("ds.select.readonly")} value="ft" items={items} onChange={() => {}} />
+        </ReadOnly>
         <SelectField testID="showcase-select-long" label={t("ds.select.twelve")} value={long} items={MANY.map((m) => ({ key: m, label: m }))} onChange={setLong} />
       </Card>
       <Card>

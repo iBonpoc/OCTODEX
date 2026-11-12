@@ -22,11 +22,8 @@ import { offsetToShow } from "./segmentedScroll";
  * Inside <ReadOnly value> fields do not take text and choice controls do not change (shown dimmed, a11y disabled).
  * Off by default — every existing screen behaves as before. Buttons that save are hidden by the screen itself.
  */
-const ReadOnlyCtx = createContext(false);
-export function ReadOnly({ value, children }: { value: boolean; children: ReactNode }) {
-  return <ReadOnlyCtx.Provider value={value}>{children}</ReadOnlyCtx.Provider>;
-}
-export const useReadOnly = () => useContext(ReadOnlyCtx);
+export { ReadOnly, useReadOnly } from "./readOnly";
+import { useReadOnly } from "./readOnly";
 export { fieldSpec, type FieldType } from "./fieldTypes";
 
 /* ---------- Button (DS: visible ≤ 36, hit 44) ---------- */
@@ -213,6 +210,7 @@ export function Segmented<K extends string>({
   scroll,
   testID,
   radio,
+  label,
 }: {
   items: { key: K; label: string }[];
   value: K;
@@ -224,6 +222,8 @@ export function Segmented<K extends string>({
   scroll?: boolean;
   /** a choice of a value in a form (not tabs of a screen): read as a radio group (#1095: ChoiceChips with a few options) */
   radio?: boolean;
+  /** what the group is a choice of — read with the group (the caption above it is not tied to it) */
+  label?: string;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -268,6 +268,7 @@ export function Segmented<K extends string>({
   const bar = (
     <View
       accessibilityRole={radio ? "radiogroup" : "tablist"}
+      accessibilityLabel={label}
       style={{
         height: h,
         padding: pad,
@@ -303,6 +304,8 @@ export function Segmented<K extends string>({
               height: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
+              // a choice in a form never grows past its card: the labels give way, they do not push the segment out
+              ...(radio ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,
               backgroundColor: !ready && sel ? c.surf2 : "transparent",
               borderWidth: !ready && sel ? 1 : 0,
@@ -605,8 +608,8 @@ export function Stepper({
 }
 
 /* ---------- ChoiceChips: wrapping single choice (when a segmented control would overflow) ---------- */
-/** a choice that fits one line as a segment: up to 4 options with up to 40 characters in all (DS А2, #1095) */
-export const fitsSegment = (labels: string[]) => labels.length <= 4 && labels.reduce((n, l) => n + l.length, 0) <= 40;
+export { fitsSegment } from "./segmentFit";
+import { fitsSegment } from "./segmentFit";
 
 export function ChoiceChips<K extends string>({
   items,
@@ -614,21 +617,24 @@ export function ChoiceChips<K extends string>({
   onChange,
   nowrap,
   label,
+  testID,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   /** one line (put inside a horizontal ScrollView) */
   nowrap?: boolean;
+  /** a segment gives each option `<testID>-<key>`; a field — `<testID>` (the row), `<testID>-button`, `<testID>-<key>` (menu items) */
+  testID?: string;
   /** the field's name: the row of a `SelectField` when the options do not fit one line */
   label?: string;
 }) {
   // never a second line of chips (#1095): a few short options — a segment in one line, otherwise a field with a menu.
   // Screens move over one by one, each naming its field with `label` (test/chipsLabel.test.ts keeps the list of the
   // others from growing); without `label` — and in a horizontal scroll (`nowrap`) — the chips are as they were.
-  if (nowrap || label === undefined) return <ChipsRow items={items} value={value} onChange={onChange} nowrap={nowrap} />;
+  if (nowrap || !label) return <ChipsRow items={items} value={value} onChange={onChange} nowrap={nowrap} />;
   if (fitsSegment(items.map((i) => i.label))) {
-    const seg = <Segmented radio full items={items} value={value} onChange={onChange} />;
+    const seg = <Segmented radio full label={label} testID={testID} items={items} value={value} onChange={onChange} />;
     // with a `label` the field names itself: a caption over the segment, the row's label in a field
     return label ? (
       <View style={{ gap: space[1] }}>
@@ -641,7 +647,7 @@ export function ChoiceChips<K extends string>({
       seg
     );
   }
-  return <SelectField label={label ?? ""} value={value} items={items} onChange={onChange} />;
+  return <SelectField label={label} testID={testID} value={value} items={items} onChange={onChange} />;
 }
 
 /** the chips of one line, inside a horizontal scroll (filters) */

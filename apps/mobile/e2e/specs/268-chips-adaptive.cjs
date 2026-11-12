@@ -17,13 +17,18 @@ exports.run = async (h) => {
   h.expect((await vis("showcase-choice-many").getByRole("radio").count()) === 0, "six options: no chips");
   h.expect((await vis("showcase-choice-many").getByRole("button").count()) === 1, "six options: one field");
 
+  // under <ReadOnly> a field does not open (#1095 review: the settings only the director changes)
+  const ro = vis("showcase-select-readonly");
+  await ro.getByRole("button").first().click({ force: true }).catch(() => {});
+  h.expect((await p.getByRole("menu").locator("visible=true").count()) === 0, "a read-only field does not open its menu");
+
   await h.go("/expense/new");
-  for (const name of ["Где купили", "Категория", "К какой работе"]) {
-    h.expect((await p.getByRole("button", { name: new RegExp(`^${name}`) }).locator("visible=true").count()) === 1, `«${name}» is a field`);
+  for (const id of ["expense-vendor", "expense-category", "expense-job"]) {
+    h.expect((await vis(`${id}-button`).count()) === 1, `${id} is a field`);
   }
-  h.expect((await p.getByRole("radio", { name: "Бензин", exact: true }).count()) === 0, "no chip «Бензин»");
-  await p.getByRole("button", { name: /^Категория/ }).locator("visible=true").first().click();
-  await p.getByRole("menuitem", { name: "Бензин", exact: true }).locator("visible=true").last().click();
+  h.expect((await p.getByRole("radio").locator("visible=true").count()) === 0, "no chips on «Новый расход»");
+  await vis("expense-category-button").click();
+  await p.getByTestId("expense-category-fuel").locator("visible=true").last().click();
   await p.getByRole("menu").locator("visible=true").waitFor({ state: "detached", timeout: 3000 });
-  await p.waitForFunction(() => [...document.querySelectorAll('[aria-label^="Категория"]')].some((e) => e.textContent?.includes("Бензин")), null, { timeout: 3000 });
+  await p.waitForFunction(() => /Бензин/.test(document.querySelector('[data-testid="expense-category-button"]')?.getAttribute("aria-label") ?? ""), null, { timeout: 3000 });
 };

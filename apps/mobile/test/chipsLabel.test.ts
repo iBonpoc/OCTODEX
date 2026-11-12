@@ -47,11 +47,19 @@ describe("ChoiceChips name their field (#1095)", () => {
   for (const f of files) {
     for (const { tag, line } of chipTags(readFileSync(f, "utf8"))) {
       all++;
-      if (!/\blabel=/.test(tag.replace(/\blabel:/g, "")) && !/\bnowrap\b/.test(tag)) legacy.push(`${relative(ROOT, f)}:${line}`);
+      const t = tag.replace(/\blabel:/g, "");
+      // `label={undefined}` and `label=""` are not a name: the chips stay the old ones (ChoiceChips takes them as no label too)
+      const named = /\blabel=/.test(t) && !/\blabel=\{\s*(undefined|null|"")\s*\}/.test(t) && !/\blabel=""/.test(t);
+      if (!named && !/\bnowrap\b/.test(t)) legacy.push(`${relative(ROOT, f)}:${line}`);
     }
   }
   it("the old chips (no label, not in a horizontal scroll) do not grow", () => {
     expect(legacy.length, `new <ChoiceChips> needs label=; the old ones:\n${legacy.join("\n")}`).toBeLessThanOrEqual(LEGACY_MAX);
+  });
+  it("`label={undefined}` and an empty label do not get around it", () => {
+    const sample = (tag: string) => chipTags(tag)[0]!.tag;
+    expect(/\blabel=\{\s*(undefined|null|"")\s*\}/.test(sample('<ChoiceChips label={undefined} items={x} />'))).toBe(true);
+    expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
     expect(all).toBeGreaterThan(80);

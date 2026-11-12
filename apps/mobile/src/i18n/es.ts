@@ -2252,6 +2252,7 @@ export const es: Dict = {
   "ds.choice.a": "Primera",
   "ds.choice.b": "Segunda",
   "ds.choice.c": "Tercera",
+  "ds.select.readonly": "Solo lectura",
   "ds.title": "Sistema de diseño",
   "ds.intro": "Los mismos tokens y componentes de la app, como muestras en vivo. El tema y el ancho siguen a esta pantalla: cámbialos en Ajustes. Cada muestra indica su clave de token y la sección del sistema de diseño.",
   "ds.moduleOnly": "Solo del módulo de nicho (lienzo del dibujo, cinta): este color no se usa fuera de él.",

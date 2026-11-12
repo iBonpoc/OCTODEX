@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu, type MenuItem } from "./overlays";
 import { Icon, Press, T } from "./primitives";
+import { useReadOnly } from "./readOnly";
 
 /**
  * One of 5–12 values, kept in a form row (DS А2, #947): a row — the label on the left, the value (`mut`) and a chevron
@@ -35,24 +36,26 @@ export function SelectField<K extends string>({
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
+  const ro = useReadOnly();
   const ref = useRef<React.ComponentRef<typeof View>>(null);
   const [anchor, setAnchor] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const chosen = items.find((i) => i.key === value);
   const shown = chosen?.label ?? placeholder ?? t("ui.select.choose");
-  const menu: MenuItem<K>[] = items.map((i) => ({ key: i.key, label: i.label, selected: i.key === value }));
+  const menu: MenuItem<K>[] = items.map((i) => ({ key: i.key, label: i.label, selected: i.key === value, testID: testID ? `${testID}-${i.key}` : undefined }));
   const open = () => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h }));
   return (
     <View style={{ gap: space[1] }} testID={testID}>
       <View ref={ref} collapsable={false}>
         <Press
+          testID={testID ? `${testID}-button` : undefined}
           onPress={open}
-          disabled={disabled}
+          disabled={disabled || ro}
           visibleHeight={size.fieldPhone}
           accessibilityRole="button"
           // the web reads the label instead of the button's text and ignores the value: the chosen one goes into the label
           accessibilityLabel={Platform.OS === "web" ? `${label}, ${shown}` : label}
           accessibilityValue={{ text: shown }}
-          accessibilityState={{ expanded: !!anchor, disabled: !!disabled }}
+          accessibilityState={{ expanded: !!anchor, disabled: !!(disabled || ro) }}
           aria-haspopup="menu"
           style={{
             minHeight: size.fieldPhone,

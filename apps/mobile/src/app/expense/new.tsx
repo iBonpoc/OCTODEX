@@ -50,9 +50,9 @@ export default function NewExpense() {
             {t("exp.aiNote")}
           </T>
           <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" />
-          <ChoiceChips label={t("exp.vendor")} value={vendor} onChange={setVendor} items={VENDORS.map((v) => ({ key: v, label: v }))} />
-          <ChoiceChips<ExpenseCategory> label={t("exp.category")} value={category} onChange={setCategory} items={CATS.map((c) => ({ key: c, label: t(`exp.cat.${c}`) }))} />
-          <ChoiceChips label={t("exp.job")} value={jobId} onChange={setJobId} items={jobs} />
+          <ChoiceChips label={t("exp.vendor")} testID="expense-vendor" value={vendor} onChange={setVendor} items={VENDORS.map((v) => ({ key: v, label: v }))} />
+          <ChoiceChips<ExpenseCategory> label={t("exp.category")} testID="expense-category" value={category} onChange={setCategory} items={CATS.map((c) => ({ key: c, label: t(`exp.cat.${c}`) }))} />
+          <ChoiceChips label={t("exp.job")} testID="expense-job" value={jobId} onChange={setJobId} items={jobs} />
         </View>
       </Card>
       {!ok ? <T v="caption" tone="mut">{t("exp.need")}</T> : null}

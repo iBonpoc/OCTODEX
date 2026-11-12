@@ -34,8 +34,8 @@ exports.run = async (h) => {
   await p.waitForTimeout(400);
   await p.getByTestId("job-new-title").locator("visible=true").locator("input").last().fill("Downspout reattach");
   // «Тип работы» — five options: a field with a menu at the row (#1095)
-  await p.getByRole("button", { name: /^Тип работы/ }).locator("visible=true").last().click();
-  await p.getByRole("menuitem", { name: "Ремонт", exact: true }).locator("visible=true").last().click();
+  await p.getByTestId("job-new-type-button").locator("visible=true").last().click();
+  await p.getByTestId("job-new-type-jt-repair").locator("visible=true").last().click();
   await p.getByRole("tab", { name: "Дата и время", exact: true }).last().click();
   const dayOffset = workdayOffset(3);
   await p.getByRole("radiogroup").filter({ has: p.getByRole("radio", { name: "Сегодня" }) }).first().getByRole("radio").nth(dayOffset).click();

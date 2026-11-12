@@ -48,6 +48,7 @@ export interface MenuItem<K extends string> {
   icon?: IconKey;
   selected?: boolean;
   destructive?: boolean;
+  testID?: string;
 }
 export function Menu<K extends string>({
   visible,
@@ -138,6 +139,7 @@ export function Menu<K extends string>({
           {items.map((it) => (
             <Press
               key={it.key}
+              testID={it.testID}
               onPress={() => picker.pick(it.key)}
               visibleHeight={size.hitMin}
               accessibilityRole="menuitem"

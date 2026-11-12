@@ -116,6 +116,7 @@ export default function SupplierScreen() {
       <Card>
         <ChoiceChips<TermsKey>
           label={t("sup.terms")}
+          testID="supplier-terms"
           value={terms}
           onChange={(k) => set({ terms: k === "none" ? undefined : k })}
           items={[{ key: "none", label: t("sup.terms.none") }, ...PAYMENT_TERMS.map((k) => ({ key: k as TermsKey, label: t(`sup.terms.${k}` as DictKey) }))]}
