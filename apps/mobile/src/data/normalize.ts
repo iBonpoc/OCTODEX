@@ -27,9 +27,20 @@ function withLists(d: DB): DB {
   return missing.length ? ({ ...d, ...Object.fromEntries(missing.map((k) => [k, []])) } as DB) : d;
 }
 
+/** a list of the wrong type (an object, a text) is as if missing: never `.map` on it (code-reviewer of #1189 №8) */
+function withoutBadLists(d: DB): DB {
+  listKeys ??= Object.entries(makeSeed()).filter(([, v]) => Array.isArray(v)).map(([k]) => k);
+  const r = d as unknown as Record<string, unknown>;
+  const bad = listKeys.filter((k) => r[k] !== undefined && !Array.isArray(r[k]));
+  if (!bad.length) return d;
+  const out = { ...r };
+  for (const k of bad) delete out[k];
+  return out as unknown as DB;
+}
+
 export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
   // the lists it does not build itself, filled at the end (what it builds from older fields — jobs from visits — first)
-  return withLists(normalizeFields(d, mode));
+  return withLists(normalizeFields(withoutBadLists(d), mode));
 }
 
 function normalizeFields(d: DB, mode: "demo" | "cloud"): DB {

@@ -11,12 +11,16 @@ vi.mock("react", () => import("./support/miniReact"));
 const storage = new Map<string, string>();
 /** reads of these keys fail (SQLITE_BUSY) — a number: that many times */
 const failing = new Map<string, number>();
+/** reads of these keys wait for the promise (a slow device: the copy is under way) */
+const holdReads = new Map<string, Promise<void>>();
 /** the device's room in characters (the web's localStorage ~5 MB); null — no limit */
 let quota: number | null = null;
 const used = () => [...storage.entries()].reduce((s, [k, v]) => s + k.length + v.length, 0);
 vi.mock("@react-native-async-storage/async-storage", () => ({
   default: {
     getItem: async (k: string) => {
+      const h = holdReads.get(k);
+      if (h) await h;
       const n = failing.get(k) ?? 0;
       if (n > 0) {
         failing.set(k, n - 1);
@@ -29,11 +33,14 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
       storage.set(k, v);
     },
     getAllKeys: async () => [...storage.keys()],
+    removeItem: async (k: string) => void storage.delete(k),
     multiRemove: async (ks: string[]) => ks.forEach((k) => storage.delete(k)),
   },
 }));
 import { render, settle } from "./support/miniReact";
-import { BROKEN_KEEP, READ_TRIES, STORAGE_LOG_KEY, keepBrokenCopy, usePersistentState } from "../src/data/persist";
+import { BROKEN_KEEP, BROKEN_MAX_CHARS, READ_TRIES, STORAGE_LOG_KEY, flushAllWriters, forgetDeviceState, keepBrokenCopy, noteStorageLoss, usePersistentState } from "../src/data/persist";
+import { normalizeDB } from "../src/data/normalize";
+import { makeSeed } from "../src/data/seed";
 
 type V = { db: { items: string[] } };
 const K = "octo.db.v5";
@@ -42,8 +49,29 @@ const Comp = () => usePersistentState<V>(K, { db: { items: ["fresh"] } }, { vali
 type Out = ReturnType<typeof usePersistentState<V>>;
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+const logOf = () => JSON.parse(storage.get(STORAGE_LOG_KEY) ?? "[]") as { key: string; at: string; what: string }[];
+type Gate = { open: () => void };
+const gateReads = (k: string): Gate => {
+  let open!: () => void;
+  holdReads.set(k, new Promise<void>((r) => (open = r)));
+  return { open: () => (holdReads.delete(k), open()) };
+};
+/** a hook whose read failed every try: loaded, empty, the first write owes a copy */
+async function afterFailedRead(Hook: () => unknown = Comp): Promise<{ out: () => Out; unmount: () => void; rerender?: unknown }> {
+  storage.set(K, JSON.stringify({ db: { items: ["the person's own"] } }));
+  failing.set(K, READ_TRIES);
+  const root = render(Hook as () => Out, {});
+  for (let i = 0; i < 40 && !(root.out as Out)[2]; i++) {
+    await wait(200);
+    await settle();
+  }
+  expect((root.out as Out)[2]).toBe(true);
+  return { out: () => root.out as Out, unmount: () => root.unmount() };
+}
+
 beforeEach(() => {
   storage.clear();
+  holdReads.clear();
   failing.clear();
   quota = null;
 });
@@ -118,9 +146,136 @@ describe("unit:persistKeep — #1189", () => {
     quota = used() + 200;
     expect(await keepBrokenCopy(K, big, 3)).toBe(true);
     expect(copies().map(([k]) => k)).toEqual([`octo.broken.${K}.3`]);
-    quota = used() + 10;
     storage.clear();
     quota = 10;
     expect(await keepBrokenCopy(K, big, 4)).toBe(false);
+  });
+});
+
+describe("unit:persistKeep — the code-reviewer of #1189", () => {
+  it("№1: the account is deleted while the copy is under way — neither the copy nor the old person's record lands", async () => {
+    const h = await afterFailedRead();
+    const gate = gateReads(K);
+    h.out()[1]({ db: { items: ["new"] } });
+    await settle();
+    await wait(300);
+    // the wipe: the device's keys go, the states forget
+    storage.clear();
+    forgetDeviceState(() => true);
+    gate.open();
+    await settle();
+    await wait(400);
+    expect([...storage.keys()]).toEqual([]);
+    h.unmount();
+    await wait(50);
+    expect([...storage.keys()]).toEqual([]);
+  }, 20_000);
+  it("№1: a copy whose write ends after the wipe goes too", async () => {
+    let release!: () => void;
+    const slow = new Promise<void>((r) => (release = r));
+    const store = await import("@react-native-async-storage/async-storage");
+    const real = store.default.setItem;
+    store.default.setItem = (async (k: string, v: string) => {
+      if (k.startsWith("octo.broken.")) await slow;
+      return real(k, v);
+    }) as typeof real;
+    try {
+      const p = keepBrokenCopy(K, "old", 7);
+      await wait(10);
+      forgetDeviceState(() => true);
+      release();
+      expect(await p).toBe(false);
+      expect(copies()).toEqual([]);
+    } finally {
+      store.default.setItem = real;
+    }
+  });
+  it("№2: changes made during the copy are written in order, the last last — and a flush (the app leaves) does not lose them", async () => {
+    const h = await afterFailedRead();
+    const gate = gateReads(K);
+    h.out()[1]({ db: { items: ["a"] } });
+    await settle();
+    h.out()[1]({ db: { items: ["b"] } });
+    await settle();
+    flushAllWriters();
+    h.out()[1]({ db: { items: ["c"] } });
+    await settle();
+    await wait(300);
+    expect(JSON.parse(storage.get(K)!).db.items).toEqual(["the person's own"]);
+    gate.open();
+    await settle();
+    await wait(400);
+    expect(JSON.parse(storage.get(K)!)).toEqual({ db: { items: ["c"] } });
+    expect(copies().map(([, v]) => JSON.parse(v).db.items)).toEqual([["the person's own"]]);
+    h.unmount();
+  }, 20_000);
+  it("№2: unmounted (a key change, the store fell back) during the copy: the last change still lands on its key", async () => {
+    const h = await afterFailedRead();
+    const gate = gateReads(K);
+    h.out()[1]({ db: { items: ["last"] } });
+    await settle();
+    h.unmount();
+    gate.open();
+    await settle();
+    await wait(100);
+    expect(JSON.parse(storage.get(K)!)).toEqual({ db: { items: ["last"] } });
+  }, 20_000);
+  it(`№3: all caches' copies stay within ${BROKEN_MAX_CHARS} characters — the oldest go first and are noted; a larger one is not kept`, async () => {
+    const third = "x".repeat(Math.floor(BROKEN_MAX_CHARS / 3));
+    expect(await keepBrokenCopy("octo.cloud.v1.a", third, 1)).toBe(true);
+    expect(await keepBrokenCopy("octo.cloud.v1.b", third, 2)).toBe(true);
+    expect(await keepBrokenCopy(K, third, 3)).toBe(true);
+    expect(await keepBrokenCopy(K, third, 4)).toBe(true);
+    const all = [...storage.keys()].filter((k) => k.startsWith("octo.broken.")).sort();
+    expect(all).toEqual(["octo.broken.octo.cloud.v1.b.2", `octo.broken.${K}.3`, `octo.broken.${K}.4`]);
+    await wait(10);
+    expect(logOf().map((x) => x.what)).toEqual([expect.stringMatching(/removed for room: octo\.broken\.octo\.cloud\.v1\.a\.1/)]);
+    expect(await keepBrokenCopy(K, "x".repeat(BROKEN_MAX_CHARS + 1), 5)).toBe(false);
+    await wait(10);
+    expect(logOf().at(-1)!.what).toMatch(/too large/);
+  });
+  it("№4: the outbox's copies (strict, «Сохранить копию») are never cut or removed for a cache's copy", async () => {
+    for (let i = 1; i <= 5; i++) expect(await keepBrokenCopy("octo.outbox.v1", `ops${i}`, i, { whole: true })).toBe(true);
+    const half = "x".repeat(Math.floor(BROKEN_MAX_CHARS / 2) + 10);
+    await keepBrokenCopy(K, half, 10);
+    await keepBrokenCopy(K, half, 11);
+    expect(copies("octo.outbox.v1").length).toBe(5);
+    expect(copies().map(([k]) => k)).toEqual([`octo.broken.${K}.11`]);
+  });
+  it("№5: the record written over is found by the log: its copy's key is noted", async () => {
+    const h = await afterFailedRead();
+    h.out()[1]({ db: { items: ["new"] } });
+    await settle();
+    await wait(400);
+    const [copy] = copies();
+    expect(copy).toBeDefined();
+    expect(logOf().map((x) => x.what)).toEqual([`written over after a failed read: the record before is kept at ${copy![0]}`]);
+    h.unmount();
+  }, 20_000);
+  it("the read-path copy refused (the device full): started over, the record is not written over", async () => {
+    storage.set(K, "{broken");
+    quota = used();
+    const root = render(Comp, {});
+    await settle();
+    await wait(100);
+    await settle();
+    expect((root.out as Out)[2]).toBe(true);
+    await wait(300);
+    expect(storage.get(K)).toBe("{broken");
+    quota = null;
+    await wait(10);
+    expect(copies()).toEqual([]);
+    root.unmount();
+  });
+  it("№8: a store record whose lists are of the wrong type opens (they are taken as missing), never crashes", () => {
+    const d = { ...makeSeed(), visits: {} as never, jobs: "x" as never, expenses: 3 as never };
+    for (const mode of ["demo", "cloud"] as const) {
+      const n = normalizeDB(d, mode);
+      expect(Array.isArray(n.visits) && Array.isArray(n.jobs) && Array.isArray(n.expenses)).toBe(true);
+    }
+  });
+  it("№9: two notes at the same moment — both are in the log", async () => {
+    await Promise.all([noteStorageLoss("a", "one"), noteStorageLoss("b", "two")]);
+    expect(logOf().map((x) => x.key)).toEqual(["a", "b"]);
   });
 });

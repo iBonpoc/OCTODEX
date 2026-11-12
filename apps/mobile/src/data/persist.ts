@@ -42,6 +42,10 @@ export interface Writer {
   forget: () => void;
   /** the app is leaving (background, the tab hidden or closed): the pending write is written now (rule 6) */
   flush: () => void;
+  /** #1189 (code-reviewer №2): the device's writes of this key wait for `p` (the copy of what is about to be written over);
+   *  scheduling, a key change and a flush stay as they are — a write is never dropped while it waits, only one made
+   *  before a wipe is (its generation) */
+  hold: (p: Promise<unknown>) => void;
 }
 /**
  * `ms` — how long a change waits for the next one before it is written (one write for a burst of changes). 0 — written
@@ -58,6 +62,8 @@ export function createWriter(
   let pending: { key: string; raw: string; gen: number } | null = null;
   /** the latest write: an older write's answer that comes after it says nothing about what is on the device now */
   let seq = 0;
+  /** the writes wait for this (hold) */
+  let gate: Promise<unknown> | null = null;
   const write = () => {
     const p = pending;
     if (timer) clearTimeout(timer);
@@ -67,12 +73,18 @@ export function createWriter(
     if (!p || p.gen !== gen()) return;
     // a refused write is not swallowed (A-02): the hook shows «не сохранено на устройстве» until a write lands
     const my = ++seq;
-    let done: Promise<void>;
-    try {
-      done = setItem(p.key, p.raw);
-    } catch (e) {
-      done = Promise.reject(e);
-    }
+    const put = () => {
+      // waited for a copy and a wipe came meanwhile: nothing lands
+      if (p.gen !== gen()) return Promise.resolve();
+      try {
+        return setItem(p.key, p.raw);
+      } catch (e) {
+        return Promise.reject(e);
+      }
+    };
+    // in order: a later write waits for the gate too, so it never lands before an earlier one
+    const done: Promise<void> = gate ? gate.then(put, put) : put();
+    if (gate) gate = done.catch(() => {});
     const told = (ok: boolean) => my === seq && p.gen === gen() && onResult?.(ok);
     done.then(
       () => told(true),
@@ -97,6 +109,13 @@ export function createWriter(
     },
     flush: () => {
       if (pending) write();
+    },
+    hold: (p) => {
+      const g = (gate ?? Promise.resolve()).then(() => p).catch(() => {});
+      gate = g;
+      void g.then(() => {
+        if (gate === g) gate = null;
+      });
     },
   };
 }
@@ -137,54 +156,109 @@ export const BROKEN_PREFIX = "octo.broken.";
 export const brokenKeyOf = (key: string, at: number) => `${BROKEN_PREFIX}${key}.${at}`;
 /** #1189 (the director): the copies of one key do not pile up — the newest this many stay */
 export const BROKEN_KEEP = 3;
+/** #1189 (the director, code-reviewer №3): all copies of caches together stay within this many characters — Android's
+ *  AsyncStorage is 6 MB in all, the web's localStorage about 5 MB; the live record and the outbox must still fit */
+export const BROKEN_MAX_CHARS = 2_000_000;
+/** the keys whose copies are the only trace of what the phone has (the outbox, the queue — `strict`): their copies are
+ *  never removed to make room and never cut to BROKEN_KEEP (code-reviewer №4) */
+const keptWhole = new Set<string>();
+const sourceOf = (copy: string) => copy.slice(BROKEN_PREFIX.length, copy.lastIndexOf("."));
+const timeOf = (copy: string) => Number(copy.slice(copy.lastIndexOf(".") + 1));
 
 /**
  * #1189: a record the phone is about to start over (unreadable, not of the expected shape, or read again before the first
- * write after a failed read) is first copied to its own key (`brokenKeyOf`). Only the newest BROKEN_KEEP copies of a key
- * stay. A full device (the web's localStorage: about 5 MB) — the older copies of that key go and the copy is tried once
- * more. true — the copy is on the device.
+ * write after a failed read) is first copied to its own key (`brokenKeyOf`). Of a cache: the newest BROKEN_KEEP copies of
+ * a key stay, and all caches' copies together within BROKEN_MAX_CHARS — the oldest go first, each noted in the log; a
+ * copy larger than that alone is not kept. A wipe (account deletion) during the copy: nothing stays. `whole` — a strict
+ * key's copy (the outbox): only written, nothing removed for it. true — the copy is on the device.
  */
-export async function keepBrokenCopy(key: string, raw: string, now = Date.now()): Promise<boolean> {
-  const prefix = `${BROKEN_PREFIX}${key}.`;
-  const copiesOf = async () => {
-    try {
-      return ((await AsyncStorage.getAllKeys()) as string[]).filter((k) => k.startsWith(prefix)).sort((a, b) => Number(a.slice(prefix.length)) - Number(b.slice(prefix.length)));
-    } catch {
-      return [];
-    }
-  };
-  const drop = async (ks: string[]) => {
-    if (!ks.length) return;
-    try {
-      await AsyncStorage.multiRemove(ks);
-    } catch {
-      /* nothing more to free */
-    }
-  };
+export async function keepBrokenCopy(key: string, raw: string, now = Date.now(), opts: { whole?: boolean; gen?: number } = {}): Promise<boolean> {
+  const g = opts.gen ?? deviceGeneration();
   const k = brokenKeyOf(key, now);
-  try {
+  const put = async () => {
+    if (g !== deviceGeneration()) return false;
     await AsyncStorage.setItem(k, raw);
-  } catch {
-    // full: the older copies of this key make room, then once more
-    await drop((await copiesOf()).filter((x) => x !== k));
+    // the wipe came while it was written (its list of keys may be from before): it goes too
+    if (g !== deviceGeneration()) {
+      await AsyncStorage.removeItem(k).catch(() => {});
+      return false;
+    }
+    return true;
+  };
+  if (opts.whole) {
+    keptWhole.add(key);
     try {
-      await AsyncStorage.setItem(k, raw);
+      return await put();
     } catch {
       return false;
     }
   }
-  const all = await copiesOf();
-  await drop(all.slice(0, Math.max(0, all.length - BROKEN_KEEP)));
-  return true;
+  if (raw.length > BROKEN_MAX_CHARS) {
+    await noteStorageLoss(key, "a copy too large to keep");
+    return false;
+  }
+  /** the caches' copies there are, the oldest first, with their sizes */
+  const caches = async () => {
+    try {
+      const ks = ((await AsyncStorage.getAllKeys()) as string[]).filter((x) => x.startsWith(BROKEN_PREFIX) && x !== k && !keptWhole.has(sourceOf(x)));
+      const out: { key: string; size: number }[] = [];
+      for (const x of ks) out.push({ key: x, size: ((await AsyncStorage.getItem(x).catch(() => null)) ?? "").length });
+      return out.sort((a, b) => timeOf(a.key) - timeOf(b.key));
+    } catch {
+      return [];
+    }
+  };
+  const drop = async (xs: { key: string }[], why: string) => {
+    if (!xs.length) return;
+    try {
+      await AsyncStorage.multiRemove(xs.map((x) => x.key));
+    } catch {
+      return;
+    }
+    for (const x of xs) await noteStorageLoss(sourceOf(x.key), `${why}: ${x.key}`);
+  };
+  // room first: this key's older copies past BROKEN_KEEP, then the oldest of all until the new one fits
+  let have = await caches();
+  const mine = have.filter((x) => sourceOf(x.key) === key);
+  const over = mine.slice(0, Math.max(0, mine.length - (BROKEN_KEEP - 1)));
+  await drop(over, "an older copy removed (BROKEN_KEEP)");
+  have = have.filter((x) => !over.includes(x));
+  const gone: typeof have = [];
+  let total = have.reduce((n, x) => n + x.size, 0) + raw.length;
+  for (const x of have) {
+    if (total <= BROKEN_MAX_CHARS) break;
+    gone.push(x);
+    total -= x.size;
+  }
+  await drop(gone, "an older copy removed for room");
+  try {
+    return await put();
+  } catch {
+    // the device is full all the same: every other cache copy makes room, then once more
+    await drop(have.filter((x) => !gone.includes(x)), "an older copy removed: the device was full");
+    try {
+      return await put();
+    } catch {
+      return false;
+    }
+  }
 }
 
 /** #1189 (the director): where the phone notes a record it had to start over without a copy — the key, when, why; the
  *  newest STORAGE_LOG_KEEP entries (no data in them, only the key's name) */
 export const STORAGE_LOG_KEY = "octo.storageLog.v1";
 export const STORAGE_LOG_KEEP = 50;
-export async function noteStorageLoss(key: string, what: string, at = new Date().toISOString()): Promise<void> {
+/** one note at a time: two at once would each read the log and one would lose the other's line (code-reviewer №9) */
+let logTail: Promise<void> = Promise.resolve();
+export function noteStorageLoss(key: string, what: string, at = new Date().toISOString()): Promise<void> {
   // eslint-disable-next-line no-console
   console.warn(`[storage] ${key}: ${what}`);
+  const g = deviceGeneration();
+  const run = logTail.then(() => (g === deviceGeneration() ? appendLog(key, what, at, g) : undefined));
+  logTail = run.catch(() => {});
+  return logTail;
+}
+async function appendLog(key: string, what: string, at: string, g: number): Promise<void> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_LOG_KEY);
     const list = (() => {
@@ -195,6 +269,8 @@ export async function noteStorageLoss(key: string, what: string, at = new Date()
         return [];
       }
     })();
+    // a wipe meanwhile (the log names the deleted person's keys): not written back
+    if (g !== deviceGeneration()) return;
     await AsyncStorage.setItem(STORAGE_LOG_KEY, JSON.stringify([...list, { key, at, what }].slice(-STORAGE_LOG_KEEP)));
   } catch {
     /* the device refuses even this: the console line is all there is */
@@ -274,8 +350,6 @@ export function usePersistentState<T>(
   const wiped = useRef(0);
   /** #1189: the key whose read failed — its record is copied before the first write over it */
   const copyBeforeWrite = useRef<string | null>(null);
-  /** the copy under way: writes wait for it */
-  const copying = useRef<Promise<void> | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -309,9 +383,12 @@ export function usePersistentState<T>(
         }
       }
     };
+    const g = deviceGeneration();
     read()
       .then(async (raw) => {
         if (!alive || w !== wiped.current) return;
+        // read now: no copy is owed before the first write (code-reviewer №7)
+        if (copyBeforeWrite.current === key) copyBeforeWrite.current = null;
         let value = init();
         let fresh = false;
         if (raw != null) {
@@ -331,7 +408,7 @@ export function usePersistentState<T>(
         if (fresh) {
           // #1189: a cache that cannot be read as it is (not JSON, not of the expected shape) is copied before it is started
           // over; the copy refused (the device is full) — the empty start is not written over it until a real change
-          const copied = await keepBrokenCopy(key, raw!);
+          const copied = await keepBrokenCopy(key, raw!, Date.now(), { gen: g });
           if (!alive || w !== wiped.current) return;
           if (!copied) {
             void noteStorageLoss(key, "unreadable record: no copy could be kept, started over");
@@ -380,22 +457,26 @@ export function usePersistentState<T>(
     // #1189: the first write after a failed read — what the device holds is read once more and copied first; the writes
     // after it wait for the copy (in order). Read again failed: written all the same (the app must not lock, #910/#926)
     // and the loss is noted (the key, when) so it can be found later
+    // The writes go to the writer at once (a key change, a flush and the app leaving see them — code-reviewer №2); only
+    // the device's write waits for the copy. A wipe during it: neither the copy nor the write lands (№1)
     if (copyBeforeWrite.current === k) {
       copyBeforeWrite.current = null;
-      const p = AsyncStorage.getItem(k).then(
-        async (old) => {
-          if (old != null && old !== raw && !(await keepBrokenCopy(k, old))) await noteStorageLoss(k, "written over after a failed read: no copy could be kept");
-        },
-        () => noteStorageLoss(k, "written over after a failed read: read again failed, no copy"),
+      const g = deviceGeneration();
+      const at = Date.now();
+      writer.current!.hold(
+        AsyncStorage.getItem(k).then(
+          async (old) => {
+            if (old == null || old === raw || g !== deviceGeneration()) return;
+            // the person's records, as the device held them: found later by the log (code-reviewer №5)
+            // the log is not waited for: the write waits for the copy only
+            if (await keepBrokenCopy(k, old, at, { gen: g })) void noteStorageLoss(k, `written over after a failed read: the record before is kept at ${brokenKeyOf(k, at)}`);
+            else void noteStorageLoss(k, "written over after a failed read: no copy could be kept");
+          },
+          () => void noteStorageLoss(k, "written over after a failed read: read again failed, no copy"),
+        ),
       );
-      copying.current = p;
-      void p.then(() => {
-        if (copying.current === p) copying.current = null;
-      });
     }
-    const wait = copying.current;
-    if (wait) void wait.then(() => (keyRef.current === k ? writer.current!.schedule(k, raw) : undefined));
-    else writer.current!.schedule(k, raw);
+    writer.current!.schedule(k, raw);
   }, [state, ready]);
 
   const setValue = useCallback(
@@ -409,7 +490,7 @@ export function usePersistentState<T>(
     if (!b || b.key !== k) return;
     const w = wiped.current;
     // the copy first: the broken record is overwritten only once its copy is on the device
-    keepBrokenCopy(k, b.raw).then(
+    keepBrokenCopy(k, b.raw, Date.now(), { whole: true }).then(
       (ok) => {
         if (!ok) return setWriteFailed(true);
         if (w !== wiped.current || keyRef.current !== k || broken.current !== b) return;
