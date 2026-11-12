@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 const upserts: { table: string; row: Record<string, unknown> }[] = [];
 let missingPriceTable = false;
+const upsertErrors: ({ code: string; message: string } | null)[] = [];
 vi.mock("../src/cloud/client", () => ({
   supabase: {
     from: (table: string) => {
@@ -22,7 +23,8 @@ vi.mock("../src/cloud/client", () => ({
         ...q,
         upsert: (row: Record<string, unknown>) => {
           upserts.push({ table, row });
-          return { then: (ok: (r: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(ok) };
+          const error = upsertErrors.shift() ?? null;
+          return { then: (ok: (r: unknown) => unknown) => Promise.resolve({ data: null, error }).then(ok) };
         },
       };
     },
@@ -30,7 +32,9 @@ vi.mock("../src/cloud/client", () => ({
   },
 }));
 
-import { itemDates, itemUsage, normalizeBarcode, normalizeProductUrl, priceHistoryFromRow, priceHistoryOf, productLink } from "../src/features/catalogCard";
+import { BARCODE_OK, PRODUCT_URL_BAD, PRODUCT_URL_SHAPE, cleanCardFields, itemDates, itemUsage, localPriceEntries, normalizeBarcode, normalizeProductUrl, priceHistoryFromRow, priceHistoryOf, productLink } from "../src/features/catalogCard";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { applyOp, catalogCardCols } from "../src/cloud/ops";
 import { catalogCardFromRow, loadPriceHistory } from "../src/cloud/repo";
 import { keepCostHistory } from "../src/features/suppliers";
@@ -144,5 +148,74 @@ describe("unit:catalogCard — what the item did on this device (itemUsage)", ()
     expect(itemUsage(db, "i1").profitCents).toBeNull();
     expect(itemUsage({ ...db, estimates: [est("e1", "approved", doc([line("l1")]), { optionId: "o1", addonIds: [] })], costsVisible: false }, "i1").profitCents).toBeNull();
     expect(itemUsage({ estimates: [], purchaseOrders: undefined } as unknown as DB, "i1")).toEqual({ inEstimates: 0, soldQty: "0", revenueCents: 0, profitCents: 0, boughtQty: "0" });
+  });
+});
+
+describe("unit:catalogCard — the phone and the server agree (code-reviewer of РС-10)", () => {
+  const sql = readFileSync(join(__dirname, "../../../supabase/migrations/20261112230000_catalog_card.sql"), "utf8");
+  it("the link's and the barcode's patterns are the migration's own text (a mismatch would drop a whole save from the queue)", () => {
+    const bad = /product_url !~ '(\[[^']*\])'/.exec(sql)?.[1];
+    const shape = /product_url ~ '([^']*)'/.exec(sql)?.[1];
+    const barcode = /barcode ~ '([^']*)'/.exec(sql)?.[1];
+    // the phone also refuses NUL (\u0000), which a server text can never hold
+    expect(PRODUCT_URL_BAD.replace("\\u0000", "\\u0001")).toBe(bad);
+    expect(PRODUCT_URL_SHAPE).toBe(shape);
+    expect(BARCODE_OK).toBe(barcode);
+    expect(/length\(product_url\) <= 500/.test(sql)).toBe(true);
+  });
+  it("the store keeps what the server will: normalized, a refused value keeps the item's own, a direction of the company only", () => {
+    const db = { serviceCategories: [{ id: "sc1" }] } as unknown as DB;
+    const prev = { id: "i1", kind: "material", name: "x", unit: "ea", priceCents: 0, barcode: "0123", productUrl: "https://old.example/" } as CatalogItem;
+    expect(cleanCardFields({ ...prev, barcode: " 999 ", productUrl: "abc.example/x", serviceCategoryId: "sc1", sku: " H-5 " }, prev, db))
+      .toMatchObject({ barcode: "999", productUrl: "https://abc.example/x", serviceCategoryId: "sc1", sku: "H-5" });
+    expect(cleanCardFields({ ...prev, barcode: "12;34", productUrl: "http://x.example", serviceCategoryId: "gone" }, prev, db))
+      .toMatchObject({ barcode: "0123", productUrl: "https://old.example/" });
+    const fresh = cleanCardFields({ ...prev, id: "i2", barcode: "12;34", productUrl: "javascript:x", serviceCategoryId: "gone" }, undefined, db);
+    expect("barcode" in fresh || "productUrl" in fresh || "serviceCategoryId" in fresh).toBe(false);
+  });
+  it("the phone's own price and markup rows of a save, as the server writes them", () => {
+    let n = 0;
+    const id = () => `h${++n}`;
+    const prev = { id: "i1", kind: "material", name: "x", unit: "ea", priceCents: 1190, markupBps: 1000 } as CatalogItem;
+    expect(localPriceEntries(prev, { ...prev, priceCents: 1213, markupBps: 1200 }, id, "t")).toEqual([
+      { id: "h1", itemId: "i1", priceCents: 1213, prevPriceCents: 1190, source: "manual", at: "t" },
+      { id: "h2", itemId: "i1", markupBps: 1200, prevMarkupBps: 1000, source: "manual", at: "t" },
+    ]);
+    expect(localPriceEntries(prev, { ...prev, name: "y" }, id, "t")).toEqual([]);
+    expect(localPriceEntries(undefined, prev, id, "t")).toEqual([]);
+  });
+  it("catalog.save: a direction the server refuses (23503) — the item goes without it; a server before the migration (PGRST204) — without the card's fields", async () => {
+    const item: CatalogItem = { id: "i1", kind: "material", name: "Hanger", unit: "ea", priceCents: 1213, barcode: "0123", serviceCategoryId: "sc-new" };
+    upserts.length = 0;
+    upsertErrors.push({ code: "23503", message: 'insert or update on table "catalog_items" violates foreign key constraint "catalog_items_service_category_fk"' });
+    await applyOp({ k: "catalog.save", item }, "co", "u");
+    expect(upserts.map((u) => "service_category_id" in u.row)).toEqual([true, false]);
+    expect(upserts[1]!.row).toMatchObject({ unit_price_cents: 1213, barcode: "0123" });
+    upserts.length = 0;
+    upsertErrors.push({ code: "PGRST204", message: "Could not find the 'barcode' column of 'catalog_items'" });
+    await applyOp({ k: "catalog.save", item }, "co", "u");
+    expect(upserts.map((u) => "barcode" in u.row)).toEqual([true, false]);
+    expect(upserts[1]!.row).toMatchObject({ unit_price_cents: 1213 });
+    // another refusal stays the op's
+    upserts.length = 0;
+    upsertErrors.push({ code: "23514", message: "new row violates check constraint" });
+    await expect(applyOp({ k: "catalog.save", item }, "co", "u")).rejects.toThrow();
+    expect(upserts).toHaveLength(1);
+  });
+});
+
+describe("unit:catalogCard — itemUsage, more cases (code-reviewer of РС-10)", () => {
+  const line = (id: string, x: object = {}) => ({ id, name: id, group: "material", quantity: "2", unit: "ea", unitPriceCents: 1000, catalogItemId: "i1", ...x });
+  const d = { options: [{ id: "o1", name: "A", recommended: true, lines: [line("a")] }, { id: "o2", name: "B", lines: [line("b", { quantity: "1.23456" })] }], settings: DEFAULT_SETTINGS } as unknown as EstimateDoc;
+  const est = (status: Estimate["status"], optionId?: string) =>
+    ({ id: status + (optionId ?? ""), customerId: "c", propertyId: "p", title: "x", totalCents: 0, status, doc: d, ...(optionId ? { approval: { optionId, addonIds: [], signerName: "x", signature: "x", at: "x", channel: "on_site", totalCents: 0, depositCents: 0 } } : {}) }) as Estimate;
+  it("the option the client chose, not the recommended one; the quantity as the engine counts it (4 decimals)", () => {
+    const u = itemUsage({ estimates: [est("approved", "o2")], purchaseOrders: [], costsVisible: true } as unknown as DB, "i1");
+    expect(u.soldQty).toBe("1.2346");
+    expect(u.revenueCents).toBe(1235);
+  });
+  it("approved without a choice, declined with one, a choice of an option not there — nothing sold", () => {
+    const u = itemUsage({ estimates: [est("approved"), est("declined", "o1"), est("approved", "gone")], purchaseOrders: [], costsVisible: true } as unknown as DB, "i1");
+    expect(u).toMatchObject({ inEstimates: 3, soldQty: "0", revenueCents: 0 });
   });
 });

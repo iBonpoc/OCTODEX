@@ -1047,7 +1047,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "catalog.save": {
       const it = op.item;
       const costCols = catalogCostCols(op);
-      await run(
+      const card = catalogCardCols(it);
+      const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(
           {
             id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
@@ -1061,13 +1062,23 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
             ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
             // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server
-            // keeps them, and one the server would refuse is not sent (the item itself is saved; the card checks first)
-            ...catalogCardCols(it),
+            // keeps them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
+            ...cardCols,
           },
           // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
-        ),
-      );
+        );
+      let r = await upsertItem(card);
+      // РС-10 (code-reviewer): the card's fields never cost the item's save — a direction the server does not have (made
+      // offline and refused, 23503 on catalog_items_service_category_fk) goes without it; a server before the migration
+      // (PGRST204, no such column) gets the item without the card's fields
+      if (r.error?.code === "23503" && "service_category_id" in card && /service_category/.test(r.error.message ?? "")) {
+        const { service_category_id: _sc, ...rest } = card;
+        r = await upsertItem(rest);
+      } else if (r.error?.code === "PGRST204" && Object.keys(card).length) {
+        r = await upsertItem({});
+      }
+      await run(Promise.resolve(r));
       if (!op.onlyNew) {
         // 19 §9: the server moves a cost sent above into catalog_item_costs, but a null there means «not sent» (old
         // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —

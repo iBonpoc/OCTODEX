@@ -61,6 +61,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { cleanCardFields, localPriceEntries } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
@@ -2288,18 +2289,22 @@ export function StoreProvider({
         ),
       // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
       saveCatalogItem: (it0) => {
-        const it = cleanSupplierLink(cleanCatalogItem(it0));
-        const prev = dbRef.current.catalog.find((x) => x.id === it.id);
+        const prev = dbRef.current.catalog.find((x) => x.id === it0.id);
+        // РС-10: the link, the barcode and the direction as the server will keep them (the phone and the server the same)
+        const it = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
         const costs = catalogCostChange(prev, it);
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
         const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
+        // РС-10: the price and markup change too (the card shows «было → стало» at once, offline as well)
+        const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, new Date().toISOString());
         return mutate(
           "catalog.save",
           (d) => ({
             ...d,
             catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it],
             ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
+            ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
           }),
           { k: "catalog.save", item: it, costs },
         );
@@ -2448,7 +2453,8 @@ export function StoreProvider({
       saveCatalogItems: (items, opts) => {
         const onlyNew = !!opts?.onlyNew;
         const fresh = onlyNew ? items.filter((x) => !dbRef.current.catalog.some((c) => c.id === x.id)) : items;
-        const undos = fresh.map(cleanCatalogItem).map((it) =>
+        // РС-10: the card's fields as the server will keep them, the same as one item's save
+        const undos = fresh.map((x) => cleanCardFields(cleanCatalogItem(x), dbRef.current.catalog.find((c) => c.id === x.id), dbRef.current)).map((it) =>
           mutate(
             "catalog.save",
             (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it] }),

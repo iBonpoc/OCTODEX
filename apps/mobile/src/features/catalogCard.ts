@@ -3,16 +3,20 @@
  * barcode as the server keeps them (migration 20261112230000_catalog_card.sql, db T202), what the item did on this
  * device (itemUsage), the history of its selling price and markup (catalog_price_history). Pure: test/catalogCard.test.ts.
  */
-import { activeLines, dec, lineProfit } from "@octo/estimating-engine";
+import { activeLines, dec, jobLineQty, lineProfit } from "@octo/estimating-engine";
 import type { CatalogItem, DB, Estimate, ID, PriceHistoryEntry } from "@/data/types";
-import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
+import { optionTotals, withAddons } from "@/features/estimateDoc";
 
 /** the characters the server refuses in a link: control, blank (NBSP, the Unicode spaces, line / paragraph separators,
  *  ideographic space) and invisible format ones (zero-width, bidirectional, BOM, soft hyphen) — the same code points as
  *  the check catalog_items_product_url_check */
-const URL_BAD = /[\u0000-\u0020\u007f-\u00a0\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u1680\u180e\u2000-\u200f\u2028-\u202f\u205f-\u2064\u2066-\u206f\u3000\ufeff\ufff9-\ufffb]/;
+export const PRODUCT_URL_BAD = "[\\u0000-\\u0020\\u007f-\\u00a0\\u00ad\\u0600-\\u0605\\u061c\\u06dd\\u070f\\u08e2\\u1680\\u180e\\u2000-\\u200f\\u2028-\\u202f\\u205f-\\u2064\\u2066-\\u206f\\u3000\\ufeff\\ufff9-\\ufffb]";
+const URL_BAD = new RegExp(PRODUCT_URL_BAD);
 /** https://, a host of letters, digits, dots and hyphens (no userinfo, not empty), an optional port, then the end or / ? # */
-const URL_SHAPE = /^https:\/\/[A-Za-z0-9.-]+(:[0-9]+)?(\/|\?|#|$)/;
+export const PRODUCT_URL_SHAPE = "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/|[?]|#|$)";
+const URL_SHAPE = new RegExp(PRODUCT_URL_SHAPE);
+/** the barcode as catalog_items_barcode_check (the same text: test/catalogCard.test.ts reads the migration) */
+export const BARCODE_OK = "^[A-Za-z0-9 ._/-]{1,64}$";
 export const PRODUCT_URL_MAX = 500;
 export const BARCODE_MAX = 64;
 
@@ -60,7 +64,7 @@ export function normalizeBarcode(typed: string): { ok: true; barcode: string } |
   const t = typed.trim();
   if (t === "") return { ok: true, barcode: "" };
   if (t.length > BARCODE_MAX) return { ok: false, why: "long" };
-  if (!/^[A-Za-z0-9 ._/-]+$/.test(t)) return { ok: false, why: "chars" };
+  if (!new RegExp(BARCODE_OK).test(t)) return { ok: false, why: "chars" };
   return { ok: true, barcode: t };
 }
 
@@ -90,13 +94,17 @@ export function itemUsage(db: Pick<DB, "estimates" | "purchaseOrders" | "costsVi
     if (!doc?.options?.length) continue;
     if (doc.options.some((o) => (o.lines ?? []).some((l) => l.catalogItemId === itemId))) inEstimates++;
     if (!signed(e)) continue;
-    const base = doc.options.find((o) => o.id === e.approval!.optionId) ?? mainOption(doc);
+    // the signed option; not found (a broken copy) — the only option, else nothing (as the contract and the supplier
+    // order count it: contractInvoice, purchaseOrders)
+    const base = doc.options.find((o) => o.id === e.approval!.optionId) ?? (doc.options.length === 1 ? doc.options[0] : undefined);
+    if (!base) continue;
     const o = withAddons(base, e.approval!.addonIds ?? []);
     const t = optionTotals(doc, o);
     activeLines(o.lines).forEach((l, i) => {
       if (l.catalogItemId !== itemId || (l.optional && !l.selected)) return;
       try {
-        sold = sold.add(dec(l.quantity));
+        // the quantity as the engine and the server count it (numeric(14,4)) — the same as the revenue beside it
+        sold = sold.add(dec(jobLineQty(l.quantity)));
       } catch {
         return;
       }
@@ -146,3 +154,40 @@ export const itemDates = (it: Pick<CatalogItem, "createdAt" | "createdBy" | "upd
   // a change only when it is not the creation itself
   changed: it.updatedAt && it.updatedAt !== it.createdAt ? { at: it.updatedAt, by: it.updatedBy } : undefined,
 });
+
+/**
+ * The card's fields of an item to save, as the server will keep them (code-reviewer of РС-10): the link and the barcode
+ * normalized; one the server would refuse keeps what the item had (never stored here and lost there); a direction that is
+ * not the company's keeps what it had. The phone and the server then hold the same.
+ */
+export function cleanCardFields(it: CatalogItem, prev: CatalogItem | undefined, db: Pick<DB, "serviceCategories">): CatalogItem {
+  const out: CatalogItem = { ...it };
+  const keep = <K extends "barcode" | "productUrl" | "serviceCategoryId">(k: K) => {
+    if (prev?.[k] !== undefined) out[k] = prev[k];
+    else delete out[k];
+  };
+  if (it.barcode !== undefined) {
+    const b = normalizeBarcode(it.barcode);
+    if (b.ok) out.barcode = b.barcode;
+    else keep("barcode");
+  }
+  if (it.productUrl !== undefined) {
+    const u = normalizeProductUrl(it.productUrl);
+    if (u.ok) out.productUrl = u.url;
+    else keep("productUrl");
+  }
+  if (it.serviceCategoryId && it.serviceCategoryId !== prev?.serviceCategoryId && !(db.serviceCategories ?? []).some((c) => c.id === it.serviceCategoryId)) keep("serviceCategoryId");
+  if (it.sku !== undefined) out.sku = it.sku.trim();
+  return out;
+}
+
+/** the phone's own price / markup history rows of a save (shown at once and offline; the next read of the card replaces
+ *  them with the server's) — as the server's triggers: only a real change; a new item has none */
+export function localPriceEntries(prev: CatalogItem | undefined, it: CatalogItem, newId: () => string, at: string): PriceHistoryEntry[] {
+  if (!prev) return [];
+  const out: PriceHistoryEntry[] = [];
+  if (prev.priceCents !== it.priceCents) out.push({ id: newId(), itemId: it.id, priceCents: it.priceCents, prevPriceCents: prev.priceCents, source: "manual", at });
+  if (it.markupBps !== undefined && prev.markupBps !== it.markupBps)
+    out.push({ id: newId(), itemId: it.id, markupBps: it.markupBps, ...(prev.markupBps !== undefined ? { prevMarkupBps: prev.markupBps } : {}), source: "manual", at });
+  return out;
+}
