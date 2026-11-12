@@ -13773,4 +13773,107 @@ select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 950 from public.es
               'T201 an older phone''s save_estimate_version (no ppm): null, its basis points are the rate');
 \echo 'T201 a tax rate with three decimals: ppm next to the basis points'
 
+-- ======================================================================================================================
+-- T202 (РС-9, #1096): the catalog item's card — barcode, product link, direction; the history of the selling price and
+-- the markup (catalog_price_history: before and after, who), read only by who sees costs; the purchase history
+-- (catalog_cost_history) gets no price rows. Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger', 'ea', 1190);
+update public.catalog_items set barcode = '0123456789012', product_url = 'https://abc.example/hanger?id=5',
+       service_category_id = (select id from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1)
+ where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select barcode = '0123456789012' and product_url like 'https://%' and service_category_id is not null
+                 from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 a barcode, a link and a direction of our own are kept');
+select tst.fails_like($q$update public.catalog_items set product_url = 'http://abc.example/x' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%product_url%', 'T202 a link without https:// — refused');
+select tst.fails_like($q$update public.catalog_items set product_url = 'https://abc.example/a b' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%product_url%', 'T202 a link with a space — refused');
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, 'https://x.example/' || repeat('a', 490)), '%product_url%', 'T202 a link past 500 — refused');
+select tst.fails_like(format($q$update public.catalog_items set barcode = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, repeat('1', 65)), '%barcode%', 'T202 a barcode past 64 — refused');
+select tst.fails_like($q$update public.catalog_items set barcode = E'12\n34' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%barcode%', 'T202 a barcode with a control character — refused');
+-- security-check of РС-9: no other scheme in any case; no invisible format characters (Cf, as app.client_title)
+-- (each call raises unless it is refused) javascript:, data: and other schemes in any case — refused; only https:// itself
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, u), '%product_url%', 'T202 not https: ' || u)
+  from unnest(array['javascript:alert(1)', 'JavaScript:alert(1)', 'JAVASCRIPT://x', 'data:text/html,<b>x', 'DATA:text/html,x',
+                    'HTTPS://abc.example/x', 'vbscript:x', ' https://abc.example/x', 'https:/abc', 'https://']) u;
+-- zero-width, bidirectional and other invisible format characters in the barcode or the link — refused
+select tst.fails_like(format($q$update public.catalog_items set %s = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, c, v), '%' || c || '%', 'T202 a format character in ' || c)
+  from (values ('barcode', U&'0123\200B456'), ('barcode', U&'0123\202E456'), ('barcode', U&'\FEFF0123'), ('barcode', U&'01\00AD23'),
+                              ('product_url', U&'https://abc.example/\200Dx'), ('product_url', U&'https://abc.example/\2066x'), ('product_url', U&'https://abc.example/\061Cx'),
+               -- security-check of #1233: blanks that are not format characters, and a barcode of a blank only
+               ('product_url', U&'https://abc.example/\00A0x'), ('product_url', U&'https://abc.example/\2028x'), ('product_url', U&'https://abc.example/\3000x'),
+               ('product_url', U&'https://abc.example\200B/x'), ('product_url', 'https:///x'), ('product_url', 'https://a@b.example/x'),
+               ('product_url', 'https://user:pw@b.example/x'), ('product_url', 'https://abc.example:x/'), ('product_url', 'https://abc_example/'),
+               ('barcode', U&'\00A0'), ('barcode', U&'\00A0\00A0'), ('barcode', U&'\200B'), ('barcode', '   '), ('barcode', 'АБВ123'), ('barcode', '12;34'), ('barcode', '<b>')) x(c, v);
+select tst.ok((select barcode = '0123456789012' and product_url = 'https://abc.example/hanger?id=5' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 after the refusals the barcode and the link are as they were');
+-- what passes: a port, a query or a fragment right after the host; a barcode of letters, digits, space . _ / -
+update public.catalog_items set product_url = 'https://abc.example:8443/x' where id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_items set product_url = 'https://abc.example?q=1', barcode = '0123-456 A/B.c_d' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select product_url = 'https://abc.example?q=1' and barcode = '0123-456 A/B.c_d' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 a port, a query; a barcode with a space, a dash, a slash, a dot and an underscore — kept');
+update public.catalog_items set product_url = 'https://abc.example/hanger?id=5', barcode = '0123456789012' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.fails_like(format($q$update public.catalog_items set service_category_id = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, :'b_cat'), '%catalog_items_service_category_fk%', 'T202 another company''s direction — refused');
+-- an older phone's save — the whole item as an upsert (ops.ts catalog.save), without the new columns, the same price:
+-- the new fields stay, no price row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1190)
+  on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents, kind = excluded.kind;
+select tst.ok((select barcode = '0123456789012' and product_url is not null and service_category_id is not null and name = 'T202 Hanger 5in'
+                 from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 an older phone''s save keeps the new fields');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0,
+              'T202 the same price saved again: no history row');
+-- the price changes (an upsert, as the phone): before and after, who; the same upsert again (a replay of the queue): no row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select count(*) = 1 and bool_and(prev_unit_price_cents = 1190 and unit_price_cents = 1213 and markup_bps is null
+                  and by = 'a0000000-0000-0000-0000-000000000002' and source = 'manual')
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 the price changed: $11.90 → $12.13, who; the same save again — no second row');
+-- the markup: a first one (insert, none before), a change, the same again
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1000, 1025, 1000);
+update public.catalog_item_costs set markup_bps = 1200 where item_id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_item_costs set markup_bps = 1200, unit_cost_cents = 1010 where item_id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select array_agg(coalesce(prev_markup_bps, -1) || '>' || markup_bps order by at, id) = array['-1>1000', '1000>1200']
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and markup_bps is not null),
+              'T202 the markup: the first (none before) and a change; the same markup with another cost — no row');
+-- a markup only, no cost (a labor item: catalog_item_costs takes a cost and a markup of any kind, spec §9 п.2)
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T202 Install', 'hr', 9000);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 4500, 500);
+select tst.ok((select unit_cost_cents = 4500 from public.catalog_item_costs where item_id = 'a2020000-0000-4000-8000-000000000002')
+              and tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000002' and markup_bps = 500$q$) = 1,
+              'T202 a labor item takes a cost and a markup; its markup is in the history');
+-- an older phone sends the markup on the item row (t30 moves it to catalog_item_costs): a row too
+update public.catalog_items set markup_bps = 1500 where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and prev_markup_bps = 1200 and markup_bps = 1500$q$) = 1,
+              'T202 a markup written the old way is in the history');
+-- the purchase history (older phones' «История закупки и налога», the supplier's screen) gets no price or markup row
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 2,
+              'T202 the purchase history keeps only the purchase rows (the first cost and the cost change)');
+-- who reads: the office yes; a tech, sales without view_costs, another company no; nobody writes it by hand
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 4, 'T202 the office reads the price history');
+select tst.fails($q$insert into public.catalog_price_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 the office does not write the history by hand');
+select tst.fails($q$update public.catalog_price_history set unit_price_cents = 1 where item_id = 'a2020000-0000-4000-8000-000000000001'$q$, 'T202 …nor change it (no update right)');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 a tech reads no price history');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 sales without view_costs reads none');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 another company reads none');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_price_history()', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.tg_price_history()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_markup_history()', 'EXECUTE')
+              and not has_table_privilege('anon', 'public.catalog_price_history', 'SELECT')
+              and not has_table_privilege('authenticated', 'public.catalog_price_history', 'INSERT')
+              and (select prosecdef from pg_proc where oid = 'app.tg_price_history()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.tg_markup_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
+\echo 'T202 the catalog card: barcode, link, direction; the price and markup history'
+
 \echo 'ALL TESTS PASSED'
