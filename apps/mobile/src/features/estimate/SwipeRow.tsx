@@ -3,6 +3,7 @@ import { Platform, View } from "react-native";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { component, gesture, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
+import { createLock, swipes } from "./swipeState";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 
 /**
@@ -22,10 +23,6 @@ export interface SwipeBtn {
   testID?: string;
 }
 
-let lastSwipeAt = 0;
-let openOne: SwipeableMethods | null = null;
-/** a swipe ended a moment ago: the tap that follows it is the finger leaving, not a request to open the row */
-export const swipedJustNow = (slow: number) => Date.now() - lastSwipeAt < slow;
 
 export function SwipeRow({
   children,
@@ -42,6 +39,7 @@ export function SwipeRow({
 }) {
   const { c } = useTheme();
   const ref = useRef<SwipeableMethods>(null);
+  const lock = useRef(createLock()).current;
   if (Platform.OS === "web" || (!left.length && !right.length)) return <>{children}</>;
   const w = component.swipeAction.w;
   const buttons = (list: SwipeBtn[]) => () => (
@@ -53,7 +51,9 @@ export function SwipeRow({
           accessibilityRole="button"
           accessibilityLabel={b.label}
           onPress={() => {
-            lastSwipeAt = Date.now();
+            // once: until the row has closed, a second press does nothing
+            if (!lock.take()) return;
+            swipes.touched();
             ref.current?.close();
             onAct(b.key);
           }}
@@ -88,20 +88,20 @@ export function SwipeRow({
       rightThreshold={w / 2}
       renderLeftActions={left.length ? buttons(left) : undefined}
       renderRightActions={right.length ? buttons(right) : undefined}
-      onSwipeableOpenStartDrag={() => {
-        lastSwipeAt = Date.now();
-      }}
-      onSwipeableCloseStartDrag={() => {
-        lastSwipeAt = Date.now();
-      }}
+      // not closer than space[4] to the left edge: the system «back» of iOS owns it (DS Б13)
+      hitSlop={{ left: -space[4] }}
+      // the buttons lie under the whole row: only an opaque row hides them at rest
+      childrenContainerStyle={{ backgroundColor: c.bg }}
+      onSwipeableOpenStartDrag={swipes.touched}
+      onSwipeableCloseStartDrag={swipes.touched}
       onSwipeableWillOpen={() => {
-        lastSwipeAt = Date.now();
-        if (openOne && openOne !== ref.current) openOne.close();
-        openOne = ref.current;
+        swipes.touched();
+        if (ref.current) swipes.opened(ref.current);
       }}
       onSwipeableClose={() => {
-        lastSwipeAt = Date.now();
-        if (openOne === ref.current) openOne = null;
+        swipes.touched();
+        lock.release();
+        if (ref.current) swipes.closed(ref.current);
       }}
     >
       {children}

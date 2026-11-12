@@ -226,3 +226,8 @@ export function setHidden<L extends CustomLine>(lines: L[], id: string, act: "hi
   if (act === "hide" && !canHide(l)) return "needZero";
   return lines.map((x) => (x.id === id ? { ...x, clientVisible: act === "hide" ? false : undefined } : x));
 }
+
+/** the screen reader's action name → the row's action, only one the row offers (a name from outside does nothing) */
+export function actOfName(name: string, a: RowActions): RowAct | null {
+  return (a.menu as string[]).includes(name) ? (name as RowAct) : null;
+}

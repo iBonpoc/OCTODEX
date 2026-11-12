@@ -52,6 +52,8 @@ export interface MenuItem<K extends string> {
   icon?: IconKey;
   selected?: boolean;
   destructive?: boolean;
+  /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
+  dim?: boolean;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -188,7 +190,7 @@ export function Menu<K extends string>({
               accessibilityRole="menuitem"
               accessibilityState={{ selected: !!it.selected }}
               accessibilityLabel={it.label}
-              style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2] }}
+              style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2], opacity: it.dim ? component.dimOpacity : 1 }}
             >
               <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View>
               <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>

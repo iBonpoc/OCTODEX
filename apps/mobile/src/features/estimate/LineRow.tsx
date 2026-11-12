@@ -14,9 +14,10 @@ import type { RequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { RowView } from "@/ui/surfaces";
 import { shownQty, lineMarks } from "@/features/estimateDoc";
-import { canHide, isHidden, rowActions, rowFigures, rowSummary, type CatalogRefusal, type RowAct } from "@/features/estimateRows";
+import { canHide, isHidden, rowActions, rowFigures, rowSummary, actOfName, type CatalogRefusal, type RowAct } from "@/features/estimateRows";
 import { LineMarks } from "@/features/LineMarks";
-import { SwipeRow, swipedJustNow, type SwipeBtn } from "./SwipeRow";
+import { SwipeRow, type SwipeBtn } from "./SwipeRow";
+import { swipes } from "./swipeState";
 
 /**
  * A line of the estimate, in place (DS §8.3, spec 2026-11-12-estimate-editor Р1): folded — the name, «120 LF × $8.50», the
@@ -104,14 +105,17 @@ function LineRowView(p: LineRowProps) {
     move: { label: t("est.sec.moveTitle"), icon: "route" },
     delete: { label: t("est.row.delete"), icon: "trash" },
   };
-  const items: MenuItem<RowAction>[] = acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", testID: `est-act-${k}-${l.id}` }));
+  const items: MenuItem<RowAction>[] = acts.menu.map((k) => ({ key: k, ...META[k], destructive: k === "delete", dim: k === "hide" && !canHide(l), testID: `est-act-${k}-${l.id}` }));
   const swipeBtn = (k: RowAct): SwipeBtn => ({ key: k, ...META[k], tone: k === "delete" ? "bad" : undefined, dim: k === "hide" && !canHide(l), testID: `est-swipe-${k}-${l.id}` });
   const f = (id: "name" | "qty" | "price" | "cost") => p.form.field(rowFieldId(l.id, id));
 
   if (!open) {
     const web = Platform.OS === "web";
     const body = (
-      <Press onPress={p.locked ? undefined : () => (swipedJustNow(motion.durSlow) ? undefined : p.api.open(l.id))} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={acts.menu.map((k) => ({ name: k, label: META[k].label }))} onAccessibilityAction={(e) => p.api.action(l.id, e.nativeEvent.actionName as RowAct)} testID={`est-line-${l.id}`} containerStyle={web && acts.menu.length ? { flex: 1 } : undefined}>
+      <Press onPress={p.locked ? undefined : () => (swipes.justSwiped(motion.durSlow) || swipes.closeOpen() ? undefined : p.api.open(l.id))} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={acts.menu.map((k) => ({ name: k, label: META[k].label }))} onAccessibilityAction={(e) => {
+          const a = actOfName(e.nativeEvent.actionName, acts);
+          if (a) p.api.action(l.id, a);
+        }} testID={`est-line-${l.id}`} containerStyle={web && acts.menu.length ? { flex: 1 } : undefined}>
         <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1] }}>
           <RowView style={{ alignItems: "flex-start" }}>
             <View style={{ paddingTop: space[1] }}>

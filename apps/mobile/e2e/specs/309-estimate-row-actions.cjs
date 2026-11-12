@@ -22,6 +22,10 @@ exports.run = async (h) => {
 
   // a priced line is not hidden: the reason, nothing changes
   await tid(`est-menu-${id}`).getByRole("button").click();
+  h.expect(
+    (await tid(`est-act-hide-${id}`).evaluate((el) => Math.min(...[el, ...el.querySelectorAll("*")].map((n) => Number(getComputedStyle(n).opacity))))) < 1,
+    "«Скрыть» of a priced line is pale in «⋯»",
+  );
   await tid(`est-act-hide-${id}`).click();
   await p.getByText(/ценой \$0/).first().waitFor({ timeout: 3000 });
   h.expect((await count(`[data-testid="est-hidden-${id}"]`)) === 0, "a priced line stays visible to the client");
