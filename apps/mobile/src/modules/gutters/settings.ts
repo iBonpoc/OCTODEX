@@ -71,6 +71,8 @@ export interface Choices {
   ds: DsDefaults;
   /** how every length is shown (#1092): feet-inches by default */
   lenFormat: LenFormat;
+  /** how far the roof stands out past the wall, ft (#932): for the roof / 3D view; kept and shown, the gutter's cut does not use it yet */
+  roofOverhangFt: number;
   /** the company chose a downspout size itself (the key is stored): it stays on a 6″ gutter too (#767) */
   dsSizeSet: boolean;
 }
@@ -166,6 +168,11 @@ function stock(d: Record<string, unknown>, offer: Offer, palette: string[], fall
   return { material, ...(gauge ? { gauge } : {}), finish, ...(color ? { color } : {}) };
 }
 
+/** the roof's overhang past the wall, feet (#932): half-foot steps up to 3, then whole feet to 6; 2 ft until the company says otherwise */
+export const OVERHANG_FT = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6] as const;
+export const DEFAULT_OVERHANG_FT = 2;
+export const readOverhangFt = (v: unknown): number => (typeof v === "number" && (OVERHANG_FT as readonly number[]).includes(v) ? v : DEFAULT_OVERHANG_FT);
+
 /** the company's format of lengths (#1092): a stored unknown value is feet-inches */
 export const readLenFormat = (v: unknown): LenFormat => (isLenFormat(v) ? v : "ftin");
 
@@ -227,7 +234,7 @@ export function choicesFor(raw: unknown): Choices {
     bottom: one(dr.bottom, offer.bottoms, "extension"),
     wall: one(dr.wall, WALLS, "wood"),
   };
-  return { offer, palette, hangerByMount, wallKitByWall, run, ds, lenFormat: readLenFormat(r.lenFormat), dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
+  return { offer, palette, hangerByMount, wallKitByWall, run, ds, lenFormat: readLenFormat(r.lenFormat), roofOverhangFt: readOverhangFt(r.roofOverhangFt), dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
 }
 
 /** the module's choices: what the canvas offered before the company's settings (M5c) */

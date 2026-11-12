@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -119,7 +119,9 @@ export default function DrawScreen() {
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
   // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
-  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | null>(null);
+  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | "layers" | null>(null);
+  // the layers of the view (#930): on this screen only, not saved with the measurement; all on to begin with
+  const [layers, setLayers] = useState({ grid: true, labels: true, ds: true });
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
   const [quickRun, setQuickRun] = useState<string | null>(null);
   /** a length label tapped (founder 09.11): the length of that gutter, without its properties */
@@ -156,8 +158,8 @@ export default function DrawScreen() {
   const canvas = useCanvasGestures(viewNow, setView, live, 2);
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -275,7 +277,7 @@ export default function DrawScreen() {
     onActivate: () => {
       const { drawing: d, tool: tl } = cur.current;
       const p0 = plan(downAt.current[0], downAt.current[1]);
-      const h = hitTest(d, p0, tolIn());
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p0, tolIn());
       const held = Date.now() - downTime.current >= motion.durSlow;
       // a free end cap taken (#504, founder 11.11: «долгое нажатие на эндкапу — тяни за край»): held, with any tool but «Желоб», or at
       // once on the picked gutter's handle — the end follows the finger along its gutter, longer or
@@ -386,7 +388,7 @@ export default function DrawScreen() {
       }
       // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
       // in a tap on the web)
-      const onDs = hitTest(d, p, tolIn());
+      const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (tl === "ds" && onDs?.kind === "ds") {
         setSelected(onDs.id);
         setSheet(true); // its menu (founder 09.11)
@@ -404,7 +406,7 @@ export default function DrawScreen() {
         }
         return;
       }
-      const h = hitTest(d, p, tolIn());
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (h) setHint(null);
       // an end (founder 08.11): an end cap swaps left ↔ right (the whole line's face); a corner asks inside / outside
       if (h?.kind === "end" && cur.current.canSave && !liftTap.current) {
@@ -450,9 +452,10 @@ export default function DrawScreen() {
             faceOff: dt.runW * 2,
             dimDs: dim ? fresh : null,
             gridMinPx: space[6],
+            layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat],
+    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers],
   );
   sceneRef.current = scene;
 
@@ -601,7 +604,18 @@ export default function DrawScreen() {
     setMoreSheet(null);
     void saveToolbarPlace(p);
   };
+  /** a layer on or off (#930): off with the downspouts — no downspout stays picked, and the downspout tool gives way to «Желоб» */
+  const toggleLayer = (l: "grid" | "labels" | "ds", on: boolean) => {
+    setLayers((x) => ({ ...x, [l]: on }));
+    if (l === "ds" && !on) {
+      if (cur.current.drawing.downspouts.some((x) => x.id === cur.current.selected)) setSelected(null);
+      if (cur.current.tool === "ds") setTool("line");
+      setSheet(false);
+    }
+  };
   const pick = (tl: Tool) => {
+    // «Водосток» needs the downspouts seen: the layer comes back on (a downspout is never put in the dark, #930 review)
+    if (tl === "ds" && !layers.ds) setLayers((x) => ({ ...x, ds: true }));
     setTool(tl);
     setHint(tl);
   };
@@ -617,18 +631,19 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "relink" | "unlink" | "delete";
+  type WhoKey = "acc" | "place" | "layers" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
     // «Как мерили, панель» the founder did not understand)
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
     { key: "place", label: t("mod.gutters.draw.placeItem") },
+    { key: "layers", label: t("mod.gutters.draw.layersItem") },
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
-    if (k === "acc" || k === "place") return setMoreSheet(k);
+    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -977,6 +992,21 @@ export default function DrawScreen() {
                 onChange={(a) => setAccuracy(a)}
               />
               <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
+            </View>
+          ) : null}
+          {moreSheet === "layers" ? (
+            <View testID="draw-layers" style={{ gap: space[2] }}>
+              <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>
+              {(["grid", "labels", "ds"] as const).map((l) => (
+                <RowView key={l} style={{ gap: space[3], justifyContent: "space-between" }}>
+                  <View style={{ flex: 1 }}>
+                    <T v="body">{t(`mod.gutters.draw.layer.${l}`)}</T>
+                    {l === "ds" ? <T v="caption" tone="mut">{t("mod.gutters.draw.layer.dsHint")}</T> : null}
+                  </View>
+                  <View testID={`draw-layer-${l}`}><Toggle on={layers[l]} onChange={(on) => toggleLayer(l, on)} label={t(`mod.gutters.draw.layer.${l}`)} /></View>
+                </RowView>
+              ))}
+              <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>
             </View>
           ) : null}
           {moreSheet === "place" ? (

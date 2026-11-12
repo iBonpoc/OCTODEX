@@ -19,6 +19,9 @@ describe("settings fields say a refused save under themselves", () => {
       expect(src, id).toMatch(new RegExp(`<ChoiceWarn\\b[^\\n]*testID="${id}"`));
     }
   });
+  it("the roof's overhang says a refused save under itself too (#932)", () => {
+    expect(src).toMatch(/<ChoiceWarn\b[^\n]*testID="gset-roof-overhang"/);
+  });
   it("ChoiceWarn draws FieldWarn at its own testID", () => {
     expect(src).toMatch(/function ChoiceWarn[\s\S]{0,400}<FieldWarn at=\{p\.testID\} \/>/);
   });
