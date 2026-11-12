@@ -22,7 +22,7 @@ vi.mock("../src/cloud/client", () => ({
     rpc: (fn: string, args: Record<string, unknown>) => (rpcs.push({ fn, args }), Promise.resolve(answers.shift() ?? { data: null, error: null, status: 200 })),
   },
 }));
-import { applyOp, PermanentError, type Op } from "../src/cloud/ops";
+import { applyOp, PermanentError, ServerError, type Op } from "../src/cloud/ops";
 
 const line = (id: string, x: object = {}) => ({ id, name: id, group: "labor", quantity: "1.23455", unit: "ea", unitPriceCents: 1000, ...x });
 const doc = (pages?: unknown) => ({
@@ -64,6 +64,24 @@ describe("unit:opsEstimateSaveTx", () => {
     const tx = rpcs.filter((r) => r.fn === "save_estimate_version");
     expect(tx).toHaveLength(2);
     expect((tx[1]!.args.p_version as { calc_inputs: { pages?: unknown } }).calc_inputs.pages).toBeUndefined();
+  });
+  it("a server error without a code, or 5xx: «try later» — never the separate requests", async () => {
+    for (const a of [{ error: { message: "TypeError: Failed to fetch", code: "" }, status: 0 }, { error: { message: "upstream", code: "PGRST002" }, status: 503 }]) {
+      tables.length = 0;
+      answers = [a];
+      const e = await applyOp(op(), "co-1", "u-1").then(() => undefined, (x: unknown) => x);
+      expect(e).toBeInstanceOf(ServerError);
+      expect(e).not.toBeInstanceOf(PermanentError);
+      expect(tables.some((t) => t.table === "estimate_line_items" || t.table === "estimate_options")).toBe(false);
+    }
+  });
+  it("the save again without the pages refused for another reason: that refusal is the op's", async () => {
+    const pages = [{ id: "p1", title: "Drawing", w: 10, h: 10, items: [{ t: "l", x1: 0, y1: 0, x2: 1, y2: 1, sw: 1, ink: "ink" }] }];
+    answers = [{ error: { code: "22023", message: "doc_pages: count" }, status: 400 }, { error: { code: "42501", message: "no right" }, status: 403 }];
+    const e = await applyOp(op(doc(pages)), "co-1", "u-1").then(() => undefined, (x: unknown) => x);
+    expect(e).toBeInstanceOf(PermanentError);
+    expect((e as PermanentError).message).toBe("no right");
+    expect(tables.some((t) => t.table === "estimate_line_items")).toBe(false);
   });
   it("a server without the function (PGRST202): the separate requests, as before", async () => {
     answers = [{ error: { code: "PGRST202", message: "no function" }, status: 404 }];

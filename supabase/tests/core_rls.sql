@@ -13462,8 +13462,8 @@ select tst.ok((select title = 'T200 one' and current_version_id = 'f2000000-0000
               'T200 the version, its current version and title, the lines and the cost — in one call');
 -- a refusal in the middle (a priced line hidden from the client: the table's check) — nothing of it is written
 :as_office_a
-select tst.fails($q$select tst.t200_save('T200 two', 'doc2', '[{"id": "b2000000-0000-4000-8000-0000000000b2", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Hidden", "quantity": "1", "unit": "ea", "unit_price_cents": 500, "client_visible": false}]')$q$,
-                 'T200 a line the table refuses: the save is refused');
+select tst.fails_like($q$select tst.t200_save('T200 two', 'doc2', '[{"id": "b2000000-0000-4000-8000-0000000000b2", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Hidden", "quantity": "1", "unit": "ea", "unit_price_cents": 500, "client_visible": false}]')$q$,
+                 '%estimate_line_items_check%', 'T200 a line the table refuses (after the version was written): the save is refused');
 :as_super
 select tst.ok((select title = 'T200 one' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
               and (select calc_inputs ->> 'mark' = 'doc1' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
@@ -13492,14 +13492,63 @@ select tst.fails_like(format($q$select tst.t200_save('T200 big', 'doc4', %L::jso
        '%too large%', 'T200 more than 4 MB: refused');
 select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', 'x', '[]', '[]', '[]', '[]')$q$,
        '%expected shape%', 'T200 not the expected shape: refused');
+-- a second, open version: refused while saving into it, the estimate's current version stays the first
+:as_super
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e2000000-0000-4000-8000-000000000001', 2);
+:as_office_a
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000002', 'T200 v2',
+         '{"calc_inputs": {"mark": "v2"}, "tax_mode": "added_on_top"}'::jsonb, '[{"id": "a2000000-0000-4000-8000-0000000000a2", "name": "A"}]'::jsonb,
+         '[{"id": "b2000000-0000-4000-8000-0000000000b4", "option_id": "a2000000-0000-4000-8000-0000000000a2", "name": "Hidden", "quantity": 1, "unit": "ea", "unit_price_cents": 500, "client_visible": false}]'::jsonb, '[]'::jsonb)$q$,
+       '%estimate_line_items_check%', 'T200 saving into a second version, refused in the middle');
+:as_super
+select tst.ok((select current_version_id = 'f2000000-0000-4000-8000-000000000001' and title = 'T200 sales' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
+              and (select calc_inputs is null from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000002')
+              and not exists (select 1 from public.estimate_options where version_id = 'f2000000-0000-4000-8000-000000000002'),
+              'T200 refused: the current version is still the first, the second as it was (no document, no options)');
+-- a discount, the pages the server refuses (the phone saves again without them on «doc_pages:»), the line cap
+:as_office_a
+select tst.t200_save('T200 discount', 'doc6', '[]', '[]', '[{"id": "a2000000-0000-4000-8000-0000000000a1", "name": "A", "position": 0, "discount_mode": "pct", "discount_value": 1250}]');
+:as_super
+select tst.ok((select discount_mode = 'pct' and discount_value = 1250 from public.estimate_options where id = 'a2000000-0000-4000-8000-0000000000a1'), 'T200 the option''s discount goes through');
+:as_office_a
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', 'x',
+         '{"calc_inputs": {"pages": "not a list"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$,
+       'doc_pages:%', 'T200 pages the server refuses: «doc_pages:» as before (the phone saves again without them)');
+select tst.fails_like(format($q$select tst.t200_save('T200 lines', 'doc7', %L::jsonb)$q$,
+         (select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'option_id', 'a2000000-0000-4000-8000-0000000000a1', 'name', 'x', 'quantity', 1, 'unit', 'ea', 'unit_price_cents', 1)) from generate_series(1, 2001) i)::text),
+       '%too large%', 'T200 more than 2000 lines: refused');
+-- a tech: his own draft — the lines saved, the cost left out; a sent one — refused
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e2000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T200 tech', 'a0000000-0000-0000-0000-000000000003');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2000000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e2000000-0000-4000-8000-000000000002', 1);
+:as_tech_a
+select public.save_estimate_version('e2000000-0000-4000-8000-000000000002', 'f2000000-0000-4000-8000-000000000003', 'T200 tech',
+  '{"calc_inputs": {"mark": "tech"}, "tax_mode": "added_on_top"}'::jsonb, '[{"id": "a2000000-0000-4000-8000-0000000000a3", "name": "A"}]'::jsonb,
+  '[{"id": "b2000000-0000-4000-8000-0000000000b5", "option_id": "a2000000-0000-4000-8000-0000000000a3", "name": "Work", "quantity": 1, "unit": "ea", "unit_price_cents": 900}]'::jsonb,
+  '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b5", "unit_cost_cents": 400}]'::jsonb);
+:as_super
+select tst.ok(exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b5')
+              and not exists (select 1 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b5'),
+              'T200 a tech saves his own draft; no cost is written');
+select set_config('app.signing_estimate', 'e2000000-0000-4000-8000-000000000002', false);
+update public.estimates set status = 'sent' where id = 'e2000000-0000-4000-8000-000000000002';
+select set_config('app.signing_estimate', '', false);
+:as_tech_a
+select tst.fails($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000002', 'f2000000-0000-4000-8000-000000000003', 'T200 tech 2',
+         '{"calc_inputs": {"mark": "tech2"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$, 'T200 a tech does not change a sent estimate');
+:as_super
+select tst.ok((select calc_inputs ->> 'mark' = 'tech' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000003'), 'T200 the sent one as it was');
 -- a locked (sent) version: its lines do not change
 :as_super
 update public.estimate_versions set locked_at = now() where id = 'f2000000-0000-4000-8000-000000000001';
 :as_office_a
-select tst.fails($q$select tst.t200_save('T200 locked', 'doc5', '[]')$q$, 'T200 a locked version is not changed');
+select tst.fails_like($q$select tst.t200_save('T200 locked', 'doc5', '[]')$q$, '%is locked%', 'T200 a locked version is not changed');
 :as_super
-select tst.ok((select calc_inputs ->> 'mark' = 'doc3' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
-              and exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b3'), 'T200 the locked version is as it was');
+select tst.ok((select calc_inputs ->> 'mark' = 'doc6' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_options where id = 'a2000000-0000-4000-8000-0000000000a1'), 'T200 the locked version is as it was');
 select tst.ok(not has_function_privilege('anon', 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE')
               and has_function_privilege('authenticated', 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE')
               and (select not prosecdef from pg_proc where oid = 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)'::regprocedure),

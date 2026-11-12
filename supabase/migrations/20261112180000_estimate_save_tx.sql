@@ -9,12 +9,15 @@
 -- version stay as they were.
 -- * security invoker: the caller's own rights — the same RLS and triggers as the separate requests (the lock of a sent
 --   version, the line checks, t20, a tech's own estimate); it gives nobody a new right.
--- * The version is locked first (for update): two saves of one estimate go one after the other.
+-- * The estimate is locked first, then the version (the order of send_estimate): two saves of one estimate go one after
+--   the other, a save and a send never deadlock.
 -- * Size: at most 10 options, 2000 lines, 2000 costs and 4 MB in all — beyond that 22023, hint estimate_save_size
 --   (as doc_pages caps the attached pages); a payload not of the expected shape — 22023, hint estimate_save_shape.
 -- Rule 16: a new function; older phones keep the separate requests (no worse than before), this phone uses them only
 -- when the server has no such function yet (PGRST202). Rule 18: revoked from public, anon; execute for authenticated.
--- Tests: supabase/tests/core_rls.sql T200, apps/mobile/test/opsEstimateQty.test.ts.
+-- The size caps stay above the app's own limits (3 options, a template's 10; pages ≤ 512 KB): a refusal of size is for
+--   good (the op leaves the queue), so the app never reaches it.
+-- Tests: supabase/tests/core_rls.sql T200, apps/mobile/test/opsEstimateSaveTx.test.ts.
 
 create or replace function public.save_estimate_version(p_estimate_id uuid, p_version_id uuid, p_title text, p_version jsonb,
                                                         p_options jsonb, p_lines jsonb, p_costs jsonb)
@@ -33,6 +36,9 @@ begin
     raise exception 'save_estimate_version: too large' using errcode = '22023', hint = 'estimate_save_size';
   end if;
 
+  -- the estimate first, then its version — the order of send_estimate and the signing functions (never a deadlock with
+  -- an office sending it at the same moment); two saves of one estimate go one after the other
+  perform 1 from public.estimates e where e.id = p_estimate_id for update;
   -- the version, as the caller may change it (RLS): locked for the rest of the save
   select v.company_id into v_company from public.estimate_versions v
    where v.id = p_version_id and v.estimate_id = p_estimate_id for update;
