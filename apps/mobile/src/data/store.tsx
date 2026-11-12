@@ -40,7 +40,7 @@ import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
-import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
+import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { contractInvoice, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
@@ -1995,7 +1995,8 @@ export function StoreProvider({
         // #1138: a tech makes a new estimate only where the server lets him (estimates_insert — a property he works at);
         // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
         if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return () => {};
-        const { doc, linesFrom } = docForSave(prev?.status, doc0, uid);
+        // as it may be counted and shown (Р3, Р4) before it is counted and saved
+        const { doc, linesFrom } = docForSave(prev?.status, normalizeDoc(doc0).doc, uid);
         const sum = summarize(doc);
         const versionId = uid();
         return mutate(

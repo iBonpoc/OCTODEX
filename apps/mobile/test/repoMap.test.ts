@@ -297,3 +297,22 @@ describe("repo: a voided deposit does not hide the paid one (В1-5)", () => {
     expect(db.estimates.find((e) => e.id === "e7")?.depositPaidAt).toBe("2026-11-06T10:00:00Z"); // before: the void one was found first — not paid
   });
 });
+
+describe("repo: an estimate's document is read as it may be counted and shown (normalizeDoc, Р3)", () => {
+  it("a priced line marked hidden comes back visible; a hidden $0 line stays hidden", async () => {
+    rows.estimates = [{ id: "e8", company_id: CO, customer_id: "c1", property_id: "p1", title: "T", status: "draft", current_version_id: "v8" }];
+    rows.estimate_versions = [{
+      id: "v8", estimate_id: "e8", company_id: CO, version_no: 1,
+      calc_inputs: {
+        options: [{ id: "o8", name: "A", lines: [
+          { id: "l1", name: "Priced", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000, clientVisible: false },
+          { id: "l2", name: "Free", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: false },
+        ] }],
+        settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" } },
+      },
+    }];
+    const db = await loadCompanyDB(CO, "u1");
+    const lines = db.estimates.find((e) => e.id === "e8")?.doc?.options[0]?.lines ?? [];
+    expect(lines.map((l) => [l.id, l.clientVisible])).toEqual([["l1", undefined], ["l2", false]]);
+  });
+});

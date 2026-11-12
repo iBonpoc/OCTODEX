@@ -1266,6 +1266,9 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     id: l.id, company_id: c, option_id: l.optionId, position: l.position, line_group: l.group, catalog_item_id: null,
     origin: l.catalogItemId ? "catalog" : "manual", name: l.name, description: l.description,
     quantity: l.quantity, unit: l.unit, unit_price_cents: l.unitPriceCents, taxable: l.taxable, is_optional: l.isOptional,
+    // a line hidden from the client ($0 only — the check of estimate_line_items): the page and the PDF leave it out. On
+    // every row: a batch insert sends the columns of all rows, a row without the key would send NULL (not null column)
+    client_visible: l.clientVisible !== false,
     // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
     ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
   }));
