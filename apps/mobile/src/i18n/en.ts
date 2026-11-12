@@ -3527,6 +3527,8 @@ export const en: Dict = {
   "po.rej.receiving": "The order is already being received — item changes were not saved",
   "po.rej.cancelled": "The order is cancelled — changes were not saved",
   "po.rej.stale": "The order changed on another phone — the marking was not saved. Open the order and mark again",
+  // #865 «Данные и деньги»: an invoice above the contract
+  "inv.rej.overContract": "The invoice was not issued: with the other invoices it is more than the contract. Another invoice was issued on this job while the phone was offline. Open the job to see what is left to bill.",
   "po.rej.officeOnly": "Only the office changes a received order",
   "po.rej.notOpen": "The order is not sent or is cancelled — nothing was marked",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)

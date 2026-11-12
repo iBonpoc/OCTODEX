@@ -86,3 +86,34 @@ export function visitPayment(
   if (expectedCents <= due) return { amountCents: expectedCents, into, overCents: 0 };
   return { amountCents: 0, into, overCents: expectedCents - due };
 }
+
+/**
+ * #865 (X-03): may an invoice of `amountCents` be issued on this contract — Σ live invoices (void ones do not count) plus
+ * it never more than the contract. The server refuses the same (trigger t41_invoice_contract, hint invoice_over_contract).
+ */
+export function canIssue(contractCents: number, invoices: InvoiceLike[], amountCents: number): boolean {
+  if (!(amountCents > 0)) return false;
+  const invoiced = invoices.filter((i) => !i.void).reduce((s, i) => s + i.totalCents, 0);
+  return invoiced + amountCents <= contractCents;
+}
+
+/**
+ * #865 (X-01, X-02): the tax inside an invoice of a contract. The contract total already holds the tax; an invoice keeps
+ * its total and splits it into subtotal + tax: tax = round half up (amount × contract tax / contract). The invoice that
+ * bills the rest of the contract takes what is left of the tax, so the invoices' tax adds up to the contract's.
+ * Never below 0, never above the invoice or the tax still left. The server counts the same (app.invoice_tax_share,
+ * migration 20261112060000); tests: engine contract.test.ts, db T196.
+ */
+export function invoiceTaxShare(
+  contractCents: number,
+  contractTaxCents: number,
+  invoices: (InvoiceLike & { taxCents?: number })[],
+  amountCents: number,
+): number {
+  if (!(contractCents > 0) || !(contractTaxCents > 0) || !(amountCents > 0)) return 0;
+  const live = invoices.filter((i) => !i.void);
+  const invoiced = live.reduce((s, i) => s + i.totalCents, 0);
+  const left = Math.max(0, contractTaxCents - live.reduce((s, i) => s + (i.taxCents ?? 0), 0));
+  const share = invoiced + amountCents >= contractCents ? left : roundCents(dec(amountCents).mul(contractTaxCents).div(contractCents));
+  return Math.max(0, Math.min(share, left, amountCents));
+}

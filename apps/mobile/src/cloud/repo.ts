@@ -462,7 +462,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const legacy = legacyForEstimate(e, { versionOf, options, lines, signed: !!appr });
     // E2a: the company's signature (an employee in their own name)
     const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
-    const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
+    const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number; tax?: number } | null;
     const depositJob = jobs.find((j) => j.estimate_id === e.id);
     const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit") : undefined;
     return {
@@ -490,6 +490,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
           ? {
               optionId: s(appr.option_id), addonIds: sel?.addon_ids ?? [], signerName: s(appr.signer_name), signature: s(appr.signature_svg),
               at: s(appr.signed_at), channel: appr.channel === "portal" ? "portal" : "on_site", totalCents: n(sel?.total ?? totals.total), depositCents: n(sel?.deposit ?? totals.deposit),
+              ...(typeof sel?.tax === "number" ? { taxCents: n(sel.tax) } : {}),
             }
           : undefined,
       depositPaidAt: depInv && n(depInv.paid_cents) > 0 ? s(depInv.updated_at) : undefined,

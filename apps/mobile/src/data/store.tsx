@@ -40,6 +40,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
+import { contractInvoice } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
@@ -1878,6 +1879,9 @@ export function StoreProvider({
         const job = d0.jobs.find((j) => j.id === jobId);
         const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
         if (!job || !customerId || amountCents <= 0) return () => {};
+        // #865: never more than the contract (the server refuses the same: t41_invoice_contract); the tax inside the total
+        const split = contractInvoice(d0, job, amountCents);
+        if (!split) return () => {};
         const id = uid();
         const now = new Date().toISOString();
         return mutate(
@@ -1886,7 +1890,7 @@ export function StoreProvider({
             ...d,
             invoices: [
               ...d.invoices,
-              { id, customerId, jobId, kind, title, totalCents: amountCents, paidCents: 0, dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined },
+              { id, customerId, jobId, kind, title, totalCents: amountCents, ...split, paidCents: 0, dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined },
             ],
           }),
           { k: "invoice.issue", id, jobId, customerId, kind, title, totalCents: amountCents, dueDate: companyToday(Date.parse(now)) },

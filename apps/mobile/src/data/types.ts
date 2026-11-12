@@ -604,6 +604,8 @@ export interface EstimateApproval {
   channel: "on_site" | "portal";
   totalCents: number;
   depositCents: number;
+  /** the contract's tax as signed (server: estimate_approvals.selection → tax); #865 splits the invoices by it */
+  taxCents?: number;
   /* ---- company signature (docs/specs/07 §3.2, wave E2a) ---- */
   /** ids the job and the deposit invoice will get when the company signs (offline: the same ids on the phone and the server) */
   jobId?: ID;
