@@ -193,6 +193,8 @@ export const component = {
   dimOpacity: 0.45,
   /** iOS-style menu that opens at the control (status, quick choices) */
   menuW: 240,
+  /** a menu shows at most this many rows (the last one half — it scrolls); a longer list is a PickerSheet (DS А2, #1164) */
+  menuMaxRows: 6.5,
   /** list cards (docs/specs/06-list-cards.md): option row in a picker sheet; narrowest figure tile */
   rowOption: 48,
   tileMin: 78,

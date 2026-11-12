@@ -214,7 +214,7 @@ export function partName(t: (key: DictKey, params?: Record<string, string | numb
 
 /** the dictionary group of an enum property's words: «k» is «K-style», «painted» is «Painted» */
 const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal: "m", color: "c", finish: "f", shape: "sh" };
-/** a property in inches (a coil's blank, a section's length): feet-inches-eighths, as on the drawing */
+/** a property in inches (a coil's blank, a section's length): feet-inches-sixteenths, as on the drawing */
 const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
 
 /**
@@ -235,7 +235,7 @@ function attrText(t: (key: DictKey, params?: Record<string, string | number>) =>
 }
 
 /**
- * A part's quantity for a person (#1090): a length in feet as feet-inches-eighths (the sum of the engine is decimal, a
+ * A part's quantity for a person (#1090): a length in feet as feet-inches-sixteenths (the sum of the engine is decimal, a
  * person reads «73′ 2″», not «73.16666666666667»), a count whole or to two places; the unit is a word of the document.
  */
 export function partQty(t: (key: DictKey, params?: Record<string, string | number>) => string, p: Pick<PartQty, "qty" | "unit">, fmt: LenFormat = "ftin"): string {

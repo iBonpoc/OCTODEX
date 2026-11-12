@@ -7,6 +7,7 @@ import { chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, 
 import type { Story } from "./scene";
 import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
+import { DENOM } from "./format";
 
 /** shorter than this is a slip of the finger, not a line */
 export const MIN_RUN_IN = 12;
@@ -141,7 +142,7 @@ export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawi
   // a taped length grows or shrinks by what the finger pulled (as drawing on straight does, extendRun), not forgotten
   const { lengthIn: typed, ...rest } = r;
   const shift = Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) - L;
-  const keep = typed !== undefined ? { lengthIn: Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round((typed + shift) * 8) / 8)) } : {};
+  const keep = typed !== undefined ? { lengthIn: Math.min(MAX_RUN_IN, Math.max(MIN_RUN_IN, Math.round((typed + shift) * DENOM) / DENOM)) } : {};
   const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, ...keep, a: at } : { ...rest, ...keep, b: at }, end);
   // never ends on another gutter's end by rounding (a corner only by the user's own act — drawing a line to it)
   if (d.runs.some((x) => x.id !== runId && sameStory(x, r) && [x.a, x.b].some((q) => Math.hypot(q[0] - at[0], q[1] - at[1]) <= 1.5))) return d;
@@ -237,7 +238,7 @@ export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?:
 export function setLength(d: Drawing, id: string, lengthIn: number | null): Drawing {
   const r = d.runs.find((x) => x.id === id);
   if (!r) return d;
-  const want = lengthIn === null ? undefined : Math.round(lengthIn * 8) / 8;
+  const want = lengthIn === null ? undefined : Math.round(lengthIn * DENOM) / DENOM;
   if (r.lengthIn === want) return d;
   const { lengthIn: _was, ...rest } = r;
   if (want === undefined) return { ...d, runs: d.runs.map((x) => (x.id === id ? rest : x)) };
@@ -344,7 +345,7 @@ export function extendRun(d: Drawing, a: P, b: P, attrs: DrawnRun["attrs"]): Dra
   const nb: P = [Math.round(a[0] + (ux / L) * add), Math.round(a[1] + (uy / L) * add)];
   const grown: DrawnRun = {
     ...(end ? { ...r, b: nb } : { ...r, a: nb }),
-    ...(r.lengthIn !== undefined ? { lengthIn: Math.round((r.lengthIn + add) * 8) / 8 } : {}),
+    ...(r.lengthIn !== undefined ? { lengthIn: Math.round((r.lengthIn + add) * DENOM) / DENOM } : {}),
   };
   const was = runLengthIn(r) || 1;
   const now = runLengthIn(grown);
