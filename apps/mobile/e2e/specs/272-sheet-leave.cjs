@@ -8,7 +8,7 @@ const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
-  await h.go("/settings/design-system");
+  await h.go("/settings/design-system/windows");
   await vis("showcase-windows").waitFor({ timeout: 5000 });
 
   // sample the open sheet and its background in the page while it leaves
@@ -50,7 +50,7 @@ exports.run = async (h) => {
   await check("reduce motion (the runner's setting): a dissolve");
   // the real motion: the page is loaded again with the setting off
   await p.emulateMedia({ reducedMotion: "no-preference" });
-  await h.go("/settings/design-system");
+  await h.go("/settings/design-system/windows");
   await vis("showcase-windows").waitFor({ timeout: 5000 });
   await check("motion on: goes down");
 };
