@@ -22,13 +22,18 @@ def body(ink, ring, rdx):
 def svg(ink, ring=None, bg=None, rdx=0, box=None, title=''):
     x, y, w, h = box
     b = f'<rect x="{x}" y="{y}" width="{w}" height="{h}" fill="{bg}"/>' if bg else ''
-    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x} {y} {w} {h}"><title>{title}</title>{b}{body(ink, ring, rdx)}</svg>'
+    return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x} {y} {w} {h}" width="{w}" height="{h}"><title>{title}</title>{b}{body(ink, ring, rdx)}</svg>'
 
 if __name__ == '__main__':
     import json
     c = json.loads((out / 'gr-layout.json').read_text())['logo']   # v4.2: gap as in the logo (70); «tight» (30) merged at 20–29 px
+    # v4.3 optical centre (founder 12.11: «изображение внутри иконки не отцентровано»). The box is centred on the bbox;
+    # the ink mass of G+R sits 0.4 % right of it and letters read low when centred exactly. Move the art 0.4 % left, 1 % up.
+    OPT_X, OPT_Y = -0.004, -0.010
+    x, y, side = c['icon'][0], c['icon'][1], c['icon'][2]
+    c['icon'] = [round(x - OPT_X * side), round(y - OPT_Y * side), side, side]
     W = {
-        'gr-icon.svg': svg(INK_D, None, BG, c['rdx'], c['icon'], 'GoRix GR v4.2 · app icon (iOS default, Android adaptive foreground on #0B0C0F)'),
+        'gr-icon.svg': svg(INK_D, None, BG, c['rdx'], c['icon'], 'GoRix GR v4.3 · app icon (optically centred) (iOS default, Android adaptive foreground on #0B0C0F)'),
         'gr-icon-tinted.svg': svg('#FFFFFF', None, '#000000', c['rdx'], c['icon'], 'GoRix GR v4.2 · iOS tinted: one colour, the system tints it'),
         'gr-icon-mono.svg': svg('#FFFFFF', None, None, c['rdx'], c['icon'], 'GoRix GR v4.2 · Android themed (monochrome): one colour on transparent'),
         'gr-mark-dark.svg': svg(INK_D, None, None, c['rdx'], c['icon'], 'GoRix GR v4.2 · square, no background'),

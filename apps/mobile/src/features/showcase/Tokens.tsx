@@ -82,9 +82,10 @@ export function TokenSection({ s }: { s: ShowcaseSection }) {
   );
 }
 
-export const TokenSections = () => (
+/** the token blocks of one showcase screen (registry: `screen`) */
+export const TokenSections = ({ screen }: { screen: string }) => (
   <>
-    {SECTIONS.filter((s) => s.tokenGroups.length).map((s) => (
+    {SECTIONS.filter((s) => s.screen === screen && s.tokenGroups.length).map((s) => (
       <TokenSection key={s.id} s={s} />
     ))}
   </>

@@ -5,10 +5,27 @@
  * same PR, and the PR says «Проверить в витрине: Настройки → Дизайн-система → <раздел> — что сделать, что увидеть».
  */
 import type { DictKey } from "@/i18n";
+import type { IconKey } from "@/ui/primitives";
+
+/**
+ * One screen of the showcase = one row of its first screen (#1150: a list of sections, each its own screen).
+ * `ds` is the DESIGN-SYSTEM.md section the screen is about, shown on the row.
+ */
+export interface ShowcaseScreen {
+  id: string;
+  title: DictKey;
+  hint: DictKey;
+  icon: IconKey;
+  ds: string;
+  /** «где в приложении»: the screens where this is seen */
+  where: DictKey;
+}
 
 export interface ShowcaseSection {
   /** testID suffix: `showcase-<id>` */
   id: string;
+  /** which screen of the showcase shows it (ShowcaseScreen.id) */
+  screen: string;
   /** the DESIGN-SYSTEM.md section the samples belong to, «§14.1» — the guard checks the heading exists */
   ds: string;
   title: DictKey;
@@ -18,14 +35,29 @@ export interface ShowcaseSection {
   components: string[];
 }
 
+/** the rows of the showcase's first screen, in the order of the founder's list (#1093 comment 12.11.2026) */
+export const SCREENS: ShowcaseScreen[] = [
+  { id: "base", title: "ds.scr.base", hint: "ds.scr.baseHint", icon: "star", ds: "§3–§4", where: "ds.where.base" },
+  { id: "buttons", title: "ds.scr.buttons", hint: "ds.scr.buttonsHint", icon: "cursor", ds: "§7", where: "ds.where.buttons" },
+  { id: "selectors", title: "ds.sec.selectors", hint: "ds.scr.selectorsHint", icon: "sliders", ds: "§9", where: "ds.where.selectors" },
+  { id: "windows", title: "ds.sec.windows", hint: "ds.scr.windowsHint", icon: "copy", ds: "§10", where: "ds.where.windows" },
+  { id: "notices", title: "ds.scr.notices", hint: "ds.scr.noticesHint", icon: "bell", ds: "§15", where: "ds.where.notices" },
+  { id: "motion", title: "ds.sec.motion", hint: "ds.scr.motionHint", icon: "refresh", ds: "§14", where: "ds.where.motion" },
+  { id: "haptics", title: "ds.scr.haptics", hint: "ds.scr.hapticsHint", icon: "phone", ds: "§15.6", where: "ds.where.haptics" },
+  { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing" },
+];
+
 export const SECTIONS: ShowcaseSection[] = [
-  { id: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet"] },
-  { id: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField"] },
-  { id: "tokens-color", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
-  { id: "tokens-text", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
-  { id: "tokens-layout", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
-  { id: "tokens-motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
-  { id: "tokens-print", ds: "§19", title: "ds.sec.print", tokenGroups: ["print", "drawingPrint"], components: [] },
+  { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet"] },
+  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField"] },
+  { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press"] },
+  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge"] },
+  { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
+  { id: "tokens-color", screen: "base", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
+  { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
+  { id: "tokens-layout", screen: "spacing", ds: "§5", title: "ds.sec.layout", tokenGroups: ["space", "spaceHalf", "radius", "size", "breakpoint", "layout", "z", "component"], components: [] },
+  { id: "tokens-motion", screen: "motion", ds: "§14", title: "ds.sec.motion", tokenGroups: ["motion", "timing"], components: [] },
+  { id: "tokens-print", screen: "base", ds: "§19", title: "ds.sec.print", tokenGroups: ["print", "drawingPrint"], components: [] },
 ];
 
 /**
@@ -33,10 +65,10 @@ export const SECTIONS: ShowcaseSection[] = [
  * the guard fails on a component that is neither in a section, nor here, nor in UI_NOT_SHOWN.
  */
 export const UI_PENDING: readonly string[] = [
-  "Columns", "Meter", "ReadOnly", "Button", "IconButton", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
+  "Columns", "Meter", "ReadOnly", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
   "TextField", "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
-  "ListPanel", "Glass", "Menu", "HelpButton", "ToastProvider", "T", "Icon", "Press", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
-  "Divider", "Empty", "SyncBadge", "Screen",
+  "ListPanel", "Glass", "Menu", "HelpButton", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
+  "Divider", "Empty", "Screen",
 ];
 
 /** components that are plumbing, not something a person sees — each with the reason */

@@ -64,6 +64,15 @@ describe("design system: components", () => {
     );
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
+  it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
+    const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
+    expect(hits).toEqual([]);
+  });
+  it("dragging gives haptics: lift = light, drop into a zone = medium (DS §15.6, #1088)", () => {
+    const src = readFileSync(join(ROOT, "features", "dnd.tsx"), "utf8");
+    expect(src).toMatch(/onActivate:[\s\S]*?haptics\.light\(\)/);
+    expect(src).toMatch(/onDeactivate:[\s\S]*?haptics\.medium\(\)/);
+  });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>
       readFileSync(f, "utf8")

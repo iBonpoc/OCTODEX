@@ -32,6 +32,7 @@ def app_icon(mark, bg='#0B0C0F', ink='#F2F3F5', dot='#FBFF00'):
 WORD = svg('brand/gorix-wordmark-dark.svg')
 LOGO_V = svg('brand/gorix-logo-vertical-dark.svg')
 MADE = svg('brand/made-with-gorix.svg')
+ICON_BEFORE = svg('v4/gr-icon-v42-before.svg', color=False)
 ICONS = {'light': app_icon(MARK), 'dark': app_icon(MARK), 'tinted': app_icon(MARK, '#000000', '#FFFFFF', '#FFFFFF')}
 REFINE = [('Сейчас', svg('brand/gorix-mark-ink-dark.svg', color=False).replace('#F2F3F5', 'currentColor')),
           ('A1 · точка с зазором', svg('directions/A-route-refine/a1-gap.svg', color=False).replace('#F2F3F5', 'currentColor')),
@@ -143,7 +144,7 @@ ul.no{padding-left:18px}ul.no li{color:var(--ink);margin:4px 0;font-size:14px}
 .marks{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}.mc{border:1px solid var(--bd);border-radius:18px;padding:10px;background:var(--bg)}.mc .big{width:96px;color:var(--ink);margin:0 auto}.mc .big svg{display:block;width:100%;height:auto}
 .mc .sm{display:flex;gap:10px;align-items:flex-end;justify-content:center;margin-top:8px;color:var(--ink)}.mc .sm span svg{display:block;width:100%;height:auto}.mc b{display:block;font-size:12.5px;text-align:center;margin-top:6px}
 .dirs{display:flex;gap:12px}.dirs figure{width:100px}.dirs .ic{width:100px;height:100px;border-radius:22px;overflow:hidden}.dirs .ic svg{display:block;width:100%;height:100%}
-.note{font-size:13px;color:var(--mut)}.ic2{display:inline-block;overflow:hidden}.ic2 svg{display:block;width:100%;height:auto}
+.note{font-size:13px;color:var(--mut)}.icg{position:relative;display:inline-block;overflow:hidden}.icg>svg{display:block;width:100%;height:auto}.icg .grid{position:absolute;inset:0;width:100%;height:100%;display:none}body.grid .icg .grid{display:block}.gridt{display:inline-flex;gap:8px;align-items:center;font-size:14px;margin:6px 0}.ic2{display:inline-block;overflow:hidden}.ic2 svg{display:block;width:100%;height:auto}
 .strip{display:flex;gap:8px;align-items:center;background:var(--surf2);border:1px solid var(--bd);border-radius:12px;padding:8px 12px;font-size:13px;color:var(--ink)}
 .mot .vis svg,.frame svg{width:100%;height:auto}.mot .vis>div{width:200px;max-width:100%}
 .gx3.still .draw,.gx3.still .fill,.gx3.still .word{animation:none!important}
@@ -157,6 +158,7 @@ function still(){const rm=document.body.classList.contains('rm');document.queryS
 document.querySelectorAll('[data-replay]').forEach(b=>b.onclick=()=>{const v=document.getElementById(b.dataset.replay);v.innerHTML=v.innerHTML;still();});
 document.querySelectorAll('#rm button').forEach(b=>b.addEventListener('click',still));
 document.getElementById('slow').onclick=function(){const b=this,v=document.getElementById('m-launch');b.setAttribute('aria-pressed','true');v.innerHTML=v.innerHTML;const s=v.querySelector('svg'),t0=performance.now();(function f(){const e=(performance.now()-t0)/3;freeze(s,Math.min(e,1600));if(e<1600)requestAnimationFrame(f);else b.setAttribute('aria-pressed','false')})();};
+const gt=document.getElementById('gridon');if(gt)gt.onchange=()=>document.body.classList.toggle('grid',gt.checked);
 document.querySelectorAll('.frame').forEach(f=>freeze(f.querySelector('svg'),+f.dataset.t));
 '''
 
@@ -187,6 +189,9 @@ out = ['<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="v
        '<h3>Знак GR</h3>',
        f'<div class="marks"><div class="mc t-dark"><div class="lg" style="width:100%">{GR}</div><b>тёмная</b></div><div class="mc t-light"><div class="lg" style="width:100%">{GR_L}</div><b>светлая</b></div></div>',
        f'<h3>Иконка: 120 · 60 · 40 · 29 · 20</h3><div class="row" style="align-items:flex-end">' + ''.join(f'<span class="ic2" style="width:{px}px;border-radius:{round(px*.22)}px">{ICONS["dark"]}</span>' for px in (120, 60, 40, 29, 20)) + '</div>',
+       '<h3>Центр иконки: было / стало</h3><p>Вы заметили, что знак внутри иконки не по центру. Замерил: по рамке рисунка знак стоял ровно, но на глаз казался ниже и правее — буквы, поставленные точно в центр, всегда кажутся ниже, а ножка R утяжеляет правую сторону. Стало: знак сдвинут на 0,4 % влево и на 1 % вверх. Включите сетку — оси и линия 80 % — и сравните.</p><label class="gridt"><input type="checkbox" id="gridon"> Показать сетку</label>',
+       f'<div class="row" style="align-items:flex-end">' + ''.join(f'<figure style="width:{w}px"><span class="icg" style="width:{w}px;border-radius:{round(w*.225)}px">{s}<svg class="grid" viewBox="0 0 100 100"><path d="M50 0V100M0 50H100" stroke="#ff3b6b" stroke-width=".5"/><rect x="10" y="10" width="80" height="80" rx="16" fill="none" stroke="#3bd1ff" stroke-width=".5" stroke-dasharray="2 2"/></svg></span><figcaption><b>{lab}</b>{cap}</figcaption></figure>' for w, s, lab, cap in [(140, ICON_BEFORE, 'было', 'по рамке: x 0,0 · y 0,0 %<br>на глаз: ниже и правее'), (140, ICONS["dark"], 'стало', 'по рамке: x −0,4 · y −1,0 %<br>по массе: x 0,0 · y −1,0 %'), (60, ICONS["dark"], '60', 'то же'), (29, ICONS["dark"], '29', 'фавикон 48: x +0,3 · y −0,9 %')]) + '</div>',
+       '<p class="note">Смещение — в процентах стороны иконки, минус — влево и вверх. В меню (24) и на пустых экранах знак стоит в своей рамке ровно по центру (0 / 0 %): там его ставит сама вёрстка.</p>',
        f'<h3>Варианты иконки</h3><div class="row" style="align-items:flex-end"><figure style="width:96px"><span class="ic2" style="width:96px;border-radius:21px">{ICONS["dark"]}</span><figcaption><b>обычная</b>iOS и Android</figcaption></figure><figure style="width:96px"><span class="ic2" style="width:96px;border-radius:21px">{IC_T}</span><figcaption><b>тонированная</b>iOS, один цвет</figcaption></figure><figure style="width:96px"><span class="ic2" style="width:96px;border-radius:48px;background:#3a4a5c">{IC_M}</span><figcaption><b>одноцветная</b>Android, тема</figcaption></figure></div>',
        f'<h3>Мелко на светлом (24 px и меньше)</h3><div class="row" style="align-items:center"><span class="t-light" style="display:inline-block;padding:10px;border-radius:10px;background:var(--bg)"><span class="ic2" style="width:40px">{GR_S}</span></span><span class="t-light" style="display:inline-block;padding:10px;border-radius:10px;background:var(--bg)"><span class="ic2" style="width:28px">{GR_S}</span></span></div><p class="note">На светлом фоне при 24 px и меньше (меню, фавикон) точка цвета ink, без жёлтого: жёлтый в ободке там превращается в соринку. Жёлтая точка — на иконке, заставке, в ожидании и на крупном знаке.</p>',
        '<p class="note">Скругления и толщина у G и R — как в слове GoRix. Зазор между G и R — как в слове (70): плотнее (30) буквы слипались на 20–29 px. Точка в знаке крупнее (r 85). «Кнопка Go» и силуэты «спокойный/смелый» сняты: выбран знак GR, у G прямой конец.</p>']

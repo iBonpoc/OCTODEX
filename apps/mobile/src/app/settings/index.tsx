@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { languages, useI18n, type Lang } from "@/i18n";
@@ -8,6 +8,7 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
 import { canSeeShowcase } from "@/features/showcase/access";
+import { useHapticsEnabled } from "@/ui/haptics";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
 import { PushSettingsSection } from "@/features/PushSettings";
@@ -26,6 +27,7 @@ export default function Settings() {
   const toast = useToast();
   const hints = useHints();
   const [showDone, setShowDone] = usePlanShowDone();
+  const [hapticsOn, setHapticsOn] = useHapticsEnabled();
   // «Для проверки» (offline, reset) — demo only (docs/specs/13 §2.3)
   return (
     <Screen title={t("nav.mySettings")}>
@@ -53,6 +55,18 @@ export default function Settings() {
           <View testID="settings-design-system">
             <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} onPress={() => router.push("/settings/design-system")} />
           </View>
+        </Card>
+      ) : null}
+      {/* «Вибрация» (DS §15.6, В-20): a setting of this device, on by default; the web has no vibration, so no switch there */}
+      {Platform.OS !== "web" ? (
+        <Card>
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="heading" style={{ flex: 1 }}>
+              {t("haptics.title")}
+            </T>
+            <Toggle label={t("haptics.title")} on={hapticsOn} onChange={setHapticsOn} />
+          </RowView>
+          <T v="caption" tone="mut">{t("haptics.hint")}</T>
         </Card>
       ) : null}
       {/* wave 7б-1: personal, the same on every device (docs/specs/03 §12) */}
