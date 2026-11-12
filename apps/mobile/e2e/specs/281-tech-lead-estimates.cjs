@@ -17,6 +17,10 @@ exports.run = async (h) => {
   Object.assign(lead, { propertyId: "p7", customerId: undefined, status: "booked" });
   const base = db.estimates.find((e) => e.id === "e2");
   db.estimates.push({ ...base, id: "e-281", leadId: "l4", propertyId: "p7", customerId: "c7", title: "Nightly 281 estimate", createdBy: "m-ivan" });
+  // a template with one line (тестовые): the builder opens with content, so «Сохранить» is not off for an empty estimate
+  const doc = JSON.parse(JSON.stringify(db.estimates.find((e) => e.doc).doc));
+  doc.options = [{ ...doc.options[0], lines: [{ id: "tl281", group: "service", name: "Nightly 281 line (тестовые)", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }];
+  db.estimateTemplates = [...(db.estimateTemplates || []), { id: "tpl281", name: "Nightly 281 template", doc }];
   await h.seed("octo.db.v5", raw);
   await h.seed("octo.leadTab.v2", "estimates");
 
@@ -31,7 +35,7 @@ exports.run = async (h) => {
 
   // the builder at that address: the office makes it — the main button stays active (DS §11 п.3); pressed, it says
   // why and saves nothing (the director's review of #1169)
-  await h.go("/estimate/new?customerId=c7&propertyId=p7&leadId=l4");
+  await h.go("/estimate/new?template=tpl281&customerId=c7&propertyId=p7&leadId=l4");
   await p.getByTestId("ue-not-here").first().waitFor({ state: "visible", timeout: 15000 });
   const before = (await h.db()).estimates.length;
   await p.getByTestId("ue-save").first().getByRole("button").click();
