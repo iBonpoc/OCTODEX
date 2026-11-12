@@ -162,7 +162,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   // the real Payment Element: the company's Stripe takes charges, in the client's browser; the simulation only otherwise
   const canOnline = data.onlinePay && data.source !== "local" && Platform.OS === "web";
   const pdf = () =>
-    saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(portalFail(t, e)));
+    saveEstimatePdf(estimateHtml(data, { lang: data.lang, choice: { optionId: base.id, addonIds: addons } }), estimateFileName(data)).catch((e) => toast.show(portalFail(t, e)));
 
   return (
     <Screen
@@ -297,7 +297,9 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
           {data.company.terms}
         </T>
       ) : null}
-      <Button label={data.status === "approved" ? t("est.portal.downloadSigned") : t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
+      <View testID="portal-pdf">
+        <Button label={data.status === "approved" ? t("est.portal.downloadSigned") : t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
+      </View>
       <SimulatedCheckout
         visible={!!payingInv}
         amountCents={payingInv ? payingInv.totalCents - payingInv.paidCents : 0}
