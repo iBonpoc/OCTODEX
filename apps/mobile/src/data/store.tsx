@@ -1989,6 +1989,8 @@ export function StoreProvider({
         const now = new Date().toISOString();
         return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
           k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
+          // #1147: on site, the total the client saw (the option with its add-ons, as summarize counts it — the server the same)
+          ...(a.channel === "on_site" ? { totalCents: summarize(e.doc, a).totalCents } : {}),
         });
       },
       countersignEstimate: (id, signature) => {
@@ -2512,6 +2514,8 @@ export function StoreProvider({
           {
             k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client",
             sent: dbRef.current.estimates.find((x) => x.id === id)?.status === "sent",
+            // #1147: the total the client saw on the phone — the server refuses another (the office changed it meanwhile)
+            totalCents: dbRef.current.estimates.find((x) => x.id === id)?.totalCents,
           },
         ),
       payDeposit: (id, method, fromClient) => {
