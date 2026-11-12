@@ -598,6 +598,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               locked={signed}
               onDrop={dropRow}
               onHold={setHoldSection}
+              beforeBegin={(r) => r.type !== "section" || leaveRow(true)}
               renderRow={(r, i) =>
 
               r.type === "section" ? (

@@ -133,3 +133,14 @@ export function edgeStep(y: number | null, top: number, bottom: number, edge: nu
   const step = Math.max(1, Math.round(Math.min(1, depth) * max));
   return y < top + edge ? -step : step;
 }
+
+/** what a drop came to: the list is different now / it ended where it was / the module leads the order and refused */
+export type DropResult = "moved" | "same" | "refused";
+
+/** the feel of a drop, decided by what it CAME TO (never before): a move — «medium»; a refusal — «warning»; nothing moved — none */
+export const feelOf = (r: DropResult): "medium" | "warning" | null => (r === "moved" ? "medium" : r === "refused" ? "warning" : null);
+
+/** one row is held at a time: a second finger on another row (or its handle and its body) is not a second drag (#1245) */
+export const canBegin = (active: string | null): boolean => active === null;
+/** only the row that is held hears about moves and the end of ITS drag */
+export const ownsDrag = (active: string | null, key: string): boolean => active === key;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine, CustomOption, EstimateSection } from "@octo/estimating-engine";
 import { moveLine, moveSection, sameLayout, viewRows } from "../src/features/sectionLayout";
-import { dragKind, edgeStep, insertionIndex, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
+import { canBegin, dragKind, edgeStep, feelOf, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
 
 const L = (id: string, sectionId?: string): CustomLine => ({ id, name: id, group: "service", quantity: "1", unit: "ea", unitPriceCents: 100, ...(sectionId ? { sectionId } : {}) });
 const opt = (lines: CustomLine[], sections?: EstimateSection[]): CustomOption => ({ id: "o", name: "Good", lines, ...(sections ? { sections } : {}) });
@@ -155,5 +155,23 @@ describe("a long estimate does not slow the drag (100 rows)", () => {
     for (let i = 0; i < 1000; i++) sink += insertionIndex(mids, (i * 7) % 4000) + (resolveDrop(big, "l:l50", i % 100) ? 1 : 0);
     expect(sink).toBeGreaterThan(0);
     expect(performance.now() - t0).toBeLessThan(500);
+  });
+});
+
+describe("the feel of a drop follows what it came to (#1245)", () => {
+  it("moved — medium; refused — warning; ended where it was — none (never a buzz for a move that did not happen)", () => {
+    expect(feelOf("moved")).toBe("medium");
+    expect(feelOf("refused")).toBe("warning");
+    expect(feelOf("same")).toBeNull();
+  });
+});
+
+describe("one drag at a time (#1245 Б2)", () => {
+  it("a second finger starts nothing while a row is held; moves and the end belong to the held row only", () => {
+    expect(canBegin(null)).toBe(true);
+    expect(canBegin("l:a")).toBe(false);
+    expect(ownsDrag("l:a", "l:a")).toBe(true);
+    expect(ownsDrag("l:a", "l:b")).toBe(false);
+    expect(ownsDrag(null, "l:a")).toBe(false);
   });
 });

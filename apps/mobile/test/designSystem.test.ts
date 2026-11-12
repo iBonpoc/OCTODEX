@@ -129,15 +129,16 @@ describe("design system: components", () => {
     for (const f of code) {
       const src = readFileSync(f, "utf8");
       if (!/holdConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
-      for (const k of ["light", "selection", "medium"]) if (!new RegExp(`haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
+      // «medium» may come through feelOf(result) — the drop's feel decided by what it came to (sortable.ts)
+      for (const k of ["light", "selection", "medium"]) if (!new RegExp(k === "medium" ? "haptics\\.medium\\(|feelOf\\(" : `haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
     }
     expect(hits, "a drag without its haptics (DS §15.6): lift = light, new place = selection, drop = medium").toEqual([]);
     const sortable = readFileSync(join(ROOT, "features", "SortableList.tsx"), "utf8");
     // let go where it was taken: no drop, no «medium»
     expect(sortable).toMatch(/r\.p !== fromSlot\.current/);
-    // the buzz follows what the drop came to: «medium» only for a move that happened, «warning» for a refusal — never before the result
-    expect(sortable).toMatch(/const res: DropResult = d \? drop\(d\) : "same";[\s\S]*?res === "moved"\) haptics\.medium\(\)/);
-    expect(sortable.slice(0, sortable.indexOf("const res: DropResult"))).not.toMatch(/haptics\.medium/);
+    // the buzz follows what the drop came to (feelOf, tested in sortable.test): it is asked after the result, never before
+    expect(sortable).toMatch(/const res: DropResult = d \? drop\(d\) : "same";[\s\S]*?feelOf\(res\)/);
+    expect(sortable.slice(0, sortable.indexOf("const res: DropResult"))).not.toMatch(/haptics\.(medium|warning)/);
     // the kind of pointer, not the width, decides how a body starts a drag
     for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
   });

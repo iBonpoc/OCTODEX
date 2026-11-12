@@ -11,7 +11,7 @@ import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, holdConfig } from "@/ui/pointer";
-import { dragKind, edgeStep, insertionIndex, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop } from "./sortable";
+import { canBegin, dragKind, edgeStep, feelOf, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
 /**
@@ -34,16 +34,19 @@ interface Ctl {
   dragY: ReturnType<typeof useSharedValue<number>>;
   /** how far the page has scrolled since the row was taken (the row goes with it) */
   scrolled: ReturnType<typeof useSharedValue<number>>;
+  /** counts the drops that moved something */
+  snap: number;
   layout: (key: string, y: number, h: number) => void;
   node: (key: string, n: ComponentRef<typeof View> | null) => void;
   begin: (key: string, absY: number) => void;
   move: (key: string, ty: number, absY: number) => void;
-  end: (key: string, canceled: boolean) => void;
+  /** `ty` — the last translation the gesture reports with its end (its last update may not have reached JS yet) */
+  end: (key: string, canceled: boolean, ty: number) => void;
   canDrag: (key: string) => boolean;
 }
 const SortCtx = createContext<Ctl | null>(null);
 
-export type DropResult = "moved" | "same" | "refused";
+export type { DropResult };
 
 export interface SortableListProps {
   rows: ViewRow[];
@@ -58,10 +61,12 @@ export interface SortableListProps {
   onDrop: (drop: Drop) => DropResult;
   /** a section is held: the screen folds it while it is carried (its lines go with it), `null` — let go */
   onHold?: (sectionId: string | null) => void;
+  /** before a section is taken (it folds, and an open row inside it would be unmounted): false — the drag does not start */
+  beforeBegin?: (row: ViewRow) => boolean;
   renderRow: (row: ViewRow, index: number) => ReactNode;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegin, renderRow }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -87,8 +92,13 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
   /** where the finger is in the window; null until the drag has told (a 0 would read as «at the top edge» and the page would run) */
   const absY = useRef<number | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const latest = useRef({ rows, onDrop, onHold, state, scroll, openKey, locked });
-  latest.current = { rows, onDrop, onHold, state, scroll, openKey, locked };
+  /** the key held now (a ref: two fingers are two handlers, and a state would be one render late) */
+  const activeKey = useRef<string | null>(null);
+  /** counts the drops that moved something: the rows stand where the new order puts them, at once, no sliding from ±h */
+  const [snap, setSnap] = useState(0);
+  const [, bump] = useState(0);
+  const latest = useRef({ rows, onDrop, onHold, beforeBegin, state, scroll, openKey, locked });
+  latest.current = { rows, onDrop, onHold, beforeBegin, state, scroll, openKey, locked };
 
   const place = useCallback((key: string, ty: number) => {
     const { rows: rs } = latest.current;
@@ -110,11 +120,12 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
   useEffect(() => stop, [stop]);
 
   const refresh = useCallback(
-    (key: string) => {
+    (key: string, fromTimer = false) => {
       const moved = (latest.current.scroll?.offset() ?? 0) - startOffset.current;
       const ty = lastT.current + moved;
       scrolled.value = moved;
-      dragY.value = ty;
+      // the finger moves the row on the UI thread; JS writes it only when the PAGE moved under a still finger (a write per move shook it)
+      if (fromTimer) dragY.value = ty;
       const r = place(key, ty);
       if (r) {
         if (r.p !== slot.current) {
@@ -128,9 +139,20 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
   );
 
   /** where each row stands NOW, in the list (the browser tells a layout only when a size changes, not when a row above grew) */
-  const measureAll = useCallback(() => {
+  const measureAll = useCallback((withHeld = false) => {
     boxRef.current?.measureInWindow((_x: number, cy: number) => {
-      nodes.current.forEach((n, k) => n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => layouts.current.set(k, { y: ny - cy, h: nh })));
+      // the first measure (at the start) takes every row, the held one too — its place may be stale after a drop (the browser tells a
+      // layout only when a size changes). A later measure leaves the held row out: it is lifted (scaled, tilted) by then.
+      const pending = [...nodes.current.entries()].filter(([k]) => withHeld || k !== activeKey.current);
+      let left = pending.length;
+      if (!left) return;
+      pending.forEach(([k, n]) =>
+        n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => {
+          layouts.current.set(k, { y: ny - cy, h: nh });
+          // the bar is drawn from these: draw it again with the new numbers
+          if (--left === 0) bump((v) => v + 1);
+        }),
+      );
     });
   }, []);
 
@@ -145,21 +167,27 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
       held,
       dragY,
       scrolled,
+      snap,
       layout: (key, y, h) => void layouts.current.set(key, { y, h }),
       node: (key, n) => void nodes.current.set(key, n),
       canDrag: (key) => !latest.current.locked && !!keys.includes(key),
       begin: (key, y) => {
-        const { rows: rs, scroll: sc, onHold: hold } = latest.current;
+        // one drag at a time: a second finger on another row (a handle and a body are two handlers) starts nothing
+        if (!canBegin(activeKey.current)) return;
+        const { rows: rs, scroll: sc, onHold: hold, beforeBegin: before } = latest.current;
         const idx = rs.findIndex((r) => rowKey(r) === key);
         const row = rs[idx];
         const me = layouts.current.get(key);
         if (!row || !me) return;
+        // a section folds when taken: an open row inside it must close first (a wrong one speaks and the drag does not start)
+        if (before && !before(row)) return;
+        activeKey.current = key;
         startOffset.current = sc?.offset() ?? 0;
         // the finger's place is known from the first moment (before, the page ran up from a 0 and the row with it)
         absY.current = y;
         visible.current = null;
         sc?.measureVisible((v) => (visible.current = v));
-        measureAll();
+        measureAll(true);
         lastT.current = 0;
         dragY.value = 0;
         scrolled.value = 0;
@@ -176,7 +204,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         if (row.type === "section") {
           hold?.(row.section.id);
           // the section folds: the rows below it have moved — measure them again once the fold is drawn
-          requestAnimationFrame(() => requestAnimationFrame(measureAll));
+          requestAnimationFrame(() => requestAnimationFrame(() => measureAll()));
         }
         // the page follows the held row near the edges of what can be seen (below the header, above the bottom bar)
         timer.current = setInterval(() => {
@@ -186,15 +214,20 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
           const step = edgeStep(absY.current, v.top, v.bottom, gesture.autoScrollEdge, space[3]);
           if (!step) return;
           s.scrollBy(step);
-          refresh(key);
+          refresh(key, true);
         }, 16);
       },
       move: (key, ty, y) => {
+        if (!ownsDrag(activeKey.current, key)) return;
         lastT.current = ty;
         absY.current = y;
         refresh(key);
       },
-      end: (key, canceled) => {
+      end: (key, canceled, endTy) => {
+        // only the held row's own finger ends the drag (the other finger's end took its place, its lastT and its lock)
+        if (!ownsDrag(activeKey.current, key)) return;
+        activeKey.current = null;
+        lastT.current = endTy;
         stop();
         lock(false);
         const { rows: rs, onDrop: drop, onHold: hold } = latest.current;
@@ -213,14 +246,15 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
         // refused — «warning» (never «medium» for a move that did not happen)
         const res: DropResult = d ? drop(d) : "same";
-        if (res === "moved") haptics.medium();
-        else if (res === "refused") haptics.warning();
-        if (res === "moved") dragY.value = 0;
+        const feel = feelOf(res);
+        if (feel) haptics[feel]();
+        // moved: the row's offset stays until the new order is drawn (zeroing it first showed the row at its old place for a frame)
+        if (res === "moved") setSnap((n) => n + 1);
         else dragY.value = reduce ? 0 : withSpring(0, motion.spring);
         lift.value = reduce ? 0 : withSpring(0, motion.spring);
       },
     }),
-    [keys, state, lift, held, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, insets.top, insets.bottom, winH],
+    [keys, state, snap, lift, held, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, insets.top, insets.bottom, winH],
   );
 
   // the bar: where the held row will stand
@@ -259,9 +293,16 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   const restIndex = ctl.active ? (idx > ctl.from ? idx - 1 : idx) : idx;
   const shift = ctl.active && !mine ? shiftOf(restIndex, ctl.from, ctl.to, ctl.h) : 0;
   const sh = useSharedValue(0);
+  const lastSnap = useRef(ctl.snap);
   useEffect(() => {
+    // a drop that moved something: the new order is drawn at once — the rows were ±h to make room, now they stand in their places
+    if (lastSnap.current !== ctl.snap) {
+      lastSnap.current = ctl.snap;
+      sh.value = shift;
+      return;
+    }
     sh.value = reduce ? shift : withTiming(shift, { duration: motion.durBase, easing: Easing.out(Easing.cubic) });
-  }, [shift, reduce, sh]);
+  }, [shift, reduce, sh, ctl.snap]);
 
   // the movement is on the UI thread (no bridge per frame): the row follows the finger and the page's scroll; the JS side is told
   // only to find the place (`move`). One finger: a second one cancels the drag.
@@ -283,7 +324,7 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     },
     onDeactivate: (e) => {
       "worklet";
-      runOnJS(end)(k, e.canceled);
+      runOnJS(end)(k, e.canceled, e.translationY);
     },
   });
   // the body of a row: a mouse / pen starts after a move of `dragStart`, a finger only after a hold (else the page's scroll is lost)
@@ -303,7 +344,7 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     },
     onDeactivate: (e) => {
       "worklet";
-      runOnJS(end)(k, e.canceled);
+      runOnJS(end)(k, e.canceled, e.translationY);
     },
   });
 

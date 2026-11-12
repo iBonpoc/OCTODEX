@@ -171,7 +171,7 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
       { rotate: `${motion.liftTilt * lift.value}deg` },
     ],
     zIndex: held.value > 0.5 ? z.lift : 0,
-    shadowOpacity: 0.35 * lift.value,
+    shadowOpacity: component.liftShadow * lift.value,
     shadowRadius: c.shadow.radius,
     shadowOffset: { width: 0, height: component.dragHandle },
     shadowColor: c.shadow.color,

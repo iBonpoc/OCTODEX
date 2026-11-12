@@ -177,6 +177,8 @@ export const component = {
   hairline: 1,
   /** drag preview handle */
   dragHandle: 16,
+  /** the shadow of a lifted card or row at full lift (opacity) */
+  liftShadow: 0.35,
   /** checklist checkbox */
   checkbox: { size: 22, radius: 7, border: 1.5 },
   /** gap between photo thumbnails */
