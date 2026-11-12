@@ -27,6 +27,8 @@ export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "modu
  */
 export const REJECT_REASONS = {
   estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
+  // #1147 (migration 20261112030000): the client signed on the phone another total than the estimate has now
+  estimate_total_mismatch: "sync.stuck.reason.estimateTotalChanged",
   // step 17 C3 (migration 20261109120000): the merge of two clients
   merge_payment_in_flight: "clientDup.rej.inFlight",
   merge_already_merged: "clientDup.rej.merged",
@@ -43,7 +45,7 @@ export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
 const SIGNED_KINDS: readonly string[] = ["estimate.sign", "estimate.approve"];
 export const rejectReasonKey = (reason: RejectReason, kind?: string) =>
-  kind && SIGNED_KINDS.includes(kind) ? ("sync.stuck.reason.estimateLinesSigned" as const) : REJECT_REASONS[reason];
+  reason === "estimate_lines_mismatch" && kind && SIGNED_KINDS.includes(kind) ? ("sync.stuck.reason.estimateLinesSigned" as const) : REJECT_REASONS[reason];
 export const rejectReasonOf = (hint: unknown): RejectReason | undefined =>
   typeof hint === "string" && Object.prototype.hasOwnProperty.call(REJECT_REASONS, hint) ? (hint as RejectReason) : undefined;
 export interface RejectedOp {
@@ -79,6 +81,9 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // (estimate.sign sends first: a quick estimate signed on site — the client's signature is not lost silently, review №1)
   // estimate.approve (the client signs on site / by link) sends first too (review #415 №3)
   if ((op.k === "estimate.send" || op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
+  // #1147: the client signed on the phone another total than the server's — a refusal for good (22023, never retried);
+  // the card says the estimate changed and the client signs again
+  if ((op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_total_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, labelKey: "est.rej.signatureLost", reason };
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
