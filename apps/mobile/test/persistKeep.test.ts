@@ -139,13 +139,13 @@ describe("unit:persistKeep — #1189", () => {
     expect(copies().map(([, v]) => v).sort()).toEqual(["v3", "v4", "v5"]);
     expect(storage.has("octo.broken.other.1")).toBe(true);
   });
-  it("a full device (the web's localStorage): the older copies of the key make room; nothing fits — false", async () => {
+  it("a full device (the web's localStorage): the oldest copies make room one at a time — only as many as needed; nothing fits — false", async () => {
     const big = "x".repeat(1000);
     await keepBrokenCopy(K, big, 1);
     await keepBrokenCopy(K, big, 2);
     quota = used() + 200;
     expect(await keepBrokenCopy(K, big, 3)).toBe(true);
-    expect(copies().map(([k]) => k)).toEqual([`octo.broken.${K}.3`]);
+    expect(copies().map(([k]) => k)).toEqual([`octo.broken.${K}.2`, `octo.broken.${K}.3`]);
     storage.clear();
     quota = 10;
     expect(await keepBrokenCopy(K, big, 4)).toBe(false);
@@ -278,4 +278,61 @@ describe("unit:persistKeep — the code-reviewer of #1189", () => {
     await Promise.all([noteStorageLoss("a", "one"), noteStorageLoss("b", "two")]);
     expect(logOf().map((x) => x.key)).toEqual(["a", "b"]);
   });
+});
+
+describe("unit:persistKeep — the code-reviewer of #1189, 2nd round", () => {
+  it("№1: after a restart the outbox's copy is still never removed for a cache's copy (the strict key is known from its hook)", async () => {
+    // the outbox's copy, from an earlier start of the app
+    storage.set("octo.broken.octo.outbox.v1.1", "x".repeat(Math.floor(BROKEN_MAX_CHARS / 2)));
+    vi.resetModules();
+    const fresh = await import("../src/data/persist");
+    // the same mini React the fresh module renders with
+    const mini = (await import("react")) as unknown as typeof import("./support/miniReact");
+    const Out = () => fresh.usePersistentState<unknown[]>("octo.outbox.v1", [], { strict: true, immediate: true });
+    const root = mini.render(Out, {});
+    await mini.settle();
+    expect(await fresh.keepBrokenCopy(K, "y".repeat(Math.floor(BROKEN_MAX_CHARS * 0.9)), 5)).toBe(true);
+    expect(storage.has("octo.broken.octo.outbox.v1.1")).toBe(true);
+    root.unmount();
+  });
+  it("№2: a copy that cannot be read counts as the whole limit (it goes for room first)", async () => {
+    storage.set("octo.broken.octo.cloud.v1.a.1", "big");
+    failing.set("octo.broken.octo.cloud.v1.a.1", 1);
+    expect(await keepBrokenCopy(K, "new", 2)).toBe(true);
+    expect(storage.has("octo.broken.octo.cloud.v1.a.1")).toBe(false);
+    expect(copies().map(([, v]) => v)).toEqual(["new"]);
+  });
+  it("№4: this key's oldest copy goes only once the new one is on the device", async () => {
+    // the 4th lands first, then the oldest of the key goes
+    await keepBrokenCopy(K, "a", 1);
+    await keepBrokenCopy(K, "b", 2);
+    await keepBrokenCopy(K, "c", 3);
+    expect(await keepBrokenCopy(K, "d", 4)).toBe(true);
+    expect(copies().map(([, v]) => v).sort()).toEqual(["b", "c", "d"]);
+  });
+  it("№7: a failed read, then a read that works (the key back) — the first write makes no copy, no line in the log", async () => {
+    storage.set(K, JSON.stringify({ db: { items: ["the person's own"] } }));
+    failing.set(K, READ_TRIES);
+    const Keyed = ({ k }: { k: string }) => usePersistentState<V>(k, { db: { items: ["fresh"] } }, { validate: (v) => Array.isArray(v?.db?.items) });
+    const root = render(Keyed, { k: K });
+    for (let i = 0; i < 40 && !(root.out as Out)[2]; i++) {
+      await wait(200);
+      await settle();
+    }
+    root.rerender({ k: "octo.other.v1" });
+    await settle();
+    await wait(50);
+    root.rerender({ k: K });
+    await settle();
+    await wait(50);
+    await settle();
+    expect((root.out as Out)[0]).toEqual({ db: { items: ["the person's own"] } });
+    (root.out as Out)[1]({ db: { items: ["the person's own", "more"] } });
+    await settle();
+    await wait(400);
+    expect(JSON.parse(storage.get(K)!).db.items).toEqual(["the person's own", "more"]);
+    expect(copies()).toEqual([]);
+    expect(logOf()).toEqual([]);
+    root.unmount();
+  }, 20_000);
 });

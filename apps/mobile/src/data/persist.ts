@@ -45,7 +45,7 @@ export interface Writer {
   /** #1189 (code-reviewer №2): the device's writes of this key wait for `p` (the copy of what is about to be written over);
    *  scheduling, a key change and a flush stay as they are — a write is never dropped while it waits, only one made
    *  before a wipe is (its generation) */
-  hold: (p: Promise<unknown>) => void;
+  hold: (run: () => Promise<unknown>) => void;
 }
 /**
  * `ms` — how long a change waits for the next one before it is written (one write for a burst of changes). 0 — written
@@ -84,7 +84,14 @@ export function createWriter(
     };
     // in order: a later write waits for the gate too, so it never lands before an earlier one
     const done: Promise<void> = gate ? gate.then(put, put) : put();
-    if (gate) gate = done.catch(() => {});
+    if (gate) {
+      // the next write waits for this one; once it is written, the writes are free again (code-reviewer 2nd round №5)
+      const g = done.catch(() => {});
+      gate = g;
+      void g.then(() => {
+        if (gate === g) gate = null;
+      });
+    }
     const told = (ok: boolean) => my === seq && p.gen === gen() && onResult?.(ok);
     done.then(
       () => told(true),
@@ -110,8 +117,9 @@ export function createWriter(
     flush: () => {
       if (pending) write();
     },
-    hold: (p) => {
-      const g = (gate ?? Promise.resolve()).then(() => p).catch(() => {});
+    hold: (run) => {
+      // started after what waits already (a write of this key still under way: it is the record copied — 2nd round №6)
+      const g = (gate ?? Promise.resolve()).then(run).catch(() => {});
       gate = g;
       void g.then(() => {
         if (gate === g) gate = null;
@@ -197,49 +205,59 @@ export async function keepBrokenCopy(key: string, raw: string, now = Date.now(),
     await noteStorageLoss(key, "a copy too large to keep");
     return false;
   }
-  /** the caches' copies there are, the oldest first, with their sizes */
+  /** the caches' copies there are, the oldest first, with their sizes (one that cannot be read counts as the whole limit:
+   *  a large copy is the one Android may not read — 2nd round №2) */
   const caches = async () => {
     try {
       const ks = ((await AsyncStorage.getAllKeys()) as string[]).filter((x) => x.startsWith(BROKEN_PREFIX) && x !== k && !keptWhole.has(sourceOf(x)));
       const out: { key: string; size: number }[] = [];
-      for (const x of ks) out.push({ key: x, size: ((await AsyncStorage.getItem(x).catch(() => null)) ?? "").length });
+      for (const x of ks) {
+        const v = await AsyncStorage.getItem(x).then(
+          (r) => r,
+          () => undefined,
+        );
+        if (v !== null) out.push({ key: x, size: v === undefined ? BROKEN_MAX_CHARS : v.length });
+      }
       return out.sort((a, b) => timeOf(a.key) - timeOf(b.key));
     } catch {
       return [];
     }
   };
+  /** the log is not waited for (the live record's write waits for this copy — 2nd round №3) */
   const drop = async (xs: { key: string }[], why: string) => {
-    if (!xs.length) return;
+    if (!xs.length) return true;
     try {
       await AsyncStorage.multiRemove(xs.map((x) => x.key));
     } catch {
-      return;
+      return false;
     }
-    for (const x of xs) await noteStorageLoss(sourceOf(x.key), `${why}: ${x.key}`);
+    for (const x of xs) void noteStorageLoss(sourceOf(x.key), `${why}: ${x.key}`);
+    return true;
   };
-  // room first: this key's older copies past BROKEN_KEEP, then the oldest of all until the new one fits
   let have = await caches();
+  // within the limit: the oldest of all go until the new one fits, and this key keeps BROKEN_KEEP with the new one
   const mine = have.filter((x) => sourceOf(x.key) === key);
   const over = mine.slice(0, Math.max(0, mine.length - (BROKEN_KEEP - 1)));
-  await drop(over, "an older copy removed (BROKEN_KEEP)");
   have = have.filter((x) => !over.includes(x));
-  const gone: typeof have = [];
+  const room: typeof have = [];
   let total = have.reduce((n, x) => n + x.size, 0) + raw.length;
   for (const x of have) {
     if (total <= BROKEN_MAX_CHARS) break;
-    gone.push(x);
+    room.push(x);
     total -= x.size;
   }
-  await drop(gone, "an older copy removed for room");
-  try {
-    return await put();
-  } catch {
-    // the device is full all the same: every other cache copy makes room, then once more
-    await drop(have.filter((x) => !gone.includes(x)), "an older copy removed: the device was full");
+  have = have.filter((x) => !room.includes(x));
+  await drop(room, "an older copy removed for room");
+  // the new copy first; the older ones of this key go only once it is on the device (2nd round №4)
+  for (;;) {
     try {
-      return await put();
+      const ok = await put();
+      if (ok) await drop(over, "an older copy removed (BROKEN_KEEP)");
+      return ok;
     } catch {
-      return false;
+      // the device is full all the same: the oldest copy of a cache makes room, one at a time, then once more
+      const next = over.shift() ?? have.shift();
+      if (!next || !(await drop([next], "an older copy removed: the device was full"))) return false;
     }
   }
 }
@@ -326,6 +344,9 @@ export function usePersistentState<T>(
   if (!writer.current)
     writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250, deviceGeneration, (ok) => setWriteFailed(!ok));
   const strict = !!opts?.strict;
+  // its copies are never removed for a cache's copy — known from the first render, before any copy runs, in every start
+  // of the app (code-reviewer 2nd round №1: a set filled only by «Сохранить копию» was empty after a restart)
+  if (strict) keptWhole.add(key);
   const patient = !strict && !!opts?.patient;
   /** the raw record a strict key could not parse: copied by «Сохранить копию и продолжить» */
   const broken = useRef<{ key: string; raw: string } | null>(null);
@@ -463,7 +484,7 @@ export function usePersistentState<T>(
       copyBeforeWrite.current = null;
       const g = deviceGeneration();
       const at = Date.now();
-      writer.current!.hold(
+      writer.current!.hold(() =>
         AsyncStorage.getItem(k).then(
           async (old) => {
             if (old == null || old === raw || g !== deviceGeneration()) return;
