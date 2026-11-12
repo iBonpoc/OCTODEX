@@ -12819,6 +12819,53 @@ update public.memberships set can_sign_contracts = false where user_id = 'a00000
 \echo 'T193 the client signs a sent quick estimate on a tech''s phone; a draft is refused'
 
 -- ======================================================================================================================
+-- T194 (#1135): the company's countersignature checks that the person may read the estimate (as sign_estimate_on_site /
+-- accept_on_site). A tech who may sign contracts, on an estimate at a property of nothing of his: «not found» — not signed,
+-- and its status not told.
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', '194 Other St', 'Pasadena');
+-- 1: signed by the client for real (director's review of #1149): sent by the office, the client signs on the page — so
+-- without the read check the tech's countersignature would make it «approved» with its job; 2: a draft
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 awaiting', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1940000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 draft', 'a0000000-0000-0000-0000-000000000001');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e1940000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e1940000-0000-4000-8000-000000000001', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e1940000-0000-4000-8000-0000000000a1' where id = 'e1940000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('e1940000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'e1940000-0000-4000-8000-0000000000a1', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'e1940000-0000-4000-8000-0000000000b1', 'labor', 'Work', 1, 40000);
+:as_office_a
+select public.send_estimate('e1940000-0000-4000-8000-000000000001', 'T194tokenSentByTheOffice0123456789abcd') is not null as t194_sent;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('T194tokenSentByTheOffice0123456789abcd', 'e1940000-0000-4000-8000-0000000000b1', null, 'T194 Client', 'M0 0 L5 5', true) ->> 'status' = 'awaiting_countersign' as t194_client_signed;
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1940000-0000-4000-8000-000000000001'),
+  'T194 (fixture: the client signed it, it awaits the company)');
+:as_tech_a
+select tst.ok(not app.can_read_estimate('e1940000-0000-4000-8000-000000000001'), 'T194 (fixture: the tech does not read it)');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000001', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 the tech does not countersign an estimate of nothing of his');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000002', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 …nor learns its status (a draft: «not found», not «status draft»)');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1940000-0000-4000-8000-000000000001'), 'T194 still awaiting the company''s signature');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = 'e1940000-0000-4000-8000-000000000001'$q$) = 0, 'T194 …no job made');
+-- the control: someone who reads it countersigns as before — «approved», its job made (the same estimate, nothing else changed)
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.ok(public.countersign_estimate('e1940000-0000-4000-8000-000000000001', 'M0 0 L3 3') = 'approved', 'T194 …the owner countersigns it as before');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = 'e1940000-0000-4000-8000-000000000001'$q$) = 1, 'T194 …and its job is made');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T194 the countersignature: only someone who reads the estimate'
+
+-- ======================================================================================================================
 -- T195 (#1147): the client's signature on an employee's device carries the total the client saw.
 -- (а) The totals the phone shows (summarize) = the totals the server signs (app.estimate_option_totals), on the same
 --     examples as apps/mobile/test/signTotals.test.ts (test/fixtures/signTotals.json): the rows estimate.save writes.
