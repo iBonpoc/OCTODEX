@@ -132,3 +132,21 @@ describe("unit:estimateTemplate — the server's check on the phone, costs apart
     expect(list.map((x) => x.id)).toEqual(["c", "b", "a"]);
   });
 });
+
+describe("a hidden template line that takes the catalog price (Р3 п.2)", () => {
+  const tplDoc: EstimateDoc = {
+    options: [{ id: "o", name: "Good", lines: [
+      { id: "h1", name: "Service call", group: "service", quantity: "1", unit: "ea", unitPriceCents: 0, catalogItemId: "svc", clientVisible: false },
+      { id: "h2", name: "Free check", group: "service", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: false },
+    ] }],
+    settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" } },
+  };
+  it("is shown again (priced), the id is named; a $0 hidden line stays hidden", () => {
+    const r = fromTemplate(tplDoc, catalog, {}, false);
+    const [a, b] = r.doc.options[0]!.lines;
+    expect(a!.unitPriceCents).toBe(15000);
+    expect(a!.clientVisible).toBeUndefined();
+    expect(r.unhidden).toEqual([a!.id]);
+    expect(b!.clientVisible).toBe(false);
+  });
+});

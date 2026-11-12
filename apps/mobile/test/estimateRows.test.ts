@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine } from "@octo/estimating-engine";
-import { clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowFigures, rowProblems, rowSummary } from "../src/features/estimateRows";
+import type { CatalogItem } from "../src/data/types";
+import { catalogUnitPrice } from "../src/features/estimateDoc";
+import { applyPatch, canHide, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowFigures, rowProblems, rowSummary } from "../src/features/estimateRows";
 
 const line = (over: Partial<CustomLine> = {}): CustomLine => ({ id: "l1", name: "Gutter 5in", group: "material", quantity: "120", unit: "LF", unitPriceCents: 850, ...over });
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -113,5 +115,113 @@ describe("the open row is asked to close (DS §8.3)", () => {
   it("a wrong row stays; it speaks (errors, scroll, vibration) only when the ask is not a finger starting to scroll", () => {
     expect(leaveDecision(typed, 2, false)).toBe("stay-loud");
     expect(leaveDecision(typed, 2, true)).toBe("stay-quiet");
+  });
+});
+
+describe("«Скрыть от клиента» (Р3)", () => {
+  it("only a line priced $0 may be hidden", () => {
+    expect(canHide(line({ unitPriceCents: 0 }))).toBe(true);
+    expect(canHide(line({ unitPriceCents: 1 }))).toBe(false);
+  });
+  it("a price typed into a hidden line shows it again", () => {
+    const hidden = line({ unitPriceCents: 0, clientVisible: false });
+    const r = applyPatch(hidden, { unitPriceCents: 500 });
+    expect(r.unhidden).toBe(true);
+    expect(r.line.clientVisible).toBeUndefined();
+    expect(r.line.unitPriceCents).toBe(500);
+  });
+  it("a price of $0 or another field keeps it hidden; a visible line is never touched", () => {
+    const hidden = line({ unitPriceCents: 0, clientVisible: false });
+    expect(applyPatch(hidden, { name: "x" })).toMatchObject({ unhidden: false, line: { clientVisible: false } });
+    expect(applyPatch(line({ unitPriceCents: 100 }), { unitPriceCents: 200 }).unhidden).toBe(false);
+  });
+});
+
+describe("«Сохранить в каталог» (Р1, К1)", () => {
+  it("a service / labor goes as the line says", () => {
+    const o = catalogOffer(line({ group: "labor", name: " Install ", unit: "hr", unitPriceCents: 6500, description: "two people" }), true);
+    expect(o).toEqual({ state: "offered", item: { kind: "labor", name: "Install", unit: "hr", priceCents: 6500, description: "two people" } });
+  });
+  it("a row that is not finished waits (no name, a wrong price)", () => {
+    expect(catalogOffer(line({ name: " " }), true)).toEqual({ state: "later" });
+    expect(catalogOffer(line({ unitPriceCents: -1 }), true)).toEqual({ state: "later" });
+  });
+  it("a material: the price in the catalog is the line's price — offered in EVERY cell of a cost up to $100.00 and a price up to 11 × the cost", () => {
+    let n = 0;
+    const costs = [1, 2, 3, 7, 33, 99, 100, 101, 333, 999, 1000, 1213, 4999, 5000, 9999, 10000];
+    for (const cost of costs) {
+      const prices = new Set<number>([cost, cost + 1, cost * 2, cost * 11, cost * 11 - 1, Math.round(cost * 1.0001), Math.round(cost * 1.05), Math.round(cost * 1.3333), Math.round(cost * 3.5), Math.round(cost * 10.99)]);
+      for (const price of prices) {
+        if (price < cost || price > cost * 11) continue;
+        const o = catalogOffer(line({ group: "material", unitCostCents: cost, unitPriceCents: price }), true);
+        expect(o.state, `cost ${cost} price ${price}`).toBe("offered");
+        if (o.state === "offered") expect(catalogUnitPrice({ id: "x", ...o.item } as CatalogItem), `cost ${cost} price ${price}`).toBe(price);
+        n += 1;
+      }
+    }
+    expect(n).toBeGreaterThan(100);
+  });
+  it("a cost above $100.00 may have no exact markup: refused with its own reason, never a wrong price", () => {
+    let refused = 0;
+    for (const cost of [10001, 12345, 55555, 99999]) {
+      for (let price = cost; price <= cost + 40; price++) {
+        const o = catalogOffer(line({ group: "material", unitCostCents: cost, unitPriceCents: price }), true);
+        if (o.state === "refused") {
+          expect(o.reason).toBe("noExact");
+          refused += 1;
+        } else if (o.state === "offered") expect(catalogUnitPrice({ id: "x", ...o.item } as CatalogItem)).toBe(price);
+      }
+    }
+    expect(refused).toBeGreaterThan(0);
+  });
+  it("a material is refused with the reason: no cost, below the cost, above 11 ×, no cost for who does not see costs", () => {
+    const m = (over: Partial<CustomLine>, costs = true) => catalogOffer(line({ group: "material", unitCostCents: 1000, unitPriceCents: 1500, ...over }), costs);
+    expect(m({ unitCostCents: undefined })).toEqual({ state: "refused", reason: "noCost" });
+    expect(m({}, false)).toEqual({ state: "refused", reason: "noCost" });
+    expect(m({ unitPriceCents: 900 })).toEqual({ state: "refused", reason: "belowCost" });
+    expect(m({ unitPriceCents: 12000 })).toEqual({ state: "refused", reason: "aboveMax" });
+    expect(m({}).state).toBe("offered");
+  });
+});
+
+describe("the row closes: one step for the screen and for «Сохранить» (settleOpenRow)", () => {
+  const ctx = (over: Record<string, unknown> = {}) => ({ openId: "r", wantCatalog: ["r"], costsVisible: true, catalog: [], problems: 0, quiet: false, newId: () => "NEW", ...over }) as Parameters<typeof settleOpenRow>[1];
+  const opt = (...lines: CustomLine[]) => ({ lines });
+  it("a right line with the catalog on: the thing is made and the link is already in the option that «Сохранить» will save", () => {
+    const r = settleOpenRow(opt(line({ id: "r", group: "service" })), ctx());
+    expect(r.closed).toBe(true);
+    expect(r.newItems.map((i) => i.id)).toEqual(["NEW"]);
+    expect(r.option.lines[0]!.catalogItemId).toBe("NEW");
+    expect(r.wantCatalog).toEqual([]);
+  });
+  it("a line already linked to a live thing creates nothing (after «Заменить»: no copy)", () => {
+    const r = settleOpenRow(opt(line({ id: "r", catalogItemId: "cat-1" })), ctx({ catalog: [{ id: "cat-1" }] }));
+    expect(r.newItems).toEqual([]);
+    expect(r.option.lines[0]!.catalogItemId).toBe("cat-1");
+    expect(r.wantCatalog).toEqual([]);
+  });
+  it("a link to a thing that is gone does not count: the thing is made anew", () => {
+    const r = settleOpenRow(opt(line({ id: "r", catalogItemId: "gone", group: "service" })), ctx());
+    expect(r.newItems).toHaveLength(1);
+  });
+  it("the catalog off or a material that is refused: nothing is made; the row still closes", () => {
+    expect(settleOpenRow(opt(line({ id: "r" })), ctx({ wantCatalog: [] })).newItems).toEqual([]);
+    const m = settleOpenRow(opt(line({ id: "r", group: "material", unitCostCents: undefined })), ctx());
+    expect(m.newItems).toEqual([]);
+    expect(m.closed).toBe(true);
+  });
+  it("a wrong row stays open (nothing is made); the scroll asks quietly", () => {
+    const loud = settleOpenRow(opt(line({ id: "r" })), ctx({ problems: 1 }));
+    expect(loud).toMatchObject({ closed: false, decision: "stay-loud", newItems: [] });
+    expect(settleOpenRow(opt(line({ id: "r" })), ctx({ problems: 1, quiet: true })).decision).toBe("stay-quiet");
+  });
+  it("a blank row is gone, with its choice", () => {
+    const r = settleOpenRow(opt(line({ id: "r", name: "", unitPriceCents: 0 })), ctx());
+    expect(r.option.lines).toEqual([]);
+    expect(r.wantCatalog).toEqual([]);
+  });
+  it("no open row: nothing changes", () => {
+    const o = opt(line());
+    expect(settleOpenRow(o, ctx({ openId: null }))).toMatchObject({ closed: true, decision: "none", option: o });
   });
 });
