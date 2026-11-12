@@ -8,6 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { supplierToRow } from "@/features/suppliers";
+import { normalizeBarcode, normalizeProductUrl } from "@/features/catalogCard";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
 import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
@@ -1046,7 +1047,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "catalog.save": {
       const it = op.item;
       const costCols = catalogCostCols(op);
-      await run(
+      const card = catalogCardCols(it);
+      const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(
           {
             id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
@@ -1059,11 +1061,24 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             // spec 36: the same — only once set ("" = cleared)
             ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
             ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
+            // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server
+            // keeps them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
+            ...cardCols,
           },
           // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
-        ),
-      );
+        );
+      let r = await upsertItem(card);
+      // РС-10 (code-reviewer): the card's fields never cost the item's save — a direction the server does not have (made
+      // offline and refused, 23503 on catalog_items_service_category_fk) goes without it; a server before the migration
+      // (PGRST204, no such column) gets the item without the card's fields
+      if (r.error?.code === "23503" && "service_category_id" in card && /service_category/.test(r.error.message ?? "")) {
+        const { service_category_id: _sc, ...rest } = card;
+        r = await upsertItem(rest);
+      } else if (r.error?.code === "PGRST204" && Object.keys(card).length) {
+        r = await upsertItem({});
+      }
+      await run(Promise.resolve(r));
       if (!op.onlyNew) {
         // 19 §9: the server moves a cost sent above into catalog_item_costs, but a null there means «not sent» (old
         // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —
@@ -1173,6 +1188,23 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
 
 /** the cost fields of a price-list item (CatalogItem) and their columns */
 export type CatalogCostChange = Partial<Record<"costCents" | "vendorTaxBps" | "markupBps", number | null>>;
+/** РС-10: catalog_items.sku / barcode / product_url / service_category_id of a save — only what is set; a link or
+ *  barcode the server would refuse (23514 would drop the whole save from the queue) is left out */
+export function catalogCardCols(it: Pick<CatalogItem, "sku" | "barcode" | "productUrl" | "serviceCategoryId">): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  if (it.sku !== undefined) out.sku = it.sku.trim() || null;
+  if (it.barcode !== undefined) {
+    const b = normalizeBarcode(it.barcode);
+    if (b.ok) out.barcode = b.barcode || null;
+  }
+  if (it.productUrl !== undefined) {
+    const u = normalizeProductUrl(it.productUrl);
+    if (u.ok) out.product_url = u.url || null;
+  }
+  if (it.serviceCategoryId !== undefined) out.service_category_id = it.serviceCategoryId || null;
+  return out;
+}
+
 const COST_COL = { costCents: "unit_cost_cents", vendorTaxBps: "vendor_tax_bps", markupBps: "markup_bps" } as const;
 /** what changed between the item on the phone before and now (a new item: what it has); empty — nothing */
 export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem): CatalogCostChange {
