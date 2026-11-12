@@ -3374,6 +3374,7 @@ export const ru = {
   "mod.gutters.draw.accItem": "Точность замера",
   "mod.gutters.draw.layersItem": "Слои…",
   "mod.gutters.draw.autoDsItem": "Расставить водостоки",
+  "mod.gutters.draw.dsAutoCount": "Водостоков стало {n}",
   "mod.gutters.draw.layersTitle": "Что показывать на чертеже",
   "mod.gutters.draw.layersHint": "Слой прячется, а не удаляется: замер, расчёт и смета не меняются. Включается заново здесь же.",
   "mod.gutters.draw.layer.grid": "Сетка",

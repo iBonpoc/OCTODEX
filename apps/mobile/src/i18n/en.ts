@@ -3374,6 +3374,7 @@ export const en: Dict = {
   "mod.gutters.draw.accItem": "How exact",
   "mod.gutters.draw.layersItem": "Layers…",
   "mod.gutters.draw.autoDsItem": "Place downspouts",
+  "mod.gutters.draw.dsAutoCount": "Downspouts now: {n}",
   "mod.gutters.draw.layersTitle": "What to show on the drawing",
   "mod.gutters.draw.layersHint": "A layer is hidden, not deleted: the measurement, the takeoff and the estimate stay as they are. Turn it back on here.",
   "mod.gutters.draw.layer.grid": "Grid",

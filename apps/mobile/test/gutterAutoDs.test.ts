@@ -21,6 +21,7 @@ const auto = (d: Drawing, before?: Drawing, force = false) => autoDownspouts(d, 
 const none: Drawing = { runs: [], downspouts: [] };
 const ds = (id: string, runId: string, atIn: number, extra: Partial<DrawnDownspout> = {}): DrawnDownspout => ({ ...DEFAULT_DS_ATTRS, id, runId, atIn, ...extra }) as DrawnDownspout;
 const flagged = (d: Drawing, id: string): boolean => !!d.runs.find((r) => r.id === id)!.attrs.dsAutoOff;
+const offOf = (d: Drawing, id: string): number => Number(d.runs.find((r) => r.id === id)!.attrs.dsAutoOff) || 0;
 /** how far the downspout stands from the nearest FREE end of its gutter (the others do not count) */
 const edgeOf = (d: Drawing, s: DrawnDownspout) => { const r = d.runs.find((x) => x.id === s.runId)!; return Math.min(s.atIn, runLengthIn(r) - s.atIn); };
 
@@ -112,29 +113,72 @@ describe("review Б1: the automatic downspouts stand where they belong again aft
   });
 });
 
-describe("review Б2: a downspout taken off by hand stops only THAT gutter (money: a downspout, its outlet and elbows are in the estimate)", () => {
-  it("A's downspout taken off; B has its own; B drawn on to A → B's downspout stays (one, on B's free end), it is not removed", () => {
+describe("review Б2 (director, counted): a removal is COUNTED on its gutter; the program never takes one off for lack of a place", () => {
+  it("a corner A+B, the only downspout (on B) taken off, then A made shorter (setLength): none comes back", () => {
+    const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]);
+    const base = auto({ runs: [A, B], downspouts: [] }, none);
+    expect(base.downspouts).toHaveLength(1);
+    const gone = removeElement(base, base.downspouts[0]!.id);
+    expect(gone.downspouts).toHaveLength(0);
+    expect(offOf(gone, base.downspouts[0]!.runId)).toBe(1);
+    const shorter = auto(setLength(gone, "A", 150), gone);
+    expect(shorter.downspouts).toHaveLength(0);
+  });
+  it("130 ft has 4, one taken off: 3 — and the length typed 125 ft keeps the 3 (none taken off for want of a place, none added)", () => {
+    const four = auto({ runs: [run("a", [0, 0], [1560, 0])], downspouts: [] }, none);
+    expect(four.downspouts).toHaveLength(4);
+    const three = removeElement(four, four.downspouts[1]!.id);
+    expect(three.downspouts).toHaveLength(3);
+    expect(offOf(three, "a")).toBe(1);
+    const typed = auto(setLength(three, "a", 1500), three);
+    expect(typed.downspouts).toHaveLength(3);
+    expect(typed.downspouts.every((s) => s.auto)).toBe(true);
+  });
+  it("the chain is made shorter so that it wants fewer: the extra one goes — the one nearest the middle (a downspout at a free end stays)", () => {
+    const four = auto({ runs: [run("a", [0, 0], [1560, 0])], downspouts: [] }, none);
+    const shorter = auto(setLength(four, "a", 1400), four); // 116 ft: 3 wanted
+    expect(shorter.downspouts).toHaveLength(3);
+    const at = shorter.downspouts.map((s) => Math.min(s.atIn, 1400 - s.atIn));
+    expect(at.filter((v) => v <= AUTO_DS_EDGE_IN + 1)).toHaveLength(2); // both ends kept
+  });
+  it("one that already stands at its own free end does not move on a recount (a split: A:12 stays, not A:188)", () => {
+    const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]);
+    const base = auto({ runs: [A, B], downspouts: [] }, none);
+    const s0 = base.downspouts[0]!; // on B, at the free end b
+    const split = auto({ ...base, runs: [{ ...base.runs[0]!, attrs: { ...base.runs[0]!.attrs, openEnds: { b: true as const } } }, { ...base.runs[1]!, attrs: { ...base.runs[1]!.attrs, openEnds: { a: true as const } } }] }, base);
+    const kept = split.downspouts.find((x) => x.id === s0.id)!;
+    expect(kept.atIn).toBe(s0.atIn); // it did not move
+    expect(split.downspouts).toHaveLength(2); // A has its own again
+  });
+  it("A's downspout taken off, then B (with its own) joined to A: the chain wants one — it has B's, A's removal counts: none is wanted, B's goes (the rule of the director: counted; a toast says so)", () => {
     const base = auto({ runs: [run("A", [0, 0], [200, 0]), run("B", [300, 0], [300, 200])], downspouts: [] }, none);
     const gone = removeElement(base, base.downspouts.find((s) => s.runId === "A")!.id);
-    expect(flagged(gone, "A")).toBe(true);
-    expect(flagged(gone, "B")).toBe(false);
     const joined = auto({ ...gone, runs: [gone.runs[0]!, { ...gone.runs[1]!, a: [200, 0], b: [200, 200] }] }, gone);
-    expect(joined.downspouts).toHaveLength(1);
-    expect(joined.downspouts[0]).toMatchObject({ runId: "B", auto: true });
+    expect(joined.downspouts).toHaveLength(0);
   });
-  it("removed by hand and not put back: A alone, flagged — a later change of its chain (longer) puts none", () => {
+  it("the gutter that carried the count is deleted: a gutter of its chain left takes it over; «Отменить» gives it back", () => {
+    const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]);
+    const base = auto({ runs: [A, B], downspouts: [] }, none);
+    const gone = removeElement(base, base.downspouts[0]!.id); // the count is on B (its downspout was there)
+    const withoutB = removeElement(gone, "B");
+    expect(offOf(withoutB, "A")).toBe(1);
+    const back = restoreRemoved(withoutB, gone, "B");
+    expect(offOf(back, "A")).toBe(0);
+    expect(offOf(back, "B")).toBe(1);
+  });
+  it("removed by hand and not put back: A alone — a later change of its chain (longer) puts none", () => {
     const d1 = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
     const gone = removeElement(d1, d1.downspouts[0]!.id);
     expect(auto(gone, d1).downspouts).toHaveLength(0);
     expect(auto({ ...gone, runs: [{ ...gone.runs[0]!, b: [300, 0] }] }, gone).downspouts).toHaveLength(0);
   });
-  it("a removed hand-put one just goes (no flag); joined with a line with a hand-put one: the auto one goes, the hand-put stays", () => {
+  it("a removed hand-put one just goes (no count); joined with a line with a hand-put one: the auto one goes, the hand-put stays", () => {
     expect(flagged(removeElement({ runs: [run("a", [0, 0], [240, 0])], downspouts: [ds("m", "a", 100)] }, "m"), "a")).toBe(false);
     const before = auto({ runs: [run("A", [0, 0], [200, 0]), run("B", [300, 0], [300, 200])], downspouts: [ds("m", "B", 100)] }, none);
     const joined = auto({ ...before, runs: [before.runs[0]!, { ...before.runs[1]!, a: [200, 0], b: [200, 200] }] }, before);
     expect(joined.downspouts.map((s) => s.id)).toEqual(["m"]);
   });
-  it("«Отменить» of the removal brings the flag back too: the gutter is not «off» — a later change keeps its downspout", () => {
+  it("«Отменить» of the removal brings the count back too: a later change keeps its downspout", () => {
     const d1 = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
     const id = d1.downspouts[0]!.id;
     const gone = removeElement(d1, id);
@@ -170,7 +214,7 @@ describe("review 9: a measurement from before the feature gets none by an edit",
     const d1 = auto({ runs: [run("a", [0, 0], [240, 0]), run("b", [0, 400], [240, 400])], downspouts: [] }, none);
     const gone = removeElement(d1, d1.downspouts.find((s) => s.runId === "b")!.id);
     const rows = toElements(gone, "m1");
-    expect(rows.find((r) => r.id === "b")!.attrs).toMatchObject({ dsAuto: true, dsAutoOff: true });
+    expect(rows.find((r) => r.id === "b")!.attrs).toMatchObject({ dsAuto: true, dsAutoOff: 1 });
     const back = fromElements(rows);
     expect(back.downspouts[0]!.auto).toBe(true);
     expect(flagged(back, "b")).toBe(true);

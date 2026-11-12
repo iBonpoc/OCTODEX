@@ -518,10 +518,20 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
 
 /** remove a line (with its downspouts) or a downspout */
 export function removeElement(d: Drawing, id: string): Drawing {
-  if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
-  // a downspout the program had put, taken off by hand: its chain is not given another by itself (#1246)
+  const line = d.runs.find((r) => r.id === id);
+  if (line) {
+    // the count of removed automatic downspouts does not go with the gutter: a gutter of its chain that is left takes it (#1246)
+    const n = Number(line.attrs.dsAutoOff) || 0;
+    const heir = n ? [...chainOf(d, id)].find((x) => x !== id) : undefined;
+    return {
+      ...d,
+      runs: d.runs.filter((r) => r.id !== id).map((r) => (r.id === heir ? { ...r, attrs: { ...r.attrs, dsAutoOff: (Number(r.attrs.dsAutoOff) || 0) + n } } : r)),
+      downspouts: d.downspouts.filter((s) => s.runId !== id),
+    };
+  }
+  // a downspout the program had put, taken off by hand: the chain wants one less (a count on its gutter, #1246)
   const gone = d.downspouts.find((s) => s.id === id);
-  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, attrs: { ...r.attrs, dsAutoOff: true as const } } : r)) : d.runs;
+  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, attrs: { ...r.attrs, dsAutoOff: (Number(r.attrs.dsAutoOff) || 0) + 1 } } : r)) : d.runs;
   return { ...d, runs, downspouts: d.downspouts.filter((s) => s.id !== id) };
 }
 
@@ -617,10 +627,22 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
   const runs = back.runs.filter((r) => !haveR.has(r.id));
   const ids = new Set([...cur.runs, ...runs].map((r) => r.id));
   const downspouts = back.downspouts.filter((s) => !haveD.has(s.id) && ids.has(s.runId));
-  // an automatic downspout taken off and brought back: its gutter is not «off» any more (removeElement had set that)
+  // an automatic downspout taken off and brought back: its gutter's count of removed ones goes down by one (removeElement had raised it);
+  // a gutter brought back with its own count: the gutter that took the count over gives it back
   const asked = before.downspouts.find((s) => s.id === removedId);
-  const unflag = asked?.auto && downspouts.some((s) => s.id === removedId) && !before.runs.find((r) => r.id === asked.runId)?.attrs.dsAutoOff;
-  const base = unflag ? cur.runs.map((r) => { if (r.id !== asked!.runId || !r.attrs.dsAutoOff) return r; const { dsAutoOff: _o, ...rest } = r.attrs; return { ...r, attrs: rest }; }) : cur.runs;
+  const dec = (rs: DrawnRun[], runId: string, n: number): DrawnRun[] => rs.map((r) => {
+    if (r.id !== runId) return r;
+    const left = (Number(r.attrs.dsAutoOff) || 0) - n;
+    const { dsAutoOff: _o, ...rest } = r.attrs;
+    return { ...r, attrs: left > 0 ? { ...rest, dsAutoOff: left } : rest };
+  });
+  let base = cur.runs;
+  if (asked?.auto && downspouts.some((s) => s.id === removedId)) base = dec(base, asked.runId, 1);
+  const back0 = run && runs.length ? Number(run.attrs.dsAutoOff) || 0 : 0;
+  if (back0) {
+    const heir = [...chainOf({ runs: [...base, ...runs] }, run!.id)].find((x) => x !== run!.id && (Number(base.find((r) => r.id === x)?.attrs.dsAutoOff) || 0) >= back0);
+    if (heir) base = dec(base, heir, back0);
+  }
   return runs.length || downspouts.length ? { ...cur, runs: [...base, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
 }
 

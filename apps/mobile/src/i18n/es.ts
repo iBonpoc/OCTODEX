@@ -3374,6 +3374,7 @@ export const es: Dict = {
   "mod.gutters.draw.accItem": "Precisión de la medida",
   "mod.gutters.draw.layersItem": "Capas…",
   "mod.gutters.draw.autoDsItem": "Colocar bajantes",
+  "mod.gutters.draw.dsAutoCount": "Bajantes ahora: {n}",
   "mod.gutters.draw.layersTitle": "Qué mostrar en el dibujo",
   "mod.gutters.draw.layersHint": "Una capa se oculta, no se borra: la medida, el cálculo y el presupuesto no cambian. Vuelve a activarla aquí.",
   "mod.gutters.draw.layer.grid": "Cuadrícula",

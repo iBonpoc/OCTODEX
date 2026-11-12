@@ -273,6 +273,10 @@ export default function DrawScreen() {
         ? autoDownspouts(made, { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, prev)
         : made;
       if (next === prev) return;
+      // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
+      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+        announceDs.current(next.downspouts.length, () => commit(made, next, true));
+      }
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
       if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
       setHint(null);
@@ -724,6 +728,9 @@ export default function DrawScreen() {
       setSheet(false);
     }
   };
+  /** the toast «Водостоков стало N» (kept fresh each render: `commit` is made once) */
+  const announceDs = useRef<(n: number, undo: () => void) => void>(() => {});
+  announceDs.current = (n, undo) => toast.show(t("mod.gutters.draw.dsAutoCount", { n }), undo);
   /** «Расставить водостоки»: every chain of an old measurement gets its downspouts — one step of «Назад» (#1246) */
   const placeAutoDs = () => {
     const o = cur.current.autoDs;

@@ -25,8 +25,8 @@ export interface DrawnRun {
     openEnds?: { a?: true; b?: true };
     /** the program puts downspouts on this gutter's chain by itself (#1246): written where an old phone copies it whole (rule 16); a drawing without it from before the feature gets none by an edit */
     dsAuto?: true;
-    /** the user took off the downspout the program had put on this gutter: none is put on it again (#1246) */
-    dsAutoOff?: true;
+    /** how many downspouts the program had put on this gutter the user took off by hand (#1246): the chain wants that many less (a count, not a ban: one removal never removes the rest) */
+    dsAutoOff?: number;
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
