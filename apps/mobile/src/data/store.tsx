@@ -115,7 +115,7 @@ import {
   type PurchaseOrder,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
-import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, templatesOfActiveModules, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
 /** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
@@ -1257,7 +1257,8 @@ export function StoreProvider({
   const snapshotFor = (kind: ChecklistVisitKind, services: ID[]): { items: ChecklistItem[]; mins?: { before?: number; after?: number } } => {
     const d0 = dbRef.current;
     if (!canEditTemplates(role)) return { items: [] };
-    const templates = d0.checklistTemplates ?? [];
+    // a module switched off puts nothing into a new visit (#607 review)
+    const templates = templatesOfActiveModules(d0.checklistTemplates ?? [], (k) => moduleActive(d0.company, k));
     // 200 items per visit is the server's limit (54000): more would be refused and hold the queue
     const items = checklistFor({ kind, catalogItemIds: services }, templates, () => uid()).slice(0, 200).map((c) => ({ ...c, addedBy: d0.me }));
     return { items, mins: snapshotPhotoMins(items, templates) };
