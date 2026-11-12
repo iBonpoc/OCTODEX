@@ -66,8 +66,13 @@ export default function MeasurementsScreen() {
     }
     return { tone: "neutral", label: t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate") };
   };
-  const signsOf = (m: MeasurementItem): CardSign[] | undefined =>
-    m.view.changed ? [{ tone: "warn", label: t(m.view.state === "signed" ? "mod.gutters.list.s.changedSigned" : "mod.gutters.list.s.changed") }] : undefined;
+  const signsOf = (m: MeasurementItem): CardSign[] | undefined => {
+    const out: CardSign[] = [];
+    if (m.view.changed) out.push({ tone: "warn", label: t(m.view.state === "signed" ? "mod.gutters.list.s.changedSigned" : "mod.gutters.list.s.changed") });
+    // #1165: the engine's rule changed after the estimate was made (a signed one is only told)
+    if (m.view.engineChanged) out.push({ tone: "warn", label: t(m.view.state === "signed" ? "mod.gutters.list.s.engineSigned" : "mod.gutters.list.s.engine") });
+    return out.length ? out : undefined;
+  };
 
   const desktop = device === "desktop";
   const card = (m: MeasurementItem) => (
@@ -84,7 +89,7 @@ export default function MeasurementsScreen() {
         lines: t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts }),
       }}
       // edge only for what needs action: the drawing changed after its estimate
-      edge={m.view.changed ? "warn" : null}
+      edge={m.view.changed || m.view.engineChanged ? "warn" : null}
       density={desktop ? "row" : "rich"}
       columns={panel.openId ? COLUMNS_PANEL : COLUMNS}
       selected={m.id === panel.openId}

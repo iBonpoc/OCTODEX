@@ -43,6 +43,7 @@ export const SCREENS: ShowcaseScreen[] = [
   { id: "windows", title: "ds.sec.windows", hint: "ds.scr.windowsHint", icon: "copy", ds: "§10", where: "ds.where.windows" },
   { id: "notices", title: "ds.scr.notices", hint: "ds.scr.noticesHint", icon: "bell", ds: "§15", where: "ds.where.notices" },
   { id: "motion", title: "ds.sec.motion", hint: "ds.scr.motionHint", icon: "refresh", ds: "§14", where: "ds.where.motion" },
+  { id: "rows", title: "ds.scr.rows", hint: "ds.scr.rowsHint", icon: "note", ds: "§8.3", where: "ds.where.rows" },
   { id: "haptics", title: "ds.scr.haptics", hint: "ds.scr.hapticsHint", icon: "phone", ds: "§15.6", where: "ds.where.haptics" },
   { id: "spacing", title: "ds.sec.layout", hint: "ds.scr.spacingHint", icon: "route", ds: "§5", where: "ds.where.spacing" },
 ];
@@ -52,6 +53,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press"] },
   { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge"] },
+  { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: [] },
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
   { id: "tokens-color", screen: "base", ds: "§3", title: "ds.sec.color", tokenGroups: ["themes", "statusIcon", "drawing"], components: [] },
   { id: "tokens-text", screen: "base", ds: "§4", title: "ds.sec.text", tokenGroups: ["font"], components: [] },
