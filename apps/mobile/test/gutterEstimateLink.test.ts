@@ -176,6 +176,16 @@ describe("makeEstimate — through the core's store", () => {
     r.undo();
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
   });
+  it("#1279 (the director's review of 14bcd1f): an estimate of a place the client already has (its target's undo is NO_UNDO) — «Отменить» is not refused", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement({ ...M, leadId: null, propertyId: "p1" }))));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = ok(makeEstimate(h.s, input({ ...M, leadId: null, propertyId: "p1" })));
+    expect(r.undo()).toBe(true);
+    expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
+    // the estimate and the measurement back; the place's own «nothing to undo» changed nothing
+    expect(h.undone).toEqual(["estimate", K.mSave]);
+  });
   it("#1244 (the director's 3rd review): with the core's undoTogether — one «Отменить» of all three parts, all or none (too late → nothing undone)", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
     const asked: unknown[][] = [];

@@ -39,7 +39,8 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 export function undoAll(store: Pick<ModuleStore, "undoTogether">, undos: readonly unknown[]): GuardedUndo {
   // what moduleOp gave (the store's undo, or null when the module is off) and the core's own undos; anything else is not
   // an undo — the whole «Отменить» is refused then, never a part silently left out (the director's review of #1279)
-  const parts = undos.filter((u) => u != null);
+  // NO_UNDO — «nothing to take back» (a target the client already has, a refused action): no part, as undoTogether skips it
+  const parts = undos.filter((u) => u != null && u !== NO_UNDO);
   if (parts.some((u) => !markOf(u))) {
     console.error("[undo] undoAll got a function the store did not make — refused");
     return TOO_LATE;
