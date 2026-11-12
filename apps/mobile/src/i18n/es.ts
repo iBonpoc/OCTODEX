@@ -403,6 +403,7 @@ export const es: Dict = {
   "more.resetDone": "Datos de prueba restablecidos",
 
   "common.undo": "Deshacer",
+  "common.undoLate": "Ya no se puede deshacer: se cambió mientras tanto",
   "common.cancel": "Cancelar",
   "common.close": "Cerrar",
   "common.help": "Ayuda",
@@ -2420,6 +2421,10 @@ export const es: Dict = {
   "ds.note.undoShow": "Mostrar «Deshacer»",
   "ds.note.undoText": "Cliente eliminado",
   "ds.note.undone": "Deshecho: {n}",
+  "ds.note.late": "Aviso «Ya no se puede deshacer»",
+  "ds.note.lateHint": "Deshacer revierte solo su propia acción. Si se cambió mientras tanto, nada cambia y el aviso dice por qué.",
+  "ds.note.lateShow": "Mostrar un deshacer tardío",
+  "ds.note.lateText": "Pago registrado",
   "ds.note.offline": "«Sin red»",
   "ds.note.offlineHint": "Sin red, los cambios van a la cola y la insignia los cuenta. Al salir de la pantalla vuelve la red.",
   "ds.note.offlineOn": "Apagar la red",

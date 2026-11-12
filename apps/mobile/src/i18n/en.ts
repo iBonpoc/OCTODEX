@@ -403,6 +403,7 @@ export const en: Dict = {
   "more.resetDone": "Test data reset",
 
   "common.undo": "Undo",
+  "common.undoLate": "Too late to undo: it was changed since",
   "common.cancel": "Cancel",
   "common.close": "Close",
   "common.help": "Help",
@@ -2420,6 +2421,10 @@ export const en: Dict = {
   "ds.note.undoShow": "Show «Undo»",
   "ds.note.undoText": "Client deleted",
   "ds.note.undone": "Undone: {n}",
+  "ds.note.late": "«Too late to undo» toast",
+  "ds.note.lateHint": "Undo takes back only its own action. If it was changed since, nothing changes and the toast says why.",
+  "ds.note.lateShow": "Show a late undo",
+  "ds.note.lateText": "Payment recorded",
   "ds.note.offline": "«Offline»",
   "ds.note.offlineHint": "Offline, changes go to the queue, the badge counts them. Leaving the screen puts the network back.",
   "ds.note.offlineOn": "Turn the network off",

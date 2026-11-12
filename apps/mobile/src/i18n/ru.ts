@@ -402,6 +402,7 @@ export const ru = {
   "more.resetDone": "Тестовые данные сброшены",
 
   "common.undo": "Отменить",
+  "common.undoLate": "Уже не отменить: это успели изменить",
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.help": "Справка",
@@ -2419,6 +2420,10 @@ export const ru = {
   "ds.note.undoShow": "Показать «Отменить»",
   "ds.note.undoText": "Клиент удалён",
   "ds.note.undone": "Отменено раз: {n}",
+  "ds.note.late": "Тост «Уже не отменить»",
+  "ds.note.lateHint": "«Отменить» откатывает только своё действие. Если его успели изменить — ничего не меняется, тост говорит почему.",
+  "ds.note.lateShow": "Показать опоздавшее «Отменить»",
+  "ds.note.lateText": "Оплата записана",
   "ds.note.offline": "«Нет сети»",
   "ds.note.offlineHint": "Без сети изменения идут в очередь, на плашке счётчик. Выход с экрана возвращает сеть.",
   "ds.note.offlineOn": "Выключить сеть",

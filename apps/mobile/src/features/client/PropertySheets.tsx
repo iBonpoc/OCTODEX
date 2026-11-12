@@ -98,7 +98,7 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
     const undos: (() => void)[] = [];
     if (notes !== (value.accessNotes ?? "")) undos.push(store.saveProperty({ ...value, accessNotes: notes }));
     if (gate !== (value.gateCode ?? "")) undos.push(store.setGateCode(value.id, gate));
-    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), () => undos.reverse().forEach((u) => u()));
+    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
     onClose();
   };
   return (

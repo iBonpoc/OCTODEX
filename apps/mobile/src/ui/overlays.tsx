@@ -710,14 +710,15 @@ export function HelpButton({ title, text, where }: { title: string; text: string
 interface ToastItem {
   id: number;
   text: string;
-  undo?: () => void;
+  /** false: nothing could be taken back (it was changed since, #1193 п.6) — the toast then says so */
+  undo?: () => void | boolean;
 }
-const ToastCtx = createContext<{ show: (text: string, undo?: () => void) => void } | null>(null);
+const ToastCtx = createContext<{ show: (text: string, undo?: () => void | boolean) => void } | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [item, setItem] = useState<ToastItem | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((text: string, undo?: () => void) => {
+  const show = useCallback((text: string, undo?: () => void | boolean) => {
     if (timer.current) clearTimeout(timer.current);
     const id = Date.now();
     setItem({ id, text, undo });
@@ -729,12 +730,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastCtx.Provider value={{ show }}>
       {children}
-      <ToastView item={item} onDone={() => setItem(null)} />
+      <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />
     </ToastCtx.Provider>
   );
 }
 
-function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => void }) {
+function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: () => void; onLate: (text: string) => void }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const { wide } = useDevice();
@@ -774,7 +775,8 @@ function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => voi
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.id = when it showed)
               if (!toastArmed(item.id, Date.now())) return;
-              item.undo?.();
+              // #1193 п.6: «Отменить» refused (the thing was changed since): say so instead of a silent nothing
+              if (item.undo?.() === false) return onLate(t("common.undoLate"));
               onDone();
             }}
           />

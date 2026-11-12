@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/cloud/ops", () => ({ PermanentError: class extends Error {}, uploadPhoto: () => null }));
-import { copyRows, duplicateMeasurement, gutterData, K, setAccuracy } from "../src/modules/gutters/data";
+import { copyRows, duplicateMeasurement, gutterData, K, setAccuracy, undoAll } from "../src/modules/gutters/data";
 import { measurementState } from "../src/modules/gutters/measurements";
 import type { DB } from "../src/data/types";
 
@@ -96,5 +96,23 @@ describe("setAccuracy («Точность замера» on the card)", () => {
     expect(setAccuracy(st, "m9", "rough")).toBeNull();
     expect(setAccuracy(st, "nope", "tape")).toBeNull();
     expect(st.ops).toEqual([]);
+  });
+});
+
+describe("undoAll — the module's «Отменить» of several changes (#1244, DS §15.2)", () => {
+  it("the core's undoTogether when there is one: the copy's undos all go to it, its answer is the toast's (false — nothing undone)", () => {
+    n = 0;
+    const st = fakeStore();
+    const asked: unknown[][] = [];
+    const withTogether = Object.assign(st, { undoTogether: (u: readonly unknown[]) => (asked.push([...u]), () => false as boolean | undefined) });
+    const r = duplicateMeasurement(withTogether, "m1", ids)!;
+    expect(r.undo()).toBe(false);
+    expect(asked[0]).toHaveLength(1 + EL.length);
+    expect(st.ops).toHaveLength(1 + EL.length);
+  });
+  it("an older store without it: one by one, the last first", () => {
+    const order: string[] = [];
+    expect(undoAll({}, [() => order.push("a"), "not a function", () => order.push("b")])()).toBe(true);
+    expect(order).toEqual(["b", "a"]);
   });
 });

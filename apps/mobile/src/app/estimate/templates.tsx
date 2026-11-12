@@ -62,9 +62,11 @@ export default function EstimateTemplates() {
     const unpriced = fromTemplate(tpl.doc, store.db.catalog, {}, false, true).checkPrice;
     const msg = unpriced.length ? t("est.tpl.starterNoPrice", { n: unpriced.length }) : t("est.tpl.starterAdded", { name: tpl.name });
     toast.show(store.online ? msg : t("offline.queued"), () => {
-      pressed.current.delete(id);
-      // the insert waits on the phone while the toast is up (SEND_AFTER_MS): «Отменить» takes it out of the queue
-      undo();
+      // the insert waits on the phone while the toast is up (SEND_AFTER_MS): «Отменить» takes it out of the queue; too
+      // late (false) — the template stays, and so does «pressed» (#1244)
+      const r = undo();
+      if (r !== false) pressed.current.delete(id);
+      return r;
     });
   };
   const copy = (x: EstimateTemplate) => {

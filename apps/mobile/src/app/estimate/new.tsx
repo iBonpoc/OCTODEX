@@ -213,9 +213,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     return r;
   };
   const docWith = (o: CustomOption): EstimateDoc => ({ ...doc, options: doc.options.map((x) => (x.id === o.id ? o : x)) });
-  const writeCatalog = (items: CatalogItem[]) => items.forEach((i) => store.saveCatalogItem(i));
-  // «Отменить» takes out exactly the things this action made (not the whole store: that would undo the server's read and other edits)
-  const unwriteCatalog = (items: CatalogItem[]) => items.forEach((i) => store.removeCatalogItem(i.id));
+  // «Отменить» takes out exactly the things this action made (not the whole store: that would undo the server's read and
+  // other edits) — each save's own undo, all of them with the estimate or none (#1244, DS §15.2)
+  const writeCatalog = (items: CatalogItem[]) => items.map((i) => store.saveCatalogItem(i));
   const leaveRow = (quiet = false): boolean => {
     const r = settleNow(quiet);
     if (!r.closed) return false;
@@ -223,11 +223,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setWantCatalog(r.wantCatalog);
     setOpenId(null);
     if (r.newItems.length) {
-      writeCatalog(r.newItems);
+      const back = store.undoTogether(writeCatalog(r.newItems));
       const ids = new Set(r.newItems.map((i) => i.id));
       toast.show(t("est.row.catalogAdded"), () => {
-        unwriteCatalog(r.newItems);
+        // too late for one of them: the lines keep their items
+        const done = back();
+        if (done !== true) return done;
         setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.catalogItemId && ids.has(x.catalogItemId) ? { ...x, catalogItemId: undefined } : x)) }));
+        return true;
       });
     }
     return true;
@@ -452,7 +455,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (!settled.closed) return;
     haptics.success();
     const clean: EstimateDoc = exemptDoc({ ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: activeLines(o.lines).filter((l) => !isBlank(l)) })) }, customer.taxExempt);
-    writeCatalog(settled.newItems);
+    const catalogUndos = writeCatalog(settled.newItems);
     const undo = store.saveEstimate({
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
@@ -461,10 +464,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // is closed by then, so its content does not come back as a draft (#860)
     dropDraft();
     const saved = store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued");
-    toast.show(settled.newItems.length ? `${saved} · ${t("est.row.catalogAdded")}` : saved, () => {
-      undo();
-      unwriteCatalog(settled.newItems);
-    });
+    // the estimate and its new price-list items: all of them go back or none (the director's 4th review Б2)
+    toast.show(settled.newItems.length ? `${saved} · ${t("est.row.catalogAdded")}` : saved, store.undoTogether([...catalogUndos, undo]));
     router.replace(`/estimate/${estimateId}${send && canSeeClientLink(store.role) ? "?send=1" : ""}`);
   };
 
@@ -492,13 +493,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       return;
     }
     // the server checks the same: over the version this screen opened on, else «не сохранено» (row_version_conflict)
-    writeCatalog(settled.newItems);
+    const catalogUndos = writeCatalog(settled.newItems);
     const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, tplDoc, seeCosts) });
     // «Отменить» (rule 5): the edit waits on the phone while the toast is up (SEND_AFTER_MS) — taken out of the queue
-    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), () => {
-      undo();
-      unwriteCatalog(settled.newItems);
-    });
+    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), store.undoTogether([...catalogUndos, undo]));
     router.replace("/estimate/templates");
   };
 

@@ -56,7 +56,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
   const totals = totalOf(lines, job);
   const warn = caContractWarning(db, job.id);
   // «Отменить» may be refused (an invoice went out meanwhile): then say why, nothing changes
-  const done = (msg: string, undo: () => boolean) => toast.show(store.online ? msg : t("offline.queued"), () => { if (!undo()) toast.show(t("job5.lines.err.undo")); });
+  const done = (msg: string, undo: () => boolean | undefined) => toast.show(store.online ? msg : t("offline.queued"), () => { if (undo() === false) toast.show(t("job5.lines.err.undo")); });
   const refuse = (after: typeof db): boolean => {
     const r = lineChangeRefusal(db, after, job.id);
     if (r) toast.show(t(REFUSAL_KEY[r]));

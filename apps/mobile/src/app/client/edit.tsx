@@ -74,8 +74,8 @@ export default function EditClient() {
     const parts = { firstName: name.first, lastName: name.last, companyName: name.company };
     if (creating) {
       const r = store.addCustomer({ name: shown, phone: filled[0] ?? "", email: email.trim() || undefined, sourceId, address: address.trim(), city: city.trim() });
-      const undos = [r.undo, store.updateCustomer(r.id, parts)];
-      toast.show(store.online ? t("clients.created", { name: shown }) : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
+      // all or nothing (DS §15.2): the client and its name parts go back together, or neither
+      toast.show(store.online ? t("clients.created", { name: shown }) : t("offline.queued"), store.undoTogether([r.undo, store.updateCustomer(r.id, parts)]));
       router.replace(`/client/${r.id}`);
       return;
     }
@@ -88,7 +88,7 @@ export default function EditClient() {
     const samePhones = JSON.stringify(phones.filter((x) => x.number.trim()).map((x) => ({ number: x.number.trim(), label: x.label }))) === JSON.stringify(mainPhonesOf(c!));
     if (!samePhones || email.trim() !== mainEmailOf(c!)) undos.push(store.saveCustomerPeople(c!.id, withMainContacts(c!, phones, email)));
     if (p && (address !== p.address || city !== p.city)) undos.push(store.updateProperty(p.id, { address: address.trim(), city: city.trim() }));
-    toast.show(store.online ? t("co.saved") : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
+    toast.show(store.online ? t("co.saved") : t("offline.queued"), store.undoTogether(undos));
     back();
   };
 
