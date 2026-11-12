@@ -1,3 +1,4 @@
+import { FieldsSection } from "@/features/showcase/Fields";
 import { View } from "react-native";
 import { Redirect, router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
@@ -36,6 +37,7 @@ export default function DesignSystemSection() {
       {s.id === "notices" ? <NoticesSection /> : null}
       {s.id === "haptics" ? <HapticsSection /> : null}
       {s.id === "rows" ? <RowsSection /> : null}
+      {s.id === "fields" ? <FieldsSection /> : null}
     </Screen>
   );
 }
