@@ -294,3 +294,9 @@ export const OFFSETS_IN = [1, 2, 3, 4, 5] as const;
 export const DS_HEADS = ["none", "funnel", "conductor"] as const;
 /** the panel's «Своя высота», feet: 0 = by the storey */
 export const MAX_DS_HEIGHT_FT = 60;
+
+/** feet and inches of a length, to the sixteenth: 11.97″ is a foot, never «12″» (the corner sketch fields) */
+export const asFields = (n: number) => {
+  const q = Math.round(n * DENOM); // whole sixteenths: 11.97″ is a foot, never «12″»
+  return { ft: String(Math.floor(q / (12 * DENOM))), inch: String((q % (12 * DENOM)) / DENOM) };
+};

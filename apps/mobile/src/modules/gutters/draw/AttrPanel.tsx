@@ -576,10 +576,10 @@ function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsA
           {ownOpen ? (
             <RowView style={{ gap: space[2] }}>
               <View style={{ width: component.qtyFieldW }} testID="attr-offset-own">
-                <TextField type="number" value={own} onChangeText={setOwn} label={t(k("offsetOwn"))} onSubmit={() => { const n = Number(own); if (n > 0 && n <= 24) put(Math.round(n * 8) / 8); }} />
+                <TextField type="number" value={own} onChangeText={setOwn} label={t(k("offsetOwn"))} onSubmit={() => { const n = Number(own); if (n > 0 && n <= 24) put(Math.round(n * DENOM) / DENOM); }} />
               </View>
               <T v="body" tone="mut">{t(k("in"))}</T>
-              <View testID="attr-offset-own-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={() => { const n = Number(own); if (n > 0 && n <= 24) put(Math.round(n * 8) / 8); }} /></View>
+              <View testID="attr-offset-own-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={() => { const n = Number(own); if (n > 0 && n <= 24) put(Math.round(n * DENOM) / DENOM); }} /></View>
             </RowView>
           ) : null}
         </View>

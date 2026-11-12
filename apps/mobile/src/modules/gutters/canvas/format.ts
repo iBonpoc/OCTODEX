@@ -24,8 +24,8 @@ export function ftIn(inches: number): string {
 }
 
 /** how a gutter's length is shown on the drawing (founder 09.11, chosen in its properties): feet + inches, inches, mm */
-/** how a length is typed and shown (founder 09.11: feet + inches + eighths, inches, also metres, centimetres, millimetres);
- *  kept in inches to 1/8″ whatever is chosen */
+/** how a length is typed and shown (founder 09.11: feet + inches + sixteenths, inches, also metres, centimetres, millimetres);
+ *  kept in inches to 1/16″ whatever is chosen */
 export type LenUnit = "ftin" | "in" | "m" | "cm" | "mm";
 export const LEN_UNITS: readonly LenUnit[] = ["ftin", "in", "m", "cm", "mm"];
 export const MM_PER_IN = 25.4;
