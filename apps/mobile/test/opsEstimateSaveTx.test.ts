@@ -51,6 +51,12 @@ describe("unit:opsEstimateSaveTx", () => {
     // no separate writes of the version's parts
     expect(tables.filter((t) => ["estimate_line_items", "estimate_options", "estimate_line_costs", "estimate_versions"].includes(t.table) && t.kind !== "insert")).toEqual([]);
   });
+  it("a title past 500 characters is cut to 500 (by character) — never refused for good", async () => {
+    await applyOp({ ...(op() as object), title: "😀" + "x".repeat(600) } as unknown as Op, "co-1", "u-1");
+    const t = (rpcs[0]!.args as { p_title: string }).p_title;
+    expect(Array.from(t)).toHaveLength(500);
+    expect(t.startsWith("😀x")).toBe(true);
+  });
   it("a refusal is the op's (for good) — never the separate requests after it", async () => {
     answers = [{ error: { code: "23514", message: "check", hint: "x" }, status: 400 }];
     const e = await applyOp(op(), "co-1", "u-1").then(() => undefined, (x: unknown) => x);

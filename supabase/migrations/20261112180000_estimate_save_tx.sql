@@ -11,8 +11,12 @@
 --   version, the line checks, t20, a tech's own estimate); it gives nobody a new right.
 -- * The estimate is locked first, then the version (the order of send_estimate): two saves of one estimate go one after
 --   the other, a save and a send never deadlock.
--- * Size: at most 10 options, 2000 lines, 2000 costs and 4 MB in all — beyond that 22023, hint estimate_save_size
---   (as doc_pages caps the attached pages); a payload not of the expected shape — 22023, hint estimate_save_shape.
+-- * Size: at most 10 options, 2000 lines, 2000 costs, a title of 500 characters and 4 MB in all (the title counted
+--   too) — beyond that 22023, hint estimate_save_size (as doc_pages caps the attached pages); a payload not of the
+--   expected shape — 22023, hint estimate_save_shape.
+-- * Only this version: every line belongs to one of the options sent, every cost to one of the lines sent — else 22023,
+--   hint estimate_save_shape, nothing written (security-check of #1226: a line into another estimate's option, a cost
+--   over another estimate's line of the same company).
 -- Rule 16: a new function; older phones keep the separate requests (no worse than before), this phone uses them only
 -- when the server has no such function yet (PGRST202). Rule 18: revoked from public, anon; execute for authenticated.
 -- The size caps stay above the app's own limits (3 options, a template's 10; pages ≤ 512 KB): a refusal of size is for
@@ -32,8 +36,19 @@ begin
     raise exception 'save_estimate_version: not the expected shape' using errcode = '22023', hint = 'estimate_save_shape';
   end if;
   if jsonb_array_length(p_options) > 10 or jsonb_array_length(p_lines) > 2000 or jsonb_array_length(v_costs) > 2000
-     or octet_length(p_version::text) + octet_length(p_options::text) + octet_length(p_lines::text) + octet_length(v_costs::text) > 4194304 then
+     or length(coalesce(p_title, '')) > 500
+     or octet_length(p_version::text) + octet_length(p_options::text) + octet_length(p_lines::text) + octet_length(v_costs::text)
+        + octet_length(coalesce(p_title, '')) > 4194304 then
     raise exception 'save_estimate_version: too large' using errcode = '22023', hint = 'estimate_save_size';
+  end if;
+  -- only this version's rows: a line of an option not sent here, a cost of a line not sent here — refused
+  if exists (select 1 from jsonb_array_elements(p_lines) l
+              where jsonb_typeof(l) is distinct from 'object'
+                 or not exists (select 1 from jsonb_array_elements(p_options) o where jsonb_typeof(o) = 'object' and o ->> 'id' = l ->> 'option_id'))
+     or exists (select 1 from jsonb_array_elements(v_costs) c
+              where jsonb_typeof(c) is distinct from 'object'
+                 or not exists (select 1 from jsonb_array_elements(p_lines) l where jsonb_typeof(l) = 'object' and l ->> 'id' = c ->> 'line_item_id')) then
+    raise exception 'save_estimate_version: a line or a cost outside this version' using errcode = '22023', hint = 'estimate_save_shape';
   end if;
 
   -- the estimate first, then its version — the order of send_estimate and the signing functions (never a deadlock with

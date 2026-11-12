@@ -13592,6 +13592,29 @@ select tst.fails($q$select public.save_estimate_version('e2000000-0000-4000-8000
          '{"calc_inputs": {"mark": "tech2"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$, 'T200 a tech does not change a sent estimate');
 :as_super
 select tst.ok((select calc_inputs ->> 'mark' = 'tech' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000003'), 'T200 the sent one as it was');
+-- security-check of #1226: only this version's rows — a line into another estimate's option, a cost over another
+-- estimate's line (the same company), another estimate's version, another company's version; a title past 500
+:as_super
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('b2000000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 400) on conflict (line_item_id) do update set unit_cost_cents = 400;
+:as_office_a
+select tst.fails_like($q$select tst.t200_save('T200 other option', 'doc8', '[{"id": "b2000000-0000-4000-8000-0000000000b8", "option_id": "a2000000-0000-4000-8000-0000000000a3", "name": "Into another", "quantity": 1, "unit": "ea", "unit_price_cents": 100}]')$q$,
+       '%outside this version%', 'T200 a line into another estimate''s option: refused');
+select tst.fails_like($q$select tst.t200_save('T200 other cost', 'doc8', '[]', '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b5", "unit_cost_cents": 1}]')$q$,
+       '%outside this version%', 'T200 a cost over another estimate''s line: refused');
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000003', 'x',
+         '{"calc_inputs": {"mark": "idor"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$, '%no such version%', 'T200 our estimate with another estimate''s version: refused (42501)');
+select tst.fails_like(format($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', %L, 'x',
+         '{"calc_inputs": {"mark": "idor"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$,
+         (select id from public.estimate_versions where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1)), '%no such version%', 'T200 our estimate with another company''s version: refused (42501)');
+select tst.fails_like($q$select tst.t200_save(repeat('t', 501), 'doc8', '[]')$q$, '%too large%', 'T200 a title past 500 characters: refused');
+:as_super
+select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b5')
+              and not exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b8')
+              and (select calc_inputs ->> 'mark' = 'tech' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000003')
+              and (select calc_inputs ->> 'mark' = 'doc6' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_versions where company_id = 'cb000000-0000-0000-0000-000000000000'),
+              'T200 the other estimate''s line, cost and version as they were; ours too (red before the security-check fix)');
 -- a locked (sent) version: its lines do not change
 :as_super
 update public.estimate_versions set locked_at = now() where id = 'f2000000-0000-4000-8000-000000000001';
