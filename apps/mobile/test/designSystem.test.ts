@@ -128,13 +128,18 @@ describe("design system: components", () => {
     const hits: string[] = [];
     for (const f of code) {
       const src = readFileSync(f, "utf8");
-      if (!/activateAfterLongPress|dragHoldMs/.test(src) || f.endsWith(join("ui", "haptics.ts"))) continue;
+      if (!/holdConfig\(|activateAfterLongPress/.test(src) || f.endsWith(join("ui", "haptics.ts")) || f.endsWith(join("ui", "pointer.ts"))) continue;
       for (const k of ["light", "selection", "medium"]) if (!new RegExp(`haptics\\.${k}\\(`).test(src)) hits.push(`${relative(ROOT, f)}: haptics.${k}`);
     }
     expect(hits, "a drag without its haptics (DS §15.6): lift = light, new place = selection, drop = medium").toEqual([]);
     const sortable = readFileSync(join(ROOT, "features", "SortableList.tsx"), "utf8");
     // let go where it was taken: no drop, no «medium»
     expect(sortable).toMatch(/r\.p !== fromSlot\.current/);
+    // the buzz follows what the drop came to: «medium» only for a move that happened, «warning» for a refusal — never before the result
+    expect(sortable).toMatch(/const res: DropResult = d \? drop\(d\) : "same";[\s\S]*?res === "moved"\) haptics\.medium\(\)/);
+    expect(sortable.slice(0, sortable.indexOf("const res: DropResult"))).not.toMatch(/haptics\.medium/);
+    // the kind of pointer, not the width, decides how a body starts a drag
+    for (const f of ["SortableList.tsx", "dnd.tsx"]) expect(readFileSync(join(ROOT, "features", f), "utf8")).toMatch(/holdConfig\(/);
   });
   it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
     const hits = outsideUi.filter((f) =>

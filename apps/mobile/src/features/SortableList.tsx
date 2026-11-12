@@ -1,16 +1,17 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { component, gesture, motion, radius, size, space, z } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
-import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { useTheme } from "@/theme/ThemeProvider";
 import { haptics } from "@/ui/haptics";
 import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
-import { insertionIndex, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop } from "./sortable";
+import { finePointer, holdConfig } from "@/ui/pointer";
+import { dragKind, edgeStep, insertionIndex, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
 /**
@@ -26,16 +27,23 @@ interface Ctl {
   to: number;
   from: number;
   h: number;
+  /** 0 → 1 while a row is lifted (scale, tilt, shadow); stays 0 under reduced motion */
   lift: ReturnType<typeof useSharedValue<number>>;
+  /** 1 while a row is held (frame, ground): shown also under reduced motion */
+  held: ReturnType<typeof useSharedValue<number>>;
   dragY: ReturnType<typeof useSharedValue<number>>;
+  /** how far the page has scrolled since the row was taken (the row goes with it) */
+  scrolled: ReturnType<typeof useSharedValue<number>>;
   layout: (key: string, y: number, h: number) => void;
   node: (key: string, n: ComponentRef<typeof View> | null) => void;
-  begin: (key: string) => void;
+  begin: (key: string, absY: number) => void;
   move: (key: string, ty: number, absY: number) => void;
   end: (key: string, canceled: boolean) => void;
   canDrag: (key: string) => boolean;
 }
 const SortCtx = createContext<Ctl | null>(null);
+
+export type DropResult = "moved" | "same" | "refused";
 
 export interface SortableListProps {
   rows: ViewRow[];
@@ -43,8 +51,11 @@ export interface SortableListProps {
   openKey?: string | null;
   /** a signed estimate: nothing drags */
   locked?: boolean;
-  /** the place the held row was dropped at (the screen moves the line / section; a refusal is its toast) */
-  onDrop: (drop: Drop) => void;
+  /**
+   * The place the held row was dropped at. The screen moves the line / section and says what came of it: «moved» (the list is
+   * different now: «medium»), «same» (it ended where it was: nothing), «refused» (the module leads it: «warning», its toast).
+   */
+  onDrop: (drop: Drop) => DropResult;
   /** a section is held: the screen folds it while it is carried (its lines go with it), `null` — let go */
   onHold?: (sectionId: string | null) => void;
   renderRow: (row: ViewRow, index: number) => ReactNode;
@@ -64,13 +75,17 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
   const keys = useMemo(() => rows.map(rowKey), [rows]);
   const [state, setState] = useState<{ active: string | null; to: number; from: number; h: number }>({ active: null, to: 0, from: 0, h: 0 });
   const lift = useSharedValue(0);
+  const held = useSharedValue(0);
   const dragY = useSharedValue(0);
+  const scrolled = useSharedValue(0);
+  const visible = useRef<{ top: number; bottom: number } | null>(null);
   const startOffset = useRef(0);
   /** the slot the held row started in, and the one it is over now (a change of slot = one tick of «selection», DS §15.6) */
   const fromSlot = useRef(0);
   const slot = useRef(0);
   const lastT = useRef(0);
-  const absY = useRef(0);
+  /** where the finger is in the window; null until the drag has told (a 0 would read as «at the top edge» and the page would run) */
+  const absY = useRef<number | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const latest = useRef({ rows, onDrop, onHold, state, scroll, openKey, locked });
   latest.current = { rows, onDrop, onHold, state, scroll, openKey, locked };
@@ -96,7 +111,9 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
 
   const refresh = useCallback(
     (key: string) => {
-      const ty = lastT.current + ((latest.current.scroll?.offset() ?? 0) - startOffset.current);
+      const moved = (latest.current.scroll?.offset() ?? 0) - startOffset.current;
+      const ty = lastT.current + moved;
+      scrolled.value = moved;
       dragY.value = ty;
       const r = place(key, ty);
       if (r) {
@@ -107,8 +124,15 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         setState((s) => (s.active === key && s.to !== r.p ? { ...s, to: r.p } : s));
       }
     },
-    [dragY, place],
+    [dragY, scrolled, place],
   );
+
+  /** where each row stands NOW, in the list (the browser tells a layout only when a size changes, not when a row above grew) */
+  const measureAll = useCallback(() => {
+    boxRef.current?.measureInWindow((_x: number, cy: number) => {
+      nodes.current.forEach((n, k) => n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => layouts.current.set(k, { y: ny - cy, h: nh })));
+    });
+  }, []);
 
   const ctl = useMemo<Ctl>(
     () => ({
@@ -118,44 +142,50 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
       from: state.from,
       h: state.h,
       lift,
+      held,
       dragY,
+      scrolled,
       layout: (key, y, h) => void layouts.current.set(key, { y, h }),
       node: (key, n) => void nodes.current.set(key, n),
       canDrag: (key) => !latest.current.locked && !!keys.includes(key),
-      begin: (key) => {
+      begin: (key, y) => {
         const { rows: rs, scroll: sc, onHold: hold } = latest.current;
         const idx = rs.findIndex((r) => rowKey(r) === key);
         const row = rs[idx];
         const me = layouts.current.get(key);
         if (!row || !me) return;
         startOffset.current = sc?.offset() ?? 0;
-        // where each row stands NOW, in the list (the browser tells a layout only when a size changes, not when a row above grew)
-        boxRef.current?.measureInWindow((_x: number, cy: number) => {
-          nodes.current.forEach((n, k) => n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => layouts.current.set(k, { y: ny - cy, h: nh })));
-        });
+        // the finger's place is known from the first moment (before, the page ran up from a 0 and the row with it)
+        absY.current = y;
+        visible.current = null;
+        sc?.measureVisible((v) => (visible.current = v));
+        measureAll();
         lastT.current = 0;
         dragY.value = 0;
+        scrolled.value = 0;
         lock(true);
         haptics.light();
-        lift.value = reduce ? 1 : withTiming(1, { duration: motion.durSlow });
-        const { rest, at } = withoutBlock(rs, key);
+        held.value = 1;
+        // reduced motion: no lift (the frame and the ground still show which row is held)
+        lift.value = reduce ? 0 : withTiming(1, { duration: motion.durSlow });
+        const { at } = withoutBlock(rs, key);
         // `from`: the slot of the held row among the others
         fromSlot.current = at;
         slot.current = at;
         setState({ active: key, from: at, to: at, h: me.h });
-        void rest;
-        if (row.type === "section") hold?.(row.section.id);
-        // the page follows the held row near the edges of the screen
+        if (row.type === "section") {
+          hold?.(row.section.id);
+          // the section folds: the rows below it have moved — measure them again once the fold is drawn
+          requestAnimationFrame(() => requestAnimationFrame(measureAll));
+        }
+        // the page follows the held row near the edges of what can be seen (below the header, above the bottom bar)
         timer.current = setInterval(() => {
           const s = latest.current.scroll;
           if (!s) return;
-          const top = insets.top + gesture.autoScrollEdge;
-          const bottom = winH - gesture.autoScrollEdge;
-          const y = absY.current;
-          const depth = y < top ? (top - y) / gesture.autoScrollEdge : y > bottom ? (y - bottom) / gesture.autoScrollEdge : 0;
-          if (depth <= 0) return;
-          const step = Math.max(1, Math.round(Math.min(1, depth) * space[3]));
-          s.scrollBy(y < top ? -step : step);
+          const v = visible.current ?? { top: insets.top, bottom: winH - insets.bottom };
+          const step = edgeStep(absY.current, v.top, v.bottom, gesture.autoScrollEdge, space[3]);
+          if (!step) return;
+          s.scrollBy(step);
           refresh(key);
         }, 16);
       },
@@ -167,7 +197,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
       end: (key, canceled) => {
         stop();
         lock(false);
-        const { rows: rs, onDrop: drop, onHold: hold, state: st } = latest.current;
+        const { rows: rs, onDrop: drop, onHold: hold } = latest.current;
         const ty = lastT.current + ((latest.current.scroll?.offset() ?? 0) - startOffset.current);
         const r = place(key, ty);
         const total = box.current.h;
@@ -178,19 +208,19 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
         const d = !canceled && r && inside && r.p !== fromSlot.current ? resolveDrop(rs, key, r.p) : null;
         setState({ active: null, to: 0, from: 0, h: 0 });
         hold?.(null);
-        void st;
-        if (d) {
-          haptics.medium();
-          dragY.value = 0;
-          lift.value = reduce ? 0 : withSpring(0, motion.spring);
-          drop(d);
-        } else {
-          dragY.value = reduce ? 0 : withSpring(0, motion.spring);
-          lift.value = reduce ? 0 : withSpring(0, motion.spring);
-        }
+        held.value = 0;
+        absY.current = null;
+        // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
+        // refused — «warning» (never «medium» for a move that did not happen)
+        const res: DropResult = d ? drop(d) : "same";
+        if (res === "moved") haptics.medium();
+        else if (res === "refused") haptics.warning();
+        if (res === "moved") dragY.value = 0;
+        else dragY.value = reduce ? 0 : withSpring(0, motion.spring);
+        lift.value = reduce ? 0 : withSpring(0, motion.spring);
       },
     }),
-    [keys, state, lift, dragY, lock, reduce, refresh, place, stop, insets.top, winH],
+    [keys, state, lift, held, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, insets.top, insets.bottom, winH],
   );
 
   // the bar: where the held row will stand
@@ -208,7 +238,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, renderRow 
     <SortCtx.Provider value={ctl}>
       <View ref={boxRef} collapsable={false} onLayout={(e) => (box.current.h = e.nativeEvent.layout.height)} style={{ position: "relative" }}>
         {rows.map((r, i) => (
-          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={r.type === "unsectioned" ? null : "x"} open={openKey === rowKey(r)}>
+          <Item key={rowKey(r)} k={rowKey(r)} index={i} dragKind={dragKind(r) ? "x" : null} open={openKey === rowKey(r)}>
             {renderRow(r, i)}
           </Item>
         ))}
@@ -222,7 +252,6 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   const ctl = useContext(SortCtx)!;
   const { c } = useTheme();
   const { t } = useI18n();
-  const { wide } = useDevice();
   const reduce = useReducedMotion();
   const mine = ctl.active === k;
   const idx = ctl.keys.indexOf(k);
@@ -234,39 +263,67 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     sh.value = reduce ? shift : withTiming(shift, { duration: motion.durBase, easing: Easing.out(Easing.cubic) });
   }, [shift, reduce, sh]);
 
+  // the movement is on the UI thread (no bridge per frame): the row follows the finger and the page's scroll; the JS side is told
+  // only to find the place (`move`). One finger: a second one cancels the drag.
+  const { dragY, scrolled, held, lift } = ctl;
+  const begin = ctl.begin;
+  const move = ctl.move;
+  const end = ctl.end;
   const handle = usePanGesture({
-    runOnJS: true,
     minDistance: gesture.dragStart,
-    onActivate: () => ctl.begin(k),
-    onUpdate: (e) => ctl.move(k, e.translationY, e.absoluteY),
-    onDeactivate: (e) => ctl.end(k, e.canceled),
+    maxPointers: 1,
+    onActivate: (e) => {
+      "worklet";
+      runOnJS(begin)(k, e.absoluteY);
+    },
+    onUpdate: (e) => {
+      "worklet";
+      dragY.value = e.translationY + scrolled.value;
+      runOnJS(move)(k, e.translationY, e.absoluteY);
+    },
+    onDeactivate: (e) => {
+      "worklet";
+      runOnJS(end)(k, e.canceled);
+    },
   });
+  // the body of a row: a mouse / pen starts after a move of `dragStart`, a finger only after a hold (else the page's scroll is lost)
+  const cfg = useMemo(() => holdConfig(finePointer()), []);
   const hold = usePanGesture({
-    runOnJS: true,
-    minDistance: wide ? gesture.dragStart : undefined,
-    activateAfterLongPress: wide ? undefined : gesture.dragHoldMs,
-    onActivate: () => ctl.begin(k),
-    onUpdate: (e) => ctl.move(k, e.translationY, e.absoluteY),
-    onDeactivate: (e) => ctl.end(k, e.canceled),
+    minDistance: cfg.minDistance,
+    activateAfterLongPress: cfg.activateAfterLongPress,
+    maxPointers: 1,
+    onActivate: (e) => {
+      "worklet";
+      runOnJS(begin)(k, e.absoluteY);
+    },
+    onUpdate: (e) => {
+      "worklet";
+      dragY.value = e.translationY + scrolled.value;
+      runOnJS(move)(k, e.translationY, e.absoluteY);
+    },
+    onDeactivate: (e) => {
+      "worklet";
+      runOnJS(end)(k, e.canceled);
+    },
   });
 
   const a = useAnimatedStyle(() => {
     const on = mine;
     return {
       transform: [
-        { translateY: on ? ctl.dragY.value : sh.value },
-        { scale: on ? 1 + (motion.liftScale - 1) * ctl.lift.value : 1 },
-        { rotate: on ? `${motion.liftTilt * ctl.lift.value}deg` : "0deg" },
+        { translateY: on ? dragY.value : sh.value },
+        { scale: on ? 1 + (motion.liftScale - 1) * lift.value : 1 },
+        { rotate: on ? `${motion.liftTilt * lift.value}deg` : "0deg" },
       ],
       zIndex: on ? z.lift : 0,
-      shadowOpacity: on ? 0.35 * ctl.lift.value : 0,
+      shadowOpacity: on ? 0.35 * lift.value : 0,
       shadowRadius: c.shadow.radius,
       shadowOffset: { width: 0, height: component.dragHandle },
       shadowColor: c.shadow.color,
       borderRadius: radius.inner,
       borderWidth: component.selectedBorder,
-      borderColor: on && ctl.lift.value > 0.01 ? c.acc : "transparent",
-      backgroundColor: on && ctl.lift.value > 0.01 ? c.bg : "transparent",
+      borderColor: on && held.value > 0.5 ? c.acc : "transparent",
+      backgroundColor: on && held.value > 0.5 ? c.bg : "transparent",
     };
   });
 

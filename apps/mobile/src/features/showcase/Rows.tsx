@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Platform, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useI18n, type DictKey } from "@/i18n";
+import type { CustomLine } from "@octo/estimating-engine";
+import { SortableList } from "@/features/SortableList";
+import { moveLine, sameLayout, viewRows } from "@/features/sectionLayout";
 import { Button } from "@/ui/controls";
 import { haptics } from "@/ui/haptics";
 import { T } from "@/ui/primitives";
@@ -17,6 +20,34 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
   { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
 ];
+
+const demoLines = (): CustomLine[] => [1, 2, 3, 4].map((n) => ({ id: `demo${n}`, name: String(n), group: "service", quantity: "1", unit: "ea", unitPriceCents: 0 }));
+
+/** a small list to drag: the real SortableList on four sample rows (nothing is saved) */
+function LiveDrag() {
+  const { t } = useI18n();
+  const [lines, setLines] = useState(demoLines);
+  const rows = viewRows({ lines, sections: [] });
+  return (
+    <Card>
+      <View testID="showcase-rows-live" style={{ gap: space[1] }}>
+        <T v="heading">{t("ds.rows.live")}</T>
+        <T v="caption" tone="mut">{t("ds.rows.liveHint")}</T>
+        <SortableList
+          rows={rows}
+          onDrop={(d) => {
+            if (d.kind !== "line") return "same";
+            const r = moveLine({ lines, sections: [] }, d.id, d.to);
+            if (!r.ok || sameLayout({ lines, sections: [] }, r.option)) return "same";
+            setLines(r.option.lines);
+            return "moved";
+          }}
+          renderRow={(r) => (r.type === "line" ? <View style={{ minHeight: space[8], justifyContent: "center" }}><T v="body">{`${t("ds.rows.liveItem")} ${r.line.name}`}</T></View> : null)}
+        />
+      </View>
+    </Card>
+  );
+}
 
 /** Estimate rows and lists (DS §8.3): the drag feel is live; the rest are named here and come with their components. */
 export function RowsSection() {
@@ -49,6 +80,7 @@ export function RowsSection() {
         </View>
         <T v="caption" tone="mut">{t("ds.rows.dragNone")}</T>
       </Card>
+      <LiveDrag />
       {PLANNED.map((p) => (
         <Card key={p.id}>
           <View testID={`showcase-rows-${p.id}`} style={{ gap: space[1] }}>

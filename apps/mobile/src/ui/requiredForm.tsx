@@ -24,8 +24,10 @@ export interface ScreenScroll {
   scrollToNode: (node: ViewNode, margin: number, animated: boolean, done?: () => void) => void;
   /** the page scrolls by `dy` at once (a row held at the edge of the screen pulls the page along, DS §14.6) */
   scrollBy: (dy: number) => void;
-  /** where the page is scrolled to now */
+  /** where the page is scrolled to now (the last place asked of the scroll, not only the last scroll event) */
   offset: () => number;
+  /** the part of the window where the page can be seen, below the header and above the bottom bar (window coordinates) */
+  measureVisible: (cb: (v: { top: number; bottom: number } | null) => void) => void;
 }
 export const ScreenScrollCtx = createContext<ScreenScroll | null>(null);
 export const useScreenScroll = () => useContext(ScreenScrollCtx);

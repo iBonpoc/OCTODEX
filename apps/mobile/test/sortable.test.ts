@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine, CustomOption, EstimateSection } from "@octo/estimating-engine";
-import { viewRows } from "../src/features/sectionLayout";
-import { dragKind, insertionIndex, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
+import { moveLine, moveSection, sameLayout, viewRows } from "../src/features/sectionLayout";
+import { dragKind, edgeStep, insertionIndex, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
 
 const L = (id: string, sectionId?: string): CustomLine => ({ id, name: id, group: "service", quantity: "1", unit: "ea", unitPriceCents: 100, ...(sectionId ? { sectionId } : {}) });
 const opt = (lines: CustomLine[], sections?: EstimateSection[]): CustomOption => ({ id: "o", name: "Good", lines, ...(sections ? { sections } : {}) });
@@ -34,8 +34,8 @@ describe("where a held line lands (resolveDrop)", () => {
   });
   it("the end of the list: the end of «без раздела»; right under «без раздела»: loose", () => {
     expect(resolveDrop(rows, "l:a1", 9)).toEqual({ kind: "line", id: "a1", to: { sectionId: undefined } });
-    // right under «без раздела»: before its first line, loose
-    expect(resolveDrop(rows, "l:a1", 7)?.kind).toBe("line");
+    // right under «без раздела» (place 7, before z1): loose, before z1
+    expect(resolveDrop(rows, "l:a1", 7)).toEqual({ kind: "line", id: "a1", to: { sectionId: undefined, beforeId: "z1" } });
   });
   it("above the first heading: «без раздела»", () => {
     expect(resolveDrop(rows, "l:a1", 0)).toEqual({ kind: "line", id: "a1", to: {} });
@@ -43,8 +43,6 @@ describe("where a held line lands (resolveDrop)", () => {
   it("into a folded section: its end", () => {
     const folded = viewRows(o, new Set(["B"]));
     // rest: s:A… s:B(closed) u z1 z2 ; place right after the folded heading
-    const r = resolveDrop(folded, "l:a1", folded.length - 1 - 4);
-    expect(r?.kind).toBe("line");
     const idx = withoutBlock(folded, "l:a1").rest.findIndex((x) => rowKey(x) === "s:B");
     expect(resolveDrop(folded, "l:a1", idx + 1)).toEqual({ kind: "line", id: "a1", to: { sectionId: "B" } });
   });
@@ -80,5 +78,82 @@ describe("the geometry", () => {
     // moving it down to place 4 pulls rows 2,3 up
     expect([0, 1, 2, 3].map((i) => shiftOf(i, 2, 4, 40))).toEqual([0, 0, -40, -40]);
     expect(shiftOf(1, 2, 2, 40)).toBe(0);
+  });
+});
+
+describe("the page follows a held row (edgeStep, #1245 Б1)", () => {
+  // visible part of the window: from 100 (below the header) to 700 (above the bottom bar); the zone is 64 deep
+  it("the finger's place is not known yet: the page stays (a 0 read as «the top edge» and ran away at ~750 px/s)", () => {
+    expect(edgeStep(null, 100, 700, 64, 16)).toBe(0);
+    expect(edgeStep(Number.NaN, 100, 700, 64, 16)).toBe(0);
+  });
+  it("the middle: nothing; the top zone: up, the bottom zone: down, deeper — faster", () => {
+    expect(edgeStep(400, 100, 700, 64, 16)).toBe(0);
+    expect(edgeStep(150, 100, 700, 64, 16)).toBeLessThan(0);
+    expect(edgeStep(100, 100, 700, 64, 16)).toBe(-16);
+    expect(Math.abs(edgeStep(110, 100, 700, 64, 16))).toBeGreaterThan(Math.abs(edgeStep(160, 100, 700, 64, 16)));
+    expect(edgeStep(690, 100, 700, 64, 16)).toBeGreaterThan(0);
+    expect(edgeStep(700, 100, 700, 64, 16)).toBe(16);
+  });
+  it("the zones count from the visible part (below the header, above the bottom bar), not from the screen", () => {
+    // y=40 is under a 100-px header: it is deep in the top zone; y=720 is under the bottom bar: deep in the bottom zone
+    expect(edgeStep(40, 100, 700, 64, 16)).toBe(-16);
+    expect(edgeStep(720, 100, 700, 64, 16)).toBe(16);
+    // the same finger on a screen without header: nothing
+    expect(edgeStep(40, 0, 900, 64, 16)).toBeLessThan(0);
+    expect(edgeStep(300, 0, 900, 64, 16)).toBe(0);
+  });
+});
+
+describe("module lines are not carried (#1245 Б4)", () => {
+  it("a line of the measurement has no handle and no hold — as in «⋯» there is no «Переместить»", () => {
+    const m = opt([L("a1", "A"), { ...L("m1", "A"), source: { module: "gutters", key: "run" } as never }], [{ id: "A", title: "A" }]);
+    expect(viewRows(m).map((r) => dragKind(r))).toEqual(["section", "line", null]);
+  });
+});
+
+describe("a drop that changes nothing is no move (#1245 Б3)", () => {
+  it("the last subsection let go a little above the middle of its section's last line: the same order", () => {
+    // A: a1 a2 / A1: x1 — A1 is the last child of A; the place right under a2 resolves to {parentId: A}: the same order
+    const r = viewRows(o);
+    const d = resolveDrop(r, "s:A1", 2);
+    expect(d).toEqual({ kind: "section", id: "A1", to: { parentId: "A" } });
+    const res = moveSection(o, "A1", (d as { to: { parentId?: string } }).to);
+    expect(res.ok && sameLayout(o, res.option)).toBe(true);
+  });
+  it("the last top section let go in «без раздела»: the same order", () => {
+    const r = viewRows(o);
+    const d = resolveDrop(r, "s:B", 7);
+    expect(d).toEqual({ kind: "section", id: "B", to: {} });
+    const res = moveSection(o, "B", {});
+    expect(res.ok && sameLayout(o, res.option)).toBe(true);
+  });
+  it("a line let go at the end of its own section: the same; into another place: different", () => {
+    const same = moveLine(o, "a2", { sectionId: "A" });
+    expect(same.ok && sameLayout(o, same.option)).toBe(true); // a2 is already the last line of A
+    const lastOfB = moveLine(o, "b1", { sectionId: "B" });
+    expect(lastOfB.ok && sameLayout(o, lastOfB.option)).toBe(true);
+    const other = moveLine(o, "a1", { sectionId: "B" });
+    expect(other.ok && sameLayout(o, other.option)).toBe(false);
+  });
+  it("refused moves (a module's line, a module's section) are not moves", () => {
+    const m = opt([L("m1", "M"), L("a1", "A")], [{ id: "M", kind: "module", module: "gutters" } as never, { id: "A", title: "A" }]);
+    expect(moveLine(m, "a1", { sectionId: "M" })).toMatchObject({ ok: false, reason: "module" });
+    const withSource = opt([{ ...L("m1", "A"), source: { module: "gutters", key: "run" } as never }], [{ id: "A", title: "A" }]);
+    expect(moveLine(withSource, "m1", {})).toMatchObject({ ok: false, reason: "moduleLine" });
+  });
+});
+
+describe("a long estimate does not slow the drag (100 rows)", () => {
+  it("finding the place for 100 rows, 1000 times, is a blink", () => {
+    const lines = Array.from({ length: 100 }, (_, i) => L(`l${i}`, `S${i % 10}`));
+    const sections = Array.from({ length: 10 }, (_, i) => ({ id: `S${i}`, title: `S${i}` }));
+    const big = viewRows(opt(lines, sections));
+    const mids = withoutBlock(big, "l:l50").rest.map((_, i) => i * 40 + 20);
+    const t0 = performance.now();
+    let sink = 0;
+    for (let i = 0; i < 1000; i++) sink += insertionIndex(mids, (i * 7) % 4000) + (resolveDrop(big, "l:l50", i % 100) ? 1 : 0);
+    expect(sink).toBeGreaterThan(0);
+    expect(performance.now() - t0).toBeLessThan(500);
   });
 });

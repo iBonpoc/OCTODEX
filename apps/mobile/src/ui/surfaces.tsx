@@ -704,8 +704,18 @@ export function Screen({
   // the forms under the screen scroll it to a field (DS §11 п.3): the view's place in the window, then to `margin` below the top
   // the top of the content lies under the status bar / header (`top`, below): the field stops below it, not at the very top
   const coveredTop = useRef(0);
+  const coveredBottom = useRef(0);
   const screenScroll = useRef<ScreenScroll>({
-    scrollBy: (dy) => scrollRef.current?.scrollTo({ y: Math.max(0, offset.current + dy), animated: false }),
+    scrollBy: (dy) => {
+      // the place is kept at once: the next tick of a held row must not read the old one while the scroll event is on its way
+      offset.current = Math.max(0, offset.current + dy);
+      scrollRef.current?.scrollTo({ y: offset.current, animated: false });
+    },
+    measureVisible: (cb) => {
+      const sv = scrollRef.current;
+      if (!sv) return cb(null);
+      sv.measureInWindow((_x, y, _w, h) => cb({ top: y + coveredTop.current, bottom: y + h - coveredBottom.current }));
+    },
     offset: () => offset.current,
     scrollToNode: (node, margin, animated, done) => {
       const sv = scrollRef.current;
@@ -726,6 +736,7 @@ export function Screen({
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   const top = pinned ? space[3] : navInsets.top;
   coveredTop.current = pinned ? 0 : navInsets.top;
+  coveredBottom.current = kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0);
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
   return (

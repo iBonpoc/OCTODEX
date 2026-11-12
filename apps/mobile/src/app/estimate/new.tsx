@@ -14,10 +14,10 @@ import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, esti
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
-import { SortableList } from "@/features/SortableList";
+import { SortableList, type DropResult } from "@/features/SortableList";
 import type { Drop } from "@/features/sortable";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
+import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -353,21 +353,30 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     toast.show(t("est.sec.moved"), back);
   };
   /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
-  const dropRow = (d: Drop) => {
-    if (signed) return;
+  const dropRow = (d: Drop): DropResult => {
+    if (signed) return "same";
+    const refuse = (why: string): DropResult => {
+      toast.show(t("est.sec.moduleBlocked"));
+      void why;
+      return "refused";
+    };
     if (d.kind === "line") {
       const index = option.lines.findIndex((l) => l.id === d.id);
       const line = option.lines[index];
-      if (!line) return;
+      if (!line) return "same";
       const r = moveLine(option, d.id, d.to);
-      if (!r.ok) return r.reason === "module" || r.reason === "moduleLine" ? void toast.show(t("est.sec.moduleBlocked")) : undefined;
+      if (!r.ok) return r.reason === "module" || r.reason === "moduleLine" ? refuse(r.reason) : "same";
+      // it came to the same order (the drop at the end of its own section, a slot just above itself…): not a move
+      if (sameLayout(option, r.option)) return "same";
       setOption(() => r.option);
-      return void toast.show(t("est.sec.moved"), () => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index })));
+      toast.show(t("est.sec.moved"), () => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index })));
+      return "moved";
     }
     const all = option.sections ?? [];
     const was = all.find((x) => x.id === d.id);
     const r = moveSection(option, d.id, d.to);
-    if (!r.ok || !was) return r.ok || r.reason !== "module" ? undefined : void toast.show(t("est.sec.moduleBlocked"));
+    if (!r.ok) return r.reason === "module" ? refuse(r.reason) : "same";
+    if (!was || sameLayout(option, r.option)) return "same";
     setOption(() => r.option);
     // «Вернуть» puts this section (with its subsections) back before the one that stood after its family — nothing else changes
     const family = new Set([d.id, ...all.filter((x) => x.parentId === d.id).map((x) => x.id)]);
@@ -376,6 +385,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       const back = moveSection(o, d.id, { parentId: was.parentId, beforeId: next?.id });
       return back.ok ? back.option : o;
     }));
+    return "moved";
   };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
   const openInCatalog = (id: string) => {

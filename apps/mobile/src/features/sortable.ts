@@ -10,7 +10,8 @@ export const rowKey = (r: ViewRow): string => (r.type === "section" ? `s:${r.sec
 
 /** what a row can be carried as: a line, a section, a subsection (the «без раздела» heading is not carried) */
 export function dragKind(r: ViewRow): "line" | "section" | "subsection" | null {
-  if (r.type === "line") return "line";
+  // a line the module (the measurement) leads is not moved by hand — not by the handle, not by a hold, as in «⋯» (no lift, no buzz)
+  if (r.type === "line") return r.line.source ? null : "line";
   if (r.type === "section") return r.depth === 0 ? "section" : "subsection";
   return null;
 }
@@ -117,4 +118,18 @@ export function shiftOf(index: number, from: number, to: number, height: number)
   if (to < from && index >= to && index < from) return height;
   if (to > from && index >= from && index < to) return -height;
   return 0;
+}
+
+/**
+ * How far the page scrolls in one tick while a row is held: nothing while the finger's place is not known yet (`y` is null until the
+ * drag reports it — before, a 0 read as «at the very top» and the page ran away, #1245), then up inside the top edge zone and down
+ * inside the bottom one, faster the deeper in. `top` / `bottom` are the edges of what the person can see (below the header and the
+ * status bar, above the bottom bar), `edge` the depth of the zone, `max` the fastest step.
+ */
+export function edgeStep(y: number | null, top: number, bottom: number, edge: number, max: number): number {
+  if (y === null || !Number.isFinite(y) || edge <= 0) return 0;
+  const depth = y < top + edge ? (top + edge - y) / edge : y > bottom - edge ? (y - (bottom - edge)) / edge : 0;
+  if (depth <= 0) return 0;
+  const step = Math.max(1, Math.round(Math.min(1, depth) * max));
+  return y < top + edge ? -step : step;
 }
