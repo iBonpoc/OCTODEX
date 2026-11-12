@@ -13648,6 +13648,17 @@ select tst.fails_like($q$update public.catalog_items set product_url = 'https://
 select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, 'https://x.example/' || repeat('a', 490)), '%product_url%', 'T202 a link past 500 — refused');
 select tst.fails_like(format($q$update public.catalog_items set barcode = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, repeat('1', 65)), '%barcode%', 'T202 a barcode past 64 — refused');
 select tst.fails_like($q$update public.catalog_items set barcode = E'12\n34' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%barcode%', 'T202 a barcode with a control character — refused');
+-- security-check of РС-9: no other scheme in any case; no invisible format characters (Cf, as app.client_title)
+-- (each call raises unless it is refused) javascript:, data: and other schemes in any case — refused; only https:// itself
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, u), '%product_url%', 'T202 not https: ' || u)
+  from unnest(array['javascript:alert(1)', 'JavaScript:alert(1)', 'JAVASCRIPT://x', 'data:text/html,<b>x', 'DATA:text/html,x',
+                    'HTTPS://abc.example/x', 'vbscript:x', ' https://abc.example/x', 'https:/abc', 'https://']) u;
+-- zero-width, bidirectional and other invisible format characters in the barcode or the link — refused
+select tst.fails_like(format($q$update public.catalog_items set %s = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, c, v), '%' || c || '%', 'T202 a format character in ' || c)
+  from (values ('barcode', U&'0123\200B456'), ('barcode', U&'0123\202E456'), ('barcode', U&'\FEFF0123'), ('barcode', U&'01\00AD23'),
+                              ('product_url', U&'https://abc.example/\200Dx'), ('product_url', U&'https://abc.example/\2066x'), ('product_url', U&'https://abc.example/\061Cx')) x(c, v);
+select tst.ok((select barcode = '0123456789012' and product_url = 'https://abc.example/hanger?id=5' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 after the refusals the barcode and the link are as they were');
 select tst.fails_like(format($q$update public.catalog_items set service_category_id = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, :'b_cat'), '%catalog_items_service_category_fk%', 'T202 another company''s direction — refused');
 -- an older phone's save — the whole item as an upsert (ops.ts catalog.save), without the new columns, the same price:
 -- the new fields stay, no price row

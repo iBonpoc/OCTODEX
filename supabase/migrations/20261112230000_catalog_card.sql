@@ -1,6 +1,7 @@
 -- РС-9 (docs/audit/2026-11-12-estimate-editor-spec.md §4.2 п.2, Р11; #1096): the catalog item's card — new fields and the
 -- history of its selling price and markup.
--- * catalog_items.barcode (≤ 64, no control characters), product_url (https://, no spaces, ≤ 500), service_category_id
+-- * catalog_items.barcode (≤ 64, no control or invisible format characters), product_url (only https://, no spaces,
+--   no control or format characters, ≤ 500), service_category_id
 --   (a direction of the item's own company: FK (company_id, service_category_id) → service_categories). The table-wide
 --   grant select, insert, update to authenticated (20261106070000) covers the new columns; rights do not change (members
 --   read, staff write). Older phones upsert without these columns — PostgREST writes only the columns sent, so nothing
@@ -23,12 +24,16 @@ alter table public.catalog_items
   add column if not exists barcode text,
   add column if not exists product_url text,
   add column if not exists service_category_id uuid;
+-- no control characters and no invisible format ones (Cf: zero-width, bidirectional marks and overrides — the set of
+-- app.client_title): the barcode and the link go to screens, supplier orders and PDFs (security-check of РС-9)
 alter table public.catalog_items add constraint catalog_items_barcode_check
-  check (barcode is null or (length(btrim(barcode)) > 0 and app.sup_text_ok(barcode, 64))) not valid;
+  check (barcode is null or (length(btrim(barcode)) > 0 and length(barcode) <= 64
+                             and barcode !~ '[\u0001-\u001f\u007f-\u009f­؀-؅؜۝܏࣢᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]')) not valid;
 alter table public.catalog_items validate constraint catalog_items_barcode_check;
 alter table public.catalog_items add constraint catalog_items_product_url_check
+  -- only https:// (lowercase, so never javascript:, data: or any other scheme in any case — the app opens it as a link)
   check (product_url is null or (product_url ~ '^https://[^[:space:][:cntrl:]]+$' and length(product_url) <= 500
-                                 and app.sup_text_ok(product_url, 500))) not valid;
+                                 and product_url !~ '[\u0001-\u001f\u007f-\u009f­؀-؅؜۝܏࣢᠎​-‏‪-‮⁠-⁤⁦-⁯﻿￹-￻]')) not valid;
 alter table public.catalog_items validate constraint catalog_items_product_url_check;
 -- MATCH SIMPLE: no direction (null) is not checked; a direction must be of the item's own company
 alter table public.catalog_items add constraint catalog_items_service_category_fk
