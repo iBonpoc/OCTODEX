@@ -1,10 +1,12 @@
 /**
- * РС-6: the sections the client reads — the engine (countedSections; the phone's clientDoc counts with it) on the same
- * examples as the server's app.client_sections (T199, test/fixtures/clientSections.json).
+ * РС-6: the sections the client reads — the engine (countedSections) and the phone (clientDoc of the normalized document)
+ * on the same examples as the server's app.client_sections (T199, test/fixtures/clientSections.json).
  */
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { countedSections } from "@octo/estimating-engine";
+import { clientDoc, cloneOption, newDoc, normalizeDoc } from "../src/features/estimateDoc";
+import type { EstimateDoc } from "../src/data/types";
 
 type Case = { name: string; sections: unknown[]; client: { id: string }[] };
 const fx = JSON.parse(readFileSync(new URL("./fixtures/clientSections.json", import.meta.url), "utf8")) as { cases: Case[] };
@@ -14,6 +16,20 @@ describe("unit:clientSections — the phone = the server (T199)", () => {
     it(c.name, () => {
       // the engine counts the same sections, in the same order, as the server passes them to the client
       expect(countedSections({ sections: c.sections as never }).map((x) => x.id)).toEqual(c.client.map((x) => x.id));
+      // and the phone's own page / PDF shows the same (clientDoc of the document as it is read: normalizeDoc)
+      const d: EstimateDoc = newDoc();
+      d.options[0] = { ...d.options[0]!, sections: c.sections as never };
+      expect(clientDoc(normalizeDoc(d).doc).options[0]!.sections).toEqual(c.client);
     });
   }
+  it("sections that are not a list: the client gets none; «Добавить вариант» does not fail (review of #1218)", () => {
+    const d: EstimateDoc = newDoc();
+    d.options[0] = { ...d.options[0]!, sections: { a: 1 } as never };
+    expect("sections" in clientDoc(d).options[0]! && clientDoc(d).options[0]!.sections !== undefined).toBe(false);
+    expect(JSON.parse(JSON.stringify(clientDoc(d))).options[0].sections).toBeUndefined();
+    expect(() => cloneOption(d.options[0]!, 1)).not.toThrow();
+    expect(cloneOption(d.options[0]!, 1).sections).toBeUndefined();
+    d.options[0] = { ...d.options[0]!, sections: [null, { id: "s1" }] as never };
+    expect(cloneOption(d.options[0]!, 1).sections).toEqual([{ id: "s1" }]);
+  });
 });

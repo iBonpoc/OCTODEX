@@ -15,6 +15,7 @@ import {
   type CustomTotals,
   type LineGroup,
   type LineSource,
+  type EstimateSection,
   SECTIONS_MAX,
   SECTION_TITLE_MAX,
   countedSections,
@@ -61,7 +62,7 @@ export function newDoc(defaultDepositBps?: number | null): EstimateDoc {
 /** A copy of an option with fresh ids (for "add option"). */
 export function cloneOption(o: CustomOption, i: number): CustomOption {
   // the sections go with it (the same ids — unique within an option): the lines keep their sectionId (Р4)
-  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })), ...(o.sections ? { sections: o.sections.map((x) => ({ ...x })) } : {}) };
+  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })), ...(Array.isArray(o.sections) ? { sections: o.sections.filter((x) => !!x && typeof x === "object").map((x) => ({ ...x })) } : {}) };
 }
 
 /** a section's title as it may be kept: no control characters, at most SECTION_TITLE_MAX (the server cuts the same) */
@@ -72,6 +73,15 @@ const cleanTitle = (t: unknown): string | undefined => {
   const x = Array.from(t.replace(/[\u0000-\u001f\u007f]/g, " ")).slice(0, SECTION_TITLE_MAX).join("").trim();
   return x ? x : undefined;
 };
+
+const SECTION_KINDS: readonly string[] = ["service", "labor", "material", "module"];
+/** what the client reads of a section — the same keys app.client_sections passes: id, title, a known kind, parentId */
+const clientSection = (x: EstimateSection): EstimateSection => ({
+  id: x.id,
+  ...(cleanTitle(x.title) ? { title: cleanTitle(x.title) } : {}),
+  ...(typeof x.kind === "string" && SECTION_KINDS.includes(x.kind) ? { kind: x.kind } : {}),
+  ...(typeof x.parentId === "string" ? { parentId: x.parentId } : {}),
+});
 
 /**
  * A document as it may be counted and shown (spec 2026-11-12-estimate-editor Р3, Р4) — on every way in (the cloud, a
@@ -216,7 +226,8 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
     options: doc.options.map((o) => ({
       ...o,
       lines: o.lines.filter((l) => !zeroQty(l) && !(l.clientVisible === false && l.unitPriceCents === 0)).map(({ unitCostCents: _c, source: _s, ...l }) => l),
-      ...(Array.isArray(o.sections) ? { sections: countedSections(o).map(({ module: _m, ...x }) => x) } : {}),
+      // sections that are not a list (a broken copy) never reach the client (as app.client_sections)
+      sections: Array.isArray(o.sections) ? countedSections(o).map(clientSection) : undefined,
     })),
   };
 }
