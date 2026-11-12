@@ -175,6 +175,8 @@ export const component = {
   /** bottom sheet: drag down this share of its height or this fast (pt/ms) to close (it then leaves at the finger's speed) */
   sheetDismissRatio: 0.4,
   sheetDismissVelocity: 0.8,
+  /** bottom sheet: pull up this far (pt) to open it to full height */
+  sheetExpandDrag: 60,
   /** bottom sheet body: a downward move this long (pt) at the top of the scroll becomes a swipe to close, not a tap */
   sheetBodySlop: 10,
   /** width of the countdown ring around the toast Undo button */
