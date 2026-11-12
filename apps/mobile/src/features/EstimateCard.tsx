@@ -536,6 +536,15 @@ function LegacyBody({ e }: { e: Estimate }) {
             {t("est.countersign.noRightOnSite")}
           </T>
         </Card>
+      ) : e.status === "draft" && !canSignDraftOnSite(store.role, e.status) ? (
+        // #1126: a tech has a draft signed only after the office sends it (the server signs a sent, locked version only)
+        <Card>
+          <View testID="est-sign-after-send">
+            <T v="body" tone="mut">
+              {t("est.signOnSite.afterSend")}
+            </T>
+          </View>
+        </Card>
       ) : e.status === "draft" || e.status === "sent" ? (
         <>
           <SectionTitle title={t("est.signOnSite")} />
@@ -546,13 +555,15 @@ function LegacyBody({ e }: { e: Estimate }) {
             <T v="caption" tone="warn">
               {t("est.rescission")}
             </T>
-            <SignaturePad
-              consent="est.signConsent"
-              onConfirm={(path) => {
-                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-                toast.show(q(t("est.signedToast", { name: customer?.name ?? "" })), store.signEstimate(e.id, path));
-              }}
-            />
+            <View testID="est-sign-on-site">
+              <SignaturePad
+                consent="est.signConsent"
+                onConfirm={(path) => {
+                  Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                  toast.show(q(t("est.signedToast", { name: customer?.name ?? "" })), store.signEstimate(e.id, path));
+                }}
+              />
+            </View>
           </Card>
         </>
       ) : e.status === "awaiting_countersign" ? (

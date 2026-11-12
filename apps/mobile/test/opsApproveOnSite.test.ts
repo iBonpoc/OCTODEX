@@ -81,6 +81,42 @@ import { canSeeClientLink, canSignDraftOnSite } from "../src/features/estimateSi
 import { tFor } from "../src/i18n/translate";
 import { rejectedOf } from "../src/data/outboxRejected";
 
+describe("estimate.sign — an older quick estimate signed on site (#1126)", () => {
+  const sign: Op = { k: "estimate.sign", id: E, svg: "M0 0 L1 1", signer: "Ann Client", sent: true };
+  const refusedSend = { message: "only the office or the director sends an estimate", code: "42501" };
+  it("a tech on a sent estimate (the send is refused 42501): the client's signature still goes (before: the op refused, the signature lost)", async () => {
+    answers = { send_estimate: { error: refusedSend } };
+    await applyOp(sign, "co-1", "u-tech");
+    const s = calls.find((c) => c.fn === "sign_estimate_on_site");
+    expect(s?.args).toEqual({ p_estimate_id: E, p_signer: "Ann Client", p_svg: "M0 0 L1 1" });
+  });
+  it("the send passes (the office): sends first, then signs — as before", async () => {
+    await applyOp(sign, "co-1", "u-office");
+    expect(calls.map((c) => c.fn)).toEqual(["send_estimate", "sign_estimate_on_site"]);
+  });
+  it("another refusal of the send (changed lines, 22023) still stops it — refused for good, not retried", async () => {
+    answers = { send_estimate: { error: { message: "estimate lines do not match", code: "22023", hint: "estimate_lines_mismatch" } } };
+    const err = await applyOp(sign, "co-1", "u-office").then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(PermanentError);
+    expect((err as PermanentError).code).toBe("22023");
+    expect(calls.some((c) => c.fn === "sign_estimate_on_site")).toBe(false);
+  });
+  it("the send refused 42501, then the server refuses the signature (not sent, 22023): the op is refused, not «done»", async () => {
+    answers = { send_estimate: { error: refusedSend }, sign_estimate_on_site: { error: { message: "estimate is not open for approval (status draft)", code: "22023" } } };
+    const err = await applyOp(sign, "co-1", "u-tech").then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(PermanentError);
+    expect((err as PermanentError).code).toBe("22023");
+  });
+  it("an older app's op (no `sent`, maybe a tech's draft the office changed since): the 42501 refuses it as before — never signed onto another version", async () => {
+    answers = { send_estimate: { error: refusedSend } };
+    const { sent: _sent, ...old } = sign as Extract<Op, { k: "estimate.sign" }>;
+    const err = await applyOp(old as Op, "co-1", "u-tech").then(() => null, (e: unknown) => e);
+    expect(err).toBeInstanceOf(PermanentError);
+    expect((err as PermanentError).code).toBe("42501");
+    expect(calls.some((c) => c.fn === "sign_estimate_on_site")).toBe(false);
+  });
+});
+
 describe("the client's page and a lost signature", () => {
   it("«Open as client» — the office side only, never a tech", () => {
     expect((["director", "sales", "dispatcher", "tech"] as const).map((r) => canSeeClientLink(r))).toEqual([true, true, true, false]);
