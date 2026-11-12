@@ -23,6 +23,15 @@ describe("tax rate in ppm (#1219)", () => {
     expect(t(20000, 73750)).toBe(1475);
     expect(t(200, 73750)).toBe(15); // 14.75 → 15
   });
+  it("a fractional rate with a discount: the tax is on the amount AFTER the discount, rounded once (#1229, РС-7a)", () => {
+    // $1000.00 − 10 % = $900.00; × 8.875 % = $79.875 → $79.88 once (half up); total $979.88
+    const r = computeCustomOption(opt, { ...S({ rateBps: 888, ratePpm: 88750 }), discount: { kind: "pct", value: "0.1" } as never });
+    expect(r.tax).toBe(7988);
+    expect(r.total).toBe(97988);
+    // and a fixed discount: $1000.00 − $33.33 = $966.67 × 8.875 % = $85.792… → $85.79
+    const f = computeCustomOption(opt, { ...S({ rateBps: 888, ratePpm: 88750 }), discount: { kind: "fixed", cents: 3333 } as never });
+    expect(f.tax).toBe(8579);
+  });
   it("an older document (only rateBps) counts as before", () => {
     expect(taxRatePpm({ rateBps: 950 })).toBe(95000);
     expect(computeCustomOption(opt, S({ rateBps: 950 })).tax).toBe(9500);

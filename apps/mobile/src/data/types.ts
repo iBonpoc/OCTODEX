@@ -593,6 +593,9 @@ export interface EstimateDoc {
   settings: CustomSettings;
   /** note to the client (scope, terms) */
   note?: string;
+  /** when the phone last saved this version: the server's version row has no time of its own, and estimates.updated_at moves with
+   *  anything (a client's view, sending, signing) — «the last estimate» reads this (РС-7a) */
+  savedAt?: string;
   /** «страницы-вложения» a module adds (a drawing of shapes, a table of words) — after the lines on /p/ and in the PDF;
    *  drawn only through features/docPages (clientPages), the server passes them through app.doc_pages (spec 33 П24.7) */
   pages?: DocAttachPage[];
@@ -652,6 +655,9 @@ export interface Estimate {
   totalCents: number;
   status: EstimateStatus;
   sentAt?: string;
+  /** when this estimate was last SAVED by a phone: the document's own mark; for one saved before it existed — the time it was sent, else
+   *  estimates.updated_at (that one moves with a client's view, so it is the last resort) */
+  savedAt?: string;
   approvedAt?: string;
   /** client-visible lines of the chosen option (hidden BOM lines stay in the engine) */
   lines?: { name: string; qty: string; totalCents: number; optional?: boolean }[];

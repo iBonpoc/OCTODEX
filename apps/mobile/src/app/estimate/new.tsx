@@ -3,8 +3,8 @@ import { canSeeClientLink } from "@/features/estimateSign";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
-import { space, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, countedSections, discountBps, sectionSubtotals, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
+import { component, space, size } from "@octo/design-tokens";
+import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
@@ -21,7 +21,8 @@ import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveS
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
-import { Labeled, MoneyField, PctField } from "@/features/fields";
+import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
+import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
 import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -168,10 +169,20 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
   const totals = useMemo(() => optionTotals(counted, option), [counted, option]);
   const s = counted.settings;
+  const partialTax = isPartialTax(doc.settings.tax);
+  const lastRate = lastTaxRatePpm(db.estimates, existing?.id);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   const setOption = (fn: (o: CustomOption) => CustomOption) =>
     setDoc((d) => ({ ...d, options: d.options.map((o) => (o.id === option.id ? fn(o) : o)) }));
+  // the tax of an old estimate set «by kind»: turning it on / converting it to the whole amount changes the client's sum — ask first
+  const [taxAsk, setTaxAsk] = useState<{ tax: TaxSettings; diffs: TaxDiff[] } | null>(null);
+  const changeTax = (patch: { enabled?: boolean; ratePpm?: number }) => {
+    if (signed) return;
+    const ch = taxChange(doc, patch);
+    if (ch.ask) return setTaxAsk({ tax: ch.tax, diffs: ch.ask });
+    setSettings({ tax: ch.tax });
+  };
   const setSettings = (patch: Partial<EstimateDoc["settings"]>) => setDoc((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
   const patchLine = (id: string, patch: Partial<CustomLine>) => {
     // a price typed into a hidden line shows it again, and the person is told (the founder's #1100); no «Отменить»: erase the price and hide again
@@ -512,8 +523,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const view = useMemo(() => viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), [option, collapsedIds, holdSection]);
   const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
-  const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
-  const taxValue = !s.tax.enabled || !taxGroups.length ? t("ue.off") : `${s.tax.rateBps / 100}% · ${taxGroups.map((g) => t(`ue.group.${g}` as DictKey).toLowerCase()).join(", ")}`;
+  const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
@@ -667,9 +677,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           <Card>
             <SumRow label={t("ue.subtotal")} value={money(totals.subtotal)} />
             <Divider />
-            <SumRow label={t("ue.discount")} value={totals.discount ? `−${money(totals.discount)}` : discValue} onPress={() => setSetting("discount")} />
+            <SumRow label={t("ue.discount")} value={totals.discount ? `−${money(totals.discount)}` : discValue} onPress={signed ? undefined : () => setSetting("discount")} />
             <Divider />
-            <SumRow label={t("ue.tax")} value={totals.tax ? `${money(totals.tax)} · ${taxValue}` : taxValue} onPress={() => setSetting("tax")} />
+            <SumRow label={t("ue.tax")} value={totals.tax ? `${money(totals.tax)} · ${taxValue}` : taxValue} onPress={signed ? undefined : () => setSetting("tax")} />
             <Divider />
             <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
               <T v="title">{t("ue.total")}</T>
@@ -678,7 +688,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             </RowView>
             <Divider />
-            <SumRow label={t("ue.deposit")} value={depValue} onPress={() => setSetting("deposit")} />
+            <SumRow label={t("ue.deposit")} value={depValue} onPress={signed ? undefined : () => setSetting("deposit")} />
             {totals.depositOverCaLimit ? (
               <T v="caption" tone="warn">
                 {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
@@ -783,9 +793,33 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onClose={() => setMoveFor(null)}
         testID="est-move-picker"
       />
-      <Sheet visible={setting !== null} onClose={() => setSetting(null)} title={setting ? t(`ue.${setting}` as DictKey) : undefined}>
+      {/* the question of the tax is a PAGE of this sheet (one window at a time: a second Modal does not show on iOS, #743) */}
+      <Sheet
+        visible={setting !== null}
+        onClose={() => {
+          setTaxAsk(null);
+          setSetting(null);
+        }}
+        title={taxAsk ? t("ue.taxAskTitle") : setting ? t(`ue.${setting}` as DictKey) : undefined}
+        onBack={taxAsk ? () => setTaxAsk(null) : undefined}
+      >
         <View style={{ gap: space[3] }}>
-          {setting === "discount" ? (
+          {taxAsk ? (
+            <View testID="est-tax-ask" style={{ gap: space[3] }}>
+              {taxAsk.diffs.map((d, i) => (
+                <T key={i} v="body" tone="mut">
+                  {taxAsk.diffs.length > 1 ? t("ue.taxAskOption", { name: d.name, was: money(d.was), will: money(d.will) }) : t("ue.taxAskBody", { was: money(d.was), will: money(d.will) })}
+                </T>
+              ))}
+              <View testID="est-tax-ask-yes">
+                <Button label={t("ue.taxAskYes")} full onPress={() => { setSettings({ tax: taxAsk.tax }); setTaxAsk(null); }} />
+              </View>
+              <View testID="est-tax-ask-no">
+                <Button label={t("ue.taxAskNo")} variant="secondary" full onPress={() => setTaxAsk(null)} />
+              </View>
+            </View>
+          ) : null}
+          {!taxAsk && setting === "discount" ? (
             <>
               <Segmented
                 full
@@ -804,39 +838,46 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               ) : null}
             </>
           ) : null}
-          {setting === "tax" ? (
+          {!taxAsk && setting === "tax" ? (
             <>
               <RowView style={{ minHeight: size.hitMin }}>
                 <T v="body" style={{ flex: 1 }}>
                   {t("ue.taxOn")}
                 </T>
-                {exempt ? null : <Toggle label={t("ue.tax")} on={s.tax.enabled} onChange={(on) => setSettings({ tax: { ...s.tax, enabled: on } })} />}
+                {/* a client without tax: the switch is pale and says why (the server refuses tax for them, П-2a) */}
+                <View testID="est-tax-toggle">
+                  <Toggle label={t("ue.tax")} on={s.tax.enabled} disabled={exempt || signed} onChange={(on) => (on ? changeTax({ enabled: true }) : setSettings({ tax: { ...s.tax, enabled: false } }))} />
+                </View>
               </RowView>
               <T v="caption" tone="mut">
-                {exempt ? t("ue.taxExemptClient") : t("ue.taxHint")}
+                {exempt ? t("ue.taxExemptClient") : signed ? t("ue.taxSigned") : t("ue.taxHint")}
               </T>
-              {s.tax.enabled ? (
-                <>
-                  <Labeled label={t("ue.taxRate")}>
-                    <PctField bps={s.tax.rateBps} onChange={(b) => setSettings({ tax: { ...s.tax, rateBps: Math.min(b, 10000) } })} />
-                  </Labeled>
-                  {LINE_GROUPS.map((g: LineGroup) => (
-                    <RowView key={g} style={{ minHeight: size.hitMin }}>
-                      <T v="body" style={{ flex: 1 }}>
-                        {t(`ue.group.${g}` as DictKey)}
-                      </T>
-                      <Toggle
-                        label={`${t("ue.tax")}: ${t(`ue.group.${g}` as DictKey)}`}
-                        on={s.tax.groups[g]}
-                        onChange={(on) => setSettings({ tax: { ...s.tax, groups: { ...s.tax.groups, [g]: on } } })}
-                      />
-                    </RowView>
-                  ))}
-                </>
+              {s.tax.enabled && !exempt && !signed ? (
+                partialTax ? (
+                  <View testID="est-tax-partial" style={{ gap: space[2] }}>
+                    <T v="caption" tone="mut">
+                      {t("ue.taxPartial")}
+                    </T>
+                    <Button label={t("ue.taxWhole")} variant="secondary" full onPress={() => changeTax({})} />
+                  </View>
+                ) : (
+                  <>
+                    <Labeled label={t("ue.taxRate")}>
+                      <View testID="est-tax-rate">
+                        <RatePctField ppm={taxRatePpm(s.tax)} onChange={(p) => setSettings({ tax: wholeTax(s.tax, { ratePpm: Math.min(p, 1_000_000) }) })} />
+                      </View>
+                    </Labeled>
+                    {lastRate !== null && lastRate !== taxRatePpm(s.tax) ? (
+                      <View testID="est-tax-last">
+                        <Button label={t("ue.taxLast", { rate: ppmToPctText(lastRate) })} variant="ghost" onPress={() => setSettings({ tax: wholeTax(s.tax, { ratePpm: lastRate }) })} />
+                      </View>
+                    ) : null}
+                  </>
+                )
               ) : null}
             </>
           ) : null}
-          {setting === "deposit" ? (
+          {!taxAsk && setting === "deposit" ? (
             <>
               <Segmented
                 full
