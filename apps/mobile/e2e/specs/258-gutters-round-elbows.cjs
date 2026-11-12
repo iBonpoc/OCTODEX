@@ -49,9 +49,10 @@ exports.run = async (h) => {
     { timeout: 10000 },
   );
   const html = await p.evaluate(() => window.__pdf);
-  const rows = [...html.matchAll(/<td>(Колено[^<]*)<\/td><td class="r">([^<]*)<\/td>/g)].map((m) => `${m[1]} = ${m[2]}`);
+  // the elbow lines by their shape and style, not by the word «Колено» (that is the dictionary's): «… · A» / «… · 45»
+  const rows = [...html.matchAll(/<td>([^<]*· (?:A|45))<\/td><td class="r">([^<]*)<\/td>/g)].map((m) => `${m[1]} = ${m[2]}`);
   h.expect(rows.length === 2, "two elbow lines (a rectangular one and a round one): " + rows.join(" | "));
-  h.expect(rows.some((r) => /(rect|Прямоугольный)/.test(r) && /· A = 3 шт$/.test(r)), "the rectangular: 3 × A — " + rows.join(" | "));
-  h.expect(rows.some((r) => /(round|Круглый)/.test(r) && /· 45 = 3 шт$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
+  h.expect(rows.some((r) => /(rect|Прямоугольный)/.test(r) && /· A = 3 \S+$/.test(r)), "the rectangular: 3 × A — " + rows.join(" | "));
+  h.expect(rows.some((r) => /(round|Круглый)/.test(r) && /· 45 = 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };

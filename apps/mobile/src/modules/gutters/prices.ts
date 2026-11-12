@@ -46,8 +46,19 @@ const live = (it: CatalogItem) => it.kind !== "kit";
 /** the company's item for a part: its properties and its unit; the closest first (catalogMatch), else undefined */
 export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
   const unit = p.unit.trim().toLowerCase();
-  return catalogMatch(catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit), matchAttrs(p))[0];
+  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
+  const want = matchAttrs(p);
+  const own = catalogMatch(pool, want)[0];
+  if (own) return own;
+  // #871: before the fix the engine counted «A» for a round downspout's elbows by default, and a company priced that row
+  // («колено A round»). The 45° elbow takes that price until the company prices its own — nothing to move, no $0 line
+  const legacy = LEGACY_ROUND_ELBOW(want);
+  return legacy ? catalogMatch(pool, legacy)[0] : undefined;
 }
+
+/** a round downspout's default 45° elbow → the same elbow under its old name «A» (see findItem); anything else → none */
+const LEGACY_ROUND_ELBOW = (w: Record<string, string>): Record<string, string> | null =>
+  w.part === "elbow" && w.shape === "round" && w.style === "45" ? { ...w, style: "A" } : null;
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
 export const PART_WORDS = new Set([
