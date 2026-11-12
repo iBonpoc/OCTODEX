@@ -14,6 +14,7 @@ import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
 import { visitPayment } from "@octo/estimating-engine";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
+import { isContractKind } from "@/features/contractInvoice";
 import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry } from "@/data/types";
 
@@ -430,7 +431,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         // balance, or what is not yet billed (a deposit off); not the whole contract. Sent invoices only, as the server and the
         // invoice list read them (a draft is not billed)
         amountDueCents: job
-          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id && i.status === "sent").map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents) }))).amountCents
+          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id && i.status === "sent" && isContractKind(typeof i.kind === "string" ? i.kind : undefined)).map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents) }))).amountCents
           : 0,
         signature: (v.signature_svg as string | null) ?? undefined,
         closed: v.status === "completed" || v.status === "no_show" || undefined,

@@ -13876,4 +13876,46 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_price_history(
               and (select prosecdef from pg_proc where oid = 'app.tg_markup_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
 \echo 'T202 the catalog card: barcode, link, direction; the price and markup history'
 
+-- ======================================================================================================================
+-- T204 (#1193 п.1, review #1203 №4): what a contract has billed is counted one way everywhere (app.job_contract_billed):
+-- its deposit / progress / final invoices sent and not removed. A standalone invoice of the job is extra work outside the
+-- contract (the director 12.11): a payment on a visit bills the contract's whole rest, the contract may go down to what
+-- the contract has billed. Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e2040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T204 contract + extra', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001', 0, 'T204 work (test price)', 1, 100000, false);
+insert into public.visits (id, company_id, job_id, starts_at) values ('f2040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f2040000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+-- a deposit of $200 (contract), a standalone of $300 (extra work), a draft progress of $100 (not billed yet)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, subtotal_cents, total_cents, sent_at) values
+  ('02040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e2040000-0000-4000-8000-000000000001', 'deposit', 'sent', 20000, 20000, now()),
+  ('02040000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e2040000-0000-4000-8000-000000000001', 'standalone', 'sent', 30000, 30000, now()),
+  ('02040000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e2040000-0000-4000-8000-000000000001', 'progress', 'draft', 10000, 10000, null);
+:as_super
+select tst.ok(app.job_contract_billed('ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001') = 20000,
+              'T204 billed by the contract: the deposit only (the standalone and the draft do not count)');
+-- the contract may go down to $200 (its own invoices), the standalone $300 does not hold it up
+:as_office_a
+update public.job_line_items set unit_price_cents = 25000 where id = 'a2040000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents = 25000 from public.jobs where id = 'e2040000-0000-4000-8000-000000000001'),
+              'T204 the contract goes down to $250 — above its own invoices, below all of the job''s (red before #1193)');
+select tst.fails_like($q$update public.job_line_items set unit_price_cents = 15000 where id = 'a2040000-0000-4000-8000-000000000001'$q$,
+                      '%below what is invoiced%', 'T204 …not below what the contract billed ($200)');
+update public.job_line_items set unit_price_cents = 100000 where id = 'a2040000-0000-4000-8000-000000000001';
+-- the visit pays the contract's whole rest: $1000 − $200 = $800 (the standalone does not eat it)
+update public.visits set status = 'on_site' where id = 'f2040000-0000-4000-8000-000000000001';
+:as_tech_a
+select tst.ok(((public.record_visit_payment('f2040000-0000-4000-8000-000000000001', '02040000-0000-4000-8000-0000000000a1', '22040000-0000-4000-8000-0000000000a1', 'cash', null, 80000) ->> 'amount_cents')::bigint) = 80000,
+              'T204 a payment on the visit bills the contract''s whole rest, $800 (red before #1193: $500)');
+:as_super
+select tst.ok((select kind = 'final' and total_cents = 80000 from public.invoices where id = '02040000-0000-4000-8000-0000000000a1')
+              and app.job_contract_billed('ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001') = 100000,
+              'T204 the final of $800: the contract fully billed ($1000), the standalone outside it');
+select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE'), 'T204 rule 18: the count is the definer functions'' own');
+\echo 'T204 what a contract billed is counted one way'
+
 \echo 'ALL TESTS PASSED'
