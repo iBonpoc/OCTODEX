@@ -638,7 +638,7 @@ export function ChoiceChips<K extends string>({
     // with a `label` the field names itself: a caption over the segment, the row's label in a field
     return label ? (
       <View style={{ gap: space[1] }}>
-        <T v="caption" tone="mut">
+        <T v="caption" tone="mut" w="semibold">
           {label}
         </T>
         {seg}
