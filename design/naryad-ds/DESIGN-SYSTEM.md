@@ -546,7 +546,7 @@ HIG [«Accessibility»](https://developer.apple.com/design/human-interface-guide
 | `Press` / `Button` | ✅ | ⬜ | ⬜ | ✅ | — | ✅ | ⬜ | — | ? |
 | `IconButton` | ✅ | ⬜ | ⬜ | ✅ | — | ? | — | — | ? |
 | `TextField` | ✅ | ⬜ | ⬜ (рамка фокуса не найдена) | — | — | ⬜ (нет `disabled`) | — | ⬜ | ✅ |
-| `NumberField`, `DateField`, `TimeField`, `SelectField` (новые) | ⬜ (у `SelectField` ◐, #1145) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ (`PickerSheet`) | ⬜ | ⬜ |
+| `NumberField` ✅ (РС-4a), `DateField`, `TimeField`, `SelectField` (новые) | ⬜ (у `SelectField` ◐, #1145) | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ | ⬜ (`PickerSheet`) | ⬜ | ⬜ |
 | `Segmented` | ✅ | ⬜ | ⬜ | ✅ | ✅ | ? | — | — | ✅ |
 | `ChoiceChips` | ✅ | ⬜ | ⬜ | ✅ | ✅ (рамка) | ? | — | ⬜ | ✅ |
 | `MultiChips` | ✅ | ⬜ | ⬜ | ✅ | ⬜ (жёлтая заливка → рамка + `check`) | ? | — | ⬜ | ✅ |
@@ -676,7 +676,7 @@ HIG [«Accessibility»](https://developer.apple.com/design/human-interface-guide
 - Доступность: весь степпер — `adjustable` с `accessibilityValue`; смахивание вверх/вниз VoiceOver меняет значение. Сейчас две отдельные кнопки ⬜ З12.
 - Как в iOS: UIStepper. Отличие: круглые кнопки 36.
 
-**А6.2. Поле числа (`NumberField`: `money` · `percent` · `qty` · `integer`)** поверх `MoneyField / PctField / QtyField`.
+**А6.2. Поле числа (`NumberField`: `money` · `percent` · `qty` · `integer`)** поверх `MoneyField / PctField / QtyField`. ✅ `ui/numberField.tsx` (РС-4a); разбор и формат — `ui/numberInput.ts` (поверх движка), запятая — только разделитель тысяч («12,50» — ошибка); панель «‹ › Готово» — `InputAccessoryView`, только iOS; старые `MoneyField / PctField / QtyField` переводятся по экранам (смета — РС-4b).
 - Подпись над полем, поле 44, знак единицы внутри (`$` слева; `%`, `ft`, `ea` справа, `mut`), число `tabular`, ошибка под полем (`bad` + значок + слово).
 - Клавиатура `decimal-pad` / `number-pad`. На iOS у цифровой клавиатуры нет «Готово» → панель над клавиатурой (`InputAccessoryView`): «‹ ›» слева, «Готово» справа. На Android — своя клавиша.
 - Разбор только через движок (правило 8): «-100», «abc», «1e5», «12,50» — ошибка под полем, не тихий ноль. При потере фокуса — формат США `1,234.50`.

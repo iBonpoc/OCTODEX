@@ -474,6 +474,11 @@ export function TextField({
   field,
   error,
   testID,
+  prefix,
+  suffix,
+  accessoryID,
+  onBlurText,
+  a11yLabel,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -495,6 +500,15 @@ export function TextField({
   /** «что вписать» under the field: alert + text, the frame `status.bad` (DS §11 п.2; the form gives it through `field`) */
   error?: string;
   testID?: string;
+  /** the unit sign inside the field: «$» before the number, «%» / «ft» / «ea» after it (`mut`, DS А6.2) */
+  prefix?: string;
+  suffix?: string;
+  /** iOS: the bar above the keyboard (`nativeID` of an InputAccessoryView), the number keyboard has no «Готово» */
+  accessoryID?: string;
+  /** the person leaves the field */
+  onBlurText?: () => void;
+  /** screen-reader name with the unit («Цена, долларов») */
+  a11yLabel?: string;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -532,6 +546,7 @@ export function TextField({
       }}
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
+      {prefix ? <T tone="mut">{prefix}</T> : null}
       <TextInput
         ref={(n) => {
           input.current = n;
@@ -540,7 +555,8 @@ export function TextField({
         value={value}
         editable={!ro}
         onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
-        onBlur={field ? () => field.blur(value) : undefined}
+        onBlur={field || onBlurText ? () => { field?.blur(value); onBlurText?.(); } : undefined}
+        inputAccessoryViewID={accessoryID}
         aria-disabled={ro || undefined}
         onChangeText={(v) => {
           const nv = f.fmt ? f.fmt(v) : v;
@@ -564,7 +580,7 @@ export function TextField({
         autoFocus={plan.autoFocus}
         selectTextOnFocus={selectOnFocus}
         submitBehavior={multi ? "newline" : "blurAndSubmit"}
-        accessibilityLabel={label ?? placeholder}
+        accessibilityLabel={a11yLabel ?? label ?? placeholder}
         aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
@@ -573,9 +589,11 @@ export function TextField({
           fontFamily: font.families.regular,
           fontSize: font.size.body + 2,
           textAlignVertical: multi ? "top" : "center",
+          fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,
           outlineStyle: "none",
         } as object}
       />
+      {suffix ? <T tone="mut">{suffix}</T> : null}
     </View>
     {shownError ? (
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={tid ? `${tid}-error` : undefined}>
