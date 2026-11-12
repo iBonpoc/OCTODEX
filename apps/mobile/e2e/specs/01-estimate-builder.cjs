@@ -1,20 +1,12 @@
 /** Custom line + catalog line + kit, tax 9.5% on the whole amount (a new estimate, РС-3) → totals match a hand calculation. */
 exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
-  const add = async () => { await h.page.getByRole("button", { name: "Добавить позицию" }).first().click(); await h.page.waitForTimeout(300); };
-  await add();
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("Вывезти мусор");
-  await h.sheet().getByText(/Своя позиция:/).click(); await h.page.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("150");
-  await h.sheet().getByRole("button", { name: "Готово" }).click(); await h.page.waitForTimeout(250);
-  await add();
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("carpet");
-  await h.sheet().getByText("Carpet removal").click(); await h.page.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(0).fill("120");
-  await h.sheet().getByRole("button", { name: "Готово" }).click(); await h.page.waitForTimeout(250);
-  await add();
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("railing kit");
-  await h.sheet().getByText(/Stair railing kit/).click(); await h.page.waitForTimeout(400);
+  const line = require("../estimateLine.cjs");
+  await line.addCustom(h, "Вывезти мусор", "150");
+  await line.addCatalog(h, "carpet", "Carpet removal", "120");
+  await line.fold(h);
+  // a kit comes as several folded rows
+  await line.addCatalog(h, "railing kit", /Stair railing kit/);
   await h.page.getByRole("button", { name: "Налог с продаж" }).click(); await h.page.waitForTimeout(250);
   await h.sheet().getByRole("switch", { name: "Налог с продаж" }).click();
   await h.sheet().locator('input[inputmode="decimal"]').first().fill("9.5");

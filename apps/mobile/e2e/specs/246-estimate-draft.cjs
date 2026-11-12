@@ -18,18 +18,15 @@ exports.run = async (h) => {
   };
   const titleInput = () => tid("ue-title").locator("input, textarea").first();
   const titleValue = async () => { await tid("ue-title").waitFor({ timeout: 8000 }); return titleInput().inputValue(); };
-  // the builder's line cards (ue-line-<id>), not the line sheet's own parts (ue-line-search/-custom/-price/-save…)
-  const SHEET_PARTS = ["search", "custom", "price", "save", "remove", "source-hint"].map((x) => `:not([data-testid="ue-line-${x}"])`).join("");
-  const hasLine = async () => (await p.locator(`[data-testid^="ue-line-"]${SHEET_PARTS}`).locator("visible=true").count()) > 0;
+  // the builder's rows (est-line-<id>), folded or open
+  const hasLine = async () => (await p.locator('[data-testid^="est-line-"]').locator("visible=true").count()) > 0;
   const draftShown = async () => (await p.getByTestId("est-draft").locator("visible=true").count()) > 0;
   const stored = () => p.evaluate(() => JSON.parse(localStorage.getItem("octo.drafts.v1.demo") || "[]"));
   const addCustomLine = async (name, price) => {
-    await tid("ue-add-line").getByRole("button").click();
-    await tid("ue-line-search").locator("input").fill(name);
-    await tid("ue-line-custom").getByRole("button").click();
-    await tid("ue-line-price").locator("input").fill(price);
-    await tid("ue-line-save").getByRole("button").click();
-    await sheetGone(p);
+    await tid("est-add-new").getByRole("button").click();
+    await p.locator('[data-testid^="est-name-"]').locator("visible=true").first().locator("input").fill(name);
+    await p.locator('[data-testid^="est-price-"]').locator("visible=true").first().locator("input").fill(price);
+    await p.locator('[data-testid^="est-collapse-"]').locator("visible=true").first().getByRole("button").click();
     await waitFor(hasLine, `the line «${name}» is in the builder`);
   };
 

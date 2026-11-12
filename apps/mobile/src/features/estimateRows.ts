@@ -10,11 +10,11 @@ export function rowSummary(l: Pick<CustomLine, "quantity" | "unit" | "unitPriceC
   return `${shownQty(l.quantity)} ${l.unit} × ${money(l.unitPriceCents)}`;
 }
 
-export type RowProblemId = "name" | "qty" | "price" | "cost";
+export type RowProblemId = "name" | "qty" | "price";
 export interface RowProblem {
   id: RowProblemId;
   /** the dictionary key of the text under the field */
-  key: "est.row.needName" | "est.row.needQty" | "est.row.needPrice" | "est.row.needCost";
+  key: "est.row.needName" | "est.row.needQty" | "est.row.needPrice";
 }
 
 /** a line that is not finished: nothing typed in it at all (name empty, price 0) closes without a trace, see `isBlank` */

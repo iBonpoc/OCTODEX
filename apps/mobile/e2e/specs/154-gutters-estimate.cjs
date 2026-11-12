@@ -75,9 +75,9 @@ exports.run = async (h) => {
   const q1 = Number(g.quantity);
   await tid(`ue-line-marks-${g.id}`).click();
   await tid("ue-line-source-hint").waitFor({ timeout: 5000 });
-  await tid("ue-line-price").locator("input").fill("99");
-  await tid("ue-line-save").getByRole("button").click();
-  await waitFor(async () => (await tid("ue-line-source-hint").count()) === 0, "the line sheet closed");
+  await tid(`est-price-${g.id}`).locator("input").fill("99");
+  await tid(`est-collapse-${g.id}`).getByRole("button").click();
+  await waitFor(async () => (await tid("ue-line-source-hint").count()) === 0, "the row closed");
   await tid("ue-save").getByRole("button").click();
   await waitFor(async () => (await lineOf(eid, g.id))?.unitPriceCents === 9900, "the hand price is saved");
 
