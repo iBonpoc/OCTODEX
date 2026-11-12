@@ -1565,10 +1565,10 @@ describe("unit:storeSync — the deposit invoice of the older path is named in t
     const job = db.jobs.find((j) => j.estimateId === "e5")!;
     return db.invoices.find((i) => i.jobId === job.id && i.kind === "deposit")!.title;
   };
-  it("Spanish: «Anticipo» (before: «Deposit» whatever the client's language)", async () => {
+  it("Spanish: «Depósito» (before: «Deposit» whatever the client's language)", async () => {
     expect(await depositWith("es")).toBe(tFor("es")("path.inv.deposit"));
   });
-  it("Russian: «Задаток»", async () => {
+  it("Russian: «Депозит»", async () => {
     expect(await depositWith("ru")).toBe(tFor("ru")("path.inv.deposit"));
   });
   it("English: «Deposit», as before", async () => {

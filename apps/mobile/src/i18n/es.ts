@@ -32,7 +32,7 @@ export const es: Dict = {
   "path.clientNew": "Crear cliente",
   "path.expenseNew": "Crear gasto",
   // «Данные и деньги» В1-7б: the deposit invoice's name — on the client's language (docLanguageFor)
-  "path.inv.deposit": "Anticipo",
+  "path.inv.deposit": "Depósito",
   "path.visitAdd": "Añadir visita",
   "path.photoAdd": "Añadir foto",
   "path.estimateNew": "Crear presupuesto",
