@@ -163,7 +163,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   const drawHs = panels.map((g) => (g.length ? areaH(g) : areaH([])));
   // the frame of a short gutter's inset (#1190) is at most half a narrow sheet wide; a panel that has such a gutter gets a strip
   // under its drawing for it, so the drawing keeps its scale and the frame always has a place
-  const iw = Math.min(DP.insetW, Math.max(inner * 0.5, DP.insetW * 0.85)), ih = Math.round((DP.insetH * iw) / DP.insetW);
+  const iw = Math.min(DP.insetW, inner * DP.insetSheetFrac), ih = Math.round((DP.insetH * iw) / DP.insetW);
   // the strip goes on the side of the short gutter: above the drawing when it is in its upper half (the leader stays short)
   const stripTop: boolean[] = [];
   const strip = panels.map((g, pi) => {
@@ -254,10 +254,14 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   const tiny = geo.filter((g) => g.L < inner * DP.insetFrac && g.L * 3 < panelMax[panelOf[g.n - 1]!]!);
   const tinySet = new Set(tiny);
 
+  /** a gutter's length as the sheet says it: with the storey when there are several (the crew needs it) */
+  const lenText = (g: (typeof geo)[number]) => {
+    const len = fmtLen(runLengthIn(g.r), fmt);
+    return many ? `${len} · ${t("mod.gutters.story", { n: storyOf(g.r.attrs.story) })}` : len;
+  };
   // dimension lines outside the house: extension lines, slash ticks, the length over the line
   const dim = (g: (typeof geo)[number]) => {
-    const len = fmtLen(runLengthIn(g.r), fmt);
-    const s = many ? `${len} · ${t("mod.gutters.story", { n: storyOf(g.r.attrs.story) })}` : len;
+    const s = lenText(g);
     // the dimension line stands off the gutter by dimOff, one dimStep further each time the text's place is taken; the text
     // may also slide along the line. No place at all — the text goes far out and a leader brings it back to its line (#1091)
     const mid0 = (o: number): [number, number] => [(g.a[0] + g.b[0]) / 2 + g.out[0] * o, (g.a[1] + g.b[1]) / 2 + g.out[1] * o];
@@ -298,30 +302,54 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
   for (const g of geo) if (!tinySet.has(g)) dim(g);
 
   const insetOf = new Set<(typeof geo)[number]>();
+  /** the corners whose word is already in an inset: each corner is said once on the sheet */
+  const shown = new Set<string>();
   for (const g of tiny) {
     const pi = panelOf[g.n - 1]!;
     const mid: [number, number] = [(g.a[0] + g.b[0]) / 2, (g.a[1] + g.b[1]) / 2];
+    // the words of the corners at its ends (left end by its place on the sheet); a corner already said in another inset is not said again
+    const left = g.a[0] < g.b[0] || (g.a[0] === g.b[0] && g.a[1] <= g.b[1]) ? 0 : 1;
+    const cornerOf = (slot: number) => {
+      const e = slot === 0 ? left : 1 - left;
+      // the corner of this end: of the corners on this gutter, the one nearest the end (and nearer to it than to the other end)
+      const end = e === 0 ? g.r.a : g.r.b, other = e === 0 ? g.r.b : g.r.a;
+      const f = found.filter((c) => c.runs.some((r) => r.id === g.r.id)).sort((p, q) => Math.hypot(p.at[0] - end[0], p.at[1] - end[1]) - Math.hypot(q.at[0] - end[0], q.at[1] - end[1]))[0];
+      if (!f || shown.has(f.id)) return null;
+      if (Math.hypot(f.at[0] - other[0], f.at[1] - other[1]) < Math.hypot(f.at[0] - end[0], f.at[1] - end[1])) return null;
+      return f;
+    };
+    const corners = [0, 1].map(cornerOf);
+    const words = corners.map((f) => {
+      if (!f) return null;
+      const word = t(f.kind === "in" ? "mod.gutters.draw.cornerIn" : f.kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
+      return `${word} ${Math.round(cornerCut(d, f, found).angleDeg)}°`;
+    });
+    const lenS = lenText(g);
+    const padX = DP.tick * 3;
+    // the frame is wider when its words (a language with long ones) or its length would not fit side by side
+    const need = Math.max(words.reduce((n, w) => n + (w ? textW(w, DP.fontSm) + 4 : 0), 0) + DP.extGap * 2, textW(lenS, DP.font) + 4) + 2 * padX;
+    const fw = Math.min(inner, Math.max(iw, Math.ceil(need)));
     // the free frame nearest to the gutter, inside its panel
     const yTop = tops[pi]! + titleH, yMax = yTop + heights[pi]! - ih;
     let best: Box | null = null;
     let bd = Infinity;
     for (let y = yTop; y <= yMax; y += 8)
-      for (let x = m; x <= W - m - iw; x += 8) {
-        const b: Box = { x0: x - DP.extGap, y0: y - DP.extGap, x1: x + iw + DP.extGap, y1: y + ih + DP.extGap };
+      for (let x = m; x <= W - m - fw; x += 8) {
+        const b: Box = { x0: x - DP.extGap, y0: y - DP.extGap, x1: x + fw + DP.extGap, y1: y + ih + DP.extGap };
         if (!free(b)) continue;
-        const dd = Math.hypot(x + iw / 2 - mid[0], y + ih / 2 - mid[1]);
-        if (dd < bd) { bd = dd; best = { x0: x, y0: y, x1: x + iw, y1: y + ih }; }
+        const dd = Math.hypot(x + fw / 2 - mid[0], y + ih / 2 - mid[1]);
+        if (dd < bd) { bd = dd; best = { x0: x, y0: y, x1: x + fw, y1: y + ih }; }
       }
     if (!best) { dim(g); continue; }
     insetOf.add(g);
+    corners.forEach((f) => f && shown.add(f.id));
     const bx = best;
     boxes.push(bx);
     const hdr = DP.fontSm * 2.2, cap = DP.fontSm * 1.8;
     const rect: [number, number][] = [[bx.x0, bx.y0], [bx.x1, bx.y0], [bx.x1, bx.y1], [bx.x0, bx.y1]];
     rect.forEach((p, i) => line(p, rect[(i + 1) % 4]!, DP.thinW));
     text(bx.x0 + DP.extGap * 2, bx.y0 + hdr * 0.68, `№${g.n}`, DP.fontSm, "start");
-    // the gutter along the frame, its ends in order left to right as on the sheet
-    const padX = DP.tick * 3;
+    // the gutter along the frame
     const x0 = bx.x0 + padX, x1 = bx.x1 - padX;
     const ly = bx.y0 + hdr + (ih - hdr - cap) * 0.7;
     line([x0, ly], [x1, ly], DP.runW + DP.thinW);
@@ -331,22 +359,9 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
       line([x - DP.tick, ly - dy + DP.tick], [x + DP.tick, ly - dy - DP.tick], DP.thinW * 1.5);
     }
     line([x0, ly - dy], [x1, ly - dy], DP.thinW);
-    const lenS = fmtLen(runLengthIn(g.r), fmt);
     const lw = textW(lenS, DP.font) + 4, lh = DP.font * 1.3;
     items.push({ t: "r", x: r1((x0 + x1) / 2 - lw / 2), y: r1(ly - dy - lh * 0.9), w: r1(lw), h: r1(lh) });
     text((x0 + x1) / 2, ly - dy - lh * 0.9 + lh * 0.75, lenS, DP.font);
-    // the words of the corners at its ends (left end by its place on the sheet)
-    const left = g.a[0] < g.b[0] || (g.a[0] === g.b[0] && g.a[1] <= g.b[1]) ? 0 : 1;
-    const words = [0, 1].map((slot) => {
-      const e = slot === 0 ? left : 1 - left;
-      // the corner of this end: of the corners on this gutter, the one nearest the end
-      const end = e === 0 ? g.r.a : g.r.b;
-      const f = found.filter((c) => c.runs.some((r) => r.id === g.r.id)).sort((p, q) => Math.hypot(p.at[0] - end[0], p.at[1] - end[1]) - Math.hypot(q.at[0] - end[0], q.at[1] - end[1]))[0];
-      if (f && Math.hypot(f.at[0] - (e === 0 ? g.r.b[0] : g.r.a[0]), f.at[1] - (e === 0 ? g.r.b[1] : g.r.a[1])) < Math.hypot(f.at[0] - end[0], f.at[1] - end[1])) return null;
-      if (!f) return null;
-      const word = t(f.kind === "in" ? "mod.gutters.draw.cornerIn" : f.kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
-      return `${word} ${Math.round(cornerCut(d, f, found).angleDeg)}°`;
-    });
     words.forEach((wd, slot) => {
       if (!wd) return;
       const ww = textW(wd, DP.fontSm) + 4, wh = DP.fontSm * 1.3;
@@ -421,7 +436,7 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
 
   // corners: «outside 90°» inside the angle
   for (const f of found) {
-    if (f.runs.some((r) => insetOf.has(byId.get(r.id)!))) continue; // its word is in the inset
+    if (shown.has(f.id)) continue; // its word is in an inset
     const p = at(f.at, panelOf[d.runs.findIndex((x) => x.id === f.runs[0].id)]);
     const ga = byId.get(f.runs[0].id), gb = byId.get(f.runs[1].id);
     if (!ga || !gb) continue;

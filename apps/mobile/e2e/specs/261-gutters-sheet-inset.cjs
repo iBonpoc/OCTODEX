@@ -34,4 +34,28 @@ exports.run = async (h) => {
   h.expect(/45′ 3″/.test(s), "the long gutter's length stays on the sheet");
   h.expect((s.match(/3′ 4″/g) || []).length === 1, "the short one's length stands once, in the inset");
   await h.shot("inset");
+  // the crew's PDF carries the same inset (one sheet for the view and the paper)
+  await p.evaluate(() => {
+    window.__pdf = null;
+    for (const f of document.querySelectorAll("iframe")) f.dataset.seen = "1";
+    const add = document.body.appendChild.bind(document.body);
+    document.body.appendChild = (el) => {
+      const r = add(el);
+      if (el.tagName === "IFRAME") el.contentWindow.print = () => {};
+      return r;
+    };
+  });
+  await tid("view-pdf-crew").getByRole("button").click();
+  await p.waitForFunction(
+    () => {
+      const f = [...document.querySelectorAll("iframe:not([data-seen])")].find((x) => x.contentDocument?.body?.innerHTML.includes("<svg"));
+      if (f) window.__pdf = f.contentDocument.documentElement.outerHTML;
+      return !!window.__pdf;
+    },
+    null,
+    { timeout: 10000 },
+  );
+  const pdf = await p.evaluate(() => window.__pdf);
+  const sheet = (pdf.match(/<svg[\s\S]*?<\/svg>/g) || []).join("");
+  h.expect(/№2/.test(sheet) && (sheet.match(/>3′ 4″</g) || []).length === 1, "the PDF's sheet: the inset «№2» and the short one's length once");
 };
