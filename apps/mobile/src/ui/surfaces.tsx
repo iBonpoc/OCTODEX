@@ -487,6 +487,8 @@ export function Screen({
   const kb = useKeyboardHeight();
   /** the pinned panel stands on a phone only, and not under the keyboard */
   const [footH, setFootH] = useState(0);
+  // the pinned bar stands on the screen's own bottom edge (the home indicator), not on the room kept for the tab bar and «＋»
+  const safe = useSafeAreaInsets();
   const hints = useHints();
   const { c } = useTheme();
   const { t } = useI18n();
@@ -830,7 +832,7 @@ export function Screen({
         {footer && !wide && !kb ? (
           <View
             onLayout={(e) => setFootH(e.nativeEvent.layout.height)}
-            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: z.nav, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+            style={{ position: "absolute", left: 0, right: 0, bottom: 0, zIndex: z.nav, paddingBottom: safe.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right, backgroundColor: c.ov }}
           >
             {footer}
           </View>

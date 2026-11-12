@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from "react";
 import { canSeeClientLink } from "@/features/estimateSign";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -19,7 +19,9 @@ import type { Drop } from "@/features/sortable";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
-import { useRequiredForm } from "@/ui/requiredForm";
+import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
+import { ActionBar } from "@/ui/actionBar";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
 import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
@@ -456,10 +458,26 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const signed = !!existing && (existing.status === "awaiting_countersign" || existing.status === "approved");
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
   const ok = !!customer && !!property && hasContent(doc);
+  /** what a press of «Сохранить» found missing (shown under it, the page scrolls there) and the nudge for the scroll */
+  const [missing, setMissing] = useState<null | "client" | "lines">(null);
+  const [revealTick, setRevealTick] = useState(0);
+  const clientRef = useRef<ComponentRef<typeof View>>(null);
+  const linesRef = useRef<ComponentRef<typeof View>>(null);
+  useEffect(() => {
+    if (ok) setMissing(null);
+  }, [ok]);
+  const { wide } = useDevice();
+  const { c } = useTheme();
   const save = (send: boolean) => {
     // #1138: the main button stays active (DS §11 п.3, the director's review of #1169): where the tech may not make one, it says why
     if (!mayHere) return void toast.show(t("est.tech.notHere"));
-    if (!customer || !property) return;
+    // something is missing (no client, no line): the button is not off — it says what and takes the person there (DS §11 п.3, Р10)
+    if (!customer || !property || !hasContent(doc)) {
+      setMissing(!customer || !property ? "client" : "lines");
+      setRevealTick((n) => n + 1);
+      haptics.warning();
+      return;
+    }
     // the open row settles first: a wrong one keeps the screen; a right one folds — and the thing it sends to the catalog is
     // in the document that is saved (the link), and «Отменить» of the save takes the thing out as well
     const settled = settleNow(false);
@@ -527,8 +545,23 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${discountBps(s.discount.value) / 100}%` : money(s.discount.cents);
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
+  /** «Сохранить и отправить» (the office: sending is theirs, #1113) and «Сохранить»: always active — a press with something missing says what */
+  const saveButtons = (
+    <>
+      {canSeeClientLink(store.role) ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" full onPress={() => save(true)} /></View> : null}
+      <View testID="ue-save">
+        <Button label={t("ue.save")} icon="check" variant={canSeeClientLink(store.role) ? "secondary" : "primary"} full onPress={() => save(false)} />
+      </View>
+    </>
+  );
+
   return (
-    <Screen onScrollBegin={() => void leaveRow(true)} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder">
+    <Screen onScrollBegin={() => void leaveRow(true)} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
+      <ActionBar testID="est-actionbar" summary={<RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>}>
+        {saveButtons}
+      </ActionBar>
+    )}>
+      <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
       {existing && existing.status !== "draft" ? (
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
@@ -556,7 +589,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <T v="caption" tone="mut">{t("est.tpl.editHint")}</T>
             </View>
           ) : (
-          <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")}>
+          <View ref={clientRef} collapsable={false} style={{ gap: space[1] }}>
+          <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")} style={missing === "client" ? { borderColor: c.status.bad.fill } : undefined}>
             <RowView>
               {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
               <View style={{ flex: 1 }}>
@@ -572,6 +606,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <Icon name="chevronRight" s={size.iconSm} />
             </RowView>
           </Card>
+          {missing === "client" ? <FieldError text={t("ue.pickClient")} testID="ue-missing-client" /> : null}
+          </View>
           )}
           <View testID="ue-title">
             <TextField type="title" value={title} onChangeText={setTitle} placeholder={tplEdit ? t("est.tpl.name") : t("ue.jobTitle")} icon="note" />
@@ -592,7 +628,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           ) : null}
 
           <SectionTitle title={t("ue.items")} right={act.length ? <T v="caption" tone="mut">{act.length}</T> : undefined} />
-          <Card>
+          <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
+          <Card style={missing === "lines" ? { borderColor: c.status.bad.fill } : undefined}>
             {option.lines.length === 0 ? (
               <View testID="est-empty">
                 <T v="body" tone="mut">
@@ -653,6 +690,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               }
             />
           </Card>
+          {missing === "lines" ? <FieldError text={t("ue.empty")} testID="ue-missing-lines" /> : null}
+          </View>
           <RowView>
             <View style={{ flex: 1 }} testID="est-add-new">
               <Button label={t("est.row.addNew")} icon="plus" variant="secondary" full onPress={() => addNew()} />
@@ -722,18 +761,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             </View>
           ) : (
             <>
-              {!ok || !mayHere ? (
-                <View testID={!mayHere && property ? "ue-not-here" : undefined}>
+              {!mayHere && property ? (
+                <View testID="ue-not-here">
                   <T v="caption" tone="mut">
-                    {!mayHere && property ? t("est.tech.notHere") : customer ? t("ue.empty") : t("ue.pickClient")}
+                    {t("est.tech.notHere")}
                   </T>
                 </View>
               ) : null}
-              {/* #1113: sending is the office side's — a tech saves only (the main action then is «Сохранить») */}
-              {canSeeClientLink(store.role) ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} /></View> : null}
-              <View testID="ue-save">
-                <Button label={t("ue.save")} icon="check" variant={canSeeClientLink(store.role) ? "secondary" : "primary"} full disabled={!ok} onPress={() => save(false)} />
-              </View>
+              {/* a phone: the buttons are in the pinned bar (Screen footer); from 820 — here, in the column of the totals */}
+              {wide ? saveButtons : null}
             </>
           )}
         </View>
@@ -971,3 +1007,13 @@ function SumRow({ label, value, onPress }: { label: string; value: string; onPre
   );
 }
 
+
+/** the page scrolls to the thing a press of «Сохранить» found missing (the screen's scroll is for its children: this is one) */
+function RevealOnTick({ tick, target }: { tick: number; target: React.RefObject<ComponentRef<typeof View> | null> }) {
+  const scroll = useScreenScroll();
+  useEffect(() => {
+    if (tick > 0 && target.current && scroll) scroll.scrollToNode(target.current, space[6], true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tick]);
+  return null;
+}
