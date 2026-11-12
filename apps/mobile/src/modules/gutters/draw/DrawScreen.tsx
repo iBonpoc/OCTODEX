@@ -795,7 +795,14 @@ export default function DrawScreen() {
     </View>
   );
   const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
-  const selectedRun = canSave && !!selected && drawing.runs.some((r) => r.id === selected);
+  // #818 (founder 12.11: «не понимаю, как тянуть край»): once per opening of the canvas, when a gutter is first picked, a toast says how an
+  // end and a corner are taken, with any tool — not a bubble that would stand over the drawing
+  const movedHint = useRef(false);
+  useEffect(() => {
+    if (movedHint.current || !canSave || !selected || !drawing.runs.some((r) => r.id === selected)) return;
+    movedHint.current = true;
+    toast.show(t("mod.gutters.draw.moveHint"));
+  }, [selected, canSave, drawing.runs, toast, t]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
@@ -940,12 +947,6 @@ export default function DrawScreen() {
           <View testID="draw-next" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[1], paddingLeft: space[3], paddingRight: space[1], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" tone="mut">{t("mod.gutters.draw.nextDs")}</T>
             <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
-          </View>
-        ) : null}
-        {/* #818 (founder 12.11: «не понимаю, как тянуть край»): a picked gutter says how its end and corner are taken, with any tool */}
-        {selectedRun && !hintText && !gripping && !flat && !ghost && !swing ? (
-          <View pointerEvents="none" testID="draw-move-hint" style={{ alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
-            <T v="caption" tone="mut" center>{t("mod.gutters.draw.moveHint")}</T>
           </View>
         ) : null}
         {hintText && !gripping ? (
