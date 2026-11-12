@@ -163,7 +163,7 @@ describe("unit:deleteAccount — when the sign-in asks «is it deleted» (review
 });
 
 describe("unit:deleteAccount — the device is wiped", () => {
-  const keys = ["octo.cloud.v1.co-1", "octo.cloud.v1.co-2", "octo.outbox.v1", "octo.queue.v1", "octo.role.v1", "octo.planWho.v1", "octo.nav.open.u1", "octo.invite.token.v1", "octo.legal.pending.v1", "octo.theme.v1", "octo.lang.v1", "octo.db.v5"];
+  const keys = ["octo.cloud.v1.co-1", "octo.cloud.v1.co-2", "octo.outbox.v1", "octo.queue.v1", "octo.role.v1", "octo.planWho.v1", "octo.nav.open.u1", "octo.invite.token.v1", "octo.legal.pending.v1", "octo.storageLog.v1", "octo.theme.v1", "octo.lang.v1", "octo.db.v5"];
   const store = (fail = false) => {
     const st = { removed: [] as string[], set: {} as Record<string, string>, gone: [] as string[] };
     return {
