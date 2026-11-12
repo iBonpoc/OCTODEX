@@ -379,7 +379,7 @@ export default function DrawScreen() {
       if (g.kind === "line") {
         setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
         // a tick on every snap on entering it: another gutter's end, a step of 45° (DS §15.6)
-        const key = drawSnap(d, g.a, p, tolIn());
+        const key = drawSnap(d, g.a, p, tolIn(), undefined, lineSnap.current);
         if (drawTick(key, lineSnap.current)) haptics.selection();
         lineSnap.current = key;
       }

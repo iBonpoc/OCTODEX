@@ -34,7 +34,7 @@ describe("windows are widths, not angles: a long gutter has no dead zone", () =>
     expect(prev).toBeGreaterThanOrEqual(58); // follows the finger at the end
     expect(jump).toBeLessThanOrEqual(TOL * 1.5 + 2);
   });
-  it("small steps along the long side of an L corner (30′×30′): the joint follows the finger on A's axis step by step, no standing and no jump", () => {
+  it("small steps along the long side of an L corner (30′×30′): B (held straight) stands until the finger is 1.5 windows off its line, then the joint catches up: a jump of the window, the same on any length", () => {
     const L: Drawing = { runs: [run("A", [0, 0], [360, 0]), run("B", [360, 0], [360, 360])], downspouts: [] };
     let held: [boolean, boolean] = [true, true];
     let last = 360;
@@ -105,6 +105,7 @@ describe("a joint of three ends is not moved", () => {
 
 import { cornerTick, drawSnap, drawTick, pullTick } from "../src/modules/gutters/canvas/edit";
 
+const TICKS_CORNER = 2, TICKS_DRAW = 3;
 describe("the ticks (DS §15.6, table «место → вибрация» in spec 33): selection on EVERY snap on entering it", () => {
   const two = (): Drawing => ({ runs: [run("a", [0, 0], [600, 0]), run("o", [300, 300], [300, 900])], downspouts: [] });
   it("pull: onto another end → a tick; stays → none; away and back → a tick again (each time)", () => {
@@ -144,7 +145,8 @@ describe("the ticks (DS §15.6, table «место → вибрация» in spe
       st.held = mv.held;
       st.onEnd = mv.end ?? null;
     }
-    expect(ticks).toBeGreaterThanOrEqual(3 - 1);
+    // onto the other end (1); [204,84] stays; [260,140] free air (the sides leave their rays); onto the end again (2)... counted exactly below
+    expect(ticks).toBe(TICKS_CORNER);
     expect(cornerTick({ held: [false, false] }, { held: [true, true] })).toBe(false); // leaving ticks nothing
   });
   it("drawing: onto another end or a step of 45° from the start; none while it stays; again after leaving", () => {
@@ -159,7 +161,55 @@ describe("the ticks (DS §15.6, table «место → вибрация» in spe
       if (drawTick(k, prev)) n++;
       prev = k;
     }
-    expect(n).toBeGreaterThanOrEqual(3);
+    expect(n).toBe(TICKS_DRAW);
     expect(drawTick(keys[3]!, keys[3]!)).toBe(false);
+  });
+});
+
+describe("review of the director 12.11: no tick on a wobble; no snap onto the neighbour's FAR end", () => {
+  it("drawing: a finger wobbling ±1″ at the edge of a step's window for 40 frames — exactly ONE tick (hysteresis, not equality of rounded points)", () => {
+    const d: Drawing = { runs: [], downspouts: [] };
+    const a: P = [0, 0];
+    let prev: string | null = null, ticks = 0;
+    for (let i = 0; i < 40; i++) {
+      const y = i % 2 ? 50 : 48; // 6.9° / 7.1° at 400″: the edge of the window of ±7°
+      const key = drawSnap(d, a, [400, y], TOL, undefined, prev);
+      if (drawTick(key, prev)) ticks++;
+      prev = key;
+    }
+    expect(ticks).toBe(1);
+  });
+  it("drawing: a wobble at the edge of another end's window — exactly one tick; leaving it (past 1.5 ×) and coming back — another", () => {
+    const d: Drawing = { runs: [run("o", [300, 300], [300, 900])], downspouts: [] };
+    const a: P = [0, 0];
+    let prev: string | null = null, ticks = 0;
+    const frames: P[] = [];
+    for (let i = 0; i < 30; i++) frames.push([300 + (i % 2 ? TOL + 1 : TOL - 1), 300]); // 11″ / 13″ from the end
+    frames.push([300 + 3 * TOL, 150], [300 + TOL - 1, 300]); // away (into the free air), back
+    for (const f of frames) {
+      const key = drawSnap(d, a, f, TOL, undefined, prev);
+      if (drawTick(key, prev)) ticks++;
+      prev = key;
+    }
+    expect(ticks).toBe(2);
+  });
+  it("swingEnd: an end of A does not stick to the FAR end of B, which meets A's standing end (A would lie on B: two corners with one id, a double count)", () => {
+    const d: Drawing = { runs: [run("A", [0, 0], [600, 0]), run("B", [0, 0], [0, 300])], downspouts: [] };
+    const sw = swingEnd(d, "A", 1, [3, 298], null, TOL)!; // the finger is at B's far end
+    expect(sw.end).toBeUndefined();
+    const a = sw.drawing.runs[0]!, b = sw.drawing.runs[1]!;
+    expect(!(a.b[0] === b.b[0] && a.b[1] === b.b[1])).toBe(true);
+    expect(findCorners(sw.drawing).filter((c) => c.id.startsWith("c:A:B")).length).toBeLessThanOrEqual(1);
+  });
+  it("moveCorner: the joint does not stick to the other end of a gutter that meets a far end of the pair", () => {
+    // A: (0,0)-(300,300) joint, B: (300,300)-(600,0); C starts at A's far end (0,0) and ends at (0,300)
+    const d: Drawing = { runs: [run("A", [0, 0], [300, 300]), run("B", [300, 300], [600, 0]), run("C", [0, 0], [0, 300])], downspouts: [] };
+    const mv = moveCorner(d, "c:A:B", [2, 298], [false, false], TOL, null);
+    expect(mv?.end).toBeUndefined();
+  });
+  it("moveCorner: folded back on itself (the sides within MIN_TURN_DEG) is no frame, as one in a line", () => {
+    const d: Drawing = { runs: [run("A", [0, 0], [150, 150]), run("B", [150, 150], [100, 0])], downspouts: [] };
+    // the far ends (0,0) and (100,0) seen from (300,5) lie in nearly one direction: the angle at the joint is ~0°
+    expect(moveCorner(d, "c:A:B", [300, 5], [false, false], TOL, null)).toBeNull();
   });
 });

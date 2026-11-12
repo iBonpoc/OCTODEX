@@ -1,6 +1,6 @@
 /**
  * #818 second half (spec 33 П35, founder 12.11 «оттягивать угол»): a corner taken and moved. The joint follows the finger,
- * the far ends of both gutters stand, each side held at a step of 45° (±7°, to ±9° once held), both held — the crossing of
+ * the far ends of both gutters stand, each side held at a step of 45° within a window of the finger's width (default 50″ ≈ 7° at 400″; once held 1.5 × that), both held — the crossing of
  * the two rays; lengths whole inches (`lengthIn`); downspouts stay on their gutter; a joint never lands on another gutter's end.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -52,7 +52,7 @@ describe("moveCorner", () => {
     expect(near0.drawing.runs[1]!.a[1]).toBe(0);
     expect(near0.drawing.runs[0]!.b[0]).toBeGreaterThan(370);
   });
-  it("the window: ±7° in, to ±9° once held; not entered between 7° and 9°", () => {
+  it("the window: in at the default width (7° at 400″), held to 1.5 × it; not entered between from outside", () => {
     const aAt = (deg: number) => at(deg, 400, [0, 0]);
     const out = SNAP_ANGLE_DEG + 1;
     expect(moveCorner(W(), ID, aAt(out))!.held[0]).toBe(false);

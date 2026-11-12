@@ -27,7 +27,7 @@ describe("swingEnd: the other end stands, the end follows the finger", () => {
     expect(runLengthIn(nr)).toBeCloseTo(Math.hypot(300, 450), 0);
     expect(dirOf(nr, 1)).toBeCloseTo(56.3, 0);
   });
-  it("held at 45° and 90° of the old direction (no neighbour) within ±7°, not outside", () => {
+  it("held at 45° and 90° of the old direction (no neighbour) within the window (±7° at 400″ with the default width), not outside", () => {
     for (const [want, finger] of [[45, 41], [45, 49], [90, 84], [90, 96], [135, 129], [0, 5], [-45, -50]] as const) {
       const s = swingEnd(one(), "a", 1, at(finger, 400))!;
       expect(s.snapped, `${finger}° near ${want}°`).toBe(true);
@@ -80,7 +80,7 @@ describe("swingEnd: the other end stands, the end follows the finger", () => {
 describe("the stroke: lift keeps the swing; «Отменить» has the drawing from before", () => {
   it("a swung pull ends where the finger lifts (held at 45°); a canceled one keeps nothing", () => {
     const before = one({ lengthIn: 600 });
-    const g = { kind: "pull" as const, id: "a", end: 1 as const, before, swung: true };
+    const g = { kind: "pull" as const, id: "a", end: 1 as const, before };
     const next = finishStroke(g, before, at(44, 400), 20, false, { id: "x", attrs });
     expect(dirOf(next.runs[0]!, 1)).toBeCloseTo(45, 0);
     expect(finishStroke(g, before, at(44, 400), 20, true, { id: "x", attrs })).toBe(before);
@@ -114,7 +114,7 @@ describe("review of #1205", () => {
     expect(s.drawing.runs[0]!.lengthIn).toBe(405);
     expect(runLengthIn(s.drawing.runs[0]!)).toBe(405);
   });
-  it("hysteresis: entered within 7°, held to 9°, left beyond; not entered between 7° and 9° from outside", () => {
+  it("hysteresis: entered within the window (7° at 400″), held to 1.5 × it, left beyond; not entered between from outside", () => {
     const out = SNAP_ANGLE_DEG + 1; // 8° off the step
     expect(swingEnd(one(), "a", 1, at(45 + out, 400))!.snapped).toBe(false); // from outside: not entered
     const entered = swingEnd(one(), "a", 1, at(45 + SNAP_ANGLE_DEG - 0.5, 400))!;

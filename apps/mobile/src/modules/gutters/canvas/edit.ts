@@ -27,16 +27,27 @@ export function endAt(d: Drawing, a: P, p: P, tolIn: number, except?: string): P
 
 /**
  * What a line being drawn is held by right now (for the tick under the finger, DS §15.6): another gutter's end (its point as the key),
- * a step of 45° from the start (the step as the key), or nothing (null). The same rules as `endAt`.
+ * a step of 45° from the start (the step as the key), or nothing (null). The same rules as `endAt`, but decided by the finger's
+ * DISTANCE / ANGLE with a hysteresis (`prev` — the key of the last frame: left only past 1.5 × the window), not by whether the rounded
+ * point equals a snapped one — a wobble of an inch at the edge of a window gave a tick every other frame.
  */
-export function drawSnap(d: Drawing, a: P, p: P, tolIn: number, except?: string): string | null {
+export function drawSnap(d: Drawing, a: P, p: P, tolIn: number, except?: string, prev: string | null = null): string | null {
   const ends = endsOf(d, except).filter((e) => e[0] !== a[0] || e[1] !== a[1]);
-  const s = snapPoint(p, ends, tolIn);
-  const onEnd = ends.find((e) => e[0] === s[0] && e[1] === s[1]);
-  if (onEnd) return `e:${onEnd[0]},${onEnd[1]}`;
-  const t = snapDirection(a, s);
-  if (t[0] === s[0] && t[1] === s[1]) return null;
-  return `s:${Math.round((Math.atan2(t[1] - a[1], t[0] - a[0]) * 180) / Math.PI)}`;
+  let best: P | null = null, bd = Infinity;
+  for (const e of ends) {
+    const dist = Math.hypot(e[0] - p[0], e[1] - p[1]);
+    const lim = prev === `e:${e[0]},${e[1]}` ? tolIn * SNAP_LEAVE_RATIO : tolIn;
+    if (dist <= lim && dist < bd) { best = e; bd = dist; }
+  }
+  if (best) return `e:${best[0]},${best[1]}`;
+  const v: P = [p[0] - a[0], p[1] - a[1]];
+  if (Math.hypot(v[0], v[1]) < 1) return null;
+  const raw = Math.atan2(v[1], v[0]);
+  const step = Math.PI / 4;
+  const m = Math.round(raw / step) * step;
+  const key = `s:${Math.round((m * 180) / Math.PI)}`;
+  const win = ((prev === key ? SNAP_ANGLE_DEG + 2 : SNAP_ANGLE_DEG) * Math.PI) / 180;
+  return Math.abs(raw - m) <= win ? key : null;
 }
 
 export function addRun(d: Drawing, id: string, a: P, b: P, attrs: DrawnRun["attrs"]): Drawing {
@@ -218,16 +229,20 @@ export function inWindow(diff: number, dist: number, tolIn: number, leave = fals
 /**
  * The end of ANOTHER gutter (same storey) the finger is near — an end is a magnet in every mode: along, across, and a corner's joint
  * (founder 12.11: «прилипает всегда»). Entered within `tolIn`, a held one (`held`) is left only past SNAP_LEAVE_RATIO × that.
- * `skip` — gutters that move (their own ends are no magnet), `except` — points that are no magnet (the standing end).
+ * `skip` — gutters that move (their own ends are no magnet), `stand` — the standing ends of the moving gutters: no magnet themselves,
+ * nor the other end of a gutter that touches one (spec 33 П35 review: an end lay on the neighbour's far end, a double count).
  */
-export function endNear(d: Drawing, story: DrawnRun, skip: Set<string>, p: P, tolIn: number, held: P | null, except: P[] = []): P | null {
+export function endNear(d: Drawing, story: DrawnRun, skip: Set<string>, p: P, tolIn: number, held: P | null, stand: P[] = []): P | null {
   let best: P | null = null, bd = Infinity;
+  const at = (q: P, e: P) => Math.hypot(e[0] - q[0], e[1] - q[1]) <= 1.5;
   for (const x of d.runs) {
     if (skip.has(x.id) || !sameStory(x, story)) continue;
+    // a gutter that touches a standing end: its OTHER end is no magnet either (the moving gutter would lie on it — two gutters with both ends shared)
+    const partner = stand.some((e) => at(x.a, e) || at(x.b, e));
     for (const q of [x.a, x.b]) {
-      if (except.some((e) => Math.hypot(e[0] - q[0], e[1] - q[1]) <= 1.5)) continue;
+      if (partner || stand.some((e) => at(q, e))) continue;
       const dist = Math.hypot(q[0] - p[0], q[1] - p[1]);
-      const lim = held && Math.hypot(held[0] - q[0], held[1] - q[1]) <= 1.5 ? tolIn * SNAP_LEAVE_RATIO : tolIn;
+      const lim = held && at(q, held) ? tolIn * SNAP_LEAVE_RATIO : tolIn;
       if (dist <= lim && dist < bd) { best = q; bd = dist; }
     }
   }
@@ -353,11 +368,12 @@ export interface CornerMove {
 
 /**
  * A corner taken and moved (#818, П35, founder 12.11 «оттягивать угол»): the joint of two gutters follows the finger, both
- * gutters stay fixed at their far ends. Each side's direction (far end → joint) is held at a step of 45° of the plan within
- * ±SNAP_ANGLE_DEG (a side already held stays to +SNAP_LEAVE_EXTRA_DEG); both held — the joint is the crossing of the two rays (a
+ * gutters stay fixed at their far ends. Each side's direction (far end → joint) is held at a step of 45° of the plan, or in its own
+ * direction, within a window `tolIn` wide across the ray (`inWindow`; once held SNAP_LEAVE_RATIO × that); both held — the joint is the crossing of the two rays (a
  * right angle between walls along the axes), one — on its ray, none — free. Lengths: the distance to the joint, whole inches,
- * written as `lengthIn`. null — no corner of that id, a side would be shorter than MIN_RUN_IN, the joint would land on another
- * gutter's end (the caller keeps the last frame), or the sides would be parallel with no way to cross.
+ * written as `lengthIn`. null — no corner of that id, a side would be shorter than MIN_RUN_IN, a turn under MIN_TURN_DEG
+ * (in one line) or folded back on itself, or the sides would be parallel with no way to cross (the caller keeps the last frame).
+ * The joint lands exactly on another gutter's end (`endNear`, `end` of the result) — never on a far end of a gutter that meets the pair.
  */
 /** a corner that can be taken: two ends and no third one of the same storey at the joint (spec П35) */
 export function cornerMovable(d: Drawing, cornerId: string): boolean {
@@ -402,7 +418,7 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
     return onOrig ? ray(orig) : null;
   });
   // another gutter's end beats the rays: the joint lands exactly on it (a three-ended joint forms on release)
-  const tgt = endNear(d, rs[0]!.r, new Set(rs.map((q) => q.r.id)), p, tolIn, onEnd);
+  const tgt = endNear(d, rs[0]!.r, new Set(rs.map((q) => q.r.id)), p, tolIn, onEnd, far);
   let at: P = p;
   if (tgt) at = tgt;
   else if (rays[0] && rays[1]) {
@@ -428,7 +444,7 @@ export function moveCorner(d: Drawing, cornerId: string, p: P, held: [boolean, b
   const angle = Math.round((Math.abs(Math.atan2(cross2(sub2(far[0]!, at), sub2(far[1]!, at)), dot2(sub2(far[0]!, at), sub2(far[1]!, at)))) * 180) / Math.PI);
   // a corner stays a corner: the frame that would lay the two sides almost in one line (a turn under MIN_TURN_DEG) is not drawn — it would
   // stop being found, and its method and splash guard would be orphaned
-  if (180 - angle < MIN_TURN_DEG) return null;
+  if (180 - angle < MIN_TURN_DEG || angle < MIN_TURN_DEG) return null; // laid in one line, or folded back on itself
   const nowHeld: [boolean, boolean] = tgt ? [false, false] : [!!rays[0], !!rays[1]];
   if (same) return { drawing: d, deg: angle, held: nowHeld, ...(tgt ? { end: tgt } : {}) };
   const ids = new Map(rs.map((q, i) => [q.r.id, { end: q.x.end, len: lens[i]! }]));
