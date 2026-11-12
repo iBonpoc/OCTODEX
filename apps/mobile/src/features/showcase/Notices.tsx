@@ -43,6 +43,14 @@ export function NoticesSection() {
           <T v="body">{t("ds.note.undone", { n: undone })}</T>
         </View>
       </Card>
+      {/* #1193 п.6 (DS §15.2): «Отменить» that is too late — the thing was changed since: nothing is taken back, the toast says so */}
+      <Card>
+        <T v="heading">{t("ds.note.late")}</T>
+        <T v="caption" tone="mut">{t("ds.note.lateHint")}</T>
+        <View testID="showcase-note-late">
+          <Button label={t("ds.note.lateShow")} variant="secondary" onPress={() => toast.show(t("ds.note.lateText"), () => false)} />
+        </View>
+      </Card>
       <Card>
         <T v="heading">{t("ds.note.offline")}</T>
         <T v="caption" tone="mut">{t("ds.note.offlineHint")}</T>

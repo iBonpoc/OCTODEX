@@ -17,7 +17,7 @@ import { moduleActive, type ModuleEstimateStore } from "../registry";
 import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
 import type { DocLang } from "@/i18n/translate";
-import { gutterData, K, KEY, ownFields, putMeasurement, withGutterData } from "./data";
+import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData } from "./data";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 import type { CatalogItem } from "@/data/types";
@@ -239,11 +239,8 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
     ok: true,
     estimateId,
     updated: !!e,
-    undo: () => {
-      undoSave();
-      // the measurement is a draft again: «Смета» stays in reach (the revision itself is history, it stays)
-      if (typeof undoReady === "function") (undoReady as () => void)();
-      t.undo();
-    },
+    // the estimate, the measurement a draft again («Смета» stays in reach; the revision itself is history, it stays) and
+    // the lead's new client: all of them go back or none (DS §15.2)
+    undo: undoAll(store, [t.undo, undoReady, undoSave]),
   };
 }

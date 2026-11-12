@@ -67,8 +67,8 @@ export default function NewLead() {
       service: undefined,
     });
     const linked = from.module && from.ref ? moduleDef(from.module)?.leadCreated?.({ ref: from.ref, leadId: r.id }, store) : undefined;
-    // «Отменить» takes the link back first, then the lead (rule 5)
-    const undo = typeof linked === "function" ? () => ((linked as () => void)(), r.undo()) : r.undo;
+    // «Отменить» (rule 5): the lead and the module's link to it, both or neither (#1244, DS §15.2)
+    const undo = store.undoTogether([r.undo, linked]);
     toast.show(store.online ? t("lead.saved", { name: name.trim() }) : t("offline.queued"), undo);
     router.replace(`/lead/${r.id}`);
   };
