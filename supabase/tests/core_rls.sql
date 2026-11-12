@@ -11373,13 +11373,9 @@ select tst.ok((select count(*) = 1 and bool_and(unit_cost_cents = 1000 and vendo
                  from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'),
   'T145 the first cost: one row, with the supplier, who and manual');
 -- the same cost again (a replay, a rename): no row
-update public.catalog_item_costs set unit_cost_cents = 1000 where item_id = '51440000-0000-4000-8000-000000000001';
+update public.catalog_item_costs set unit_cost_cents = 1000, markup_bps = 500 where item_id = '51440000-0000-4000-8000-000000000001';
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 1,
-  'T145 the same cost, tax and markup: no row');
--- РС-9 (T202): a markup change alone is a row of the history too (it was not before — the card shows the markup's history)
-update public.catalog_item_costs set markup_bps = 500 where item_id = '51440000-0000-4000-8000-000000000001';
-select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001' and markup_bps = 500$q$) = 1,
-  'T145 only the markup changed: a row with it (РС-9)');
+  'T145 the same cost and tax (only the markup changed): no row');
 -- an old phone sends the cost on the item row (t30 moves it): a row too
 update public.catalog_items set unit_cost_cents = 1100 where id = '51440000-0000-4000-8000-000000000001';
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001' and unit_cost_cents = 1100$q$) = 1,
@@ -11397,7 +11393,7 @@ select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' from 
                 where item_id = '51440000-0000-4000-8000-000000000001' and unit_cost_cents = 1100),
   'T145 …the earlier row keeps the earlier supplier');
 :as_office_a
-select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 4, 'T145 the office reads the history (three cost rows and the markup row of РС-9)');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 3, 'T145 the office reads the history');
 -- a cost row never moves to another item (director's check of #459 Н3)
 update public.catalog_item_costs set item_id = '99000000-0000-4000-8000-000000000001' where item_id = '51440000-0000-4000-8000-000000000001';
 select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 1, 'T145 a cost row keeps its item');
@@ -11413,7 +11409,7 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T14
 update public.memberships set permissions_override = '{"view_costs": true}'::jsonb
  where user_id in ('a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000003') and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_sales_a
-select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 4, 'T145 sales with view_costs reads the history');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 3, 'T145 sales with view_costs reads the history');
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 the tech never, even with view_costs');
 :as_super
@@ -13636,12 +13632,12 @@ drop function tst.t200_save(text, text, jsonb, jsonb, jsonb);
 
 -- ======================================================================================================================
 -- T202 (РС-9, #1096): the catalog item's card — barcode, product link, direction; the history of the selling price and
--- the markup (catalog_cost_history), read only by who sees costs. Test prices.
+-- the markup (catalog_price_history: before and after, who), read only by who sees costs; the purchase history
+-- (catalog_cost_history) gets no price rows. Test prices.
 -- ======================================================================================================================
 :as_office_a
 insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
   ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger', 'ea', 1190);
--- the fields
 update public.catalog_items set barcode = '0123456789012', product_url = 'https://abc.example/hanger?id=5',
        service_category_id = (select id from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1)
  where id = 'a2020000-0000-4000-8000-000000000001';
@@ -13653,46 +13649,66 @@ select tst.fails_like(format($q$update public.catalog_items set product_url = %L
 select tst.fails_like(format($q$update public.catalog_items set barcode = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, repeat('1', 65)), '%barcode%', 'T202 a barcode past 64 — refused');
 select tst.fails_like($q$update public.catalog_items set barcode = E'12\n34' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%barcode%', 'T202 a barcode with a control character — refused');
 select tst.fails_like(format($q$update public.catalog_items set service_category_id = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, :'b_cat'), '%catalog_items_service_category_fk%', 'T202 another company''s direction — refused');
--- an older phone's save (the whole item, without the new columns) keeps them
-update public.catalog_items set name = 'T202 Hanger 5in', unit = 'ea', unit_price_cents = 1190, kind = 'material' where id = 'a2020000-0000-4000-8000-000000000001';
-select tst.ok((select barcode = '0123456789012' and product_url is not null and service_category_id is not null
+-- an older phone's save — the whole item as an upsert (ops.ts catalog.save), without the new columns, the same price:
+-- the new fields stay, no price row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1190)
+  on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents, kind = excluded.kind;
+select tst.ok((select barcode = '0123456789012' and product_url is not null and service_category_id is not null and name = 'T202 Hanger 5in'
                  from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 an older phone''s save keeps the new fields');
-:as_super
-select tst.ok(not exists (select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'),
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0,
               'T202 the same price saved again: no history row');
--- the price changes: a row of its own, who and when; the cost and the markup: a cost row with the markup
-:as_office_a
-update public.catalog_items set unit_price_cents = 1213 where id = 'a2020000-0000-4000-8000-000000000001';
+-- the price changes (an upsert, as the phone): before and after, who; the same upsert again (a replay of the queue): no row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select count(*) = 1 and bool_and(prev_unit_price_cents = 1190 and unit_price_cents = 1213 and markup_bps is null
+                  and by = 'a0000000-0000-0000-0000-000000000002' and source = 'manual')
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 the price changed: $11.90 → $12.13, who; the same save again — no second row');
+-- the markup: a first one (insert, none before), a change, the same again
 insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
   ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1000, 1025, 1000);
 update public.catalog_item_costs set markup_bps = 1200 where item_id = 'a2020000-0000-4000-8000-000000000001';
-update public.catalog_item_costs set markup_bps = 1200 where item_id = 'a2020000-0000-4000-8000-000000000001';
-:as_super
-select tst.ok((select count(*) = 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'
-                  and unit_price_cents = 1213 and unit_cost_cents is null and by = 'a0000000-0000-0000-0000-000000000002'),
-              'T202 the price changed: a row with the new price, no cost, who changed it');
-select tst.ok((select array_agg(markup_bps order by at, id) = array[1000, 1200] from public.catalog_cost_history
-                where item_id = 'a2020000-0000-4000-8000-000000000001' and unit_cost_cents is not null),
-              'T202 the cost row keeps the markup; a markup change alone writes a row; the same markup again — none');
--- a cost of a labor item is kept (spec §9 п.2: catalog_item_costs takes a cost of any kind)
-:as_office_a
+update public.catalog_item_costs set markup_bps = 1200, unit_cost_cents = 1010 where item_id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select array_agg(coalesce(prev_markup_bps, -1) || '>' || markup_bps order by at, id) = array['-1>1000', '1000>1200']
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and markup_bps is not null),
+              'T202 the markup: the first (none before) and a change; the same markup with another cost — no row');
+-- a markup only, no cost (a labor item: catalog_item_costs takes a cost and a markup of any kind, spec §9 п.2)
 insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
   ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T202 Install', 'hr', 9000);
-insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents) values ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 4500);
-select tst.ok((select unit_cost_cents = 4500 from public.catalog_item_costs where item_id = 'a2020000-0000-4000-8000-000000000002'), 'T202 a labor item takes a cost');
--- who reads the history: who sees costs only
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 4500, 500);
+select tst.ok((select unit_cost_cents = 4500 from public.catalog_item_costs where item_id = 'a2020000-0000-4000-8000-000000000002')
+              and tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000002' and markup_bps = 500$q$) = 1,
+              'T202 a labor item takes a cost and a markup; its markup is in the history');
+-- an older phone sends the markup on the item row (t30 moves it to catalog_item_costs): a row too
+update public.catalog_items set markup_bps = 1500 where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and prev_markup_bps = 1200 and markup_bps = 1500$q$) = 1,
+              'T202 a markup written the old way is in the history');
+-- the purchase history (older phones' «История закупки и налога», the supplier's screen) gets no price or markup row
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 2,
+              'T202 the purchase history keeps only the purchase rows (the first cost and the cost change)');
+-- who reads: the office yes; a tech, sales without view_costs, another company no; nobody writes it by hand
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 4, 'T202 the office reads the price history');
+select tst.fails($q$insert into public.catalog_price_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 the office does not write the history by hand');
+select tst.fails($q$update public.catalog_price_history set unit_price_cents = 1 where item_id = 'a2020000-0000-4000-8000-000000000001'$q$, 'T202 …nor change it (no update right)');
 :as_tech_a
-select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 a tech reads no price history');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 a tech reads no price history');
 :as_sales_a
-select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 sales without view_costs reads no price history');
-select tst.fails($q$insert into public.catalog_cost_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 nobody writes the history by hand');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 sales without view_costs reads none');
 :as_owner_b
-select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 another company reads none');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 another company reads none');
 :as_super
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_price_history()', 'EXECUTE')
               and not has_function_privilege('anon', 'app.tg_price_history()', 'EXECUTE')
-              and not has_function_privilege('authenticated', 'app.tg_cost_history()', 'EXECUTE')
-              and (select prosecdef from pg_proc where oid = 'app.tg_price_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
+              and not has_function_privilege('authenticated', 'app.tg_markup_history()', 'EXECUTE')
+              and not has_table_privilege('anon', 'public.catalog_price_history', 'SELECT')
+              and not has_table_privilege('authenticated', 'public.catalog_price_history', 'INSERT')
+              and (select prosecdef from pg_proc where oid = 'app.tg_price_history()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.tg_markup_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
 \echo 'T202 the catalog card: barcode, link, direction; the price and markup history'
 
 \echo 'ALL TESTS PASSED'
