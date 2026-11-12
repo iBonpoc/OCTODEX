@@ -19,7 +19,7 @@
  --draw-water:#8FA2FF;--draw-power:#FFA03C;--draw-drain:#A9AEBA;--draw-note:#FF6B6B;
  --draw-run-w:4px;--draw-run-w-sel:6px;--draw-ds-r:7px;--draw-node-r:5px;--draw-label-gap:4px;
  /* the drawing on paper (a module's measurement sheet, its PDFs, the estimate's page; #739): sheet units */
- --draw-print-sheet-w:800px;--draw-print-page-w:420px;--draw-print-margin:24px;--draw-print-run-w:2.5px;--draw-print-thin-w:1px;--draw-print-dim-off:30px;--draw-print-dim-step:18px;--draw-print-ext-gap:4px;--draw-print-tick:5px;--draw-print-num-r:10px;--draw-print-ds-r:6px;--draw-print-font:13px;--draw-print-font-sm:11px;--draw-print-stamp-h:76px;--draw-print-scale-px:120px;--draw-print-panel-min:120px;--draw-print-panel-gap:28px;
+ --draw-print-sheet-w:800px;--draw-print-page-w:420px;--draw-print-margin:24px;--draw-print-run-w:2.5px;--draw-print-thin-w:1px;--draw-print-dim-off:30px;--draw-print-dim-step:18px;--draw-print-ext-gap:4px;--draw-print-tick:5px;--draw-print-num-r:10px;--draw-print-ds-r:6px;--draw-print-font:13px;--draw-print-font-sm:11px;--draw-print-stamp-h:76px;--draw-print-scale-px:120px;--draw-print-panel-min:120px;--draw-print-panel-gap:28px;--draw-print-inset-frac:0.1;--draw-print-inset-w:190px;--draw-print-inset-h:96px;
 --st-neu:#C9CDD6;
  --shadow-sm:0 2px 8px rgba(0,0,0,.25);--shadow-md:0 6px 16px rgba(0,0,0,.35);--shadow-lg:0 30px 80px rgba(0,0,0,.35);--scrim-crop:rgba(0,0,0,.55);--veil:rgba(0,0,0,.18);--veil-strong:rgba(0,0,0,.3);--crop-line:rgba(255,255,255,.35);
  --on-fill-btn-bg:rgba(255,255,255,.35);--on-fill-btn-bd:rgba(0,0,0,.35);
