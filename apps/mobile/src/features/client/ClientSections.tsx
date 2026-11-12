@@ -71,7 +71,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
   const { t, money, day } = useI18n();
   const toast = useToast();
   const office = role !== "tech";
-  const r = clientRecords(db, c, role);
+  const r = clientRecords(db, c, role, store.mode);
   const [newProp, setNewProp] = useState<Property | null>(null);
   const [people, setPeople] = useState(false);
   const [hist, setHist] = useState<"all" | HistoryKind>("all");

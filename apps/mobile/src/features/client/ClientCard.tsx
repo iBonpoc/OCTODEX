@@ -68,7 +68,7 @@ export function ClientCardBody({ c }: { c: Customer }) {
   /** the same rules as the «＋» of this card: the role, the tie to the client */
   const estimateItem = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate");
   const [main] = peopleOf(c);
-  const r = clientRecords(db, c, role);
+  const r = clientRecords(db, c, role, store.mode);
   const counts = clientCounts(r);
   const props = r.properties;
   const openTasks = r.tasks.filter((x) => !x.doneAt);

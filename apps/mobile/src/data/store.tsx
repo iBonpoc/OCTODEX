@@ -1891,6 +1891,9 @@ export function StoreProvider({
         );
       },
       sendEstimate: (id, tk) => {
+        // #1113: a tech never sends (the server's send_estimate is the office side's — T142): nothing «sent» on his phone,
+        // no link made, nothing queued to be refused
+        if (role === "tech") return noop;
         const cur = dbRef.current.estimates.find((e) => e.id === id);
         // a revoked token never comes back (the server refuses it too and makes its own)
         const token = (cur?.linkRevokedAt ? undefined : cur?.token) ?? tk ?? newToken();

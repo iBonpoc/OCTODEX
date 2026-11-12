@@ -14,9 +14,10 @@ import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
+import { canEditCatalog } from "@/features/access";
 
 const KINDS: CatalogKind[] = ["service", "labor", "material", "kit"];
 
@@ -64,6 +65,15 @@ export default function CatalogItemScreen() {
     back();
   };
   const comps = it.components ?? [];
+
+  // the price list is the office's (#868; catalog_items_update — staff): the tech neither changes nor opens an item —
+  // the list does not open it for him either (canEdit in catalog/index.tsx)
+  if (!canEditCatalog(store.role))
+    return (
+      <Screen title={t("cat.edit")} back={back}>
+        <Empty icon="alert" title={t("mny.noAccess")} testID="no-access" />
+      </Screen>
+    );
 
   return (
     <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>

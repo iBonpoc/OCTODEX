@@ -3543,4 +3543,6 @@ export const es: Dict = {
   "sup.taxNotSet": "Sin impuesto: los artículos conservan el suyo",
   "sup.notFound": "Proveedor no encontrado: aún cargando o eliminado",
   "sup.vendorLocked": "Vendedor: {name} (lo cambia la oficina)",
+  // «Данные и деньги» #1113: a tech does not send an estimate
+  "est.tech.officeSends": "La oficina envía el presupuesto al cliente",
 };

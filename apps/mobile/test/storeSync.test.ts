@@ -1453,6 +1453,36 @@ describe("unit:storeSync — two people one after the other on one phone (#864, 
   });
 });
 
+describe("unit:storeSync — a tech does not send an estimate to the client (#1113, П-23/П-44; spec 35 §4д п.10)", () => {
+  const sendAs = async (dbRole: string) => {
+    signIn("u1", "c1");
+    Object.assign(auth.company!, { role: dbRole });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const d = makeSeed();
+    const e = d.estimates.find((x) => x.id === "e6")!;
+    Object.assign(e, { status: "draft", token: undefined, sentAt: undefined });
+    server.loads.splice(0).forEach((x) => x.resolve(d));
+    await settle();
+    (valueOf(r) as unknown as { sendEstimate: (id: string) => void }).sendEstimate("e6");
+    await wait(1700); // the outbox tick
+    await settle();
+    const est = (valueOf(r) as unknown as { db: { estimates: { id: string; status: string; token?: string }[] } }).db.estimates.find((x) => x.id === "e6")!;
+    return { ops: server.sends.map((x) => (x.op as { k: string }).k), est };
+  };
+  it("the tech: nothing changes and nothing goes to the server (before: «sent» on the phone + a link, the op refused 42501)", async () => {
+    const { ops, est } = await sendAs("tech");
+    expect(ops).not.toContain("estimate.send");
+    expect(est.status).toBe("draft");
+    expect(est.token).toBeUndefined();
+  });
+  it("the office: sent as before", async () => {
+    const { ops, est } = await sendAs("office");
+    expect(ops).toContain("estimate.send");
+    expect(est.status).toBe("sent");
+  });
+});
+
 describe("unit:storeSync — sales take the deposit through the server's deposit function (#868, 17, T73)", () => {
   const withDeposit = () => {
     const d = makeSeed();
