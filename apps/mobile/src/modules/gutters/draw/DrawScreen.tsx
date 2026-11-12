@@ -30,7 +30,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { autoDownspouts } from "../canvas/autoDs";
-import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, pulledSide, pullSideIn, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -58,6 +58,8 @@ import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
+/** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
+const SNAP_PX = sizes.hitMin / 4;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
@@ -69,9 +71,9 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { ic
   return (
     <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ selected: !!active }} containerStyle={grow ? { flex: 1 } : undefined} style={{ alignItems: "center", gap: space[1], minWidth: sizes.hitMin }}>
       <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
       </View>
-      <T v="micro" w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={grow ? 1 : undefined}>{label}</T>
+      <T v="micro" center w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={grow ? 1 : undefined}>{label}</T>
     </Press>
   );
 }
@@ -175,7 +177,7 @@ export default function DrawScreen() {
     return () => clearInterval(iv);
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
-  const [hint, setHint] = useState<Tool | "select" | null>(null);
+  const [hint, setHint] = useState<Tool | "select" | "move" | null>(null);
   const live = useLive();
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
@@ -285,12 +287,16 @@ export default function DrawScreen() {
   );
 
   const tolIn = () => FINGER / (cur.current.view?.k ?? 1);
+  /** the width of a magnet's window in plan inches (pixels, not degrees: the same on a 3 ft and a 30 ft gutter) */
+  const snapIn = () => SNAP_PX / (cur.current.view?.k ?? 1);
   const plan = (x: number, y: number): P => (cur.current.view ? toPlan(cur.current.view, [x, y]) : [0, 0]);
 
   // one finger: draw a run, or drag an end of the picked run
   const dragRef = useRef<Stroke | null>(null);
   /** a stroke just ended and no finger has touched down since: on the web the lift of a drag is also a tap on the spot — not a tap on an end cap (it turned the new line's face, #854) */
   const liftTap = useRef(false);
+  /** what the line being drawn is held by (`drawSnap`): a tick on entering a snap, none while it stays */
+  const lineSnap = useRef<string | null>(null);
   // where the finger touched down: the pan activates only after it has moved a little
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
@@ -304,18 +310,40 @@ export default function DrawScreen() {
       downTime.current = Date.now();
     },
     onActivate: () => {
+      lineSnap.current = null;
       const { drawing: d, tool: tl } = cur.current;
       const p0 = plan(downAt.current[0], downAt.current[1]);
       const h = hitTest(withoutDs(d, !cur.current.layers.ds), p0, tolIn());
-      const held = Date.now() - downTime.current >= motion.durSlow;
-      // a free end cap taken (#504, founder 11.11: «долгое нажатие на эндкапу — тяни за край»): held, with any tool but «Желоб», or at
-      // once on the picked gutter's handle — the end follows the finger along its gutter, longer or
-      // shorter. A corner's end is not taken (it would break the corner). «Желоб» without a hold goes on from the end, as before
-      if (h?.kind === "end" && cur.current.canSave && tl !== "line" && (held || h.id === cur.current.selected) && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap") {
-        dragRef.current = { kind: "pull", id: h.id, end: h.end, before: d, from: p0, held: null };
-        haptics.light(); // picked up
-        setSelected(h.id);
-        return;
+      const held = Date.now() - downTime.current >= motion.longPressMs;
+      // An end or a corner taken (#818, П35; founder 12.11: «долгое нажатие работает в любом режиме»). Taken: by a long press on any end
+      // with ANY tool, and by a drag from an end with the downspout tool (it has no other use for it; the picked gutter's ring too).
+      // Not taken: «Желоб» without a hold — it goes on from the end, as drawing always did: a new line (a corner, or the same gutter
+      // grown straight on); from the picked gutter's ring along the gutter it is a pull, across it a new line (#504).
+      const endHere = h?.kind === "end" && cur.current.canSave ? h : null;
+      if (endHere) {
+        const corner = findCorners(d).find((c) => c.runs.some((x) => x.id === endHere.id && x.end === endHere.end));
+        const sel = cur.current.selected;
+        const ring = endHere.id === sel || (!!corner && corner.runs.some((x) => x.id === sel));
+        if (held || (ring && tl !== "line") || tl === "ds") {
+          // a joint of three ends is not moved (spec П35): say why, once, instead of doing nothing
+          if (corner && !cornerMovable(d, corner.id)) {
+            haptics.warning();
+            toast.show(t("mod.gutters.draw.hint.threeEnds"));
+            return;
+          }
+          if (corner && cornerMovable(d, corner.id)) {
+            dragRef.current = { kind: "corner", cornerId: corner.id, before: d, from: p0, held: [true, true], tol: snapIn(), onEnd: null };
+            setSelected(endHere.id);
+            haptics.light(); // picked up
+            return;
+          }
+          if (!corner && runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
+            dragRef.current = { kind: "pull", id: endHere.id, end: endHere.end, before: d, from: p0, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
+            setSelected(endHere.id);
+            haptics.light(); // picked up
+            return;
+          }
+        }
       }
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
@@ -327,10 +355,10 @@ export default function DrawScreen() {
       // «Желоб» from an end continues the gutter (a corner, or the same gutter grown straight on); so does a long press
       // on an end with «Водосток». «Выбрать» (a quick drag that moved an end) is gone (#687): the length is changed by
       // its label or «Свойства»; handles on the ends of the picked gutter come with #682
-      if (tl === "line" || (held && h?.kind === "end")) {
+      if (tl === "line") {
         const a = startAt(d, p0, tolIn());
-        // «Желоб» held on a free cap, or at once on the picked gutter's handle: along the gutter it is a pull, across it a new gutter (decided on the first move)
-        const cap = tl === "line" && (held || h?.kind === "end" && h.id === cur.current.selected) && h?.kind === "end" && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
+        // on the picked gutter's ring (a free end): along the gutter it is a pull, across it a new gutter (decided on the first move)
+        const cap = h?.kind === "end" && h.id === cur.current.selected && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
         dragRef.current = { kind: "line", a, ...(cap && h?.kind === "end" ? { pullable: { id: h.id, end: h.end, before: d } } : {}) };
         setGhost({ a, b: a });
       }
@@ -344,33 +372,54 @@ export default function DrawScreen() {
         const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
         const far = Math.hypot(p[0] - g.a[0], p[1] - g.a[1]) > tolIn();
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
-          dragRef.current = { kind: "pull", ...g.pullable, fromLine: true };
+          // along its own line: the end is taken and follows the finger (it may then leave the line: it swings, #818)
+          dragRef.current = { kind: "pull", ...g.pullable, fromLine: true, from: g.a, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
           haptics.light(); // picked up (the «Желоб» stroke turned into a pull)
           setGhost(null);
           setSelected(g.pullable.id);
-          setDrawing(moveEndAlong(g.pullable.before, g.pullable.id, g.pullable.end, p));
+          const sw = swingEnd(g.pullable.before, g.pullable.id, g.pullable.end, grabbedEnd(g.pullable.before, g.pullable.id, g.pullable.end, g.a, p), HELD_ORIGINAL, snapIn());
+          if (sw) setDrawing(sw.drawing);
           return;
         }
         if (far) dragRef.current = { kind: "line", a: g.a }; // across: a new gutter, as before
       }
-      if (g.kind === "line") setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
+      if (g.kind === "line") {
+        setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
+        // a tick on every snap on entering it: another gutter's end, a step of 45° (DS §15.6)
+        const key = drawSnap(d, g.a, p, tolIn(), undefined, lineSnap.current);
+        if (drawTick(key, lineSnap.current)) haptics.selection();
+        lineSnap.current = key;
+      }
       else if (g.kind === "ds") setDrawing(moveDs(g.before, g.id, p));
+      else if (g.kind === "corner") {
+        const mv = moveCorner(g.before, g.cornerId, grabbedCorner(g.before, g.cornerId, g.from, p), g.held, g.tol, g.onEnd ?? null);
+        // none: the joint would land on another gutter's end, or a side would be too short — the last frame stays
+        if (mv) {
+          setDrawing(mv.drawing);
+          const f = findCorners(mv.drawing).find((c) => c.id === g.cornerId);
+          const fixed = f ? f.runs.map((x) => mv.drawing.runs.find((r) => r.id === x.id)!).map((r, i) => (f.runs[i]!.end === 0 ? r.b : r.a)) : null;
+          if (f && fixed) setSwing({ a: fixed[0]!, b: f.at, deg: mv.deg });
+          // a tick on EVERY snap on entering it: a side onto a step / its own direction, the joint onto another gutter's end (DS §15.6, table «место → вибрация» in spec 33)
+          if (cornerTick(mv, g)) haptics.selection();
+          g.held = mv.held;
+          g.onEnd = mv.end ?? null;
+        }
+      }
       else if (g.kind === "pull") {
-        const run = g.before.runs.find((x) => x.id === g.id);
-        // the finger left the gutter's axis (#818): the end swings round the other one, free, held at 45° steps, till the lift;
-        // only the move from where it touched down counts (a cap is taken within a finger's radius, off the axis)
-        if (!g.swung && !g.fromLine && run && pulledSide(run, g.end, p, pullSideIn(cur.current.view?.k ?? 1), g.from)) g.swung = true;
-        if (g.swung) {
-          const sw = swingEnd(g.before, g.id, g.end, p, g.held ?? null);
-          // none: the end would land on another gutter's end — the last frame stays (and is what the lift keeps)
-          if (sw) {
-            setDrawing(sw.drawing);
-            const mv = sw.drawing.runs.find((x) => x.id === g.id);
-            if (mv) setSwing({ a: g.end === 0 ? mv.b : mv.a, b: g.end === 0 ? mv.a : mv.b, deg: sw.deg });
-            if (sw.snapped && g.held == null) haptics.selection(); // once on entering a step, not on every move at its edge
-            g.held = sw.step;
-          }
-        } else setDrawing(moveEndAlong(g.before, g.id, g.end, p));
+        // the end follows the finger (by its move from the touch): along its own line it stays straight and only grows or shrinks,
+        // across it swings round the other end, held at 45° steps (#818, П30) — no corridor, no tool to switch to
+        const sw = swingEnd(g.before, g.id, g.end, grabbedEnd(g.before, g.id, g.end, g.from, p), g.held ?? null, g.tol, g.onEnd ?? null);
+        // none: the end would land on another gutter's end — the last frame stays (and is what the lift keeps)
+        if (sw) {
+          setDrawing(sw.drawing);
+          const mv = sw.drawing.runs.find((x) => x.id === g.id);
+          if (mv && sw.step !== HELD_ORIGINAL) setSwing({ a: g.end === 0 ? mv.b : mv.a, b: g.end === 0 ? mv.a : mv.b, deg: sw.deg });
+          else setSwing(null);
+          // a tick on EVERY snap on entering it (a step of 45°, the gutter's own direction, another gutter's end), not on every move at its edge
+          if (pullTick(sw, g)) haptics.selection();
+          g.held = sw.step;
+          g.onEnd = sw.end ?? null;
+        }
       }
       else setDrawing(moveEnd(g.before, g.id, g.end, p, tolIn()));
     },
@@ -384,13 +433,13 @@ export default function DrawScreen() {
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
       const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: newRunAttrs(cur.current.ch, cur.current.story) });
-      if (g.kind === "end" || g.kind === "ds" || g.kind === "pull") {
+      if (g.kind === "end" || g.kind === "ds" || g.kind === "pull" || g.kind === "corner") {
         if (e.canceled) setDrawing(g.before);
         else {
           commit(next, g.before);
           if (next !== g.before) haptics.medium(); // set down (DS §15.6) — only when something moved
           // «Желоб»: drawn on / pulled out straight from the end → its length window, as growing a gutter always did (founder 09.11)
-          if (g.kind === "pull" && g.fromLine && next !== g.before) {
+          if (g.kind === "pull" && g.fromLine && next !== g.before && sameDirection(g.before, next, g.id)) {
             setQuickRun(g.id);
             quickGrew.current = true;
           }
@@ -427,6 +476,8 @@ export default function DrawScreen() {
         setLenEdit(lab.id.slice(4));
         return;
       }
+      // (the lift of a drag of an end or a corner is a tap on the spot on the web: not a tap on its label, #818 review)
+      if (lab?.id.startsWith("corner:") && liftTap.current) return;
       if (lab?.id.startsWith("corner:")) {
         setCornerSheet(lab.id.slice(7));
         return;
@@ -444,11 +495,14 @@ export default function DrawScreen() {
         setSheet(true); // its menu (founder 09.11)
         return;
       }
+      // …nor a tap that puts a downspout (the downspout tool drags ends and corners now)
+      if (tl === "ds" && liftTap.current) return;
       if (tl === "ds") {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch), cur.current.ch);
         if (next !== d) {
           commit(next);
+          haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
           // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open
@@ -768,6 +822,14 @@ export default function DrawScreen() {
     </View>
   );
   const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
+  // #818 (founder 12.11: «не понимаю, как тянуть край»): once per opening of the canvas, when a gutter is first picked, the hint bubble says how
+  // an end and a corner are taken, with any tool (the bubble the tools' hints use: it never replaces a toast with «Отменить», rule 5)
+  const movedHint = useRef(false);
+  useEffect(() => {
+    if (movedHint.current || !canSave || !selected || !drawing.runs.some((r) => r.id === selected)) return;
+    movedHint.current = true;
+    setHint("move");
+  }, [selected, canSave, drawing.runs]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;

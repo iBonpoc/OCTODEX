@@ -249,7 +249,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         ) : null}
 
         <View testID="view-photos">
-          <MeasurePhotos measurementId={m.id} testID="view-photo-strip" readOnly={!moduleActive(store.db.company, KEY)} />
+          <MeasurePhotos framed measurementId={m.id} testID="view-photo-strip" readOnly={!moduleActive(store.db.company, KEY)} />
         </View>
 
         {money$ && preview ? (
