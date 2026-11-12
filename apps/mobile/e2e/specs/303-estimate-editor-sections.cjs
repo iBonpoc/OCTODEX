@@ -26,14 +26,19 @@ exports.run = async (h) => {
   await line.fold(h);
   h.expect((await count('[data-testid^="est-line-"]')) === 2, "two rows");
 
+  // the title: the whole title in one go (a typed-by-letter title is cut by a blur that commits it),
+  // Enter by the keyboard (a blur commits the same title, so a field that has already gone is no failure)
+  const typeSectionName = async (name) => {
+    await vis('[data-testid^="est-sec-name-"]').first().locator("input").fill(name);
+    await p.keyboard.press("Enter");
+  };
   // «＋ Раздел»: the title is typed in the heading
   await tid("est-add-section").getByRole("button").click();
-  await vis('[data-testid^="est-sec-name-"]').first().locator("input").fill("Крыша");
-  await vis('[data-testid^="est-sec-name-"]').first().locator("input").press("Enter");
+  await typeSectionName("Крыша");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-sec-name-"]').length === 0, null, { timeout: 3000 });
   h.expect((await sections()) === 1, "one section");
   const sid = (await vis('[data-testid^="est-section-"]').first().getAttribute("data-testid")).replace("est-section-", "");
-  h.expect(/Крыша/.test(await tid(`est-section-${sid}`).innerText()), "the title stands in the heading");
+  { const ht = await tid(`est-section-${sid}`).innerText(); h.expect(/Крыша/.test(ht), `the title stands in the heading (${JSON.stringify(ht)})`); }
 
   // «⋯ → Переместить» the first row into it
   const first = (await vis('[data-testid^="est-line-"]').first().getAttribute("data-testid")).replace("est-line-", "");
@@ -70,8 +75,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => document.querySelectorAll('[role="menu"]').length === 0, null, { timeout: 3000 });
   // an estimate with a section saves: the server's check of the sums passes (no 22023), the sections are kept
   await tid("est-add-section").getByRole("button").click();
-  await vis('[data-testid^="est-sec-name-"]').first().locator("input").fill("Двор");
-  await vis('[data-testid^="est-sec-name-"]').first().locator("input").press("Enter");
+  await typeSectionName("Двор");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-section-"]').length === 1, null, { timeout: 3000 });
   const before = ((await h.db()).estimates ?? []).length;
   await tid("ue-save").getByRole("button").click();
