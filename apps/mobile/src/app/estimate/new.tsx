@@ -6,7 +6,7 @@ import * as Haptics from "expo-haptics";
 import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import { canSeeEstimate } from "@/features/access";
+import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { EstimateDoc, EstimateTemplate } from "@/data/types";
 import { canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
@@ -171,7 +171,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const setRecommended = (on: boolean) =>
     setDoc((d) => ({ ...d, options: d.options.map((o) => ({ ...o, recommended: o.id === option.id ? on : on ? false : o.recommended })) }));
 
-  const ok = !!customer && !!property && hasContent(doc);
+  // #1138: a tech saves a new estimate only where the server lets him (estimates_insert — a property he works at)
+  const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
+  const ok = !!customer && !!property && hasContent(doc) && mayHere;
   const save = (send: boolean) => {
     if (!customer || !property) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -373,9 +375,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           ) : (
             <>
               {!ok ? (
-                <T v="caption" tone="mut">
-                  {customer ? t("ue.empty") : t("ue.pickClient")}
-                </T>
+                <View testID={!mayHere && property ? "ue-not-here" : undefined}>
+                  <T v="caption" tone="mut">
+                    {!mayHere && property ? t("est.tech.notHere") : customer ? t("ue.empty") : t("ue.pickClient")}
+                  </T>
+                </View>
               ) : null}
               {/* #1113: sending is the office side's — a tech saves only (the main action then is «Сохранить») */}
               {canSeeClientLink(store.role) ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} /></View> : null}

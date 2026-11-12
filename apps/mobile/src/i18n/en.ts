@@ -3560,4 +3560,6 @@ export const en: Dict = {
   "sup.vendorLocked": "Vendor: {name} (the office changes it)",
   // «Данные и деньги» #1113: a tech does not send an estimate
   "est.tech.officeSends": "The office sends the estimate to the client",
+  // «Данные и деньги» #1138: a tech makes an estimate only where he works
+  "est.tech.notHere": "The office makes the estimate for this address: you have no visit here",
 };

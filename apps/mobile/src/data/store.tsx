@@ -20,6 +20,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
+import { canMakeEstimateAt } from "@/features/access";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
 /** app lead status → public.leads.status */
@@ -1841,7 +1842,7 @@ export function StoreProvider({
       addEstimate: (e) => {
         const id = uid();
         const serviceCategoryId = inheritCategory(dbRef.current, { kind: "estimate", leadId: e.leadId, customerId: e.customerId }, e.serviceCategoryId);
-        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId }] }), {
+        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId, createdBy: d.me }] }), {
           k: "estimate.add", id, versionId: uid(), optionId: uid(), customerId: e.customerId, propertyId: e.propertyId, title: e.title,
           totalCents: e.totalCents, depositCents: e.depositCents, marginPct: e.marginPct ?? null, lines: e.lines ?? [],
         });
@@ -1953,6 +1954,9 @@ export function StoreProvider({
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
+        // #1138: a tech makes a new estimate only where the server lets him (estimates_insert — a property he works at);
+        // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
+        if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return () => {};
         const { doc, linesFrom } = docForSave(prev?.status, doc0, uid);
         const sum = summarize(doc);
         const versionId = uid();
@@ -1962,6 +1966,8 @@ export function StoreProvider({
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
+              createdBy: prev ? prev.createdBy : d.me,
               // E3: an estimate keeps the template it was made from; a new one from a template counts one use (demo too)
               templateId: prev ? prev.templateId : templateId0,
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
