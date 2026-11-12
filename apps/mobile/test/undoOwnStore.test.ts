@@ -328,26 +328,23 @@ describe("unit:undoOwnStore — undoTogether, the director's 3rd review of #1244
     await settle();
     expect(valueOf(r).db.customers.some((x) => x.id === made.id)).toBe(false);
   });
-  it("a part not made by the store throws: the store's parts are back all the same, and the result is true (the toast closes)", async () => {
+  it("a part the store did not make (a screen's reset, a throwing function): the whole «Отменить» is refused — nothing goes back, nothing runs (review of #1279; a screen's step — withAfter)", async () => {
     const r = await demo();
     const c = valueOf(r).db.customers[0]!;
     const undo = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
     await settle();
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     let after = false;
-    const all = call(r, "undoTogether", [undo, () => { throw new Error("a screen's reset (test)"); }, () => (after = true)]) as () => unknown;
-    expect(all()).toBe(true);
-    warn.mockRestore();
+    const all = call(r, "undoTogether", [undo, () => (after = true)]) as () => unknown;
+    expect(() => all()).toThrow(/did not make/);
     await settle();
-    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
-    expect(after).toBe(true);
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+    expect(after).toBe(false);
   });
-  it("nothing of the store's to take back — only empty functions, or a dropped part with them: undefined, nothing runs", async () => {
+  it("nothing of the store's to take back — no parts, or only «nothing to undo» (NO_UNDO): undefined", async () => {
     const r = await demo();
-    let ran = false;
-    expect((call(r, "undoTogether", [() => {}]) as () => unknown)()).toBeUndefined();
-    expect((call(r, "undoTogether", [() => (ran = true)]) as () => unknown)()).toBeUndefined();
-    expect(ran).toBe(false);
+    const { NO_UNDO } = await import("../src/data/undo");
+    expect((call(r, "undoTogether", [NO_UNDO]) as () => unknown)()).toBeUndefined();
+    expect((call(r, "undoTogether", [NO_UNDO, null, undefined]) as () => unknown)()).toBeUndefined();
     expect((call(r, "undoTogether", []) as () => unknown)()).toBeUndefined();
   });
   it("a dropped part among live ones (the server dropped a template save): the live ones go back — true", async () => {
@@ -543,6 +540,16 @@ describe("unit:undoOwnStore — #1265: an op folded into a later one (coalesceKe
 });
 
 describe("unit:undoOwnStore — a store's reverse step inside undoTogether (review of #1279 №3)", () => {
+  it("a function the store did not make (an undo passed through bind) in undoTogether: refused — nothing goes back (in tests it throws)", async () => {
+    const r = await demo();
+    const c = valueOf(r).db.customers[0]!;
+    const undoName = call(r, "updateCustomer", c.id, { name: "Renamed (test)" }) as () => boolean | undefined;
+    await settle();
+    const bound = undoName.bind(null);
+    expect(() => (call(r, "undoTogether", [undoName, bound]) as () => unknown)()).toThrow(/did not make/);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+  });
   it("a job line (a reverse step) + a client's name: true — both back; the line's own «Отменить» after it is too late (done)", async () => {
     const r = await demo();
     // a job of its own lines (no estimate: its lines are not the estimate's), not done, nothing billed on it (a line

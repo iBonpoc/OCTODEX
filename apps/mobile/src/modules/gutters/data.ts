@@ -19,7 +19,7 @@ import { supabase } from "@/cloud/client";
 import { PermanentError, uploadPhoto } from "@/cloud/ops";
 import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
-import { type GuardedUndo, markOf, NO_UNDO } from "@/data/undo";
+import { type GuardedUndo, markOf, NO_UNDO, TOO_LATE } from "@/data/undo";
 
 export const KEY = "gutters";
 export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", rAdd: "revision.add" } as const;
@@ -37,7 +37,14 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 /** «Отменить» of several of the module's changes made together (in the order made): all of them or none — the store's
  *  undoTogether (DS §15.2); an older test store without it — one by one, the last first */
 export function undoAll(store: Pick<ModuleStore, "undoTogether">, undos: readonly unknown[]): GuardedUndo {
-  if (store.undoTogether) return store.undoTogether(undos);
+  // what moduleOp gave (the store's undo, or null when the module is off) and the core's own undos; anything else is not
+  // an undo — the whole «Отменить» is refused then, never a part silently left out (the director's review of #1279)
+  const parts = undos.filter((u) => u != null);
+  if (parts.some((u) => !markOf(u))) {
+    console.error("[undo] undoAll got a function the store did not make — refused");
+    return TOO_LATE;
+  }
+  if (store.undoTogether) return store.undoTogether(parts as GuardedUndo[]);
   // an older test store without undoTogether: nothing to take back together
   return NO_UNDO;
 }
@@ -232,9 +239,10 @@ export function duplicateMeasurement(store: ModuleStore, ref: string, newId: () 
   if (!v) return null;
   const c = copyRows(v.m, v.elements, newId);
   const at = now();
-  const undos: (() => void)[] = [];
+  const undos: GuardedUndo[] = [];
   const put = (u: unknown) => {
-    if (typeof u === "function") undos.push(u as () => void);
+    const undo = asUndo(u);
+    if (undo) undos.push(undo);
     return u != null;
   };
   const row: MeasurementRow = { ...c.m, updatedAt: at };

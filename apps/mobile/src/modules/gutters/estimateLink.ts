@@ -21,7 +21,7 @@ import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData 
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 import type { CatalogItem } from "@/data/types";
-import { type GuardedUndo } from "@/data/undo";
+import { type GuardedUndo, NO_UNDO } from "@/data/undo";
 
 const SIGNED = new Set<Estimate["status"]>(["awaiting_countersign", "approved"]);
 
@@ -195,14 +195,14 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   // the client and the property: the estimate's own, else the lead's (made from it when it has none, S3), else the
   // property's — also when the lead is not seen here (a tech on his visit's property; review M8b №6)
   let target: { customerId: string; propertyId: string; undo: () => void; leadId?: string } | null = null;
-  if (e) target = { customerId: e.customerId, propertyId: e.propertyId, undo: () => {}, ...(e.leadId ? { leadId: e.leadId } : {}) };
+  if (e) target = { customerId: e.customerId, propertyId: e.propertyId, undo: NO_UNDO, ...(e.leadId ? { leadId: e.leadId } : {}) };
   if (!target && x.m.leadId && db.leads.some((l) => l.id === x.m.leadId)) {
     const t = store.leadEstimateTarget(x.m.leadId);
     if (t) target = { ...t, leadId: x.m.leadId };
   }
   if (!target && x.m.propertyId) {
     const p = db.properties.find((q) => q.id === x.m.propertyId);
-    if (p) target = { customerId: p.customerId, propertyId: p.id, undo: () => {} };
+    if (p) target = { customerId: p.customerId, propertyId: p.id, undo: NO_UNDO };
   }
   if (!target) return { ok: false, reason: "noClient" };
 

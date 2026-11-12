@@ -205,7 +205,7 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(1025);
     // on main all of it went back; with all or nothing alone, nothing would (the save is too late)
-    expect(applyTaxUndo(valueOf(r).undoTogether, undoSave, undoApply as unknown as GuardedUndo)()).toBe(true);
+    expect(applyTaxUndo(valueOf(r).undoTogether, undoSave as unknown as GuardedUndo, undoApply as unknown as GuardedUndo)()).toBe(true);
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(0);
     expect(supOf(r).taxBps).toBe(1025);

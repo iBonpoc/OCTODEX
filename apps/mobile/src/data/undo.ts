@@ -6,6 +6,8 @@
  *
  * The result: true — taken back; false — too late, nothing changed (the toast says so); undefined — nothing to take back
  * (the server dropped it, or the action did nothing): the toast just closes.
+ *
+ * Не обходить приведением (as never / any, Object.assign с NO_UNDO, помощник с u: any): ревью отклонит.
  */
 declare const undoBrand: unique symbol;
 export type GuardedUndo = (() => boolean | undefined) & { readonly [undoBrand]: true };

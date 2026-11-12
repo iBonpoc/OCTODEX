@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/cloud/ops", () => ({ PermanentError: class extends Error {}, uploadPhoto: () => null }));
 import { localUndo, NO_UNDO, orElse, TOO_LATE, whenLate, withAfter, type GuardedUndo } from "../src/data/undo";
+import type { UndoParts } from "../src/data/store";
 
 const SRC = join(__dirname, "..", "src");
 const files = (dir: string): string[] =>
@@ -41,6 +42,9 @@ describe("unit:undoBrand — the toast takes only the store's undo", () => {
     show("x", () => true);
     show("x", a);
     show("x", withAfter(a, () => {}));
+    // @ts-expect-error undoTogether takes the store's undos only: a screen's arrow around one is not (review of #1279)
+    const parts: UndoParts = [a, () => b()];
+    void parts;
     // @ts-expect-error a store's undo is not a screen's own state (review of #1279 №1)
     localUndo(a);
     // @ts-expect-error withAfter takes the store's undo, not a function of the screen

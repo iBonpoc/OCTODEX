@@ -130,7 +130,9 @@ export type { GuardedUndo };
  * action: nothing to take back), null (changed since: too late). Kept for every undo mutate and undoTogether make, so a
  * screen's undo of several actions is all or nothing (DS §15.2 «Полуотката не бывает»).
  */
-type UndoPlan = (cur: DB) => { value: DB; commit: () => void } | "done" | "dead" | null;
+type UndoPlan = (cur: DB) => { value: DB; commit: () => void; check?: (final: DB) => boolean } | "done" | "dead" | null;
+/** what undoTogether takes: the store's undos only (a screen's step after it — withAfter at the toast) */
+export type UndoParts = readonly (GuardedUndo | null | undefined)[];
 const undoPlans = new WeakMap<object, UndoPlan>();
 
 /** the plan of undos in the order they were made: the last first, each on what the one after it left; a function the
@@ -138,11 +140,11 @@ const undoPlans = new WeakMap<object, UndoPlan>();
  *  one that throws does not stop the rest, and the toast still closes (the director's 3rd review, remark 2). None of the
  *  store's own parts left to take back (all dead, or only such functions) — undefined: nothing happens (remark 3). A part
  *  already taken back on its own (its own toast) — false: the rest is not taken back after it (remark 4). */
-function planTogether(undos: readonly unknown[]): UndoPlan {
+function planTogether(undos: UndoParts): UndoPlan {
   return (cur) => {
     let value = cur;
     const commits: (() => void)[] = [];
-    const others: (() => unknown)[] = [];
+    const checks: ((final: DB) => boolean)[] = [];
     let live = 0;
     for (const u of [...undos].reverse()) {
       if (typeof u !== "function" || u === NO_UNDO) continue;
@@ -150,15 +152,21 @@ function planTogether(undos: readonly unknown[]): UndoPlan {
       if (!plan) {
         // the store's reverse step (no plan to fold): a part of its own — asked first, run with the others' commits
         const mark = markOf(u);
-        if (mark) {
-          // asked on the state after the other parts (review of #1279 №3)
-          if (!mark.ready(value)) return null;
-          commits.push(() => {
-            // asked just before: it goes back — a «no» now is a bug to see, never a silent half undo
-            if ((u as () => boolean | undefined)() !== true) console.warn("[undo] a reverse step refused after it was ready");
-          });
-          live++;
-        } else others.push(u as () => unknown);
+        if (!mark) {
+          // not the store's (a function of a screen, a bind of an undo): it cannot be asked or folded — a refusal, never a
+          // silent half undo (the director's review of #1279); a screen's step goes through withAfter at the toast
+          const msg = "[undo] undoTogether got a function the store did not make — refused";
+          if (process.env.NODE_ENV === "test") throw new Error(msg);
+          console.error(msg);
+          return null;
+        }
+        // asked on the state after the other parts (review of #1279 №3)
+        if (!mark.ready(value)) return null;
+        commits.push(() => {
+          // asked just before: it goes back — a «no» now is a bug to see, never a silent half undo
+          if ((u as () => boolean | undefined)() !== true) console.error("[undo] a reverse step refused after it was ready");
+        });
+        live++;
         continue;
       }
       const r = plan(value);
@@ -166,23 +174,13 @@ function planTogether(undos: readonly unknown[]): UndoPlan {
       if (r === "done" || r === null) return r;
       value = r.value;
       commits.push(r.commit);
+      if (r.check) checks.push(r.check);
       live++;
     }
     if (!live) return "dead";
-    return {
-      value,
-      commit: () => {
-        commits.forEach((f) => f());
-        for (const f of others) {
-          try {
-            f();
-          } catch (e) {
-            // eslint-disable-next-line no-console
-            console.warn("[undo] a part not made by the store failed", e);
-          }
-        }
-      },
-    };
+    // every part asked once more on the end state of all of them (a folded op is written from it — review of #1279)
+    if (!checks.every((c) => c(value))) return null;
+    return { value, commit: () => commits.forEach((f) => f()) };
   };
 }
 
@@ -347,7 +345,7 @@ interface StoreCtx {
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: DB) => DB; coalesceKey?: string; made?: string[] }) => Undo | null;
   /** «Отменить» of several actions made together (each the undo a store action returned, in the order they were made):
    *  all of them go back or none — false: too late, nothing changed (DS §15.2) */
-  undoTogether: (undos: readonly unknown[]) => GuardedUndo;
+  undoTogether: (undos: UndoParts) => GuardedUndo;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
   setLocationConsent: (on: boolean) => Omit<ConsentChange, "undo"> & { undo: GuardedUndo };
@@ -1046,6 +1044,7 @@ export function StoreProvider({
         const r = plan(dbRef.current);
         if (r === "dead") return undefined;
         if (r === "done" || r === null) return false;
+        if (r.check && !r.check(r.value)) return false;
         dbRef.current = r.value;
         setDb(dbRef.current);
         r.commit();
@@ -1058,7 +1057,7 @@ export function StoreProvider({
   );
   /** «Отменить» of several actions made together (a new client and its name parts, a job and its visit): all of them go
    *  back or none (remark 1 of the director's review of #1244) */
-  const undoTogether = useCallback((undos: readonly unknown[]): GuardedUndo => runnable(planTogether(undos)), [runnable]);
+  const undoTogether = useCallback((undos: UndoParts): GuardedUndo => runnable(planTogether(undos)), [runnable]);
 
   /* ---------- mutations ---------- */
   /** Apply locally; in cloud mode record the op; return undo. */
@@ -1123,9 +1122,11 @@ export function StoreProvider({
         // folded into a later op (#1265): that op stays and is written again from the phone's whole record after the undo
         // — so it carries every later change folded into it, and none of this one's; its module says how
         // (ModuleDef.rebuild); a module that cannot — too late, as before
-        if (live && live !== oid && !rebuilt(outboxRef.current.find((x) => x.id === live)!, r.value)) return null;
+        const folded = !!live && live !== oid;
         return {
           value: r.value,
+          // asked on the end state (of the whole undoTogether): the carrier must be writable from it
+          ...(folded ? { check: (final: DB) => !!rebuilt(outboxRef.current.find((x) => x.id === carrierId())!, final) } : {}),
           commit: () => {
             done = true;
             if (oid) undoneOps.current.add(oid);
@@ -1137,7 +1138,9 @@ export function StoreProvider({
               // still folded: the carrier written from what the phone holds now — after every part of this «Отменить»
               const carrier = outboxRef.current.find((x) => x.id === now);
               const again = carrier ? rebuilt(carrier, dbRef.current) : null;
+              // asked on this very state just before (check): a null now is a bug to see
               if (again) outboxRef.current = outboxRef.current.map((x) => (x.id === now ? again : x));
+              else console.error("[undo] a folded op could not be written again after its check");
             } else {
               // the op it replaced comes back in its place — unless that action was taken back already (#1265); back in
               // place, it carries itself again (the director's review of #1279 Б1)

@@ -16,7 +16,7 @@ import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/cont
 import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { withAfter } from "@/data/undo";
+import { withAfter, type GuardedUndo } from "@/data/undo";
 
 const NEW = "__new";
 
@@ -90,7 +90,7 @@ export default function NewJob() {
     if (!ok) return;
     setSaved(true);
     haptics.success();
-    const undos: (() => void)[] = [];
+    const undos: GuardedUndo[] = [];
     let cid = client?.id;
     let pid = newAddress ? undefined : (propertyId as ID);
     if (newClient) {

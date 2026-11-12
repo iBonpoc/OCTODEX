@@ -118,9 +118,11 @@ describe("undoAll — the module's «Отменить» of several changes (#124
     expect(asked[0]).toHaveLength(1 + EL.length);
     expect(st.ops).toHaveLength(1 + EL.length);
   });
-  it("an older store without it: nothing to take back together (a module never makes an undo of its own — review of #1279 Б2)", () => {
+  it("a function the store did not make: the whole «Отменить» is refused (false), nothing runs — never a part left out (review of #1279)", () => {
     const order: string[] = [];
-    expect(undoAll({}, [() => order.push("a"), () => order.push("b")])()).toBeUndefined();
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(undoAll({}, [() => order.push("a"), () => order.push("b")])()).toBe(false);
+    err.mockRestore();
     expect(order).toEqual([]);
   });
 });

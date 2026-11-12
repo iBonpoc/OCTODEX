@@ -140,11 +140,11 @@ describe("makeEstimate — through the core's store", () => {
           [...us].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
           return true;
         }),
-      leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: () => undone.push("target") }),
+      leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: markUndo(() => (undone.push("target"), true)) }),
       saveEstimate: (e: (typeof saved)[number]) => {
         saved.push(e);
         s.db = { ...s.db, estimates: [...s.db.estimates.filter((x) => x.id !== e.id), { ...e, title: "T", totalCents: 0, status: "draft" } as Estimate] };
-        return () => undone.push("estimate");
+        return markUndo(() => (undone.push("estimate"), true));
       },
     };
     return { s, sent, saved, targets, undone };

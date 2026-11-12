@@ -65,7 +65,7 @@ export interface ModuleStore {
   db: import("@/data/types").DB;
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: import("@/data/types").DB) => import("@/data/types").DB; coalesceKey?: string; made?: string[] }) => unknown;
   /** the store's «Отменить» of several actions: all or none (store.tsx). Missing in an older test store — then one by one */
-  undoTogether?: (undos: readonly unknown[]) => import("@/data/undo").GuardedUndo;
+  undoTogether?: (undos: readonly (import("@/data/undo").GuardedUndo | null | undefined)[]) => import("@/data/undo").GuardedUndo;
 }
 
 /**
@@ -74,11 +74,11 @@ export interface ModuleStore {
  * (money through the engine, the offline queue, «Отменить»). A module never writes an estimate any other way.
  */
 export interface ModuleEstimateStore extends ModuleStore {
-  leadEstimateTarget: (leadId: string) => { customerId: string; propertyId: string; undo: () => void } | null;
+  leadEstimateTarget: (leadId: string) => { customerId: string; propertyId: string; undo: import("@/data/undo").GuardedUndo } | null;
   /** a new estimate at this property is the person's to make (a tech: where he works — the server's estimates_insert);
    *  asked before anything is written for it (#1138). Missing in an older test store — then «yes». */
   mayMakeEstimateAt?: (propertyId: string | undefined) => boolean;
-  saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => () => void;
+  saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => import("@/data/undo").GuardedUndo;
 }
 
 /**
@@ -180,7 +180,7 @@ export interface ModuleDef {
    * a lead was made from a module's thing (S1b «Сделать заявкой»: /lead/new?module=<key>&ref=<id>): the module links its
    * thing to the lead through the store it is given (moduleOp). The lead form is the core's, unchanged (spec 14).
    */
-  leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
+  leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => import("@/data/undo").GuardedUndo | null | undefined;
   /** its words on an open (draft / sent) estimate; `data` — DB.moduleData[key]. Pure: called on every render */
   estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
   /**

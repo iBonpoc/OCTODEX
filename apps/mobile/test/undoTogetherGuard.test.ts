@@ -29,7 +29,7 @@ const ROW = new RegExp(String.raw`${CALL}\s*;\s*(?:if \([^)]*\)\s*)?(?:else\s+)?
 const ALLOWED: { file: string; text: RegExp; why: string }[] = [
   { file: "features/client/importDemo.ts", text: /for \(const u of job\.undos\.reverse\(\)\) \{/, why: "a client import: each card is its own record — one changed since stays (kept), as the server's undo counts it" },
   { file: "data/store.tsx", text: /for \(const u of \[\.\.\.undos\]\.reverse\(\)\)/, why: "planTogether itself" },
-  { file: "data/store.tsx", text: /commits\.forEach\(\(f\) => f\(\)\);/, why: "planTogether's commit" },
+  { file: "data/store.tsx", text: /commits\.forEach\(\(f\) => f\(\)\)/, why: "planTogether's commit" },
 ];
 
 describe("unit:undoTogetherGuard — several undos only through undoTogether", () => {
