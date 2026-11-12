@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
-import { parseMoneyToCents, parsePctToBps, parseQty } from "@octo/estimating-engine";
+import { parseMoneyToCents, parsePctToBps, parsePctToPpm, parseQty, ppmToPctText } from "@octo/estimating-engine";
 import { TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 
@@ -44,6 +44,13 @@ export function MoneyField({ cents, onChange, placeholder }: { cents: number; on
 
 export function PctField({ bps, onChange, placeholder }: { bps: number; onChange: (b: number) => void; placeholder?: string }) {
   const f = useSynced(bps, bpsToText, (s) => (s.trim() === "" ? 0 : parsePctToBps(s)), onChange);
+  return <TextField type="percent" value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} />;
+}
+
+/** #1219: a tax rate with up to four decimals (8.875 %) in ppm. For the estimate editor: the value is
+ *  taxRatePpm(s.tax), onChange — setSettings({ tax: taxWithRatePpm(s.tax, p) }) (ratePpm and its basis points together). */
+export function RatePctField({ ppm, onChange, placeholder }: { ppm: number; onChange: (p: number) => void; placeholder?: string }) {
+  const f = useSynced(ppm, ppmToPctText, (s) => (s.trim() === "" ? 0 : parsePctToPpm(s)), onChange);
   return <TextField type="percent" value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} />;
 }
 

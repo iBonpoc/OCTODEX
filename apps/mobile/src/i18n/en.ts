@@ -2638,7 +2638,7 @@ export const en: Dict = {
   "job5.lines.err.undo": "Cannot undo: the total would go below what is invoiced",
   "job5.ca.chip": "Contract needed",
   "job5.ca.text": "Under CA law, home improvement work over $500 needs a written contract signed by the client.",
-  "job5.lines.err.rate": "The rate is a number from 0 to 100, e.g. 8.25",
+  "job5.lines.err.rate": "The rate is a number from 0 to 100, up to 4 decimals, e.g. 8.875",
   "job5.lines.exempt": "The client is tax exempt — no tax is charged",
   "job5.type.pick": "Job type",
   "job5.tags": "Tags",

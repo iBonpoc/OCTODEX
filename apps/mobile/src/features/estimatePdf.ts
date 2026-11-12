@@ -8,7 +8,7 @@
 import { Platform } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
-import { LINE_GROUPS, activeLines } from "@octo/estimating-engine";
+import { LINE_GROUPS, activeLines, ppmToPctText, taxRatePpm } from "@octo/estimating-engine";
 import { print as P } from "@octo/design-tokens";
 import { SIG_BOX, fitSignature } from "./signaturePath";
 import type { DictKey } from "@/i18n";
@@ -54,7 +54,7 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
       const sums = [
         `<tr><td>${esc(t("ue.subtotal"))}</td><td class="r">${money(tot.subtotal)}</td></tr>`,
         tot.discount ? `<tr><td>${esc(t("ue.discount"))}</td><td class="r">−${money(tot.discount)}</td></tr>` : "",
-        tot.tax ? `<tr><td>${esc(t("ue.taxLine", { rate: (s.tax.rateBps / 100).toString() }))}</td><td class="r">${money(tot.tax)}</td></tr>` : "",
+        tot.tax ? `<tr><td>${esc(t("ue.taxLine", { rate: ppmToPctText(taxRatePpm(s.tax)) }))}</td><td class="r">${money(tot.tax)}</td></tr>` : "",
         `<tr class="tot"><td>${esc(t("ue.total"))}</td><td class="r">${money(tot.total)}</td></tr>`,
         tot.deposit ? `<tr><td>${esc(t("ue.deposit"))}</td><td class="r">${money(tot.deposit)}</td></tr>` : "",
       ].join("");

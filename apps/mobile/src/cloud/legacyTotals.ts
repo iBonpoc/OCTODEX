@@ -18,6 +18,8 @@ export interface LegacyLine {
 export interface LegacyVersion {
   taxEnabled: boolean;
   taxRateBps: number | null;
+  /** #1219: estimate_versions.tax_rate_ppm (null: the basis points are the rate) */
+  taxRatePpm?: number | null;
   depositRule: unknown;
   discountMode: string | null;
   discountValue: number | null;
@@ -38,7 +40,7 @@ export function legacyTotals(lines: LegacyLine[], v: LegacyVersion): { totalCent
     : null;
   const t = computeOption(
     counted.map((l, i) => ({ name: `line ${i + 1}`, quantity: 1, unitPriceCents: l.lineTotalCents, taxable: l.taxable })),
-    { mode: "added_on_top", enabled: v.taxEnabled, rateBps: v.taxRateBps ?? 0 },
+    { mode: "added_on_top", enabled: v.taxEnabled, rateBps: v.taxRateBps ?? 0, ratePpm: v.taxRatePpm ?? undefined },
     discount,
   );
   return { totalCents: t.total, depositCents: depositAmount(t.total, serverDepositRule(v.depositRule)) };
@@ -69,7 +71,7 @@ export function legacyForEstimate(
   return legacyTotals(
     d.lines.filter((l) => l.option_id === opt.id).map((l) => ({ lineTotalCents: num(l.line_total_cents), taxable: !!l.taxable, optional: !!l.is_optional, clientVisible: l.client_visible !== false })),
     {
-      taxEnabled: !!ver.tax_enabled, taxRateBps: ver.tax_rate_bps == null ? null : num(ver.tax_rate_bps), depositRule: ver.deposit_rule,
+      taxEnabled: !!ver.tax_enabled, taxRateBps: ver.tax_rate_bps == null ? null : num(ver.tax_rate_bps), taxRatePpm: ver.tax_rate_ppm == null ? null : num(ver.tax_rate_ppm), depositRule: ver.deposit_rule,
       discountMode: (opt.discount_mode as string | null) ?? null, discountValue: opt.discount_value == null ? null : num(opt.discount_value),
     },
   );
