@@ -39,7 +39,10 @@ revoke all on function app.version_tax_ppm(int, int) from public, anon, authenti
 create or replace function app.doc_tax_ppm(t jsonb)
 returns numeric language sql immutable set search_path = '' as $$
   select case
-    when jsonb_typeof(t -> 'ratePpm') = 'number' and (t ->> 'ratePpm') ~ '^[0-9]{1,7}$' and (t ->> 'ratePpm')::numeric <= 1000000
+    -- a whole number by value, not by its text: jsonb keeps 88750.0 as written, the engine reads it as 88750
+    -- (security-check of #1230)
+    when jsonb_typeof(t -> 'ratePpm') = 'number' and (t ->> 'ratePpm')::numeric between 0 and 1000000
+         and (t ->> 'ratePpm')::numeric = trunc((t ->> 'ratePpm')::numeric)
          and jsonb_typeof(t -> 'rateBps') = 'number' and floor((t ->> 'ratePpm')::numeric / 100 + 0.5) = (t ->> 'rateBps')::numeric
       then (t ->> 'ratePpm')::numeric
     when jsonb_typeof(t -> 'rateBps') = 'number' then (t ->> 'rateBps')::numeric * 100

@@ -13684,6 +13684,8 @@ update public.estimate_versions set tax_rate_ppm = 88750, tax_rate_bps = 888, ca
 select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 the same save again: ppm stays');
 select tst.fails_like($q$update public.estimate_versions set tax_rate_ppm = 1000001 where id = 'a2010000-0000-4000-8000-000000000002'$q$, '%tax_rate_ppm%', 'T201 above 100 %: refused');
 select tst.ok(public.send_estimate('a2010000-0000-4000-8000-000000000001', 'tok_t201_0123456789abcdef') = 'tok_t201_0123456789abcdef', 'T201 the ppm estimate is sent');
+select tst.fails_like($q$update public.estimate_versions set tax_rate_ppm = 88760 where id = 'a2010000-0000-4000-8000-000000000002'$q$, '%is locked%',
+                      'T201 a sent version: not even its ppm alone changes');
 :as_super
 select tst.ok((select (x -> 'settings' -> 'tax' ->> 'ratePpm') = '88750' from app.client_doc((select calc_inputs from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002')) x),
               'T201 what the client reads keeps ratePpm');
@@ -13704,6 +13706,18 @@ select tst.ok((select (tax_rate_ppm, tax_rate_bps, contract_total_cents) = (7375
               'T201 a new phone sets 7.375 %: basis points 738, $1073.75');
 :as_super
 select tst.ok(app.job_contract_tax('a2010000-0000-4000-8000-0000000000e1') = 7375, 'T201 the contract''s tax at 7.375 %: $73.75');
+-- a job with a sent invoice of its whole total: a ppm change alone (the same basis points 888: 8.88 % → 8.876 %) may not
+-- bring the total below what is invoiced (t19 fires on tax_rate_ppm too)
+:as_office_a
+update public.jobs set tax_rate_ppm = 88800, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('a2010000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a2010000-0000-4000-8000-0000000000e1', 'final', 'sent', 'T201 final', 108880, 108880, now());
+select tst.fails_like($q$update public.jobs set tax_rate_ppm = 88760 where id = 'a2010000-0000-4000-8000-0000000000e1'$q$, '%below what is invoiced%',
+                      'T201 a ppm change alone below the invoiced total: refused');
+select tst.ok((select (tax_rate_ppm, contract_total_cents) = (88800, 108880::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'), 'T201 the job stays at 8.88 %, $1088.80');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T201 test' where id = 'a2010000-0000-4000-8000-0000000000f1';
+:as_super
 -- the same basis points with ppm gone (this phone's «Отменить» back to 8.88 %: ops job.update writes tax_rate_ppm null)
 :as_office_a
 update public.jobs set tax_rate_ppm = 88750, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
@@ -13731,7 +13745,9 @@ select tst.ok((select bool_and(app.valid_estimate_template_doc(jsonb_set(doc, '{
 select tst.ok(app.doc_tax_ppm('{"rateBps": 950}') = 95000 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750}') = 88750
               and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 1.5}') = 88800 and app.doc_tax_ppm('{}') = 0
               and app.doc_tax_ppm('{"rateBps": 950, "ratePpm": 88750}') = 95000
-              and app.doc_tax_ppm('{"ratePpm": 88750}') = 0 and app.doc_tax_ppm('{"rateBps": "888", "ratePpm": 88750}') = 0,
+              and app.doc_tax_ppm('{"ratePpm": 88750}') = 0
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750.0}') = 88750 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750.5}') = 88800
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 8.875e4}') = 88750 and app.doc_tax_ppm('{"rateBps": 0, "ratePpm": 1e300}') = 0 and app.doc_tax_ppm('{"rateBps": "888", "ratePpm": 88750}') = 0,
               'T201 the document''s rate: ppm (rounding to its basis points), else the basis points × 100');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_rate_ppm()', 'EXECUTE')
               and not has_function_privilege('authenticated', 'app.job_lines_totals_ppm(uuid,boolean,int)', 'EXECUTE')
