@@ -92,6 +92,10 @@ const clientSection = (x: EstimateSection): EstimateSection => ({
   ...(isSubsection(x) ? { parentId: x.parentId } : {}),
 });
 
+/** an option's sections as the client reads them — the same as app.client_sections (test/fixtures/clientSections.json);
+ *  a template keeps them so too (#1232: the server checks a template's sections are already in this form) */
+export const clientSectionsOf = (o: Pick<CustomOption, "sections">): EstimateSection[] => countedSections(o).map(clientSection);
+
 /**
  * A document as it may be counted and shown (spec 2026-11-12-estimate-editor Р3, Р4) — on every way in (the cloud, a
  * draft, a template, a module, the save): a line hidden from the client with a price is visible again (the founder: a
