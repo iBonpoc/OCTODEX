@@ -31,6 +31,7 @@ import { laborRows, materialRows, missingItems, partName, sampleJob } from "../s
 import type { MeasurementRow } from "../src/modules/gutters/canvas/model";
 import { tFor } from "../src/i18n/translate";
 import { newDoc } from "../src/features/estimateDoc";
+import type { GuardedUndo } from "../src/data/undo";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const name = (p: PartQty) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;
@@ -173,7 +174,7 @@ describe("makeEstimate — through the core's store", () => {
   it("#1244 (the director's 3rd review): with the core's undoTogether — one «Отменить» of all three parts, all or none (too late → nothing undone)", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
     const asked: unknown[][] = [];
-    const st = { ...h.s, undoTogether: (undos: readonly unknown[]) => (asked.push([...undos]), () => false) };
+    const st = { ...h.s, undoTogether: (undos: readonly unknown[]) => (asked.push([...undos]), (() => false) as unknown as GuardedUndo) };
     // the harness's own functions write through h.s: keep the db in step
     Object.defineProperty(st, "db", { get: () => h.s.db });
     const r = ok(makeEstimate(st, input(M)));

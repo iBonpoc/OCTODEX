@@ -54,6 +54,9 @@ vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), back
 
 import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
+import { relink, setAccuracy } from "../src/modules/gutters/data";
+import guttersModule from "../src/modules/gutters/module";
+import { moduleDef, registerModule } from "../src/modules/registry";
 import { makeSeed } from "../src/data/seed";
 import type { CatalogItem, DB, EstimateDoc, EstimateTemplate, Supplier } from "../src/data/types";
 import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
@@ -437,6 +440,52 @@ describe("unit:undoOwnStore — the director's 4th review of #1244 Б2: each scr
     await settle();
     expect(valueOf(r).db.customers.find((c) => c.id === x.id)?.lastName).toBe("Changed");
   });
+});
+
+describe("unit:undoOwnStore — #1265: an op folded into a later one (coalesceKey) is not «too late» while it waits", () => {
+  const M = { id: "m-1265", label: null, status: "draft" as const, propertyId: null, leadId: null, accuracy: "rough" as const, updatedAt: "2026-11-10T10:00:00Z" };
+  const withGutters = async () => {
+    // the app finds its modules by require.context; a test registers the one it uses
+    if (!moduleDef("gutters")) registerModule(guttersModule);
+    const co = company();
+    const r = await signedIn({
+      company: { ...co.company!, modules: { gutters: { enabled: true, trialEndsAt: new Date(Date.now() + 86_400_000).toISOString(), settings: {}, rowVersion: 1 } } },
+      moduleData: { gutters: { measurements: [M], elements: [] } },
+    } as Partial<DB>);
+    return r;
+  };
+  const mOf = (r: Root<P>) => (valueOf(r).db.moduleData as { gutters: { measurements: (typeof M & { leadId: string | null; accuracy: string })[] } }).gutters.measurements.find((x) => x.id === M.id)!;
+  it("link a lead, then the accuracy (both measurement.save of the same measurement: one waiting op) → «Отменить» the link: true — the link back, the accuracy stays, the op says so", async () => {
+    const r = await withGutters();
+    const store = valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(store, M.id, { leadId: "l1" })!;
+    await settle();
+    setAccuracy(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, "tape");
+    await settle();
+    expect(mOf(r).leadId).toBe("l1");
+    expect(undoLink()).toBe(true);
+    await settle();
+    expect(mOf(r).leadId).toBeNull();
+    expect(mOf(r).accuracy).toBe("tape");
+    await tick();
+    const sent = server.sends.filter((x) => x.op.k === "module.op");
+    expect(sent).toHaveLength(1);
+    expect((sent[0]!.op.payload as { m: { leadId: string | null; accuracy: string } }).m).toMatchObject({ leadId: null, accuracy: "tape" });
+  }, 15000);
+  it("then «Отменить» the accuracy too: the op goes — nothing reaches the server", async () => {
+    const r = await withGutters();
+    const undoLink = relink(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, "tape")!;
+    await settle();
+    expect(undoLink()).toBe(true);
+    await settle();
+    expect(undoAcc()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
 });
 
 describe("unit:undoOwnStore — the demo: what an action adds is what the store shows (the director's Б3)", () => {

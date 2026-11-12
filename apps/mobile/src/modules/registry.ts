@@ -65,7 +65,7 @@ export interface ModuleStore {
   db: import("@/data/types").DB;
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: import("@/data/types").DB) => import("@/data/types").DB; coalesceKey?: string; made?: string[] }) => unknown;
   /** the store's «Отменить» of several actions: all or none (store.tsx). Missing in an older test store — then one by one */
-  undoTogether?: (undos: readonly unknown[]) => () => boolean | undefined;
+  undoTogether?: (undos: readonly unknown[]) => import("@/data/undo").GuardedUndo;
 }
 
 /**
@@ -153,6 +153,9 @@ export interface StarterEstimate {
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
+  /** #1265: a waiting op of this module written again from the phone's data `d` (an earlier change folded into it by
+   *  coalesceKey was taken back): its payload now, or null — cannot (then that «Отменить» is too late) */
+  rebuild?: (op: { kind: string; payload: Record<string, unknown> }, d: import("@/data/types").DB) => Record<string, unknown> | null;
   titleKey: DictKey;
   hintKey: DictKey;
   trialDays: number;

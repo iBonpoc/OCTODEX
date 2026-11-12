@@ -3,6 +3,7 @@
  * sees them, picking a supplier for a price-list item and the history of an item's cost. Pure (no React).
  */
 import type { CatalogItem, CostHistoryEntry, DB, PaymentTerms, Role, Supplier } from "@/data/types";
+import { orElse, type GuardedUndo } from "@/data/undo";
 
 export const PAYMENT_TERMS: PaymentTerms[] = ["cod", "prepaid", "net_15", "net_30", "net_60", "custom"];
 
@@ -202,14 +203,6 @@ export function keepCostHistory(next: DB, cur: DB): DB {
  * save and the items' tax together, all or none; the supplier's save already on the server (the «Применить?» sheet was up
  * longer than SEND_AFTER_MS) — only «Применить» is taken back, the same as having chosen «Не применять».
  */
-export function applyTaxUndo(
-  together: (undos: readonly unknown[]) => () => boolean | undefined,
-  undoSave: unknown,
-  undoApply: () => boolean | undefined,
-): () => boolean | undefined {
-  const both = together([undoSave, undoApply]);
-  return () => {
-    const r = both();
-    return r === false ? undoApply() : r;
-  };
+export function applyTaxUndo(together: (undos: readonly unknown[]) => GuardedUndo, undoSave: unknown, undoApply: GuardedUndo): GuardedUndo {
+  return orElse(together([undoSave, undoApply]), undoApply);
 }

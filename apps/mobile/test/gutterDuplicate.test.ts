@@ -10,6 +10,7 @@ vi.mock("@/cloud/ops", () => ({ PermanentError: class extends Error {}, uploadPh
 import { copyRows, duplicateMeasurement, gutterData, K, setAccuracy, undoAll } from "../src/modules/gutters/data";
 import { measurementState } from "../src/modules/gutters/measurements";
 import type { DB } from "../src/data/types";
+import type { GuardedUndo } from "../src/data/undo";
 
 const M = { id: "m1", label: null, status: "ready" as const, propertyId: "p1", leadId: "l1", accuracy: "tape" as const, updatedAt: "2026-11-10T10:00:00Z" };
 const EL = [
@@ -104,7 +105,7 @@ describe("undoAll — the module's «Отменить» of several changes (#124
     n = 0;
     const st = fakeStore();
     const asked: unknown[][] = [];
-    const withTogether = Object.assign(st, { undoTogether: (u: readonly unknown[]) => (asked.push([...u]), () => false as boolean | undefined) });
+    const withTogether = Object.assign(st, { undoTogether: (u: readonly unknown[]) => (asked.push([...u]), (() => false) as unknown as GuardedUndo) });
     const r = duplicateMeasurement(withTogether, "m1", ids)!;
     expect(r.undo()).toBe(false);
     expect(asked[0]).toHaveLength(1 + EL.length);

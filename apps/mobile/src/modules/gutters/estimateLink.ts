@@ -21,6 +21,7 @@ import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData 
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 import type { CatalogItem } from "@/data/types";
+import { type GuardedUndo } from "@/data/undo";
 
 const SIGNED = new Set<Estimate["status"]>(["awaiting_countersign", "approved"]);
 
@@ -168,7 +169,7 @@ export interface MakeInput {
 }
 
 export type MakeResult =
-  | { ok: true; estimateId: string; undo: () => void; updated: boolean }
+  | { ok: true; estimateId: string; undo: GuardedUndo; updated: boolean }
   /** off: the module is not active (О2); signed: never changed; noClient: no lead or property this person can make an estimate for */
   | { ok: false; reason: "off" | "signed" | "noClient" | "notHere" };
 

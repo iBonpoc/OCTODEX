@@ -62,6 +62,7 @@ import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { sameValue, undoOwn } from "@/data/undoOwn";
+import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
 import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
@@ -119,10 +120,9 @@ import {
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, templatesOfActiveModules, visitSettingsOf } from "@/features/checklist";
 
-type Undo = () => void;
-/** an undo that may be refused: false = too late, nothing changed (the toast says so); undefined = nothing to take back
- *  (the server already dropped the action — the toast just closes, as before #1244: the director's review, remark 2) */
-export type GuardedUndo = () => boolean | undefined;
+/** every action's «Отменить» is a GuardedUndo (#1261): true — back, false — too late, undefined — nothing to take back */
+type Undo = GuardedUndo;
+export type { GuardedUndo };
 
 /**
  * What an undo would do now, without doing it (the director's review of #1244, remark 1): the store's value after it and
@@ -145,10 +145,16 @@ function planTogether(undos: readonly unknown[]): UndoPlan {
     const others: (() => unknown)[] = [];
     let live = 0;
     for (const u of [...undos].reverse()) {
-      if (typeof u !== "function") continue;
+      if (typeof u !== "function" || u === NO_UNDO) continue;
       const plan = undoPlans.get(u);
       if (!plan) {
-        others.push(u as () => unknown);
+        // the store's reverse step (no plan to fold): a part of its own — asked first, run with the others' commits
+        const mark = markOf(u);
+        if (mark) {
+          if (mark.ready && !mark.ready()) return null;
+          commits.push(() => void (u as () => unknown)());
+          live++;
+        } else others.push(u as () => unknown);
         continue;
       }
       const r = plan(value);
@@ -340,7 +346,7 @@ interface StoreCtx {
   undoTogether: (undos: readonly unknown[]) => GuardedUndo;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
-  setLocationConsent: (on: boolean) => ConsentChange;
+  setLocationConsent: (on: boolean) => Omit<ConsentChange, "undo"> & { undo: GuardedUndo };
   /** wave 7б-2: a point of mine on an open visit: kept as the last one and sent at once (never queued) */
   recordVisitPoint: (p: VisitPoint, source: "status_change" | "foreground") => void;
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
@@ -742,6 +748,10 @@ export function StoreProvider({
   const settingsStale = useRef(new Set<string>());
   /** ops dropped on a conflict: their «Отменить» does nothing (review #374 №2) */
   const deadOps = useRef(new Set<string>());
+  /** #1265: a waiting module op folded into a later one (coalesceKey) — older id → the id that carries it now */
+  const foldedInto = useRef(new Map<string, string>());
+  /** the ops whose action was taken back (#1265: a later op folded over one of them restores it no more) */
+  const undoneOps = useRef(new Set<string>());
   /** read one module's row again and take the server's settings and version; until then its settings are not saved */
   const rereadSettings = async (mod: string, cid: string | undefined) => {
     settingsStale.current.add(mod);
@@ -925,7 +935,11 @@ export function StoreProvider({
             const mod = item.op.module;
             const { kept, gone } = dropModuleOps(outboxRef.current, mod, w);
             outboxRef.current = kept;
-            for (const g of gone) opPause.current.delete(g.id);
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              // their «Отменить» has nothing to take back: the toast just closes, not «too late» (#1266)
+              deadOps.current.add(g.id);
+            }
             // the phone's copy of the module's data holds what was just dropped: it goes until the next read (a canvas
             // that saves again then sends its measurement whole — review M5a №4)
             const cur = dbRef.current;
@@ -1024,7 +1038,7 @@ export function StoreProvider({
    *  undefined (the toast just closes) */
   const runnable = useCallback(
     (plan: UndoPlan): GuardedUndo => {
-      const undo: GuardedUndo = () => {
+      const undo = markUndo(() => {
         const r = plan(dbRef.current);
         if (r === "dead") return undefined;
         if (r === "done" || r === null) return false;
@@ -1032,7 +1046,7 @@ export function StoreProvider({
         setDb(dbRef.current);
         r.commit();
         return true;
-      };
+      });
       undoPlans.set(undo, plan);
       return undo;
     },
@@ -1066,6 +1080,7 @@ export function StoreProvider({
         const at = coalesceAt(outboxRef.current, op, whoRef.current, inFlight.current);
         if (at >= 0) {
           replaced = outboxRef.current[at]!;
+          foldedInto.current.set(replaced.id, oid);
           outboxRef.current = outboxRef.current.map((x, i) => (i === at ? coalesced(replaced!, item) : x));
         } else outboxRef.current = [...outboxRef.current, item];
         setOutbox(outboxRef.current);
@@ -1079,21 +1094,39 @@ export function StoreProvider({
         if (done) return "done";
         // dropped by the server as built on a lost base: nothing to take back, the toast just closes (review #374 №2)
         if (oid && deadOps.current.has(oid)) return "dead";
-        // already on its way to the server or there (sent, being sent, or folded into a later op): taking it back on the
-        // phone only would be undone by the next read — too late (the director's 4th review of #1244)
-        if (oid && (inFlight.current === oid || !outboxRef.current.some((x) => x.id === oid))) return null;
+        // the op that carries this action now: its own, or a later one it was folded into (#1265)
+        let live = oid;
+        while (live && foldedInto.current.has(live)) live = foldedInto.current.get(live)!;
+        // already on its way to the server or there (sent, being sent): taking it back on the phone only would be undone
+        // by the next read — too late (the director's 4th review of #1244)
+        if (live && (inFlight.current === live || !outboxRef.current.some((x) => x.id === live))) return null;
         // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays;
         // all or nothing: when a part of it was changed since, nothing is taken back and its op stays in the queue (the
         // toast says it is too late — never a half undo, the director's review of #1244 Б2)
         const r = undoOwn(prev, next, cur);
         if (!r.ok) return null;
+        // folded into a later op (#1265): that op stays, written again from what the phone holds after the undo — its
+        // module says how (ModuleDef.rebuild); a module that cannot — too late, as before
+        let rewritten: OwnedItem | null = null;
+        if (live && live !== oid) {
+          const carrier = outboxRef.current.find((x) => x.id === live)!;
+          const payload = carrier.op.k === "module.op" ? moduleDef(carrier.op.module)?.rebuild?.({ kind: carrier.op.kind, payload: carrier.op.payload }, r.value) : null;
+          if (!payload || carrier.op.k !== "module.op") return null;
+          rewritten = { ...carrier, op: { ...carrier.op, payload } };
+        }
         return {
           value: r.value,
           commit: () => {
             done = true;
+            if (oid) undoneOps.current.add(oid);
             if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
-            if (oid) {
-              outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
+            if (rewritten) {
+              outboxRef.current = outboxRef.current.map((x) => (x.id === rewritten!.id ? rewritten! : x));
+              setOutbox(outboxRef.current);
+            } else if (oid) {
+              // the op it replaced comes back in its place — unless that action was taken back already (#1265)
+              const back = replaced && !undoneOps.current.has(replaced.id) ? replaced : null;
+              outboxRef.current = back ? outboxRef.current.map((x) => (x.id === oid ? back : x)) : outboxRef.current.filter((x) => x.id !== oid);
               setOutbox(outboxRef.current);
             }
           },
@@ -1118,9 +1151,9 @@ export function StoreProvider({
   const recordPayment = (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string, fromClient?: boolean): Undo => {
     const d0 = dbRef.current;
     const inv = d0.invoices.find((i) => i.id === invoiceId);
-    if (!inv) return () => {};
+    if (!inv) return NO_UNDO;
     const amount = acceptPayment(inv, amountCents);
-    if (amount <= 0) return () => {};
+    if (amount <= 0) return NO_UNDO;
     const now = new Date().toISOString();
     // who took it (wave 8): the person recording it; a client paying on /p/ is nobody on the team
     const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined, receivedBy: fromClient ? undefined : d0.me };
@@ -1206,9 +1239,11 @@ export function StoreProvider({
   const dismissRejected = (id: ID): Undo => {
     const was = rejected.find((x) => x.id === id);
     setRejected((prev) => prev.filter((x) => x.id !== id));
-    return () => {
-      if (was) setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
-    };
+    return markUndo(() => {
+      if (!was) return undefined;
+      setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
+      return true;
+    });
   };
   const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
   // like discardOp: refused while one of them is on its way to the server (it would get there although the card says no)
@@ -1236,7 +1271,7 @@ export function StoreProvider({
     if (!l) return null;
     if (l.customerId) {
       const propertyId = leadEstimatePropertyId(d0, l);
-      if (propertyId) return { customerId: l.customerId, propertyId, undo: () => {} };
+      if (propertyId) return { customerId: l.customerId, propertyId, undo: NO_UNDO };
     }
     const ids = { customerId: uid(), contactId: uid(), propertyId: uid() };
     const now = new Date().toISOString();
@@ -1300,7 +1335,7 @@ export function StoreProvider({
   };
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
   /** nothing to take back: the toast just closes */
-  const noop: GuardedUndo = () => undefined;
+  const noop = NO_UNDO;
   /** spec 37: an order on the phone and in the queue (header, lines, the lines taken out) */
   const putOrder = (o0: PurchaseOrder, removedLineIds: ID[]): Undo => {
     // the server moves row_version by one per save (a new order: the insert, then the update → 2) — mirrored here so a
@@ -1548,8 +1583,10 @@ export function StoreProvider({
         mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at });
         // «Отменить» (rule 5): the op may already be on the server (the outbox goes every 1.5 s) — a reverse op, not a
         // take-back of the queue; while both wait they go in order, the last one wins
-        return () =>
-          void mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
+        return markUndo(() => {
+          mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
+          return true;
+        });
       },
       saveChecklistTemplate: (t, opts) => {
         const clean = cleanTemplate(t);
@@ -1588,7 +1625,7 @@ export function StoreProvider({
       payVisit: (visitId, method) => {
         const d0 = dbRef.current;
         const v = d0.visits.find((x) => x.id === visitId);
-        if (!v) return () => {};
+        if (!v) return NO_UNDO;
         const invoiceId = uid();
         const paymentId = uid();
         // an inspection (no job) takes no payment
@@ -1647,7 +1684,7 @@ export function StoreProvider({
       markReminded: (id) => patchLead(id, { remindedAt: new Date().toISOString(), askAgainAt: undefined }),
       remindInvoice: (invoiceId, channel) => {
         const inv = dbRef.current.invoices.find((i) => i.id === invoiceId);
-        if (!inv) return () => {};
+        if (!inv) return NO_UNDO;
         const activityId = uid();
         const at = new Date().toISOString();
         return mutate(
@@ -1710,7 +1747,7 @@ export function StoreProvider({
         mutate("lead.cost", (d) => ({ ...d, leads: d.leads.map((x) => (x.id === id ? { ...x, costCents: cents } : x)) }), { k: "lead.cost", leadId: id, cents }),
       saveLeadPeople: (leadId, people) => {
         const l = dbRef.current.leads.find((x) => x.id === leadId);
-        if (!l) return () => {};
+        if (!l) return NO_UNDO;
         const named = people.map((p, i) => (i === 0 ? { ...p, name: l.name, role: "main" as const } : p));
         if (l.customerId && dbRef.current.customers.some((c) => c.id === l.customerId)) return saveCustomerPeople(l.customerId, named);
         const clean = cleanPeople(named, uid);
@@ -1795,7 +1832,7 @@ export function StoreProvider({
           setDb(d);
         };
         const cid = company?.companyId;
-        return changeConsent(
+        const c = changeConsent(
           {
             get: () => dbRef.current,
             set: put,
@@ -1816,6 +1853,14 @@ export function StoreProvider({
           },
           on,
         );
+        // the consent's own step back (locationConsent.ts): the store's undo, so the toast takes it (#1261)
+        return {
+          done: c.done,
+          undo: markUndo(() => {
+            c.undo();
+            return true;
+          }),
+        };
       },
       recordVisitPoint: (p, source) => {
         const next = { ...dbRef.current, visitPoints: keepLast(dbRef.current.visitPoints, p) };
@@ -1845,12 +1890,12 @@ export function StoreProvider({
       },
       bookLead: (id, at) => {
         const l = dbRef.current.leads.find((x) => x.id === id);
-        if (!l || !isOpenLeadStatus(l.status)) return () => {};
+        if (!l || !isOpenLeadStatus(l.status)) return NO_UNDO;
         // S4 (docs/specs/03 §1): an inspection is a visit of the lead at the property, without a job.
         // One planned inspection at a time (double tap, second booking): reschedule lives in the Plan.
-        if (hasPlannedInspection(dbRef.current, l)) return () => {};
+        if (hasPlannedInspection(dbRef.current, l)) return NO_UNDO;
         const target = leadTarget(id);
-        if (!target) return () => {};
+        if (!target) return NO_UNDO;
         const ids = { visitId: at.visitId ?? uid() };
         const now = new Date().toISOString();
         const snap = snapshotFor("inspection", []);
@@ -1881,7 +1926,7 @@ export function StoreProvider({
       cancelVisit: (id, reason, text) => {
         const d0 = dbRef.current;
         const v = d0.visits.find((x) => x.id === id);
-        if (!v || !canCancel(v) || (reason === "other" && !text?.trim())) return () => {};
+        if (!v || !canCancel(v) || (reason === "other" && !text?.trim())) return NO_UNDO;
         const leadBack = leadRollsBack(d0, id);
         const jobBack = jobRollsBack(d0, id);
         return mutate(
@@ -1922,7 +1967,7 @@ export function StoreProvider({
       },
       rescheduleVisit: (id, start, durationMin, allDay) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
-        if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
+        if (!v || !canReschedule(v) || durationMin <= 0) return NO_UNDO;
         return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => rescheduled(x, start, durationMin, allDay)), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
       },
       addLead: (lead) => {
@@ -1945,7 +1990,7 @@ export function StoreProvider({
       assignVisit: (visitId, userIds) => {
         const v = dbRef.current.visits.find((x) => x.id === visitId);
         // people change only before the tech is on site (§4.1; the server refuses the same, public.assign_visit)
-        if (!v || !canReschedule(v)) return () => {};
+        if (!v || !canReschedule(v)) return NO_UNDO;
         const list = [...new Set(userIds)];
         return mutate("visit.assign", (d) => patchVisit(d, visitId, (x) => withAssignees(x, list)), { k: "visit.assign", visitId, userIds: list });
       },
@@ -1967,7 +2012,7 @@ export function StoreProvider({
       },
       payInvoice: (id, method) => {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
-        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : () => {};
+        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : NO_UNDO;
       },
       recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
       refundPaymentDemo: (paymentId, amountCents) => {
@@ -2007,7 +2052,7 @@ export function StoreProvider({
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
         const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
-        if (!job || !customerId || amountCents <= 0) return () => {};
+        if (!job || !customerId || amountCents <= 0) return NO_UNDO;
         // #865: never more than the contract (engine canIssue; the server refuses the same from В1-4б); the tax inside the total
         const split = contractInvoice(d0, job, amountCents);
         if (!split) return null;
@@ -2087,10 +2132,10 @@ export function StoreProvider({
       },
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
-        if (prev?.status === "approved") return () => {};
+        if (prev?.status === "approved") return NO_UNDO;
         // #1138: a tech makes a new estimate only where the server lets him (estimates_insert — a property he works at);
         // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
-        if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return () => {};
+        if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return NO_UNDO;
         // as it may be counted and shown (Р3, Р4) before it is counted and saved
         const { doc, linesFrom } = docForSave(prev?.status, normalizeDoc(doc0).doc, uid);
         const sum = summarize(doc);
@@ -2121,9 +2166,9 @@ export function StoreProvider({
       },
       approveEstimate: (id, a) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return () => {};
+        if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return NO_UNDO;
         // on site the client signs on an employee's device: only someone who may sign contracts (server: the same)
-        if (a.channel === "on_site" && !canCountersign(dbRef.current, dbRef.current.me)) return () => {};
+        if (a.channel === "on_site" && !canCountersign(dbRef.current, dbRef.current.me)) return NO_UNDO;
         if (a.channel === "on_site") a = { ...a, deviceUserId: dbRef.current.me };
         const token = e.token ?? newToken();
         const ids = { jobId: jobOfEstimate(dbRef.current, id)?.id ?? uid(), invoiceId: uid() };
@@ -2137,13 +2182,13 @@ export function StoreProvider({
       countersignEstimate: (id, signature) => {
         const d0 = dbRef.current;
         const e = d0.estimates.find((x) => x.id === id);
-        if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return () => {};
+        if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return NO_UNDO;
         const now = new Date().toISOString();
         // the same ids on the phone and the server (the client may have signed on the page: no ids were stored then)
         const ids = { jobId: jobOfEstimate(d0, id)?.id ?? e.approval?.jobId ?? uid(), invoiceId: e.approval?.invoiceId ?? uid() };
         // the saved signature (one tap) or one drawn now (the server saves it as the new own signature)
         const saved = typeof signature === "string" ? undefined : (d0.memberSignatures ?? []).find((s) => s.id === signature.savedId && s.userId === d0.me && !s.revokedAt);
-        if (typeof signature !== "string" && !saved) return () => {};
+        if (typeof signature !== "string" && !saved) return NO_UNDO;
         const svg = typeof signature === "string" ? signature : saved!.svg;
         return mutate(
           "estimate.countersign",
@@ -2152,14 +2197,14 @@ export function StoreProvider({
         );
       },
       saveMySignature: (svg, name, title) => {
-        if (svg.length < 3 || !name.trim()) return () => {};
+        if (svg.length < 3 || !name.trim()) return NO_UNDO;
         const sig = { id: uid(), userId: dbRef.current.me, svg, name: name.trim(), title: title?.trim() || undefined };
         return mutate("member.signature", (d) => savedSignature(d, sig, new Date().toISOString()), { k: "member.signature", ...sig });
       },
       updateMember: (id, patch) => {
         const d0 = dbRef.current;
         // security-check #98: check the role before applying — offline must not show an edit the server refuses
-        if (!d0.members.some((m) => m.id === id) || !canEditMember(d0, d0.me)) return () => {};
+        if (!d0.members.some((m) => m.id === id) || !canEditMember(d0, d0.me)) return NO_UNDO;
         // the right to sign: owner only (the server refuses others too)
         const p = { ...patch, canSignContracts: canGrantSign(d0, d0.me) ? patch.canSignContracts : undefined };
         return mutate(
@@ -2177,18 +2222,18 @@ export function StoreProvider({
       },
       declineCountersign: (id, text) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e || e.status !== "awaiting_countersign" || !text.trim() || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e || e.status !== "awaiting_countersign" || !text.trim() || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
         return mutate("estimate.decline", (d) => companyDeclined(d, id, text), { k: "estimate.decline", id, text: text.trim() });
       },
       reopenEstimate: (id, reason) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
         return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim() });
       },
       revokeEstimateLink: (id) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         // the server allows the director and the office only (revoke_estimate_link)
-        if (!e?.token || e.linkRevokedAt || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e?.token || e.linkRevokedAt || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
         const now = new Date().toISOString();
         // the phone keeps the old token marked revoked: the page says "not valid" at once, the next send makes a new one
         return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, linkRevokedAt: now } : x)) }), {
@@ -2202,7 +2247,7 @@ export function StoreProvider({
       convertLead: (leadId, reasonText) => {
         const d0 = dbRef.current;
         const l = d0.leads.find((x) => x.id === leadId);
-        if (!l || l.status === "won") return () => {};
+        if (!l || l.status === "won") return NO_UNDO;
         const ids = { customerId: l.customerId ?? uid(), contactId: uid(), propertyId: l.propertyId ?? uid(), noteId: uid() };
         const needCustomer = !l.customerId;
         const now = new Date().toISOString();
@@ -2249,11 +2294,11 @@ export function StoreProvider({
         ),
       // a repeat (a double tap, the pair already merged / marked) queues nothing: a second op would outlive its «Отменить»
       mergeCustomers: (keepId, dropId) => {
-        if (mergeCustomersDb(dbRef.current, keepId, dropId) === dbRef.current) return () => {};
+        if (mergeCustomersDb(dbRef.current, keepId, dropId) === dbRef.current) return NO_UNDO;
         return mutate("customer.merge", (d) => mergeCustomersDb(d, keepId, dropId), { k: "customer.merge", keepId, dropId });
       },
       markNotDuplicate: (aId, bId) => {
-        if (markNotDuplicateDb(dbRef.current, aId, bId) === dbRef.current) return () => {};
+        if (markNotDuplicateDb(dbRef.current, aId, bId) === dbRef.current) return NO_UNDO;
         return mutate("customer.notDup", (d) => markNotDuplicateDb(d, aId, bId), { k: "customer.notDup", id: aId, otherId: bId });
       },
       saveServiceCategory: (cat) => {
@@ -2282,35 +2327,37 @@ export function StoreProvider({
         const back = lineSaveUndo(dbRef.current, line);
         mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew });
         // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
-        return () => {
-          const now = dbRef.current;
-          const after = back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line);
-          // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
-          if (lineChangeRefusal(now, after, line.jobId)) return false;
+        const after = (now: DB) => (back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line));
+        // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
+        const ready = () => !lineChangeRefusal(dbRef.current, after(dbRef.current), line.jobId);
+        return markUndo(() => {
+          if (!ready()) return false;
           if (back.k === "remove") mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id });
           else mutate("jobLine.save", (d) => withJobLine(d, back.line), { k: "jobLine.save", line: back.line, isNew: false });
           return true;
-        };
+        }, ready);
       },
       removeJobLine: (id) => {
         const line = (dbRef.current.jobLines ?? []).find((l) => l.id === id);
-        if (!line) return () => false;
+        if (!line) return markUndo(() => false);
         mutate("jobLine.remove", (d) => withoutJobLine(d, id), { k: "jobLine.remove", id });
         // the removal may already be on the server: «Отменить» puts the line back as its own step
-        return () => {
-          if (lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId)) return false;
+        const ready = () => !lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId);
+        return markUndo(() => {
+          if (!ready()) return false;
           mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
           return true;
-        };
+        }, ready);
       },
       setJobTax: (jobId, tax) => {
         const prev = taxBefore(dbRef.current, jobId);
         mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
-        return () => {
-          if (lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId)) return false;
+        const ready = () => !lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId);
+        return markUndo(() => {
+          if (!ready()) return false;
           mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });
           return true;
-        };
+        }, ready);
       },
       setJobTags: (jobId, tagIds) => {
         // a tag switched off since cannot be put back (job_tags_insert): «Отменить» leaves it out
@@ -2318,13 +2365,13 @@ export function StoreProvider({
         const prev = (dbRef.current.jobs.find((j) => j.id === jobId)?.tagIds ?? []).filter((id) => active.has(id));
         const put = (ids: ID[]) => mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds: ids } : j)) }), { k: "job.tags", id: jobId, tagIds: ids });
         put(tagIds);
-        return () => void put(prev);
+        return markUndo(() => (put(prev), true));
       },
       setJobType: (jobId, jobTypeId) => {
         const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.jobTypeId ?? null;
         const put = (id: ID | null) => mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: id ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId: id });
         put(jobTypeId);
-        return () => void put(prev);
+        return markUndo(() => (put(prev), true));
       },
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
@@ -2504,10 +2551,12 @@ export function StoreProvider({
         const before = o.lines.filter((l) => lines.some((x) => x.id === l.id)).map((l) => ({ id: l.id, received: l.receivedQty }));
         apply(o, lines);
         // «Отменить» (rule 5): the quantities as they were — the op may already be on the server, a reverse call
-        return () => {
+        return markUndo(() => {
           const cur = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === id);
-          if (cur) apply(cur, before);
-        };
+          if (!cur) return undefined;
+          apply(cur, before);
+          return true;
+        });
       },
       loadCostHistory: (where) => {
         const cid = whoRef.current?.companyId;
@@ -2567,7 +2616,7 @@ export function StoreProvider({
       scheduleJob: (jobId, sch) => {
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
-        if (!job) return () => {};
+        if (!job) return NO_UNDO;
         const e = job.estimateId ? d0.estimates.find((x) => x.id === job.estimateId) : undefined;
         const visitId = sch.visitId ?? uid();
         const opt = e?.doc && e.approval ? e.doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
@@ -2598,7 +2647,7 @@ export function StoreProvider({
       },
       saveCompany: (patch) => {
         const cur = dbRef.current.company;
-        if (!cur) return () => {};
+        if (!cur) return NO_UNDO;
         const next = { ...cur, ...patch };
         return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined });
       },
@@ -2636,20 +2685,20 @@ export function StoreProvider({
           { k: "contact.remove", id },
         ),
       inviteMember: (m) => {
-        if (modeRef.current !== "demo") return () => {};
+        if (modeRef.current !== "demo") return NO_UNDO;
         const initials = m.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
         const expiresAt = new Date(Date.now() + 7 * 864e5).toISOString();
         return mutate("member.invite", (d) => ({ ...d, members: [...d.members, { id: uid(), ...m, initials, pending: true, expiresAt }] }));
       },
       revokeInvite: (id) => {
-        if (modeRef.current !== "demo" || !dbRef.current.members.some((m) => m.id === id && m.pending)) return () => {};
+        if (modeRef.current !== "demo" || !dbRef.current.members.some((m) => m.id === id && m.pending)) return NO_UNDO;
         return mutate("member.revoke", (d) => ({ ...d, members: d.members.filter((m) => m.id !== id) }));
       },
       setMemberDisabled: (id, disabled) => {
-        if (modeRef.current !== "demo") return () => {};
+        if (modeRef.current !== "demo") return NO_UNDO;
         const d0 = dbRef.current;
         const m = d0.members.find((x) => x.id === id && (disabled ? !x.pending : !!x.disabled));
-        if (!m || m.id === d0.me) return () => {};
+        if (!m || m.id === d0.me) return NO_UNDO;
         // the person stays in `members` (old records keep the name); `pending` keeps them out of pickers
         return mutate("member.status", (d) => ({
           ...d,
@@ -2663,7 +2712,7 @@ export function StoreProvider({
       },
       signEstimate: (id, path) =>
         // #1126: a draft only by someone who may send it (the server signs only a sent, locked version)
-        !canCountersign(dbRef.current, dbRef.current.me) || !canSignDraftOnSite(role, dbRef.current.estimates.find((x) => x.id === id)?.status ?? "draft") ? () => {} : mutate(
+        !canCountersign(dbRef.current, dbRef.current.me) || !canSignDraftOnSite(role, dbRef.current.estimates.find((x) => x.id === id)?.status ?? "draft") ? NO_UNDO : mutate(
           "estimate.sign",
           (d) => ({
             ...d,
@@ -2684,7 +2733,7 @@ export function StoreProvider({
         ),
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e || !e.depositCents) return () => {};
+        if (!e || !e.depositCents) return NO_UNDO;
         const job0 = jobOfEstimate(dbRef.current, id);
         const depInv = job0 ? dbRef.current.invoices.find((i) => i.jobId === job0.id && i.kind === "deposit") : undefined;
         if (depInv) return recordPayment(depInv.id, depInv.totalCents - depInv.paidCents, method, undefined, fromClient);
@@ -2719,7 +2768,7 @@ export function StoreProvider({
           },
         );
       },
-      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
+      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : NO_UNDO),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],

@@ -31,7 +31,7 @@ export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, rea
   const remove = (id: string) => {
     const undo = removePhoto(store, id);
     onRemoved?.();
-    if (typeof undo === "function") toast.show(t("photo.deleted"), undo as () => void);
+    if (undo) toast.show(t("photo.deleted"), undo);
   };
   if (framed) {
     return (

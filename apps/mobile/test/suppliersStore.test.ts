@@ -56,6 +56,7 @@ import { StoreProvider } from "../src/data/store";
 import { applyTaxUndo } from "../src/features/suppliers";
 import { makeSeed } from "../src/data/seed";
 import type { CatalogItem, DB, Supplier } from "../src/data/types";
+import type { GuardedUndo } from "../src/data/undo";
 
 type Value = {
   db: DB;
@@ -64,7 +65,7 @@ type Value = {
   setSupplierActive: (id: string, active: boolean) => () => void;
   applySupplierTax: (id: string) => () => void;
   saveCatalogItem: (it: CatalogItem) => () => void;
-  undoTogether: (undos: readonly unknown[]) => () => boolean | undefined;
+  undoTogether: (undos: readonly unknown[]) => import("../src/data/undo").GuardedUndo;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -204,7 +205,7 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(1025);
     // on main all of it went back; with all or nothing alone, nothing would (the save is too late)
-    expect(applyTaxUndo(valueOf(r).undoTogether, undoSave, undoApply)()).toBe(true);
+    expect(applyTaxUndo(valueOf(r).undoTogether, undoSave, undoApply as unknown as GuardedUndo)()).toBe(true);
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(0);
     expect(supOf(r).taxBps).toBe(1025);

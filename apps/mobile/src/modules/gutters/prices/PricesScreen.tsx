@@ -25,6 +25,7 @@ import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, CardList, ListRow, Screen } from "@/ui/surfaces";
 import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
+import { withAfter } from "@/data/undo";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -59,12 +60,8 @@ export default function GutterPricesScreen() {
     if (!fresh.length) return;
     fresh.forEach((it) => made.current.add(it.id));
     const undo = store.saveCatalogItems(fresh, { onlyNew: true });
-    toast.show(store.online ? t(k("made"), { n: fresh.length }) : t("offline.queued"), () => {
-      // too late (false): the items stay made — a second press must not make them again (#1244)
-      const r = undo();
-      if (r !== false) fresh.forEach((it) => made.current.delete(it.id));
-      return r;
-    });
+    // too late (false): the items stay made — a second press must not make them again (#1244)
+    toast.show(store.online ? t(k("made"), { n: fresh.length }) : t("offline.queued"), withAfter(undo, () => fresh.forEach((it) => made.current.delete(it.id))));
   };
   const bind = (it: CatalogItem, row: PriceRow) => {
     setBindFor(null);
