@@ -66,6 +66,7 @@ exports.run = async (h) => {
     return true;
   };
   const corners = boxes.texts.filter((b) => /°/.test(b.s));
+  h.expect(corners.length > 0, "the sample shows at least one corner word (the check is not empty)");
   const onLine = corners.filter((b) => boxes.lines.some((l) => segHits(l, b))).map((b) => b.s);
   h.expect(onLine.length === 0, "no corner word stands on a line: " + onLine.join(" | "));
   await h.shot("labels-zoomed-out");
