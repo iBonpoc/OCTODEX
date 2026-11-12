@@ -13379,4 +13379,44 @@ select tst.ok((select status = 'draft' from public.invoices where id = '01970000
               and not exists (select 1 from public.payments where id = '21970000-0000-4000-8000-0000000000c2'), 'T197 nothing written');
 \echo 'T197 the invoices of a contract: never above it; a wrong one is voided by the owner, without payments, with a reason'
 
+-- ======================================================================================================================
+-- T198: the payment check (app.tg_payment_not_above_balance) says nothing to someone outside the invoice's company — it
+-- runs before the RLS check: another company gets only the policy's refusal, whatever the amount; the company's own
+-- overpayment is refused without amounts in the text. And no payment goes into a voided invoice by a server path either
+-- (no signed-in user — the Stripe webhook's database calls, a migration): t06_payment_not_void.
+-- ======================================================================================================================
+:as_owner_b
+do $$ declare st text; msg text; begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-b-1');
+  raise exception 'FAILED: T198 another company wrote a payment';
+exception when others then
+  get stacked diagnostics st = returned_sqlstate, msg = message_text;
+  perform tst.ok(st = '42501' and msg not like '%balance%', format('T198 another company: only the policy''s refusal (%s %s)', st, msg));
+end $$;
+do $$ declare st text; msg text; begin
+  -- its own company on the payment, our invoice: the foreign key refuses, nothing about our invoice is said
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('cb000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-b-2');
+  raise exception 'FAILED: T198 another company wrote a payment on our invoice';
+exception when others then
+  get stacked diagnostics st = returned_sqlstate, msg = message_text;
+  perform tst.ok(msg not like '%balance%' and msg not like '%9000%', format('T198 our invoice under another company''s payment: nothing said about it (%s)', st));
+end $$;
+:as_office_a
+do $$ declare h text; msg text; begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-a-1');
+  raise exception 'FAILED: T198 an overpayment was written';
+exception when check_violation then
+  get stacked diagnostics h = pg_exception_hint, msg = message_text;
+  perform tst.ok(h = 'payment_above_balance' and msg !~ '[0-9]', 'T198 our own overpayment: refused, no amounts in the text');
+end $$;
+-- a server path (no signed-in user) into a voided invoice: refused as for a person
+:as_super
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+         ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000002', 'c1970000-0000-4000-8000-000000000001', 'card', 100, 'succeeded', 't198-server-void')$q$,
+       '%void invoice%', 'T198 a server path pays no voided invoice either');
+\echo 'T198 the payment check: nothing to another company, no amounts, no payment into a voided invoice'
+
 \echo 'ALL TESTS PASSED'
