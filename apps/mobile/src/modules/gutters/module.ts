@@ -7,7 +7,7 @@
  */
 import { moduleHref, type ModuleDef } from "../registry";
 import { asGutterData, guttersOps, linkLead, loadGutters, measureHref } from "./data";
-import { staleMeasurements } from "./estimateLink";
+import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
 
 const draw = moduleHref("gutters", "draw");
 /** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
@@ -100,9 +100,13 @@ const gutters: ModuleDef = {
   // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the review's «Перенести изменения в смету»)
   estimateNotes: (e, db) => {
     const m = staleMeasurements(db, e)[0];
-    return m
-      ? [{ id: "stale", labelKey: "mod.gutters.est.stale", hintKey: "mod.gutters.est.staleHint", action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate", icon: "pencil", href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` } }]
-      : [];
+    // the drawing's change says it first: not two buttons that do the same
+    const eng = engineStaleMeasurements(db, e).find((x) => x.id !== m?.id);
+    const notes = [];
+    if (m) notes.push({ id: "stale", labelKey: "mod.gutters.est.stale" as const, hintKey: "mod.gutters.est.staleHint" as const, action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate" as const, icon: "pencil" as const, href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` } });
+    // #1165: the engine's rule changed since the estimate was computed → «Обновить» (a signed estimate is not offered notes at all)
+    if (eng) notes.push({ id: "engine", labelKey: "mod.gutters.est.engine" as const, hintKey: "mod.gutters.est.engineHint" as const, action: { id: "engine-update", labelKey: "mod.gutters.est.staleUpdate" as const, icon: "pencil" as const, href: `${view}?m=${encodeURIComponent(eng.id)}&estimate=1` } });
+    return notes;
   },
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
   screens: {
