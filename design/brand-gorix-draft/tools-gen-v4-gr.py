@@ -30,5 +30,6 @@ if __name__ == '__main__':
     for k, c in cfg.items():
         (out / f'gr-{k}-icon.svg').write_text(svg(INK_D, None, BG, c['rdx'], c['icon'], f'GoRix GR v4.1 · {k} · app icon'))
         (out / f'gr-{k}-dark.svg').write_text(svg(INK_D, None, None, c['rdx'], c['tight'], f'GoRix GR v4.1 · {k} · dark'))
+        (out / f'gr-{k}-mark-dark.svg').write_text(svg(INK_D, None, None, c['rdx'], c['icon'], f'GoRix GR v4.1 · {k} · square, no background'))
         (out / f'gr-{k}-light.svg').write_text(svg(INK_L, INK_L, None, c['rdx'], c['tight'], f'GoRix GR v4.1 · {k} · light'))
     print('wrote', 3 * len(cfg))

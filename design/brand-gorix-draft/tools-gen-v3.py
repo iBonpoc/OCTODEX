@@ -8,8 +8,8 @@ INK_D, INK_L, ACC, ON_ACC, OK = '#F2F3F5', '#15161A', '#FBFF00', '#0B0C0F', '#7C
 
 # --- marks (1024 box). Ring = the path of the G; the dot travels and is drawn separately.
 RING = {
-    'calm': 'M730 170 H442 A272 272 0 0 0 170 442 V582 A272 272 0 0 0 442 854 H582 A272 272 0 0 0 854 582 V450 H640 V574 H730 V582 '
-            'A148 148 0 0 1 582 730 H442 A148 148 0 0 1 294 582 V442 A148 148 0 0 1 442 294 H600 Z',
+    'calm': 'M660 170 H442 A272 272 0 0 0 170 442 V582 A272 272 0 0 0 442 854 H582 A272 272 0 0 0 854 582 V450 H640 V574 H730 V582 '
+            'A148 148 0 0 1 582 730 H442 A148 148 0 0 1 294 582 V442 A148 148 0 0 1 442 294 H660 Z',   # v4: top end straight (no Gatorade-like slant)
     'bold': 'M600 170 H442 A272 272 0 0 0 170 442 V582 A272 272 0 0 0 442 854 H582 A272 272 0 0 0 854 582 V450 H690 V574 H730 V582 '
             'A148 148 0 0 1 582 730 H442 A148 148 0 0 1 294 582 V442 A148 148 0 0 1 442 294 H600 L716 232 Z',
 }
@@ -87,6 +87,19 @@ def intro(kind):
             f'<animateMotion begin="800ms" dur="600ms" fill="freeze" keyTimes="0;1" calcMode="spline" keySplines=".45 0 .35 1" path="{jump}"/>'
             f'<animateTransform attributeName="transform" type="scale" additive="sum" values="1;1.25;1" begin="1400ms" dur="200ms" fill="freeze"/></g></g></svg>')
 
+GR_RDX, GR_BOX = -604, (16, -736, 1363, 764)   # v4.1 «плотнее»: R of the logo font next to the G (tools-gen-v4-gr.py, v4/gr-layout.json)
+
+def gr_wrap(svg_1024):
+    """Put a 1024-box G animation next to the logo R: the waiting/done animations live on the GR mark."""
+    head, inner = re.match(r'(<svg[^>]*>)(.*)</svg>', svg_1024, re.S).groups()
+    title = re.search(r'<title>.*?</title>', inner).group(0); inner = inner.replace(title, '')
+    cls = re.search(r'class="([^"]+)"', head)
+    c = f' class="{cls.group(1)}"' if cls else ''
+    x, y, w, h = GR_BOX
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="{x} {y} {w} {h}"{c}>{title.replace("v3.1", "v4 GR")}'
+            f'<g transform="translate({round(TX,1)} {round(TY,1)}) scale({round(S,5)})">{inner}</g>'
+            f'<path fill="var(--i,#F2F3F5)" transform="translate({GR_RDX} 0)" d="{paths[2]}"/></svg>')
+
 def loading(kind):
     """Waiting: the dot (with its ring, so it never melts into the letter) rides the contour of the G; the letter never rotates.
     Loop 1800 = motion.skeletonCycle; shown after spinnerDelayMs 300."""
@@ -129,7 +142,7 @@ files = {
     'logo-calm-dark.svg': ligature('calm', 'dark', 'GoRix logo v3 · calm · dark'), 'logo-calm-light.svg': ligature('calm', 'light', 'GoRix logo v3 · calm · light'),
     'logo-bold-dark.svg': ligature('bold', 'dark', 'GoRix logo v3 · bold · dark'), 'logo-bold-light.svg': ligature('bold', 'light', 'GoRix logo v3 · bold · light'),
     'intro-calm.svg': intro('calm'), 'intro-bold.svg': intro('bold'),
-    'loading-calm.svg': loading('calm'), 'success-calm.svg': success('calm'),
+    'loading-calm.svg': gr_wrap(loading('calm')), 'success-calm.svg': gr_wrap(success('calm')),
     'go-button-dark.svg': go_button(INK_D, 'Кнопка Go · dark (sketch)'), 'go-button-light.svg': go_button(INK_L, 'Кнопка Go · light (sketch)'),
     'go-icon.svg': go_icon(),
 }
