@@ -1,5 +1,5 @@
 {
-  "about": "#1147: what the phone shows the client (summarize) = what the server signs (app.estimate_option_totals over the rows estimate.save writes) \u2014 test/signTotals.test.ts and T195 \u00b7 quick: a quick estimate this phone made (estimate.add rows) \u2014 addedTotalCents = estimate_option_totals",
+  "about": "#1147: what the phone shows the client (summarize) = what the server signs (app.estimate_option_totals over the rows estimate.save writes) — test/signTotals.test.ts and T195 · quick: a quick estimate this phone made (estimate.add rows) — addedTotalCents = estimate_option_totals",
   "cases": [
     {
       "name": "two options, the second with its add-on; tax 9.5% on material; 10% off; deposit 10%",
@@ -318,7 +318,7 @@
       "depositCents": 20000
     },
     {
-      "name": "no tax, no discount, two add-ons \u2014 one taken; deposit 25%",
+      "name": "no tax, no discount, two add-ons — one taken; deposit 25%",
       "doc": {
         "options": [
           {
@@ -434,6 +434,170 @@
       },
       "totalCents": 115000,
       "depositCents": 28750
+    },
+    {
+      "name": "the default of a new estimate: tax 10.25% on every group, $23.99 off, a hidden $0 line, the add-on taken; deposit 10%",
+      "doc": {
+        "options": [
+          {
+            "id": "c1",
+            "name": "Whole",
+            "lines": [
+              {
+                "id": "c1a",
+                "name": "Line c1a",
+                "group": "labor",
+                "quantity": "2.5",
+                "unit": "hr",
+                "unitPriceCents": 8550
+              },
+              {
+                "id": "c1b",
+                "name": "Line c1b",
+                "group": "material",
+                "quantity": "11",
+                "unit": "ea",
+                "unitPriceCents": 1337,
+                "unitCostCents": 900
+              },
+              {
+                "id": "c1c",
+                "name": "Line c1c",
+                "group": "service",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 19900
+              },
+              {
+                "id": "c1d",
+                "name": "Line c1d",
+                "group": "material",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 0,
+                "clientVisible": false
+              },
+              {
+                "id": "c1e",
+                "name": "Line c1e",
+                "group": "service",
+                "quantity": "1",
+                "unit": "ea",
+                "unitPriceCents": 4500,
+                "optional": true
+              }
+            ]
+          }
+        ],
+        "settings": {
+          "tax": {
+            "enabled": true,
+            "rateBps": 1025,
+            "groups": {
+              "service": true,
+              "labor": true,
+              "material": true
+            }
+          },
+          "deposit": {
+            "kind": "pct",
+            "bps": 1000
+          },
+          "discount": {
+            "kind": "fixed",
+            "cents": 2399
+          }
+        }
+      },
+      "sel": {
+        "optionId": "c1",
+        "addonIds": [
+          "c1e"
+        ]
+      },
+      "rows": {
+        "taxEnabled": true,
+        "taxRateBps": 1025,
+        "options": [
+          {
+            "id": "c1",
+            "position": 0,
+            "name": "Whole",
+            "isRecommended": false,
+            "discountMode": "fixed",
+            "discountValue": 2399
+          }
+        ],
+        "lines": [
+          {
+            "id": "c1a",
+            "optionId": "c1",
+            "position": 0,
+            "group": "labor",
+            "name": "Line c1a",
+            "description": null,
+            "quantity": "2.5",
+            "unit": "hr",
+            "unitPriceCents": 8550,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "c1b",
+            "optionId": "c1",
+            "position": 1,
+            "group": "material",
+            "name": "Line c1b",
+            "description": null,
+            "quantity": "11",
+            "unit": "ea",
+            "unitPriceCents": 1337,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "c1c",
+            "optionId": "c1",
+            "position": 2,
+            "group": "service",
+            "name": "Line c1c",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 19900,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "c1d",
+            "optionId": "c1",
+            "position": 3,
+            "group": "material",
+            "name": "Line c1d",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 0,
+            "taxable": true,
+            "isOptional": false
+          },
+          {
+            "id": "c1e",
+            "optionId": "c1",
+            "position": 4,
+            "group": "service",
+            "name": "Line c1e",
+            "description": null,
+            "quantity": "1",
+            "unit": "ea",
+            "unitPriceCents": 4500,
+            "taxable": true,
+            "isOptional": true
+          }
+        ]
+      },
+      "totalCents": 64037,
+      "depositCents": 6404
     }
   ],
   "quick": [
@@ -457,7 +621,7 @@
       "shownTotalCents": 18500
     },
     {
-      "name": "the quick estimate, $100 for 3: estimate.add rounds the price (3333 \u00d7 3 = $99.99) \u2014 the total is not sent",
+      "name": "the quick estimate, $100 for 3: estimate.add rounds the price (3333 × 3 = $99.99) — the total is not sent",
       "lines": [
         {
           "qty": "3",
