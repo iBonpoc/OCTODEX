@@ -1557,6 +1557,15 @@ describe("unit:storeSync — a tech makes an estimate only where he works, and k
     const v = await saveAs("p7", "c7");
     expect(v.db.estimates.some((e) => e.id === "e-1138")).toBe(false);
   });
+  it("a quick estimate (addEstimate) keeps its author too", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo, the office
+    await settle();
+    const v = valueOf(r) as unknown as { db: { me: string; estimates: { title: string; createdBy?: string }[] }; addEstimate: (e: object) => void };
+    v.addEstimate({ customerId: "c1", propertyId: "p1", title: "Quick 1138", totalCents: 18500, depositCents: 0, status: "draft", lines: [{ name: "Work", qty: "1", totalCents: 18500 }] });
+    await settle();
+    const d = (valueOf(r) as unknown as typeof v).db;
+    expect(d.estimates.find((e) => e.title === "Quick 1138")?.createdBy).toBe(d.me);
+  });
   it("at his job's property (p1): saved, and its author is him (the server's created_by)", async () => {
     const v = await saveAs("p1", "c1");
     expect(v.db.estimates.find((e) => e.id === "e-1138")?.createdBy).toBe(v.db.me);

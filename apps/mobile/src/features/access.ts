@@ -10,7 +10,7 @@
  * so nothing the tech made offline (his own draft, not on the server yet) is ever hidden by the phone. The rules matter
  * in the demo, where the phone holds the whole company. Pure, unit-tested: test/access.test.ts.
  */
-import type { DB, ID, Role } from "@/data/types";
+import type { DB, ID, Lead, Role } from "@/data/types";
 import type { Mode } from "@/data/store";
 import { techVisitCounts } from "./comms/comms";
 import { isAssigned } from "./schedule";
@@ -52,6 +52,11 @@ export function isPropertyAssignee(db: Pick<DB, "visits" | "jobs" | "leads">, w:
       (v.propertyId ?? db.jobs.find((j) => j.id === v.jobId)?.propertyId ?? (v.leadId ? db.leads.find((l) => l.id === v.leadId)?.propertyId : undefined)) === propertyId &&
       techVisitCounts({ me: w.me, jobs: db.jobs }, v, now),
   );
+}
+/** the property a lead's estimate is made at (the store's leadTarget): the lead's own, else its client's first; none —
+ *  a new one is made for it (then nobody has a visit there yet) */
+export function leadEstimatePropertyId(db: Pick<DB, "properties">, l: Pick<Lead, "propertyId" | "customerId">): ID | undefined {
+  return l.propertyId ?? (l.customerId ? db.properties.find((p) => p.customerId === l.customerId)?.id : undefined);
 }
 /** a tech saves a new estimate only where the server lets him (estimates_insert: a property he works at, #1138) */
 export const canMakeEstimateAt = (db: Pick<DB, "visits" | "jobs" | "leads">, w: Who, propertyId: ID | undefined): boolean => free(w) || isPropertyAssignee(db, w, propertyId);

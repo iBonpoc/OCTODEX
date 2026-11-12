@@ -170,6 +170,23 @@ describe("makeEstimate — through the core's store", () => {
     r.undo();
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
   });
+  it("#1138 (review of #1169 Б1): where the person may not make a new estimate — «notHere», and NOTHING is written (before: a revision, «ready», a client from the lead and a false «Смета составлена»)", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const asked: (string | undefined)[] = [];
+    const s = { ...h.s, mayMakeEstimateAt: (pid: string | undefined) => (asked.push(pid), false) };
+    const r = makeEstimate(s, input(M));
+    expect(r).toEqual({ ok: false, reason: "notHere" });
+    expect(h.sent).toEqual([]); // no revision, no «ready»
+    expect(h.targets).toEqual([]); // no client made from the lead
+    expect(h.saved).toEqual([]);
+    expect(asked).toHaveLength(1); // asked once, at the lead's property (or its client's), before anything
+  });
+  it("…where he may: made as before (the question does not change the rest)", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const s = { ...h.s, mayMakeEstimateAt: () => true };
+    expect(makeEstimate(s, input(M)).ok).toBe(true);
+    expect(h.saved).toHaveLength(1);
+  });
   it("P4b-2 (#705): the drawing goes with the estimate as its page; «Обновить» replaces it; without a page — none", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
     const pg = { id: "gutters:m1", title: "Gutter drawing", w: 100, h: 50, items: [{ t: "l" as const, x1: 0, y1: 0, x2: 10, y2: 0, sw: 1, ink: "ink" as const }] };

@@ -173,8 +173,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
 
   // #1138: a tech saves a new estimate only where the server lets him (estimates_insert — a property he works at)
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
-  const ok = !!customer && !!property && hasContent(doc) && mayHere;
+  const ok = !!customer && !!property && hasContent(doc);
   const save = (send: boolean) => {
+    // #1138: the main button stays active (DS §11 п.3, the director's review of #1169): where the tech may not make one, it says why
+    if (!mayHere) return void toast.show(t("est.tech.notHere"));
     if (!customer || !property) return;
     haptics.success();
     const clean: EstimateDoc = exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines) })) }, customer.taxExempt);
@@ -374,7 +376,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             </View>
           ) : (
             <>
-              {!ok ? (
+              {!ok || !mayHere ? (
                 <View testID={!mayHere && property ? "ue-not-here" : undefined}>
                   <T v="caption" tone="mut">
                     {!mayHere && property ? t("est.tech.notHere") : customer ? t("ue.empty") : t("ue.pickClient")}

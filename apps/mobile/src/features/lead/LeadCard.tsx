@@ -23,7 +23,7 @@ import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } fro
 import { Icon, Press, T } from "@/ui/primitives";
 import { liveUri } from "@/features/photoUri";
 import { Sheet, useToast } from "@/ui/overlays";
-import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
+import { canMakeEstimateAt, canSeeEstimate, leadEstimatePropertyId } from "@/features/access";
 import { Card, Empty, Grid, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -71,7 +71,7 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
   // a tech: only the estimates the server shows him (canSeeEstimate, #1138); a new one only where he works (estimates_insert)
   const who = { role, mode: store.mode, me: db.me };
   const estimates = db.estimates.filter((e) => (e.leadId === l.id || (l.customerId && e.customerId === l.customerId)) && canSeeEstimate(db, who, e.id));
-  const mayMakeEstimate = canMakeEstimateAt(db, who, l.propertyId);
+  const mayMakeEstimate = canMakeEstimateAt(db, who, leadEstimatePropertyId(db, l));
   const assignee = db.members.find((m) => m.id === l.assigneeId);
   const events = leadTimeline(db, l, db.me, t("acct.deletedName"));
 

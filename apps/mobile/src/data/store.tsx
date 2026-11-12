@@ -20,7 +20,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
-import { canMakeEstimateAt } from "@/features/access";
+import { canMakeEstimateAt, leadEstimatePropertyId } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -319,6 +319,8 @@ interface StoreCtx {
   saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
+  /** #1138: may the person make a NEW estimate at this property (a tech: only where he works, as the server) */
+  mayMakeEstimateAt: (propertyId: ID | undefined) => boolean;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
   convertLead: (leadId: ID, reasonText: string) => Undo;
   /** New client entered by hand (not from a lead): active client with one property. */
@@ -1110,7 +1112,7 @@ export function StoreProvider({
     const l = d0.leads.find((x) => x.id === leadId);
     if (!l) return null;
     if (l.customerId) {
-      const propertyId = l.propertyId ?? d0.properties.find((p) => p.customerId === l.customerId)?.id;
+      const propertyId = leadEstimatePropertyId(d0, l);
       if (propertyId) return { customerId: l.customerId, propertyId, undo: () => {} };
     }
     const ids = { customerId: uid(), contactId: uid(), propertyId: uid() };
@@ -2062,6 +2064,9 @@ export function StoreProvider({
         });
       },
       leadEstimateTarget: (leadId) => leadTarget(leadId),
+      // #1138: may the person make a new estimate at this property (a tech: where he works — estimates_insert); a module
+      // asks before it writes anything for an estimate (review of #1169 Б1)
+      mayMakeEstimateAt: (propertyId) => canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId),
       convertLead: (leadId, reasonText) => {
         const d0 = dbRef.current;
         const l = d0.leads.find((x) => x.id === leadId);

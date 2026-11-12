@@ -3,7 +3,8 @@
  * The bugs it guards (the demo): the lead card showed the tech every estimate of the lead and its client — a tap led to
  * «нет доступа»; «＋ Смета» on a lead where he has no visit let him save an estimate that then vanished behind «нет
  * доступа» (the server would not take it). Now the card lists only the estimates he may see; where he does not work, no
- * «＋ Смета», and the builder says the office makes it, its «Сохранить» off. The office sees and adds as before.
+ * «＋ Смета», and the builder says the office makes it — «Сохранить» stays active and, pressed, says so and saves
+ * nothing. The office sees and adds as before.
  * The demo seed, changed from a page without the app (h.seed): the tech's lead l4 at p7 (no visit of his there) with an
  * estimate made by another (e-281); the card opens on its «Сметы» tab.
  */
@@ -28,10 +29,15 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("lead-new-estimate").count()) === 0, "the tech: no «＋ Смета» where he has no visit");
   await h.shot("tech-lead");
 
-  // the builder at that address: the office makes it — «Сохранить» off
+  // the builder at that address: the office makes it — the main button stays active (DS §11 п.3); pressed, it says
+  // why and saves nothing (the director's review of #1169)
   await h.go("/estimate/new?customerId=c7&propertyId=p7&leadId=l4");
   await p.getByTestId("ue-not-here").first().waitFor({ state: "visible", timeout: 15000 });
-  h.expect(await p.getByTestId("ue-save").first().getByRole("button").isDisabled(), "the tech: «Сохранить» is off where he does not work");
+  const before = (await h.db()).estimates.length;
+  await p.getByTestId("ue-save").first().getByRole("button").click();
+  await p.getByText(/Смету по этому адресу составит офис/).last().waitFor({ state: "visible", timeout: 10000 });
+  h.expect((await h.db()).estimates.length === before, "the tech: «Сохранить» saved no estimate where he does not work");
+  h.expect(/\/estimate\/new/.test(p.url()), `the tech: still in the builder (${p.url()})`);
 
   // the office: the estimate is there, and «＋ Смета»
   await h.seed("octo.role.v1", "director");
