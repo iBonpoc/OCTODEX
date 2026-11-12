@@ -34,7 +34,7 @@ const chain = (table: string): Record<string, unknown> => {
   return c;
 };
 vi.mock("../src/cloud/client", () => ({
-  supabase: { from: (t: string) => chain(t), rpc: () => Promise.resolve({ data: null, error: null }) },
+  supabase: { from: (t: string) => chain(t), rpc: (fn: string) => Promise.resolve(fn === "save_estimate_version" ? { data: null, error: { code: "PGRST202", message: "no function" }, status: 404 } : { data: null, error: null }) },
 }));
 
 import { applyOp, type Op } from "../src/cloud/ops";

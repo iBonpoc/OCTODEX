@@ -1220,6 +1220,53 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   // what the server counts the totals from (#1147: the same rows as the phone's summarize — test/signTotals.test.ts, T195)
   const rows = versionRows(op.doc);
   const taxOn = rows.taxEnabled;
+  // #1220: the version, the estimate's current version, the options, lines and costs — one transaction on the server
+  // (public.save_estimate_version): a refusal leaves the version, its lines and the current version as they were. Only a
+  // server without the function yet (PGRST202) gets the separate requests below; any other refusal is the op's, as before.
+  const versionCols = (doc: unknown) => ({
+    calc_inputs: doc, engine_version: ENGINE_VERSION,
+    source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
+    totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
+    tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
+    contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
+  });
+  const optionRows = rows.options.map((o) => ({
+    id: o.id, name: o.name, position: o.position, is_recommended: o.isRecommended, discount_mode: o.discountMode, discount_value: o.discountValue,
+  }));
+  const lineRows = rows.lines.map((l) => ({
+    id: l.id, option_id: l.optionId, position: l.position, line_group: l.group, catalog_item_id: null,
+    origin: l.catalogItemId ? "catalog" : "manual", name: l.name, description: l.description,
+    quantity: l.quantity, unit: l.unit, unit_price_cents: l.unitPriceCents, taxable: l.taxable, is_optional: l.isOptional,
+    client_visible: l.clientVisible !== false,
+    ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
+  }));
+  const costRows = lineRows.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, unit_cost_cents: op.costs[l.id] }));
+  // the server keeps at most 500 characters of the title (a longer one would be refused for good): cut here, by
+  // character — an emoji stays whole
+  const title500 = Array.from(op.title ?? "").slice(0, 500).join("");
+  const saveTx = (doc: unknown) =>
+    supabase.rpc("save_estimate_version", {
+      p_estimate_id: op.id, p_version_id: versionId, p_title: title500, p_version: versionCols(doc),
+      p_options: op.doc.options.length ? optionRows : [], p_lines: op.doc.options.length ? lineRows : [], p_costs: op.doc.options.length ? costRows : [],
+    });
+  // pages the server would refuse are left out, the estimate itself goes (spec 33 П24.7; trigger t07_doc_pages)
+  const sendable = withSendablePages(op.doc);
+  const first = await saveTx(sendable);
+  if (first.error?.code !== "PGRST202") {
+    try {
+      await run(Promise.resolve(first));
+    } catch (e) {
+      if (!(e instanceof PermanentError) || !/doc_pages:/.test(e.message) || sendable.pages === undefined) throw e;
+      const { pages: _refused, ...bare } = op.doc;
+      await run(saveTx(bare));
+    }
+    return;
+  }
+  await saveLegacy(op, c, versionId!, rows, taxOn, s);
+}
+
+/** the separate requests of a save (a server before #1220's public.save_estimate_version) — as they were */
+async function saveLegacy(op: Extract<Op, { k: "estimate.save" }>, c: string, versionId: string, rows: ReturnType<typeof versionRows>, taxOn: boolean, s: Extract<Op, { k: "estimate.save" }>["doc"]["settings"]) {
   const saveVersion = (doc: unknown) =>
     run(
       supabase
