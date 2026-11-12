@@ -64,7 +64,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
         style={{
           height: component.mediaH,
           borderRadius: radius.inner,
-          borderWidth: 1,
+          borderWidth: component.hairline,
           borderStyle: "dashed",
           borderColor: c.bd,
           backgroundColor: c.in,
@@ -76,7 +76,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
         {...pan.panHandlers}
       >
         {!d ? (
-          <View style={{ position: "absolute", left: 0, right: 0, top: h / 2 - 10, alignItems: "center" }} pointerEvents="none">
+          <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: space[4] }} pointerEvents="none">
             <T v="caption" tone="mut" center>
               {(label ?? t("visit.signHere"))}
             </T>
@@ -118,7 +118,7 @@ export function SignaturePreview({ svg, label }: { svg: string; label: string })
   const { c } = useTheme();
   return (
     <View
-      style={{ height: component.mediaH, borderRadius: radius.inner, borderWidth: 1, borderColor: c.bd, backgroundColor: c.in, overflow: "hidden" }}
+      style={{ height: component.mediaH, borderRadius: radius.inner, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.in, overflow: "hidden" }}
       accessibilityLabel={label}
     >
       {/* the saved path lives in the 400 × 160 box (signaturePath.ts): drawn in that box, left-aligned, never cut */}

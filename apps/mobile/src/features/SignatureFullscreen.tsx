@@ -116,7 +116,7 @@ export function SignatureFullscreen({
               width: cv.w,
               height: cv.h,
               borderRadius: radius.inner,
-              borderWidth: 1,
+              borderWidth: component.hairline,
               borderStyle: "dashed",
               borderColor: c.bd,
               backgroundColor: c.in,
@@ -126,7 +126,7 @@ export function SignatureFullscreen({
             {...pan.panHandlers}
           >
             {!path ? (
-              <View style={{ position: "absolute", left: 0, right: 0, top: cv.h / 2 - space[3], alignItems: "center" }} pointerEvents="none">
+              <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: space[4] }} pointerEvents="none">
                 <T v="caption" tone="mut" center>
                   {label}
                 </T>

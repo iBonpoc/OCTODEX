@@ -35,26 +35,32 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
       {onAdd ? (
+        // the add tile (DS «Плитка добавления»): the size of a thumbnail, a one-line caption on every language, the frame
+        // readable (≥ 3:1: `mut`), the icon never squeezed by a big font (the tile grows, not the icon shrinks)
         <Press
           onPress={pick}
           accessibilityRole="button"
           accessibilityLabel={t("visit.addPhoto")}
+          testID="photo-add"
           style={{
             width: THUMB,
-            height: THUMB,
+            minHeight: THUMB,
+            paddingHorizontal: space[1],
             borderRadius: radius.inner,
-            borderWidth: 1,
+            borderWidth: component.hairline,
             borderStyle: "dashed",
-            borderColor: c.bd,
+            borderColor: c.mut,
             backgroundColor: c.in,
             alignItems: "center",
             justifyContent: "center",
-            gap: component.photoGap,
+            gap: space[1],
           }}
         >
-          <Icon name="camera" s={size.iconMd} />
-          <T v="micro" tone="mut" center numberOfLines={2}>
-            {t("visit.addPhoto")}
+          <View style={{ flexShrink: 0 }}>
+            <Icon name="camera" s={size.iconMd} color={c.mut} />
+          </View>
+          <T v="caption" tone="mut" center numberOfLines={1}>
+            {t("photo.addShort")}
           </T>
         </Press>
       ) : null}
@@ -63,7 +69,8 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
           key={p.id}
           onPress={() => setOpen(p)}
           accessibilityRole="button"
-          accessibilityLabel={t("photo.open", { n: i + 1 })}
+          accessibilityLabel={`${title ?? (p.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}, ${t("photo.nOf", { n: i + 1, total: shown.length })}`}
+          testID={`photo-thumb-${p.id}`}
           style={{ width: THUMB, height: THUMB, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
         >
           {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
