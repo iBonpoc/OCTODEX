@@ -138,7 +138,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, deposit_rule, template_id"),
       live<Row>("estimate_options", "id, version_id, name, position, created_at, discount_mode, discount_value"),
       live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position, taxable"),
-      every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method"),
+      every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method, decision, version_id"),
       live<Row>("invoices"),
       live<Row>("payments"),
       // wave П-1: customer_id is new — on a database without the migration read the old columns (preview of a PR)
@@ -525,7 +525,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       dueDate: s(i.due_date) || s(i.sent_at) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
       method: lastPayment.has(s(i.id)) ? paymentMethodFromDb(s(lastPayment.get(s(i.id))?.method)) : undefined,
-      kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
+      // the exact kind (review of #865 З3): a standalone / recurring invoice of a job is outside its contract, as on the server
+      kind: i.kind === "deposit" || i.kind === "progress" || i.kind === "standalone" || i.kind === "recurring" ? i.kind : "final",
       number: s(i.number) || undefined,
       title: (i.title as string | null) ?? undefined,
       sentAt: (i.sent_at as string | null) ?? undefined,
@@ -590,6 +591,17 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       taxable: !!r.taxable, totalCents: n(r.line_total_cents),
     }))
     .sort((a, b) => a.jobId.localeCompare(b.jobId) || a.position - b.position);
+  // #865 З5: the contract's tax as the server reads it (app.job_contract_tax): the client's approval of the job's approved
+  // version (approved, party customer), its selection's tax a number; none — the phone counts it (contractTaxOf)
+  const contractTaxOfRow = (j: Row): { contractTaxCents?: number } => {
+    if (!j.estimate_id) return {};
+    const a = approvals
+      .filter((x) => x.estimate_id === j.estimate_id && (x.decision ?? "approved") === "approved" && (x.party ?? "customer") === "customer"
+        && (!j.approved_version_id || x.version_id === j.approved_version_id))
+      .filter((x) => typeof (x.selection as { tax?: unknown } | null)?.tax === "number")
+      .sort((x, y) => s(y.signed_at).localeCompare(s(x.signed_at)))[0];
+    return a ? { contractTaxCents: n((a.selection as { tax: number }).tax) } : {};
+  };
   const toJob = (j: Row): Job => ({
     id: s(j.id),
     propertyId: s(j.property_id),
@@ -605,6 +617,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
     status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
+    ...contractTaxOfRow(j),
     estimateId: (j.estimate_id as string | null) ?? undefined,
     serviceCategoryId: (j.service_category_id as string | null) ?? undefined,
   });

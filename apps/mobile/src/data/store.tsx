@@ -313,7 +313,9 @@ interface StoreCtx {
    *  database's rules); in the cloud the server applies (cloud/advance.ts), then refresh(). null — done, else our word. */
   applyAdvanceDemo: (advanceId: ID, invoiceId: ID) => AdvanceError | null;
   /** progress (by stage) or final balance invoice for a job */
-  issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
+  /** #865: null — refused, nothing written or queued (above the contract: engine canIssue); the screen says so
+   *  (inv.rej.overContract) and shows no «Отменить» */
+  issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo | null;
   /** create or update a universal estimate (draft) */
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
@@ -1884,7 +1886,7 @@ export function StoreProvider({
         if (!job || !customerId || amountCents <= 0) return () => {};
         // #865: never more than the contract (engine canIssue; the server refuses the same from В1-4б); the tax inside the total
         const split = contractInvoice(d0, job, amountCents);
-        if (!split) return () => {};
+        if (!split) return null;
         const id = uid();
         const now = new Date().toISOString();
         return mutate(

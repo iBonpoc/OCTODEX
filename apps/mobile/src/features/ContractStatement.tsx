@@ -34,6 +34,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
   const [bps, setBps] = useState(5000);
   const [cents, setCents] = useState(0);
   const [title, setTitle] = useState("");
+  const [balanceSent, setBalanceSent] = useState(false);
   const job = db.jobs.find((j) => j.id === jobId);
   if (!job) return null;
   const invoices = db.invoices.filter((i) => i.jobId === jobId).sort((a, b) => (a.sentAt ?? a.dueDate).localeCompare(b.sentAt ?? b.dueDate));
@@ -41,6 +42,14 @@ export function ContractStatement({ jobId }: { jobId: string }) {
   const hasFinal = invoices.some((i) => i.kind === "final");
   const progress = mode === "pct" ? progressAmount(job.amountCents, st.invoiced, bps) : Math.min(cents, st.toInvoice);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
+  // #865: an invoice the store refused (above the contract) says so, with no «Отменить»; a second tap on «Выставить
+  // остаток» before the screen redraws is not a second invoice and does not replace the first one's «Отменить» (rule 5)
+  const issue = (kind: "progress" | "final", amount: number, name: string) => {
+    const undo = store.issueInvoice(jobId, kind, amount, name);
+    if (undo) toast.show(q(t("inv.issued")), undo);
+    else toast.show(t("inv.overContract.screen"));
+    return !!undo;
+  };
 
   const row = (label: string, v: number, strong?: boolean) => (
     <RowView style={{ justifyContent: "space-between" }}>
@@ -96,7 +105,12 @@ export function ContractStatement({ jobId }: { jobId: string }) {
               label={t("inv.billBalance", { amount: money(st.toInvoice) })}
               testID="statement-bill-balance"
               icon="invoice"
-              onPress={() => toast.show(q(t("inv.issued")), store.issueInvoice(jobId, "final", st.toInvoice, "Final balance"))}
+              disabled={balanceSent}
+              onPress={() => {
+                if (balanceSent) return;
+                setBalanceSent(true);
+                if (!issue("final", st.toInvoice, "Final balance")) setBalanceSent(false);
+              }}
             />
           ) : null}
           <Button label={t("inv.progress")} testID="statement-progress" icon="plus" variant="secondary" onPress={() => setSheet(true)} />
@@ -130,7 +144,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
             full
             disabled={progress <= 0}
             onPress={() => {
-              toast.show(q(t("inv.issued")), store.issueInvoice(jobId, "progress", progress, title.trim() ? `Progress: ${title.trim()}` : "Progress payment"));
+              issue("progress", progress, title.trim() ? `Progress: ${title.trim()}` : "Progress payment");
               setSheet(false);
               setTitle("");
             }}

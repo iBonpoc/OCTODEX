@@ -1790,3 +1790,29 @@ describe("unit:storeSync — the payment on a visit is a payment with its receip
     expect(mine[0]!.receiptNumber).toBeUndefined(); // the server numbers it (RCT-…)
   });
 });
+
+describe("unit:storeSync — an invoice above the contract is refused before anything is written (#865 Б1)", () => {
+  it("issueInvoice answers null: no invoice in the DB, nothing queued to send", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads[0]!.resolve(makeSeed());
+    await settle();
+    type V = { db: { invoices: { jobId: string }[]; jobs: { id: string; amountCents: number }[] }; queue: number; issueInvoice: (j: string, k: "final", a: number, t: string) => (() => void) | null };
+    const v = valueOf(r) as unknown as V;
+    const job = v.db.jobs.find((j) => j.id === "j1")!;
+    const before = v.db.invoices.filter((i) => i.jobId === "j1").length;
+    const sends = server.sends.length;
+    expect(v.issueInvoice("j1", "final", job.amountCents + 1, "Final balance")).toBeNull();
+    await settle();
+    const after = valueOf(r) as unknown as V;
+    expect(after.db.invoices.filter((i) => i.jobId === "j1")).toHaveLength(before);
+    expect(server.sends.length).toBe(sends);
+    expect(storage.get("octo.outbox.v1") ?? "[]").not.toContain("invoice.issue");
+    // within the contract: written and queued as before
+    const ok = (valueOf(r) as unknown as V).issueInvoice("j1", "final", 1000, "Final balance");
+    expect(ok).toBeTypeOf("function");
+    await settle();
+    expect((valueOf(r) as unknown as V).db.invoices.filter((i) => i.jobId === "j1")).toHaveLength(before + 1);
+  });
+});

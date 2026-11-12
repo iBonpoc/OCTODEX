@@ -246,3 +246,28 @@ describe("loadCompanyDB — «Весь день» of a visit (3b-3, 17-job §11.
     expect(by("v3").allDay).toBeUndefined();
   });
 });
+
+describe("repo: the invoices of a contract (#865 review З3, З5)", () => {
+  it("an invoice's kind as it is: standalone / recurring stay outside the contract", async () => {
+    rows.invoices = ["deposit", "progress", "final", "standalone", "recurring"].map((kind, i) => ({
+      id: `inv-${kind}`, company_id: CO, customer_id: "c1", job_id: "j1", kind, status: "sent", total_cents: 1000 + i, paid_cents: 0, subtotal_cents: 1000 + i, tax_cents: 0, sent_at: "2026-11-05T10:00:00Z",
+    }));
+    const db = await loadCompanyDB(CO, "u1");
+    expect(Object.fromEntries(db.invoices.map((i) => [i.id, i.kind]))).toEqual({
+      "inv-deposit": "deposit", "inv-progress": "progress", "inv-final": "final", "inv-standalone": "standalone", "inv-recurring": "recurring",
+    });
+  });
+  it("the contract's tax: the client's approval of the job's approved version (approved, customer), its tax a number", async () => {
+    rows.jobs = [...rows.jobs!, { id: "j9", property_id: "p1", customer_id: "c1", number: "JOB-0009", status: "scheduled", estimate_id: "e9", approved_version_id: "v2", contract_total_cents: 109500 }];
+    rows.estimate_approvals = [
+      { estimate_id: "e9", version_id: "v1", decision: "approved", party: "customer", selection: { tax: 1 }, signed_at: "2026-11-06T10:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "approved", party: "contractor", selection: { tax: 2 }, signed_at: "2026-11-07T10:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "declined", party: "customer", selection: { tax: 3 }, signed_at: "2026-11-07T11:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "approved", party: "customer", selection: { tax: "4" }, signed_at: "2026-11-07T12:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "approved", party: "customer", selection: { tax: 9500 }, signed_at: "2026-11-05T12:00:00Z" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.jobs.find((j) => j.id === "j9")?.contractTaxCents).toBe(9500);
+    expect(db.jobs.find((j) => j.id === "j1")?.contractTaxCents).toBeUndefined();
+  });
+});

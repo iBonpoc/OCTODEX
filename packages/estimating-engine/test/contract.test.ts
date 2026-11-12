@@ -110,4 +110,11 @@ describe("#865: invoices of a contract — never more than the contract, the tax
     const voided = [{ totalCents: 547500, paidCents: 0, taxCents: 47500, void: true }];
     expect(invoiceTaxShare(1095000, 95000, voided, 1095000)).toBe(95000);
   });
+  it("an invoice issued before the split (no tax): the last one takes only its own share, not the whole rest", () => {
+    const C = 1095000, T = 95000;
+    const old = [{ totalCents: 109500, paidCents: 109500, taxCents: 0 }];
+    expect(invoiceTaxShare(C, T, old, C - 109500)).toBe(85500); // 985500 × 950 / 10950 = 85500, not all 95000
+    // an invoice whose own share rounds to 0 (a cent) is no mark of the old way
+    expect(invoiceTaxShare(C, T, [{ totalCents: 1, paidCents: 0, taxCents: 0 }], C - 1)).toBe(95000);
+  });
 });

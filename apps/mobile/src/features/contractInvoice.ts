@@ -12,9 +12,11 @@ import { linesOf, totalOf } from "@/features/jobLines";
 type D = Pick<DB, "estimates" | "jobLines" | "invoices">;
 
 /** the contract's tax: the client's signed choice (as the server's app.job_contract_tax), else the job's own lines */
-export function contractTaxOf(d: D, job: Pick<Job, "id" | "estimateId" | "amountCents" | "taxEnabled" | "taxRateBps">): number {
+export function contractTaxOf(d: D, job: Pick<Job, "id" | "estimateId" | "amountCents" | "taxEnabled" | "taxRateBps" | "contractTaxCents">): number {
   let tax = 0;
-  if (job.estimateId) {
+  // the server's own reading of the signed tax (repo: the approval of the job's approved version, party customer)
+  if (job.contractTaxCents != null) tax = job.contractTaxCents;
+  else if (job.estimateId) {
     const e = d.estimates.find((x) => x.id === job.estimateId);
     const doc = e?.doc;
     const base = doc && e?.approval ? doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
@@ -32,7 +34,7 @@ const contractInvoices = (d: Pick<DB, "invoices">, jobId: ID): Invoice[] =>
   d.invoices.filter((i) => i.jobId === jobId && (i.kind === undefined || i.kind === "deposit" || i.kind === "progress" || i.kind === "final"));
 
 /** a new invoice of `amountCents` on the job: refused (null) above the contract; else its subtotal and tax */
-export function contractInvoice(d: D, job: Pick<Job, "id" | "estimateId" | "amountCents" | "taxEnabled" | "taxRateBps">, amountCents: number): { subtotalCents: number; taxCents: number } | null {
+export function contractInvoice(d: D, job: Pick<Job, "id" | "estimateId" | "amountCents" | "taxEnabled" | "taxRateBps" | "contractTaxCents">, amountCents: number): { subtotalCents: number; taxCents: number } | null {
   const live = contractInvoices(d, job.id).map((i) => ({ totalCents: i.totalCents, paidCents: i.paidCents, taxCents: i.taxCents }));
   if (!canIssue(job.amountCents, live, amountCents)) return null;
   const taxCents = invoiceTaxShare(job.amountCents, contractTaxOf(d, job), live, amountCents);

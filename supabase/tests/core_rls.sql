@@ -13085,8 +13085,11 @@ select tst.ok((select contract_total_cents from public.jobs where id = 'e1960000
               and app.job_contract_tax('e1960000-0000-4000-8000-000000000001') = 1000, 'T196 (fixture: contract $510 with $10 tax)');
 select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_tax(uuid)', 'EXECUTE')
               and not has_function_privilege('anon', 'app.job_contract_tax(uuid)', 'EXECUTE')
-              and not has_function_privilege('authenticated', 'app.tg_invoice_contract()', 'EXECUTE'),
-              'T196 the contract''s tax and the check run only inside the trigger (rule 18)');
+              and not has_function_privilege('authenticated', 'app.tg_invoice_contract()', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.invoice_tax_split(uuid,uuid,uuid,bigint)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_invoice_contract()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.invoice_tax_split(uuid,uuid,uuid,bigint)'::regprocedure),
+              'T196 rule 18; the trigger runs as the writer (invoker), the count as definer');
 :as_office_a
 -- what invoice.issue writes (ops.ts): subtotal = total, no tax
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
@@ -13127,13 +13130,38 @@ select tst.ok((select tax_cents = 333 from public.invoices where id = '01960000-
 select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
          ('ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'T196 B', 1, now())$q$,
        '%row-level security%', 'T196 another company: only the policy''s refusal');
+-- and the count itself answers nothing outside the company (a check that does not work would give B the share)
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 'f1960000-0000-4000-8000-000000000009', 100) is null,
+              'T196 another company learns no share of our job');
+:as_tech_a
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 'f1960000-0000-4000-8000-000000000009', 5100) is not null,
+              'T196 a tech of the company (his visit payment''s final) is split as the office');
+-- an invoice issued before the split (no tax although its share is not 0): the last one takes only its own share
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T196 old', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+  insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+    ('a1960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000002', 0, 'T196 part', 1, 50000, true);
+end $$;
+alter table public.invoices disable trigger t41_invoice_contract;   -- as an invoice made before this migration
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000002', 'deposit', 'sent', 'Deposit', 5500, 5500, now());
+alter table public.invoices enable trigger t41_invoice_contract;
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000002', 'final', 'sent', 'Final balance', 49500, 49500, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (45000, 4500) from public.invoices where id = '01960000-0000-4000-8000-000000000007'),
+              'T196 after an old invoice without tax: the final takes its own share $45, not the whole $50 (З4)');
 -- (в) every contract the other tests billed
 :as_super
 select tst.ok(coalesce(string_agg(x.title, '; '), '') = '', format('T196 the invoices of every contract keep its tax: %s', coalesce(string_agg(x.title, '; '), '')))
-  from (select j.title, j.contract_total_cents as c, app.job_contract_tax(j.id) as ct, sum(i.total_cents) as inv, sum(i.tax_cents) as tx
+  from (select j.title, j.contract_total_cents as c, app.job_contract_tax(j.id) as ct, sum(i.total_cents) as inv, sum(i.tax_cents) as tx,
+               -- a contract with an invoice issued before the split: each invoice its own share (З4), no rest gathered
+               bool_or(i.tax_cents = 0 and floor(i.total_cents::numeric * app.job_contract_tax(j.id) / nullif(j.contract_total_cents, 0) + 0.5) > 0) as before
           from public.jobs j join public.invoices i on i.job_id = j.id and i.kind in ('deposit', 'progress', 'final') and i.status = 'sent' and i.deleted_at is null
          group by j.id) x
- where x.tx > x.ct or (x.inv = x.c and x.tx <> x.ct);
+ where x.tx > x.ct or (x.inv = x.c and x.tx <> x.ct and not x.before);
 select tst.ok((select count(*) >= 1 from public.invoices i join public.jobs j on j.id = i.job_id
                 where i.kind = 'deposit' and i.tax_cents > 0 and j.estimate_id is not null),
               'T196 a signature''s deposit carries its share of the tax');

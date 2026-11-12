@@ -129,7 +129,14 @@ export default function JobScreen() {
     // one tap = one balance invoice (a double tap before the re-render made two)
     if (restSent) return;
     setRestSent(true);
-    toast.show(store.online ? t("job3.done.invoiced") : t("offline.queued"), store.issueInvoice(j.id, "final", rest, t("job3.done.restTitle")));
+    const undo = store.issueInvoice(j.id, "final", rest, t("job3.done.restTitle"));
+    // #865: refused (above the contract) — said so, nothing to undo; the button works again
+    if (!undo) {
+      setRestSent(false);
+      toast.show(t("inv.overContract.screen"));
+      return;
+    }
+    toast.show(store.online ? t("job3.done.invoiced") : t("offline.queued"), undo);
   };
 
   const details = (

@@ -186,6 +186,8 @@ export interface Job {
   jobTypeId?: ID;
   /** wave П-2a: tags of the job (the company's Tag list, server: job_tags) */
   tagIds?: ID[];
+  /** #865: the contract's tax as signed (server: the client's approval of the job's approved version, selection → tax) */
+  contractTaxCents?: number;
   /** wave П-2a: tax of a job without an estimate (server: jobs.tax_enabled / tax_rate_bps); an exempt client → off */
   taxEnabled?: boolean;
   taxRateBps?: number;
@@ -907,7 +909,7 @@ export interface Invoice {
   paidAt?: string;
   method?: PaymentMethod;
   /** deposit → progress (by stage) → final balance; each takes partial payments */
-  kind?: "deposit" | "progress" | "final";
+  kind?: "deposit" | "progress" | "final" | "standalone" | "recurring";
   number?: string;
   /** what the client sees: "Deposit", "Progress: rough-in", "Final balance" */
   title?: string;

@@ -101,8 +101,9 @@ export function canIssue(contractCents: number, invoices: InvoiceLike[], amountC
  * #865 (X-01, X-02): the tax inside an invoice of a contract. The contract total already holds the tax; an invoice keeps
  * its total and splits it into subtotal + tax: tax = round half up (amount × contract tax / contract). The invoice that
  * bills the rest of the contract takes what is left of the tax, so the invoices' tax adds up to the contract's.
- * Never below 0, never above the invoice or the tax still left. The server counts the same (app.invoice_tax_share,
- * migration 20261112060000); tests: engine contract.test.ts, db T196.
+ * Never below 0, never above the invoice or the tax still left. A contract with an invoice issued before the split (no tax
+ * though its share is not 0): every invoice takes its own share, the last one too (no rest gathered into it). The server
+ * counts the same (app.invoice_tax_split, migration 20261112060000); tests: engine contract.test.ts, db T196.
  */
 export function invoiceTaxShare(
   contractCents: number,
@@ -114,6 +115,10 @@ export function invoiceTaxShare(
   const live = invoices.filter((i) => !i.void);
   const invoiced = live.reduce((s, i) => s + i.totalCents, 0);
   const left = Math.max(0, contractTaxCents - live.reduce((s, i) => s + (i.taxCents ?? 0), 0));
-  const share = invoiced + amountCents >= contractCents ? left : roundCents(dec(amountCents).mul(contractTaxCents).div(contractCents));
+  const prop = (cents: number) => roundCents(dec(cents).mul(contractTaxCents).div(contractCents));
+  // an invoice issued before the split (#865) has no tax although its share is not 0: the rest of the tax is not this
+  // invoice's — the one that bills the rest counts its own share only (director's decision 12.11, З4)
+  const before = live.some((i) => !((i.taxCents ?? 0) > 0) && prop(i.totalCents) > 0);
+  const share = invoiced + amountCents >= contractCents && !before ? left : prop(amountCents);
   return Math.max(0, Math.min(share, left, amountCents));
 }

@@ -76,6 +76,20 @@ describe("#865 contract invoices on the phone", () => {
     expect(withTaxSplit(d2, "fin")).toBe(d2);
     expect(withTaxSplit(d2, "nope")).toBe(d2);
   });
+  it("a standalone invoice of the job is outside the contract, as on the server (review З3: T196's $510 / $50 / $170)", () => {
+    let d = linesJob();
+    d = { ...d, invoices: [...d.invoices, { id: "sa", customerId: "c1", jobId: "j3", kind: "standalone", totalCents: 5_000, paidCents: 0, dueDate: "2026-11-12" }] };
+    d = issue(d, 17_000);
+    const job = d.jobs.find((j) => j.id === "j3")!;
+    // the rest of the contract is $340 (not $290): the standalone $50 does not count
+    expect(contractInvoice(d, job, 34_000)).toEqual({ subtotalCents: 33_333, taxCents: 667 });
+    expect(contractInvoice(d, job, 34_001)).toBeNull();
+  });
+  it("the server's reading of the signed tax wins (job.contractTaxCents, review З5)", () => {
+    const d = linesJob();
+    const job = { ...d.jobs.find((j) => j.id === "j3")!, contractTaxCents: 2_000 };
+    expect(contractTaxOf(d, job)).toBe(2_000);
+  });
   it("the server's refusal above the contract (В1-4б): the card says why", () => {
     const op = { k: "invoice.issue" as const, id: "i9", jobId: "j3", customerId: "c1", kind: "progress" as const, title: "Progress", totalCents: 100, dueDate: "2026-11-12" };
     const r = rejectedOf({ id: "o1", op } as never, "the job's invoices would be more than its contract", Date.parse("2026-11-12T12:00:00Z"), null, "invoice_over_contract");

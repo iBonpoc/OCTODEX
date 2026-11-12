@@ -3544,6 +3544,7 @@ export const es: Dict = {
   "po.rej.stale": "El pedido cambió en otro teléfono: la marca no se guardó. Ábralo y marque de nuevo",
   // #865 «Данные и деньги»: an invoice above the contract
   "inv.rej.overContract": "La factura no se emitió: junto con las demás supera el contrato. Se emitió otra factura de este trabajo mientras el teléfono estaba sin conexión. Abra el trabajo para ver lo que queda por facturar.",
+  "inv.overContract.screen": "La factura no se emitió: junto con las demás supera el contrato. Lo que queda por facturar está en el estado del contrato.",
   "po.rej.officeOnly": "Solo la oficina cambia un pedido recibido",
   "po.rej.notOpen": "El pedido no está enviado o está cancelado: no se marcó nada",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)
