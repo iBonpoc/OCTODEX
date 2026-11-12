@@ -439,7 +439,7 @@
 | `ModuleDef.estimateSectionKey?` | реестр модулей | «Позиции модуля» | — |
 | `CatalogItem.sku?`, `barcode?`, `productUrl?`, `serviceCategoryId?`, `createdAt/By?`, `updatedAt/By?` | `types.ts:678-706`, `repo.ts`, `ops.ts` | нет | кому открыт каталог |
 | `catalog_items.barcode`, `product_url`, `service_category_id` | база, новые колонки | null | участники компании |
-| `catalog_cost_history.unit_price_cents`, `markup_bps` | база, новые колонки | null | `can_view_costs` |
+| `catalog_price_history` (`unit_price_cents`, `prev_unit_price_cents`, `markup_bps`, `prev_markup_bps`, `at`, `by`) | база, новая таблица (#1233) | — | `can_view_costs` |
 
 Не добавляем: поле порядка, `section_id` в строках, `taxable` у строки (до ответа основателя), режимы налога, `sectionTotals`, склады.
 
@@ -450,7 +450,7 @@
    - `alter table public.catalog_items add column barcode text check (length(barcode) <= 64)`, `add column product_url text check (product_url ~ '^https://' and length(product_url) <= 500)`, `add column service_category_id uuid` + FK `(company_id, service_category_id)` на `public.service_categories (company_id, id)` (`20261105250000_service_categories.sql:11`), `not valid` → `validate` (как `20261110000000_suppliers.sql:95-100`).
    - **Колоночные `grant`/`revoke` не нужны:** у `catalog_items` табличный `grant select, insert, update … to authenticated` (`20261104020000_universal_estimate.sql:48`; `20261106070000`; комментарий в `20261110000000`); новые колонки им покрыты. Правило «сначала `revoke`» — для новых таблиц и функций.
    - `catalog_items` в списке больших таблиц нет — индекс по `service_category_id` обычный.
-   - `alter table public.catalog_cost_history add column unit_price_cents bigint, add column markup_bps int`.
+   - ~~`alter table public.catalog_cost_history add column unit_price_cents bigint, add column markup_bps int`~~ — **сделано иначе (#1233, см. §10):** отдельная таблица `public.catalog_price_history`.
    - `markup_bps` живёт в `catalog_item_costs` (`20261108130000_tech_no_costs.sql:41`): `app.tg_cost_history` (`20261110000000_suppliers.sql:180`) сейчас пишет строку только при смене `unit_cost_cents` или `vendor_tax_bps` — дополнить условием `markup_bps` и писать его в историю (`create or replace`, та же подпись).
    - Смена цены продажи (`catalog_items.unit_price_cents`) — новая функция-триггер `AFTER UPDATE OF unit_price_cents` на `catalog_items`: строка истории с `unit_price_cents` и `unit_cost_cents = null`. Функция — `security definer`, `revoke all … from public, anon, authenticated` (правило 18, как `tg_cost_history`).
    - Приложение: `CostHistory` и `historyOf` (`features/suppliers`, `SupplierParts`) сейчас не умеют строку без закупки — научить (показывать «Цена $11.90 → $12.13»).
@@ -587,3 +587,18 @@ OTHER ITEMS                                        («Без раздела»)
 4. Налог — право: по умолчанию выключен, ставка вручную; приложение не советует.
 5. `DEFAULT_TAX` «все группы» меняет новые сметы; старые — снимком и через диалог. Тест на старый документ обязателен.
 6. Объём: самая большая работа выпуска в зоне (г) — три задачи по очереди (РС-4, РС-5, РС-7).
+
+
+---
+
+## 10. Поправки после сдачи РС-9 (12.11.2026)
+
+Где этот раздел расходится с текстом выше — прав этот раздел.
+
+**История цены продажи и наценки — отдельная таблица `public.catalog_price_history`**, а не новые колонки в `catalog_cost_history` (так было в §4.1, §4.2 п.2 и Р11). Влито в #1233, миграция `supabase/migrations/20261112230000_catalog_card.sql`, тест базы T202.
+
+- Причина: старые версии приложения читают `catalog_cost_history` для блока «История закупки и налога» (экран позиции и экран поставщика). Строка о смене цены продажи показалась бы там как закупка «—» и вытеснила бы настоящие строки. Нашёл независимый рецензент РС-9.
+- Устройство: одна строка на каждое изменение цены продажи (`catalog_items.unit_price_cents`) или наценки (`catalog_item_costs.markup_bps`), со значением «до» и «после», кто и когда. Пишут только триггеры `app.tg_price_history` и `app.tg_markup_history`, и только когда значение действительно изменилось. Читает только тот, у кого `can_view_costs`.
+- `app.tg_cost_history` и `catalog_cost_history` не менялись: в них по-прежнему только закупка и налог поставщика.
+- Для экрана (Р11, блок «История»): строки «Цена $11.90 → $12.13» и «Наценка 8 % → 10 %» берутся из `catalog_price_history`; «Закупка» и «Налог» — из `catalog_cost_history`; общий список сортируется по времени.
+- Правило 16 соблюдено: только добавление (новые колонки `barcode`, `product_url`, `service_category_id` в `catalog_items`, новая таблица, функции, триггеры).
