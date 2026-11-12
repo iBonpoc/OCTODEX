@@ -21,6 +21,10 @@ export type InputNode = ComponentRef<typeof TextInput>;
 /** the screen's scroll, offered to the forms under it: `scrollToNode` brings a view `margin` below the top */
 export interface ScreenScroll {
   scrollToNode: (node: ViewNode, margin: number, animated: boolean) => void;
+  /** the page scrolls by `dy` at once (a row held at the edge of the screen pulls the page along, DS §14.6) */
+  scrollBy: (dy: number) => void;
+  /** where the page is scrolled to now */
+  offset: () => number;
 }
 export const ScreenScrollCtx = createContext<ScreenScroll | null>(null);
 export const useScreenScroll = () => useContext(ScreenScrollCtx);

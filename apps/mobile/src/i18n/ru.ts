@@ -835,6 +835,7 @@ export const ru = {
   "est.sec.nothingToLay": "Нечего раскладывать",
   "est.sec.toggle": "Свернуть или развернуть раздел",
   "est.sec.nameLabel": "Название раздела",
+  "est.sec.drag": "Перетащить",
   "ue.items": "Позиции",
   "ue.addItem": "Добавить позицию",
   "ue.editLine": "Позиция",

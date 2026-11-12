@@ -14,8 +14,10 @@ import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, esti
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
+import { SortableList } from "@/features/SortableList";
+import type { Drop } from "@/features/sortable";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
-import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, putBack, renameSection, restoreLayout, shiftLine, snapshotLayout, viewRows, type LayoutSnapshot } from "@/features/sectionLayout";
+import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, renameSection, restoreLayout, shiftLine, snapshotLayout, viewRows, type LayoutSnapshot } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -98,6 +100,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // sections (DS §8.5): the folded ones are the phone's own state; the one being renamed in place; the row to move (its sheet)
   const [collapsedIds, setCollapsedIds] = useState<string[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [holdSection, setHoldSection] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
   const rowForm = useRequiredForm();
   // what a pick in the catalog sheet opens next (a row with the cursor in it) waits until the sheet is gone: the web would give the
@@ -343,6 +346,23 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setOption(() => r.option);
     toast.show(t("est.sec.moved"), back);
   };
+  /** a row was let go in the list (DS §14.6): the line or the section lands where the bar stood; «Вернуть» takes back this move only */
+  const dropRow = (d: Drop) => {
+    if (d.kind === "line") {
+      const index = option.lines.findIndex((l) => l.id === d.id);
+      const line = option.lines[index];
+      if (!line) return;
+      const r = moveLine(option, d.id, d.to);
+      if (!r.ok) return void toast.show(t(r.reason === "module" || r.reason === "moduleLine" ? "est.sec.moduleBlocked" : "est.sec.moved"));
+      setOption(() => r.option);
+      return void toast.show(t("est.sec.moved"), () => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index })));
+    }
+    const snap = snapshotLayout(option);
+    const r = moveSection(option, d.id, d.to);
+    if (!r.ok) return void toast.show(t(r.reason === "module" ? "est.sec.moduleBlocked" : "est.sec.moved"));
+    setOption(() => r.option);
+    showUndo("est.sec.moved", snap);
+  };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
   const openInCatalog = (id: string) => {
     const cid = option.lines.find((l) => l.id === id)?.catalogItemId;
@@ -462,7 +482,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
-  const view = viewRows(option, new Set(collapsedIds));
+  // a section that is carried folds while it is held (its lines go with it)
+  const view = viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds));
   const secTotals = sectionSubtotals(option, s);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
@@ -543,7 +564,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 </T>
               </View>
             ) : null}
-            {view.map((r, i) =>
+            <SortableList
+              rows={view}
+              openKey={openId ? `l:${openId}` : renamingId ? `s:${renamingId}` : null}
+              locked={signed}
+              onDrop={dropRow}
+              onHold={setHoldSection}
+              renderRow={(r, i) =>
+
               r.type === "section" ? (
                 <View key={`s-${r.section.id}`}>
                   {i > 0 ? <Divider /> : null}
@@ -583,8 +611,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     checkPrice={checkPrice.includes(r.line.id)}
                   />
                 </View>
-              ),
-            )}
+              )
+              }
+            />
           </Card>
           <RowView>
             <View style={{ flex: 1 }} testID="est-add-new">

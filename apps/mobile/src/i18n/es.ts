@@ -836,6 +836,7 @@ export const es: Dict = {
   "est.sec.nothingToLay": "Nada que agrupar",
   "est.sec.toggle": "Contraer o expandir la sección",
   "est.sec.nameLabel": "Nombre de la sección",
+  "est.sec.drag": "Arrastrar para reordenar",
   "ue.items": "Partidas",
   "ue.addItem": "Añadir partida",
   "ue.editLine": "Partida",

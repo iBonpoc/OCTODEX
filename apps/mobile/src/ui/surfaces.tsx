@@ -705,6 +705,8 @@ export function Screen({
   // the top of the content lies under the status bar / header (`top`, below): the field stops below it, not at the very top
   const coveredTop = useRef(0);
   const screenScroll = useRef<ScreenScroll>({
+    scrollBy: (dy) => scrollRef.current?.scrollTo({ y: Math.max(0, offset.current + dy), animated: false }),
+    offset: () => offset.current,
     scrollToNode: (node, margin, animated) => {
       const sv = scrollRef.current;
       if (!sv) return;
