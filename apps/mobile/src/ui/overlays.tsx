@@ -1,4 +1,5 @@
 import { toastArmed } from "./toastArm";
+import { toastBottom, useFooterInset } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
@@ -742,8 +743,10 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
   const { wide } = useDevice();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
+  const bar = useFooterInset();
   if (!item) return null;
-  const bottom = wide ? insets.bottom + space[6] : Math.max(insets.bottom, space[3]) + size.tabbarH + space[4];
+  // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»)
+  const bottom = wide ? insets.bottom + space[6] : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4], bar, space[3]);
   return (
     <Animated.View
       key={item.id}
