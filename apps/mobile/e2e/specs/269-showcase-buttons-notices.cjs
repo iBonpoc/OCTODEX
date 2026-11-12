@@ -42,8 +42,11 @@ exports.run = async (h) => {
   await vis("showcase-note-undo").getByRole("button").first().click();
   const undo = p.getByRole("button", { name: "Отменить", exact: true }).locator("visible=true").first();
   await undo.waitFor({ timeout: 3000 });
-  await p.waitForTimeout(400); // the toast ignores a tap in its first moments (the second tap of a double tap)
-  await undo.click();
+  // the toast ignores a tap in its first moments (the second tap of a double tap): press until it takes it and goes
+  for (let i = 0; i < 20 && (await undo.count()) > 0; i++) {
+    await undo.click({ timeout: 1000 }).catch(() => {});
+    await undo.waitFor({ state: "detached", timeout: 300 }).catch(() => {});
+  }
   await p.getByText("Отменено раз: 1", { exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
 
   // the toast with «Отменить» stays about 5 seconds and goes by itself
