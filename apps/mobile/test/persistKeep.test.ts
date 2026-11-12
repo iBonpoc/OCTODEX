@@ -38,7 +38,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 import { render, settle } from "./support/miniReact";
-import { BROKEN_KEEP, BROKEN_MAX_CHARS, READ_TRIES, STORAGE_LOG_KEY, flushAllWriters, forgetDeviceState, keepBrokenCopy, noteStorageLoss, usePersistentState } from "../src/data/persist";
+import { BROKEN_KEEP, BROKEN_MAX_CHARS, BROKEN_MAX_CHARS_WEB, READ_TRIES, STORAGE_LOG_KEY, flushAllWriters, forgetDeviceState, keepBrokenCopy, noteStorageLoss, usePersistentState } from "../src/data/persist";
 import { normalizeDB } from "../src/data/normalize";
 import { makeSeed } from "../src/data/seed";
 
@@ -291,7 +291,10 @@ describe("unit:persistKeep — the code-reviewer of #1189, 2nd round", () => {
     const Out = () => fresh.usePersistentState<unknown[]>("octo.outbox.v1", [], { strict: true, immediate: true });
     const root = mini.render(Out, {});
     await mini.settle();
-    expect(await fresh.keepBrokenCopy(K, "y".repeat(Math.floor(BROKEN_MAX_CHARS * 0.9)), 5)).toBe(true);
+    // room for both (the outbox's copy counts — #1260 З2): the cache's copy lands, and the outbox's is not removed for it
+    expect(await fresh.keepBrokenCopy("octo.cloud.v1.a", "o".repeat(Math.floor(BROKEN_MAX_CHARS * 0.3)), 4)).toBe(true);
+    expect(await fresh.keepBrokenCopy(K, "y".repeat(Math.floor(BROKEN_MAX_CHARS * 0.4)), 5)).toBe(true);
+    expect(storage.has("octo.broken.octo.cloud.v1.a.4")).toBe(false);
     expect(storage.has("octo.broken.octo.outbox.v1.1")).toBe(true);
     root.unmount();
   });
@@ -335,4 +338,57 @@ describe("unit:persistKeep — the code-reviewer of #1189, 2nd round", () => {
     expect(logOf()).toEqual([]);
     root.unmount();
   }, 20_000);
+});
+
+describe("unit:persistKeep — the security check of #1260", () => {
+  it("З1: the account deleted while a copy is under way — no line in the storage log (it names the person's company and id)", async () => {
+    const h = await afterFailedRead();
+    const gate = gateReads(K);
+    h.out()[1]({ db: { items: ["new"] } });
+    await settle();
+    await wait(300);
+    storage.clear();
+    forgetDeviceState(() => true);
+    gate.open();
+    await settle();
+    await wait(400);
+    expect(storage.has(STORAGE_LOG_KEY)).toBe(false);
+    // a note made before the wipe and written after it: not written either
+    const g0 = (await import("../src/data/persist")).deviceGeneration();
+    forgetDeviceState(() => true);
+    await noteStorageLoss("octo.cloud.v1.c1.u1", "late (test)", undefined, g0);
+    expect(storage.has(STORAGE_LOG_KEY)).toBe(false);
+    h.unmount();
+  }, 20_000);
+  it("З2: on the web all copies stay within 1 million characters, the outbox's copies counted — the sign-in token still fits", async () => {
+    const w = globalThis as { window?: unknown };
+    const had = "window" in w;
+    w.window = { localStorage: {} };
+    try {
+      quota = 1_700_000;
+      storage.set("octo.broken.octo.outbox.v1.1", "o".repeat(500_000));
+      // the outbox's hook is known (its copies are kept whole)
+      const Ob = () => usePersistentState<unknown[]>("octo.outbox.v1", [], { strict: true, immediate: true });
+      const ob = render(Ob, {});
+      await settle();
+      expect(await keepBrokenCopy("octo.cloud.v1.a", "a".repeat(400_000), 2)).toBe(true);
+      // the next copy: with the outbox's it would be over the web's limit — the older cache copy goes
+      expect(await keepBrokenCopy(K, "k".repeat(400_000), 3)).toBe(true);
+      const broken = [...storage.entries()].filter(([k]) => k.startsWith("octo.broken.")).reduce((n, [, v]) => n + v.length, 0);
+      expect(broken).toBeLessThanOrEqual(BROKEN_MAX_CHARS_WEB);
+      expect(storage.has("octo.broken.octo.outbox.v1.1")).toBe(true);
+      // the sign-in (Supabase keeps its token in the same storage): written, and signing out removes it
+      const store = (await import("@react-native-async-storage/async-storage")).default;
+      await store.setItem("sb-test-auth-token", "t".repeat(300_000));
+      expect(storage.has("sb-test-auth-token")).toBe(true);
+      await store.multiRemove(["sb-test-auth-token"]);
+      expect(storage.has("sb-test-auth-token")).toBe(false);
+      // the outbox's copies alone leave no room for a cache's: not written
+      storage.set("octo.broken.octo.outbox.v1.2", "o".repeat(450_000));
+      expect(await keepBrokenCopy(K, "k".repeat(100_000), 4)).toBe(false);
+      ob.unmount();
+    } finally {
+      if (!had) delete w.window;
+    }
+  });
 });

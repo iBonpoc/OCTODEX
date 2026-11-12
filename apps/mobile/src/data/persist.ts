@@ -167,6 +167,12 @@ export const BROKEN_KEEP = 3;
 /** #1189 (the director, code-reviewer №3): all copies of caches together stay within this many characters — Android's
  *  AsyncStorage is 6 MB in all, the web's localStorage about 5 MB; the live record and the outbox must still fit */
 export const BROKEN_MAX_CHARS = 2_000_000;
+/** the web (the security check of #1260 З2): localStorage is about 5 MB and holds the sign-in token too — a full one
+ *  would refuse its refresh and sign the person out */
+export const BROKEN_MAX_CHARS_WEB = 1_000_000;
+const onWeb = () => typeof window !== "undefined" && typeof (window as { localStorage?: unknown }).localStorage !== "undefined";
+/** the limit of all kept copies on this device */
+export const brokenMaxChars = () => (onWeb() ? BROKEN_MAX_CHARS_WEB : BROKEN_MAX_CHARS);
 /** the keys whose copies are the only trace of what the phone has (the outbox, the queue — `strict`): their copies are
  *  never removed to make room and never cut to BROKEN_KEEP (code-reviewer №4) */
 const keptWhole = new Set<string>();
@@ -201,22 +207,33 @@ export async function keepBrokenCopy(key: string, raw: string, now = Date.now(),
       return false;
     }
   }
-  if (raw.length > BROKEN_MAX_CHARS) {
-    await noteStorageLoss(key, "a copy too large to keep");
+  const max = brokenMaxChars();
+  if (raw.length > max) {
+    void noteStorageLoss(key, "a copy too large to keep", undefined, g);
     return false;
   }
   /** the caches' copies there are, the oldest first, with their sizes (one that cannot be read counts as the whole limit:
    *  a large copy is the one Android may not read — 2nd round №2) */
+  /** the strict keys' copies: never removed, but they take room too (З2) */
+  let whole = 0;
   const caches = async () => {
     try {
-      const ks = ((await AsyncStorage.getAllKeys()) as string[]).filter((x) => x.startsWith(BROKEN_PREFIX) && x !== k && !keptWhole.has(sourceOf(x)));
+      const all = ((await AsyncStorage.getAllKeys()) as string[]).filter((x) => x.startsWith(BROKEN_PREFIX) && x !== k);
+      for (const x of all.filter((y) => keptWhole.has(sourceOf(y)))) {
+        const v = await AsyncStorage.getItem(x).then(
+          (r) => r,
+          () => undefined,
+        );
+        if (v !== null) whole += v === undefined ? max : v.length;
+      }
+      const ks = all.filter((x) => !keptWhole.has(sourceOf(x)));
       const out: { key: string; size: number }[] = [];
       for (const x of ks) {
         const v = await AsyncStorage.getItem(x).then(
           (r) => r,
           () => undefined,
         );
-        if (v !== null) out.push({ key: x, size: v === undefined ? BROKEN_MAX_CHARS : v.length });
+        if (v !== null) out.push({ key: x, size: v === undefined ? max : v.length });
       }
       return out.sort((a, b) => timeOf(a.key) - timeOf(b.key));
     } catch {
@@ -231,7 +248,7 @@ export async function keepBrokenCopy(key: string, raw: string, now = Date.now(),
     } catch {
       return false;
     }
-    for (const x of xs) void noteStorageLoss(sourceOf(x.key), `${why}: ${x.key}`);
+    for (const x of xs) void noteStorageLoss(sourceOf(x.key), `${why}: ${x.key}`, undefined, g);
     return true;
   };
   let have = await caches();
@@ -240,11 +257,16 @@ export async function keepBrokenCopy(key: string, raw: string, now = Date.now(),
   const over = mine.slice(0, Math.max(0, mine.length - (BROKEN_KEEP - 1)));
   have = have.filter((x) => !over.includes(x));
   const room: typeof have = [];
-  let total = have.reduce((n, x) => n + x.size, 0) + raw.length;
+  let total = whole + have.reduce((n, x) => n + x.size, 0) + raw.length;
   for (const x of have) {
-    if (total <= BROKEN_MAX_CHARS) break;
+    if (total <= max) break;
     room.push(x);
     total -= x.size;
+  }
+  // the strict copies alone leave no room for it: not written (the live record and the sign-in come first)
+  if (total > max) {
+    void noteStorageLoss(key, "no room for a copy (the outbox's copies take it)", undefined, g);
+    return false;
   }
   have = have.filter((x) => !room.includes(x));
   await drop(room, "an older copy removed for room");
@@ -268,10 +290,13 @@ export const STORAGE_LOG_KEY = "octo.storageLog.v1";
 export const STORAGE_LOG_KEEP = 50;
 /** one note at a time: two at once would each read the log and one would lose the other's line (code-reviewer №9) */
 let logTail: Promise<void> = Promise.resolve();
-export function noteStorageLoss(key: string, what: string, at = new Date().toISOString()): Promise<void> {
+/** `gen` — the generation of the work that noted it (the copy, the read): a wipe since then (account deletion) and the line
+ *  is not written — it names the deleted person's company and id (the security check of #1260 З1) */
+export function noteStorageLoss(key: string, what: string, at = new Date().toISOString(), gen = deviceGeneration()): Promise<void> {
+  const g = gen;
+  if (g !== deviceGeneration()) return logTail;
   // eslint-disable-next-line no-console
   console.warn(`[storage] ${key}: ${what}`);
-  const g = deviceGeneration();
   const run = logTail.then(() => (g === deviceGeneration() ? appendLog(key, what, at, g) : undefined));
   logTail = run.catch(() => {});
   return logTail;
@@ -432,7 +457,7 @@ export function usePersistentState<T>(
           const copied = await keepBrokenCopy(key, raw!, Date.now(), { gen: g });
           if (!alive || w !== wiped.current) return;
           if (!copied) {
-            void noteStorageLoss(key, "unreadable record: no copy could be kept, started over");
+            void noteStorageLoss(key, "unreadable record: no copy could be kept, started over", undefined, g);
             return setState({ key, value, loaded: true, forgotten: true });
           }
         }
@@ -490,10 +515,10 @@ export function usePersistentState<T>(
             if (old == null || old === raw || g !== deviceGeneration()) return;
             // the person's records, as the device held them: found later by the log (code-reviewer №5)
             // the log is not waited for: the write waits for the copy only
-            if (await keepBrokenCopy(k, old, at, { gen: g })) void noteStorageLoss(k, `written over after a failed read: the record before is kept at ${brokenKeyOf(k, at)}`);
-            else void noteStorageLoss(k, "written over after a failed read: no copy could be kept");
+            if (await keepBrokenCopy(k, old, at, { gen: g })) void noteStorageLoss(k, `written over after a failed read: the record before is kept at ${brokenKeyOf(k, at)}`, undefined, g);
+            else void noteStorageLoss(k, "written over after a failed read: no copy could be kept", undefined, g);
           },
-          () => void noteStorageLoss(k, "written over after a failed read: read again failed, no copy"),
+          () => void noteStorageLoss(k, "written over after a failed read: read again failed, no copy", undefined, g),
         ),
       );
     }
