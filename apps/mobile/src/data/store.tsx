@@ -41,7 +41,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
-import { contractInvoice, withTaxSplit } from "@/features/contractInvoice";
+import { contractInvoice, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
@@ -316,6 +316,10 @@ interface StoreCtx {
   /** #865: null — refused, nothing written or queued (above the contract: engine canIssue); the screen says so
    *  (inv.rej.overContract) and shows no «Отменить» */
   issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo | null;
+  /** В1-5 (#1107): void a sent invoice — director (owner / admin) only, no payment on it, the reason required. The
+   *  invoice moves to voidInvoices (no sum counts it); no «Отменить»: the server never lets it back. null — done;
+   *  else why not (the screen shows it). Server: tg_invoice_guard (db T197). */
+  voidInvoice: (id: ID, reason: string) => VoidRefusal | null;
   /** create or update a universal estimate (draft) */
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
@@ -1879,6 +1883,27 @@ export function StoreProvider({
         const r = applyAdvance(dbRef.current, advanceId, invoiceId, { mode: modeRef.current, appRole: role });
         if (!r.ok) return r.error;
         mutate("payment.advanceDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices, advances: r.advances }));   // no op
+        return null;
+      },
+      voidInvoice: (id, reason) => {
+        const d0 = dbRef.current;
+        const refusal = voidRefusal(d0, id, reason, role);
+        if (refusal) return refusal;
+        const inv = d0.invoices.find((i) => i.id === id)!;
+        const why = reason.trim();
+        mutate(
+          "invoice.void",
+          (d) => {
+            const cur = d.invoices.find((i) => i.id === id);
+            if (!cur) return d;
+            return {
+              ...d,
+              invoices: d.invoices.filter((i) => i.id !== id),
+              voidInvoices: [...(d.voidInvoices ?? []).filter((i) => i.id !== id), { ...cur, status: "void", voidReason: why, voidedAt: new Date().toISOString() }],
+            };
+          },
+          { k: "invoice.void", id, jobId: inv.jobId, reason: why, totalCents: inv.totalCents },
+        );
         return null;
       },
       issueInvoice: (jobId, kind, amountCents, title) => {

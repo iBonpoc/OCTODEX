@@ -14,6 +14,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { clientHistory, type HistoryKind } from "@/features/clients";
 import { clientRecords, type ClientRow } from "@/features/clientRows";
 import { invoiceChip } from "@/features/ContractStatement";
+import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 import { estView } from "@/features/boards";
 import { jobStatusView } from "@/features/jobs";
 import { leadStatusView } from "@/features/leads";
@@ -201,7 +202,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       );
 
     case "invoices":
-      return r.invoices.length + r.receipts.length === 0 ? (
+      return r.invoices.length + r.receipts.length + (db.voidInvoices ?? []).filter((i) => i.customerId === c.id).length === 0 ? (
         <Empty icon="invoice" title={t("client.empty.invoices")} hint={t("client.empty.documentsHint")} />
       ) : (
         <>
@@ -224,6 +225,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
               );
             })}
           </CardGrid>
+          <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.customerId === c.id)} testPrefix="client" />
           {r.receipts.length ? <SectionTitle title={t("client.receipts")} /> : null}
           <CardGrid>
             {r.receipts.map((p) => (
