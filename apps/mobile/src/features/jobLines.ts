@@ -4,7 +4,7 @@
  * Refused before the store: a job from an estimate (its lines are the estimate's, t20), a job that is done, and a change
  * that brings the total below what is already invoiced (engine jobLinesBelowInvoiced, db T69).
  */
-import { caWrittenContractRequired, dec, jobLineQty, jobLinesBelowInvoiced, jobLinesTotals, roundCents } from "@octo/estimating-engine";
+import { bpsFromPpm, caWrittenContractRequired, dec, jobLineQty, jobLinesBelowInvoiced, jobLinesTotals, parsePctToPpm, ppmToPctText, roundCents, taxRatePpm } from "@octo/estimating-engine";
 import type { DB, ID, Job, JobLineItem } from "@/data/types";
 import { findJob } from "@/data/jobs";
 
@@ -15,7 +15,13 @@ export const linesOf = (d: Pick<DB, "jobLines">, jobId: ID): JobLineItem[] =>
 
 export const nextLinePosition = (d: Pick<DB, "jobLines">, jobId: ID): number => Math.max(-1, ...linesOf(d, jobId).map((l) => l.position)) + 1;
 
-const taxOf = (j: Pick<Job, "taxEnabled" | "taxRateBps">) => ({ enabled: !!j.taxEnabled, rateBps: j.taxRateBps ?? 0 });
+type JobTaxOf = Pick<Job, "taxEnabled" | "taxRateBps" | "taxRatePpm">;
+const taxOf = (j: JobTaxOf) => ({ enabled: !!j.taxEnabled, rateBps: j.taxRateBps ?? 0, ratePpm: j.taxRatePpm });
+/** #1219: a job's tax as it is set — the rate in ppm beside its rounded basis points (absent ppm: an older writer, the
+ *  basis points are the rate) */
+export type JobTaxSet = { taxEnabled: boolean; taxRateBps: number; taxRatePpm?: number };
+/** the job's rate as people read it: 8.875, 9.5 */
+export const jobRateText = (j: JobTaxOf): string => ppmToPctText(taxRatePpm({ rateBps: j.taxRateBps ?? 0, ratePpm: j.taxRatePpm }));
 
 /** «Без налога» client of the job (customers.tax_exempt): the server switches the job's tax off (t18_job_money), so do we */
 export function jobClientExempt(d: Pick<DB, "customers" | "properties">, j: Pick<Job, "customerId" | "propertyId">): boolean {
@@ -24,7 +30,7 @@ export function jobClientExempt(d: Pick<DB, "customers" | "properties">, j: Pick
 }
 
 /** the job's total from these lines and tax (engine) */
-export function totalOf(lines: Pick<JobLineItem, "quantity" | "unitPriceCents" | "taxable">[], tax: Pick<Job, "taxEnabled" | "taxRateBps">) {
+export function totalOf(lines: Pick<JobLineItem, "quantity" | "unitPriceCents" | "taxable">[], tax: JobTaxOf) {
   return jobLinesTotals(lines, taxOf(tax));
 }
 
@@ -59,8 +65,10 @@ export function withoutJobLine<T extends D>(d: T, id: ID): T {
   return recount({ ...d, jobLines: (d.jobLines ?? []).filter((x) => x.id !== id) }, l.jobId) as T;
 }
 
-export function withJobTax<T extends D>(d: T, jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }): T {
+export function withJobTax<T extends D>(d: T, jobId: ID, set: JobTaxSet): T {
   const j = d.jobs.find((x) => x.id === jobId);
+  // a rate in basis points only (an older queued change) leaves no ppm behind: the server does the same (t03)
+  const tax = { ...set, taxRatePpm: set.taxRatePpm };
   // an exempt client never gets tax on the job (the server does the same, t18_job_money)
   const next = j && jobClientExempt(d, j) ? { ...tax, taxEnabled: false } : tax;
   return recount({ ...d, jobs: d.jobs.map((x) => (x.id === jobId ? { ...x, ...next } : x)) }, jobId) as T;
@@ -76,9 +84,16 @@ export function lineSaveUndo(before: Pick<DB, "jobLines">, line: Pick<JobLineIte
 }
 
 /** the job's tax before a change, to put back on «Отменить» */
-export function taxBefore(before: Pick<DB, "jobs">, jobId: ID): { taxEnabled: boolean; taxRateBps: number } {
+export function taxBefore(before: Pick<DB, "jobs">, jobId: ID): JobTaxSet {
   const j = before.jobs.find((x) => x.id === jobId);
-  return { taxEnabled: !!j?.taxEnabled, taxRateBps: j?.taxRateBps ?? 0 };
+  return { taxEnabled: !!j?.taxEnabled, taxRateBps: j?.taxRateBps ?? 0, ...(j?.taxRatePpm !== undefined ? { taxRatePpm: j.taxRatePpm } : {}) };
+}
+
+/** #1219: a tax rate typed as percent ("8.875") → the job's tax rate (ppm and its basis points); null when it is not a
+ *  number, has more than four decimals or is above 100 % */
+export function percentToRate(s: string): { taxRatePpm: number; taxRateBps: number } | null {
+  const p = parsePctToPpm(s.trim());
+  return p === null ? null : { taxRatePpm: p, taxRateBps: bpsFromPpm(p) };
 }
 
 /** a tax rate typed as percent ("8.25") → basis points; null when it is not a number (no throw on "7..5") */

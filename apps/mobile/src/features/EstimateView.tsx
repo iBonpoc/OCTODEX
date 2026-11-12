@@ -4,7 +4,7 @@
  */
 import { View } from "react-native";
 import { space, component, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, type CustomOption } from "@octo/estimating-engine";
+import { LINE_GROUPS, activeLines, ppmToPctText, taxRatePpm, type CustomOption } from "@octo/estimating-engine";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -138,7 +138,7 @@ export function EstimateView({
 
         <Line label={t("ue.subtotal")} v={money(tot.subtotal)} />
         {tot.discount ? <Line label={t("ue.discount")} v={`−${money(tot.discount)}`} /> : null}
-        {tot.tax ? <Line label={t("ue.taxLine", { rate: s.tax.rateBps / 100 })} v={money(tot.tax)} /> : null}
+        {tot.tax ? <Line label={t("ue.taxLine", { rate: ppmToPctText(taxRatePpm(s.tax)) })} v={money(tot.tax)} /> : null}
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="title">{t("ue.total")}</T>
           <T v="display" tabular>

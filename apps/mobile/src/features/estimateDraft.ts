@@ -31,6 +31,8 @@ export interface EstimateDraft {
   doc: EstimateDoc;
   templateId?: string;
   checkPrice: string[];
+  /** rows where «Сохранить в каталог» is on (the choice survives a reload; absent in older drafts) */
+  wantCatalog?: string[];
 }
 export const MAX_DRAFTS = 10;
 export const DRAFT_DAYS = 30;
@@ -60,7 +62,7 @@ export function upsertDraft(list: readonly EstimateDraft[], d: EstimateDraft, no
 
 /** what the builder holds, to compare with how it opened (the time and the place are not part of it) */
 export const draftSnapshot = (d: Omit<EstimateDraft, "ctx" | "at">) =>
-  JSON.stringify([d.estimateId, d.customerId ?? null, d.propertyId ?? null, d.title, d.doc, d.templateId ?? null, d.checkPrice]);
+  JSON.stringify([d.estimateId, d.customerId ?? null, d.propertyId ?? null, d.title, d.doc, d.templateId ?? null, d.checkPrice, ...(d.wantCatalog?.length ? [d.wantCatalog] : [])]);
 
 /**
  * The drafts after a change in the builder (review of #859 №1). As it opened — nothing new to keep: a fresh builder (a
@@ -94,6 +96,7 @@ export function cleanDraft(x: unknown): EstimateDraft | null {
     doc: normalizeDoc({ ...base, ...d.doc, options, settings: { ...base.settings, ...(d.doc?.settings ?? {}) } }).doc,
     templateId: d.templateId,
     checkPrice: Array.isArray(d.checkPrice) ? d.checkPrice.filter((c) => typeof c === "string") : [],
+    ...(Array.isArray(d.wantCatalog) && d.wantCatalog.some((c) => typeof c === "string") ? { wantCatalog: d.wantCatalog.filter((c) => typeof c === "string") } : {}),
   };
 }
 export const cleanDrafts = (v: unknown): EstimateDraft[] => (Array.isArray(v) ? v.map(cleanDraft).filter((d): d is EstimateDraft => !!d) : []);

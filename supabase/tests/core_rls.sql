@@ -12892,8 +12892,9 @@ declare e uuid := tst.t195_id(p_case, 'estimate'); v uuid := tst.t195_id(p_case,
 begin
   insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
     (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T195 ' || p_case, p_by);
-  insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule) values
-    (v, 'ca000000-0000-0000-0000-000000000000', e, 1, (r ->> 'taxEnabled')::boolean, (r ->> 'taxRateBps')::int, c -> 'doc' -> 'settings' -> 'deposit');
+  -- #1219: the rate in ppm too, as estimate.save writes it (the 8.875 % example)
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, tax_rate_ppm, deposit_rule) values
+    (v, 'ca000000-0000-0000-0000-000000000000', e, 1, (r ->> 'taxEnabled')::boolean, (r ->> 'taxRateBps')::int, (r ->> 'taxRatePpm')::int, c -> 'doc' -> 'settings' -> 'deposit');
   update public.estimates set current_version_id = v where id = e;
   for x in select * from jsonb_array_elements(r -> 'options') loop
     insert into public.estimate_options (id, company_id, version_id, name, position, discount_mode, discount_value) values
@@ -13629,5 +13630,250 @@ select tst.ok(not has_function_privilege('anon', 'public.save_estimate_version(u
               'T200 rule 18; the caller''s own rights (security invoker)');
 drop function tst.t200_save(text, text, jsonb, jsonb, jsonb);
 \echo 'T200 an estimate is saved in one transaction: a refusal leaves it as it was'
+-- T201 (#1219): a tax rate with three decimals — ppm (1 = 0.0001 %) next to the basis points. Test prices.
+-- (а) a new phone writes ppm (8.875 % = 88750): the server writes the basis points from it (888), any basis points it sent
+--     — no refusal; the contract counts 8.875 %: $1000 → tax $88.75 (the engine the same, taxPpm.test.ts).
+-- (б) an older phone saves the document without ratePpm and the basis points 888: ppm goes back to null, its 8.88 % is the
+--     rate (as before, $88.80); the send check compares the version's ppm with its document's.
+-- (в) a job's own lines: 8.875 % → $88.75; an older phone changes the basis points — ppm follows them.
+-- (г) what the client reads keeps ratePpm; a template may carry it (0..1000000); rule 18.
+-- ======================================================================================================================
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a2010000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T201 NY tax');
+-- a new phone: ppm 88750 with basis points that do not follow it (0) — the server writes 888
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, tax_rate_ppm, deposit_rule, calc_inputs)
+  values ('a2010000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-000000000001', 1, true, 0, 88750, '{"kind":"none"}', $j${"options":[
+   {"id":"a2010000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a2010000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":100000}]}],
+ "settings":{"tax":{"enabled":true,"rateBps":888,"ratePpm":88750,"groups":{"service":true,"labor":true,"material":true}},"deposit":{"kind":"none"},"discount":null}}$j$);
+update public.estimates set current_version_id = 'a2010000-0000-4000-8000-000000000002' where id = 'a2010000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended) values
+  ('a2010000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-000000000002', 'A', 0, true);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000a1', 'Install', 1, 100000, true);
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'),
+              'T201 ppm 88750 written: the server sets the basis points 888 (round half up), no refusal');
+:as_super
+select tst.ok((select (t.tax, t.total) = (8875::bigint, 108875::bigint) from app.estimate_option_totals('a2010000-0000-4000-8000-000000000002', 'a2010000-0000-4000-8000-0000000000a1', '{}') t),
+              'T201 $1000 × 8.875 % = $88.75 tax, $1088.75 total (the basis points gave $88.80)');
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a2010000-0000-4000-8000-000000000002')$q$) = 0, 'T201 the version''s ppm matches its document''s');
+:as_office_a
+-- the version's ppm apart from the document's (88800 against 88750): the send check says «tax»
+update public.estimate_versions set tax_rate_ppm = 88800 where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88800, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 (fixture: ppm 88800)');
+select tst.fails_like($q$select public.send_estimate('a2010000-0000-4000-8000-000000000001', 'tok_t201_0123456789abcdef')$q$, '%(tax)%', 'T201 a rate apart from the document: not sent');
+-- (б) an older phone saves: the document without ratePpm, the basis points 888 → ppm null, 8.88 % is the rate
+update public.estimate_versions set tax_rate_ppm = 88750 where id = 'a2010000-0000-4000-8000-000000000002';
+update public.estimate_versions set tax_rate_bps = 888, calc_inputs = calc_inputs #- '{settings,tax,ratePpm}' where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 888 from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'),
+              'T201 an older phone''s save: ppm back to null, its basis points are the rate');
+:as_super
+select tst.ok((select t.tax = 8880 from app.estimate_option_totals('a2010000-0000-4000-8000-000000000002', 'a2010000-0000-4000-8000-0000000000a1', '{}') t)
+              and tst.cnt($q$select 1 from app.version_lines_mismatch('a2010000-0000-4000-8000-000000000002')$q$) = 0,
+              'T201 the older phone''s estimate counts as before ($88.80) and matches its document');
+:as_office_a
+-- an older phone changes only the basis points of a ppm version: ppm follows them (null)
+update public.estimate_versions set tax_rate_ppm = 88750, calc_inputs = jsonb_set(calc_inputs, '{settings,tax,ratePpm}', '88750') where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 the new phone saves again: 88750 / 888');
+update public.estimate_versions set tax_rate_bps = 950 where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 950 from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 only the basis points changed: ppm null');
+update public.estimate_versions set tax_rate_ppm = 88750, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-000000000002';
+-- the same save again (ppm, basis points and the document unchanged): ppm stays
+update public.estimate_versions set tax_rate_ppm = 88750, tax_rate_bps = 888, calc_inputs = calc_inputs where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 the same save again: ppm stays');
+select tst.fails_like($q$update public.estimate_versions set tax_rate_ppm = 1000001 where id = 'a2010000-0000-4000-8000-000000000002'$q$, '%tax_rate_ppm%', 'T201 above 100 %: refused');
+select tst.ok(public.send_estimate('a2010000-0000-4000-8000-000000000001', 'tok_t201_0123456789abcdef') = 'tok_t201_0123456789abcdef', 'T201 the ppm estimate is sent');
+select tst.fails_like($q$update public.estimate_versions set tax_rate_ppm = 88760 where id = 'a2010000-0000-4000-8000-000000000002'$q$, '%is locked%',
+                      'T201 a sent version: not even its ppm alone changes');
+:as_super
+select tst.ok((select (x -> 'settings' -> 'tax' ->> 'ratePpm') = '88750' from app.client_doc((select calc_inputs from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002')) x),
+              'T201 what the client reads keeps ratePpm');
+-- (в) a job's own lines
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps, tax_rate_ppm) values
+  ('a2010000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T201 lines', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'draft', true, 0, 88750);
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000e1', 0, 'T201 part', 1, 100000, true);
+select tst.ok((select (tax_rate_ppm, tax_rate_bps, contract_total_cents) = (88750, 888, 108875::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 a job of its own lines at 8.875 %: $1088.75, basis points 888');
+update public.jobs set tax_rate_bps = 950 where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select tax_rate_ppm is null and contract_total_cents = 109500 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 an older phone sets 9.5 % in basis points: ppm null, $1095.00');
+update public.jobs set tax_rate_ppm = 73750, tax_rate_bps = 950 where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps, contract_total_cents) = (73750, 738, 107375::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 a new phone sets 7.375 %: basis points 738, $1073.75');
+:as_super
+select tst.ok(app.job_contract_tax('a2010000-0000-4000-8000-0000000000e1') = 7375, 'T201 the contract''s tax at 7.375 %: $73.75');
+-- a job with a sent invoice of its whole total: a ppm change alone (the same basis points 888: 8.88 % → 8.876 %) may not
+-- bring the total below what is invoiced (t19 fires on tax_rate_ppm too)
+:as_office_a
+update public.jobs set tax_rate_ppm = 88800, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('a2010000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a2010000-0000-4000-8000-0000000000e1', 'final', 'sent', 'T201 final', 108880, 108880, now());
+select tst.fails_like($q$update public.jobs set tax_rate_ppm = 88760 where id = 'a2010000-0000-4000-8000-0000000000e1'$q$, '%below what is invoiced%',
+                      'T201 a ppm change alone below the invoiced total: refused');
+select tst.ok((select (tax_rate_ppm, contract_total_cents) = (88800, 108880::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'), 'T201 the job stays at 8.88 %, $1088.80');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T201 test' where id = 'a2010000-0000-4000-8000-0000000000f1';
+:as_super
+-- the same basis points with ppm gone (this phone's «Отменить» back to 8.88 %: ops job.update writes tax_rate_ppm null)
+:as_office_a
+update public.jobs set tax_rate_ppm = 88750, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
+update public.jobs set tax_rate_bps = 888, tax_rate_ppm = null where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 888 and contract_total_cents = 108880 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 the same basis points, ppm null: 8.88 % again ($1088.80)');
+-- an older phone makes a job with the basis points only: no ppm, its rate counts
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+  ('a2010000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'T201 old', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'draft', true, 950);
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000e4', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000e3', 0, 'T201 part', 1, 100000, true);
+select tst.ok((select tax_rate_ppm is null and contract_total_cents = 109500 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e3'),
+              'T201 an older phone''s job: no ppm, 9.5 % as before ($1095.00)');
+:as_super
+-- (г) a template may carry ratePpm, a whole one 0..1000000
+select tst.ok((select bool_and(app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '88750'))
+                      and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '1000001'))
+                      and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '8.875'))
+                      and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '"88750"')))
+                 from public.estimate_templates where app.valid_estimate_template_doc(doc))
+              and exists (select 1 from public.estimate_templates where app.valid_estimate_template_doc(doc)),
+              'T201 a template: ratePpm 88750 passes; above 100 %, a fraction, a string — refused');
+select tst.ok(app.doc_tax_ppm('{"rateBps": 950}') = 95000 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750}') = 88750
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 1.5}') = 88800 and app.doc_tax_ppm('{}') = 0
+              and app.doc_tax_ppm('{"rateBps": 950, "ratePpm": 88750}') = 95000
+              and app.doc_tax_ppm('{"ratePpm": 88750}') = 0
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750.0}') = 88750 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750.5}') = 88800
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 8.875e4}') = 88750 and app.doc_tax_ppm('{"rateBps": 0, "ratePpm": 1e300}') = 0 and app.doc_tax_ppm('{"rateBps": "888", "ratePpm": 88750}') = 0,
+              'T201 the document''s rate: ppm (rounding to its basis points), else the basis points × 100');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_rate_ppm()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.job_lines_totals_ppm(uuid,boolean,int)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.version_tax_ppm(int,int)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.doc_tax_ppm(jsonb)', 'EXECUTE')
+              and has_function_privilege('authenticated', 'app.doc_tax_ppm(jsonb)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_tax_rate_ppm()'::regprocedure), 'T201 rule 18; the sync runs as the writer');
+-- the save in one transaction (#1220) writes the ppm rate; an older phone's call (no tax_rate_ppm) leaves it null
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a2010000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T201 tx');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('a2010000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-000000000011', 1);
+select public.save_estimate_version('a2010000-0000-4000-8000-000000000011', 'a2010000-0000-4000-8000-000000000012', 'T201 tx',
+  '{"calc_inputs": {"settings": {"tax": {"enabled": true, "rateBps": 888, "ratePpm": 88750}}}, "tax_enabled": true, "tax_rate_bps": 0, "tax_rate_ppm": 88750, "tax_mode": "added_on_top"}'::jsonb,
+  '[]'::jsonb, '[]'::jsonb, '[]'::jsonb);
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000012'),
+              'T201 save_estimate_version writes ppm 88750 (the basis points 888 from it)');
+select public.save_estimate_version('a2010000-0000-4000-8000-000000000011', 'a2010000-0000-4000-8000-000000000012', 'T201 tx',
+  '{"calc_inputs": {"settings": {"tax": {"enabled": true, "rateBps": 950}}}, "tax_enabled": true, "tax_rate_bps": 950, "tax_mode": "added_on_top"}'::jsonb,
+  '[]'::jsonb, '[]'::jsonb, '[]'::jsonb);
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 950 from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000012'),
+              'T201 an older phone''s save_estimate_version (no ppm): null, its basis points are the rate');
+\echo 'T201 a tax rate with three decimals: ppm next to the basis points'
+
+-- ======================================================================================================================
+-- T202 (РС-9, #1096): the catalog item's card — barcode, product link, direction; the history of the selling price and
+-- the markup (catalog_price_history: before and after, who), read only by who sees costs; the purchase history
+-- (catalog_cost_history) gets no price rows. Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger', 'ea', 1190);
+update public.catalog_items set barcode = '0123456789012', product_url = 'https://abc.example/hanger?id=5',
+       service_category_id = (select id from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1)
+ where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select barcode = '0123456789012' and product_url like 'https://%' and service_category_id is not null
+                 from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 a barcode, a link and a direction of our own are kept');
+select tst.fails_like($q$update public.catalog_items set product_url = 'http://abc.example/x' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%product_url%', 'T202 a link without https:// — refused');
+select tst.fails_like($q$update public.catalog_items set product_url = 'https://abc.example/a b' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%product_url%', 'T202 a link with a space — refused');
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, 'https://x.example/' || repeat('a', 490)), '%product_url%', 'T202 a link past 500 — refused');
+select tst.fails_like(format($q$update public.catalog_items set barcode = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, repeat('1', 65)), '%barcode%', 'T202 a barcode past 64 — refused');
+select tst.fails_like($q$update public.catalog_items set barcode = E'12\n34' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%barcode%', 'T202 a barcode with a control character — refused');
+-- security-check of РС-9: no other scheme in any case; no invisible format characters (Cf, as app.client_title)
+-- (each call raises unless it is refused) javascript:, data: and other schemes in any case — refused; only https:// itself
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, u), '%product_url%', 'T202 not https: ' || u)
+  from unnest(array['javascript:alert(1)', 'JavaScript:alert(1)', 'JAVASCRIPT://x', 'data:text/html,<b>x', 'DATA:text/html,x',
+                    'HTTPS://abc.example/x', 'vbscript:x', ' https://abc.example/x', 'https:/abc', 'https://']) u;
+-- zero-width, bidirectional and other invisible format characters in the barcode or the link — refused
+select tst.fails_like(format($q$update public.catalog_items set %s = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, c, v), '%' || c || '%', 'T202 a format character in ' || c)
+  from (values ('barcode', U&'0123\200B456'), ('barcode', U&'0123\202E456'), ('barcode', U&'\FEFF0123'), ('barcode', U&'01\00AD23'),
+                              ('product_url', U&'https://abc.example/\200Dx'), ('product_url', U&'https://abc.example/\2066x'), ('product_url', U&'https://abc.example/\061Cx'),
+               -- security-check of #1233: blanks that are not format characters, and a barcode of a blank only
+               ('product_url', U&'https://abc.example/\00A0x'), ('product_url', U&'https://abc.example/\2028x'), ('product_url', U&'https://abc.example/\3000x'),
+               ('product_url', U&'https://abc.example\200B/x'), ('product_url', 'https:///x'), ('product_url', 'https://a@b.example/x'),
+               ('product_url', 'https://user:pw@b.example/x'), ('product_url', 'https://abc.example:x/'), ('product_url', 'https://abc_example/'),
+               ('barcode', U&'\00A0'), ('barcode', U&'\00A0\00A0'), ('barcode', U&'\200B'), ('barcode', '   '), ('barcode', 'АБВ123'), ('barcode', '12;34'), ('barcode', '<b>')) x(c, v);
+select tst.ok((select barcode = '0123456789012' and product_url = 'https://abc.example/hanger?id=5' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 after the refusals the barcode and the link are as they were');
+-- what passes: a port, a query or a fragment right after the host; a barcode of letters, digits, space . _ / -
+update public.catalog_items set product_url = 'https://abc.example:8443/x' where id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_items set product_url = 'https://abc.example?q=1', barcode = '0123-456 A/B.c_d' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select product_url = 'https://abc.example?q=1' and barcode = '0123-456 A/B.c_d' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 a port, a query; a barcode with a space, a dash, a slash, a dot and an underscore — kept');
+update public.catalog_items set product_url = 'https://abc.example/hanger?id=5', barcode = '0123456789012' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.fails_like(format($q$update public.catalog_items set service_category_id = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, :'b_cat'), '%catalog_items_service_category_fk%', 'T202 another company''s direction — refused');
+-- an older phone's save — the whole item as an upsert (ops.ts catalog.save), without the new columns, the same price:
+-- the new fields stay, no price row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1190)
+  on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents, kind = excluded.kind;
+select tst.ok((select barcode = '0123456789012' and product_url is not null and service_category_id is not null and name = 'T202 Hanger 5in'
+                 from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 an older phone''s save keeps the new fields');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0,
+              'T202 the same price saved again: no history row');
+-- the price changes (an upsert, as the phone): before and after, who; the same upsert again (a replay of the queue): no row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select count(*) = 1 and bool_and(prev_unit_price_cents = 1190 and unit_price_cents = 1213 and markup_bps is null
+                  and by = 'a0000000-0000-0000-0000-000000000002' and source = 'manual')
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 the price changed: $11.90 → $12.13, who; the same save again — no second row');
+-- the markup: a first one (insert, none before), a change, the same again
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1000, 1025, 1000);
+update public.catalog_item_costs set markup_bps = 1200 where item_id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_item_costs set markup_bps = 1200, unit_cost_cents = 1010 where item_id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select array_agg(coalesce(prev_markup_bps, -1) || '>' || markup_bps order by at, id) = array['-1>1000', '1000>1200']
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and markup_bps is not null),
+              'T202 the markup: the first (none before) and a change; the same markup with another cost — no row');
+-- a markup only, no cost (a labor item: catalog_item_costs takes a cost and a markup of any kind, spec §9 п.2)
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T202 Install', 'hr', 9000);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 4500, 500);
+select tst.ok((select unit_cost_cents = 4500 from public.catalog_item_costs where item_id = 'a2020000-0000-4000-8000-000000000002')
+              and tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000002' and markup_bps = 500$q$) = 1,
+              'T202 a labor item takes a cost and a markup; its markup is in the history');
+-- an older phone sends the markup on the item row (t30 moves it to catalog_item_costs): a row too
+update public.catalog_items set markup_bps = 1500 where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and prev_markup_bps = 1200 and markup_bps = 1500$q$) = 1,
+              'T202 a markup written the old way is in the history');
+-- the purchase history (older phones' «История закупки и налога», the supplier's screen) gets no price or markup row
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 2,
+              'T202 the purchase history keeps only the purchase rows (the first cost and the cost change)');
+-- who reads: the office yes; a tech, sales without view_costs, another company no; nobody writes it by hand
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 4, 'T202 the office reads the price history');
+select tst.fails($q$insert into public.catalog_price_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 the office does not write the history by hand');
+select tst.fails($q$update public.catalog_price_history set unit_price_cents = 1 where item_id = 'a2020000-0000-4000-8000-000000000001'$q$, 'T202 …nor change it (no update right)');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 a tech reads no price history');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 sales without view_costs reads none');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 another company reads none');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_price_history()', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.tg_price_history()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_markup_history()', 'EXECUTE')
+              and not has_table_privilege('anon', 'public.catalog_price_history', 'SELECT')
+              and not has_table_privilege('authenticated', 'public.catalog_price_history', 'INSERT')
+              and (select prosecdef from pg_proc where oid = 'app.tg_price_history()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.tg_markup_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
+\echo 'T202 the catalog card: barcode, link, direction; the price and markup history'
 
 \echo 'ALL TESTS PASSED'

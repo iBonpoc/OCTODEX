@@ -5,7 +5,7 @@
  * client's signature is refused for a total that only looks different (#1147). Pure: test/signTotals.test.ts and T195
  * read the same examples (test/fixtures/signTotals.json).
  */
-import { discountBps, jobLineQty, type DecLike } from "@octo/estimating-engine";
+import { bpsFromPpm, discountBps, jobLineQty, taxRatePpm, type DecLike } from "@octo/estimating-engine";
 import type { EstimateDoc } from "@/data/types";
 
 /** A line's quantity as estimate_line_items keeps it; a text that is not a number goes as before (the server says no). */
@@ -20,6 +20,8 @@ export const storedQty = (q: DecLike): string | number => {
 export interface VersionRows {
   taxEnabled: boolean;
   taxRateBps: number;
+  /** #1219: the rate in ppm (estimate_versions.tax_rate_ppm) */
+  taxRatePpm: number;
   options: { id: string; position: number; name: string; isRecommended: boolean; discountMode: "pct" | "fixed" | null; discountValue: number | null }[];
   lines: {
     id: string; optionId: string; position: number; group: string; catalogItemId?: string; name: string; description: string | null;
@@ -35,7 +37,8 @@ export function versionRows(doc: EstimateDoc): VersionRows {
   const taxOn = s.tax.enabled && Object.values(s.tax.groups).some(Boolean);
   return {
     taxEnabled: taxOn,
-    taxRateBps: s.tax.rateBps,
+    taxRateBps: bpsFromPpm(taxRatePpm(s.tax)),
+    taxRatePpm: taxRatePpm(s.tax),
     options: doc.options.map((o, i) => ({
       id: o.id, position: i, name: o.name, isRecommended: !!o.recommended,
       discountMode: s.discount ? s.discount.kind : null,

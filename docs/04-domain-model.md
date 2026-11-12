@@ -401,6 +401,7 @@
 | start_date_approx, completion_date_approx, substantial_commencement_text | date, date, text | (v0.3.1) Обязательные поля CA-договора |
 | tax_enabled | bool | Налог вкл/выкл на документе (по умолчанию из `Company.tax_settings.default_enabled`) |
 | tax_rate_id, tax_rate_bps | → TaxRate, int (снимок) | Выбранная ставка; снимок ставки, чтобы изменение TaxRate не меняло отправленные сметы |
+| tax_rate_ppm | int, null (#1219) | Ставка в миллионных (1 = 0,0001 %; 8,875 % = 88750). Есть — это ставка, `tax_rate_bps` = её округление (сервер пишет сам); нет — ставка = `tax_rate_bps` × 100 (старые телефоны). В документе — `settings.tax.ratePpm` рядом с `rateBps` |
 | tax_profile_id, tax_mode, include_purchase_tax_in_cost | → TaxProfile, enum (снимок), bool (снимок) | (v0.3) Налоговый профиль документа; по умолчанию профиль компании, меняется на черновике (PRD 19) |
 | totals | json, вычисляемое | По каждому варианту: subtotal, discount, tax, total, cost, margin |
 | locked_at, sent_at | timestamp | Блокировка при отправке (проверка в API и триггер БД) |

@@ -304,3 +304,19 @@ describe("invoice of a cancelled job (wave 3a, findJob)", () => {
     expect(ih).toContain(esc(job.title));
   });
 });
+
+describe("#1219: a rate with three decimals on the client's document", () => {
+  it("8.875 % shows as «8.875%», the tax is $88.75 on $1000 (8.88 % would be $88.80)", () => {
+    const { db, e } = dbWith("en");
+    const ny = {
+      ...doc,
+      options: [{ id: "o1", name: "Good", recommended: true, lines: [{ id: "l1", group: "labor", name: "Install", quantity: "1", unit: "ea", unitPriceCents: 100000 }] }],
+      settings: { ...doc.settings, tax: { enabled: true, rateBps: 888, ratePpm: 88750, groups: { service: true, labor: true, material: true } } },
+    } as unknown as EstimateDoc;
+    const p = portalFromEstimate({ ...db, estimates: db.estimates.map((x) => (x.id === e.id ? { ...x, doc: ny } : x)) }, { ...e, doc: ny }, "Acme");
+    const html = estimateHtml(p, { lang: p.lang });
+    expect(html).toContain("8.875%");
+    expect(html).toContain("$88.75");
+    expect(html).not.toContain("8.88%");
+  });
+});

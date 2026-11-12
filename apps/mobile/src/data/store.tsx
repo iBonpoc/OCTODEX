@@ -33,7 +33,7 @@ import { tFor } from "@/i18n/translate";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
-import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
+import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine, type JobTaxSet } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
@@ -359,7 +359,7 @@ interface StoreCtx {
   /** «Отменить» of these runs the same check (lineChangeRefusal) and returns false when it is refused: nothing changes */
   saveJobLine: (line: Omit<JobLineItem, "totalCents">, isNew: boolean) => GuardedUndo;
   removeJobLine: (id: ID) => GuardedUndo;
-  setJobTax: (jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }) => GuardedUndo;
+  setJobTax: (jobId: ID, tax: JobTaxSet) => GuardedUndo;
   setJobTags: (jobId: ID, tagIds: ID[]) => Undo;
   setJobType: (jobId: ID, jobTypeId: ID | null) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
