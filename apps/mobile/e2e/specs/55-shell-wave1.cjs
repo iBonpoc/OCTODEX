@@ -51,7 +51,7 @@ exports.run = async (h) => {
   h.expect(!/Голосовая заметка/.test(body), "no «Голосовая заметка» until it works");
   h.expect(!/волн[еыа]/i.test(body), "no «Появится в волне N»");
   // wave 2c (13 v2 §2.4): the technician's home set is Лид · Расход; «Фото» lives in the «＋» of his visit (e2e 59)
-  for (const it of ["Новый лид", "Расход по чеку"]) h.expect(body.includes(it), `«＋» has «${it}»`);
+  for (const it of ["Создать лид", "Создать расход"]) h.expect(body.includes(it), `«＋» has «${it}»`);
   h.expect(!/Фото/.test(await h.sheet().innerText()), "no «Фото» without a visit (it is on the visit)");
   await h.shot("quick");
 

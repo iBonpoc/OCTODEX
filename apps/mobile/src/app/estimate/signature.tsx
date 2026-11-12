@@ -56,6 +56,7 @@ export default function MySignatureScreen() {
           )}
           <SignaturePad
             label={t("est.countersign.padLabel")}
+            consent={null}
             confirmLabel={t("est.sig.save")}
             disabled={name.trim().length < 2}
             onConfirm={(svg) => toast.show(t("est.sig.done"), store.saveMySignature(svg, name, me?.title || title))}

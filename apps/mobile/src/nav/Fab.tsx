@@ -28,11 +28,14 @@ export interface FabProps {
 /** the items this screen offers this role, with the actions the screen did not wire left out */
 export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
   const { role, db } = useStore();
-  const core = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
-  if (set !== "home") return core;
+  const all = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
+  // «Работа без сметы» is always the last line, after a module's items too (main-path spec §2.2 п.4)
+  const core = all.filter((it) => it.id !== "job");
+  const tail = all.filter((it) => it.id === "job");
+  if (set !== "home") return [...core, ...tail];
   // the home «＋»: what the company's usable modules add («Замерить здесь», docs/specs/33 П15.2); none — as before
   const mods = placeActions("home", db.company, { role }, undefined, db.moduleData).map((a): FabItem => ({ id: `module.${a.module}.${a.id}`, label: a.labelKey, icon: a.icon, href: a.href }));
-  return [...core, ...mods];
+  return [...core, ...mods, ...tail];
 }
 
 function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
@@ -80,9 +83,16 @@ export function FabSheet({ visible, onClose, ...p }: FabProps & { visible: boole
             <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
               <Icon name={a.icon} s={size.iconMd} color={c.ink} />
             </View>
-            <T v="body" w="semibold" style={{ flex: 1 }}>
-              {t(a.label)}
-            </T>
+            <View style={{ flex: 1 }}>
+              <T v="body" w="semibold">
+                {t(a.label)}
+              </T>
+              {a.hint ? (
+                <T v="caption" tone="mut">
+                  {t(a.hint)}
+                </T>
+              ) : null}
+            </View>
           </Press>
         ))}
       </View>

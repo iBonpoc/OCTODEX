@@ -4077,8 +4077,11 @@ insert into public.invoices (id, company_id, number, customer_id, kind, status, 
   ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
 select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', -100, -100)$q$, 'an invoice is not born with a negative total');
 select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', -1, 0)$q$, 'an invoice is not born with a negative subtotal');
+-- the payment is the office's: sales take none on an invoice (T191, #868)
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
+:as_sales_a
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
 select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
 select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
@@ -4108,8 +4111,10 @@ update public.invoices set title = 'T53 renamed', due_date = tst.today() + 30, r
 select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
 update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
+:as_sales_a
 select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
 -- a draft still changes, but not below what is paid; once sent it is frozen
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
@@ -4118,8 +4123,10 @@ update public.invoices set subtotal_cents = 6000, total_cents = 6000 where id = 
 select tst.ok((select total_cents = 6000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'), 'a draft invoice still changes its amounts');
 select tst.fails($q$update public.invoices set total_cents = -1 where id = '15300000-0000-4000-8000-000000000002'$q$, 'a draft does not go negative');
 -- a paid draft: the total does not go below what is paid (check_violation, not the freeze)
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
+:as_sales_a
 do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   raise exception 'FAILED: a draft went below what is paid';
@@ -12557,5 +12564,285 @@ select tst.ok((select status = 'sent' and paid_cents = 50000 from public.invoice
 select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.payments where id = '21820000-0000-4000-8000-0000000000a2'), 'T181 the payment''s client is the invoice''s, not the job''s (С4)');
 select tst.ok((select paid_cents = 0 from public.invoices where id = '01820000-0000-4000-8000-000000000001'), 'T181 the unpaid deposit is untouched');
 \echo 'T181 visit payment: who may, one answer to another company or tech ok'
+
+-- T191 (#868, Q-42): sales take no payment on an invoice (13 §4) and see only their own expenses (#1042, default «no»);
+-- the deposit at the signing stays theirs (17, T73 — a security-definer function), the office's rights are unchanged
+:as_super
+insert into public.expenses (id, company_id, vendor, amount_cents, category, created_by) values
+  ('e1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T191 owner vendor', 1000, 'materials', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T191 sales vendor', 2000, 'materials', 'a0000000-0000-0000-0000-000000000005');
+:as_sales_a
+do $$ begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+    values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
+            'cash', 100, 'succeeded', 't191-sales-pay');
+  raise exception 'FAILED: T191 sales took a payment on an invoice';
+exception when insufficient_privilege then null;   -- RLS (42501), not some other error
+end $$;
+select tst.ok(true, 'T191 sales cannot take a payment on an invoice (payments_insert_staff, 42501)');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'$q$) = 0, 'T191 sales do not see another person''s expense');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where created_by <> 'a0000000-0000-0000-0000-000000000005'$q$) = 0, 'T191 sales see no expense of the company but their own');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'$q$) = 1, 'T191 sales see their own expense');
+select tst.blocked($q$update public.expenses set amount_cents = 1 where id = 'e1910000-0000-4000-8000-000000000001'$q$, 'T191 sales cannot change another person''s expense');
+update public.expenses set amount_cents = 2500 where id = 'e1910000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select amount_cents = 2500 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'), 'T191 sales change their own expense');
+select tst.ok((select amount_cents = 1000 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'), 'T191 another person''s expense is untouched');
+:as_office_a
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 100, 'succeeded', 't191-office-pay');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id in ('e1910000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-000000000002')$q$) = 2, 'T191 the office sees every expense');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = 't191-office-pay'$q$) = 1, 'T191 the office still takes a payment on an invoice');
+-- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
+-- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
+-- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed'),
+  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit'),
+  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', 1, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', '51910000-0000-4000-8000-000000000001', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', '51910000-0000-4000-8000-000000000002', 'customer', 'approved', 'Ann', '{"deposit": 1000}'),  -- = the office's hand-made invoice 11910…004: only the version refuses
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', '51910000-0000-4000-8000-000000000003', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;  -- straight to «approved» (the signing itself is S8's tests)
+update public.estimates set status = 'approved' where id in ('0e191000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002', '0e191000-0000-4000-8000-000000000003');
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000001'),
+  ('e1910000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 2', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002'),
+  ('e1910000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000003');
+-- the deposit invoices as the signature leaves them (the signed version, the client's deposit) — and one of another sum
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f1', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000001'),
+  ('11910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f3', 'deposit', 'sent', 'Deposit', 9999900, 9999900, now(), '51910000-0000-4000-8000-000000000003');
+:as_sales_a
+-- В-1: sales put in a «deposit» of their own on a signed estimate without one — the database refuses the insert
+do $$ begin
+  insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id)
+  values ('11910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 9999900, 9999900, now(), '51910000-0000-4000-8000-000000000002');
+  raise exception 'FAILED: T191 sales inserted a deposit invoice';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales cannot insert a deposit invoice (invoices_insert, 42501)');
+-- a deposit invoice of another sum than the client signed: the function refuses sales
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000003', 'a1910000-0000-4000-8000-000000000003', 'cash');
+  raise exception 'FAILED: T191 the function paid sales a deposit of another sum';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 a deposit invoice of another sum than the signed deposit: refused to sales (42501)');
+select tst.ok((public.record_estimate_deposit('0e191000-0000-4000-8000-000000000001', 'a1910000-0000-4000-8000-000000000001', 'cash') ->> 'repeat') = 'false', 'T191 sales take the deposit the signature made (record_estimate_deposit)');
+:as_super
+select tst.ok((select balance_cents = 0 from public.invoices where id = '11910000-0000-4000-8000-000000000001'), 'T191 the deposit invoice is paid');
+select tst.ok((select balance_cents = 9999900 from public.invoices where id = '11910000-0000-4000-8000-000000000003'), 'T191 the deposit of another sum stays unpaid');
+-- В-2: the same $99 999 through record_visit_payment — sales put in a visit and a draft final of their own: refused
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1910000-0000-4000-8000-0000000000f2', now());
+update public.visits set status = 'on_site' where id = 'f1910000-0000-4000-8000-000000000001';
+-- the job has a contract: with sales in the function's roles it would pay (the test fails on «FAILED», not on «nothing due»)
+update public.jobs set contract_total_cents = 9999900 where id = 'e1910000-0000-4000-8000-0000000000f2';
+:as_sales_a
+do $$ begin
+  perform public.record_visit_payment('f1910000-0000-4000-8000-000000000001', '11910000-0000-4000-8000-0000000000a5', 'a1910000-0000-4000-8000-000000000005', 'cash', null, 9999900);
+  raise exception 'FAILED: T191 record_visit_payment paid sales';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
+-- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
+do $$ begin
+  update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
+  raise exception 'FAILED: T191 sales turned a draft into a deposit';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
+:as_super
+select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
+select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
+-- the office's visit payment: T181 (unchanged)
+-- the office: a deposit invoice by hand, as before
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+  values ('11910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 1000, 1000, now());
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id = '11910000-0000-4000-8000-000000000004'$q$) = 1, 'T191 the office still inserts a deposit invoice');
+-- the new branches of the function (rule 15): the hand-made deposit invoice of the office (no signed version) — sales are
+-- refused; the estimate not approved — sales are refused; a payment on its way (ACH) — nobody pays the deposit twice
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000002', 'a1910000-0000-4000-8000-000000000008', 'cash');
+  raise exception 'FAILED: T191 sales paid the office''s hand-made deposit invoice';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed version): refused to sales (42501)');
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 another version');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 2, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', '51910000-0000-4000-8000-000000000017', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;
+update public.estimates set status = 'approved' where id = '0e191000-0000-4000-8000-000000000007';
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f7', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 7', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000007');
+-- the deposit invoice of version 1, the client signed version 2: the same sum, another version
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f7', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000007');
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000007', 'a1910000-0000-4000-8000-000000000017', 'cash');
+  raise exception 'FAILED: T191 sales paid a deposit invoice of another version than the client signed';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 another version than the client signed, the same sum: refused to sales (42501)');
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
+  ('0e191000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 ACH on its way');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', 1, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', '51910000-0000-4000-8000-000000000004', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', '51910000-0000-4000-8000-000000000005', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;
+update public.estimates set status = 'approved' where id = '0e191000-0000-4000-8000-000000000005';
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 4', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000004'),
+  ('e1910000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 5', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000005');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f4', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000004'),
+  ('11910000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f5', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000005');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('a1910000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', '11910000-0000-4000-8000-000000000009', 'c7300000-0000-4000-8000-000000000001', 'ach', 2500, 'pending', 't191-ach');
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000004', 'a1910000-0000-4000-8000-000000000009', 'cash');
+  raise exception 'FAILED: T191 sales paid the deposit of an estimate not approved';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 the estimate not approved: refused to sales (42501)');
+:as_office_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000005', 'a1910000-0000-4000-8000-0000000000b0', 'cash');
+  raise exception 'FAILED: T191 a deposit with an ACH on its way was paid again';
+exception when sqlstate '22023' then null;
+end $$;
+select tst.ok(true, 'T191 an ACH of the deposit on its way: the deposit is not paid twice (22023, any role)');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '11910000-0000-4000-8000-000000000009'$q$) = 1, 'T191 only the ACH on the deposit');
+\echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
+
+-- ======================================================================================================================
+-- T192 (#1113, П-23/П-44): a tech does not send an estimate to the client — not even his own draft. The app opened the send
+-- sheet by its address (?send=1) for him; the server's answer is the guard: no «sent», no locked version, no client link
+-- (a tech with the link could sign as the client, spec 35 §4д п.10). e1420000-…03 — the T142 draft the tech made.
+-- ======================================================================================================================
+:as_tech_a
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', 'T192tokenTheTechTriesToSend0123456789ab')$q$, '%only the office%',
+  'T192 the tech does not send his own draft');
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', null)$q$, '%only the office%',
+  'T192 …nor without a token of his own');
+select tst.blocked($q$update public.estimates set status = 'sent' where id = 'e1420000-0000-4000-8000-000000000003'$q$, 'T192 the tech does not mark it «sent» by hand');
+select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000003')$q$, '%only the office%', 'T192 the tech gets no client link of it');
+-- a new estimate made «sent» at once, or with a link of his own on it: not sent, no link (director's review of #1134 п.2)
+select tst.fails($q$insert into public.estimates (id, company_id, customer_id, property_id, title, status) values ('e1920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 sent at once', 'sent')$q$,
+  'T192 the tech does not insert an estimate «sent» at once');
+do $$ begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title, public_token) values ('e1920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 own link', 'T192tokenTheTechPutsOnHisDraft0123456789');
+exception when others then null;   -- refused, or kept without the link (t02_public_token_null) — both checked below
+end $$;
+do $$ begin
+  update public.estimates set public_token = 'T192tokenTheTechPutsOnHisDraft0123456789' where id = 'e1420000-0000-4000-8000-000000000003';
+exception when others then null;
+end $$;
+:as_super
+select tst.ok((select status = 'draft' and sent_version_id is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
+  'T192 the draft is still a draft: not sent');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where estimate_id = 'e1420000-0000-4000-8000-000000000003'$q$) = 0, 'T192 …no client link made');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = 'e1920000-0000-4000-8000-000000000001'$q$) = 0, 'T192 …no «sent» estimate inserted');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0
+          and tst.cnt($q$select 1 from public.estimates where public_token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0,
+  'T192 …a link the tech writes himself (on a new draft or his own) is kept nowhere');
+select tst.ok((select locked_at is null and sent_at is null from public.estimate_versions where id = 'e1420000-0000-4000-8000-0000000000a3'), 'T192 …its version not locked');
+:as_office_a
+select tst.ok(public.send_estimate('e1420000-0000-4000-8000-000000000003', null) is not null, 'T192 the office sends it as before');
+\echo 'T192 a tech does not send an estimate to the client (not his own draft either); the office as before'
+-- T193 (#1126): the client signs an older quick estimate on a tech's phone (sign_estimate_on_site). The app no longer stops
+-- at the tech's refused send (42501) — this is the server's door it then relies on: a tech who may sign contracts, not staff,
+-- who sees the estimate (his own): a SENT one is signed; a DRAFT one is refused (only a sent, locked version is signed).
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+do $$
+declare n int; e uuid; v uuid; o uuid;
+begin
+  for n in 1..2 loop
+    e := ('e1930000-0000-4000-8000-00000000000' || n)::uuid; v := ('e1930000-0000-4000-8000-0000000000a' || n)::uuid;
+    o := ('e1930000-0000-4000-8000-0000000000b' || n)::uuid;
+    insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+      (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T193 ' || n,
+       'a0000000-0000-0000-0000-000000000003');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (v, 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"none"}');
+    update public.estimates set current_version_id = v where id = e;
+    insert into public.estimate_options (id, company_id, version_id, name) values (o, 'ca000000-0000-0000-0000-000000000000', v, 'Only');
+    insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+      (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
+  end loop;
+end $$;
+:as_office_a
+select public.send_estimate('e1930000-0000-4000-8000-000000000001', null);
+:as_tech_a
+select tst.ok(not app.is_staff('ca000000-0000-0000-0000-000000000000'), 'T193 (fixture: the tech is not staff)');
+select tst.ok(public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000001', 'Ann Client', 'M0 0 L1 1') = 'awaiting_countersign',
+  'T193 a sent quick estimate: the client signs on the tech''s phone');
+select tst.ok(public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000001', 'Ann Client', 'M0 0 L1 1') = 'awaiting_countersign',
+  'T193 …a repeat (no network) changes nothing');
+select tst.fails_like($q$select public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000002', 'Ann Client', 'M0 0 L1 1')$q$, '%not open for approval%',
+  'T193 a draft: refused (the office sends it first)');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_approvals where estimate_id = 'e1930000-0000-4000-8000-000000000001' and party = 'customer'$q$) = 1,
+  'T193 one client signature, kept');
+select tst.ok((select status = 'draft' from public.estimates where id = 'e1930000-0000-4000-8000-000000000002'), 'T193 the draft stays a draft');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T193 the client signs a sent quick estimate on a tech''s phone; a draft is refused'
+
+-- ======================================================================================================================
+-- T194 (#1135): the company's countersignature checks that the person may read the estimate (as sign_estimate_on_site /
+-- accept_on_site). A tech who may sign contracts, on an estimate at a property of nothing of his: «not found» — not signed,
+-- and its status not told.
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', '194 Other St', 'Pasadena');
+select set_config('app.signing_estimate', 'e1940000-0000-4000-8000-000000000001', false);
+insert into public.estimates (id, company_id, customer_id, property_id, title, status, created_by) values
+  ('e1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 awaiting', 'awaiting_countersign', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1940000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 draft', 'draft', 'a0000000-0000-0000-0000-000000000001');
+select set_config('app.signing_estimate', '', false);
+:as_tech_a
+select tst.ok(not app.can_read_estimate('e1940000-0000-4000-8000-000000000001'), 'T194 (fixture: the tech does not read it)');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000001', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 the tech does not countersign an estimate of nothing of his');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000002', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 …nor learns its status (a draft: «not found», not «status draft»)');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1940000-0000-4000-8000-000000000001'), 'T194 still awaiting the company''s signature');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = 'e1940000-0000-4000-8000-000000000001'$q$) = 0, 'T194 …no job made');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T194 the countersignature: only someone who reads the estimate'
 
 \echo 'ALL TESTS PASSED'

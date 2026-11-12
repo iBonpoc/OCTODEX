@@ -2,11 +2,11 @@ import { ModulePlaces } from "@/modules/ModulePlaces";
 import { useRef, useState } from "react";
 import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
-import { canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
+import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
 import { clientCounts, clientRecords, clientRowsFor, type ClientRow } from "@/features/clientRows";
 import { billingLine } from "@/features/clientForm";
 import { PersonRows } from "@/features/client/ClientSections";
@@ -21,7 +21,8 @@ import { propertyTitle } from "@/features/properties";
 import { sourceName } from "@/features/leads";
 import type { Customer, CustomerStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { IconButton, StatusChip, TagChip } from "@/ui/controls";
+import { fabItems } from "@/nav/sections";
+import { Button, IconButton, StatusChip, TagChip } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
@@ -64,8 +65,10 @@ export function ClientCardBody({ c }: { c: Customer }) {
   const status = statusOf(c);
   const chip = clientStatusChip[status];
   const tags = tagsOf(db, c);
+  /** the same rules as the «＋» of this card: the role, the tie to the client */
+  const estimateItem = fabItems("client", role, { customerId: c.id }).find((i) => i.id === "estimate");
   const [main] = peopleOf(c);
-  const r = clientRecords(db, c, role);
+  const r = clientRecords(db, c, role, store.mode);
   const counts = clientCounts(r);
   const props = r.properties;
   const openTasks = r.tasks.filter((x) => !x.doneAt);
@@ -153,6 +156,11 @@ export function ClientCardBody({ c }: { c: Customer }) {
         {lateCalls ? <StatusChip status="warn" label={t("client.lateCalls")} /> : null}
       </RowView>
 
+      {/* #1094/#879: the card's main action — in one place, a verb: the estimate (the «＋» keeps the rest) */}
+      {estimateItem && canServe(db, c.id) ? (
+        <Button testID="client-make-estimate" label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
+      ) : null}
+
       {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
       <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id) }} />
 
@@ -160,9 +168,9 @@ export function ClientCardBody({ c }: { c: Customer }) {
         // money only, three equal tiles on one line — unslop 05.11
         <Card>
           <RowView style={{ alignItems: "flex-start" }}>
-            <MoneyCell label={t("client.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
-            <MoneyCell label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} />
-            <MoneyCell label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} />
+            <MoneyCell testID="client-owes" label={t("client.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
+            <MoneyCell testID="client-paid" label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} />
+            <MoneyCell testID="client-invoiced" label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} />
           </RowView>
         </Card>
       ) : null}
@@ -251,9 +259,9 @@ export function ClientCardBody({ c }: { c: Customer }) {
 }
 
 
-function MoneyCell({ label, value, tone = "ink" }: { label: string; value: string; tone?: "ink" | "warn" }) {
+function MoneyCell({ label, value, tone = "ink", testID }: { label: string; value: string; tone?: "ink" | "warn"; testID?: string }) {
   return (
-    <View style={{ alignItems: "flex-start", flex: 1 }}>
+    <View testID={testID} style={{ alignItems: "flex-start", flex: 1 }}>
       <T v="caption" tone="mut">
         {label}
       </T>

@@ -43,7 +43,7 @@
  "e2e/specs/122-tabbar-everywhere.cjs": 22,
  "e2e/specs/123-calls-back-more.cjs": 14,
  "e2e/specs/125-push-kinds.cjs": 1,
- "e2e/specs/126-signature-fullscreen.cjs": 7,
+ "e2e/specs/126-signature-fullscreen.cjs": 6,
  "e2e/specs/127-tech-leads.cjs": 5,
  "e2e/specs/129-lead-default-assignee.cjs": 1,
  "e2e/specs/131-inspection-no-estimate.cjs": 3,
