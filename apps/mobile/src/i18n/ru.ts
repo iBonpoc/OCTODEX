@@ -3670,6 +3670,8 @@ export const ru = {
   "sup.vendorLocked": "Продавец: {name} (меняет офис)",
   // «Данные и деньги» #1113: a tech does not send an estimate
   "est.tech.officeSends": "Смету клиенту отправит офис",
+  // «Данные и деньги» #1138: a tech makes an estimate only where he works
+  "est.tech.notHere": "Смету по этому адресу составит офис: у вас здесь нет выезда",
 } as const;
 
 export type DictKey = keyof typeof ru;

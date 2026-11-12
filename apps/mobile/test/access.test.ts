@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { canEditCatalog, canSeeEstimate, canSeeInvoice, canSeeJob, canSeeVisit } from "../src/features/access";
+import { canEditCatalog, canMakeEstimateAt, canSeeEstimate, canSeeInvoice, canSeeJob, canSeeVisit } from "../src/features/access";
 import { isAssigned } from "../src/features/schedule";
 
 const db = makeSeed();
@@ -74,6 +74,26 @@ describe("unit:access — the demo tech sees only his own work (#868)", () => {
     it("my visit of a done job there: not seen", () => {
       const jobs = [...db.jobs, { ...db.jobs[0]!, id: "j-x", propertyId: "p-x", status: "done" as const }];
       expect(canSeeEstimate(at([visit({ jobId: "j-x", propertyId: undefined })], { jobs }), tech, "e-x")).toBe(false);
+    });
+  });
+  describe("#1138 — the author, the lead's property, where a tech may make one", () => {
+    const est = { ...db.estimates[0]!, id: "e-y", propertyId: "p-y", leadId: undefined };
+    it("an estimate he made himself (created_by), at a property with no visit of his: he sees it (before: «нет доступа»)", () => {
+      expect(canSeeEstimate({ ...db, estimates: [...db.estimates, { ...est, createdBy: db.me }] }, tech, "e-y")).toBe(true);
+      expect(canSeeEstimate({ ...db, estimates: [...db.estimates, { ...est, createdBy: "m-ivan" }] }, tech, "e-y")).toBe(false);
+    });
+    it("his visit with neither its own property nor a job: the lead's property counts (the server's t04_visit_property)", () => {
+      const lead = { ...db.leads[0]!, id: "l-y", propertyId: "p-y", assigneeId: "m-ivan" };
+      const visit = { ...mine, id: "v-y", jobId: undefined, propertyId: undefined, leadId: "l-y", start: new Date().toISOString(), closed: false, step: "scheduled" } as (typeof db.visits)[number];
+      const d = { ...db, visits: [...db.visits, visit], leads: [...db.leads, lead], estimates: [...db.estimates, est] };
+      expect(canSeeEstimate(d, tech, "e-y")).toBe(true);
+      expect(canMakeEstimateAt(d, tech, "p-y")).toBe(true);
+    });
+    it("a new estimate: the tech only where he works (estimates_insert); the office anywhere", () => {
+      expect(canMakeEstimateAt(db, tech, "p-y")).toBe(false);
+      expect(canMakeEstimateAt(db, tech, undefined)).toBe(false);
+      for (const role of ["director", "dispatcher", "sales"] as const) expect(canMakeEstimateAt(db, { role, mode: "demo", me: db.me }, "p-y")).toBe(true);
+      expect(canMakeEstimateAt(db, { ...tech, mode: "cloud" }, "p-y")).toBe(true); // the server answers there
     });
   });
   it("the price list: the tech does not change it (T99); the office does", () => {
