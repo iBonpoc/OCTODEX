@@ -106,20 +106,27 @@ async function waitPastCompanyMidnight() {
     h.layout = layout;
     // The downspouts the canvas puts by itself (#1246) are switched off — by the company's REAL setting, rules.dsAuto = false — in the
     // specs written before them: they count the downspouts they put themselves. A spec about them says `exports.autoDs = true` (296).
-    // Before every navigation the stored database gets the setting (the module's settings exist once a spec has switched it on).
+    // The stored database gets the setting (a module that is not switched on yet is the same as none: access "off", no trial used) around
+    // every navigation; when it had to be written the page is loaded again so the app reads it.
     if (!spec.autoDs) {
       const go = h.go;
+      const patch = () => page.evaluate((k) => {
+        try {
+          const s = JSON.parse(localStorage.getItem(k) || "null");
+          if (!s || !s.db || !s.db.company) return false;
+          const m = s.db.company.modules || {};
+          const g = m.gutters || { enabled: false, rowVersion: 0 };
+          if (g.settings && g.settings.rules && g.settings.rules.dsAuto === false) return false;
+          m.gutters = { ...g, settings: { ...(g.settings || {}), rules: { ...((g.settings || {}).rules || {}), dsAuto: false } } };
+          s.db.company.modules = m;
+          localStorage.setItem(k, JSON.stringify(s));
+          return true;
+        } catch (e) { return false; }
+      }, "octo.db.v5").catch(() => false);
       h.go = async (...a) => {
-        await page.evaluate((k) => {
-          try {
-            const s = JSON.parse(localStorage.getItem(k) || "null");
-            const g = s && s.db && s.db.company && s.db.company.modules && s.db.company.modules.gutters;
-            if (!g || (g.settings && g.settings.rules && g.settings.rules.dsAuto === false)) return;
-            g.settings = { ...(g.settings || {}), rules: { ...((g.settings || {}).rules || {}), dsAuto: false } };
-            localStorage.setItem(k, JSON.stringify(s));
-          } catch (e) { /* no database yet */ }
-        }, "octo.db.v5").catch(() => {});
-        return go(...a);
+        await patch();
+        await go(...a);
+        if (await patch()) await go(...a);
       };
     }
     try {
