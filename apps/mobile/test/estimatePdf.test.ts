@@ -335,6 +335,25 @@ describe("estimate PDF: sections for the client (РС-7b, §5)", () => {
   });
 });
 
+describe("estimate PDF: the tax line of the editor (РС-7a, Р6)", () => {
+  it("«Sales tax 8.875%» on the whole amount after the discount, once; the total agrees", () => {
+    const { db, e } = dbWith("en");
+    // $240.00 + $46.50 = $286.50; discount 10 % = $28.65 → $257.85; tax 8.875 % = $22.88 (22.8827…) → total $280.73
+    const taxed: EstimateDoc = { ...doc, settings: { ...doc.settings, discount: { kind: "pct", value: "0.1" } as never, tax: { enabled: true, rateBps: 888, ratePpm: 88750, groups: { service: true, labor: true, material: true } } } };
+    const e2: Estimate = { ...e, doc: taxed };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? e2 : x));
+    const html = estimateHtml(portalFromEstimate(db, e2, "Acme"), { lang: "en" });
+    expect(html).toMatch(/Sales tax 8\.875%/);
+    expect(html).toContain("$22.88");
+    expect(html).toContain("$280.73");
+  });
+  it("the tax off: no tax line", () => {
+    const { db, e } = dbWith("en");
+    const html = estimateHtml(portalFromEstimate(db, e, "Acme"), { lang: "en" });
+    expect(html).not.toMatch(/Sales tax/);
+  });
+});
+
 describe("invoice and receipt: the same header, in the client's language", () => {
   for (const client of DOC_LANGS)
     it(`client ${client}`, () => {

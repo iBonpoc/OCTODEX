@@ -2,6 +2,7 @@
  * Read the company's data from the OCTODEX database and map it to the app's view model (src/data/types.ts).
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
+import { estimateSavedAt } from "@/features/estimateTax";
 import { normalizeDoc } from "@/features/estimateDoc";
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
@@ -480,6 +481,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       totalCents: sel?.total !== undefined ? n(sel.total) : legacy ? legacy.totalCents : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
+      savedAt: estimateSavedAt(ver?.calc_inputs, (ver?.sent_at as string | null) ?? undefined, s(e.updated_at) || undefined),
       // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
       approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,
       depositCents: sel?.deposit !== undefined ? n(sel.deposit) : legacy ? legacy.depositCents : totals.deposit,

@@ -5,11 +5,12 @@ import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
 import { SortableList } from "@/features/SortableList";
 import { moveLine, sameLayout, viewRows } from "@/features/sectionLayout";
-import { Button } from "@/ui/controls";
+import { Button, Toggle } from "@/ui/controls";
+import { Labeled, RatePctField } from "@/features/fields";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
 import { T } from "@/ui/primitives";
-import { Card, SectionTitle } from "@/ui/surfaces";
+import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 /** the samples of the estimate editor (DS §8.3–8.5, Б13, §14.6): what is shown now, what comes with its component */
@@ -23,6 +24,38 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
 ];
 
 const demoLines = (): CustomLine[] => [1, 2, 3, 4].map((n) => ({ id: `demo${n}`, name: String(n), group: "service", quantity: "1", unit: "ea", unitPriceCents: 0 }));
+
+/** the tax sheet of the estimate (DS §8.7): the switch, the rate by hand, «as in the last estimate» (nothing is saved) */
+function TaxSample() {
+  const { t } = useI18n();
+  const [on, setOn] = useState(true);
+  const [ppm, setPpm] = useState(0);
+  return (
+    <Card>
+      <View testID="showcase-rows-tax" style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.rows.tax")}</T>
+        <T v="caption" tone="mut">{t("ds.rows.taxHint")}</T>
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="body">{t("ue.taxOn")}</T>
+          <Toggle label={t("ue.tax")} on={on} onChange={setOn} />
+        </RowView>
+        {on ? (
+          <>
+            <Labeled label={t("ue.taxRate")}>
+              <RatePctField ppm={ppm} onChange={setPpm} />
+            </Labeled>
+            {ppm !== 88750 ? <Button label={t("ue.taxLast", { rate: "8.875" })} variant="ghost" onPress={() => setPpm(88750)} /> : null}
+          </>
+        ) : null}
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="body" tone="mut">{t("ue.taxOn")}</T>
+          <Toggle label={t("ue.tax")} on={false} onChange={() => {}} disabled />
+        </RowView>
+        <T v="caption" tone="mut">{t("ue.taxExemptClient")}</T>
+      </View>
+    </Card>
+  );
+}
 
 /** a small list to drag: the real SortableList on four sample rows (nothing is saved) */
 function LiveDrag() {
@@ -88,6 +121,7 @@ export function RowsSection() {
           <PhotoStrip photos={[]} onAdd={() => {}} />
         </View>
       </Card>
+      <TaxSample />
       <LiveDrag />
       {PLANNED.map((p) => (
         <Card key={p.id}>
