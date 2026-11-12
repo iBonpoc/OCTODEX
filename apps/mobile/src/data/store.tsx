@@ -61,7 +61,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
-import { cleanCardFields, localPriceEntries } from "@/features/catalogCard";
+import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
@@ -2297,16 +2297,19 @@ export function StoreProvider({
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
         const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
         // РС-10: the price and markup change too (the card shows «было → стало» at once, offline as well)
-        const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, new Date().toISOString());
+        const now = new Date().toISOString();
+        const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
+        // on the phone: changed now, by me (the server writes its own); in the queue: never these columns
+        const local: CatalogItem = { ...it, updatedAt: now, ...(dbRef.current.me ? { updatedBy: dbRef.current.me } : {}), ...(prev ? {} : { createdAt: now, ...(dbRef.current.me ? { createdBy: dbRef.current.me } : {}) }) };
         return mutate(
           "catalog.save",
           (d) => ({
             ...d,
-            catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it],
+            catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? local : x)) : [...d.catalog, local],
             ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
             ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
           }),
-          { k: "catalog.save", item: it, costs },
+          { k: "catalog.save", item: itemForSave(it), costs },
         );
       },
       saveSupplier: (x0) => {
@@ -2438,8 +2441,9 @@ export function StoreProvider({
         void loadPriceHistory(cid, itemId)
           .then((rows) => {
             if (whoRef.current?.companyId !== cid) return;
-            // the item's rows as the server has them now; other items' stay
-            dbRef.current = { ...dbRef.current, priceHistory: [...(dbRef.current.priceHistory ?? []).filter((h) => h.itemId !== itemId), ...rows] };
+            // the item's rows as the server has them now; other items' stay; the phone's own while its save is queued
+            const pending = outboxRef.current.some((o) => o.op.k === "catalog.save" && (o.op as { item?: { id?: string } }).item?.id === itemId);
+            dbRef.current = { ...dbRef.current, priceHistory: mergePriceHistory(dbRef.current.priceHistory, itemId, rows, pending) };
             setDb(dbRef.current);
           })
           .catch(() => undefined);
@@ -2454,15 +2458,22 @@ export function StoreProvider({
         const onlyNew = !!opts?.onlyNew;
         const fresh = onlyNew ? items.filter((x) => !dbRef.current.catalog.some((c) => c.id === x.id)) : items;
         // РС-10: the card's fields as the server will keep them, the same as one item's save
-        const undos = fresh.map((x) => cleanCardFields(cleanCatalogItem(x), dbRef.current.catalog.find((c) => c.id === x.id), dbRef.current)).map((it) =>
-          mutate(
+        const undos = fresh.map((x) => cleanCardFields(cleanCatalogItem(x), dbRef.current.catalog.find((c) => c.id === x.id), dbRef.current)).map((it) => {
+          const prev = dbRef.current.catalog.find((x) => x.id === it.id);
+          // РС-10: a change of an item there (not onlyNew) shows its price / markup row at once too
+          const priceHist = onlyNew || dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, new Date().toISOString(), dbRef.current.me ?? undefined);
+          return mutate(
             "catalog.save",
-            (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it] }),
+            (d) => ({
+              ...d,
+              catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it],
+              ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
+            }),
             onlyNew
-              ? { k: "catalog.save", item: it, onlyNew: true, costs: catalogCostChange(undefined, it) }
-              : { k: "catalog.save", item: it, costs: catalogCostChange(dbRef.current.catalog.find((x) => x.id === it.id), it) },
-          ),
-        );
+              ? { k: "catalog.save", item: itemForSave(it), onlyNew: true, costs: catalogCostChange(undefined, it) }
+              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it) },
+          );
+        });
         // the last one first: each undo puts back the phone's state from before its own save
         return () => [...undos].reverse().forEach((u) => u());
       },

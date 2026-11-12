@@ -32,7 +32,7 @@ vi.mock("../src/cloud/client", () => ({
   },
 }));
 
-import { BARCODE_OK, PRODUCT_URL_BAD, PRODUCT_URL_SHAPE, cleanCardFields, itemDates, itemUsage, localPriceEntries, normalizeBarcode, normalizeProductUrl, priceHistoryFromRow, priceHistoryOf, productLink } from "../src/features/catalogCard";
+import { BARCODE_OK, PRODUCT_URL_BAD, PRODUCT_URL_SHAPE, cleanCardFields, itemDates, itemForSave, mergePriceHistory, itemUsage, localPriceEntries, normalizeBarcode, normalizeProductUrl, priceHistoryFromRow, priceHistoryOf, productLink } from "../src/features/catalogCard";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { applyOp, catalogCardCols } from "../src/cloud/ops";
@@ -178,8 +178,8 @@ describe("unit:catalogCard — the phone and the server agree (code-reviewer of 
     const id = () => `h${++n}`;
     const prev = { id: "i1", kind: "material", name: "x", unit: "ea", priceCents: 1190, markupBps: 1000 } as CatalogItem;
     expect(localPriceEntries(prev, { ...prev, priceCents: 1213, markupBps: 1200 }, id, "t")).toEqual([
-      { id: "h1", itemId: "i1", priceCents: 1213, prevPriceCents: 1190, source: "manual", at: "t" },
-      { id: "h2", itemId: "i1", markupBps: 1200, prevMarkupBps: 1000, source: "manual", at: "t" },
+      { id: "h1", itemId: "i1", priceCents: 1213, prevPriceCents: 1190, source: "manual", at: "t", local: true },
+      { id: "h2", itemId: "i1", markupBps: 1200, prevMarkupBps: 1000, source: "manual", at: "t", local: true },
     ]);
     expect(localPriceEntries(prev, { ...prev, name: "y" }, id, "t")).toEqual([]);
     expect(localPriceEntries(undefined, prev, id, "t")).toEqual([]);
@@ -217,5 +217,31 @@ describe("unit:catalogCard — itemUsage, more cases (code-reviewer of РС-10)"
   it("approved without a choice, declined with one, a choice of an option not there — nothing sold", () => {
     const u = itemUsage({ estimates: [est("approved"), est("declined", "o1"), est("approved", "gone")], purchaseOrders: [], costsVisible: true } as unknown as DB, "i1");
     expect(u).toMatchObject({ inEstimates: 3, soldQty: "0", revenueCents: 0 });
+  });
+});
+
+describe("unit:catalogCard — the director's review of #1236", () => {
+  it("productLink: no scheme-relative link, no international host or a look-alike letter, no tab or line break inside, no format character in the host", () => {
+    const bad = ["//evil.example", "https://пример.рф/x", "https://ex\u0430mple.com/x", "https://abc.example/a\tb", "https://abc.example/a\nb", "https://ab\nc.example/",
+      "https://abc\u200d.example/", "https://abc.example\u202e/x", "https://abc.example\ufeff/x"];
+    for (const u of bad) {
+      expect(productLink(u), JSON.stringify(u)).toBeNull();
+      expect(normalizeProductUrl(u).ok, JSON.stringify(u)).toBe(false);
+    }
+  });
+  it("the server's rows replace the phone's for that item; the phone's own stay while its save is in the queue", () => {
+    const cur = [
+      { id: "l1", itemId: "i1", priceCents: 1213, source: "manual", at: "2", local: true },
+      { id: "s0", itemId: "i1", priceCents: 1190, source: "manual", at: "1" },
+      { id: "o1", itemId: "i2", priceCents: 500, source: "manual", at: "1" },
+    ];
+    const rows = [{ id: "s1", itemId: "i1", priceCents: 1190, source: "manual", at: "1" }];
+    expect(mergePriceHistory(cur, "i1", rows, false).map((h) => h.id)).toEqual(["s1", "o1"]);
+    expect(mergePriceHistory(cur, "i1", rows, true).map((h) => h.id)).toEqual(["s1", "l1", "o1"]);
+  });
+  it("the phone's rows carry who; a save sends no server-owned columns", () => {
+    const prev = { id: "i1", kind: "material", name: "x", unit: "ea", priceCents: 1190 } as CatalogItem;
+    expect(localPriceEntries(prev, { ...prev, priceCents: 1213 }, () => "h", "t", "u1")).toEqual([{ id: "h", itemId: "i1", priceCents: 1213, prevPriceCents: 1190, source: "manual", at: "t", by: "u1", local: true }]);
+    expect(itemForSave({ ...prev, createdAt: "a", createdBy: "u1", updatedAt: "b", updatedBy: "u2", barcode: "1" })).toEqual({ ...prev, barcode: "1" });
   });
 });

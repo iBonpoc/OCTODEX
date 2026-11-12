@@ -819,6 +819,8 @@ export interface PriceHistoryEntry {
   source: string;
   at: string;
   by?: ID;
+  /** made by this phone at a save (shown at once, offline too); kept while that save is still in the queue */
+  local?: boolean;
 }
 
 /** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */

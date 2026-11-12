@@ -183,11 +183,26 @@ export function cleanCardFields(it: CatalogItem, prev: CatalogItem | undefined, 
 
 /** the phone's own price / markup history rows of a save (shown at once and offline; the next read of the card replaces
  *  them with the server's) — as the server's triggers: only a real change; a new item has none */
-export function localPriceEntries(prev: CatalogItem | undefined, it: CatalogItem, newId: () => string, at: string): PriceHistoryEntry[] {
+export function localPriceEntries(prev: CatalogItem | undefined, it: CatalogItem, newId: () => string, at: string, by?: ID): PriceHistoryEntry[] {
   if (!prev) return [];
   const out: PriceHistoryEntry[] = [];
-  if (prev.priceCents !== it.priceCents) out.push({ id: newId(), itemId: it.id, priceCents: it.priceCents, prevPriceCents: prev.priceCents, source: "manual", at });
+  const who = by ? { by } : {};
+  if (prev.priceCents !== it.priceCents) out.push({ id: newId(), itemId: it.id, priceCents: it.priceCents, prevPriceCents: prev.priceCents, source: "manual", at, ...who, local: true });
   if (it.markupBps !== undefined && prev.markupBps !== it.markupBps)
-    out.push({ id: newId(), itemId: it.id, markupBps: it.markupBps, ...(prev.markupBps !== undefined ? { prevMarkupBps: prev.markupBps } : {}), source: "manual", at });
+    out.push({ id: newId(), itemId: it.id, markupBps: it.markupBps, ...(prev.markupBps !== undefined ? { prevMarkupBps: prev.markupBps } : {}), source: "manual", at, ...who, local: true });
   return out;
+}
+
+/** the server's rows of an item into the phone's price history: they replace the phone's rows of that item — but the
+ *  phone's own rows stay while a save of that item is still in the queue (the server has not written its own yet) */
+export function mergePriceHistory(cur: PriceHistoryEntry[] | undefined, itemId: ID, rows: PriceHistoryEntry[], pendingSave: boolean): PriceHistoryEntry[] {
+  const keep = (cur ?? []).filter((h) => h.itemId !== itemId || (pendingSave && h.local));
+  return [...rows, ...keep];
+}
+
+/** an item as a save sends it: the server's own columns (who made and changed it, when) never ride in the queue — the
+ *  server writes them, and a member's id under them would tie the op to others (outboxDeps) */
+export function itemForSave(it: CatalogItem): CatalogItem {
+  const { createdAt: _a, createdBy: _b, updatedAt: _c, updatedBy: _d, ...rest } = it;
+  return rest;
 }
