@@ -12818,4 +12818,31 @@ select tst.ok((select status = 'draft' from public.estimates where id = 'e193000
 update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T193 the client signs a sent quick estimate on a tech''s phone; a draft is refused'
 
+-- ======================================================================================================================
+-- T194 (#1135): the company's countersignature checks that the person may read the estimate (as sign_estimate_on_site /
+-- accept_on_site). A tech who may sign contracts, on an estimate at a property of nothing of his: «not found» — not signed,
+-- and its status not told.
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', '194 Other St', 'Pasadena');
+select set_config('app.signing_estimate', 'e1940000-0000-4000-8000-000000000001', false);
+insert into public.estimates (id, company_id, customer_id, property_id, title, status, created_by) values
+  ('e1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 awaiting', 'awaiting_countersign', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1940000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 draft', 'draft', 'a0000000-0000-0000-0000-000000000001');
+select set_config('app.signing_estimate', '', false);
+:as_tech_a
+select tst.ok(not app.can_read_estimate('e1940000-0000-4000-8000-000000000001'), 'T194 (fixture: the tech does not read it)');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000001', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 the tech does not countersign an estimate of nothing of his');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000002', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 …nor learns its status (a draft: «not found», not «status draft»)');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1940000-0000-4000-8000-000000000001'), 'T194 still awaiting the company''s signature');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = 'e1940000-0000-4000-8000-000000000001'$q$) = 0, 'T194 …no job made');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T194 the countersignature: only someone who reads the estimate'
+
 \echo 'ALL TESTS PASSED'
