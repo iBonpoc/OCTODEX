@@ -4,7 +4,7 @@
  * follows the finger, the other end stays; near a right angle it is held there and the chip says «90°»; «Назад» puts it back.
  * Finds things by testID / id; waits on what it checks (no pauses).
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, pressWhenStill } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -35,11 +35,27 @@ exports.run = async (h) => {
   const g0 = await geom();
   h.expect(!!g0 && Math.abs(g0.b[1] - g0.a[1]) < 1, "a horizontal gutter, picked");
 
+  // taken 18 px off the axis (a cap is taken within a finger's radius) and pulled ALONG: only the length changes, the angle stays
+  const c18 = await capAt(1);
+  await p.mouse.move(c18[0], c18[1] - 18);
+  await p.mouse.down();
+  const t0 = await p.evaluate(() => performance.now()); // held: a long press takes the cap (the touch is not a tap that puts a downspout)
+  await p.waitForFunction((t) => performance.now() - t > 450, t0);
+  for (let i = 1; i <= 8; i++) await p.mouse.move(c18[0] + (40 * i) / 8, c18[1] - 18, { steps: 3 });
+  await p.mouse.up();
+  await p.waitForFunction(([k, bx]) => { const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt)[0]?.geom; return !!g && g.b[0] > bx + 1; }, [KEY, g0.b[0]], { timeout: 8000 });
+  const along = await geom();
+  h.expect(Math.abs(along.b[1] - along.a[1]) < 1, `along from an off-axis touch: the angle stays (${JSON.stringify(along)})`);
+  await pressWhenStill(tid("draw-undo").getByRole("button"));
+  await p.waitForFunction(([k, bx]) => { const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt)[0]?.geom; return !!g && g.b[0] === bx; }, [KEY, g0.b[0]], { timeout: 8000 });
+
   // the right end taken and pulled to a point just under the left (standing) end: 90°, held there
   const c = await capAt(1);
   const left = await capAt(0); // the standing end: a right angle is straight above or below it
   await p.mouse.move(c[0], c[1]);
   await p.mouse.down();
+  const t1 = await p.evaluate(() => performance.now());
+  await p.waitForFunction((t) => performance.now() - t > 450, t1); // held (the gutter may not be picked after «Назад»)
   for (let i = 1; i <= 10; i++) await p.mouse.move(c[0] + ((left[0] + 2 - c[0]) * i) / 10, c[1] + (90 * i) / 10, { steps: 3 });
   const chip = tid("draw-swing-chip");
   await chip.waitFor({ timeout: 5000 });
@@ -53,7 +69,7 @@ exports.run = async (h) => {
   h.expect(g1.a[0] === g0.a[0] && g1.a[1] === g0.a[1], "the other end stays");
 
   // «Назад»: the end is back where it was
-  await tid("draw-undo").getByRole("button").click();
+  await pressWhenStill(tid("draw-undo").getByRole("button"));
   await p.waitForFunction(([k, ax, ay, bx, by]) => {
     const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt)[0]?.geom;
     return !!g && g.a[0] === ax && g.a[1] === ay && g.b[0] === bx && g.b[1] === by;
