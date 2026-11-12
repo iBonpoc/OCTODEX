@@ -3,16 +3,16 @@
  * Core, trade-agnostic. All money math goes through @octo/estimating-engine (rule 8): this file only picks prices
  * (current catalog, else the template's) and never sums anything itself.
  */
-import { DEFAULT_TAX, parseQty, type CustomLine, type CustomOption } from "@octo/estimating-engine";
+import { DEFAULT_TAX, parseQty, sectionIdOk, type CustomLine, type CustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { StarterEstimate } from "@/modules/registry";
 import { catalogMatch } from "./catalogMatch";
 import { canEditTemplates, stableUuid } from "./checklist";
-import { catalogUnitCost, catalogUnitPrice, mainOption, newDoc, normalizeDoc, optionTotals, uid } from "./estimateDoc";
+import { catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, normalizeDoc, optionTotals, uid } from "./estimateDoc";
 
 /** The keys of a template line the server takes (app.valid_estimate_template_doc); a module's `source` never rides along */
-type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected">;
+type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected" | "clientVisible" | "sectionId">;
 
 /** text the server takes: no control characters, at most `n` characters (never half an emoji: by code points) */
 // eslint-disable-next-line no-control-regex
@@ -35,6 +35,10 @@ function templateLine(l: CustomLine, withCost: boolean, keepIds = false): Templa
     out.optional = true;
     out.selected = false;
   }
+  // #1232: its section, and «hidden from the client» — only at $0 (the engine and the server: a priced line is visible)
+  if (sectionIdOk(l.sectionId)) out.sectionId = l.sectionId;
+  // hidden as the phone reads it (false, or «false» / 0 written by another copy) — always a boolean false to the server
+  if (markedHidden(l) && l.unitPriceCents === 0) out.clientVisible = false;
   // who does not see costs sends no key: the server then keeps what it had (spec 07 §11, E3b duty)
   if (withCost && l.unitCostCents !== undefined) out.unitCostCents = l.unitCostCents;
   return out;
@@ -50,6 +54,8 @@ export function toTemplateDoc(doc: EstimateDoc, costsVisible: boolean, taxExempt
       id: keepIds ? o.id : uid(),
       name: cut(o.name, 120),
       ...(o.recommended ? { recommended: true } : {}),
+      // #1232: the sections as the client reads them (the server checks that form); the lines keep their sectionId
+      ...(clientSectionsOf(o).length ? { sections: clientSectionsOf(o) } : {}),
       lines: o.lines.map((l) => templateLine(l, costsVisible, keepIds)),
     })),
     // a tax-exempt client's estimate has its tax switched off (exemptDoc): the template must not carry that to others
@@ -89,6 +95,8 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
   for (const o of doc.options) {
     if (!ID.test(o.id) || optIds.has(o.id) || !text(o.name, 120) || o.lines.length > 200) return false;
     optIds.add(o.id);
+    // #1232: sections — a list (the server puts them in the client's form itself, trigger t02, before its check)
+    if (o.sections != null && !Array.isArray(o.sections)) return false;
     for (const l of o.lines) {
       if (!ID.test(l.id) || lineIds.has(l.id)) return false;
       lineIds.add(l.id);
@@ -98,6 +106,10 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
       const c = l.unitCostCents ?? costs[l.id];
       if (c !== undefined && !cents(c)) return false;
       if (l.catalogItemId != null && !ID.test(l.catalogItemId)) return false;
+      // a boolean or none (the server's jsonb_typeof); false only at $0
+      if (l.clientVisible != null && typeof l.clientVisible !== "boolean") return false;
+      if (l.clientVisible === false && l.unitPriceCents !== 0) return false;
+      if (l.sectionId != null && !sectionIdOk(l.sectionId)) return false;
     }
   }
   const s = doc.settings;
