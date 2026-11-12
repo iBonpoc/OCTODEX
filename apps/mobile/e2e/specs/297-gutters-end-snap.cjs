@@ -54,7 +54,7 @@ exports.run = async (h) => {
     const g = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).map((e) => e.geom);
     const ends = g.flatMap((r) => [r.a, r.b]);
     return ends.some((q, i) => ends.some((o, j) => j !== i && Math.hypot(o[0] - q[0], o[1] - q[1]) < 1.5));
-  }, KEY, { timeout: 8000 }).catch(() => {});
+  }, KEY, { timeout: 8000 });
   const g = await runs();
   const share = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]) < 1.5;
   const ends = g.flatMap((r) => [r.a, r.b]);
