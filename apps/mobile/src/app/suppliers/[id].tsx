@@ -74,10 +74,7 @@ export default function SupplierScreen() {
     const undoApply = store.applySupplierTax(s.id);
     const undoSave = undoRef.current;
     // one «Отменить» for both: the items' tax and the supplier's own (review SUP1 №6 — the second toast replaces the first)
-    toast.show(t("sup.applied", { n }), () => {
-      undoApply();
-      undoSave?.();
-    });
+    toast.show(t("sup.applied", { n }), store.undoTogether([undoSave, undoApply]));
     setAsk(null);
     back();
   };

@@ -134,7 +134,10 @@ type UndoPlan = (cur: DB) => { value: DB; commit: () => void } | "done" | "dead"
 const undoPlans = new WeakMap<object, UndoPlan>();
 
 /** the plan of undos in the order they were made: the last first, each on what the one after it left; a function the
- *  store did not make (a screen's own reset, a «nothing to undo») runs after, when all of them went back */
+ *  store did not make (a screen's own reset, a «nothing to undo», a reverse op) runs after, when all of them went back —
+ *  one that throws does not stop the rest, and the toast still closes (the director's 3rd review, remark 2). None of the
+ *  store's own parts left to take back (all dead, or only such functions) — undefined: nothing happens (remark 3). A part
+ *  already taken back on its own (its own toast) — false: the rest is not taken back after it (remark 4). */
 function planTogether(undos: readonly unknown[]): UndoPlan {
   return (cur) => {
     let value = cur;
@@ -155,8 +158,21 @@ function planTogether(undos: readonly unknown[]): UndoPlan {
       commits.push(r.commit);
       live++;
     }
-    if (!live && !others.length) return "dead";
-    return { value, commit: () => [...commits, ...others].forEach((f) => f()) };
+    if (!live) return "dead";
+    return {
+      value,
+      commit: () => {
+        commits.forEach((f) => f());
+        for (const f of others) {
+          try {
+            f();
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.warn("[undo] a part not made by the store failed", e);
+          }
+        }
+      },
+    };
   };
 }
 
@@ -1309,6 +1325,8 @@ export function StoreProvider({
     };
     const at = new Date().toISOString();
     pairs.forEach(({ prev, next }) => go(prev, next, at));
+    // not undoOwn, on purpose: the reverse ops are new changes that always apply (no conflict, never a half undo) and reach
+    // the server even when the first save already did (review SUP1 №1)
     return () => {
       const back = new Date().toISOString();
       [...pairs].reverse().forEach(({ prev, next }) => go(next, prev, back));
@@ -1459,10 +1477,7 @@ export function StoreProvider({
           // the old server has no photos of items: the photo itself went
           false,
         );
-        return () => {
-          undoItem();
-          undoPhoto();
-        };
+        return undoTogether([undoPhoto, undoItem]);
       },
       addVisitItem: addVisitItemFn,
       removeVisitItem: (visitId, itemId) => {
@@ -1494,8 +1509,7 @@ export function StoreProvider({
             return { ...x, checklist: [...list].sort((p, q) => (p.position ?? 0) - (q.position ?? 0)) };
           });
         if (dbRef.current.checklistLegacy) return chkMutate("check.move", visitId, apply, { k: "chk.item.edit", id: itemId, visitId });
-        const undos = moves.map((m, i) => mutate("check.move", i === 0 ? apply : (d) => d, { k: "chk.item.edit", id: m.id, visitId, position: m.position }));
-        return () => [...undos].reverse().forEach((u) => u());
+        return undoTogether(moves.map((m, i) => mutate("check.move", i === 0 ? apply : (d) => d, { k: "chk.item.edit", id: m.id, visitId, position: m.position })));
       },
       addVisitTemplate: (visitId, templateId) => {
         const d0 = dbRef.current;
@@ -1519,7 +1533,7 @@ export function StoreProvider({
           }),
         );
         if (minsChanged && mins) undos.push(mutate("check.mins", (d) => d, { k: "chk.visit.mins", visitId, before: mins.before ?? null, after: mins.after ?? null }));
-        return () => [...undos].reverse().forEach((u) => u());
+        return undoTogether(undos);
       },
       reviewVisitMissed: (visitId) => {
         // an old server has no «Просмотрено» (and no card: attention.ts) — nothing that would come back after a reload
@@ -1857,15 +1871,7 @@ export function StoreProvider({
             techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x),
           },
         );
-        const undoSnap = snapshotOps(ids.visitId, snap);
-        const undoVisit = () => {
-          undoSnap();
-          undoVisit0();
-        };
-        return () => {
-          undoVisit();
-          target.undo();
-        };
+        return undoTogether([target.undo, undoVisit0, snapshotOps(ids.visitId, snap)]);
       },
       cancelVisit: (id, reason, text) => {
         const d0 = dbRef.current;
@@ -1903,14 +1909,7 @@ export function StoreProvider({
           }),
           { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: people[0] ?? null, assigneeIds: people, note, scope },
         );
-        const undoSnap = snapshotOps(id, snap);
-        return {
-          id,
-          undo: () => {
-            undoSnap();
-            undo0();
-          },
-        };
+        return { id, undo: undoTogether([undo0, snapshotOps(id, snap)]) };
       },
       markNotified: (visitId) => {
         const at = new Date().toISOString();
@@ -2424,6 +2423,7 @@ export function StoreProvider({
         const undoItems = saveItemsBoth(renamed);
         // «Отменить» (rule 5): a new supplier is taken back from the queue (nothing reached the server yet, or it stays
         // as made); a changed one gets a reverse op — the change may already be on the server
+        // a changed one: reverse ops only (they always apply — not a half undo); a new one: its own undo (nothing to clash)
         return () => {
           undoItems();
           if (before) put(before);
@@ -2462,7 +2462,7 @@ export function StoreProvider({
           ids.push(o.id);
           undos.push(putOrder(o, []));
         }
-        return { ids, made: undos.length, undo: () => [...undos].reverse().forEach((u) => u()) };
+        return { ids, made: undos.length, undo: undoTogether(undos) };
       },
       savePurchaseOrder: (o) => {
         const d0 = dbRef.current;
@@ -2563,8 +2563,8 @@ export function StoreProvider({
               : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it) },
           );
         });
-        // the last one first: each undo puts back the phone's state from before its own save
-        return () => [...undos].reverse().forEach((u) => u());
+        // all of them or none (DS §15.2)
+        return undoTogether(undos);
       },
       removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
       scheduleJob: (jobId, sch) => {

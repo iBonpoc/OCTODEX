@@ -259,6 +259,112 @@ describe("unit:undoOwnStore — «Отменить» of several actions together
   });
 });
 
+describe("unit:undoOwnStore — undoTogether, the director's 3rd review of #1244", () => {
+  const TPL = { id: "tpl-four", name: "Four (test)", items: [0, 1, 2, 3].map((i) => ({ id: `tpl-four-i${i}`, label: `Step ${i} (test)`, kind: "check", required: true })), appliesTo: { everyVisit: false, visitKinds: [], catalogItemIds: [] } };
+  const openVisit = (r: Root<P>) => valueOf(r).db.visits.find((v) => v.step === "scheduled" && !v.closed && !v.signature)!;
+  it("a template's 4 items added → the 2nd ticked → «Отменить» the template: nothing goes, all its ops reach the server (the blocker, :1522)", async () => {
+    const r = await signedIn({ checklistTemplates: [...company().checklistTemplates!, TPL] } as Partial<DB>);
+    const v = openVisit(r);
+    const before = v.checklist.length;
+    const undo = call(r, "addVisitTemplate", v.id, TPL.id) as () => boolean | undefined;
+    await settle();
+    const added = valueOf(r).db.visits.find((x) => x.id === v.id)!.checklist.slice(before);
+    expect(added).toHaveLength(4);
+    call(r, "checkItem", v.id, added[1]!.id, true);
+    await settle();
+    expect(undo()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.visits.find((x) => x.id === v.id)!.checklist).toHaveLength(before + 4);
+    // the queue sends one at a time: every add and the tick go
+    for (let k = 0; k < 6; k++) {
+      await tick();
+      server.sends.filter((x) => !(x as { done?: boolean }).done).forEach((x) => ((x as { done?: boolean }).done = true, x.d.resolve()));
+      await settle();
+    }
+    expect(server.sends.filter((x) => x.op.k === "chk.item.add").length).toBe(4);
+    expect(server.sends.filter((x) => x.op.k === "chk.item.set").length).toBe(1);
+  }, 30_000);
+  it("nested: a new job, then its visit (scheduleJob — itself together with its checklist) → «Отменить» all: the job and the visit are gone", async () => {
+    const r = await demo();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const job = call(r, "addJob", { customerId: c.id, propertyId: prop.id, title: "Nested (test)" }) as { id: string; undo: () => unknown };
+    await settle();
+    const sched = call(r, "scheduleJob", job.id, { start: new Date().toISOString(), durationMin: 60, techId: null });
+    await settle();
+    expect(valueOf(r).db.visits.some((v) => v.jobId === job.id)).toBe(true);
+    expect((call(r, "undoTogether", [job.undo, sched]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.jobs.some((j) => j.id === job.id)).toBe(false);
+    expect(valueOf(r).db.visits.some((v) => v.jobId === job.id)).toBe(false);
+  });
+  it("the same, the visit changed since (an item added to it) → false (the job form's «Уже не отменить»): the job and the visit stay", async () => {
+    const r = await demo();
+    const c = valueOf(r).db.customers[0]!;
+    const prop = valueOf(r).db.properties.find((p) => p.customerId === c.id)!;
+    const job = call(r, "addJob", { customerId: c.id, propertyId: prop.id, title: "Nested (test)" }) as { id: string; undo: () => unknown };
+    await settle();
+    const sched = call(r, "scheduleJob", job.id, { start: new Date().toISOString(), durationMin: 60, techId: null });
+    await settle();
+    const visit = valueOf(r).db.visits.find((v) => v.jobId === job.id)!;
+    call(r, "addVisitItem", visit.id, "Later (test)", false);
+    await settle();
+    expect((call(r, "undoTogether", [job.undo, sched]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.jobs.some((j) => j.id === job.id)).toBe(true);
+    expect(valueOf(r).db.visits.some((v) => v.id === visit.id)).toBe(true);
+  });
+  it("two parts of one record (a new client, then its name parts — client/edit): both go back", async () => {
+    const r = await demo();
+    const src = valueOf(r).db.sources[0]!.id;
+    const made = call(r, "addCustomer", { name: "Two Parts", phone: "(818) 555-0199", sourceId: src, address: "9 Test St", city: "Encino" }) as { id: string; undo: () => unknown };
+    await settle();
+    const parts = call(r, "updateCustomer", made.id, { firstName: "Two", lastName: "Parts" });
+    await settle();
+    expect((call(r, "undoTogether", [made.undo, parts]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.customers.some((x) => x.id === made.id)).toBe(false);
+  });
+  it("a part not made by the store throws: the store's parts are back all the same, and the result is true (the toast closes)", async () => {
+    const r = await demo();
+    const c = valueOf(r).db.customers[0]!;
+    const undo = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
+    await settle();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let after = false;
+    const all = call(r, "undoTogether", [undo, () => { throw new Error("a screen's reset (test)"); }, () => (after = true)]) as () => unknown;
+    expect(all()).toBe(true);
+    warn.mockRestore();
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
+    expect(after).toBe(true);
+  });
+  it("nothing of the store's to take back — only empty functions, or a dropped part with them: undefined, nothing runs", async () => {
+    const r = await demo();
+    let ran = false;
+    expect((call(r, "undoTogether", [() => {}]) as () => unknown)()).toBeUndefined();
+    expect((call(r, "undoTogether", [() => (ran = true)]) as () => unknown)()).toBeUndefined();
+    expect(ran).toBe(false);
+    expect((call(r, "undoTogether", []) as () => unknown)()).toBeUndefined();
+  });
+  it("a dropped part among live ones (the server dropped a template save): the live ones go back — true", async () => {
+    const settings = { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: false, labor: false, material: false } }, deposit: { kind: "none" as const } };
+    const tpl = { id: "tpl-1", name: "Visit (test)", rowVersion: 3, doc: { options: [{ id: "o", name: "A", lines: [{ id: "l", name: "Call (test)", group: "service", quantity: "1", unit: "ea", unitPriceCents: 100 }] }], settings } } as unknown as EstimateTemplate;
+    const r = await signedIn({ estimateTemplates: [tpl] });
+    const dead = call(r, "saveEstimateTemplate", { ...tpl, name: "E1 (test)" });
+    await tick();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    server.sends.find((x) => x.op.k === "est.template.save")!.d.reject(new PermanentError("changed on another phone", 409, "40001", "row_version_conflict"));
+    await settle();
+    const c = valueOf(r).db.customers[0]!;
+    const live = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
+    await settle();
+    expect((call(r, "undoTogether", [dead, live]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
+  });
+});
+
 describe("unit:undoOwnStore — the demo: what an action adds is what the store shows (the director's Б3)", () => {
   it("a lead won → «Отменить»: the lead is not won, its client and address are gone (red before: the client had no number)", async () => {
     const r = await demo();

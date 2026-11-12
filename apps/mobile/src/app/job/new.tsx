@@ -108,7 +108,9 @@ export default function NewJob() {
     // «Отменить» takes back everything this form made and leaves the job's screen (it would show an empty job)
     const undoAll = () => {
       // all or nothing (DS §15.2): too late for one part — nothing goes back, the toast says so
-      if (store.undoTogether(undos)() === false) return false;
+      // nothing taken back (too late — false, or nothing to take back — undefined): the form stays as it is
+      const r = store.undoTogether(undos)();
+      if (r !== true) return r;
       setNotifyId(null);
       setCreatedId(null);
       setSaved(false);
