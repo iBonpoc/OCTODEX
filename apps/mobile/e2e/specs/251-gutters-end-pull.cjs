@@ -103,7 +103,11 @@ exports.run = async (h) => {
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => { const g = await gutters2(); return g.length === 1 && Math.abs(g[0].b[1] - g[0].a[1]) < 1; }, "«Назад»: straight again");
   // «Желоб», the picked gutter's ring, NO hold, ACROSS: a new gutter from the end, as before (#504) — drawing on from an end is what «Желоб» does
-  await waitFor(async () => (await svg().locator('[id^="handle-cap:"]').count()) === 2, "the gutter is picked: the ring is there");
+  {
+    const r0 = await capAt(0), r1 = await capAt(1);
+    await p.mouse.click((r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2); // pick it (the swing above was undone: it may be let go)
+    await waitFor(async () => (await svg().locator('[id^="handle-cap:"]').count()) === 2, "the gutter is picked: the ring is there");
+  }
   await pull(await capAt(1), 0, 90, 0);
   await waitFor(async () => (await count()) === 2, "the ring, no hold, across: a new gutter from the end");
 };
