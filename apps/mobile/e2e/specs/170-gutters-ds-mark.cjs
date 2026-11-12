@@ -4,7 +4,8 @@
  * - a downspout put on a gutter: «D1» inside its mark; over it the fittings in one word (default 3 × A → «AAA»);
  * - elbows by style in the panel: B +1 → «AAAB», A −1 → «AAB»;
  * - dragged by the finger, it slides along its run (the store's atIn changes, it stays on the run);
- * - a long press on a free end, then a drag → a new gutter from that end (a corner), not a moved end.
+ * - «Желоб»: a plain drag from a free end → a new gutter from that end (a corner). A LONG press on an end takes it instead
+ *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
  * Finds things by id / testID; waits on what it checks.
  */
 const { skipLength, canvasAt } = require("../gutters.cjs");
@@ -83,9 +84,9 @@ exports.run = async (h) => {
   const mark2 = await svg().locator("circle").first().boundingBox();
   h.expect(Math.abs(mark2.y + mark2.height / 2 - y) < 6, "it stays on the run (not where the finger went)");
 
-  // a long press on the free right end, then a drag → a new gutter from it (with «Желоб»; «Выбрать» is gone, #687)
+  // a plain drag from the free right end → a new gutter from it (with «Желоб»; «Выбрать» is gone, #687). Not a long press: that takes the end (П35)
   await tid("draw-tool-line").getByRole("button").click();
-  await drag([x1, y], [x1, y + b.height * 0.25], 600);
-  await waitFor(async () => (await live("run")).length === 2, "a long press on an end: a new gutter from it");
+  await drag([x1, y], [x1, y + b.height * 0.25]);
+  await waitFor(async () => (await live("run")).length === 2, "a drag from an end: a new gutter from it");
   await waitFor(async () => (await svg().locator('[id^="c:"]').count()) === 1, "a corner where it starts");
 };

@@ -2887,6 +2887,8 @@ export const es: Dict = {
   "mod.gutters.draw.hint.line": "Deslice el dedo por el borde del techo para dibujar una canaleta",
   "mod.gutters.draw.hint.ds": "Toque la canaleta donde va el bajante",
   "mod.gutters.draw.hint.select": "Primero toque una canaleta o un bajante para elegirlo",
+  "mod.gutters.draw.hint.move": "Mantenga pulsado un extremo o una esquina y arrastre: se mueve libremente y se ajusta a 45° y 90°",
+  "mod.gutters.draw.hint.threeEnds": "Una unión de tres extremos no se mueve: mueva los canalones uno por uno",
   "mod.gutters.draw.nextDs": "Siguiente: ponga los bajantes en las canaletas",
   "mod.gutters.draw.fit": "Todo el dibujo",
   "mod.gutters.draw.test": "precios de prueba",
