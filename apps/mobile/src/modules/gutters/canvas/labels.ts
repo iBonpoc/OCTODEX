@@ -80,7 +80,8 @@ export function candidates(l: LabelWant, gap: number): [number, number][] {
   return out;
 }
 
-/** Greedy placement; a uniform grid keeps it near-linear (150 labels well under a frame). */
+/** Greedy placement; a uniform grid (labels, and the drawn lines by the cells they pass) keeps a candidate's check to the few
+ *  neighbours in its cells, not to every line of the drawing (#1198 review: 150 gutters stay within a frame). */
 /** `keepAll` (the speed bench only): a label with no free place still goes to its first place — the worst load;
  *  `marks` — drawn points no label may cover (a downspout's mark, spec 33 П20.8) */
 export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; h: number }, gap: number, keepAll = false, marks: readonly { at: [number, number]; r: number }[] = [], lines: readonly { a: [number, number]; b: [number, number] }[] = []): PlacedLabel[] {
@@ -97,9 +98,25 @@ export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; 
   // a mark is avoided where there is room; a label with no room but over a mark still shows (a length is never lost)
   const markBoxes = marks.map((m) => boxOf(m.at[0], m.at[1], m.r * 2, m.r * 2));
   const offMarks = (b: Box) => !markBoxes.some((q) => overlaps(b, q));
-  // the drawn lines (with their bounding boxes, to skip the far ones cheaply): a label off them is easier to read
-  const segs = lines.map((l) => ({ ...l, x0: Math.min(l.a[0], l.b[0]), x1: Math.max(l.a[0], l.b[0]), y0: Math.min(l.a[1], l.b[1]), y1: Math.max(l.a[1], l.b[1]) }));
-  const offLines = (b: Box) => !segs.some((q) => q.x0 < b.x1 && b.x0 < q.x1 && q.y0 < b.y1 && b.y0 < q.y1 && segmentHitsBox(q.a, q.b, b));
+  // the drawn lines, put into the same cells they pass through: a candidate looks only at the lines of its own cells
+  const lineGrid = new Map<number, { a: [number, number]; b: [number, number] }[]>();
+  for (const l of lines) {
+    const n = Math.max(1, Math.ceil(Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]) / (cell / 2)));
+    const seen = new Set<number>();
+    // a step of half a cell can not skip one; the neighbours of a point are added for a box that only touches the edge
+    for (let i = 0; i <= n; i++) {
+      const x = l.a[0] + ((l.b[0] - l.a[0]) * i) / n, y = l.a[1] + ((l.b[1] - l.a[1]) * i) / n;
+      for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) {
+        const k = (Math.floor(x / cell) + dx) * 100_003 + (Math.floor(y / cell) + dy);
+        if (!seen.has(k)) { seen.add(k); (lineGrid.get(k) ?? lineGrid.set(k, []).get(k)!).push(l); }
+      }
+    }
+  }
+  const offLines = (b: Box) => {
+    if (lines.length === 0) return true;
+    for (const k of keys(b)) for (const q of lineGrid.get(k) ?? []) if (segmentHitsBox(q.a, q.b, b)) return false;
+    return true;
+  };
   const order = [...want].sort((p, q) => q.priority - p.priority || (p.id < q.id ? -1 : 1));
   const out: PlacedLabel[] = [];
   for (const l of order) {
@@ -117,7 +134,7 @@ export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; 
     const at =
       cs.find(([x, y]) => ok(x, y) && clear(x, y, true, true)) ??
       cs.find(([x, y]) => ok(x, y) && clear(x, y, false, true)) ??
-      (l.must || segs.length === 0 ? (cs.find(([x, y]) => ok(x, y) && clear(x, y, true, false)) ?? cs.find(([x, y]) => ok(x, y))) : undefined) ??
+      (l.must || lines.length === 0 ? (cs.find(([x, y]) => ok(x, y) && clear(x, y, true, false)) ?? cs.find(([x, y]) => ok(x, y))) : undefined) ??
       (keepAll ? cs[0] : undefined);
     if (!at) continue;
     const b = boxOf(at[0], at[1], l.w, l.h);

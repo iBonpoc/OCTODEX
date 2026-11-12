@@ -171,7 +171,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   const dsById = new Map(d.downspouts.map((x) => [x.id, x]));
   ds.forEach((s) => {
     const code = dsCode(dsById.get(s.id)!);
-    if (code) add(`ds:${s.id}`, s.at, s.at, code, "ds", -1, o.dsPad);
+    if (code) add(`ds:${s.id}`, s.at, s.at, code, "ds", s.selected ? 1e6 : -1, o.dsPad, s.selected); // the picked one's word stays, as its length does
   });
   if (o.cornerText) for (const k of corners) add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", -1, o.dsPad);
   for (const x of o.extra ?? []) {

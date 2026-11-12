@@ -56,5 +56,17 @@ exports.run = async (h) => {
     if (a.x0 < b.x1 - 1 && b.x0 < a.x1 - 1 && a.y0 < b.y1 - 1 && b.y0 < a.y1 - 1) over.push(`${a.s} / ${b.s}`);
   }
   h.expect(over.length === 0, "no two words overlap: " + over.join(" | "));
+  // a corner's word («… 90°») never stands on a line: the lines are in SVG coordinates, the words in the page's — shifted by the SVG's origin
+  const segHits = (l, b) => {
+    const [ax, ay, bx, by] = [l.x1 + boxes.ox, l.y1 + boxes.oy, l.x2 + boxes.ox, l.y2 + boxes.oy];
+    let t0 = 0, t1 = 1;
+    for (const [pp, dd] of [[ax - b.x0, -(bx - ax)], [b.x1 - ax, bx - ax], [ay - b.y0, -(by - ay)], [b.y1 - ay, by - ay]]) {
+      if (dd === 0) { if (pp < 0) return false; } else { const r = pp / dd; if (dd < 0) { if (r > t1) return false; if (r > t0) t0 = r; } else { if (r < t0) return false; if (r < t1) t1 = r; } }
+    }
+    return true;
+  };
+  const corners = boxes.texts.filter((b) => /°/.test(b.s));
+  const onLine = corners.filter((b) => boxes.lines.some((l) => segHits(l, b))).map((b) => b.s);
+  h.expect(onLine.length === 0, "no corner word stands on a line: " + onLine.join(" | "));
   await h.shot("labels-zoomed-out");
 };
