@@ -70,7 +70,10 @@ export function alongChain(d: Drawing, runId: string, side: "L" | "R"): Drawing 
 
 export type Hit = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "run"; id: string };
 
-/** what is under the finger: a downspout, then a line's end (to drag), then a line */
+/**
+ * What is under the finger: the nearest of a downspout and a line's end (a downspout wins a tie), then a line. The nearest, not
+ * «a downspout first»: an automatic downspout stands 12″ from the end (#1246) and must not take the touch that goes on from the end.
+ */
 export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
   let best: { h: Hit; dist: number } | null = null;
   const take = (h: Hit, dist: number) => {
@@ -83,7 +86,6 @@ export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
     const t = Math.min(1, Math.max(0, s.atIn / (runLengthIn(r) || 1)));
     take({ kind: "ds", id: s.id }, Math.hypot(p[0] - (r.a[0] + (r.b[0] - r.a[0]) * t), p[1] - (r.a[1] + (r.b[1] - r.a[1]) * t)));
   }
-  if (best) return (best as { h: Hit }).h;
   for (const r of d.runs) {
     take({ kind: "end", id: r.id, end: 0 }, Math.hypot(p[0] - r.a[0], p[1] - r.a[1]));
     take({ kind: "end", id: r.id, end: 1 }, Math.hypot(p[0] - r.b[0], p[1] - r.b[1]));

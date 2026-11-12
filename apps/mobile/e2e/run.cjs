@@ -99,6 +99,9 @@ async function waitPastCompanyMidnight() {
       localStorage.setItem("octo.theme.v1", JSON.stringify(o.theme));
       localStorage.setItem("octo.hints.v1", JSON.stringify(["today", "company", "clients", "estimate-builder", "inbox", "triage", "money", "jobs", "team", "catalog", "plan", "visits"]));
     }, { lang: "ru", role: "director", theme: layout.theme, ...(spec.init || {}) });
+    // the downspouts the canvas puts by itself (#1246) are off in the specs written before them: they count downspouts they put
+    // themselves. A spec about them says `exports.autoDs = true` (296); the others are about something else
+    if (!spec.autoDs) await ctx.addInitScript(() => { globalThis.__octoAutoDs = "off"; });
     const page = await ctx.newPage();
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
     page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));

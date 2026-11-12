@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { autoDownspouts, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN } from "../canvas/autoDs";
+import { autoDownspouts } from "../canvas/autoDs";
 import { addDownspout, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, pulledSide, pullSideIn, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
@@ -121,6 +121,8 @@ export default function DrawScreen() {
   const ch = useMemo(() => choicesFor(settings), [settings]);
   // the company's rules and use (M7c) and its corner method: the $ under the drawing counts by them
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
+  /** the downspouts it puts by itself (#1246): the company's setting — one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
+  const autoDs = useMemo(() => { const r = readRules(settings); /* a test seam like globalThis.__octoSheetLeave: the specs written before the automatic downspouts count their own */ if ((globalThis as { __octoAutoDs?: string }).__octoAutoDs === "off") return null; return r.dsAuto ? { spacingIn: r.runPerDsFt * 12, edgeIn: r.dsEdgeIn } : null; }, [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -181,8 +183,8 @@ export default function DrawScreen() {
   const canvas = useCanvasGestures(viewNow, setView, live, 2);
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -265,8 +267,8 @@ export default function DrawScreen() {
   const commit = useCallback(
     (made: Drawing, prev = cur.current.drawing) => {
       // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
-      const next = cur.current.canSave
-        ? autoDownspouts(made, { spacingIn: AUTO_DS_SPACING_IN, edgeIn: AUTO_DS_EDGE_IN, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, prev)
+      const next = cur.current.canSave && cur.current.autoDs
+        ? autoDownspouts(made, { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, prev)
         : made;
       if (next === prev) return;
       setHint(null);

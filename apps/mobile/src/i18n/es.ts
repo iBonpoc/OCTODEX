@@ -3053,6 +3053,8 @@ export const es: Dict = {
   "mod.gutters.set.r.dsStickFt": "Bajantes se compran en tramos de",
   "mod.gutters.set.r.dsShareOffcuts": "Los recortes de bajante sirven para otro bajante",
   "mod.gutters.set.r.dsExtensionIn": "Agregar a cada bajante",
+  "mod.gutters.set.r.dsAuto": "Poner un bajante en cada canalón automáticamente",
+  "mod.gutters.set.r.dsEdgeIn": "Bajante automático desde el extremo",
   "mod.gutters.set.r.rainBasis": "Tamaño de canaleta según lluvia",
   "mod.gutters.set.r.rain.smacna": "SMACNA (5 min, prudente)",
   "mod.gutters.set.r.rain.code": "Según código (60 min)",

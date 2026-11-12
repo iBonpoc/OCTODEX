@@ -351,6 +351,8 @@ export default function GutterSettingsScreen() {
             </Field>
             <Switch testID="gset-rule-dsShareOffcuts" on={rules.dsShareOffcuts} onChange={(v) => setRule("dsShareOffcuts", v)} label={t(k("r.dsShareOffcuts"))} />
             {num("dsExtensionIn", t(k("in")), t(k("r.dsExtensionIn")))}
+            <Switch testID="gset-rule-dsAuto" on={rules.dsAuto} onChange={(v) => setRule("dsAuto", v)} label={t(k("r.dsAuto"))} />
+            {num("dsEdgeIn", t(k("in")), t(k("r.dsEdgeIn")))}
             <Field label={t(k("r.rainBasis"))} testID="gset-rule-rainBasis">
               <ChoiceChips items={(["smacna", "code"] as const).map((b) => ({ key: b, label: t(k(`r.rain.${b}`)) }))} value={rules.rainBasis} onChange={(b) => setRule("rainBasis", b)} />
               <T v="caption" tone="mut">{t(k("r.rainHint"))}</T>

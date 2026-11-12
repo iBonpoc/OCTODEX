@@ -3053,6 +3053,8 @@ export const ru = {
   "mod.gutters.set.r.dsStickFt": "Водосток покупаем кусками",
   "mod.gutters.set.r.dsShareOffcuts": "Обрезки водостока — в дело на другой водосток",
   "mod.gutters.set.r.dsExtensionIn": "Добавлять к каждому водостоку",
+  "mod.gutters.set.r.dsAuto": "Ставить даунспот на каждый желоб сам",
+  "mod.gutters.set.r.dsEdgeIn": "Автоматический даунспот от края",
   "mod.gutters.set.r.rainBasis": "Подбор размера желоба — по дождю",
   "mod.gutters.set.r.rain.smacna": "SMACNA (5 мин, осторожно)",
   "mod.gutters.set.r.rain.code": "По коду (60 мин)",

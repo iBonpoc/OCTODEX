@@ -1,5 +1,5 @@
 /**
- * #1246 (spec 33-gutters-ds-auto А1–А3, founder 12.11): a downspout by itself — one per CHAIN (a joined line) up to 35 ft, 12″ from the
+ * #1246 (spec 33-gutters-ds-auto А1–А3, founder 12.11): a downspout by itself — one per CHAIN (a joined line) up to 40 ft, 12″ from the
  * free end; a corner of two lines has one; joined → one goes, split → it comes back; hand-put ones are never touched; a removed
  * auto one is not put back; moved by hand it is yours.
  */
@@ -35,9 +35,9 @@ describe("one line", () => {
     expect(auto(once)).toBe(once);
     expect(auto(once, once)).toBe(once);
   });
-  it("a long straight gutter: 35 ft → one, 36 ft → two (one downspout on it overflows)", () => {
-    expect(auto({ runs: [run("a", [0, 0], [420, 0])], downspouts: [] }, none).downspouts).toHaveLength(1);
-    const two = auto({ runs: [run("a", [0, 0], [432, 0])], downspouts: [] }, none);
+  it("a long straight gutter: 40 ft → one, 41 ft → two (one downspout on it overflows)", () => {
+    expect(auto({ runs: [run("a", [0, 0], [480, 0])], downspouts: [] }, none).downspouts).toHaveLength(1);
+    const two = auto({ runs: [run("a", [0, 0], [492, 0])], downspouts: [] }, none);
     expect(two.downspouts).toHaveLength(2);
     expect(new Set(two.downspouts.map((s) => s.atIn)).size).toBe(2); // not on the same spot
   });
@@ -49,7 +49,7 @@ describe("one line", () => {
 });
 
 describe("a chain: a corner of two lines has ONE downspout", () => {
-  const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]); // 400″ in all: under 35 ft
+  const A = run("A", [0, 0], [200, 0]), B = run("B", [200, 0], [200, 200]); // 400″ in all: under 40 ft
   const apart = (): Drawing => auto({ runs: [A, run("B", [300, 0], [300, 200])], downspouts: [] }, none);
   it("two separate lines: one each", () => {
     expect(apart().downspouts).toHaveLength(2);

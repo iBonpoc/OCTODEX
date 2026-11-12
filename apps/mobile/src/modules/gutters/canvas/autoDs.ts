@@ -3,7 +3,7 @@
  *
  * The unit is the CHAIN (a joined line: gutters whose ends meet, a corner or a straight join, not split by the user), not a
  * single gutter — two gutters joined into a corner are one chain, so «a corner of two lines has ONE downspout» needs no special
- * case. A chain wants ⌈length ÷ spacing⌉ downspouts (spacing 35 ft by default: one downspout on a very long straight gutter
+ * case. A chain wants ⌈length ÷ spacing⌉ downspouts (spacing 40 ft by default, the company's «runPerDsFt»: one downspout on a very long straight gutter
  * overflows). Downspouts the user put by hand count and are never touched; the ones put here carry `auto`. A removed auto one
  * is not put back (`dsAutoOff` on its gutter). Pure functions: the same drawing back when nothing changes.
  */
@@ -44,7 +44,7 @@ export interface AutoDsOptions {
   newId: () => string;
 }
 
-export const AUTO_DS_SPACING_IN = 35 * 12;
+export const AUTO_DS_SPACING_IN = 40 * 12; // = the rule «runPerDsFt» 40 ft by default (Rules, settings.ts)
 export const AUTO_DS_EDGE_IN = 12;
 
 const sig = (d: Pick<Drawing, "runs">, id: string) => {

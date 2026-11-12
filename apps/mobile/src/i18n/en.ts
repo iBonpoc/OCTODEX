@@ -3053,6 +3053,8 @@ export const en: Dict = {
   "mod.gutters.set.r.dsStickFt": "Downspouts are bought in sticks of",
   "mod.gutters.set.r.dsShareOffcuts": "Downspout offcuts go into another downspout",
   "mod.gutters.set.r.dsExtensionIn": "Add to every downspout",
+  "mod.gutters.set.r.dsAuto": "Put a downspout on every gutter by itself",
+  "mod.gutters.set.r.dsEdgeIn": "Automatic downspout from the end",
   "mod.gutters.set.r.rainBasis": "Gutter size by rainfall",
   "mod.gutters.set.r.rain.smacna": "SMACNA (5 min, cautious)",
   "mod.gutters.set.r.rain.code": "By code (60 min)",
