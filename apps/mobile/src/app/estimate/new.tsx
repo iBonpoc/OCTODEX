@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { space, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
+import { LINE_GROUPS, activeLines, discountBps, sectionSubtotals, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
@@ -14,6 +14,8 @@ import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, esti
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
+import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
+import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, putBack, renameSection, restoreLayout, shiftLine, snapshotLayout, viewRows, type LayoutSnapshot } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { PickerSheet } from "@/ui/pickerSheet";
@@ -92,7 +94,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // «Из каталога», a finger starts to scroll or the estimate is saved); the focus it takes when it opens
   const [openId, setOpenId] = useState<string | null>(null);
   const [focusRow, setFocusRow] = useState<{ id: string; field: "name" | "qty" } | null>(null);
-  const [picker, setPicker] = useState<"add" | { replace: string } | null>(null);
+  const [picker, setPicker] = useState<"add" | { replace: string } | { addTo: string } | null>(null);
+  // sections (DS §8.5): the folded ones are the phone's own state; the one being renamed in place; the row to move (its sheet)
+  const [collapsedIds, setCollapsedIds] = useState<string[]>([]);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [moveFor, setMoveFor] = useState<string | null>(null);
   const rowForm = useRequiredForm();
   // what a pick in the catalog sheet opens next (a row with the cursor in it) waits until the sheet is gone: the web would give the
   // focus back to the button that opened it
@@ -227,9 +233,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setFocusRow(null);
     setOpenId(id);
   };
-  const addNew = () => {
+  const addNew = (sectionId?: string) => {
     if (!leaveRow()) return;
-    const l = newLine("service", { unit: "ea" });
+    const l = newLine("service", { unit: "ea", ...(sectionId ? { sectionId } : {}) });
+    if (sectionId) setCollapsedIds((c) => c.filter((x) => x !== sectionId));
     setOption((o) => ({ ...o, lines: [...o.lines, l] }));
     setFocusRow({ id: l.id, field: "name" });
     setOpenId(l.id);
@@ -240,8 +247,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const fromCatalog = (itemId: string) => {
     const it = db.catalog.find((x) => x.id === itemId);
     if (!it || picker === null) return;
-    const target = typeof picker === "object" ? picker.replace : null;
-    const made = linesFromCatalog(it, db.catalog);
+    const target = typeof picker === "object" && "replace" in picker ? picker.replace : null;
+    const addTo = typeof picker === "object" && "addTo" in picker ? picker.addTo : undefined;
+    const made = linesFromCatalog(it, db.catalog).map((l) => (addTo ? { ...l, sectionId: addTo } : l));
     setPicker(null);
     if (target) {
       const old = option.lines.find((x) => x.id === target);
@@ -277,18 +285,76 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const rowAction = (id: string, a: RowAction) => {
     if (a === "delete") return removeLine(id);
     if (a === "replace") return setPicker({ replace: id });
+    if (a === "move") return setMoveFor(id);
     const d = duplicateLine(option.lines, id);
     if (!d) return;
     setOption((o) => ({ ...o, lines: duplicateLine(o.lines, id, () => d.copyId)?.lines ?? o.lines }));
     toast.show(t("est.row.duplicated"), () => setOption((o) => ({ ...o, lines: dropLine(o.lines, d.copyId) })));
+  };
+  /* ---- sections (DS §8.5): every change undoes itself only (the layout it changed), never the whole document ---- */
+  const secTitle = (x: EstimateSection) => x.title ?? (x.kind && x.kind !== "module" ? t(`est.sec.${x.kind}` as DictKey) : t("est.sec.untitled"));
+  const showUndo = (text: DictKey, snap: LayoutSnapshot) => toast.show(t(text), () => setOption((o) => restoreLayout(o, snap)));
+  const addSectionBtn = (parentId?: string) => {
+    if (!leaveRow()) return;
+    const r = addSection(option, { parentId });
+    if (!r) return void toast.show(t("est.sec.limit"));
+    setOption(() => r.option);
+    setCollapsedIds((c) => c.filter((x) => x !== parentId));
+    setRenamingId(r.id);
+  };
+  const layoutBtn = () => {
+    if (!leaveRow()) return;
+    const snap = snapshotLayout(option);
+    const next = layoutByKind(option);
+    if (!next) return void toast.show(t(canAddSection(option) ? "est.sec.nothingToLay" : "est.sec.limit"));
+    setOption(() => next);
+    showUndo("est.sec.laidOut", snap);
+  };
+  const sectionAction = (id: string, a: SectionAction) => {
+    if (a === "rename") return setRenamingId(id);
+    if (a === "addSub") return addSectionBtn(id);
+    if (a === "addHere") return addNew(id);
+    if (a === "catalogHere") return leaveRow() ? setPicker({ addTo: id }) : undefined;
+    const snap = snapshotLayout(option);
+    setOption((o) => deleteSection(o, id));
+    showUndo("est.sec.deleted", snap);
+  };
+  const doMove = (lineId: string, key: string) => {
+    const index = option.lines.findIndex((l) => l.id === lineId);
+    const line = option.lines[index];
+    if (!line) return;
+    const back = () => setOption((o) => putBack(o, lineId, { sectionId: line.sectionId, index }));
+    setMoveFor(null);
+    if (key === "__up__" || key === "__down__") {
+      const dir = key === "__up__" ? -1 : 1;
+      const next = shiftLine(option, lineId, dir);
+      if (next === option) return;
+      setOption(() => next);
+      return void toast.show(t("est.sec.moved"), () => setOption((o) => shiftLine(o, lineId, (dir * -1) as -1 | 1)));
+    }
+    const r = moveLine(option, lineId, { sectionId: key === "__none__" ? undefined : key });
+    if (!r.ok) return void toast.show(t(r.reason === "module" || r.reason === "moduleLine" ? "est.sec.moduleBlocked" : "est.sec.moved"));
+    setOption(() => r.option);
+    toast.show(t("est.sec.moved"), back);
   };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
   const openInCatalog = (id: string) => {
     const cid = option.lines.find((l) => l.id === id)?.catalogItemId;
     if (cid) router.push(`/catalog/${cid}`);
   };
-  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog });
-  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog };
+  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction });
+  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction };
+  const sectionApi = useMemo<SectionApi>(
+    () => ({
+      toggle: (id) => setCollapsedIds((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id])),
+      action: (id, a) => latest.current.sectionAction(id, a),
+      rename: (id, title) => {
+        setOption((o) => renameSection(o, id, title));
+        setRenamingId(null);
+      },
+    }),
+    [],
+  );
   const rowApi = useMemo<RowApi>(
     () => ({
       open: (id) => latest.current.openRow(id),
@@ -377,6 +443,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
+  const view = viewRows(option, new Set(collapsedIds));
+  const secTotals = sectionSubtotals(option, s);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
   const taxValue = !s.tax.enabled || !taxGroups.length ? t("ue.off") : `${s.tax.rateBps / 100}% · ${taxGroups.map((g) => t(`ue.group.${g}` as DictKey).toLowerCase()).join(", ")}`;
@@ -456,31 +524,62 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 </T>
               </View>
             ) : null}
-            {option.lines.map((l, i) => (
-              <View key={l.id}>
-                {i > 0 ? <Divider /> : null}
-                <LineRow
-                  line={l}
-                  open={openId === l.id}
-                  total={totalById.get(l.id) ?? 0}
-                  costsVisible={seeCosts}
-                  form={rowForm}
-                  api={rowApi}
-                  locked={signed}
-                  unhiddenMark={unhiddenIds.includes(l.id)}
-                  catalog={openId === l.id && store.role !== "tech" ? catalogStateOf(l) : undefined}
-                  autoFocus={focusRow?.id === l.id ? focusRow.field : undefined}
-                  checkPrice={checkPrice.includes(l.id)}
-                />
-              </View>
-            ))}
+            {view.map((r, i) =>
+              r.type === "section" ? (
+                <View key={`s-${r.section.id}`}>
+                  {i > 0 ? <Divider /> : null}
+                  <SectionHeader
+                    section={r.section}
+                    depth={r.depth}
+                    title={secTitle(r.section)}
+                    total={money(secTotals.bySection[r.section.id] ?? 0)}
+                    lineCount={r.lineCount}
+                    collapsed={r.collapsed}
+                    renaming={renamingId === r.section.id}
+                    api={sectionApi}
+                  />
+                </View>
+              ) : r.type === "unsectioned" ? (
+                <View key="unsectioned" testID="est-sec-loose">
+                  {i > 0 ? <Divider /> : null}
+                  <T v="caption" tone="mut" w="semibold">
+                    {t("est.sec.loose")}
+                  </T>
+                </View>
+              ) : (
+                <View key={r.line.id} style={{ paddingLeft: r.depth === 1 ? space[4] : 0 }}>
+                  {i > 0 ? <Divider /> : null}
+                  <LineRow
+                    line={r.line}
+                    open={openId === r.line.id}
+                    total={totalById.get(r.line.id) ?? 0}
+                    costsVisible={seeCosts}
+                    form={rowForm}
+                    api={rowApi}
+                    locked={signed}
+                    unhiddenMark={unhiddenIds.includes(r.line.id)}
+                    catalog={openId === r.line.id && store.role !== "tech" ? catalogStateOf(r.line) : undefined}
+                    autoFocus={focusRow?.id === r.line.id ? focusRow.field : undefined}
+                    checkPrice={checkPrice.includes(r.line.id)}
+                  />
+                </View>
+              ),
+            )}
           </Card>
           <RowView>
             <View style={{ flex: 1 }} testID="est-add-new">
-              <Button label={t("est.row.addNew")} icon="plus" variant="secondary" full onPress={addNew} />
+              <Button label={t("est.row.addNew")} icon="plus" variant="secondary" full onPress={() => addNew()} />
             </View>
             <View style={{ flex: 1 }} testID="est-add-catalog">
               <Button label={t("est.row.addCatalog")} icon="search" variant="secondary" full onPress={openCatalog} />
+            </View>
+          </RowView>
+          <RowView>
+            <View style={{ flex: 1 }} testID="est-group-by-kind">
+              <Button label={t("est.sec.layout")} variant="ghost" full onPress={layoutBtn} />
+            </View>
+            <View style={{ flex: 1 }} testID="est-add-section">
+              <Button label={`＋ ${t("est.sec.addSection")}`} variant="ghost" full onPress={() => addSectionBtn()} />
             </View>
           </RowView>
         </View>
@@ -569,16 +668,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       </Sheet>
       <PickerSheet<string>
         visible={picker !== null && db.catalog.length > 0}
-        title={picker !== null && typeof picker === "object" ? t("est.row.replaceTitle") : t("est.row.pickTitle")}
+        title={picker !== null && typeof picker === "object" && "replace" in picker ? t("est.row.replaceTitle") : t("est.row.pickTitle")}
         items={[
-          ...(picker !== null && typeof picker === "object" ? [{ key: "__clear__", label: t("est.row.clear") }] : []),
+          ...(picker !== null && typeof picker === "object" && "replace" in picker ? [{ key: "__clear__", label: t("est.row.clear") }] : []),
           ...[...db.catalog]
-            .filter((x) => !(picker !== null && typeof picker === "object") || x.kind !== "kit")
+            .filter((x) => !(picker !== null && typeof picker === "object" && "replace" in picker) || x.kind !== "kit")
             .sort((a, b) => a.name.localeCompare(b.name))
             .map((x) => ({ key: x.id, label: x.name, subtitle: `${t(kindLabel(x.kind))} · ${money(itemPrice(x, db.catalog))} / ${x.unit}${x.placeholder ? ` · ${t("cat.placeholder")}` : ""}` })),
         ]}
         value={null}
-        onSelect={(k) => (k === "__clear__" && typeof picker === "object" && picker ? clearRow(picker.replace) : fromCatalog(k))}
+        onSelect={(k) => (k === "__clear__" && typeof picker === "object" && picker && "replace" in picker ? clearRow(picker.replace) : fromCatalog(k))}
         onClose={() => setPicker(null)}
         onExited={() => {
           const next = afterPicker.current;
@@ -586,6 +685,20 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           next?.();
         }}
         testID="est-catalog-picker"
+      />
+      <PickerSheet<string>
+        visible={moveFor !== null}
+        title={t("est.sec.moveTitle")}
+        items={[
+          { key: "__up__", label: t("est.sec.moveUp") },
+          { key: "__down__", label: t("est.sec.moveDown") },
+          ...(option.sections ?? []).filter((x) => x.kind !== "module").map((x) => ({ key: x.id, label: secTitle(x) })),
+          { key: "__none__", label: t("est.sec.moveNone") },
+        ]}
+        value={null}
+        onSelect={(k) => moveFor && doMove(moveFor, k)}
+        onClose={() => setMoveFor(null)}
+        testID="est-move-picker"
       />
       <Sheet visible={setting !== null} onClose={() => setSetting(null)} title={setting ? t(`ue.${setting}` as DictKey) : undefined}>
         <View style={{ gap: space[3] }}>
