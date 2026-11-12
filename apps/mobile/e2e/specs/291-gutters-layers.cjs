@@ -1,5 +1,5 @@
 /**
- * e2e 275 — «Слои» на холсте и «Вынос крыши» в настройках (#930, #932; spec 33 П33). Every view.
+ * e2e 291 — «Слои» на холсте и «Вынос крыши» в настройках (#930, #932; spec 33 П33). Every view.
  * - a run and a downspout drawn (the grid too); «⋯» → «Слои» → «Подписи» off: no length word on the canvas; on again: it is back;
  *   «Водостоки» off: no downspout mark; the gutter stays (the drawing is not changed);
  * - Настройки Gutters → «Дом и крыша» → «Вынос крыши»: 2 ft by default, another pick is kept after a reload.
