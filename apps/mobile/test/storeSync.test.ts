@@ -1576,6 +1576,31 @@ describe("unit:storeSync — the deposit invoice of the older path is named in t
   });
 });
 
+describe("unit:storeSync — the demo keeps its data past midnight (the founder's measurement, 12.11; К1, Э1)", () => {
+  it("a demo record of an earlier day is read as it is — not replaced by a fresh seed at midnight in Los Angeles", async () => {
+    const d = makeSeed();
+    d.estimates = [...d.estimates, { ...d.estimates[0]!, id: "e-kept", title: "The founder's measurement estimate" }];
+    storage.set("octo.db.v5", JSON.stringify({ day: "2020-01-01", db: d })); // an earlier day (never today in LA)
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // demo
+    await settle();
+    const db = (valueOf(r) as unknown as { db: { estimates: { id: string }[] } }).db;
+    expect(db.estimates.some((e) => e.id === "e-kept")).toBe(true); // before: gone — a new seed
+  });
+  it("«Сбросить тестовые данные» still starts the demo over (with «Отменить»)", async () => {
+    const d = makeSeed();
+    d.estimates = [...d.estimates, { ...d.estimates[0]!, id: "e-kept" }];
+    storage.set("octo.db.v5", JSON.stringify({ day: "2020-01-01", db: d }));
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const undo = (valueOf(r) as unknown as { resetDemo: () => () => void }).resetDemo();
+    await settle();
+    expect((valueOf(r) as unknown as { db: { estimates: { id: string }[] } }).db.estimates.some((e) => e.id === "e-kept")).toBe(false);
+    undo();
+    await settle();
+    expect((valueOf(r) as unknown as { db: { estimates: { id: string }[] } }).db.estimates.some((e) => e.id === "e-kept")).toBe(true);
+  });
+});
+
 describe("unit:storeSync — a tech makes an estimate only where he works, and keeps seeing it (#1138)", () => {
   type W = { db: { me: string; estimates: { id: string; createdBy?: string }[] }; saveEstimate: (e: object) => void };
   const doc = { options: [{ id: "o-1138", name: "A", lines: [{ id: "l-1138", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 10000 }] }], settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: null } };
