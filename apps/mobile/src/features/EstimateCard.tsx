@@ -31,6 +31,7 @@ import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } fro
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, canSeeClientLink, canSignDraftOnSite, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
+import { StatusNote } from "@/ui/statusNote";
 
 
 /** under the estimate's title (its screen and the panel on 1280): «client · address, city» */
@@ -416,14 +417,10 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
           {t("ue.sendNote")}
         </T>
         {!hasValidCslb(store.db.company) ? (
-          <T v="caption" tone="warn">
-            {t("ue.noCslb")}
-          </T>
+          <StatusNote tone="warn">{t("ue.noCslb")}</StatusNote>
         ) : null}
         {store.mode === "demo" ? (
-          <T v="caption" tone="warn">
-            {t("ue.demoLink")}
-          </T>
+          <StatusNote tone="warn">{t("ue.demoLink")}</StatusNote>
         ) : null}
       </View>
     </Sheet>
@@ -571,9 +568,7 @@ function LegacyBody({ e }: { e: Estimate }) {
             <T v="caption" tone="mut">
               {t("est.esign")}
             </T>
-            <T v="caption" tone="warn">
-              {t("est.rescission")}
-            </T>
+            <StatusNote tone="warn">{t("est.rescission")}</StatusNote>
             <View testID="est-sign-on-site">
               <SignaturePad
                 consent="est.signConsent"
@@ -624,9 +619,7 @@ function CountersignCard({ e }: { e: Estimate }) {
               {a?.channel === "on_site" ? t("est.countersign.onSite", { company }) : t("est.countersign.asYou", { name: me?.name ?? "", company })}
             </T>
             {hisWarning(store.db, store.db.me) ? (
-              <T v="caption" tone="warn">
-                {t("est.countersign.hisWarning")}
-              </T>
+              <StatusNote tone="warn">{t("est.countersign.hisWarning")}</StatusNote>
             ) : null}
             {mine ? (
               <>

@@ -25,6 +25,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { localUndo } from "@/data/undo";
+import { StatusNote } from "@/ui/statusNote";
 
 export default function PurchaseOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -142,7 +143,7 @@ export default function PurchaseOrderScreen() {
             <ChoiceChips value={o.fulfillment} onChange={(k) => set({ fulfillment: k })} items={(["delivery", "pickup"] as const).map((k) => ({ key: k, label: t(`po.fulfillment.${k}`) }))} />
             {o.fulfillment === "delivery" ? <TextField type="street" value={o.deliverTo ?? ""} onChangeText={(v) => set({ deliverTo: v })} placeholder={t("po.deliverTo")} /> : null}
             <TextField type="date" value={dateText} onChangeText={(v) => { setDateText(v); set({ neededOn: isoDate(v) }); }} placeholder={t("po.neededOn")} />
-            {dateBad ? <T v="caption" tone="bad">{t("po.neededOn")}</T> : null}
+            {dateBad ? <StatusNote tone="bad">{t("po.neededOn")}</StatusNote> : null}
             <TextField type="note" value={o.note ?? ""} onChangeText={(v) => set({ note: v })} placeholder={t("po.note")} multiline />
             {costs ? <Toggle on={o.printPrices} onChange={(v) => set({ printPrices: v })} label={t("po.printPrices")} /> : null}
           </>
