@@ -553,6 +553,8 @@ export default function DrawScreen() {
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
       // fittings word over a downspout → its menu
       const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(e.x - l.x) <= l.w / 2 && Math.abs(e.y - l.y) <= l.h / 2) : undefined;
+      // (the lift of a drag is a tap on the spot on the web: it opens no label it ended over — a downspout dragged under its own word, spec 170)
+      if ((lab?.id.startsWith("len:") || lab?.id.startsWith("ds:")) && liftTap.current) return;
       if (lab?.id.startsWith("len:")) {
         setSelected(lab.id.slice(4));
         setLenEdit(lab.id.slice(4));
@@ -572,7 +574,7 @@ export default function DrawScreen() {
       // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
       // in a tap on the web)
       const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
-      if (tl === "ds" && onDs?.kind === "ds") {
+      if (tl === "ds" && onDs?.kind === "ds" && !liftTap.current) {
         setSelected(onDs.id);
         setSheet(true); // its menu (founder 09.11)
         return;
