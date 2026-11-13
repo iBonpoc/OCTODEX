@@ -15,8 +15,15 @@ exports.run = async (h) => {
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
   };
-  /** the big value above the tape, as read in sixteenths: «25′ 6″» = 0, «25′ 6 1/16″» = 1 */
+  /** the big value above the tape */
   const value = async () => (await tid("quick-length-tape-value").innerText()).replace(/\s+/g, " ").trim();
+  /** a length as the tape writes it («25′ 6″», «25′ 6 3/8″», «7/16″») in sixteenths of an inch */
+  const s16 = (t) => {
+    const ft = Number((t.match(/(\d+)′/) || [0, 0])[1]);
+    const m = t.replace(/\d+′/, "").trim().match(/^(?:(\d+))?\s*(?:(\d+)\/(\d+))?\s*″?$/);
+    if (!m) throw new Error(`cannot read the length «${t}»`);
+    return ft * 192 + Number(m[1] || 0) * 16 + Number(m[2] || 0) * (16 / Number(m[3] || 16));
+  };
   /** a slow drag of `px` to the left and a lift with no flick: the tape follows the finger 1:1 (one mark = `tape-tick` px) */
   const drag = async (px) => {
     const tb = await tid("quick-length-tape").boundingBox();
@@ -39,16 +46,19 @@ exports.run = async (h) => {
   await tid("quick-length").waitFor({ timeout: 5000 });
   await tid("quick-length-tape").waitFor({ timeout: 5000 });
   const v0 = await value();
+  const base = s16(v0);
+  /** the browser has drawn what the lift left: two frames (the tape settles in the one the finger lifts) */
+  const settled = () => p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-  // 5 px is a third of a mark: the tape settles back — nothing changed
+  // 5 px is a third of a mark: the tape settles back — nothing changed (read AFTER the lift settled, not before the drag acted)
   await drag(5);
-  await p.waitForFunction(([id, v]) => { const el = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.getBoundingClientRect().height > 0); return !!el && el.innerText.replace(/\s+/g, " ").trim() === v; }, ["quick-length-tape-value", v0], { timeout: 5000 });
-  h.expect((await value()) === v0, `5 px moves nothing (${v0})`);
+  await settled();
+  h.expect(s16(await value()) === base, `5 px moves nothing (${v0} → ${await value()})`);
 
-  // 16 px is one mark: 1/16″ more; the value changes by exactly that
+  // 16 px is one mark: exactly 1/16″ more, whatever the length the screen's width gave the line
   await drag(16);
-  await p.waitForFunction(([id, v]) => { const el = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.getBoundingClientRect().height > 0); return !!el && el.innerText.replace(/\s+/g, " ").trim() !== v; }, ["quick-length-tape-value", v0], { timeout: 5000 });
+  await settled();
   const v1 = await value();
-  h.expect(/1\/16″$/.test(v1) || /1\/16/.test(v1), `16 px = one mark, 1/16″ more (${v0} → ${v1})`);
+  h.expect(s16(v1) === base + 1, `16 px = one mark, 1/16″ more (${v0} = ${base}/16 → ${v1} = ${s16(v1)}/16)`);
   await h.shot("one-mark");
 };
