@@ -1,5 +1,5 @@
 /**
- * e2e 328 — «Рабочие чертежи» (основатель 13.11, #1349; docs/specs/33-gutters-shop-drawings.md). Every view.
+ * e2e 360 — «Рабочие чертежи» (основатель 13.11, #1349; docs/specs/33-gutters-shop-drawings.md). Every view.
  * «Просмотр замера» → «Документы»:
  * - «Рабочие чертежи»: a page of 11 × 17 sheets — the plan G-1 (the app's language, ru) and the schedules G-2;
  * - «Рабочие чертежи, Letter»: the same sheets on a Letter page, reduced whole;

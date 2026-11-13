@@ -3593,9 +3593,9 @@ export const es: Dict = {
   "mod.gutters.shop.doc": "Planos de taller",
   "mod.gutters.shop.docSize": "Plano y tablas · 11×17",
   "mod.gutters.shop.docLetter": "Planos de taller, Letter",
-  "mod.gutters.shop.docLetterSub": "Reducido a Letter",
+  "mod.gutters.shop.docLetterSub": "Las mismas hojas, reducidas",
   "mod.gutters.shop.docOrder": "Pedido de materiales",
-  "mod.gutters.shop.docOrderSub": "Para el proveedor · Letter",
+  "mod.gutters.shop.docOrderSub": "Para el proveedor · Letter · EN",
   "mod.gutters.shop.problems": "El plano tiene rótulos superpuestos ({n}). Revise la hoja antes de enviarla.",
   // step 14 (docs/specs/08 §7.3): the checklist on the visit screen
   "chk.left": "Obligatorios pendientes: {n}",

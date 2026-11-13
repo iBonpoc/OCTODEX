@@ -3593,9 +3593,9 @@ export const en: Dict = {
   "mod.gutters.shop.doc": "Shop drawings",
   "mod.gutters.shop.docSize": "Plan and schedules · 11×17",
   "mod.gutters.shop.docLetter": "Shop drawings, Letter",
-  "mod.gutters.shop.docLetterSub": "Reduced to fit Letter",
+  "mod.gutters.shop.docLetterSub": "The same sheets, reduced",
   "mod.gutters.shop.docOrder": "Material order",
-  "mod.gutters.shop.docOrderSub": "For the supplier · Letter",
+  "mod.gutters.shop.docOrderSub": "For the supplier · Letter · EN",
   "mod.gutters.shop.problems": "The drawing has overlapping labels ({n}). Check the sheet before sending.",
   // step 14 (docs/specs/08 §7.3): the checklist on the visit screen
   "chk.left": "Required left: {n}",

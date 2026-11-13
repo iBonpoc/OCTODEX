@@ -3593,9 +3593,9 @@ export const ru = {
   "mod.gutters.shop.doc": "Рабочие чертежи",
   "mod.gutters.shop.docSize": "План и ведомости · 11×17",
   "mod.gutters.shop.docLetter": "Рабочие чертежи, Letter",
-  "mod.gutters.shop.docLetterSub": "Уменьшено под Letter",
+  "mod.gutters.shop.docLetterSub": "Те же листы, уменьшены",
   "mod.gutters.shop.docOrder": "Заказ материалов",
-  "mod.gutters.shop.docOrderSub": "Поставщику · Letter",
+  "mod.gutters.shop.docOrderSub": "Поставщику · Letter · EN",
   "mod.gutters.shop.problems": "На чертеже есть наложения подписей ({n}). Проверьте лист перед отправкой.",
   // step 14 (docs/specs/08 §7.3): the checklist on the visit screen
   "chk.left": "Осталось обязательных: {n}",
