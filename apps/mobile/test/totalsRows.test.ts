@@ -57,3 +57,18 @@ describe("the editor's wiring (review of #1362, К1)", () => {
     expect(totalsRows({ totals: t, allOptional: t, own: false, costKnown: true }).client.map((r) => r.key)).toEqual(["subtotal", "total"]);
   });
 });
+
+describe("review of #1380 (director, К1): through the screen's own path", () => {
+  it("an add-on with a price and quantity 0: no «если включит» row (the sum does not change)", () => {
+    const o = opt([L("a", 100000), L("b", 25000, { optional: true, quantity: "0" })]);
+    const settings = S();
+    const rows = totalsRows({ totals: computeCustomOption(o, settings), allOptional: allOptionalFor({ settings }, o, false), own: false, costKnown: false });
+    expect(rows.client.map((r) => r.key)).toEqual(["subtotal", "total"]);
+  });
+  it("a priced add-on flagged hidden: the client sees it, so «если включит» counts it", () => {
+    const o = opt([L("a", 100000), L("b", 30000, { optional: true, clientVisible: false })]);
+    const settings = S();
+    const rows = totalsRows({ totals: computeCustomOption(o, settings), allOptional: allOptionalFor({ settings }, o, false), own: false, costKnown: false });
+    expect(rows.client.find((r) => r.key === "ifAll")?.cents).toBe(130000);
+  });
+});

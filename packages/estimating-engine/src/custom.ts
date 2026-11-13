@@ -189,8 +189,11 @@ export function computeCustomOption(option: CustomOption, s: CustomSettings): Cu
  * null when there is nothing left to tick (no optional line, or every one is already in).
  */
 export function computeAllOptional(option: CustomOption, s: CustomSettings): CustomTotals | null {
-  // an add-on the client can tick: not ticked yet, seen by the client (not hidden) and priced (a $0 one adds nothing)
-  const can = (l: CustomLine) => !!l.optional && !l.selected && !(l.clientVisible === false) && l.unitPriceCents !== 0;
+  // an add-on the client can tick: not ticked yet, seen by the client — hidden only at $0, the rule of toLine (a priced line
+  // flagged hidden is shown, review of #1380) — and priced above $0: a $0 one adds nothing, a negative one is no offer
+  // (DS §8.9: «если включит» never lowers the total)
+  const seen = (l: CustomLine) => !(l.clientVisible === false && l.unitPriceCents === 0);
+  const can = (l: CustomLine) => !!l.optional && !l.selected && seen(l) && l.unitPriceCents > 0;
   if (!activeLines(option.lines).some(can)) return null;
   return computeCustomOption({ ...option, lines: option.lines.map((l) => (can(l) ? { ...l, selected: true } : l)) }, s);
 }

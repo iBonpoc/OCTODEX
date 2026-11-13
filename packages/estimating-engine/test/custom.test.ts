@@ -199,6 +199,32 @@ describe("computeAllOptional: the total if the client ticks every add-on", () =>
     expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "Free check", optional: true })] }, S())).toBeNull();
     expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "Haul", optional: true, clientVisible: false })] }, S())).toBeNull();
   });
+  it("a priced add-on flagged hidden counts — the client sees it (hidden only at $0, as toLine)", () => {
+    const o = { ...base, lines: [base.lines[0]!, L("material", "1", 30000, { name: "Guards", optional: true, clientVisible: false })] };
+    expect(computeAllOptional(o, S())!.total).toBe(130000);
+  });
+  it("a negative add-on is no offer: «если включит» never lowers the total", () => {
+    expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", -5000, { name: "Credit", optional: true })] }, S())).toBeNull();
+  });
+  it("a fixed discount: the same engine, the discount clamped as for the estimate", () => {
+    const s = S({ discount: { kind: "fixed", cents: 20000 } });
+    expect(computeAllOptional(base, s)!.total).toBe(160000 - 20000);
+    expect(computeAllOptional(base, s)!.total).toBe(computeCustomOption({ ...base, lines: base.lines.map((l) => ({ ...l, selected: true })) }, s).total);
+  });
+  it("tax on a part of the groups and a rate in ppm: the same engine", () => {
+    const part = S({ tax: { enabled: true, rateBps: 1000, groups: { service: false, labor: false, material: true } } });
+    // material: the $500 guards only (the $1,000 install is labor, the $100 haul is service) → 10 % of $500 = $50
+    expect(computeAllOptional(base, part)!.tax).toBe(5000);
+    expect(computeAllOptional(base, part)!.total).toBe(165000);
+    const ppm = S({ tax: { enabled: true, rateBps: 888, ratePpm: 88750, groups: { service: true, labor: true, material: true } } });
+    const ticked = { ...base, lines: base.lines.map((l) => ({ ...l, selected: true })) };
+    expect(computeAllOptional(base, ppm)!.total).toBe(computeCustomOption(ticked, ppm).total);
+    expect(computeAllOptional(base, ppm)!.tax).toBe(14200);
+  });
+  it("an add-on with a price and quantity 0: the sum does not change", () => {
+    const o = { ...base, lines: [base.lines[0]!, L("material", "0", 25000, { name: "Guards", optional: true })] };
+    expect(computeAllOptional(o, S())!.total).toBe(computeCustomOption(o, S()).total);
+  });
   it("a blank add-on (no name, no price) does not count as one", () => {
     expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "", optional: true })] }, S())).toBeNull();
   });
