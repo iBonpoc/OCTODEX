@@ -4,7 +4,8 @@
  *   (Spanish), under its heading, ABOVE the signature; Notes under theirs;
  * - the estimate's own Terms (typed with markup): shown as text, and they stay when the company's default changes after;
  * - the PDF: the headings in Spanish, the text escaped, Terms before the signatures;
- * - on site: the same Terms above «Client signs on site».
+ * - on site: the same Terms above «Client signs on site»;
+ * - #1324: the PDF is a contract — the right to cancel 12 pt bold right before the signatures, no text below 10 pt.
  */
 const TOKEN = "demo0handyman0estimate0000000001";
 const DB_KEY = "octo.db.v5";
@@ -67,6 +68,9 @@ exports.run = async (h) => {
   h.expect(pdf.includes("<h2>Términos y condiciones</h2>") && pdf.includes("<h2>Notas</h2>"), "the PDF: the headings in the client's language");
   h.expect(pdf.includes("Pay in 30 days &lt;b&gt;net&lt;/b&gt; (test).") && !pdf.includes("<b>net</b>"), "the PDF escapes the Terms");
   h.expect(pdf.indexOf("Términos y condiciones") < pdf.indexOf('class="sigs"'), "the PDF: Terms before the signatures");
+  // #1324: a contract — the right to cancel is the 12 pt bold notice right before the signatures, no text below 10 pt
+  h.expect(/<p class="notice">[^<]+<\/p>\s*<div class="sigs">/.test(pdf), "the PDF: the right to cancel stands right before the signatures (#1324)");
+  h.expect(/\.notice \{ font-size: 12pt; font-weight: 700/.test(pdf) && /\.mut \{[^}]*font-size: (1\d|[2-9]\d)(\.\d+)?pt/.test(pdf), "the PDF: the notice 12 pt bold, the small text ≥ 10 pt (#1324)");
 
   // on site: the same Terms above «Client signs on site»
   await h.go("/estimate/e6");

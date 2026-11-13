@@ -46,3 +46,27 @@ describe("unit:contractPdfFonts — #1324", () => {
     expect((tokens as unknown as { print: typeof print }).print.contract).toEqual(print.contract);
   });
 });
+
+describe("unit:contractPdfFonts — the estimate's PDF (#1324)", () => {
+  it("is a contract: ≥ 10 pt; the right to cancel is the 12 pt bold notice, right before the signatures (not the small grey line)", async () => {
+    const { fromRaw } = await import("../src/cloud/portal");
+    const { estimateHtml } = await import("../src/features/estimatePdf");
+    const { DEFAULT_SETTINGS } = await import("../src/features/estimateDoc");
+    const p = fromRaw({
+      status: "sent",
+      doc: { options: [{ id: "o1", name: "Only", lines: [{ id: "l1", name: "Work", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 40000 }] }], settings: DEFAULT_SETTINGS } as never,
+      company: { name: "Co (test)" },
+      doc_language: "en",
+    });
+    for (const style of ["classic", "compact"] as const) {
+      const html = estimateHtml(p, { lang: "en", style });
+      expect(sizeOf(html, "body"), style).toBeGreaterThanOrEqual(10);
+      expect(sizeOf(html, ".mut"), style).toBeGreaterThanOrEqual(10);
+      const notice = html.indexOf('<p class="notice">Right to cancel');
+      expect(notice, style).toBeGreaterThan(0);
+      expect(html).not.toMatch(/<p class="mut">Right to cancel/);
+      // nothing between the notice and the signatures
+      expect(html.slice(notice).replace(/<p class="notice">[^<]*<\/p>\s*/, "").startsWith('<div class="sigs">'), style).toBe(true);
+    }
+  });
+});

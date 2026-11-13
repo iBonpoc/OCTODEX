@@ -119,8 +119,8 @@ ${p.title ? `<p><b>${esc(p.title)}</b></p>` : ""}
 ${blocks}
 ${notesHtml}
 ${termsHtml}
-<p class="mut">${esc(t("est.rescission"))}</p>
 ${a ? `<p class="ok">✓ ${esc(t("portal.approved"))}</p>` : ""}
+<p class="notice">${esc(t("est.rescission"))}</p>
 ${signatures}
 ${record}
 ${pagesHtml(doc?.pages)}`;
@@ -132,6 +132,9 @@ ${pagesHtml(doc?.pages)}`;
     company: p.company,
     body,
     opts,
+    // #1324 (docs/specs/41): an estimate is a CA home-improvement contract — no text below 10 pt; the right to cancel
+    // (.notice, 12 pt bold) stands right before the signatures
+    contract: true,
   });
 }
 
