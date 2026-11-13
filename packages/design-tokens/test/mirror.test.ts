@@ -166,6 +166,8 @@ describe("print tokens mirror print.css (docs/specs/07 §2.2 В, §3.4)", () => 
     expect(s.sectionGapPt).toBe(px(k("section-gap")));
   });
   it("the default style is the base print type (classic)", () => expect(print.styles.classic.fontPt).toEqual(print.fontPt));
+  it("#1324: the contract floor (an estimate's PDF) mirrors print.css", () =>
+    expect(print.contract).toEqual({ minPt: px("print-contract-min"), headingPt: px("print-contract-heading"), noticePt: px("print-contract-notice") }));
   it("no colours in the styles: the brand band colour is a company setting", () => {
     expect(JSON.stringify(print.styles)).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });

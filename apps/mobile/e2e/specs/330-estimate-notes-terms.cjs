@@ -4,7 +4,9 @@
  *   (Spanish), under its heading, ABOVE the signature; Notes under theirs;
  * - the estimate's own Terms (typed with markup): shown as text, and they stay when the company's default changes after;
  * - the PDF: the headings in Spanish, the text escaped, Terms before the signatures;
- * - on site: the same Terms above «Client signs on site».
+ * - on site: the same Terms above «Client signs on site»;
+ * - #1324: the PDF is a contract — the right to cancel 12 pt bold right before the signatures, no text below 10 pt;
+ *   at signing (/p/) the right to cancel is large and bold, right before the signature pad.
  */
 const TOKEN = "demo0handyman0estimate0000000001";
 const DB_KEY = "octo.db.v5";
@@ -55,6 +57,16 @@ exports.run = async (h) => {
   h.expect(/Términos y condiciones/.test(await tid("estimate-terms").innerText()), "under its heading in Spanish");
   h.expect((await tid("estimate-notes").innerText()).includes(NOTE) && /Notas/.test(await tid("estimate-notes").innerText()), "Notes under their heading");
   h.expect(await before("estimate-terms", "portal-sign"), "Terms stand above the signature");
+  // #1324: the right to cancel — large and bold, right before the signature pad (as the 12 pt bold notice in the PDF)
+  h.expect(await before("sign-rescission", "signature-pad"), "the right to cancel stands right before the signature pad (#1324)");
+  h.expect(/Derecho a cancelar/.test(await tid("sign-rescission").innerText()), "…in the client's language");
+  // bold is its own font family (font.families.bold), not font-weight; larger than the body text next to it
+  const st = await p.evaluate(() => {
+    const el = [...document.querySelectorAll('[data-testid="sign-rescission"] *')].find((e) => e.textContent.trim());
+    const cs = getComputedStyle(el);
+    return { family: cs.fontFamily, size: parseFloat(cs.fontSize) };
+  });
+  h.expect(/700Bold/.test(st.family) && st.size >= 15, `…bold and large (${st.family}, ${st.size}px)`);
 
   // the estimate's own Terms: as text; the company's default changes after — the estimate keeps its own
   await seed(OWN, "Otro texto (prueba).");
@@ -67,6 +79,9 @@ exports.run = async (h) => {
   h.expect(pdf.includes("<h2>Términos y condiciones</h2>") && pdf.includes("<h2>Notas</h2>"), "the PDF: the headings in the client's language");
   h.expect(pdf.includes("Pay in 30 days &lt;b&gt;net&lt;/b&gt; (test).") && !pdf.includes("<b>net</b>"), "the PDF escapes the Terms");
   h.expect(pdf.indexOf("Términos y condiciones") < pdf.indexOf('class="sigs"'), "the PDF: Terms before the signatures");
+  // #1324: a contract — the right to cancel is the 12 pt bold notice right before the signatures, no text below 10 pt
+  h.expect(/<p class="notice">[^<]+<\/p>\s*<div class="sigs">/.test(pdf), "the PDF: the right to cancel stands right before the signatures (#1324)");
+  h.expect(/\.notice \{ font-size: 12pt; font-weight: 700/.test(pdf) && /\.mut \{[^}]*font-size: (1\d|[2-9]\d)(\.\d+)?pt/.test(pdf), "the PDF: the notice 12 pt bold, the small text ≥ 10 pt (#1324)");
 
   // on site: the same Terms above «Client signs on site»
   await h.go("/estimate/e6");
