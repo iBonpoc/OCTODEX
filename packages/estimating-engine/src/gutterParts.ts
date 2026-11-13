@@ -158,10 +158,12 @@ export interface MeasurementInput {
 /** Company rules (spec П4, П18.10). Every value is a company setting with this default. */
 export interface GutterRules {
   storyHeightIn: number;
-  /** waste for the purchase: "0.05" = 5% (0..1) */
+  /** waste for the purchase of the gutter (only): "0.10" = 10% (0..1); "0" — no waste (#1355: the company can switch it off) */
   wastePct: DecLike;
-  /** extra gutter a field-cut corner uses, inches (a prefab corner uses none) */
+  /** extra gutter an INSIDE (and, until the founder says otherwise, a bay) field-cut corner uses, inches (a prefab corner uses none) */
   cutCornerAllowanceIn: number;
+  /** extra gutter an OUTSIDE field-cut corner uses, inches (#1355, founder 13.11: «для наружного 14 инчей, для внутреннего 6»); a saved company without it gets the default */
+  cutCornerOutAllowanceIn: number;
   /** downspouts are bought in sticks */
   dsStickIn: number;
   /** offcuts of one downspout go into another of the same kind (first fit decreasing) */
@@ -225,8 +227,9 @@ export interface GutterRules {
 
 export const DEFAULT_GUTTER_RULES: GutterRules = {
   storyHeightIn: 120,
-  wastePct: "0.05",
+  wastePct: "0.10",
   cutCornerAllowanceIn: 6,
+  cutCornerOutAllowanceIn: 14,
   dsStickIn: 120,
   dsShareOffcuts: true,
   dsExtensionIn: 0,
@@ -301,6 +304,7 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   if (typeof r.hangerAtEnds !== "boolean") r.hangerAtEnds = d.hangerAtEnds;
   if (!Number.isInteger(r.dsExtensionIn) || r.dsExtensionIn < 0) r.dsExtensionIn = 0;
   if (!Number.isInteger(r.cutCornerAllowanceIn) || r.cutCornerAllowanceIn < 0) r.cutCornerAllowanceIn = d.cutCornerAllowanceIn;
+  if (!Number.isInteger(r.cutCornerOutAllowanceIn) || r.cutCornerOutAllowanceIn < 0) r.cutCornerOutAllowanceIn = d.cutCornerOutAllowanceIn;
   return r;
 }
 
@@ -455,7 +459,7 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "1";
+export const GUTTER_PARTS_VERSION = "2"; // 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
 
 export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
   const rules = resolveGutterRules(over);
@@ -620,7 +624,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     } else {
       if (c.method === "strip") acc.add({ key: `stripmiter.${stockKey(c)}`, section: "corners_caps", unit: "ea", use: "purchase", kind: "material", attrs: { ...stockAttrs(c), part: "strip_miter" } }, 1);
       acc.add({ key: "labor.corner_cut", section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "corner_cut" } }, 1);
-      addPurchase(c, rules.cutCornerAllowanceIn);
+      addPurchase(c, c.kind === "out" ? rules.cutCornerOutAllowanceIn : rules.cutCornerAllowanceIn); // an outside corner takes more than an inside one or a bay (#1355)
       joint(c.method === "strip" ? "corner_strip" : "corner_cut", c);
     }
     if (c.splashGuard) acc.add({ key: `splashguard.${c.profile}.${c.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_guard", profile: c.profile, size: c.size } }, 1);

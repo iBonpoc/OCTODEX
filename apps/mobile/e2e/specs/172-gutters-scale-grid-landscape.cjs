@@ -7,7 +7,8 @@
  *   the toolbar and the drawing; a tap on a gutter opens its attributes in a sheet («Свойства»).
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, canvasAt, openProps } = require("../gutters.cjs");
+const { skipLength, canvasAt, openProps, doubleTapUntil } = require("../gutters.cjs");
+const { sheetGone } = require("../sheet.cjs"); // the one that throws when a layer stays
 
 exports.run = async (h) => {
   const p = h.page;
@@ -53,8 +54,10 @@ exports.run = async (h) => {
   await h.shot("scaled");
 
   // on its side: a clean sheet
+  await sheetGone(p); // the length sheet is not only «count 0»: its layer is gone too — a tap or a measure after the resize must not meet it
   await p.setViewportSize({ width: 932, height: 430 });
-  await tid("draw-surface").waitFor({ timeout: 5000 });
+  // the canvas has taken the new window: its box is the window's (at 390 nothing else in the layout changes, so nothing else tells)
+  await waitFor(async () => { const r = await tid("draw-surface").boundingBox(); return !!r && Math.round(r.width) === 932 && Math.round(r.height) === 430; }, "on its side: the canvas fills the window");
   await waitFor(async () => (await tid("side-nav").count()) === 0, "on its side: no app menu");
   h.expect((await tid("draw-panel").count()) === 0, "on its side: no side panel");
   // wait on it (rule 19): the header row goes with the layout's next render, not with the menu
@@ -62,12 +65,11 @@ exports.run = async (h) => {
   h.expect((await tid("draw-back").count()) === 1 && (await tid("draw-fit").count()) === 0 && (await tid("draw-toolbar").count()) === 1, "back and the toolbar stay; no «fit» in the header (#1273)");
   // «вписать»: a double tap on the empty place (the header has no button, a phone on its side has no «⋯»)
   const sb = await tid("draw-surface").boundingBox();
-  await canvasAt(p, sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
+  const empty = [sb.x + sb.width * 0.9, sb.y + sb.height * 0.6];
+  await canvasAt(p, empty[0], empty[1]);
   const pxBefore = await runLine();
-  await p.mouse.click(sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
-  await p.mouse.click(sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
-  // the drawing is fitted: its line changes size (the whole drawing now fills the canvas) — waited on, not slept on
-  await waitFor(async () => Math.abs((await runLine()) - pxBefore) > 2, `the double tap on the empty place fits the drawing (${Math.round(pxBefore)} px before)`);
+  // the drawing is fitted: its line changes size (the whole drawing now fills the canvas) — waited on, the double tap tried again if the page took it as two single ones
+  await doubleTapUntil(p, empty[0], empty[1], { fn: (before) => { const l = document.querySelector('[data-testid="draw-svg"] line:not([id^=halo])'); return !!l && Math.abs(Math.hypot(l.x2.baseVal.value - l.x1.baseVal.value, l.y2.baseVal.value - l.y1.baseVal.value) - before) > 2; }, arg: pxBefore }, `the drawing was not fitted (${Math.round(pxBefore)} px before)`);
   await h.shot("landscape");
   // the attributes in a sheet, as upright
   await openProps(p, { force: true }); // on its side: a double tap on the picked gutter opens its sheet
