@@ -112,6 +112,32 @@ export function insertionIndex(mids: number[], centre: number): number {
   return p;
 }
 
+/**
+ * The place with a margin (DS §14.6, `gesture.slotHysteresis`): from the place `cur` the held row goes down only once its centre is
+ * `hyst` below a neighbour's middle, and up only once it is `hyst` above — a finger resting on a middle does not flick between two places.
+ */
+export function placeWithMargin(mids: number[], centre: number, cur: number, hyst: number): number {
+  const down = insertionIndex(mids, centre - hyst);
+  if (down > cur) return down;
+  const up = insertionIndex(mids, centre + hyst);
+  if (up < cur) return up;
+  return Math.max(0, Math.min(cur, mids.length));
+}
+
+/**
+ * Does the new place cross into another section (#1312, DS §14.6)? «selection» buzzes ONLY then, not on every place change: for a
+ * line — the section it would land in; for a section — where it would stand (its parent and the one after it).
+ */
+export function crossesSection(rows: ViewRow[], key: string, from: number, to: number): boolean {
+  if (from === to) return false;
+  const a = resolveDrop(rows, key, from);
+  const b = resolveDrop(rows, key, to);
+  if (!a || !b) return false;
+  if (a.kind === "line" && b.kind === "line") return (a.to.sectionId ?? "") !== (b.to.sectionId ?? "");
+  if (a.kind === "section" && b.kind === "section") return (a.to.parentId ?? "") !== (b.to.parentId ?? "") || (a.to.beforeId ?? "") !== (b.to.beforeId ?? "");
+  return false;
+}
+
 /** how far a row is pushed to make room: rows between the held one's old and new place move by its height (down or up) */
 export function shiftOf(index: number, from: number, to: number, height: number): number {
   // index, from, to — positions in the list WITHOUT the held row's own slot: rows at [to, from) move down, rows at [from, to) move up
@@ -130,8 +156,19 @@ export function edgeStep(y: number | null, top: number, bottom: number, edge: nu
   if (y === null || !Number.isFinite(y) || edge <= 0) return 0;
   const depth = y < top + edge ? (top + edge - y) / edge : y > bottom - edge ? (y - (bottom - edge)) / edge : 0;
   if (depth <= 0) return 0;
-  const step = Math.max(1, Math.round(Math.min(1, depth) * max));
+  // the speed grows with the depth squared: a finger just inside the zone creeps, at the very edge it runs (DS §14.6)
+  const d = Math.min(1, depth);
+  const step = Math.max(1, Math.round(d * d * max));
   return y < top + edge ? -step : step;
+}
+
+/**
+ * While a LINE is carried, «Без раздела» is a place to drop even when no line is outside a section yet (DS §14.6): the heading is
+ * added at the end of a list that has sections and no loose lines. A list with no sections needs none (every place is «without»).
+ */
+export function withLooseTarget(rows: ViewRow[], carryingLine: boolean): ViewRow[] {
+  if (!carryingLine || rows.some((r) => r.type === "unsectioned") || !rows.some((r) => r.type === "section")) return rows;
+  return [...rows, { type: "unsectioned", lineCount: 0 }];
 }
 
 /** what a drop came to: the list is different now / it ended where it was / the module leads the order and refused */

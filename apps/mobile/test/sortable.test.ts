@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine, CustomOption, EstimateSection } from "@octo/estimating-engine";
 import { moveLine, moveSection, sameLayout, viewRows } from "../src/features/sectionLayout";
-import { canBegin, dragKind, dragWrite, edgeStep, heldGone, feelOf, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
+import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, heldGone, feelOf, insertionIndex, placeWithMargin, withLooseTarget, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock } from "../src/features/sortable";
 
 const L = (id: string, sectionId?: string): CustomLine => ({ id, name: id, group: "service", quantity: "1", unit: "ea", unitPriceCents: 100, ...(sectionId ? { sectionId } : {}) });
 const opt = (lines: CustomLine[], sections?: EstimateSection[]): CustomOption => ({ id: "o", name: "Good", lines, ...(sections ? { sections } : {}) });
@@ -201,5 +201,47 @@ describe("a held row that is gone ends the drag (#1262 замечание 2)", (
     expect(heldGone("l:a", ["s:A", "l:a"])).toBe(false);
     expect(heldGone("l:a", ["s:A", "l:b"])).toBe(true);
     expect(heldGone(null, ["l:b"])).toBe(false);
+  });
+});
+
+describe("part «б» (#1307, DS §14.6): margin, edge speed, «selection» only across a section (#1312)", () => {
+  it("the place changes only 6 px past a middle; a finger resting on a middle does not flick", () => {
+    const mids = [10, 30, 50];
+    expect(placeWithMargin(mids, 33, 1, 6)).toBe(1);
+    expect(placeWithMargin(mids, 37, 1, 6)).toBe(2);
+    expect(placeWithMargin(mids, 27, 2, 6)).toBe(2);
+    expect(placeWithMargin(mids, 23, 2, 6)).toBe(1);
+    expect(placeWithMargin(mids, 99, 0, 6)).toBe(3);
+    expect(placeWithMargin(mids, -50, 3, 6)).toBe(0);
+  });
+  it("the edge speed grows with the depth squared, up to the token's max", () => {
+    expect(edgeStep(100, 100, 700, 64, 18)).toBe(-18);
+    // half way into the zone: a quarter of the speed
+    expect(edgeStep(132, 100, 700, 64, 18)).toBe(-5);
+    expect(edgeStep(668, 100, 700, 64, 18)).toBe(5);
+  });
+  it("«selection» only when the place is in another section", () => {
+    // rest (a1 held): s:A, a2, s:A1, x1, s:B, b1, u, z1, z2
+    expect(crossesSection(rows, "l:a1", 1, 2)).toBe(false);
+    expect(crossesSection(rows, "l:a1", 1, 5)).toBe(true);
+    expect(crossesSection(rows, "l:a1", 5, 6)).toBe(false);
+    expect(crossesSection(rows, "l:a1", 6, 7)).toBe(true);
+    expect(crossesSection(rows, "l:a1", 3, 3)).toBe(false);
+  });
+});
+
+describe("«Без раздела» is a place to drop while a line is carried (DS §14.6)", () => {
+  const secOnly = viewRows(opt([L("a1", "A"), L("b1", "B")], [{ id: "A", title: "A" }, { id: "B", title: "B" }]));
+  it("added at the end when the list has sections and no loose lines; a line dropped there leaves its section", () => {
+    const rs = withLooseTarget(secOnly, true);
+    expect(keys(rs)).toEqual(["s:A", "l:a1", "s:B", "l:b1", "u"]);
+    // a1 held: rest s:A, s:B, b1, u — the place after «u» is «без раздела»
+    expect(resolveDrop(rs, "l:a1", 4)).toEqual({ kind: "line", id: "a1", to: {} });
+  });
+  it("not while a section is carried, not twice, not in a list without sections", () => {
+    expect(withLooseTarget(secOnly, false)).toBe(secOnly);
+    expect(withLooseTarget(rows, true)).toBe(rows);
+    const flat = viewRows(opt([L("z1"), L("z2")]));
+    expect(withLooseTarget(flat, true)).toBe(flat);
   });
 });
