@@ -79,7 +79,7 @@ export function FilterBar<K extends string>({
       accessibilityLabel={a11y.label}
       testID={testID}
       style={{
-        height: h,
+        minHeight: h,
         paddingHorizontal: space[3],
         borderRadius: radius.pill,
         flexDirection: "row",
@@ -124,7 +124,7 @@ export function FilterBar<K extends string>({
       accessibilityLabel={t("fix.filters.a11y", { n: active })}
       testID="filter-button"
       style={{
-        height: component.button.phone,
+        minHeight: component.button.phone,
         minWidth: component.button.phone,
         paddingHorizontal: alone ? space[3] : active ? space[2] : 0,
         borderRadius: radius.pill,
@@ -208,7 +208,7 @@ export function FilterBar<K extends string>({
               visibleHeight={component.button.sm}
               accessibilityRole="button"
               accessibilityLabel={t("card.filter.remove", { v: chosenLabel(group, option) })}
-              style={{ height: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
+              style={{ minHeight: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
             >
               <T v="button" w="semibold" style={{ color: c.ink }}>
                 {chosenLabel(group, option)}
@@ -326,7 +326,7 @@ function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
         testID="filter-search-toggle"
         style={{
           width: h,
-          height: h,
+          minHeight: h,
           borderRadius: radius.pill,
           alignItems: "center",
           justifyContent: "center",
@@ -356,7 +356,7 @@ function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
         returnKeyType="search"
         autoCorrect={false}
         accessibilityLabel={placeholder}
-        style={{ flex: 1, minWidth: 0, height: fieldH, color: c.ink, fontFamily: font.families.regular, fontSize: font.size.body + 2, outlineStyle: "none" } as object}
+        style={{ flex: 1, minWidth: 0, height: fieldH, color: c.ink, fontFamily: font.families.regular, fontSize: font.size.input, outlineStyle: "none" } as object}
       />
       <Press
         onPress={() => {

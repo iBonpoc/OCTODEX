@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
+import { component, spaceHalf, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
@@ -68,7 +68,7 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       style={[
         {
-          height: h,
+          minHeight: h,
           paddingHorizontal: space[4],
           borderRadius: radius.pill,
           backgroundColor: bg,
@@ -141,7 +141,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
       accessibilityRole="text"
       accessibilityLabel={label}
       style={{
-        height: component.chip.h,
+        minHeight: component.chip.h,
         paddingHorizontal: component.chip.px,
         borderRadius: radius.chip,
         backgroundColor: bg,
@@ -151,10 +151,13 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
         alignItems: "center",
         gap: space[1],
         alignSelf: "flex-start",
+        // a long word (RU / ES, a bigger system font) wraps inside the chip, it is never cut (#1303)
+        maxWidth: "100%",
+        paddingVertical: spaceHalf.hair,
       }}
     >
       <Icon name={statusIcon[status]} s={sizes.iconSm} color={fg} />
-      <T v="caption" w="semibold" style={{ color: fg }} numberOfLines={1}>
+      <T v="caption" w="semibold" style={{ color: fg, flexShrink: 1 }}>
         {label}
       </T>
     </View>
@@ -272,7 +275,7 @@ export function Segmented<K extends string>({
       accessibilityRole={radio ? "radiogroup" : "tablist"}
       accessibilityLabel={label}
       style={{
-        height: h,
+        minHeight: h,
         padding: pad,
         borderRadius: radius.pill,
         backgroundColor: c.track,
@@ -303,7 +306,7 @@ export function Segmented<K extends string>({
               setLayouts((p) => (p[it.key]?.x === x && p[it.key]?.w === w ? p : { ...p, [it.key]: { x, w } }));
             }}
             style={{
-              height: h - pad * 2,
+              minHeight: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
               // a choice in a form never grows past its card: the labels give way, they do not push the segment out
@@ -353,7 +356,7 @@ export function TagChip({ label, onPress }: { label: string; onPress?: () => voi
   const body = (
     <View
       style={{
-        height: component.button.sm,
+        minHeight: component.button.sm,
         paddingHorizontal: space[3],
         borderRadius: radius.pill,
         borderWidth: 1,
@@ -403,7 +406,7 @@ export function Avatar({ initials, s = component.avatar.md, sub }: { initials: s
 export function MetaTag({ label, icon }: { label: string; icon?: IconKey }) {
   const { c } = useTheme();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], height: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
       {icon ? <Icon name={icon} s={sizes.iconXs} color={c.mut} /> : null}
       <T v="caption" w="medium" style={{ color: icon ? c.ink : c.mut }}>
         {label}
@@ -588,7 +591,7 @@ export function TextField({
           minHeight: multi ? h * 2 : h,
           color: c.ink,
           fontFamily: font.families.regular,
-          fontSize: font.size.body + 2,
+          fontSize: font.size.input,
           textAlignVertical: multi ? "top" : "center",
           fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,
           outlineStyle: "none",
@@ -720,7 +723,7 @@ function ChipsRow<K extends string>({ items, value, onChange, nowrap }: { items:
             {...({ "aria-checked": sel } as object)}
             accessibilityLabel={it.label}
             style={{
-              height: h,
+              minHeight: h,
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
@@ -767,7 +770,7 @@ export function MultiChips<K extends string>({
             accessibilityState={{ checked: sel }}
             accessibilityLabel={it.label}
             style={{
-              height: h,
+              minHeight: h,
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
