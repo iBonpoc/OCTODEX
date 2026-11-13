@@ -16,10 +16,12 @@ exports.run = async (h) => {
   // the swipe is live now (РС-7c2): on the web a hint about «⋯», not a «coming» stub; the rest still wait for their components
   h.expect((await p.getByTestId("showcase-rows-swipe-soon").count()) === 0, "swipe: no stub any more");
   h.expect(/«⋯»/.test(await vis("showcase-rows-swipe").innerText()), "swipe: the web names «⋯»");
-  for (const id of ["row", "compact", "section", "variants", "firstHint", "notes", "required", "profit", "catalog"]) {
+  for (const id of ["row", "compact", "section", "variants", "firstHint", "notes", "fromTemplate", "required", "profit", "catalog"]) {
     await vis(`showcase-rows-${id}-soon`).waitFor({ timeout: 3000 });
     h.expect((await vis(`showcase-rows-${id}`).innerText()).length > 20, `${id}: named, with its rule`);
   }
+  // «Из шаблона…» (DS 1.6.0) points to its own rule
+  h.expect(/§8\.13/.test(await vis("showcase-rows-fromTemplate").innerText()), "fromTemplate: names §8.13");
   // the list of sections names it
   await h.go("/settings/design-system");
   await vis("showcase-row-rows").waitFor({ timeout: 5000 });

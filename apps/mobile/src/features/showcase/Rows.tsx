@@ -17,7 +17,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-/** the samples of the estimate editor (DS §8.3–8.5, Б13, §14.6): what is shown now, what comes with its component */
+/** the samples of the estimate editor (DS §8.3–8.5, §8.10–8.13, Б13, §14.6): what is shown now, what comes with its component */
 const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
   { id: "compact", title: "ds.rows.compact", hint: "ds.rows.compactHint" },
@@ -25,6 +25,7 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "variants", title: "ds.rows.variants", hint: "ds.rows.variantsHint" },
   { id: "firstHint", title: "ds.rows.firstHint", hint: "ds.rows.firstHintHint" },
   { id: "notes", title: "ds.rows.notes", hint: "ds.rows.notesHint" },
+  { id: "fromTemplate", title: "ds.rows.fromTemplate", hint: "ds.rows.fromTemplateHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
   { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
