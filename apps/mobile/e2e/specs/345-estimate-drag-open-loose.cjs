@@ -13,7 +13,7 @@ exports.run = async (h) => {
   const order = () => p.locator('[data-testid^="est-line-"], [data-testid="est-sec-loose"]').evaluateAll((els) => els.map((e) => (e.getAttribute("data-testid") === "est-sec-loose" ? "u" : e.getAttribute("data-testid").replace("est-line-", ""))));
   const take = async (key) => {
     const hd = tid(`sort-handle-${key}`);
-    await hd.scrollIntoViewIfNeeded();
+    await line.toMiddle(h, hd);
     const b = await hd.boundingBox();
     const x = b.x + b.width / 2;
     await p.mouse.move(x, b.y + b.height / 2);

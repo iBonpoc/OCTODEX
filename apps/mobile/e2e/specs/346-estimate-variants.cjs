@@ -94,7 +94,7 @@ exports.run = async (h) => {
   await tid("est-var-rename-done").getByRole("button").click();
   await sheetGone(p);
   await p.waitForFunction(() => /Вы правите «Premium»/.test(document.querySelector('[data-testid="est-variants"]')?.textContent || ""), null, { timeout: 3000 });
-  h.expect(/Premium/.test(await tid("est-var-seg").innerText()), "the new name is on the segment");
+  h.expect((await count(`[data-testid="est-var-seg-${better}"]`)) === 1 && /Premium/.test(await tid(`est-var-seg-${better}`).innerText()), "the new name is on the segment");
 
   // a third copy (of «Premium», $150); at three the copy is pale and says why
   await tid("est-var-copy").getByRole("button").click();
