@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { findCorners, runEnds, wouldDuplicate, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, MIN_TURN_DEG, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { findCorners, runEnds, wouldDuplicate, overlapsRun, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, MIN_TURN_DEG, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -131,7 +131,7 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
   const at = endAt(d, fixed, p, tolIn, runId);
   if (Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) < MIN_RUN_IN) return d;
   // the end dropped so that the gutter lies exactly on another one (both ends shared) is no move: that would be a duplicate (#1256)
-  if (wouldDuplicate({ runs: d.runs.filter((x) => x.id !== runId) }, fixed, at, Number(r.attrs.story) || 1)) return d;
+  if (lineRefused({ runs: d.runs.filter((x) => x.id !== runId) } as Drawing, fixed, at, Number(r.attrs.story) || 1, tolIn)) return d;
   const { lengthIn: _typed, ...rest } = r;
   const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, a: at } : { ...rest, b: at }, end);
   // downspouts stay on the line: at most its new length
@@ -718,12 +718,16 @@ export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, cancele
   if (canceled) return d;
   const b = endAt(d, g.a, p, tolIn);
   // a line drawn over a gutter from one of its ends to the other is no new gutter (#1256): the same drawing back, the caller says why (`lineRefused`)
-  if (lineRefused(d, g.a, b, Number(newRun.attrs.story) || 1)) return d;
+  if (lineRefused(d, g.a, b, Number(newRun.attrs.story) || 1, tolIn)) return d;
   return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);
 }
 
-/** the line `a`→`b` is refused (it lies on a gutter that is there): the one place that says so — `finishStroke` drops it, the screen tells why */
-export const lineRefused = (d: Drawing, a: P, b: P, story: number): boolean => !!wouldDuplicate(d, a, b, story);
+/** the line `a`→`b` is refused (`dup`: exactly on a gutter that is there; `overlap`: along a stretch of one, #1318): the one place that says so — `finishStroke` drops it, the screen tells why */
+export const lineRefused = (d: Drawing, a: P, b: P, story: number, fingerIn = 1): "dup" | "overlap" | null =>
+  wouldDuplicate(d, a, b, story) ? "dup" : overlapsRun(d, a, b, story, Math.min(OVERLAP_ACROSS_MAX_IN, Math.max(1, fingerIn))) ? "overlap" : null;
+
+/** how far across a gutter's line a drawn line may lie and still count as lying along it: a finger's reach (the caller's `tolIn`), at most this (#1318 review: a touch is never exact) */
+export const OVERLAP_ACROSS_MAX_IN = 6;
 
 /** a turn under this (degrees) from a gutter's free end is the same gutter going on, not a new one with a corner */
 export const STRAIGHT_ON_DEG = 10;
