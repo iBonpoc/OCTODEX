@@ -3587,7 +3587,7 @@ export const ru = {
   "mod.gutters.shop.o.deliver": "Доставка / самовывоз",
   "mod.gutters.shop.o.needed": "Нужно к",
   "mod.gutters.shop.o.by": "Заказчик",
-  "mod.gutters.shop.o.note": "Углы режутся на месте из желоба. Количества по замеру — подтвердить до резки рулона.",
+  "mod.gutters.shop.o.note": "Количества по замеру — подтвердить перед заказом.",
   "mod.gutters.shop.fileDrawings": "Рабочие чертежи водостоков",
   "mod.gutters.shop.fileOrder": "Заказ материалов",
   "mod.gutters.shop.doc": "Рабочие чертежи",

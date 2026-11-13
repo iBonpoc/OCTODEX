@@ -87,7 +87,7 @@ function notes(s: Sheet, x: ShopCtx, m: ShopModel, story: number, schedules: str
   let X0 = 4.15, X1 = 7.55, moved = false;
   const here = m.chains.filter((c) => c.story === story), ds = m.ds.filter((d) => d.seg.story === story);
   const segs = here.flatMap((c) => c.segs);
-  const miters = m.tags.filter((g) => g.kind === "miter" && segs.some((sg) => sg.ends.some((e) => e.tag === g.tag)));
+  const miters = m.tags.filter((g) => g.kind === "miter" && g.cut > 0 && segs.some((sg) => sg.ends.some((e) => e.tag === g.tag)));
   const kind = (k?: string) => t(k === "in" ? "mod.gutters.draw.cornerIn" : k === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
   const list: string[] = [
     SW(t, "n.gutter", { g: gutterStock(t, segs) }),

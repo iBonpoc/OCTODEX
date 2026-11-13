@@ -3587,7 +3587,7 @@ export const es: Dict = {
   "mod.gutters.shop.o.deliver": "Entrega / recogida",
   "mod.gutters.shop.o.needed": "Para el",
   "mod.gutters.shop.o.by": "Pedido por",
-  "mod.gutters.shop.o.note": "Los ingletes se cortan en obra del propio canalón. Cantidades según medición: confirmar antes de cortar la bobina.",
+  "mod.gutters.shop.o.note": "Cantidades según la medición: confirmar antes de pedir.",
   "mod.gutters.shop.fileDrawings": "Planos de taller de canalones",
   "mod.gutters.shop.fileOrder": "Pedido de materiales",
   "mod.gutters.shop.doc": "Planos de taller",

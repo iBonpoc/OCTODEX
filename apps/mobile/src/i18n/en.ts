@@ -3587,7 +3587,7 @@ export const en: Dict = {
   "mod.gutters.shop.o.deliver": "Deliver to / pickup",
   "mod.gutters.shop.o.needed": "Needed by",
   "mod.gutters.shop.o.by": "Ordered by",
-  "mod.gutters.shop.o.note": "Miters are cut on site from gutter stock. Quantities per field measure — confirm before cutting coil.",
+  "mod.gutters.shop.o.note": "Quantities per field measure — confirm before ordering.",
   "mod.gutters.shop.fileDrawings": "Gutter shop drawings",
   "mod.gutters.shop.fileOrder": "Material order",
   "mod.gutters.shop.doc": "Shop drawings",

@@ -94,18 +94,16 @@ function partRow(x: ShopCtx, m: ShopModel, p: PartQty): MatRow {
 }
 const materials = (x: ShopCtx) => x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0);
 
-/** the material list: the corners of the plan (cut on site), then the estimate's parts — each with its basis */
+/** the material list: the tagged parts, the corners cut on site (a corner made of a part is the estimate's own row), then the rest of the estimate's parts — each with its basis */
 export function materialRows(x: ShopCtx, m: ShopModel): MatRow[] {
   const { t } = x;
-  const miters = m.tags.filter((g) => g.kind === "miter").map((g): MatRow => ({ tag: g.tag, item: cap1(sw(t, "miterRow", { kind: kindWord(t, g.cornerKind), deg: g.angleDeg! })), color: "—", qty: `${g.qty} ${t("mod.gutters.view.u.ea")}`, basis: sw(t, "b.cut", { deg: miterCutDeg(g.angleDeg!) }) }));
+  const miters = m.tags.filter((g) => g.kind === "miter" && g.cut > 0).map((g): MatRow => ({ tag: g.tag, item: cap1(sw(t, "miterRow", { kind: kindWord(t, g.cornerKind), deg: g.angleDeg! })), color: "—", qty: `${g.cut} ${t("mod.gutters.view.u.ea")}`, basis: sw(t, "b.cut", { deg: miterCutDeg(g.angleDeg!) }) }));
   const rows = materials(x).map((p) => partRow(x, m, p));
   return [...rows.filter((r) => r.tag), ...miters, ...rows.filter((r) => !r.tag)];
 }
-/** what is bought: the stock a length is made from (the coil, the sticks), not the finished length made from it */
+/** what is bought: the engine marks a finished length (a gutter made from coil or sections, a downspout made from sticks) as the estimate's only */
 export function orderRows(x: ShopCtx, m: ShopModel): MatRow[] {
-  const all = materials(x), has = (prefix: string, rest: string) => all.some((p) => p.key === `${prefix}.${rest}`);
-  const made = (p: PartQty) => (p.key.startsWith("gutter.") && has("coil", p.key.slice(7))) || (p.key.startsWith("ds.") && has("dsstick", p.key.slice(3)));
-  return all.filter((p) => !made(p)).map((p) => partRow(x, m, p));
+  return materials(x).filter((p) => p.use !== "estimate").map((p) => partRow(x, m, p));
 }
 
 const tagMark = (tag: string) => (p: Part, cx: number, cy: number) => {

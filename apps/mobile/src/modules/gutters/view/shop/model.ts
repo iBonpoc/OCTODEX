@@ -4,7 +4,7 @@
  * plan (A, B, C …), the downspouts. Pure; quantities are the estimate's (the engine's parts), not counted here. Nothing is invented: what the measurement does not say is
  * `undefined` here and «TBD» / «VERIFY» on the sheet.
  */
-import { capSide, findCorners, houseSides, runEnds, runLengthIn, type Drawing, type DrawnRun, type FoundCorner, type P } from "../../geometry";
+import { capSide, cornerChoiceOf, findCorners, houseSides, runEnds, runLengthIn, withoutDuplicates, type CornerChoice, type Drawing, type DrawnRun, type FoundCorner, type P } from "../../geometry";
 
 export interface ShopEnd {
   kind: "cap" | "corner" | "join";
@@ -14,6 +14,8 @@ export interface ShopEnd {
   angleDeg?: number;
   outward?: boolean;
   cornerId?: string;
+  /** how the corner is made: its own choice, else the company's (as the estimate takes it) */
+  method?: CornerChoice["method"];
   /** the plan tag of the part at this end (A, B — end caps; C, D … — miters) */
   tag?: string;
 }
@@ -34,7 +36,7 @@ export interface ShopSeg {
   /** walked a → b as it was drawn */
   forward: boolean;
 }
-export interface ShopChain { n: number; story: number; segs: ShopSeg[]; totalIn: number }
+export interface ShopChain { n: number; story: number; segs: ShopSeg[]; totalIn: number; /** an outline that ends where it began */ closed: boolean }
 export interface ShopDs {
   n: number;
   tag: string;
@@ -50,7 +52,7 @@ export interface ShopDs {
   offsets?: { lengthIn: number; qty: number }[];
   dropIn?: number;
 }
-export interface ShopTag { tag: string; kind: "capL" | "capR" | "miter"; cornerKind?: FoundCorner["kind"]; angleDeg?: number; outward: number; inward: number; qty: number }
+export interface ShopTag { tag: string; kind: "capL" | "capR" | "miter"; cornerKind?: FoundCorner["kind"]; angleDeg?: number; outward: number; inward: number; qty: number; /** of them cut on site from the gutter (the rest are parts of the estimate) */ cut: number }
 export interface ShopModel { chains: ShopChain[]; ds: ShopDs[]; tags: ShopTag[]; stories: number[] }
 
 const near = (p: P, q: P, tol = 1) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= tol;
@@ -93,7 +95,9 @@ function walk(runs: DrawnRun[]): { run: DrawnRun; forward: boolean }[][] {
   return out;
 }
 
-export function shopModel(d: Drawing, storyFt?: number): ShopModel {
+export function shopModel(d0: Drawing, storyFt?: number, corner: CornerChoice["method"] = "cut"): ShopModel {
+  // as the estimate reads the drawing: a gutter lying on another is counted once (#1256)
+  const d = withoutDuplicates(d0);
   const side = houseSides(d);
   const corners = findCorners(d);
   const ends = runEnds(d, corners);
@@ -112,20 +116,20 @@ export function shopModel(d: Drawing, storyFt?: number): ShopModel {
       const end = (e: 0 | 1): ShopEnd => {
         const x = ends[run.id]![forward ? e : ((1 - e) as 0 | 1)];
         if (x.kind === "cap") return { kind: "cap", hand: capSide(forward ? e : ((1 - e) as 0 | 1), s) };
-        if (x.kind === "corner") { const c = corners.find((k) => k.id === x.cornerId)!; return { kind: "corner", cornerKind: c.kind, angleDeg: 180 - c.turnDeg, outward: !!c.outward, cornerId: c.id }; }
+        if (x.kind === "corner") { const c = corners.find((k) => k.id === x.cornerId)!; return { kind: "corner", cornerKind: c.kind, angleDeg: 180 - c.turnDeg, outward: !!c.outward, cornerId: c.id, method: d.corners?.[c.id]?.method ?? cornerChoiceOf(d, c)?.method ?? corner }; }
         return { kind: "join" };
       };
       const w = parseFloat(String(run.attrs.size));
       return { id: run.id, tag: `${ci + 1}-${si + 1}`, a, b, lengthIn: L, house, widthIn: Number.isFinite(w) && w > 0 ? w : 5, story: Number(run.attrs.story) || 1, ends: [end(0), end(1)], run, forward };
     });
-    return { n: ci + 1, story: segs[0]!.story, segs, totalIn: segs.reduce((n, s) => n + s.lengthIn, 0) };
+    return { n: ci + 1, story: segs[0]!.story, segs, totalIn: segs.reduce((n, s) => n + s.lengthIn, 0), closed };
   });
 
   // tags: A — end cap left, B — end cap right, then one letter a kind of miter (its kind and angle), in the order met
   const tags: ShopTag[] = [];
   const tagOf = (kind: ShopTag["kind"], cornerKind?: FoundCorner["kind"], angleDeg?: number) => {
     let t = tags.find((x) => x.kind === kind && x.cornerKind === cornerKind && x.angleDeg === angleDeg);
-    if (!t) { t = { tag: "", kind, cornerKind, angleDeg, outward: 0, inward: 0, qty: 0 }; tags.push(t); }
+    if (!t) { t = { tag: "", kind, cornerKind, angleDeg, outward: 0, inward: 0, qty: 0, cut: 0 }; tags.push(t); }
     return t;
   };
   const seen = new Set<string>();
@@ -137,6 +141,7 @@ export function shopModel(d: Drawing, storyFt?: number): ShopModel {
     seen.add(e.cornerId!);
     const t = tagOf("miter", e.cornerKind, e.angleDeg);
     t.qty++;
+    if (e.method === "cut") t.cut++;
     if (e.outward) t.outward++; else t.inward++;
   }
   // A and B are always the end caps (left, right), even when the drawing has one hand only
@@ -144,17 +149,17 @@ export function shopModel(d: Drawing, storyFt?: number): ShopModel {
   for (const t of tags) t.tag = t.kind === "capL" ? "A" : t.kind === "capR" ? "B" : String.fromCharCode(letter++);
   for (const s of all) for (const e of s.ends) e.tag = e.kind === "cap" ? (e.hand === "L" ? "A" : "B") : e.kind === "corner" ? tagOf("miter", e.cornerKind, e.angleDeg).tag : undefined;
 
-  const ds: ShopDs[] = d.downspouts.flatMap((x, i): ShopDs[] => {
-    const seg = all.find((s) => s.id === x.runId);
-    if (!seg) return [];
+  // a downspout whose gutter is gone is not on the sheet; the rest are numbered in a row
+  const ds: ShopDs[] = d.downspouts.filter((x) => all.some((s) => s.id === x.runId)).map((x, i): ShopDs => {
+    const seg = all.find((s) => s.id === x.runId)!;
     const along = Math.min(seg.lengthIn, Math.max(0, seg.forward ? x.atIn : seg.lengthIn - x.atIn));
     const t = along / (seg.lengthIn || 1);
     const drop = x.heightIn ?? (storyFt ? seg.story * storyFt * 12 : undefined);
-    return [{
+    return {
       n: i + 1, tag: `DS${i + 1}`, seg, at: [seg.a[0] + (seg.b[0] - seg.a[0]) * t, seg.a[1] + (seg.b[1] - seg.a[1]) * t],
       fromEndIn: Math.min(along, seg.lengthIn - along), size: String(x.size), color: x.color, material: x.material,
       elbows: x.elbows?.filter((e) => e.qty > 0), offsets: x.offsets?.filter((o) => o.qty > 0), dropIn: drop,
-    }];
+    };
   });
   return { chains, ds, tags, stories: [...new Set(chains.map((c) => c.story))].sort((a, b) => a - b) };
 }

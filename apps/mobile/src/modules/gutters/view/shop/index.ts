@@ -16,10 +16,11 @@ export { shopJob } from "./job";
 export type { ShopCtx, ShopJob, ShopRules } from "./job";
 export type ShopPaper = "ansiB" | "letter";
 
-export interface ShopSet { drawings: Sheet[]; order: Sheet[]; problems: string[] }
+/** `problems` — of the drawings, `orderProblems` — of the order: each is said with its own document */
+export interface ShopSet { drawings: Sheet[]; order: Sheet[]; problems: string[]; orderProblems: string[] }
 
 export function shopSheets(d: Drawing, x: ShopCtx): ShopSet {
-  const m = shopModel(d, x.rules.storyFt);
+  const m = shopModel(d, x.rules.storyFt, x.rules.corner);
   const plans = m.stories.length;
   // the schedules may take more than one sheet: counted first, then drawn with «SHEET n OF N»
   const build = (of: number) => {
@@ -28,9 +29,8 @@ export function shopSheets(d: Drawing, x: ShopCtx): ShopSet {
   };
   const drawings = build(build(plans + 1).length);
   const order = orderSheets(x, m);
-  const name = (i: number) => (i < drawings.length ? `G-${i + 1}` : `MO-${i - drawings.length + 1}`);
-  const problems = [...drawings, ...order].flatMap((s, i) => [...s.notes, ...s.problems(), ...(s.minPt() < SS.minPt - 0.01 ? [`a text of ${s.minPt().toFixed(1)} pt`] : [])].map((p) => `${name(i)}: ${p}`));
-  return { drawings, order, problems };
+  const check = (sheets: Sheet[], prefix: string) => sheets.flatMap((s, k) => [...s.notes, ...s.problems(), ...(s.minPt() < SS.minPt - 0.01 ? [`a text of ${s.minPt().toFixed(1)} pt`] : [])].map((p) => `${prefix}-${k + 1}: ${p}`));
+  return { drawings, order, problems: check(drawings, "G"), orderProblems: check(order, "MO") };
 }
 
 /** the page to print: the sheets at their own size, or the whole sheet reduced to Letter */

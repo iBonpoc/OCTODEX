@@ -188,7 +188,7 @@ interface ChainGeo { chain: ShopChain; closed: boolean; back: Pt[]; face: Pt[]; 
 function chainGeo(chain: ShopChain, tp: (p: P) => Pt, k: number): ChainGeo {
   const segs = chain.segs, n = segs.length;
   const back = [...segs.map((s) => tp(s.a)), tp(segs[n - 1]!.b)];
-  const closed = n > 2 && V.len(V.sub(back[0]!, back[n]!)) < 0.01;
+  const closed = chain.closed;
   const u = segs.map((_, i) => V.unit(back[i]!, back[i + 1]!));
   // the house on the left → the face on the right
   const fn = segs.map((s: ShopSeg, i) => (s.house === "L" ? V.mul(left(u[i]!), -1) : left(u[i]!)));

@@ -4,7 +4,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { shopSheet as SS } from "@octo/design-tokens";
-import type { Drawing } from "@/modules/gutters/geometry";
+import { computeGutterParts } from "@octo/estimating-engine";
+import { toMeasurement, type Drawing } from "@/modules/gutters/geometry";
+import { readRules, toRulesOverride } from "@/modules/gutters/settings";
 import { shopHtml, shopSheets } from "@/modules/gutters/view/shop";
 import { fi, miterCutDeg, shopModel } from "@/modules/gutters/view/shop/model";
 import { pickScale } from "@/modules/gutters/view/shop/plan";
@@ -23,6 +25,7 @@ describe("shop drawings: the measurement as a drawing reads it", () => {
   });
   it("end caps are A (left) and B (right); a letter a kind of miter: C outside 90°, D bay 126° — one inside, one outside", () => {
     expect(m.tags.map((g) => [g.tag, g.kind, g.cornerKind, g.angleDeg, g.qty])).toEqual([["A", "capL", undefined, undefined, 2], ["B", "capR", undefined, undefined, 2], ["C", "miter", "out", 90, 2], ["D", "miter", "bay", 126, 2]]);
+    expect(m.tags.map((g) => g.cut)).toEqual([0, 0, 2, 2]);
     expect(m.tags[3]).toMatchObject({ inward: 1, outward: 1 });
     expect(m.chains[0]!.segs[0]!.ends.map((e) => e.tag)).toEqual(["A", "C"]);
     expect(m.chains[1]!.segs[0]!.ends.map((e) => e.tag)).toEqual(["B", "C"]);
@@ -57,7 +60,7 @@ describe("shop drawings: the sheets of the reference job", () => {
     expect(words).toEqual(expect.arrayContaining(["GUTTER LAYOUT PLAN — LEVEL 1", "NOT FOR PERMIT", "URBANTECH", "BUILDERS"]));
   });
   it("nothing overlaps and nothing leaves the border — the check before saving", () => {
-    expect(set.problems).toEqual([]);
+    expect([set.problems, set.orderProblems]).toEqual([[], []]);
   });
   it("the plan: the scale, every length as a dimension, an angle at every corner, the tags", () => {
     expect(words).toEqual(expect.arrayContaining(['SCALE: 3/32" = 1\'-0" ON 11×17 SHEET', "44'-6\"", "28'-10\"", "44'-2\"", "29'-1\"", "49'-7\"", "55'-2\""]));
@@ -104,9 +107,60 @@ describe("shop drawings: the sheets of the reference job", () => {
     const rows = orderRows(x, shopModel(REF));
     expect(rows.some((r) => /Seamless coil/.test(r.item))).toBe(true);
     expect(rows.some((r) => r.basis === "Sum of segments" || r.basis === "Sum of drops")).toBe(false);
+    // only what the engine says is bought (review of #1349): none of the estimate-only rows
+    expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0 && p.use !== "estimate").length);
     expect(set.order).toHaveLength(1);
     expect(set.order[0]!.w / set.order[0]!.h).toBeCloseTo(8.5 / 11, 5);
     expect(text(set.order[0]!.svg())).toEqual(expect.arrayContaining(["MATERIAL ORDER", "SUPPLIER", "PO #", "DELIVER TO / PICKUP", "MO-1"]));
+  });
+});
+
+describe("shop drawings: as the estimate counts (review of #1349)", () => {
+  const withRules = (raw: object) => {
+    const x = ctxOf(REF);
+    const r = readRules(raw);
+    return { ...x, rules: { ...x.rules, corner: r.corner }, parts: computeGutterParts(toMeasurement(REF, { method: r.corner }), toRulesOverride(raw)).parts };
+  };
+  it("a corner made of a ready part is the estimate's row, not «field-cut»: no C, D rows, no note of a cut", () => {
+    const x = withRules({ rules: { corner: "prefab" } });
+    expect(x.rules.corner).toBe("prefab");
+    const m = shopModel(REF, 10, x.rules.corner);
+    expect(m.tags.filter((g) => g.kind === "miter").map((g) => g.cut)).toEqual([0, 0]);
+    const rows = materialRows(x, m);
+    expect(rows.filter((r) => r.tag === "C" || r.tag === "D")).toEqual([]);
+    expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0).length);
+    const g1 = text(shopSheets(REF, x).drawings[0]!.svg()).join(" ");
+    expect(g1).not.toContain("MITERS FIELD-CUT");
+    // the tags stay on the plan: the corner is still there
+    expect(text(shopSheets(REF, x).drawings[0]!.svg()).filter((w) => w === "C")).toHaveLength(2);
+  });
+  it("one corner's own choice wins over the company's", () => {
+    const d = { ...REF, corners: { "c:a:b": { method: "prefab" } } } as Drawing;
+    expect(shopModel(d, 10).tags.filter((g) => g.kind === "miter").map((g) => [g.tag, g.qty, g.cut])).toEqual([["C", 2, 1], ["D", 2, 2]]);
+  });
+  it("sectional gutters: the order has the sections, not also the finished length", () => {
+    const x = withRules({ rules: { seamless: false } });
+    const rows = orderRows(x, shopModel(REF, 10));
+    expect(rows.some((r) => r.basis === "Sum of segments")).toBe(false);
+    expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0 && p.use !== "estimate").length);
+  });
+  it("a gutter drawn end to start: the same caps, corner and downspout place", () => {
+    const flip = { ...REF, runs: REF.runs.map((r) => (r.id === "a" ? { ...r, a: r.b, b: r.a } : r)), downspouts: REF.downspouts.map((s) => (s.runId === "a" ? { ...s, atIn: 534 - 24 } : s)) } as Drawing;
+    const m = shopModel(flip, 10), first = m.chains[0]!.segs[0]!;
+    expect([first.tag, first.forward, first.ends.map((e) => e.tag), fi(first.lengthIn)]).toEqual(["1-1", false, ["A", "C"], "44'-6\""]);
+    expect([m.ds[0]!.seg.tag, m.ds[0]!.fromEndIn, m.ds[0]!.at]).toEqual(["1-1", 24, [0, 510]]);
+  });
+  it("a gutter lying on another is counted once, as in the estimate; a downspout of a gutter that is gone is not numbered", () => {
+    const d = { runs: [REF.runs[4]!, { ...REF.runs[4]!, id: "twin" }, REF.runs[5]!], downspouts: [{ ...REF.downspouts[0]!, runId: "gone" }, REF.downspouts[2]!] } as Drawing;
+    const m = shopModel(d, 10);
+    expect(m.chains.map((c) => fi(c.totalIn))).toEqual(["104'-9\""]);
+    expect(m.ds.map((s) => s.tag)).toEqual(["DS1"]);
+  });
+  it("what a person typed cannot break the page: the company, the client, the address", () => {
+    const evil = '</text><script>alert(1)</script> & "Co" <b>';
+    const html = shopHtml(shopSheets(REF, ctxOf(REF, "en", { company: { name: evil, lines: [evil] }, client: evil, address: evil })).drawings, "</title><script>x</script>");
+    expect(html).not.toMatch(/<script|<b>|<\/text><s/);
+    expect(html).toContain("&lt;/TEXT&gt;");
   });
 });
 
@@ -137,7 +191,7 @@ describe("shop drawings: a hard measurement", () => {
   it("a closed outline, two storeys, a 2'-6\" stub, downspouts with nothing measured, a long company name — in every language", () => {
     for (const lang of ["en", "ru", "es"] as const) {
       const set = shopSheets(HARD, ctxOf(HARD, lang, { company: { name: "Acme Roofing & Sheet Metal of Southern California", lines: [] }, client: "John Smith", address: "123 Main St, Los Angeles, CA 90001" }));
-      expect(set.problems, lang).toEqual([]);
+      expect([set.problems, set.orderProblems], lang).toEqual([[], []]);
       // a plan a storey, then the schedules
       expect(text(set.drawings[1]!.svg()).some((w) => /LEVEL 2|ЭТАЖ 2|NIVEL 2/.test(w)), lang).toBe(true);
     }

@@ -206,7 +206,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       fmt,
     });
     const sheets = kind === "order" ? set.order : set.drawings;
-    if (set.problems.length) toast.show(t("mod.gutters.shop.problems", { n: set.problems.length }));
+    const problems = kind === "order" ? set.orderProblems : set.problems;
+    if (problems.length) toast.show(t("mod.gutters.shop.problems", { n: problems.length }));
     saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, who), paper), shopFileName(tt, kind, who), shopPagePt(sheets, paper)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
   };
 
