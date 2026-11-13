@@ -30,6 +30,7 @@ import { dayAtHour } from "./bookRules";
 import { TaskSheet } from "@/features/tasks/TaskSheet";
 import { memberLabel, memberName } from "@/features/team";
 import { useDialThenAsk } from "@/features/comms/dial";
+import { type GuardedUndo } from "@/data/undo";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 const tel = (p?: string) => (p ?? "").replace(/[^\d+]/g, "");
@@ -39,7 +40,7 @@ function useSaved() {
   const store = useStore();
   const toast = useToast();
   const { t } = useI18n();
-  return (undo: () => void, msg?: string) => toast.show(store.online ? msg ?? t("co.saved") : t("offline.queued"), undo);
+  return (undo: GuardedUndo, msg?: string) => toast.show(store.online ? msg ?? t("co.saved") : t("offline.queued"), undo);
 }
 
 /* ======================= contact actions (call / SMS / email / route / marketplace) ======================= */

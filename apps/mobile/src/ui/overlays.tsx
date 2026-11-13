@@ -17,6 +17,7 @@ import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
+import type { GuardedUndo } from "@/data/undo";
 
 /**
  * Every modal turns with the device (docs/specs/32): without it an iPhone shows a modal in portrait only
@@ -712,14 +713,14 @@ interface ToastItem {
   id: number;
   text: string;
   /** false: nothing could be taken back (it was changed since, #1193 п.6) — the toast then says so */
-  undo?: () => void | boolean;
+  undo?: GuardedUndo;
 }
-const ToastCtx = createContext<{ show: (text: string, undo?: () => void | boolean) => void } | null>(null);
+const ToastCtx = createContext<{ show: (text: string, undo?: GuardedUndo) => void } | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [item, setItem] = useState<ToastItem | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((text: string, undo?: () => void | boolean) => {
+  const show = useCallback((text: string, undo?: GuardedUndo) => {
     if (timer.current) clearTimeout(timer.current);
     const id = Date.now();
     setItem({ id, text, undo });
