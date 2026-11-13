@@ -392,7 +392,7 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
     // offline: three module changes and a core note in between
     for (const k of ["el-1", "el-2"]) valueOf(r).moduleOp("op_demo", { kind: "element.save", payload: { k }, apply: (d) => d, coalesceKey: k });
     (valueOf(r) as unknown as { addNote: (n: object) => unknown }).addNote({ subjectType: "lead", subjectId: "l1", body: "core", visibility: "team" });
-    valueOf(r).moduleOp("op_demo", { kind: "element.remove", payload: { id: "el-1" }, apply: (d) => d });
+    const undoRemove = valueOf(r).moduleOp("op_demo", { kind: "element.remove", payload: { id: "el-1" }, apply: (d) => d });
     await settle();
     expect(valueOf(r).queue.map((x) => x.label)).toEqual(["module.enable", "module.op", "module.op", "note.add", "module.op"]);
     valueOf(r).setOnline(true);
@@ -410,6 +410,8 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
     expect(server.sends.at(-1)!.op).toMatchObject({ k: "note.add" });
     const v = valueOf(r) as unknown as { rejectedOps: { what: string; module: string; count: number; href: string }[] };
     expect(v.rejectedOps).toEqual([expect.objectContaining({ what: "module", module: "op_demo", count: 3, href: "/company/modules" })]);
+    // #1266: their «Отменить» has nothing to take back — undefined (the toast closes), not false («Уже не отменить»)
+    expect((undoRemove as () => unknown)()).toBeUndefined();
   });
   it("cloud: a plain refusal of a module change (no module_inactive) stays a try — the other module changes wait", async () => {
     signIn("u1", "c1");

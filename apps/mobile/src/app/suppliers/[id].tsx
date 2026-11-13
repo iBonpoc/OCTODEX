@@ -23,6 +23,8 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
+import { NotFound } from "@/ui/emptyStates";
+import { type GuardedUndo } from "@/data/undo";
 
 type TermsKey = PaymentTerms | "none";
 
@@ -34,7 +36,7 @@ export default function SupplierScreen() {
   const found = (store.db.suppliers ?? []).find((x) => x.id === id);
   const [s, setS] = useState<Supplier>(() => found ?? { id: uid(), name: "", active: true });
   const [ask, setAsk] = useState<{ n: number; pct: string } | null>(null);
-  const undoRef = useRef<(() => void) | null>(null);
+  const undoRef = useRef<GuardedUndo | null>(null);
   const [taxText, setTaxText] = useState(() => (found?.taxBps === undefined ? "" : String(found.taxBps / 100)));
   const set = (p: Partial<Supplier>) => setS((x) => ({ ...x, ...p }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/suppliers"));
@@ -88,7 +90,7 @@ export default function SupplierScreen() {
   if (!found && id !== "new") {
     return (
       <Screen title={t("sup.edit")} back={back}>
-        <Empty icon="truck" title={t("sup.notFound")} />
+        <NotFound testID="sup-not-found" title={t("sup.notFound")} listLabel={t("empty.toSuppliers")} onList={() => router.replace("/suppliers")} />
       </Screen>
     );
   }

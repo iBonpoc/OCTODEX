@@ -30,6 +30,7 @@ import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
 import { cancelNotice } from "@/features/cancelNotify";
+import { NO_UNDO } from "@/data/undo";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string; allDay?: boolean };
 
@@ -423,7 +424,7 @@ export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (
           init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId, allDay: v.allDay, allowAllDay: !!v.jobId && v.kind !== "inspection" }}
           onSave={(f) => {
             const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin, f.allDay);
-            const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : () => {};
+            const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : NO_UNDO;
             toast.show(f.allDay ? t("job5.allDaySaved", { date: day(f.start) }) : t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), store.undoTogether([undoMove, undoTech]));
             // the client was told the old time: offer to tell the new one (§5.2)
             return v.customerNotifiedAt ? v.id : null;

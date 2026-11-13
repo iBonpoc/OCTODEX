@@ -17,6 +17,7 @@ import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
+import type { GuardedUndo } from "@/data/undo";
 
 /**
  * Every modal turns with the device (docs/specs/32): without it an iPhone shows a modal in portrait only
@@ -52,6 +53,8 @@ export interface MenuItem<K extends string> {
   icon?: IconKey;
   selected?: boolean;
   destructive?: boolean;
+  /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
+  dim?: boolean;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -188,7 +191,7 @@ export function Menu<K extends string>({
               accessibilityRole="menuitem"
               accessibilityState={{ selected: !!it.selected }}
               accessibilityLabel={it.label}
-              style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2] }}
+              style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2], opacity: it.dim ? component.dimOpacity : 1 }}
             >
               <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View>
               <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>
@@ -712,14 +715,14 @@ interface ToastItem {
   id: number;
   text: string;
   /** false: nothing could be taken back (it was changed since, #1193 п.6) — the toast then says so */
-  undo?: () => void | boolean;
+  undo?: GuardedUndo;
 }
-const ToastCtx = createContext<{ show: (text: string, undo?: () => void | boolean) => void } | null>(null);
+const ToastCtx = createContext<{ show: (text: string, undo?: GuardedUndo) => void } | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [item, setItem] = useState<ToastItem | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((text: string, undo?: () => void | boolean) => {
+  const show = useCallback((text: string, undo?: GuardedUndo) => {
     if (timer.current) clearTimeout(timer.current);
     const id = Date.now();
     setItem({ id, text, undo });

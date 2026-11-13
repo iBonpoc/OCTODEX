@@ -19,6 +19,7 @@ import { supabase } from "@/cloud/client";
 import { PermanentError, uploadPhoto } from "@/cloud/ops";
 import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
+import { type GuardedUndo, markOf, NO_UNDO, TOO_LATE } from "@/data/undo";
 
 export const KEY = "gutters";
 export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", rAdd: "revision.add" } as const;
@@ -35,13 +36,24 @@ const str = (v: unknown) => (typeof v === "string" && v ? v : null);
 /** the module's slice of the phone's data (absent or broken → empty) */
 /** «Отменить» of several of the module's changes made together (in the order made): all of them or none — the store's
  *  undoTogether (DS §15.2); an older test store without it — one by one, the last first */
-export function undoAll(store: Pick<ModuleStore, "undoTogether">, undos: readonly unknown[]): () => boolean | undefined {
-  if (store.undoTogether) return store.undoTogether(undos);
-  return () => {
-    [...undos].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
-    return true;
-  };
+export function undoAll(store: Pick<ModuleStore, "undoTogether">, undos: readonly unknown[]): GuardedUndo {
+  // what moduleOp gave (the store's undo, or null when the module is off) and the core's own undos; anything else is not
+  // an undo — the whole «Отменить» is refused then, never a part silently left out (the director's review of #1279)
+  // NO_UNDO — «nothing to take back» (a target the client already has, a refused action): no part, as undoTogether skips it
+  const parts = undos.filter((u) => u != null && u !== NO_UNDO);
+  if (parts.some((u) => !markOf(u))) {
+    console.error("[undo] undoAll got a function the store did not make — refused");
+    return TOO_LATE;
+  }
+  if (store.undoTogether) return store.undoTogether(parts as GuardedUndo[]);
+  // an older test store without undoTogether: nothing to take back together
+  return NO_UNDO;
 }
+
+/** what the module store's moduleOp gave, as the toast takes it: the store's own undo (mutate) — the module not active —
+ *  null. Any other function is not an undo (NO_UNDO): a module never makes one of its own (the director's review of
+ *  #1279 Б2; test/undoBrand.test.ts) */
+export const asUndo = (u: unknown): GuardedUndo | null => (u == null ? null : markOf(u) ? (u as GuardedUndo) : NO_UNDO);
 
 export function gutterData(db: Pick<DB, "moduleData"> | null | undefined): GutterData {
   const g = db?.moduleData?.[KEY];
@@ -115,27 +127,48 @@ export function clientStart(to: MeasureDoors, db: Pick<DB, "moduleData" | "leads
 export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId, ...(m.accuracy ? { accuracy: m.accuracy } : {}) });
 
 /**
+ * #1265: a waiting op written again from the phone's data (an earlier change folded into it was taken back): a
+ * measurement's save — its row now; an element's — the element now; gone from the phone, or another kind — null. The
+ * row as the phone holds it after the undo: so the op carries every later change folded into it (B, C…) and none of the
+ * one taken back (the director's review of #1279 №4).
+ */
+export function rebuildOp(op: { kind: string; payload: Record<string, unknown> }, d: DB): Record<string, unknown> | null {
+  const g = gutterData(d);
+  if (op.kind === K.mSave) {
+    const id = (op.payload.m as { id?: unknown } | undefined)?.id;
+    const m = g.measurements.find((x) => x.id === id);
+    return m ? { ...op.payload, m: ownFields(m) } : null;
+  }
+  if (op.kind === K.eSave) {
+    const id = (op.payload.e as { id?: unknown } | undefined)?.id;
+    const e = g.elements.find((x) => x.id === id);
+    return e ? { ...op.payload, e: e as ElementRow & Record<string, unknown> } : null;
+  }
+  return null;
+}
+
+/**
  * S1b «Сделать заявкой»: the new lead made from a draft takes it (ModuleDef.leadCreated). A measurement the store does
  * not have (never saved) or one already on a lead — nothing. Returns the store's «Отменить».
  */
-export function linkLead(store: ModuleStore, ref: string, leadId: string): (() => void) | null {
+export function linkLead(store: ModuleStore, ref: string, leadId: string): GuardedUndo | null {
   const m = gutterData(store.db).measurements.find((x) => x.id === ref);
   if (!m || m.leadId) return null;
   const row = { ...ownFields(m), leadId };
   const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...m, leadId })), coalesceKey: m.id, made: [m.id] });
-  return typeof undo === "function" ? (undo as () => void) : null;
+  return asUndo(undo);
 }
 
 /**
  * «Привязать» (founder 09.11, версия 475): a draft for nobody goes to a client's address (the client's place shows it,
  * «Открыть замер»). A measurement the store does not have, or one already on a lead or an address — nothing.
  */
-export function linkProperty(store: ModuleStore, ref: string, propertyId: string): (() => void) | null {
+export function linkProperty(store: ModuleStore, ref: string, propertyId: string): GuardedUndo | null {
   const m = gutterData(store.db).measurements.find((x) => x.id === ref);
   if (!m || m.leadId || m.propertyId) return null;
   const row = { ...ownFields(m), propertyId };
   const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...m, propertyId })), coalesceKey: m.id, made: [m.id] });
-  return typeof undo === "function" ? (undo as () => void) : null;
+  return asUndo(undo);
 }
 
 /**
@@ -143,20 +176,20 @@ export function linkProperty(store: ModuleStore, ref: string, propertyId: string
  * another lead or address, or back to the drafts (`null`). Unlike linkLead / linkProperty an existing link is replaced:
  * a lead → the lead only, an address → the address only. Returns the store's «Отменить».
  */
-export function relink(store: ModuleStore, ref: string, to: { leadId: string } | { propertyId: string } | null): (() => void) | null {
+export function relink(store: ModuleStore, ref: string, to: { leadId: string } | { propertyId: string } | null): GuardedUndo | null {
   const m = gutterData(store.db).measurements.find((x) => x.id === ref);
   if (!m) return null;
   const next: MeasurementRow = { ...m, leadId: to && "leadId" in to ? to.leadId : null, propertyId: to && "propertyId" in to ? to.propertyId : null };
   if (next.leadId === m.leadId && next.propertyId === m.propertyId) return null;
   const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(next) }, apply: (d) => withGutterData(d, putMeasurement(next)), coalesceKey: m.id, made: [m.id] });
-  return typeof undo === "function" ? (undo as () => void) : null;
+  return asUndo(undo);
 }
 
 /**
  * «Удалить замер» (founder 09.11, #690; П24 Б6): soft (the server sets deleted_at), its elements go with it on the
  * phone. Not when a signed estimate stands on it — the caller checks (estimateLink.signedOn); the server refuses too.
  */
-export function removeMeasurement(store: ModuleStore, ref: string): (() => void) | null {
+export function removeMeasurement(store: ModuleStore, ref: string): GuardedUndo | null {
   const g = gutterData(store.db);
   if (!g.measurements.some((x) => x.id === ref)) return null;
   const undo = store.moduleOp(KEY, {
@@ -165,19 +198,19 @@ export function removeMeasurement(store: ModuleStore, ref: string): (() => void)
     apply: (d) => withGutterData(d, (x) => ({ ...x, measurements: x.measurements.filter((m) => m.id !== ref), elements: x.elements.filter((e) => e.measurementId !== ref) })),
     coalesceKey: ref,
   });
-  return typeof undo === "function" ? (undo as () => void) : null;
+  return asUndo(undo);
 }
 
 /**
  * «Точность замера» from the measurement's card (spec 33 П25.3 Б1; the same choice as the canvas's «⋯», #739): only the
  * measurement's own field — the drawing is not changed, so its status (made into an estimate or not) stays.
  */
-export function setAccuracy(store: ModuleStore, ref: string, accuracy: "rough" | "tape"): (() => void) | null {
+export function setAccuracy(store: ModuleStore, ref: string, accuracy: "rough" | "tape"): GuardedUndo | null {
   const m = gutterData(store.db).measurements.find((x) => x.id === ref);
   if (!m || (m.accuracy ?? "rough") === accuracy) return null;
   const next: MeasurementRow = { ...m, accuracy };
   const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: ownFields(next) }, apply: (d) => withGutterData(d, putMeasurement(next)), coalesceKey: m.id, made: [m.id] });
-  return typeof undo === "function" ? (undo as () => void) : null;
+  return asUndo(undo);
 }
 
 /**
@@ -202,14 +235,15 @@ export function copyRows(m: MeasurementRow, elements: readonly ElementRow[], new
  * «Дублировать» (spec 33 П25.3 Г): the copy is written as the canvas writes a new one — the measurement first (its
  * elements refer to it), then each element. One «Отменить» takes all of it back. The module not active → nothing.
  */
-export function duplicateMeasurement(store: ModuleStore, ref: string, newId: () => string, now = () => new Date().toISOString()): { id: string; undo: () => void } | null {
+export function duplicateMeasurement(store: ModuleStore, ref: string, newId: () => string, now = () => new Date().toISOString()): { id: string; undo: GuardedUndo } | null {
   const v = measurementOf(gutterData(store.db), ref);
   if (!v) return null;
   const c = copyRows(v.m, v.elements, newId);
   const at = now();
-  const undos: (() => void)[] = [];
+  const undos: GuardedUndo[] = [];
   const put = (u: unknown) => {
-    if (typeof u === "function") undos.push(u as () => void);
+    const undo = asUndo(u);
+    if (undo) undos.push(undo);
     return u != null;
   };
   const row: MeasurementRow = { ...c.m, updatedAt: at };
@@ -295,7 +329,7 @@ export function addPhoto(store: ModuleStore, x: { id: string; measurementId: str
 
 /** a photo removed (deleted_at); the returned undo puts it back (rule 5) */
 export function removePhoto(store: ModuleStore, id: string) {
-  return store.moduleOp(KEY, { kind: K.pRemove, payload: { id }, apply: (d) => ({ ...d, files: (d.files ?? []).filter((y) => y.id !== id) }) });
+  return asUndo(store.moduleOp(KEY, { kind: K.pRemove, payload: { id }, apply: (d) => ({ ...d, files: (d.files ?? []).filter((y) => y.id !== id) }) }));
 }
 
 /* ---------- module.op → the server ---------- */

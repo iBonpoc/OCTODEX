@@ -1,9 +1,10 @@
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { canSeeLead, canSeeLeadCost, sourceName } from "@/features/leads";
 import { LeadCardBody } from "@/features/lead/LeadCard";
 import { Empty, Screen } from "@/ui/surfaces";
+import { NotFound } from "@/ui/emptyStates";
 
 /** Lead card (docs/14-leads-spec.md §7.2): the screen around the body shared with the panel on 1280 (features/lead/LeadCard.tsx). */
 export default function LeadScreen() {
@@ -14,7 +15,7 @@ export default function LeadScreen() {
   if (!l || !canSeeLead(role, db.me, l)) {
     return (
       <Screen title={t("lead.card")}>
-        <Empty icon="inbox" title={l ? t("lead.noAccess") : t("lead.notFound")} />
+        {l ? <Empty icon="inbox" title={t("lead.noAccess")} /> : <NotFound testID="lead-not-found" title={t("lead.notFound")} listLabel={t("empty.toLeads")} onList={() => router.replace("/leads")} />}
       </Screen>
     );
   }

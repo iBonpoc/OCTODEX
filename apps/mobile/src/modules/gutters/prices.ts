@@ -68,7 +68,7 @@ export const PART_WORDS = new Set([
   "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
 ]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile"]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
 /* ---------- the parts the company prices ---------- */
 
@@ -83,6 +83,10 @@ export const LABOR_PARTS: readonly PartQty[] = [
   labor("labor.corner_cut", "ea", { work: "corner_cut" }),
   labor("labor.tearoff", "ft", { work: "tearoff" }),
   labor("labor.tile", "ft", { work: "tile" }),
+  // the starter estimates (#1323): a cleaning, a downspout flush and a guard installation are priced like the rest of the labor
+  labor("labor.cleaning", "ft", { work: "cleaning" }),
+  labor("labor.flush", "ea", { work: "flush" }),
+  labor("labor.guard_install", "ft", { work: "guard_install" }),
 ];
 
 /**
@@ -98,7 +102,8 @@ export function sampleJob(raw: unknown): MeasurementInput {
   const run = (id: string, lengthIn: number, ends: MeasurementInput["runs"][number]["ends"]) => ({ ...ra, id, lengthIn, ends, houseSide: "R" as const });
   return {
     runs: [
-      run("a", 480, [{ kind: "cap" }, { kind: "corner", cornerId: "c1" }]),
+      // guards on the first run: the price list gets the guard row too (the starter «Только guards», #1323)
+      { ...run("a", 480, [{ kind: "cap" }, { kind: "corner", cornerId: "c1" }]), guardsIn: 480 },
       run("b", 360, [{ kind: "corner", cornerId: "c1" }, { kind: "corner", cornerId: "c2" }]),
       run("c", 240, [{ kind: "corner", cornerId: "c2" }, { kind: "cap" }]),
     ],

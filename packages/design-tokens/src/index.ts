@@ -116,6 +116,8 @@ export const gesture = {
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
   autoScrollEdge: 64,
+  /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
+  slop: 10,
 } as const;
 
 /* ---------- components.css ---------- */
@@ -175,6 +177,10 @@ export const component = {
   statusEdge: 3,
   /** selected card / drop target border */
   selectedBorder: 2,
+  /** the small shadow of a raised «Заливка» (the chosen segment, tab, chip): DS «Выделение выбранного», foundation.css --shadow-sm */
+  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25 },
+  /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
+  swipeAction: { w: 80, full: 0.6 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */
@@ -242,6 +248,8 @@ export interface ThemeColors {
   mut: string;
   surf: string;
   surf2: string;
+  /** `surf` laid over `bg`, opaque: the tone a card shows to the eye, for a thing that must hide what is under it (a swiped row) */
+  surfSolid: string;
   in: string;
   bd: string;
   track: string;
@@ -275,6 +283,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     mut: "#CDD1DA",
     surf: "rgba(255,255,255,0.07)",
     surf2: "rgba(255,255,255,0.11)",
+    surfSolid: "#33363C",
     in: "rgba(255,255,255,0.05)",
     bd: "rgba(255,255,255,0.14)",
     track: "rgba(255,255,255,0.12)",
@@ -308,6 +317,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     mut: "#575C68",
     surf: "rgba(255,255,255,0.62)",
     surf2: "rgba(255,255,255,0.85)",
+    surfSolid: "#F9F7F5",
     in: "rgba(255,255,255,0.55)",
     bd: "rgba(20,22,30,0.1)",
     track: "rgba(20,22,30,0.09)",
@@ -373,7 +383,7 @@ export const print = {
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */
 /** sizes on the drawing canvas (design/naryad-ds/tokens/foundation.css --draw-*): line widths, a downspout, a node,
  *  the gap between a length label and its line; colours are themes[t].drawing */
-export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4 } as const;
+export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4, liftScale: 1.5 } as const;
 /** the drawing on paper (foundation.css --draw-print-*; a module's measurement sheet, its PDFs, the estimate's page, #739):
  *  sizes in sheet units — the sheet is `sheetW` wide and scales to the screen or the page; colours are `print`;
  *  `pageW`: the estimate's page — one sheet for the phone (/p/) and the paper, so built for the narrow one;
