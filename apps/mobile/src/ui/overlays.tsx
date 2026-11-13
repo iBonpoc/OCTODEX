@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { toastArmed } from "./toastArm";
 import { toastBottom, useFooterInset } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
@@ -213,6 +214,23 @@ export function Menu<K extends string>({
  */
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
+
+/**
+ * The side insets of the open sheet (its left / right padding). A list inside a sheet scrolls in `SheetScroll`: the scroll view spans
+ * the insets (negative margin) and pads its content back by the same, so the scroll indicator stands in the inset — not over the
+ * arrows «›» at the end of the rows (founder 13.11, #1339; DS Б1).
+ */
+const SheetInset = createContext<{ l: number; r: number }>({ l: 0, r: 0 });
+export function SheetScroll({ style, contentContainerStyle, ...rest }: ComponentProps<typeof ScrollView>) {
+  const g = useContext(SheetInset);
+  return (
+    <ScrollView
+      {...rest}
+      style={[{ marginLeft: -g.l, marginRight: -g.r }, style]}
+      contentContainerStyle={[{ paddingLeft: g.l, paddingRight: g.r }, contentContainerStyle]}
+    />
+  );
+}
 
 /* ---------- Sheet: iOS-style bottom sheet on phone, centered modal on tablet/desktop ----------
  * Phone: grabber; drag the top of the sheet down to close, up to open it full height; tap outside or Android back closes.
@@ -543,6 +561,7 @@ export function Sheet({
             !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, follow]}
           accessibilityViewIsModal
         >
+          <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: wide ? space[4] : Math.max(insets.right, space[4]) }}>
           <Glass
             strong
             style={{
@@ -641,7 +660,7 @@ export function Sheet({
               <GestureDetector gesture={bodyPan}>
               <View style={{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }} testID="sheet-body">
                 <GestureDetector gesture={scrollNative}>
-                <ScrollView
+                <SheetScroll
                   style={{ flexGrow: 0 }}
                   contentContainerStyle={{ gap: space[3] }}
                   keyboardShouldPersistTaps="handled"
@@ -652,7 +671,7 @@ export function Sheet({
                   }}
                 >
                   <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
-                </ScrollView>
+                </SheetScroll>
                 </GestureDetector>
               </View>
               </GestureDetector>
@@ -663,6 +682,7 @@ export function Sheet({
               </View>
             ) : null}
           </Glass>
+          </SheetInset.Provider>
         </Animated.View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
