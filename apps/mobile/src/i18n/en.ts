@@ -468,6 +468,8 @@ export const en: Dict = {
   "est.signOnSite": "Client signs on site",
   "est.esign": "The client agrees to sign electronically and receive a copy by email (E-SIGN). The contractor countersigns next.",
   "est.rescission": "Right to cancel: 3 business days (age 65+: 5, emergency work: 7). Saturday counts as a business day.",
+  // #1325: the contractor's Terms speak of arbitration (features/termsArbitration mentionsArbitration) — a warning, nothing blocked
+  "est.terms.arbitrationWarn": "Arbitration in a California home-improvement contract needs a special notice with the client's initials (B&P §7191). Check with your lawyer.",
   "est.signedToast": "Estimate signed: {name}",
   "est.depositDue": "Deposit due",
   "est.recordDeposit": "Record deposit",
