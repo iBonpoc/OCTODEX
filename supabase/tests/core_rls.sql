@@ -14008,4 +14008,142 @@ select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_bill
               'T204 rule 18: the count is the definer functions'' own; it runs with its caller''s rights (invoker)');
 \echo 'T204 what a contract billed is counted one way'
 
+-- ======================================================================================================================
+-- T205 (#1304, docs/specs/40): «Notes» and «Terms & conditions». The company's default Terms by language (en / es / ru) and
+-- the old single key in one (rule 16, step 1: t08 both ways, the shape refused); only owner / admin change them; the
+-- version's copy terms_text comes from its document and is frozen by sending; the page passes the estimate's own Terms and
+-- the defaults by language (the page picks — the same inputs as apps/mobile/test/estimateTerms.test.ts). Test data.
+-- ======================================================================================================================
+:as_super
+-- a row written with the old key only (an older phone, a row the migration has not reached): t08 makes it the English one
+update public.companies set estimate_settings = estimate_settings - 'terms_by_lang' || '{"terms": "T205 old terms"}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings -> 'terms_by_lang' = '{"en": "T205 old terms"}'::jsonb from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 t08: an older phone''s old key alone → it is the English one');
+:as_owner_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings ->> 'terms' = 'T205 Warranty 1 year' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 a new phone changes en → the old key follows (older phones read it)');
+-- an older phone: re-reads the row, writes its own `terms`, keeps terms_by_lang as stored
+update public.companies set estimate_settings = estimate_settings || '{"terms": "T205 Edited on an old phone"}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings -> 'terms_by_lang' = '{"en": "T205 Edited on an old phone", "es": "T205 Garantía 1 año"}'::jsonb
+                 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 an older phone changes the old key → en follows, es stays');
+-- both changed in one write and differ: en (the newer phone) wins
+update public.companies set estimate_settings = estimate_settings || '{"terms": "T205 stale", "terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings ->> 'terms' = 'T205 Warranty 1 year' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 both changed and differ — en wins');
+select tst.fails_like($q$update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"de": "x"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+                      '%en / es / ru%', 'T205 a language other than en / es / ru — refused');
+select tst.fails_like(format($q$update public.companies set estimate_settings = estimate_settings || jsonb_build_object('terms_by_lang', jsonb_build_object('en', %L)) where id = 'ca000000-0000-0000-0000-000000000000'$q$, repeat('x', 10001)),
+                      '%10000%', 'T205 longer than 10000 characters — refused');
+select tst.fails_like($q$update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": 5}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+                      '%en / es / ru%', 'T205 not a text — refused');
+-- rights: the defaults are owner / admin's (companies_update) — office and a tech change nothing, an admin may
+:as_super
+select role as t205_role from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000' \gset
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 by the office"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 by a tech"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select estimate_settings -> 'terms_by_lang' ->> 'en' = 'T205 Warranty 1 year' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 office and a tech cannot change the defaults (RLS: owner / admin only)');
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año", "ru": "T205 by an admin"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select estimate_settings -> 'terms_by_lang' ->> 'ru' = 'T205 by an admin' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 …an admin may');
+update public.memberships set role = :'t205_role' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- a Spanish client; an estimate with its own Terms, one without (made before #1304), one cleared
+insert into public.customers (id, company_id, display_name) values ('c2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T205 client');
+insert into public.contacts (id, company_id, customer_id, name, is_primary, preferred_language) values
+  ('b2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c2050000-0000-4000-8000-000000000001', 'Ana T205', true, 'es');
+update public.customers set primary_contact_id = 'b2050000-0000-4000-8000-000000000001' where id = 'c2050000-0000-4000-8000-000000000001';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c2050000-0000-4000-8000-000000000001', '205 Terms St', 'Pasadena');
+do $$
+declare i int;
+begin
+  for i in 1..3 loop
+    insert into public.estimates (id, company_id, customer_id, property_id, title) values
+      (format('e2050000-0000-4000-8000-00000000000%s', i)::uuid, 'ca000000-0000-0000-0000-000000000000', 'c2050000-0000-4000-8000-000000000001', 'd2050000-0000-4000-8000-000000000001', 'T205 #' || i);
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule, calc_inputs) values
+      (format('e2050000-0000-4000-8000-0000000000a%s', i)::uuid, 'ca000000-0000-0000-0000-000000000000', format('e2050000-0000-4000-8000-00000000000%s', i)::uuid, 1, '{"kind":"none"}',
+       jsonb_build_object('note', 'T205 notes', 'options', '[]'::jsonb)
+       || case i when 1 then '{"terms": "T205 own terms"}'::jsonb when 3 then '{"terms": ""}'::jsonb else '{}'::jsonb end);
+    update public.estimates set current_version_id = format('e2050000-0000-4000-8000-0000000000a%s', i)::uuid where id = format('e2050000-0000-4000-8000-00000000000%s', i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (format('e2050000-0000-4000-8000-0000000000b%s', i)::uuid, 'ca000000-0000-0000-0000-000000000000', format('e2050000-0000-4000-8000-0000000000a%s', i)::uuid, 'Only');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values
+      ('ca000000-0000-0000-0000-000000000000', format('e2050000-0000-4000-8000-0000000000b%s', i)::uuid, 'labor', 'Work', 1, 40000);
+  end loop;
+end $$;
+select tst.ok((select array_agg(terms_text order by id) from public.estimate_versions where estimate_id::text like 'e2050000-%')
+                is not distinct from array['T205 own terms', null, ''],
+              'T205 terms_text is the document''s own Terms (none — null; cleared — "")');
+select tst.fails_like($q$update public.estimate_versions set calc_inputs = calc_inputs || jsonb_build_object('terms', repeat('y', 10001)) where id = 'e2050000-0000-4000-8000-0000000000a1'$q$,
+                      '%terms_text_len%', 'T205 a version''s Terms longer than 10000 — refused');
+-- the copy is never set apart from the document (security-check of #1304)
+update public.estimate_versions set terms_text = 'T205 forged' where id = 'e2050000-0000-4000-8000-0000000000a1';
+select tst.ok((select terms_text = 'T205 own terms' from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a1'),
+              'T205 terms_text written apart from the document goes back to the document''s Terms');
+-- an older row's value the migration could not move (too long) never blocks a save of the other settings
+alter table public.companies disable trigger t08_company_estimate_terms;
+update public.companies set estimate_settings = estimate_settings || jsonb_build_object('terms', repeat('z', 10001)) where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t08_company_estimate_terms;
+:as_owner_a
+update public.companies set estimate_settings = estimate_settings || '{"valid_days": 14}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select (estimate_settings ->> 'valid_days')::int = 14 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 an old oversized `terms` does not block saving the other settings (only a changed key is checked)');
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+-- sent: the version locked, the estimate «sent», its link (as send_estimate leaves them; the document here has no lines)
+update public.estimate_versions set locked_at = now(), sent_at = now() where estimate_id::text like 'e2050000-%';
+update public.estimates set status = 'sent', sent_version_id = current_version_id where id::text like 'e2050000-%';
+insert into app.estimate_tokens (token, estimate_id, company_id) values
+  ('T205tokenOwnTerms0123456789abcdefgh', 'e2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000'),
+  ('T205tokenNoTerms0123456789abcdefghi', 'e2050000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000'),
+  ('T205tokenCleared0123456789abcdefghi', 'e2050000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000');
+:as_owner_a
+-- sending froze the text: the company's default changes, the sent version does not
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 New default", "es": "T205 Nuevo"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.fails($q$update public.estimate_versions set calc_inputs = calc_inputs || '{"terms": "T205 changed after sending"}'::jsonb where id = 'e2050000-0000-4000-8000-0000000000a1'$q$,
+                 'T205 a sent version''s Terms cannot change (t40)');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('T205tokenOwnTerms0123456789abcdefgh') -> 'doc' ->> 'terms') = 'T205 own terms'
+              and (public.portal_estimate('T205tokenOwnTerms0123456789abcdefgh') -> 'doc' ->> 'note') = 'T205 notes',
+              'T205 the page reads the estimate''s own Terms and its Notes (the snapshot, not the new default)');
+select tst.ok(not (public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'doc') ? 'terms'
+              and public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company' -> 'terms_by_lang' = '{"en": "T205 New default", "es": "T205 Nuevo"}'::jsonb
+              and public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') ->> 'doc_language' = 'es',
+              format('T205 an estimate made before #1304: no own Terms — the page gets the defaults by language and the client''s language (es): %s / %s / %s',
+                     public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'doc', public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company' -> 'terms_by_lang',
+                     public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') ->> 'doc_language'));
+select tst.ok((public.portal_estimate('T205tokenCleared0123456789abcdefghi') -> 'doc' ->> 'terms') = '', 'T205 cleared on purpose: "" reaches the page (no block)');
+-- signed, without its own Terms: the page gets no defaults by language — only the old single text it showed then
+:as_super
+select set_config('app.signing_estimate', 'e2050000-0000-4000-8000-000000000002', false);
+update public.estimates set status = 'approved' where id = 'e2050000-0000-4000-8000-000000000002';
+select set_config('app.signing_estimate', '', false);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(not (public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company') ? 'terms_by_lang'
+              and public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company' ->> 'terms' = 'T205 New default',
+              'T205 a signed older estimate: no newer defaults by language, the old single text (security-check of #1304)');
+:as_super
+select tst.ok(app.estimate_terms_by_lang('{"terms_by_lang": {"en": "a", "es": "  ", "de": "x", "ru": 3}}') = '{"en": "a"}'::jsonb
+              and app.estimate_terms_by_lang('{"terms_by_lang": "x"}') = '{}'::jsonb,
+              'T205 the page gets only en / es / ru texts, not blank');
+select tst.ok(not has_function_privilege('anon', 'app.estimate_terms_by_lang(jsonb)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.estimate_terms_by_lang(jsonb)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_company_estimate_terms()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_version_terms_text()', 'EXECUTE'),
+              'T205 rule 18: the new functions are closed (the triggers and the definer page call them)');
+\echo 'T205 Notes and Terms: the defaults by language, the snapshot in the version ok'
+
 \echo 'ALL TESTS PASSED'

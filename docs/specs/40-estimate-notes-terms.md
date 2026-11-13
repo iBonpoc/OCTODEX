@@ -61,8 +61,9 @@ interface EstimateDoc {
   есть «старая смета»). (`note` сейчас `normalizeDoc` не режет — 5000 только у шаблона, `estimateTemplate.ts:63,92`; это не меняем.)
 - Шаблон сметы: `terms` в шаблон не пишется и из шаблона не читается. Сервер это уже держит: `valid_estimate_template_doc`
   (`20261112210000_tax_rate_ppm.sql:305`) пропускает только options/settings/note — записываем как защиту, тест.
-- Сервер: `calc_inputs.terms` + копия в `estimate_versions.terms_text` (существующая колонка) — как `note` → `intro_text`.
-  `save_estimate_version` пишет `terms_text = p_version ->> 'terms_text'`; запасной путь без функции (PGRST202) — тоже.
+- Сервер: `calc_inputs.terms` + копия в `estimate_versions.terms_text` (существующая колонка). Копию пишет триггер
+  `t08_terms_text` из `calc_inputs` при каждой записи документа — так её не обойдёт ни `save_estimate_version`, ни запасной
+  путь без функции (PGRST202), ни старый телефон; приложение `terms_text` не шлёт.
   Длина: `check (terms_text is null or char_length(terms_text) <= 10000) not valid` — без проверки старых строк, без
   блокировки (правило 16, малое).
 - **Замораживает отправка, не подпись**: `locked_at` ставится при отправке (PRD 05:110). С этого момента `terms_text` и `calc_inputs` версии не меняются — уже держит триггер `app.tg_estimate_version_lock` (core.sql:738: изменение заблокированной версии — 42501); тест.
@@ -97,17 +98,21 @@ estimate: { validDays; depositBps; terms?: string /* старое, правил�
   `/p/` и приложение покажут Terms на разных языках.
 - `termsOnClientChange(current, oldLang, newLang, co)` — п.2.5: не трогали → умолчание нового языка, правили → как есть.
 - `termsForClient(doc, co, lang)` — что видит клиент: `doc.terms` есть → он (пусто → блока нет); нет → `termsDefault(co, lang)`.
-  Тот же порядок на сервере (§5) — один тест-пара (unit + db) на одни входы.
+  Выбирает **страница** этой же функцией (`PortalData.terms`, `cloud/portal.ts`: и с сервера `fromRaw`, и с телефона
+  `portalFromEstimate`) — сервер только отдаёт снимок и умолчания, поэтому разойтись приложению и `/p/` нечем.
+- `syncCompanyTerms(prev, next)` — то же правило, что триггер t08, в `saveCompany` стора: экран, который ещё правит старое
+  `estimate.terms`, не теряет правку за `termsByLang.en`.
 
 ## 5. Сервер: `/p/` и PDF
 
 - `app.client_doc`: в список пропускаемых полей добавить `terms` (рядом с `note`) — клиент читает снимок из версии.
 - Язык страницы: `doc_language` добавляет обёртка `public.portal_estimate` (`app.estimate_doc_language`), не
   `portal_estimate_base`. Подстановка по языку — в обёртке (новая редакция, та же сигнатура).
-- `portal_estimate` (правило 16): поле `terms` в ответе — `doc.terms`, если ключ есть,
-  иначе `coalesce(nullif(terms_by_lang ->> doc_language, ''), nullif(terms_by_lang ->> 'en', ''), estimate_settings ->> 'terms')`.
-  `company.terms` в ответе остаётся (старый вид страницы в кэше браузера) и равен тому же.
-- PDF (`estimatePdf.ts`) и `/p/`: «Notes» = `doc.note`, «Terms & conditions» = `termsForClient(...)`; заголовки — `tFor(lang)`
+- `portal_estimate` (правило 16, та же сигнатура): добавляет `company.terms_by_lang` (`app.estimate_terms_by_lang`: только
+  en/es/ru, непустые строки). `company.terms` остаётся (старый вид страницы в кэше браузера, старый сервер → старый текст).
+  Выбор — на странице `termsForClient` (§4).
+- PDF (`estimatePdf.ts`), `/p/` и подпись на месте (общий `EstimateView`, проп `terms`): «Notes» = `doc.note`,
+  «Terms & conditions» = `PortalData.terms` / `termsForClient(...)`; заголовки — `tFor(lang)`
   (ключи `est.doc.notes`, `est.doc.terms`, RU/EN/ES); Terms выше подписи, шрифтом не меньше 10 pt (основной шрифт
   стилей classic 9.5 и compact 8.5 — тоже мал, это В4).
   - **Notes на `/p/` сейчас не выводятся вовсе** (в `p/[token].tsx` нет `note`) — это новая отрисовка.
@@ -146,17 +151,19 @@ estimate: { validDays; depositBps; terms?: string /* старое, правил�
 - `portalFromEstimate` (демо, PDF с телефона) и сервер на одних входах дают одни Terms;
 - шаблон сметы не несёт `terms`.
 
-База (`core_rls.sql`, следующий свободный номер):
+База (`core_rls.sql` T205):
 - миграция: `terms` → `terms_by_lang.en`; триггер в обе стороны; плохая форма — отказ;
 - `companies`: tech и office не меняют `estimate_settings` (отказ RLS), owner и admin — меняют;
-- `save_estimate_version` пишет `terms_text`; > 10000 — отказ;
-- подписанная версия: `terms_text` не меняется;
-- `/p/`: снимок из `calc_inputs.terms`; без ключа — умолчание по `doc_language` → en → старое; `""` — пусто;
-- сверка с `termsForClient` на тех же входах (как пара signTotals / T195).
+- `terms_text` = `calc_inputs.terms` (нет — null, стёрто — ""); > 10000 — отказ;
+- отправленная версия: Terms не меняются (t40);
+- `/p/`: снимок из `calc_inputs.terms` и Notes; без ключа — `terms_by_lang` и `doc_language` (es) для выбора на странице;
+  `""` — пусто; `app.estimate_terms_by_lang` — только en/es/ru, непустые;
+- правило 18: новые функции закрыты.
 
-e2e (блок «Данных» 330–339, вместе с «Экранами»): компания с en и es → новая смета клиенту-испаноговорящему → в редакторе
-es-текст → `/p/` и PDF: заголовок «Términos y condiciones», текст es, выше подписи; правка условий компании после подписи —
-подписанная смета показывает прежний текст. Все 6 видов.
+e2e 330 (этот PR): клиент-испаноговорящий; старая смета без Terms → на `/p/` умолчание es под заголовком «Términos y
+condiciones» выше подписи, Notes под «Notas»; своя Terms с разметкой — текстом, и остаётся после смены умолчания компании;
+PDF — заголовки es, текст экранирован, Terms до подписей; на месте — Terms выше «Client signs on site». Все 6 видов.
+e2e редактора (подстановка при создании, смена клиента) — «Экраны» с #1307 д (блок 311–319).
 
 ## 7а. Карта пути и документы
 

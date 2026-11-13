@@ -467,6 +467,9 @@ export const ru = {
   "est.signOnSite": "Подпись клиента на месте",
   "est.esign": "Клиент соглашается подписать электронно и получить копию по email (E-SIGN). Подрядчик подписывает договор следом.",
   "est.rescission": "Право отказа: 3 рабочих дня (65+ лет — 5, аварийные работы — 7). Суббота считается рабочим днём.",
+  // #1304 (docs/specs/40): what the client reads — headings on /p/, in the PDF, at signing on site (client language)
+  "est.doc.notes": "Примечания",
+  "est.doc.terms": "Условия",
   "est.signedToast": "Смета подписана: {name}",
   "est.depositDue": "Депозит к оплате",
   "est.recordDeposit": "Записать депозит",

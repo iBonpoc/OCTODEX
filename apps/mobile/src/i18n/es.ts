@@ -468,6 +468,9 @@ export const es: Dict = {
   "est.signOnSite": "Firma del cliente en el lugar",
   "est.esign": "El cliente acepta firmar electrónicamente y recibir una copia por email (E-SIGN). El contratista firma después.",
   "est.rescission": "Derecho a cancelar: 3 días hábiles (65+: 5, emergencias: 7). El sábado cuenta como día hábil.",
+  // #1304 (docs/specs/40): what the client reads — headings on /p/, in the PDF, at signing on site (client language)
+  "est.doc.notes": "Notas",
+  "est.doc.terms": "Términos y condiciones",
   "est.signedToast": "Presupuesto firmado: {name}",
   "est.depositDue": "Depósito a pagar",
   "est.recordDeposit": "Registrar depósito",

@@ -104,6 +104,11 @@ ${companySig}
   }
 </tbody></table>`
     : "";
+  // #1304: «Notes» and «Terms & conditions» under their headings, in the client's language; Terms (the estimate's own text,
+  // or the company's default for an older estimate — p.terms) before the signatures, in the document's own font (never the
+  // small grey one); the contractor's text goes through esc()
+  const notesHtml = typeof doc?.note === "string" && doc.note.trim() ? `<h2>${esc(t("est.doc.notes"))}</h2><div class="note">${esc(doc.note)}</div>` : "";
+  const termsHtml = p.terms.trim() ? `<h2>${esc(t("est.doc.terms"))}</h2><div class="note">${esc(p.terms)}</div>` : "";
   const title = `${t("portal.estimate")} ${p.number ?? ""}`.trim();
   const contacts = [p.customer.phone, p.customer.email].filter(Boolean).map((x) => esc(x!)).join(" · ");
   const body = `
@@ -112,8 +117,8 @@ ${companySig}
   }</p>
 ${p.title ? `<p><b>${esc(p.title)}</b></p>` : ""}
 ${blocks}
-${doc?.note ? `<div class="note">${esc(doc.note)}</div>` : ""}
-${p.company.terms ? `<div class="note mut">${esc(p.company.terms)}</div>` : ""}
+${notesHtml}
+${termsHtml}
 <p class="mut">${esc(t("est.rescission"))}</p>
 ${a ? `<p class="ok">✓ ${esc(t("portal.approved"))}</p>` : ""}
 ${signatures}

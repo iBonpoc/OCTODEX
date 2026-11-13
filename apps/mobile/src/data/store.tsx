@@ -29,7 +29,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, docLanguageFor, leadPeopleOf, mainContact, nextClientNumber } from "./people";
-import { tFor } from "@/i18n/translate";
+import { tFor, type DocLang } from "@/i18n/translate";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
@@ -41,6 +41,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
+import { syncCompanyTerms, termsForNew, termsOnClientChange, type TermsFor } from "@/features/estimateTerms";
 import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
@@ -394,7 +395,11 @@ interface StoreCtx {
    *  invoice moves to voidInvoices (no sum counts it); no «Отменить»: the server never lets it back. null — done;
    *  else why not (the screen shows it). Server: tg_invoice_guard (db T197). */
   voidInvoice: (id: ID, reason: string) => VoidRefusal | null;
-  /** create or update a universal estimate (draft) */
+  /** #1304 (docs/specs/40 §6): the Terms a new estimate starts with — the company's default in the client's language */
+  estimateTerms: (at: TermsFor) => { text: string; lang: DocLang };
+  /** #1304: the client of a draft changed — the untouched default follows the new client's language, an edited text stays */
+  estimateTermsOnClientChange: (current: string | undefined, at: { from: TermsFor; to: TermsFor }) => string;
+  /** create or update a universal estimate (draft); a new one without `doc.terms` gets estimateTerms (#1304) */
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
   /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
@@ -2150,6 +2155,8 @@ export function StoreProvider({
           },
         );
       },
+      estimateTerms: (at) => termsForNew(dbRef.current, at),
+      estimateTermsOnClientChange: (current, at) => termsOnClientChange(dbRef.current, current, at.from, at.to),
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return NO_UNDO;
@@ -2157,7 +2164,11 @@ export function StoreProvider({
         // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
         if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return NO_UNDO;
         // as it may be counted and shown (Р3, Р4) before it is counted and saved
-        const saved = docForSave(prev?.status, normalizeDoc(doc0).doc, uid);
+        const norm = normalizeDoc(doc0).doc;
+        // #1304: a new estimate without Terms (a module, a template, an editor that did not set them) takes the company's
+        // default in the client's language; an existing one never gets the key here (its client keeps seeing the default)
+        const withTerms = !prev && norm.terms === undefined ? { ...norm, terms: termsForNew(dbRef.current, { customerId, leadId: leadId0 }).text } : norm;
+        const saved = docForSave(prev?.status, withTerms, uid);
         const linesFrom = saved.linesFrom;
         // the mark of «the last estimate» goes into the document itself (the server's rows have no save time of their own)
         const savedAt = new Date().toISOString();
@@ -2683,7 +2694,9 @@ export function StoreProvider({
       saveCompany: (patch) => {
         const cur = dbRef.current.company;
         if (!cur) return NO_UNDO;
-        const next = { ...cur, ...patch };
+        // #1304: the old single Terms and the English default stay one (the server's t08 the same) — a screen that still
+        // edits estimate.terms is not lost behind termsByLang.en
+        const next = { ...cur, ...patch, estimate: syncCompanyTerms(cur.estimate, { ...cur, ...patch }.estimate) };
         return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined });
       },
       saveLicense: (l) =>
