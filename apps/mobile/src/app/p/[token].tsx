@@ -191,7 +191,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
         <Empty icon="pencil" title={t("portal.draft")} />
       ) : (
         <>
-          <EstimateView doc={doc} optionId={base.id} onOption={setOptionId} addonIds={addons} onAddons={setAddonIds} readOnly={!!approved} />
+          <EstimateView doc={doc} optionId={base.id} onOption={setOptionId} addonIds={addons} onAddons={setAddonIds} readOnly={!!approved} terms={data.terms} />
 
           {approved ? (
             <Card status="ok">
@@ -284,7 +284,9 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
             <></>
           ) : (
             <>
-              <SectionTitle title={t("portal.sign")} />
+              <View testID="portal-sign">
+                <SectionTitle title={t("portal.sign")} />
+              </View>
               <Card>
                 <SignBlock onSign={sign} busy={busy} />
               </Card>
@@ -292,11 +294,6 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
           )}
         </>
       )}
-      {data.company.terms ? (
-        <T v="caption" tone="mut">
-          {data.company.terms}
-        </T>
-      ) : null}
       <View testID="portal-pdf">
         <Button label={data.status === "approved" ? t("est.portal.downloadSigned") : t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
       </View>

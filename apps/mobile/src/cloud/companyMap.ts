@@ -2,6 +2,7 @@
 import { DOC_LANGS } from "@/i18n/translate";
 import type { Address, Company, CompanyContact, CompanyLicense, EntityType, LicenseKind } from "@/data/types";
 import { validZone } from "@/features/zone";
+import { cleanTerms, termsByLangFrom } from "@/features/estimateTerms";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
@@ -11,7 +12,11 @@ const addr = (r: Row, p: string): Address => ({ line1: s(r[`${p}line1`]), city: 
 export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], contacts: Row[]): Company {
   const brand = (r.brand ?? {}) as { logo?: string; color?: string };
   const contract = (r.contract_settings ?? {}) as { insurance?: Company["insurance"]; cancel_email?: string };
-  const est = (r.estimate_settings ?? {}) as { valid_days?: number; deposit_bps?: number | null; terms?: string };
+  const est = (r.estimate_settings ?? {}) as { valid_days?: number; deposit_bps?: number | null; terms?: string; terms_by_lang?: unknown };
+  // #1304 (rule 16, step 1): the defaults by language; a row the migration has not reached (or an older phone wrote) — the
+  // old single text is the English one
+  const byLang = termsByLangFrom(est.terms_by_lang);
+  if (est.terms_by_lang === undefined && !byLang.en && typeof est.terms === "string" && est.terms.trim()) byLang.en = cleanTerms(est.terms)!.trim();
   const pay = (r.payment_settings ?? {}) as { zelle?: string; check_payable_to?: string };
   const onb = (r.onboarding_state ?? {}) as { skipped?: string[] };
   const mailing = addr(r, "mailing_address_");
@@ -36,7 +41,7 @@ export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], 
     leadDefaultAssigneeId: opt(r.lead_default_assignee_id) ?? null,
     scheduleSettings: (r.schedule_settings as Company["scheduleSettings"] | null) ?? undefined,
     businessHours: (r.business_hours as Company["businessHours"] | null) ?? undefined,
-    estimate: { validDays: est.valid_days ?? 7, depositBps: est.deposit_bps === undefined ? 1000 : est.deposit_bps, terms: est.terms },
+    estimate: { validDays: est.valid_days ?? 7, depositBps: est.deposit_bps === undefined ? 1000 : est.deposit_bps, terms: est.terms, termsByLang: byLang },
     payment: { zelle: pay.zelle, checkPayableTo: pay.check_payable_to },
     licenses: licenses.map(licenseFromDb),
     contacts: contacts.sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0)).map(contactFromDb),
@@ -55,6 +60,17 @@ const contactFromDb = (r: Row): CompanyContact => ({
 /** jsonb columns of `companies` that companyToDb merges with what is stored: company.save must read all of them first,
  *  or a save from one screen wipes what another saved (П4a review: schedule_settings, business_hours, lead_settings). */
 export const COMPANY_STORED_COLUMNS = ["brand", "contract_settings", "estimate_settings", "payment_settings", "onboarding_state", "lead_settings", "schedule_settings", "business_hours"] as const;
+
+/** #1304 (rule 16, step 1): the defaults by language and, for older phones, the old single key = the English one; a company
+ *  without termsByLang (an older build's queued op) writes only the old key — the server's trigger moves it to en */
+function termsToDb(c: Company): Row {
+  if (!c.estimate.termsByLang) {
+    const t = cleanTerms(c.estimate.terms)?.trim();
+    return { terms: t || null };
+  }
+  const by = termsByLangFrom(c.estimate.termsByLang);
+  return { terms_by_lang: by, terms: by.en ?? null };
+}
 
 /** Columns of `companies` (jsonb settings are merged with what is already stored). */
 export function companyToDb(c: Company, stored: Row, tzChanged?: boolean) {
@@ -77,7 +93,7 @@ export function companyToDb(c: Company, stored: Row, tzChanged?: boolean) {
     doc_language: c.docLanguage ?? "en",
     brand: { ...((stored.brand as Row) ?? {}), logo: c.brand.logo ?? null, color: c.brand.color ?? null },
     contract_settings: { ...((stored.contract_settings as Row) ?? {}), insurance: c.insurance, cancel_email: n(c.cancelEmail) },
-    estimate_settings: { ...((stored.estimate_settings as Row) ?? {}), valid_days: c.estimate.validDays, deposit_bps: c.estimate.depositBps, terms: n(c.estimate.terms) },
+    estimate_settings: { ...((stored.estimate_settings as Row) ?? {}), valid_days: c.estimate.validDays, deposit_bps: c.estimate.depositBps, ...termsToDb(c) },
     payment_settings: { ...((stored.payment_settings as Row) ?? {}), zelle: n(c.payment.zelle), check_payable_to: n(c.payment.checkPayableTo) },
     onboarding_state: { ...((stored.onboarding_state as Row) ?? {}), skipped: c.skipped },
     // whom new leads go to: null = the owner; absent (an older build's queued op, an old cache) leaves the stored one

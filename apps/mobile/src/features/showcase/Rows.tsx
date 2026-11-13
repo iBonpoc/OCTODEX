@@ -13,7 +13,7 @@ import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
 import { fillStyle } from "@/ui/fill";
 import { SelectedCheck } from "@/ui/selectedCheck";
-import { Press, T } from "@/ui/primitives";
+import { Icon, Press, T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
@@ -22,6 +22,9 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
   { id: "compact", title: "ds.rows.compact", hint: "ds.rows.compactHint" },
   { id: "section", title: "ds.rows.section", hint: "ds.rows.sectionHint" },
+  { id: "variants", title: "ds.rows.variants", hint: "ds.rows.variantsHint" },
+  { id: "firstHint", title: "ds.rows.firstHint", hint: "ds.rows.firstHintHint" },
+  { id: "notes", title: "ds.rows.notes", hint: "ds.rows.notesHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
   { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
@@ -75,6 +78,10 @@ function FillSample() {
           <T v="body" w="semibold">{t("ds.rows.fillCard")}</T>
           <SelectedCheck />
         </View>
+        <RowView>
+          <Icon name="eyeOff" s={size.iconMd} />
+          <T v="caption" tone="mut">{t("ds.rows.eyeOff")}</T>
+        </RowView>
         <View testID="showcase-fill-chosen">
           <T v="caption">{t("ds.rows.fillChosen", { name: items.find((x) => x.key === sel)!.label })}</T>
         </View>
