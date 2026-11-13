@@ -1,8 +1,8 @@
 /**
  * e2e 360 — «Рабочие чертежи» (основатель 13.11, #1349; docs/specs/33-gutters-shop-drawings.md). Every view.
  * «Просмотр замера» → «Документы»:
- * - «Рабочие чертежи»: a page of 11 × 17 sheets — the plan G-1 (the app's language, ru) and the schedules G-2;
- * - «Рабочие чертежи, Letter»: the same sheets on a Letter page, reduced whole;
+ * - «Рабочие чертежи» → the menu «Бумага» (one row, founder 13.11: «объединить в одну»): «11×17» — a page of 11 × 17
+ *   sheets, the plan G-1 (the app's language, ru) and the schedules G-2; «Letter» — the same sheets reduced whole;
  * - «Заказ материалов»: the supplier's order, in English, on Letter.
  * The web prints from a hidden frame: the spec catches the frame's HTML instead of the print dialog. Finds things by
  * testID; waits on what it checks (no pauses).
@@ -48,13 +48,21 @@ exports.run = async (h) => {
       )
       .then(() => true, () => false);
   /** press where the button stands (the review slides in: a press on a moving button is cancelled) and read the frame */
-  const printVia = async (id) => {
+  let shot = false;
+  const printVia = async (id, choice) => {
     const btn = tid(id).getByRole("button");
     await btn.scrollIntoViewIfNeeded();
     await catchPrint();
     let ok = false;
     for (let i = 0; i < 3 && !ok; i++) {
       await btn.click();
+      // the paper's menu: the choice prints, and the menu goes
+      if (choice) {
+        await tid(choice).waitFor({ timeout: 5000 });
+        if (!shot) { shot = true; await h.shot("view-shop-paper"); }
+        await tid(choice).click();
+        await p.getByTestId(choice).waitFor({ state: "hidden", timeout: 5000 });
+      }
       ok = await framed(i < 2 ? 3000 : 8000);
     }
     h.expect(ok, `${id}: a printed frame`);
@@ -78,7 +86,7 @@ exports.run = async (h) => {
   await tid("view-doc-shop").waitFor({ timeout: 8000 });
 
   // the drawings at their own size: the plan, then the schedules — in the app's language
-  const d = await printVia("view-pdf-shop");
+  const d = await printVia("view-pdf-shop", "view-shop-paper-ansiB");
   h.expect(d.includes("@page{size:11in 17in"), "11 × 17 pages");
   h.expect((d.match(/<svg/g) || []).length >= 2, "a plan sheet and a schedules sheet");
   h.expect(d.includes(">G-1<") && d.includes(">G-2<"), "sheets G-1 and G-2");
@@ -90,7 +98,8 @@ exports.run = async (h) => {
   h.expect(Math.min(...pts) >= 10.99, `no text below 11 pt (${Math.min(...pts).toFixed(2)})`);
 
   // the same sheets reduced to Letter
-  const l = await printVia("view-pdf-shop-letter");
+  h.expect((await tid("view-doc-shop-letter").count()) === 0, "one row of the drawings, not two");
+  const l = await printVia("view-pdf-shop", "view-shop-paper-letter");
   h.expect(l.includes("@page{size:8.5in 11in"), "Letter pages");
   h.expect(l.includes('height="11.000in"') && l.includes("ПЛАН ВОДОСТОКОВ"), "the whole sheet reduced to the page");
 

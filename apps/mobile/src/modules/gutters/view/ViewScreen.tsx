@@ -6,7 +6,7 @@
  * canvas. Reads the store only (offline: the same). A technician sees the drawing and the list, never money (the
  * total, the estimates, the estimate action — canSeeClientMoney).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ElementRef } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
@@ -20,7 +20,7 @@ import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
@@ -194,6 +194,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // «Рабочие чертежи» (#1349): the plan sheets G-1 …, the schedules and the supplier's order — 11 × 17, or the same
   // sheets reduced to Letter; the quantities are the estimate's (`parts`). The crew's are in the app's language, the
   // supplier's order in English (spec 36 №19). A sheet with overlapping labels is still given, with a warning.
+  const shopRef = useRef<ElementRef<typeof View>>(null);
+  const [shopAt, setShopAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
     const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
     const tt = kind === "order" ? tFor("en") : t;
@@ -213,6 +215,17 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
   return (
     <>
+      <Menu
+        visible={!!shopAt}
+        anchor={shopAt}
+        title={t("mod.gutters.shop.paper")}
+        items={[
+          { key: "ansiB" as const, label: t("mod.gutters.shop.paperB"), testID: "view-shop-paper-ansiB" },
+          { key: "letter" as const, label: t("mod.gutters.shop.paperLetter"), testID: "view-shop-paper-letter" },
+        ]}
+        onSelect={(k) => { setShopAt(null); shop("drawings", k); }}
+        onClose={() => setShopAt(null)}
+      />
       <View testID="view-screen" style={{ gap: space[4] }}>
         <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} />
         {/* 820 / 1280 on its own page: two columns — the sheet and the action on the left, the documents, the photos and
@@ -266,8 +279,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               onOpen={() => (clientEst ? router.push(`/estimate/${clientEst.id}` as Href) : pdf("client"))}
             />
             <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} />
-            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" onOpen={() => shop("drawings", "ansiB")} />
-            <DocRow id="shop-letter" title={t("mod.gutters.shop.docLetter")} sub={t("mod.gutters.shop.docLetterSub")} openTestID="view-pdf-shop-letter" onOpen={() => shop("drawings", "letter")} />
+            {/* one row, the paper is chosen on the press (founder 13.11: «объединить в одну»): 11 × 17, or the same sheets reduced to Letter */}
+            <View ref={shopRef} collapsable={false}>
+              <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" onOpen={() => shopRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setShopAt({ x, y, w, h }))} />
+            </View>
             <DocRow id="shop-order" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} />
           </Card>
           </View>
