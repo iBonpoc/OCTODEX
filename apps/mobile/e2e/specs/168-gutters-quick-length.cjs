@@ -123,7 +123,8 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "⅜", "← one mark shorter: ⅜");
   // the tape says the whole length at every inch: «25′ 6″», «25′ 7″» … (founder 09.11)
   const marks = await tid("quick-length-tape").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
-  h.expect(["25′ 5″", "25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
+  // (the marks are 16 px apart, #1315: ±175 px of a phone-wide tape show the inches around the value — 25′ 6″ and 25′ 7″ — not a third one)
+  h.expect(["25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
   // a tap on a number: the tape comes to it — the whole inch, no eighths (the sample's click on a page)
   const seven = await tid("quick-length-tape").locator("text").filter({ hasText: /^25′ 7″$/ }).first().boundingBox();
   await p.mouse.click(seven.x + seven.width / 2, seven.y + seven.height / 2);
