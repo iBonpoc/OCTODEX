@@ -16,8 +16,17 @@ describe("«Заливка» of the chosen (#1306)", () => {
     expect(f).toMatch(/component\.shadowSm\.opacity/);
     expect(f).not.toMatch(/c\.acc/);
   });
-  it("Segmented, ChoiceChips, MultiChips, the filter bar and the tab bar take it", () => {
-    for (const f of ["ui/controls.tsx", "ui/filterBar.tsx", "nav/TabBar.tsx"]) expect(src(f), f).toMatch(/fillStyle\(c\)/);
+  it("ChoiceChips, MultiChips and the filter bar take it", () => {
+    for (const f of ["ui/controls.tsx", "ui/filterBar.tsx"]) expect(src(f), f).toMatch(/fillStyle\(c\)/);
+  });
+  it("a moving slider (tab bar pill, Segmented) takes the fill without the shadow (#1354)", () => {
+    const flat = src("ui/fill.ts").match(/export function fillStyleFlat[\s\S]*?\n}/)?.[0] ?? "";
+    expect(flat).toMatch(/backgroundColor: c\.surf2/);
+    expect(flat).not.toMatch(/shadow|elevation/);
+    // the pill of the tab bar lives in the iOS 26 GlassView and animates left/width: no shadow on it
+    expect(src("nav/TabBar.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\), pill\]/);
+    expect(src("nav/TabBar.tsx")).not.toMatch(/fillStyle\(c\)/);
+    expect(src("ui/controls.tsx")).toMatch(/borderRadius: radius\.pill \}, fillStyleFlat\(c\), pill\]/);
   });
   it("the chosen is never the accent and never an ink frame", () => {
     const c = src("ui/controls.tsx");

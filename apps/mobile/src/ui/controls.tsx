@@ -12,7 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
-import { fillStyle } from "./fill";
+import { fillStyle, fillStyleFlat } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
@@ -289,7 +289,7 @@ export function Segmented<K extends string>({
       {ready ? (
         <Animated.View
           // selected: ink frame on a raised surface — yellow is kept for the one main action (rule 2, unslop 05.11 №1)
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill }, fillStyle(c), pill]}
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill }, fillStyleFlat(c), pill]}
         />
       ) : null}
       {items.map((it) => {
