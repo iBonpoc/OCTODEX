@@ -2,7 +2,7 @@
  * e2e 144 — «Замер», холст модуля Gutters (docs/specs/33-gutters-canvas.md П20.4 M4b; спека 33 §7). Every view.
  * - «Компания → Модули» → «Холст замера»: the module is off — the canvas says at once that nothing will be saved;
  *   the empty canvas asks to draw the first run; no total under the drawing (#700: it is on «Просмотр замера»);
- * - one finger draws a run → a line with «… · эт 1»; a second run from
+ * - one finger draws a run → a line with its length alone (one storey: no «· эт 1», #1275); a second run from
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button turns the picked run
  *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
  * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Свойства on the phone — «Выбрать» is gone, #687 — Эт 1 / Этаж, Назад, Вперёд);
@@ -74,7 +74,8 @@ exports.run = async (h) => {
   const x1 = b.x + b.width * 0.7;
   await stroke([x0, y], [x1, y]);
   await waitFor(async () => (await count("line")) === 1, "one run drawn");
-  await waitFor(async () => (await labels()).some((t) => / · эт 1$/.test(t)), "its label: length · эт 1");
+  // one storey: the label is the length alone (no «· эт 1», founder 12.11, #1275)
+  await waitFor(async () => (await labels()).some((t) => /^\d+(′|″)/.test(t) && !/эт/.test(t)), "its label: the length alone (one storey)");
   h.expect(/Желоб · .* · эт 1/.test(await tid("draw-selected").innerText()), "the new run is picked");
   h.expect((await tid("draw-empty").count()) === 0, "the empty hint is gone");
 
