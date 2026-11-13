@@ -69,6 +69,8 @@ export const motion = {
   durSlow: 350,
   /** a press held this long is a long press (iOS 0.5 s): the canvas takes an end or a corner by it (founder 12.11, #818) */
   longPressMs: 500,
+  /** a second tap on the same object within this is a double tap (app-only like longPressMs; = the toast's arm time): the canvas opens properties by it (spec 33, #1273) */
+  doubleTapMs: 300,
   durChart: 900,
   easeOut: [0.2, 0.8, 0.2, 1] as const,
   /** components.css --ease-spring (overrides foundation's .3,1.4,.5,1) */

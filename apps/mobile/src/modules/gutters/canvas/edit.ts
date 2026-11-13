@@ -830,6 +830,20 @@ export function flipFace(d: Drawing, runId: string): Drawing {
 }
 
 /**
+ * «Без заглушки» (spec 33, #1273): the end of a gutter is left without a cap (the crew butts it to a wall, a post, a neighbour's gutter):
+ * `noCap[end]` — the cap is not drawn and not counted (`runEnds` → «join»). `off=false` puts the cap back. A corner end has no cap to
+ * remove (same drawing back); same drawing back when nothing changes.
+ */
+export function setCapOff(d: Drawing, runId: string, end: 0 | 1, off: boolean): Drawing {
+  const r = d.runs.find((x) => x.id === runId);
+  if (!r) return d;
+  if (!!r.noCap?.[end] === off) return d;
+  const next: [boolean, boolean] = [r.noCap?.[0] ?? false, r.noCap?.[1] ?? false];
+  next[end] = off;
+  return { ...d, runs: d.runs.map((x) => (x.id === runId ? { ...x, noCap: next[0] || next[1] ? next : undefined } : x)) };
+}
+
+/**
  * Set the angle between the walls at a corner (founder 08.11: measured by a triangle on site). The first run stays;
  * the second turns about the corner — the same way it turns now — and what hangs on its far end turns with it.
  * A closed line: only the second run's far end moves (its neighbours keep the join). Same drawing back when nothing
