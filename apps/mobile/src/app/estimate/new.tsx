@@ -16,7 +16,7 @@ import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
 import { useRowView } from "@/features/estimate/rowView";
 import { SortableList, type DropResult } from "@/features/SortableList";
-import type { Drop } from "@/features/sortable";
+import { withLooseTarget, type Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
@@ -112,6 +112,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [collapsedIds, setCollapsedIds] = useState<string[]>([]);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [holdSection, setHoldSection] = useState<string | null>(null);
+  /** a row is carried: the whole list is short rows («Кратко»), «Без раздела» is a place to drop (DS §14.6) */
+  const [lifted, setLifted] = useState<string | null>(null);
   const [moveFor, setMoveFor] = useState<string | null>(null);
   const rowForm = useRequiredForm();
   // what a pick in the catalog sheet opens next (a row with the cursor in it) waits until the sheet is gone: the web would give the
@@ -573,7 +575,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const act = activeLines(option.lines);
   // the sum of each line by its id, once (not `indexOf` for every row: that is n² for a long estimate)
   // a section that is carried folds while it is held (its lines go with it)
-  const view = useMemo(() => viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), [option, collapsedIds, holdSection]);
+  const view = useMemo(() => withLooseTarget(viewRows(option, new Set(holdSection ? [...collapsedIds, holdSection] : collapsedIds)), !!lifted?.startsWith("l:")), [option, collapsedIds, holdSection, lifted]);
   const secTotals = useMemo(() => sectionSubtotals(option, s), [option, s]);
   const totalById = new Map(act.map((l, i) => [l.id, totals.lineTotals[i] ?? 0] as const));
   const taxValue = !s.tax.enabled ? t("ue.off") : partialTax ? `${ppmToPctText(taxRatePpm(s.tax))}% · ${t("ue.taxPartialShort")}` : `${ppmToPctText(taxRatePpm(s.tax))}%`;
@@ -700,7 +702,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               locked={signed}
               onDrop={dropRow}
               onHold={setHoldSection}
-              beforeBegin={(r) => r.type !== "section" || leaveRow(true)}
+              onLift={setLifted}
+              // the open row folds first (the whole list folds): a wrong one stays and the drag does not start
+              beforeBegin={() => leaveRow(true)}
               renderRow={(r, i) =>
 
               r.type === "section" ? (
@@ -741,7 +745,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     catalog={openId === r.line.id && store.role !== "tech" ? catalogStateOf(r.line) : undefined}
                     autoFocus={focusRow?.id === r.line.id ? focusRow.field : undefined}
                     checkPrice={checkPrice.includes(r.line.id)}
-                    view={rowLook}
+                    view={lifted ? "brief" : rowLook}
                     onTouchOpen={openId === r.line.id ? markTouchInOpen : undefined}
                   />
                 </View>

@@ -24,6 +24,8 @@ exports.run = async (h) => {
     await p.mouse.down();
     const first = typeof target === "function" ? b.y - 30 : target;
     await p.mouse.move(x, b.y + b.height / 2 + (first > b.y ? 12 : -12), { steps: 4 });
+    // the list folds when a row is lifted (DS §14.6): the places are read once it has folded and settled
+    await p.getByTestId("sort-folded").first().waitFor({ state: "attached", timeout: 3000 });
     const toY = typeof target === "function" ? await target() : target;
     await p.mouse.move(x, toY, { steps: 12 });
     if (release) {

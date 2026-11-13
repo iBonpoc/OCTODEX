@@ -11,7 +11,7 @@ import { Icon } from "@/ui/primitives";
 import { useScreenScroll } from "@/ui/requiredForm";
 import { useScrollLock } from "@/ui/surfaces";
 import { finePointer, holdConfig } from "@/ui/pointer";
-import { canBegin, dragKind, dragWrite, edgeStep, feelOf, heldGone, insertionIndex, ownsDrag, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
+import { canBegin, crossesSection, dragKind, dragWrite, edgeStep, feelOf, heldGone, ownsDrag, placeWithMargin, resolveDrop, rowKey, shiftOf, withoutBlock, type Drop, type DropResult } from "./sortable";
 import type { ViewRow } from "./sectionLayout";
 
 /**
@@ -63,12 +63,17 @@ export interface SortableListProps {
   onDrop: (drop: Drop) => DropResult;
   /** a section is held: the screen folds it while it is carried (its lines go with it), `null` — let go */
   onHold?: (sectionId: string | null) => void;
+  /**
+   * any row is lifted (its key) / let go (`null`): the screen folds THE WHOLE LIST into short rows while it is carried (DS §14.6,
+   * decision 13.11) — the list keeps the held row under the finger and scrolls its place there
+   */
+  onLift?: (key: string | null) => void;
   /** before a section is taken (it folds, and an open row inside it would be unmounted): false — the drag does not start */
   beforeBegin?: (row: ViewRow) => boolean;
   renderRow: (row: ViewRow, index: number) => ReactNode;
 }
 
-export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegin, renderRow }: SortableListProps) {
+export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, beforeBegin, renderRow }: SortableListProps) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const lock = useScrollLock();
@@ -78,7 +83,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
   const layouts = useRef(new Map<string, { y: number; h: number }>());
   const nodes = useRef(new Map<string, ComponentRef<typeof View> | null>());
   const boxRef = useRef<ComponentRef<typeof View>>(null);
-  const box = useRef({ h: 0 });
+  const box = useRef({ h: 0, y: 0 });
   const keys = useMemo(() => rows.map(rowKey), [rows]);
   const [state, setState] = useState<{ active: string | null; to: number; from: number; h: number }>({ active: null, to: 0, from: 0, h: 0 });
   const lift = useSharedValue(0);
@@ -100,8 +105,14 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
   /** counts the drops that moved something: the rows stand where the new order puts them, at once, no sliding from ±h */
   const [snap, setSnap] = useState(0);
   const [, bump] = useState(0);
-  const latest = useRef({ rows, onDrop, onHold, beforeBegin, state, scroll, openKey, locked });
-  latest.current = { rows, onDrop, onHold, beforeBegin, state, scroll, openKey, locked };
+  /** the list folded when the row was lifted: how far the held row's top moved up (the row is kept under the finger by it) */
+  const foldShift = useRef(0);
+  /** the held row before the fold: its top and height in the list, and where on it the finger took it (0 — its top, 1 — its bottom) */
+  const liftTop = useRef(0);
+  const liftH = useRef(0);
+  const liftAt = useRef(0.5);
+  const latest = useRef({ rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked });
+  latest.current = { rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked };
 
   const place = useCallback((key: string, ty: number) => {
     const { rows: rs } = latest.current;
@@ -113,7 +124,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
       return l ? l.y + l.h / 2 : Number.POSITIVE_INFINITY;
     });
     const centre = me.y + me.h / 2 + ty;
-    return { p: insertionIndex(mids, centre), centre };
+    // the place changes only past a margin (`gesture.slotHysteresis`): no flicker between two places under a resting finger
+    return { p: placeWithMargin(mids, centre, slot.current, gesture.slotHysteresis), centre };
   }, []);
 
   const stop = useCallback(() => {
@@ -124,16 +136,19 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
 
   const refresh = useCallback(
     (key: string, fromTimer = false) => {
-      const moved = (latest.current.scroll?.offset() ?? 0) - startOffset.current;
+      const moved = (latest.current.scroll?.offset() ?? 0) - startOffset.current + foldShift.current;
       const ty = lastT.current + moved;
       scrolled.value = moved;
       // the finger moves the row on the UI thread; JS writes it only when the PAGE moved under a still finger (a write per move shook it)
       if (fromTimer) dragY.value = ty;
+      // until the folded list is measured the rows' places are the old ones: no place, no bar move, no buzz from them
+      if (settled.current !== key) return;
       const r = place(key, ty);
       if (r) {
         if (r.p !== slot.current) {
+          // «selection» only when the place crosses into another section (#1312), not on every place
+          if (crossesSection(latest.current.rows, key, slot.current, r.p)) haptics.selection();
           slot.current = r.p;
-          haptics.selection();
         }
         setState((s) => (s.active === key && s.to !== r.p ? { ...s, to: r.p } : s));
       }
@@ -143,12 +158,15 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
 
   /** where each row stands NOW, in the list (the browser tells a layout only when a size changes, not when a row above grew) */
   const measureAll = useCallback((withHeld = false, done?: () => void) => {
-    boxRef.current?.measureInWindow((_x: number, cy: number) => {
+    boxRef.current?.measureInWindow((_x: number, cy: number, _bw: number, bh: number) => {
+      box.current.h = bh;
+      box.current.y = cy;
       // the first measure (at the start) takes every row, the held one too — its place may be stale after a drop (the browser tells a
       // layout only when a size changes). A later measure leaves the held row out: it is lifted (scaled, tilted) by then.
-      const pending = [...nodes.current.entries()].filter(([k]) => withHeld || k !== activeKey.current);
+      // (a row that is gone has no node: it would never answer, and `done` would never come)
+      const pending = [...nodes.current.entries()].filter(([k, n]) => !!n && (withHeld || k !== activeKey.current));
       let left = pending.length;
-      if (!left) return;
+      if (!left) return void done?.();
       pending.forEach(([k, n]) =>
         n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => {
           layouts.current.set(k, { y: ny - cy, h: nh });
@@ -172,12 +190,55 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
     held.value = 0;
     lift.value = 0;
     dragY.value = 0;
+    foldShift.current = 0;
+    settled.current = null;
     setState({ active: null, to: 0, from: 0, h: 0 });
     latest.current.onHold?.(null);
+    latest.current.onLift?.(null);
   }, [activeSV, stop, lock, held, lift, dragY]);
+
+  /**
+   * The list has folded under the lifted row (DS §14.6): the row stays where the finger holds it (its top moved by `shift`, the drag
+   * offset takes it back), and the page scrolls by the same amount so the row's PLACE in the folded list is under the finger too.
+   */
+  const afterFold = useCallback((key: string) => {
+    if (activeKey.current !== key) return;
+    const ks = latest.current.rows.map(rowKey);
+    const i = ks.indexOf(key);
+    const prev = i > 0 ? layouts.current.get(ks[i - 1]!) : undefined;
+    const next = i >= 0 && i < ks.length - 1 ? layouts.current.get(ks[i + 1]!) : undefined;
+    if (i < 0) return;
+    // the held row is lifted (scaled): its own size is read from its neighbours, which stand still
+    const top = prev ? prev.y + prev.h : 0;
+    const h = Math.max(0, (next ? next.y : box.current.h) - top);
+    // the finger keeps the same point of the row (its handle is in the row's middle, a folded row is shorter)
+    const shift = liftTop.current + liftAt.current * liftH.current - (top + liftAt.current * h);
+    layouts.current.set(key, { y: top, h });
+    foldShift.current = shift;
+    settled.current = key;
+    setState((s) => (s.active === key ? { ...s, h } : s));
+    if (shift) latest.current.scroll?.scrollBy(-shift);
+    // the place is found again at once (a finger that does not move gives no move to do it); the page's offset settles a frame later
+    requestAnimationFrame(() => {
+      refresh(key, true);
+      setFolded(key);
+    });
+  }, [refresh]);
   useEffect(() => {
     if (heldGone(activeKey.current, keys)) abort();
   }, [keys, abort]);
+  // the screen has drawn the folded list (new rows): now every row stands where it will stay while the row is carried
+  const pendingFold = useRef<string | null>(null);
+  /** the held row whose folded list is measured: only then its place is looked for */
+  const settled = useRef<string | null>(null);
+  /** the held row whose list has folded and settled (a mark for the tests: `sort-folded`) */
+  const [folded, setFolded] = useState<string | null>(null);
+  useEffect(() => {
+    const k = pendingFold.current;
+    if (!k || activeKey.current !== k) return;
+    pendingFold.current = null;
+    measureAll(false, () => afterFold(k));
+  }, [rows, measureAll, afterFold]);
   const abortRef = useRef(abort);
   abortRef.current = abort;
   useEffect(() => () => abortRef.current(), []);
@@ -206,8 +267,6 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         const row = rs[idx];
         const me = layouts.current.get(key);
         if (!row || !me) return;
-        // a section folds when taken: an open row inside it must close first (a wrong one speaks and the drag does not start)
-        if (before && !before(row)) return;
         activeKey.current = key;
         activeSV.value = key;
         startOffset.current = sc?.offset() ?? 0;
@@ -215,10 +274,30 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         absY.current = y;
         visible.current = null;
         sc?.measureVisible((v) => (visible.current = v));
-        measureAll(true);
+        liftTop.current = me.y;
+        // where every row stands now (the held one too), THEN the list folds: the held row's top before the fold is known exactly
+        measureAll(true, () => {
+          if (activeKey.current !== key) return;
+          const was = layouts.current.get(key) ?? me;
+          liftTop.current = was.y;
+          liftH.current = was.h;
+          liftAt.current = was.h > 0 ? Math.max(0, Math.min(1, (y - box.current.y - was.y) / was.h)) : 0.5;
+          // the open row closes first (a wrong one stays — the drag does not start), then the list folds; a section folds itself too
+          if (before && !before(row)) return void abortRef.current();
+          pendingFold.current = key;
+          if (row.type === "section") hold?.(row.section.id);
+          latest.current.onLift?.(key);
+          // nothing folds (a list without `onLift`, a line): the rows stand as they are — measured already
+          if (!latest.current.onLift && row.type !== "section") {
+            pendingFold.current = null;
+            afterFold(key);
+          }
+        });
         lastT.current = 0;
         dragY.value = 0;
         scrolled.value = 0;
+        foldShift.current = 0;
+        settled.current = null;
         lock(true);
         haptics.light();
         held.value = 1;
@@ -229,18 +308,13 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         fromSlot.current = at;
         slot.current = at;
         setState({ active: key, from: at, to: at, h: me.h });
-        if (row.type === "section") {
-          hold?.(row.section.id);
-          // the section folds: the rows below it have moved — measure them again once the fold is drawn
-          // (and the place is found again at once: a finger that does not move gives no move to do it)
-          requestAnimationFrame(() => requestAnimationFrame(() => measureAll(false, () => refresh(key, true))));
-        }
+        // (the whole list folds into short rows once every row is measured, above; a section folds too)
         // the page follows the held row near the edges of what can be seen (below the header, above the bottom bar)
         timer.current = setInterval(() => {
           const s = latest.current.scroll;
           if (!s) return;
           const v = visible.current ?? { top: insets.top, bottom: winH - insets.bottom };
-          const step = edgeStep(absY.current, v.top, v.bottom, gesture.autoScrollEdge, space[3]);
+          const step = edgeStep(absY.current, v.top, v.bottom, gesture.autoScrollEdge, gesture.autoScrollMax);
           if (!step) return;
           s.scrollBy(step);
           refresh(key, true);
@@ -261,16 +335,20 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         stop();
         lock(false);
         const { rows: rs, onDrop: drop, onHold: hold } = latest.current;
-        const ty = lastT.current + ((latest.current.scroll?.offset() ?? 0) - startOffset.current);
+        const ty = lastT.current + ((latest.current.scroll?.offset() ?? 0) - startOffset.current) + foldShift.current;
         const r = place(key, ty);
         const total = box.current.h;
         const me = layouts.current.get(key);
         const centre = me ? me.y + me.h / 2 + ty : 0;
         const inside = centre > -gesture.autoScrollEdge && centre < total + gesture.autoScrollEdge;
         // let go where it was taken: nothing moved — no «medium», no move, no toast
-        const d = !canceled && r && inside && r.p !== fromSlot.current ? resolveDrop(rs, key, r.p) : null;
+        // (let go before the folded list was measured: its place is not known — nothing moves)
+        const d = !canceled && settled.current === key && r && inside && r.p !== fromSlot.current ? resolveDrop(rs, key, r.p) : null;
+        settled.current = null;
         setState({ active: null, to: 0, from: 0, h: 0 });
         hold?.(null);
+        latest.current.onLift?.(null);
+        foldShift.current = 0;
         held.value = 0;
         absY.current = null;
         // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
@@ -284,7 +362,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
         lift.value = reduce ? 0 : withSpring(0, motion.spring);
       },
     }),
-    [keys, state, snap, lift, held, activeSV, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, insets.top, insets.bottom, winH],
+    [keys, state, snap, lift, held, activeSV, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, afterFold, insets.top, insets.bottom, winH],
   );
 
   // the bar: where the held row will stand
@@ -306,6 +384,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, beforeBegi
             {renderRow(r, i)}
           </Item>
         ))}
+        {state.active && folded === state.active ? <View pointerEvents="none" testID="sort-folded" style={{ position: "absolute", width: 0, height: 0 }} /> : null}
         {state.active ? <View pointerEvents="none" testID="sort-bar" style={{ position: "absolute", left: 0, right: 0, top: barY - component.selectedBorder / 2, height: component.selectedBorder, backgroundColor: c.ink, zIndex: z.lift }} /> : null}
       </View>
     </SortCtx.Provider>
