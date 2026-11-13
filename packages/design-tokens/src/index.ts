@@ -118,6 +118,10 @@ export const gesture = {
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
   autoScrollEdge: 64,
+  /** the fastest the page scrolls at the very edge while a row is held, px a frame (the speed grows with the depth squared) — DS §14.6 */
+  autoScrollMax: 18,
+  /** a held row's place changes only once its middle is this far past a neighbour's middle (no flicker between two places), px */
+  slotHysteresis: 6,
   /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
   slop: 10,
 } as const;

@@ -865,7 +865,7 @@ export const ru = {
   "est.sec.moveUp": "Выше",
   "est.sec.moveDown": "Ниже",
   "est.sec.moveNone": "Без раздела",
-  "est.sec.moved": "Позиция перемещена",
+  "est.sec.moved": "Позиция перенесена",
   "est.sec.moduleBlocked": "Порядок этих позиций ведёт замер",
   "est.sec.limit": "Разделов не больше 40",
   "est.sec.nothingToLay": "Нечего раскладывать",

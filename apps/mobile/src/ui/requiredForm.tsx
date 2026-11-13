@@ -26,6 +26,11 @@ export interface ScreenScroll {
   scrollBy: (dy: number) => void;
   /** where the page is scrolled to now (the last place asked of the scroll, not only the last scroll event) */
   offset: () => number;
+  /**
+   * where the page REALLY is now (the browser: read from the page — it may have stopped the scroll itself, e.g. when the page got
+   * shorter, and its scroll event is still on the way); a phone: as `offset`
+   */
+  offsetNow?: () => number;
   /** the part of the window where the page can be seen, below the header and above the bottom bar (window coordinates) */
   measureVisible: (cb: (v: { top: number; bottom: number } | null) => void) => void;
 }

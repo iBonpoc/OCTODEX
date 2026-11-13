@@ -41,3 +41,20 @@ exports.undo = async (h) => {
   }
   return (await btn.count()) === 0;
 };
+
+/**
+ * A held row is carried by where IT is, not by where the pointer is (DS §14.6): when the list folds and the page cannot scroll,
+ * the row stands on its own place in the list and the pointer is off it by the rest. `carry` moves the pointer so the held row's
+ * middle comes to `y` (window coordinates); `pointerY` — where the pointer is now. Returns the pointer's new y.
+ */
+exports.carry = async (h, key, x, pointerY, y) => {
+  const id = key.replace(/^l:/, "");
+  const r = await h.page.evaluate((k) => {
+    // (a row that is going away may still be in the page for a moment, with no size: the one that is seen)
+    const b = [...document.querySelectorAll(`[data-testid="sort-row-l:${k}"]`)].map((e) => e.getBoundingClientRect()).find((x) => x.height > 0);
+    return b ? b.top + b.height / 2 : null;
+  }, id);
+  const to = r === null ? y : pointerY + (y - r);
+  await h.page.mouse.move(x, to, { steps: 12 });
+  return to;
+};
