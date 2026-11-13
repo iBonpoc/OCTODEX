@@ -20,6 +20,8 @@ exports.run = async (h) => {
     await vis(`showcase-rows-${id}-soon`).waitFor({ timeout: 3000 });
     h.expect((await vis(`showcase-rows-${id}`).innerText()).length > 20, `${id}: named, with its rule`);
   }
+  // «Из шаблона…» (DS 1.6.0) points to its own rule
+  h.expect(/§8\.13/.test(await vis("showcase-rows-fromTemplate").innerText()), "fromTemplate: names §8.13");
   // the list of sections names it
   await h.go("/settings/design-system");
   await vis("showcase-row-rows").waitFor({ timeout: 5000 });

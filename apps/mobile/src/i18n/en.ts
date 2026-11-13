@@ -2571,7 +2571,7 @@ export const en: Dict = {
   "ds.rows.notes": "Notes and Terms",
   "ds.rows.notesHint": "Two estimate rows with a bottom window; a new estimate gets the company’s text (§8.12, #1304).",
   "ds.rows.fromTemplate": "From template…",
-  "ds.rows.fromTemplateHint": "“＋” in Estimates — “New estimate” or “From template…”; an empty estimate has a third row “From template…”, then “⋯ → Add from template…”. Adds only; focus on the first line’s quantity, “Next” goes to the next one (§8.13, #1117).",
+  "ds.rows.fromTemplateHint": "“＋” in Estimates — “New estimate” or “From template…”; an empty estimate has a “From template…” button, then “⋯ → Add from template…”. Adds only; focus on the first line’s quantity, “›” goes to the next one (§8.13, #1117).",
   "ds.rows.eyeOff": "“Hidden from the client” icon (eyeOff)",
   "ds.rows.swipeToneCard": "Card",
   "ds.rows.swipeToneSolid": "Row tone (surfSolid) — must match",
