@@ -36,7 +36,8 @@ exports.run = async (h) => {
   await tid(`est-hide-${b}`).getByRole("switch").click();
   await line.fold(h);
   await tid(`est-spend-${b}`).waitFor({ timeout: 3000 });
-  h.expect(/Маржа/.test(await page()), "the owner sees the margin under the totals");
+  // «Только для вас» (cost, profit) under the totals (#1362, DS §8.9)
+  h.expect((await count('[data-testid="est-tot-own"]')) >= 1, "the owner sees «Только для вас» under the totals");
   h.expect((await count('[data-testid="est-client-off"]')) === 0, "no «выйти» before the mode");
 
   // «⋯ → Экран для клиента»
@@ -46,7 +47,7 @@ exports.run = async (h) => {
   await tid("est-client-off").waitFor({ timeout: 3000 });
   h.expect((await count(`[data-testid="est-spend-${b}"]`)) === 0, "client screen: no «расход» of the hidden line");
   h.expect((await count('[data-testid="est-var-add"]')) === 0, "client screen: no «Добавить вариант» (the owner's button)");
-  h.expect(!/Маржа|себестоимость/i.test(await page()), "client screen: no margin, no cost under the totals");
+  h.expect((await p.locator('[data-testid="est-tot-own"]').count()) === 0 && !/Себестоимость|Прибыль/.test(await page()), "client screen: no cost, no profit under the totals");
   await tid(`est-line-${a}`).click();
   const fig = await tid(`est-figures-${a}`).innerText();
   h.expect(!/прибыль/i.test(fig), `client screen: the open row shows no profit (${fig})`);
@@ -59,5 +60,5 @@ exports.run = async (h) => {
   await tid(`est-spend-${b}`).waitFor({ timeout: 3000 });
   h.expect((await count('[data-testid="est-client-off"]')) === 0, "«выйти» is gone");
   h.expect((await count('[data-testid="est-var-add"]')) === 1, "«Добавить вариант» is back");
-  h.expect(/Маржа/.test(await page()), "the margin is back");
+  h.expect((await count('[data-testid="est-tot-own"]')) >= 1, "«Только для вас» is back");
 };

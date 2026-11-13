@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeCustomOption, catalogCost, catalogPrice, depositAmount, depositSettingFromRule, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
+  computeCustomOption, computeAllOptional, catalogCost, catalogPrice, depositAmount, depositSettingFromRule, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
   DEFAULT_TAX, type CustomLine, type CustomSettings,
 } from "../src/custom.js";
 
@@ -156,5 +156,46 @@ describe("depositSettingFromRule — the server's deposit rule", () => {
       expect(depositAmount(10000, depositSettingFromRule(bad))).toBe(0);
     }
     expect(depositSettingFromRule({ kind: "pct", bps: "ten" })).toEqual({ kind: "none" });
+  });
+});
+
+// #1362 (DS §8.9): «Если клиент включит всё на выбор — итог $Y» — the engine's own totals with the add-ons ticked (К1)
+describe("computeAllOptional: the total if the client ticks every add-on", () => {
+  const base = {
+    id: "o2",
+    name: "Good",
+    lines: [
+      L("labor", "1", 100000, { name: "Install gutters" }),
+      L("material", "2", 25000, { name: "Guards", optional: true }),
+      L("service", "1", 10000, { name: "Haul away", optional: true }),
+    ],
+  };
+  it("no add-ons (or all already in): no line — null", () => {
+    expect(computeAllOptional({ ...base, lines: [base.lines[0]!] }, S())).toBeNull();
+    expect(computeAllOptional({ ...base, lines: base.lines.map((l) => (l.optional ? { ...l, selected: true } : l)) }, S())).toBeNull();
+  });
+  it("add-ons + discount + tax + deposit: $Y is the estimate's total as if every add-on were in", () => {
+    const s = S({ discount: { kind: "pct", value: "0.1" }, tax: { enabled: true, rateBps: 1025, groups: { service: true, labor: true, material: true } }, deposit: { kind: "pct", bps: 1000 } });
+    const now = computeCustomOption(base, s);
+    const all = computeAllOptional(base, s)!;
+    const ticked = computeCustomOption({ ...base, lines: base.lines.map((l) => (l.optional ? { ...l, selected: true } : l)) }, s);
+    // the estimate itself does not change: the add-ons stay out of its total
+    expect(now.subtotal).toBe(100000);
+    // the same engine with the add-ons ticked: $1,000 + $500 + $100 = $1,600; −10 % = $1,440; tax 10.25 % = $147.60 → $1,587.60
+    expect(all.subtotal).toBe(160000);
+    expect(all.discount).toBe(16000);
+    expect(all.tax).toBe(14760);
+    expect(all.total).toBe(158760);
+    expect(all.total).toBe(ticked.total);
+    expect(all.deposit).toBe(15876);
+    expect(all.total).toBeGreaterThan(now.total);
+  });
+  it("one add-on already ticked by the client: only the other is added", () => {
+    const one = { ...base, lines: base.lines.map((l, i) => (i === 1 ? { ...l, selected: true } : l)) };
+    expect(computeCustomOption(one, S()).total).toBe(150000);
+    expect(computeAllOptional(one, S())!.total).toBe(160000);
+  });
+  it("a blank add-on (no name, no price) does not count as one", () => {
+    expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "", optional: true })] }, S())).toBeNull();
   });
 });

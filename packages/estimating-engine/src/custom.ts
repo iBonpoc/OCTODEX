@@ -184,6 +184,17 @@ export function computeCustomOption(option: CustomOption, s: CustomSettings): Cu
 }
 
 /**
+ * «Если клиент включит всё на выбор — итог $Y» (#1362, DS §8.9): the option's totals with every «на выбор клиента» line the
+ * client could still tick ticked — the same engine, the same discount, tax and deposit as the estimate (no sums on a screen).
+ * null when there is nothing left to tick (no optional line, or every one is already in).
+ */
+export function computeAllOptional(option: CustomOption, s: CustomSettings): CustomTotals | null {
+  const lines = activeLines(option.lines);
+  if (!lines.some((l) => l.optional && !l.selected)) return null;
+  return computeCustomOption({ ...option, lines: option.lines.map((l) => (l.optional ? { ...l, selected: true } : l)) }, s);
+}
+
+/**
  * Catalog price of a bought item: supplier price + supplier sales tax, then our markup.
  * $10.00 at 10.25% tax = $11.03 cost; +10% markup = $12.13. No intermediate rounding.
  */

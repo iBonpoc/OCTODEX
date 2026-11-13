@@ -417,12 +417,14 @@ function LineRowView(p: LineRowProps) {
         </Press>
         {more ? (
           <>
-            <RowView style={{ minHeight: size.hitMin }}>
-              <T v="body" style={{ flex: 1 }}>
-                {t("ue.addon")}
-              </T>
-              <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
-            </RowView>
+            <View testID={`est-optional-toggle-${l.id}`}>
+              <RowView style={{ minHeight: size.hitMin }}>
+                <T v="body" style={{ flex: 1 }}>
+                  {t("ue.addon")}
+                </T>
+                <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
+              </RowView>
+            </View>
             {p.noHide ? (
               <T v="caption" tone="mut">
                 {t("est.row.hideTpl")}
