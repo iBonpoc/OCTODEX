@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { component, radius, size, space } from "@octo/design-tokens";
+import { radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
@@ -11,11 +11,13 @@ import { Button, Toggle } from "@/ui/controls";
 import { Labeled, RatePctField } from "@/features/fields";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
+import { fillStyle } from "@/ui/fill";
+import { SelectedCheck } from "@/ui/selectedCheck";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-/** the samples of the estimate editor (DS §8.3–8.5, Б13, §14.6): what is shown now, what comes with its component */
+/** the samples of the estimate editor (DS §8.3–8.5, §8.10–8.13, Б13, §14.6): what is shown now, what comes with its component */
 const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
   { id: "compact", title: "ds.rows.compact", hint: "ds.rows.compactHint" },
@@ -23,6 +25,7 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "variants", title: "ds.rows.variants", hint: "ds.rows.variantsHint" },
   { id: "firstHint", title: "ds.rows.firstHint", hint: "ds.rows.firstHintHint" },
   { id: "notes", title: "ds.rows.notes", hint: "ds.rows.notesHint" },
+  { id: "fromTemplate", title: "ds.rows.fromTemplate", hint: "ds.rows.fromTemplateHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
   { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
@@ -61,9 +64,7 @@ function FillSample() {
                 accessibilityLabel={it.label}
                 style={[
                   { minHeight: size.controlLg, paddingHorizontal: space[4], borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-                  on
-                    ? { backgroundColor: c.surf2, shadowColor: c.shadow.color, shadowOpacity: component.shadowSm.opacity, shadowRadius: component.shadowSm.radius, shadowOffset: { width: 0, height: component.shadowSm.offsetY } }
-                    : null,
+                  on ? fillStyle(c) : null,
                 ]}
               >
                 <T v="body" w={on ? "semibold" : "medium"} tone={on ? "ink" : "mut"}>
@@ -73,6 +74,11 @@ function FillSample() {
             );
           })}
         </RowView>
+        {/* a chosen card or day: the same fill and the check in its corner (the fill alone is quiet: contrast ≈ 1.4) */}
+        <View testID="showcase-fill-card" style={[{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[4], borderRadius: radius.inner }, fillStyle(c)]}>
+          <T v="body" w="semibold">{t("ds.rows.fillCard")}</T>
+          <SelectedCheck />
+        </View>
         <RowView>
           <Icon name="eyeOff" s={size.iconMd} />
           <T v="caption" tone="mut">{t("ds.rows.eyeOff")}</T>

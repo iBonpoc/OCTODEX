@@ -132,6 +132,8 @@ export const component = {
   tip: { fs: 11.5, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
   fab: 36,
   dockBtn: 36,
+  /** a module's tape measure: px between two marks, 1/16″ or 1 mm — stretched over a real tape so a finger can hit a mark (founder 13.11.2026, #1315: «чуть растянутая, ничего страшного») */
+  tapeTick: 16,
   sheetRadius: 24,
   modalW: 380,
   /** DS Б3 (Н-04): the confirm dialog's max width */
@@ -178,7 +180,7 @@ export const component = {
   /** selected card / drop target border */
   selectedBorder: 2,
   /** the small shadow of a raised «Заливка» (the chosen segment, tab, chip): DS «Выделение выбранного», foundation.css --shadow-sm */
-  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25 },
+  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25, /** Android has no shadow* props: the same lift as `elevation` (app-only, not in the CSS) */ elevation: 2 },
   /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
   swipeAction: { w: 80, full: 0.6 },
   /** hairline border */
@@ -378,6 +380,10 @@ export const print = {
   pagePadMm: 14,
   fontPt: { title: 18, heading: 11, body: 9.5, small: 8 },
   styles: printStyles,
+  /** #1324 (docs/specs/41): an estimate's PDF is a CA home-improvement contract — no text below minPt, a section heading at
+   *  least headingPt bold, a statutory phrase (the right to cancel, next to the signatures) noticePt bold
+   *  (B&P §7159, docs/legal/legal-research.md §1.2). The document's style keeps its own sizes above the floor. */
+  contract: { minPt: 10, headingPt: 10, noticePt: 12 },
 } as const;
 
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */

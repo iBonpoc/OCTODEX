@@ -8,6 +8,7 @@ import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
 import { Button, TextField } from "./controls";
 import { activeFilterCount, chosenFilters, chosenLabel, filterLabel, SEARCH_FROM, searchAfter, sheetOptions, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
+import { fillStyle } from "./fill";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 
@@ -85,14 +86,14 @@ export function FilterBar<K extends string>({
         flexDirection: "row",
         alignItems: "center",
         gap: space[1],
-        // chosen: ink frame on the same surface — yellow is kept for the one main action (rule 2)
-        backgroundColor: c.surf2,
-        borderWidth: sel ? component.selectedBorder : component.hairline,
-        borderColor: sel ? c.ink : c.bd,
+        // chosen: «Заливка» (DS «Выделение выбранного»); yellow is the main action's alone (rule 2)
+        ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+        borderWidth: component.hairline,
+        borderColor: sel ? "transparent" : c.bd,
       }}
     >
       {icon}
-      <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }}>
+      <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
         {label}
       </T>
     </Press>
@@ -132,9 +133,9 @@ export function FilterBar<K extends string>({
         alignItems: "center",
         justifyContent: "center",
         gap: space[1],
-        backgroundColor: c.surf2,
-        borderWidth: active ? component.selectedBorder : component.hairline,
-        borderColor: active ? c.ink : c.bd,
+        ...(active ? fillStyle(c) : { backgroundColor: "transparent" }),
+        borderWidth: component.hairline,
+        borderColor: active ? "transparent" : c.bd,
       }}
     >
       {sliders}
@@ -330,10 +331,10 @@ function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
           borderRadius: radius.pill,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: c.surf2,
-          // on: an ink frame, like a chosen filter — not a colour (rule 2)
-          borderWidth: state === "closedActive" ? component.selectedBorder : component.hairline,
-          borderColor: state === "closedActive" ? c.ink : c.bd,
+          // on: «Заливка», like a chosen filter — not a colour (rule 2)
+          ...(state === "closedActive" ? fillStyle(c) : { backgroundColor: "transparent" }),
+          borderWidth: component.hairline,
+          borderColor: state === "closedActive" ? "transparent" : c.bd,
         }}
       >
         <Icon name="search" s={size.iconSm} color={c.ink} />
