@@ -13,7 +13,7 @@ vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 import { makeSeed } from "../src/data/seed";
 import type { Company, DB, EstimateDoc } from "../src/data/types";
-import { cleanTerms, syncCompanyTerms, TERMS_MAX, termsByLangFrom, termsDefault, termsForClient, termsForNew, termsOnClientChange } from "../src/features/estimateTerms";
+import { cleanTerms, syncCompanyTerms, withFrozenTerms, TERMS_MAX, termsByLangFrom, termsDefault, termsForClient, termsForNew, termsOnClientChange } from "../src/features/estimateTerms";
 import { companyFromDb, companyToDb } from "../src/cloud/companyMap";
 import { normalizeDoc, DEFAULT_SETTINGS } from "../src/features/estimateDoc";
 import { fromRaw } from "../src/cloud/portal";
@@ -47,6 +47,15 @@ describe("unit:estimateTerms — the default by language (#1304)", () => {
     // a client without a language of its own → the company's language; ru has no text → en
     const d2 = seed({ company: "ru" });
     expect(termsForNew(d2, { customerId: d2.customers[0]!.id })).toEqual({ text: EN, lang: "ru" });
+  });
+  it("sending / signing freezes: an estimate still without Terms takes the default in the client's language; its own stays", () => {
+    const d = seed({ customer: "es" });
+    const e = { ...d.estimates[0]!, customerId: d.customers[0]!.id, doc: { options: [], settings: DEFAULT_SETTINGS } as EstimateDoc };
+    d.estimates = [e, ...d.estimates.slice(1)];
+    expect(withFrozenTerms(d, e.id).estimates[0]!.doc!.terms).toBe(ES);
+    const own = { ...d, estimates: [{ ...e, doc: { ...e.doc, terms: "" } }, ...d.estimates.slice(1)] };
+    expect(withFrozenTerms(own, e.id)).toBe(own);
+    expect(withFrozenTerms(d, "nope")).toBe(d);
   });
   it("a lead without a client: the lead's language", () => {
     const d = seed();

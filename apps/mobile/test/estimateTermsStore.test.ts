@@ -147,6 +147,16 @@ describe("unit:estimateTermsStore — #1304", () => {
     await settle();
     expect("terms" in valueOf(r).db.estimates.find((e) => e.id === old.id)!.doc!).toBe(false);
   });
+  it("an old draft (no key) sent: sending freezes the Spanish default into it — on the phone as on the server (t06)", async () => {
+    const base = company();
+    const es = base.customers[0]!;
+    const prop = base.properties.find((p) => p.customerId === es.id)!;
+    const old = { ...base.estimates[0]!, customerId: es.id, propertyId: prop.id, leadId: undefined, status: "draft" as const, doc: doc() };
+    const r = await signedIn({ estimates: [old, ...base.estimates.slice(1)] });
+    (valueOf(r) as unknown as { sendEstimate: (id: string) => unknown }).sendEstimate(old.id);
+    await settle();
+    expect(valueOf(r).db.estimates.find((e) => e.id === old.id)!.doc!.terms).toBe(ES);
+  });
   it("a sent estimate saved again (a new version): its own Terms go on, the company's new default does not", async () => {
     const base = company();
     const sent = base.estimates.find((e) => e.status === "sent" && e.doc)!;
