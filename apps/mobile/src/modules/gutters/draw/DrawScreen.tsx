@@ -60,6 +60,8 @@ type Tool = "line" | "ds";
 const FINGER = sizes.hitMin / 2;
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
+/** a tap this soon after a two-finger gesture began or ended is not a tap */
+const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
@@ -501,6 +503,7 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) return; // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);

@@ -39,7 +39,13 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   now.current = { view, onView, zoom };
   // commits made and not rendered yet (gestureState.ts: the render takes away exactly its commit from the live transform)
   const pending = useRef<Pending[]>([]);
+  /** when a two-finger segment last began or ended (ms): a tap right after it is the fingers lifting, not a tap (a pinch that ends over a length label opened its sheet) */
+  const multiAt = useRef(0);
+  const markMulti = () => {
+    multiAt.current = Date.now();
+  };
   const commit = (S: number, Tx: number, Ty: number) => {
+    markMulti();
     const t = { S, Tx, Ty };
     const z = now.current.zoom;
     const raw = applyTf(now.current.view, t);
@@ -83,6 +89,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     s.value = st.S;
     fx.value = 0;
     fy.value = 0;
+    if (st.seg && !seg.value) scheduleOnRN(markMulti); // a two-finger segment began (before `seg` is written)
     seg.value = st.seg;
     nPinch.value = st.nPinch;
     nPan.value = st.nPan;
@@ -113,7 +120,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     onDeactivate: end,
   });
   const both = useSimultaneousGestures(pan, pinch);
-  return { pan, pinch, both, settleView };
+  return { pan, pinch, both, settleView, multiAt };
 }
 
 export type CanvasGestures = ReturnType<typeof useCanvasGestures>;
