@@ -1,5 +1,5 @@
 /**
- * e2e 309 — подписи под кнопками панели холста Gutters не обрезаются «…» при крупном шрифте (#1303, снимок 5-draw ветки
+ * e2e 320 — подписи под кнопками панели холста Gutters не обрезаются «…» при крупном шрифте (#1303, снимок 5-draw ветки
  * claude/e5-fonts-shots). Шрифт крупнее имитируется стилем на всех подписях панели (в вебе масштаб системного шрифта
  * недоступен). Every view: no caption in the toolbar is clipped, and the toolbar stays inside the screen.
  * Finds things by testID; waits on what it checks.
