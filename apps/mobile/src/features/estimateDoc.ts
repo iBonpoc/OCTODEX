@@ -24,6 +24,7 @@ import {
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
 import { clientPages, pagesProblem } from "./docPages";
+import { cleanTerms } from "./estimateTerms";
 import { taxModeFor } from "@octo/estimating-engine";
 
 /** UUID: Web Crypto when present (web, Node tests), expo-crypto on the phone. */
@@ -149,7 +150,18 @@ export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: st
     const { sections: _s, ...rest } = o;
     return { ...rest, lines, ...(sections ? { sections } : {}) };
   });
-  return { doc: changed ? { ...doc, options } : doc, unhidden };
+  // #1304: Terms as they may be stored — not a string goes (an «old estimate»: the client sees the company's default)
+  let terms = doc.terms;
+  if (doc.terms !== undefined) {
+    const t = cleanTerms(doc.terms);
+    if (t !== doc.terms) {
+      terms = t;
+      changed = true;
+    }
+  }
+  if (!changed) return { doc, unhidden };
+  const { terms: _t, ...rest } = doc;
+  return { doc: { ...rest, options, ...(terms !== undefined ? { terms } : {}) }, unhidden };
 }
 
 /** Unit price of a catalog item (materials: purchase + supplier tax + markup). */
