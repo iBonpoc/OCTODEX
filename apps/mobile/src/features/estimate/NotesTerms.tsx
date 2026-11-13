@@ -11,7 +11,7 @@ import { Sheet } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { TERMS_MAX, cleanTerms } from "@/features/estimateTerms";
 import { mentionsArbitration } from "@/features/termsArbitration";
-import { firstWords, termsShown, termsToWrite } from "./notesTerms";
+import { firstWords, termsFallbackToEnglish, termsShown, termsToWrite } from "./notesTerms";
 
 /** «согласуйте с юристом» under a Terms text that speaks of arbitration (#1325: a warning only, nothing is blocked) */
 export function ArbitrationWarn({ text, testID, short }: { text: string | undefined; testID?: string; short?: boolean }) {
@@ -105,6 +105,14 @@ export function NotesTerms(p: {
               <T v="caption" tone="mut">
                 {t("est.nt.lang", { lang: DOC_LANG_LABEL[p.lang] })}
               </T>
+              {/* the company has no Terms in the client's language: the English ones came (one line, the director's call 13.11) */}
+              {termsFallbackToEnglish({ terms: draft }, p.company, p.lang) ? (
+                <View testID="est-terms-fallback">
+                  <T v="caption" tone="mut">
+                    {t("est.nt.fallbackEn")}
+                  </T>
+                </View>
+              ) : null}
               <ArbitrationWarn text={draft} testID="est-terms-sheet-arb" />
             </>
           ) : null}

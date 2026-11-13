@@ -22,6 +22,7 @@ import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { OptionsCard } from "@/features/estimate/OptionsCard";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
+import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
@@ -646,7 +647,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
 
   // #1138: a tech saves a new estimate only where the server lets him (estimates_insert — a property he works at)
   // a signed estimate: its rows do not open (DS §8.3)
-  const signed = !!existing && (existing.status === "awaiting_countersign" || existing.status === "approved");
+  // one rule with the card, /p/ and the PDF: a signature on it, or a status after signing (review of #1376)
+  const signed = isSignedEstimate(existing);
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
   const ok = !!customer && !!property && hasContent(doc);
   /** what a press of «Сохранить» found missing (shown under it, the page scrolls there) and the nudge for the scroll */
@@ -996,7 +998,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             onTerms={(v) => setDoc((d) => ({ ...d, terms: v }))}
             noTerms={!!tplEdit}
             locked={signed}
-            signed={!!existing && (!!existing.approval || existing.status === "approved" || existing.status === "awaiting_countersign")}
+            signed={signed}
           />
           {tplEdit ? (
             <View testID="est-tpl-save">

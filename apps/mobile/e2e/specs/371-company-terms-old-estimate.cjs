@@ -2,6 +2,7 @@
  * e2e 371 — the company's Terms by language and an estimate made before #1304 (DS §8.12, spec 40 §6, #1304), every view:
  * - «Компания → Документы»: English always; «Добавить: Español» adds a field; arbitration — «согласуйте с юристом»; saved
  *   into termsByLang; a new estimate of a Spanish-reading client takes it;
+ * - no Spanish at the company: «подставлен English»; a signed estimate (a signature, another status): Terms read only;
  * - an estimate without the `terms` key: its row shows the company's default; opened, closed unchanged and saved —
  *   still no key (its client goes on reading the default, as before).
  */
@@ -9,7 +10,7 @@ const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
   const p = h.page;
-  const { sheetGone } = require("../sheet.cjs");
+  const { sheetGone, closeSheet, pressEscUntilClosed } = require("../sheet.cjs");
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const count = (id) => p.getByTestId(id).locator("visible=true").count();
 
@@ -22,8 +23,23 @@ exports.run = async (h) => {
   delete old.doc.terms;
   const es = (c, id) => ({ ...c, people: c.people?.length ? c.people.map((x, i) => (i === 0 ? { ...x, language: "es" } : x)) : [{ id, name: c.name, role: "main", phones: [], emails: [], language: "es" }] });
   raw.db.customers = raw.db.customers.map((c) => (c.id === "c2" ? es(c, "pp371") : c.id === old.customerId ? es(c, "pp371b") : c));
+  // signed by the client (a signature on it) though its status is another: its Terms are read only (one rule with /p/)
+  const signedOne = { ...JSON.parse(JSON.stringify(old)), id: "e-371-signed", number: "EST-0371", status: "sent", approval: { signedAt: "2026-11-01T18:00:00.000Z", name: "Client (тестовые)" } };
+  delete signedOne.doc.terms;
+  raw.db.estimates.push(signedOne);
   await h.seed(DB_KEY, raw);
   await h.seed("octo.role.v1", "director");
+
+  // the company has no Spanish yet: the Spanish-reading client's new estimate says the English ones came
+  await h.go("/estimate/new?customerId=c2&propertyId=p2");
+  await tid("est-terms-row").click();
+  await tid("est-terms-fallback").waitFor({ timeout: 3000 });
+  if (h.layout.width < 820) await closeSheet(p);
+  else await pressEscUntilClosed(p);
+  // the signed one: the Terms row does not open
+  await h.go(`/estimate/new?id=${signedOne.id}`);
+  await tid("est-terms-row").waitFor({ timeout: 8000 });
+  h.expect((await tid("est-terms-row").getByRole("button").count()) === 0, "signed (a signature, another status): Terms read only");
 
   // the company: English always, Spanish added
   await h.go("/company/documents");

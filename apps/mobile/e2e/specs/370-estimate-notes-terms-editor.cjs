@@ -4,6 +4,7 @@
  * - another client (English): the untouched text follows their language; an edited text stays when the client changes;
  * - a Terms text that speaks of arbitration: «согласуйте с юристом» (a warning, nothing blocked);
  * - a template picked in «С чего начать?» keeps the Terms (a template never carries them, spec 40 §7);
+ * - Notes closed by «×» are saved as by «Готово»;
  * - saved: the estimate keeps its own Terms and Notes; the template editor has no Terms row.
  */
 const DB_KEY = "octo.db.v5";
@@ -13,7 +14,7 @@ const ES = "Neto 15. Limpieza incluida (тестовые).";
 exports.run = async (h) => {
   const p = h.page;
   const line = require("../estimateLine.cjs");
-  const { sheetGone } = require("../sheet.cjs");
+  const { sheetGone, closeSheet, pressEscUntilClosed } = require("../sheet.cjs");
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const count = (id) => p.getByTestId(id).locator("visible=true").count();
   const rowSays = (id, re) => p.waitForFunction(([id, src]) => new RegExp(src).test(document.querySelector(`[data-testid="${id}"]`)?.textContent || ""), [id, re.source], { timeout: 3000 });
@@ -63,11 +64,12 @@ exports.run = async (h) => {
   await rowSays("est-terms-row", /arbitration/);
   h.expect(!/Neto 15/.test(await tid("est-terms-row").innerText()), "an edited text stays when the client changes");
 
-  // Notes
+  // Notes — closed by «×»: saved as by «Готово» (DS §8.12: closing is saving)
   await tid("est-notes-row").click();
   await tid("est-notes-field").locator("textarea, input").first().fill("Gate code 1234");
-  await tid("est-nt-done").getByRole("button").click();
-  await sheetGone(p);
+  // (a phone: the sheet's «×»; from 820 a centred window: Esc — both close it, both save)
+  if (h.layout.width < 820) await closeSheet(p);
+  else await pressEscUntilClosed(p);
   await rowSays("est-notes-row", /Gate code 1234/);
 
   // saved: its own Terms and Notes

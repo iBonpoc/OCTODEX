@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Company } from "@/data/types";
-import { companyTermsWrite, firstWords, termsLangsShown, termsShown, termsToWrite } from "@/features/estimate/notesTerms";
+import { companyTermsWrite, firstWords, isSignedEstimate, termsFallbackToEnglish, termsLangsShown, termsShown, termsToWrite } from "@/features/estimate/notesTerms";
 
 // «Notes — заметка», «Terms — условия» (DS §8.12, spec 40 §6, #1304)
 const co = (byLang: Partial<Record<"en" | "es" | "ru", string>>, terms?: string): Pick<Company, "estimate"> => ({ estimate: { validDays: 7, depositBps: 1000, termsByLang: byLang, ...(terms !== undefined ? { terms } : {}) } as Company["estimate"] });
@@ -64,5 +64,28 @@ describe("the company's Terms written by language (review: English never wiped)"
   });
   it("nothing to keep: no empty English is made up", () => {
     expect(companyTermsWrite({ terms: "  " }, "es", "Neto")).toEqual({ es: "Neto" });
+  });
+});
+
+describe("review of #1376 (К1)", () => {
+  it("an old single text with CR / a control character: opened and closed — still no key", () => {
+    expect(termsToWrite({}, "Net 15\r\nNo refunds", "Net 15\nNo refunds")).toBeNull();
+    expect(termsToWrite({}, "Net 15\u0007", "Net 15")).toBeNull();
+    expect(termsToWrite({}, "Net 15\r\n", "Net 30")).toBe("Net 30");
+  });
+  it("signed: one rule with the card and /p/ — a signature on it, or a status after signing", () => {
+    expect(isSignedEstimate({ status: "sent", approval: { signedAt: "2026-11-13" } as never })).toBe(true);
+    expect(isSignedEstimate({ status: "approved" })).toBe(true);
+    expect(isSignedEstimate({ status: "awaiting_countersign" })).toBe(true);
+    expect(isSignedEstimate({ status: "sent" })).toBe(false);
+    expect(isSignedEstimate(undefined)).toBe(false);
+  });
+  it("«подставлен English»: only when the client's language has no text and the English default stands", () => {
+    const c = co({ en: "Net 15" });
+    expect(termsFallbackToEnglish({}, c, "es")).toBe(true);
+    expect(termsFallbackToEnglish({ terms: "Net 15" }, c, "es")).toBe(true);
+    expect(termsFallbackToEnglish({ terms: "Mine" }, c, "es")).toBe(false);
+    expect(termsFallbackToEnglish({}, c, "en")).toBe(false);
+    expect(termsFallbackToEnglish({}, co({ en: "Net 15", es: "Neto 15" }), "es")).toBe(false);
   });
 });

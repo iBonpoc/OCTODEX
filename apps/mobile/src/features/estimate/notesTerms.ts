@@ -2,9 +2,9 @@
  * «Notes — заметка» and «Terms — условия» rows of the estimate (DS §8.12, spec 40 §6, #1304): what the row shows.
  * Pure: the rows and the tests read the same words.
  */
-import type { Company, EstimateDoc } from "@/data/types";
+import type { Company, Estimate, EstimateDoc } from "@/data/types";
 import { DOC_LANGS, type DocLang } from "@/i18n/translate";
-import { cleanTerms, termsForClient } from "@/features/estimateTerms";
+import { cleanTerms, termsDefault, termsForClient } from "@/features/estimateTerms";
 
 /** how much of a text a row shows (one line on a phone) */
 export const PREVIEW_MAX = 60;
@@ -37,7 +37,20 @@ export function termsShown(doc: Pick<EstimateDoc, "terms">, co: Pick<Company, "e
  */
 export function termsToWrite(doc: Pick<EstimateDoc, "terms">, shown: string, typed: string): string | null {
   if (typeof doc.terms === "string") return typed === doc.terms ? null : typed;
-  return typed === shown ? null : typed;
+  // the default as it would be stored (an old single text may hold a CR or a control character): opened and closed - no key
+  return typed === (cleanTerms(shown) ?? "") ? null : typed;
+}
+
+/** signed by the client: the one rule of the card, /p/ and the PDF - a signature on it, or a status after signing */
+export function isSignedEstimate(e: Pick<Estimate, "approval" | "status"> | undefined | null): boolean {
+  return !!e && (!!e.approval || e.status === "approved" || e.status === "awaiting_countersign");
+}
+
+/** the Terms shown are the company's English because it has none in the client's language (the sheet says so, one line) */
+export function termsFallbackToEnglish(doc: Pick<EstimateDoc, "terms">, co: Pick<Company, "estimate"> | null | undefined, lang: DocLang): boolean {
+  if (lang === "en" || co?.estimate.termsByLang?.[lang]?.trim()) return false;
+  const def = termsDefault(co, lang);
+  return !!def && (typeof doc.terms !== "string" || doc.terms === def);
 }
 
 /** the company's Terms fields on the screen: English always (the fallback), the others once written or added */
