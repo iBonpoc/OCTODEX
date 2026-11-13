@@ -27,6 +27,27 @@ export function fitView(pts: readonly P[], vp: { w: number; h: number }, margin:
   return { k, ox: vp.w / 2 - ((x0 + x1) / 2) * k, oy: vp.h / 2 + ((y0 + y1) / 2) * k };
 }
 
+/**
+ * The limits of the scale (founder 12.11, #1281): the farthest — the whole drawing in a QUARTER of the screen (half each way of
+ * the view that fits it), the nearest — 1″ as big as a finger's target (`hitPx`, twice the old nearest). Without limits a long pinch
+ * went far away and the grid had millions of lines: the app hung.
+ */
+export interface ZoomLimits { kMin: number; kMax: number }
+export function zoomLimits(pts: readonly P[], vp: { w: number; h: number }, margin: number, hitPx: number): ZoomLimits {
+  const kMax = hitPx;
+  const kFit = fitView(pts, vp, margin).k;
+  return { kMin: Math.min(Math.max(kFit / 2, Number.EPSILON), kMax), kMax };
+}
+
+/** the view with its scale inside the limits, the centre of the viewport staying where it is (a defence at the commit; the pinch stops softly before) */
+export function clampView(v: View, lim: ZoomLimits, vp: { w: number; h: number }): View {
+  const k = Math.min(lim.kMax, Math.max(lim.kMin, v.k));
+  if (k === v.k || !Number.isFinite(k)) return k === v.k ? v : { ...v, k: Number.isFinite(k) ? k : lim.kMin };
+  const r = k / v.k;
+  const cx = vp.w / 2, cy = vp.h / 2;
+  return { k, ox: cx - (cx - v.ox) * r, oy: cy - (cy - v.oy) * r };
+}
+
 /** zoom by `s` about a screen point (pinch focal point) */
 export const zoomAt = (v: View, s: number, fx: number, fy: number): View => ({ k: v.k * s, ox: fx - (fx - v.ox) * s, oy: fy - (fy - v.oy) * s });
 export const panBy = (v: View, dx: number, dy: number): View => ({ k: v.k, ox: v.ox + dx, oy: v.oy + dy });
@@ -37,15 +58,17 @@ export interface SceneRun {
   face: [[number, number], [number, number]];
 }
 /** an end cap (founder 08.11): left or right, looking at the face; a tap swaps both caps of the line */
-export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean }
+export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean; /** picked up by a hold or being dragged (#1272): the point itself is bigger */ lifted?: boolean; /** something is lifted and this free end of ANOTHER gutter is where it can stick (#1272) */ target?: boolean }
 /** a corner: outside / inside (a tap swaps); an inside one gets a splash guard by itself */
-export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean }
+export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean; /** picked up by a hold or being dragged (#1272) */ lifted?: boolean }
 export interface SceneDs {
   id: string; at: [number, number]; story: Story; selected: boolean;
   /** «D1» inside the mark (founder 08.11) */
   text: string;
   /** just put: the mark blinks (founder 08.11) — the painter hides it on the off beat */
   dim?: boolean;
+  /** picked up by a hold or being dragged (#1272) */
+  lifted?: boolean;
 }
 export interface SceneLabel extends PlacedLabel { text: string; kind: "len" | "ds" | "story" | "corner" }
 /** the grid under the drawing (founder 08.11, as in CAD): minor and major lines as two paths; `stepIn` — a minor cell */
@@ -59,10 +82,14 @@ export function gridStepIn(k: number, minPx: number): number {
 }
 
 /** the grid lines over the viewport: every 5th is a major one (the next step up) */
+/** the most lines of a grid (both ways): a view so far away that the largest step is still denser than this has no grid (#1281: a pinch far out made millions of lines) */
+export const MAX_GRID_LINES = 240;
+
 export function buildGrid(v: View, vp: { w: number; h: number }, minPx: number): SceneGrid {
   const step = gridStepIn(v.k, minPx);
   const [x0, y1] = toPlan(v, [0, 0]);
   const [x1, y0] = toPlan(v, [vp.w, vp.h]);
+  if (!(v.k > 0) || !Number.isFinite(v.k) || (x1 - x0) / step + (y1 - y0) / step > MAX_GRID_LINES) return { minor: "", major: "", stepIn: step };
   let minor = "", major = "";
   for (let i = Math.ceil(x0 / step); i * step <= x1; i++) {
     const sx = (i * step * v.k + v.ox).toFixed(1);
@@ -84,6 +111,8 @@ export interface SceneOpts {
   padX: number;
   gap: number;
   selected?: string | null;
+  /** what is picked up by a hold or dragged (#1272): the point is drawn bigger, and the free ends it can stick to are marked */
+  lift?: import("./edit").Lift | null;
   /** the radius of a downspout's mark: its label stays off it (П20.8) */
   dsPad?: number;
   /** text of a downspout label and a storey label (i18n: «DS 3», «эт 2») */
@@ -154,7 +183,7 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
         const k = Math.min(o.dsPad * 2, n / 2) / n;
         at = [at[0] + (to[0] - at[0]) * k, at[1] + (to[1] - at[1]) * k];
       }
-      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at, side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected });
+      caps.push({ id: `cap:${r.id}:${e}`, runId: r.id, end: e, at, side: capSide(e, side), story: storyOf(r.attrs.story), selected: r.id === o.selected, ...(o.lift?.kind === "end" && o.lift.id === r.id && o.lift.end === e ? { lifted: true } : o.lift && !(o.lift.kind === "end" && o.lift.id === r.id) && o.lift.kind !== "ds" ? { target: true } : {}) });
     });
   }
   const corners: SceneCorner[] = found.map((f) => {
@@ -177,6 +206,7 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       angleDeg: Math.round(cornerCut(d, f, found).angleDeg),
       arc,
       handle: f.runs.some((x) => x.id === o.selected),
+      ...(o.lift?.kind === "corner" && o.lift.cornerId === f.id ? { lifted: true } : {}),
     };
   });
   const ds: SceneDs[] = [];
@@ -186,7 +216,7 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
     // atIn is along the run's length (typed wins over drawn, geometry.ts)
     const t = Math.min(1, Math.max(0, s.atIn / (runLengthIn(r) || 1)));
     const at: P = [r.a[0] + (r.b[0] - r.a[0]) * t, r.a[1] + (r.b[1] - r.a[1]) * t];
-    ds.push({ id: s.id, at: toScreen(o.view, at), story: storyOf(r.attrs.story), selected: s.id === o.selected, text: o.dsText(ds.length + 1), ...(o.dimDs === s.id ? { dim: true } : {}) });
+    ds.push({ id: s.id, at: toScreen(o.view, at), story: storyOf(r.attrs.story), selected: s.id === o.selected, text: o.dsText(ds.length + 1), ...(o.dimDs === s.id ? { dim: true } : {}), ...(o.lift?.kind === "ds" && o.lift.id === s.id ? { lifted: true } : {}) });
   }
   const h = Math.ceil(o.fontSize * 1.4);
   const texts = new Map<string, { text: string; kind: SceneLabel["kind"] }>();
