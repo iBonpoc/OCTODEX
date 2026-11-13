@@ -65,6 +65,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.fab).toBe(px("fab"));
     expect(component.dockBtn).toBe(px("dock-btn"));
     expect(component.tapeTick).toBe(px("tape-tick"));
+    expect(component.estRow).toEqual({ qty: px("est-qty-w"), unit: px("est-unit-w") });
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
     for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
   });

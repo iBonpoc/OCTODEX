@@ -5,6 +5,11 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
 import { SwipeRow } from "@/features/estimate/SwipeRow";
+import { LineRow, type RowApi } from "@/features/estimate/LineRow";
+import type { RowView as RowLook } from "@/features/estimate/rowView";
+import { rowFigures } from "@/features/estimateRows";
+import { useRequiredForm } from "@/ui/requiredForm";
+import { Segmented } from "@/ui/controls";
 import { SortableList } from "@/features/SortableList";
 import { moveLine, sameLayout, viewRows } from "@/features/sectionLayout";
 import { Button, Toggle } from "@/ui/controls";
@@ -19,15 +24,12 @@ import { SECTIONS } from "./registry";
 
 /** the samples of the estimate editor (DS §8.3–8.5, §8.10–8.13, Б13, §14.6): what is shown now, what comes with its component */
 const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
-  { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
-  { id: "compact", title: "ds.rows.compact", hint: "ds.rows.compactHint" },
   { id: "section", title: "ds.rows.section", hint: "ds.rows.sectionHint" },
   { id: "variants", title: "ds.rows.variants", hint: "ds.rows.variantsHint" },
   { id: "firstHint", title: "ds.rows.firstHint", hint: "ds.rows.firstHintHint" },
   { id: "notes", title: "ds.rows.notes", hint: "ds.rows.notesHint" },
   { id: "fromTemplate", title: "ds.rows.fromTemplate", hint: "ds.rows.fromTemplateHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
-  { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
   { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
 ];
 
@@ -92,6 +94,40 @@ function FillSample() {
 }
 
 /** the swipe of an estimate row (DS Б13): on a phone — swipe it; the web has no swipe, its actions are in «⋯» of the row */
+/** the estimate line live (DS §8.3, #1307 «а»): «Кратко / Подробно», the trash, a tap opens it in place (one open),
+ *  the open row's numbers in one row and «Сумма · прибыль · %», a hidden line with its hatch and «расход» (tests prices) */
+function LineSample() {
+  const { t } = useI18n();
+  const form = useRequiredForm();
+  const [look, setLook] = useState<RowLook>("brief");
+  const [open, setOpen] = useState<string | null>(null);
+  const [lines, setLines] = useState<CustomLine[]>(() => [
+    { id: "ds-l1", name: t("ds.rows.lineA"), description: t("ds.rows.lineADesc"), group: "material", quantity: "86", unit: "LF", unitPriceCents: 1200, unitCostCents: 540 },
+    { id: "ds-l2", name: t("ds.rows.lineB"), group: "service", quantity: "2", unit: "hr", unitPriceCents: 0, unitCostCents: 14000, clientVisible: false },
+  ]);
+  const api: RowApi = {
+    open: (id) => setOpen((cur) => (cur === id ? null : id)),
+    close: () => setOpen(null),
+    change: (id, patch) => setLines((ls) => ls.map((l) => (l.id === id ? { ...l, ...patch } : l))),
+    action: (id, a) => (a === "delete" ? setLines((ls) => ls.filter((l) => l.id !== id)) : undefined),
+    bad: () => {},
+    wantCatalog: () => {},
+    openInCatalog: () => {},
+  };
+  return (
+    <Card>
+      <View testID="showcase-rows-line" style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.rows.row")}</T>
+        <T v="caption" tone="mut">{t("ds.rows.rowHint")}</T>
+        <Segmented<RowLook> full value={look} onChange={setLook} items={[{ key: "brief", label: t("est2.view.brief") }, { key: "full", label: t("est2.view.full") }]} />
+        {lines.map((l) => (
+          <LineRow key={l.id} line={l} open={open === l.id} total={rowFigures(l, true).total} costsVisible form={form} api={api} view={look} />
+        ))}
+      </View>
+    </Card>
+  );
+}
+
 function SwipeSample() {
   const { t } = useI18n();
   const { c } = useTheme();
@@ -228,6 +264,7 @@ export function RowsSection() {
         </View>
       </Card>
       <TaxSample />
+      <LineSample />
       <SwipeSample />
       <FillSample />
       <LiveDrag />

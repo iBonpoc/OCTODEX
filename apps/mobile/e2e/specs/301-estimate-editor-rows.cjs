@@ -62,7 +62,7 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-collapse-"]')) === 1 && (await count(`[data-testid="est-collapse-${id}"]`)) === 1, "«abc» in the cost keeps the row open");
   await vis(`[data-testid="est-cost-${id}"] input`).first().fill("");
   await p.waitForFunction((i) => !document.querySelector(`[data-testid="est-cost-${i}-error"]`), id, { timeout: 3000 });
-  h.expect(!/Заработок/.test(await vis(`[data-testid="est-figures-${id}"]`).first().innerText()), "an empty cost is unknown: no profit line");
+  h.expect(!/прибыль/i.test(await vis(`[data-testid="est-figures-${id}"]`).first().innerText()), "an empty cost is unknown: no profit line");
 
   // the tech: no cost field, no profit
   await h.seed("octo.role.v1", "tech");
@@ -71,6 +71,6 @@ exports.run = async (h) => {
   await tid("est-add-new").getByRole("button").click();
   await vis('[data-testid^="est-price-"]').first().waitFor({ timeout: 3000 });
   h.expect((await count('[data-testid^="est-cost-"]')) === 0, "the tech: no cost field");
-  h.expect(!/Заработок/.test(await vis('[data-testid^="est-figures-"]').first().innerText()), "the tech: no profit");
+  h.expect(!/прибыль/i.test(await vis('[data-testid^="est-figures-"]').first().innerText()), "the tech: no profit");
   await h.seed("octo.role.v1", "director");
 };
