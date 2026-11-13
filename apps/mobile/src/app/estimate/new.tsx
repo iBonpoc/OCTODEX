@@ -23,6 +23,7 @@ import { SectionHeader, type SectionAction, type SectionApi } from "@/features/e
 import { OptionsCard } from "@/features/estimate/OptionsCard";
 import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
 import { allOptionalFor, totalsRows } from "@/features/estimate/totalsRows";
+import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
@@ -998,12 +999,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             </RowView>
             <Divider />
-            <SumRow label={t("ue.deposit")} value={depValue} onPress={signed ? undefined : () => setSetting("deposit")} />
-            {totals.depositOverCaLimit ? (
-              <T v="caption" tone="warn">
-                {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
-              </T>
-            ) : null}
+            <SumRow label={t("ue.deposit")} value={depValue} onPress={signed ? undefined : () => setSetting("deposit")} testID="est-deposit-row" />
+            {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /> : null}
             {/* the same as «Итого ˅» of the phone's panel: «если клиент включит всё на выбор» and «Только для вас» (DS §8.9) */}
             {/* from 820 (no panel): the same «если включит» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
             {wide && (totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length) ? (
@@ -1194,16 +1191,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 ]}
               />
               {s.deposit.kind === "pct" ? (
-                <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
+                <View testID="est-deposit-pct">
+                  <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
+                </View>
               ) : s.deposit.kind === "fixed" ? (
                 <MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} />
               ) : null}
               <SumRow label={t("ue.deposit")} value={money(totals.deposit)} />
-              {totals.depositOverCaLimit ? (
-                <T v="caption" tone="warn">
-                  {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
-                </T>
-              ) : null}
+              {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn-sheet" /> : null}
             </>
           ) : null}
           <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
@@ -1293,7 +1288,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   );
 }
 
-function SumRow({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
+function SumRow({ label, value, onPress, testID }: { label: string; value: string; onPress?: () => void; testID?: string }) {
   const row = (
     <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
       <T v="body" tone="mut">
@@ -1308,7 +1303,7 @@ function SumRow({ label, value, onPress }: { label: string; value: string; onPre
     </RowView>
   );
   return onPress ? (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} testID={testID}>
       {row}
     </Press>
   ) : (
