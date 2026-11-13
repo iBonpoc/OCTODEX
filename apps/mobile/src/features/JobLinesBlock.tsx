@@ -17,6 +17,7 @@ import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { whenLate, type GuardedUndo } from "@/data/undo";
 
 /** who changes a job's own lines: the server's app.is_staff (owner, admin, office, sales) */
 export const canEditJobLines = (role: Role) => role !== "tech";
@@ -56,7 +57,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
   const totals = totalOf(lines, job);
   const warn = caContractWarning(db, job.id);
   // «Отменить» may be refused (an invoice went out meanwhile): then say why, nothing changes
-  const done = (msg: string, undo: () => boolean | undefined) => toast.show(store.online ? msg : t("offline.queued"), () => { if (undo() === false) toast.show(t("job5.lines.err.undo")); });
+  const done = (msg: string, undo: GuardedUndo) => toast.show(store.online ? msg : t("offline.queued"), whenLate(undo, () => toast.show(t("job5.lines.err.undo"))));
   const refuse = (after: typeof db): boolean => {
     const r = lineChangeRefusal(db, after, job.id);
     if (r) toast.show(t(REFUSAL_KEY[r]));

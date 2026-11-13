@@ -16,6 +16,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow } from "@/ui/surfaces";
 import { linkChoices, relink, undoAll } from "../data";
 import type { Customer, Property } from "@/data/types";
+import { type GuardedUndo } from "@/data/undo";
 
 type Tab = "leads" | "clients";
 
@@ -36,7 +37,7 @@ export function LinkSheet({ visible, onClose, measurementId }: { visible: boolea
     setPhone("");
     setName("");
   };
-  const done = (undo: (() => void) | null, who: string) => {
+  const done = (undo: GuardedUndo | null, who: string) => {
     reset();
     onClose();
     toast.show(t("mod.gutters.link.done", { who }), undo ?? undefined);

@@ -10,6 +10,7 @@ vi.mock("@/cloud/ops", () => ({ PermanentError: class extends Error {}, uploadPh
 import { copyRows, duplicateMeasurement, gutterData, K, setAccuracy, undoAll } from "../src/modules/gutters/data";
 import { measurementState } from "../src/modules/gutters/measurements";
 import type { DB } from "../src/data/types";
+import { markUndo, type GuardedUndo } from "../src/data/undo";
 
 const M = { id: "m1", label: null, status: "ready" as const, propertyId: "p1", leadId: "l1", accuracy: "tape" as const, updatedAt: "2026-11-10T10:00:00Z" };
 const EL = [
@@ -29,11 +30,18 @@ function fakeStore(active = true) {
       const before = s.db;
       s.db = ch.apply(s.db);
       s.ops.push({ kind: ch.kind, payload: ch.payload });
-      return () => {
+      return markUndo(() => {
         s.db = before;
         s.ops.pop();
-      };
+        return true;
+      });
     },
+    // the core's undoTogether, as a test store does it: the last first
+    undoTogether: (us: readonly unknown[]) =>
+      markUndo(() => {
+        [...us].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
+        return true;
+      }),
   };
   return s;
 }
@@ -104,15 +112,17 @@ describe("undoAll — the module's «Отменить» of several changes (#124
     n = 0;
     const st = fakeStore();
     const asked: unknown[][] = [];
-    const withTogether = Object.assign(st, { undoTogether: (u: readonly unknown[]) => (asked.push([...u]), () => false as boolean | undefined) });
+    const withTogether = Object.assign(st, { undoTogether: (u: readonly unknown[]) => (asked.push([...u]), (() => false) as unknown as GuardedUndo) });
     const r = duplicateMeasurement(withTogether, "m1", ids)!;
     expect(r.undo()).toBe(false);
     expect(asked[0]).toHaveLength(1 + EL.length);
     expect(st.ops).toHaveLength(1 + EL.length);
   });
-  it("an older store without it: one by one, the last first", () => {
+  it("a function the store did not make: the whole «Отменить» is refused (false), nothing runs — never a part left out (review of #1279)", () => {
     const order: string[] = [];
-    expect(undoAll({}, [() => order.push("a"), "not a function", () => order.push("b")])()).toBe(true);
-    expect(order).toEqual(["b", "a"]);
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(undoAll({}, [() => order.push("a"), () => order.push("b")])()).toBe(false);
+    err.mockRestore();
+    expect(order).toEqual([]);
   });
 });
