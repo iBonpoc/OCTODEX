@@ -19,17 +19,17 @@ exports.run = async (h) => {
 
   await h.go("/today");
   const l = (id, name, cents, sectionId) => ({ id, name, group: "service", quantity: "1", unit: "ea", unitPriceCents: cents, ...(sectionId ? { sectionId } : {}) });
-  await p.evaluate(({ k, tpl, l1, l2 }) => {
-    const s = JSON.parse(localStorage.getItem(k));
-    s.db.estimateTemplates = [{
-      id: tpl, name: "Guards only (тестовые)",
-      doc: {
-        options: [{ id: "00000000-0000-4000-8000-0000000004a1", name: "Good", sections: [{ id: "00000000-0000-4000-8000-0000000004c1", title: "Guards" }], lines: [l1, l2] }],
-        settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" }, caHic: true },
-      },
-    }];
-    localStorage.setItem(k, JSON.stringify(s));
-  }, { k: DB_KEY, tpl: TPL, l1: l("00000000-0000-4000-8000-0000000004b1", "Guards (тестовые)", 4000, "00000000-0000-4000-8000-0000000004c1"), l2: l("00000000-0000-4000-8000-0000000004b2", "Install guards (тестовые)", 2500, "00000000-0000-4000-8000-0000000004c1") });
+  // the template goes in through h.seed (a page without the app: the running app would write its own over it, CHECKS §9 №12)
+  const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+  const sec = "00000000-0000-4000-8000-0000000004c1";
+  raw.db.estimateTemplates = [{
+    id: TPL, name: "Guards only (тестовые)",
+    doc: {
+      options: [{ id: "00000000-0000-4000-8000-0000000004a1", name: "Good", sections: [{ id: sec, title: "Guards" }], lines: [l("00000000-0000-4000-8000-0000000004b1", "Guards (тестовые)", 4000, sec), l("00000000-0000-4000-8000-0000000004b2", "Install guards (тестовые)", 2500, sec)] }],
+      settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" }, caHic: true },
+    },
+  }];
+  await h.seed(DB_KEY, raw);
 
   // a new estimate: «С чего начать?» — «Пустая смета»
   await h.go("/estimate/new?customerId=c2&propertyId=p2");

@@ -14,11 +14,12 @@ exports.run = async (h) => {
   const count = (id) => p.getByTestId(id).locator("visible=true").count();
   const lineIds = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-line-", ""));
   const focusedQty = () => p.evaluate(() => document.activeElement?.closest('[data-testid^="est-qty-"]')?.getAttribute("data-testid") ?? null);
-  const seed = (tpls) => p.evaluate(({ k, tpls }) => {
-    const s = JSON.parse(localStorage.getItem(k));
-    s.db.estimateTemplates = tpls;
-    localStorage.setItem(k, JSON.stringify(s));
-  }, { k: DB_KEY, tpls });
+  // the templates go in through h.seed (a page without the app: the running app would write its own over them, CHECKS §9 №12)
+  const seed = async (tpls) => {
+    const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+    raw.db.estimateTemplates = tpls;
+    await h.seed(DB_KEY, raw);
+  };
   const { sheetGone } = require("../sheet.cjs");
   const openMenu = async () => {
     await tid("est-list-add").getByRole("button").click();
