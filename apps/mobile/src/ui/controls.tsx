@@ -568,6 +568,7 @@ export function TextField({
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",
         paddingHorizontal: space[3],
+        // the same frame as a one-line field of this height (e2e 343 compares them)
         paddingVertical: one ? Math.max(0, (h - line) / 2) : multi ? space[2] : 0,
         gap: space[2],
       }}
@@ -587,13 +588,15 @@ export function TextField({
         aria-disabled={ro || undefined}
         onChangeText={(v) => {
           const nv = f.fmt ? f.fmt(v) : v;
+          // text taken away: measure again from the smallest height (a textarea's scrollHeight never drops below its height)
+          if (multi && nv.length < len.current) setTextH(0);
           field?.edit(nv);
           onChangeText(nv);
         }}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
         multiline={multi}
-        onContentSizeChange={multi ? (e) => setTextH(Math.ceil(e.nativeEvent.contentSize.height)) : undefined}
+        onContentSizeChange={multi && Platform.OS === "web" ? (e) => setTextH(Math.ceil(e.nativeEvent.contentSize.height)) : undefined}
         keyboardType={f.kb ?? "default"}
         inputMode={f.kb === "decimal-pad" ? "decimal" : f.kb === "number-pad" ? "numeric" : f.kb === "phone-pad" ? "tel" : f.kb === "email-address" ? "email" : f.kb === "url" ? "url" : type === "search" ? "search" : "text"}
         autoComplete={f.ac}
@@ -613,7 +616,8 @@ export function TextField({
         style={{
           flex: 1,
           minHeight: minH,
-          height: multi ? Math.max(minH, textH) : undefined,
+          // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
+          height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
           fontFamily: font.families.regular,
           fontSize: font.size.body + 2,

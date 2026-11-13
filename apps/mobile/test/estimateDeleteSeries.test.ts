@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { CustomLine } from "@octo/estimating-engine";
-import { dropLine, restoreDeleted } from "../src/features/estimateRows";
+import { dropLine, nextSeries, restoreDeleted } from "../src/features/estimateRows";
+import { toastExpires, toastIdFor } from "../src/ui/toastArm";
 
 const ln = (id: string, over: Partial<CustomLine> = {}): CustomLine => ({ id, name: id, group: "material", quantity: "1", unit: "ea", unitPriceCents: 100, ...over });
 const ids = (ls: CustomLine[]) => ls.map((l) => l.id).join(",");
@@ -40,5 +41,34 @@ describe("unit:estimateDeleteSeries — one «Вернуть» for a series of d
     const s: { line: CustomLine; index: number }[] = [];
     const l = del(["a", "b"].map((x) => ln(x)), "a", s);
     expect(ids(restoreDeleted(restoreDeleted(l, s), s))).toBe("a,b");
+  });
+});
+
+describe("unit:estimateDeleteSeries — which deletions one «Вернуть» takes back", () => {
+  const it1 = { line: ln("a"), index: 0 };
+  const it2 = { line: ln("b"), index: 1 };
+  it("the same variant while the toast is on screen: added to the series", () => {
+    expect(nextSeries({ toast: 1, optionId: "good", items: [it1] }, true, "good", it2)).toEqual([it1, it2]);
+  });
+  it("another variant (Good → Better): a new series — nothing comes back into a wrong variant", () => {
+    expect(nextSeries({ toast: 1, optionId: "good", items: [it1] }, true, "better", it2)).toEqual([it2]);
+  });
+  it("the toast gone or replaced by another: a new series", () => {
+    expect(nextSeries({ toast: 1, optionId: "good", items: [it1] }, false, "good", it2)).toEqual([it2]);
+    expect(nextSeries(null, false, "good", it2)).toEqual([it2]);
+  });
+});
+
+describe("unit:toast — one toast that grows (DS §15.2)", () => {
+  it("`grow` with the toast on screen keeps its id; gone or another one on screen — a new toast", () => {
+    expect(toastIdFor(100, 100, 900)).toBe(100);
+    expect(toastIdFor(200, 100, 900)).toBe(900);
+    expect(toastIdFor(undefined, 100, 900)).toBe(900);
+    expect(toastIdFor(100, undefined, 900)).toBe(900);
+  });
+  it("the timer of an earlier show does not hide the grown toast", () => {
+    expect(toastExpires({ id: 100, at: 500 }, 100, 100)).toBe(false);
+    expect(toastExpires({ id: 100, at: 500 }, 100, 500)).toBe(true);
+    expect(toastExpires(null, 100, 500)).toBe(false);
   });
 });

@@ -113,6 +113,14 @@ export function reinsertLine(lines: CustomLine[], line: CustomLine, index: numbe
  * «Вернуть» of a series of deletions (DS §15.2, О15): only the deleted lines come back, each to its place, in the reverse order of
  * the deletions (each index was taken from the list as it stood then); everything else done in those seconds stays as it is.
  */
+export type DeleteSeries = { toast: number; optionId: string; items: { line: CustomLine; index: number }[] };
+/**
+ * The deletions «Вернуть» takes back after one more: added to the series while its toast is on screen AND it is the same variant
+ * (Good / Better / Best) — a line deleted in another variant starts a new series, so nothing comes back into a wrong variant.
+ */
+export function nextSeries(prev: DeleteSeries | null, toastOnScreen: boolean, optionId: string, item: { line: CustomLine; index: number }): DeleteSeries["items"] {
+  return prev && toastOnScreen && prev.optionId === optionId ? [...prev.items, item] : [item];
+}
 export function restoreDeleted(lines: CustomLine[], deleted: readonly { line: CustomLine; index: number }[]): CustomLine[] {
   return [...deleted].reverse().reduce((acc, d) => reinsertLine(acc, d.line, d.index), lines);
 }

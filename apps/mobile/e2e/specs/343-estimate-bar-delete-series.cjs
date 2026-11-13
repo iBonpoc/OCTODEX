@@ -3,8 +3,9 @@
  * - 390: the pinned bar has the buttons IN ONE ROW — «Сохранить» on the left, «Сохранить и отправить» on the right, widths
  *   2 : 3, each 44 high; the tech has one «Сохранить» across the bar and «Отправит офис»; 820 / 1280: no bar, the buttons stand in the column;
  * - three lines deleted one after another: ONE toast «Удалено позиций: 3» (the count grows, the toast is not replaced);
- *   a price changed between the deletions stays after «Вернуть», and all three lines are back on their places;
- * - the empty description of the open row is one line high and grows with the text.
+ *   a price changed between the deletions stays after «Вернуть», and all three lines are back on their places; another
+ *   toast between two deletions ends the series;
+ * - the empty description of the open row is one line high, grows with the text and comes back down when it is erased.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -39,12 +40,19 @@ exports.run = async (h) => {
   const frame = (loc) => loc.evaluate((el) => el.parentElement.getBoundingClientRect().height);
   const h0 = await frame(desc);
   const name = await frame(vis(`[data-testid="est-name-${a}"] input`).first());
-  h.expect(Math.abs(h0 - name) < 2, `the empty description is one line, as the name field (${h0} vs ${name})`);
+  h.expect(Math.abs(h0 - name) < 1, `the empty description is one line, as the name field (${h0} vs ${name})`);
   await desc.fill("Line one\nLine two\nLine three");
   await p.waitForFunction((id) => {
     const el = document.querySelector(`[data-testid="est-line-${id}"] textarea`);
     return el && el.parentElement.getBoundingClientRect().height > 70;
   }, a, { timeout: 3000 });
+  // the text erased: one line again (a textarea's height must come back down)
+  await desc.fill("");
+  await p.waitForFunction(([id, hh]) => {
+    const el = document.querySelector(`[data-testid="est-line-${id}"] textarea`);
+    return el && Math.abs(el.parentElement.getBoundingClientRect().height - hh) < 1;
+  }, [a, name], { timeout: 3000 });
+  await desc.fill("Cleaned and flushed");
   await vis(`[data-testid="est-name-${a}"] input`).first().fill("Gutter clean (тестовые)");
   await vis(`[data-testid="est-price-${a}"] input`).first().fill("10");
   await h.shot("desc");
@@ -72,6 +80,15 @@ exports.run = async (h) => {
   await p.waitForFunction((n) => document.querySelectorAll('[data-testid^="est-line-"]').length === n, before.length, { timeout: 3000 });
   h.expect((await lineIds()).join() === before.join(), "all three back, each on its place");
   h.expect(/\$35\b/.test(await tid(`est-sum-${keep}`).innerText()), "the price changed between the deletions stays ($35)");
+
+  // another toast between two deletions ends the series: the next deletion is «Позиция удалена», not «Удалено позиций: 2»
+  await tid(`est-trash-${x}`).getByRole("button").click();
+  await p.waitForFunction(() => /Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
+  await tid(`est-menu-${keep}`).getByRole("button").click();
+  await tid(`est-act-duplicate-${keep}`).click();
+  await p.waitForFunction(() => !/Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
+  await tid(`est-trash-${y}`).getByRole("button").click();
+  await p.waitForFunction(() => /Позиция удалена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });
 
   // the tech: one «Сохранить» across the bar
   if (phone) {

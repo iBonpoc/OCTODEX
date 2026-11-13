@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { toastArmed } from "./toastArm";
+import { toastArmed, toastExpires, toastIdFor } from "./toastArm";
 import { toastBottom, useFooterInset } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -760,9 +760,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const show = useCallback((text: string, undo?: GuardedUndo, opts?: { grow?: number }) => {
     if (timer.current) clearTimeout(timer.current);
     const at = Date.now();
-    const id = opts?.grow !== undefined && current.current?.id === opts.grow ? opts.grow : at;
+    const id = toastIdFor(current.current?.id, opts?.grow, at);
     setItem({ id, at, text, undo });
-    timer.current = setTimeout(() => setItem((cur) => (cur?.id === id && cur.at === at ? null : cur)), motion.toastUndoMs);
+    timer.current = setTimeout(() => setItem((cur) => (toastExpires(cur, id, at) ? null : cur)), motion.toastUndoMs);
     return id;
   }, [setItem]);
   const showing = useCallback((id: number) => current.current?.id === id, []);

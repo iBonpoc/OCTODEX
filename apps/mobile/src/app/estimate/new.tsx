@@ -20,7 +20,7 @@ import type { Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
-import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, replaceLine, restoreDeleted, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { ActionBar } from "@/ui/actionBar";
 import { useReducedMotion } from "react-native-reanimated";
@@ -201,7 +201,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (unhiddenIds.includes(id)) setUnhiddenIds((ids) => ids.filter((x) => x !== id));
   };
   // «Отменить» of an action takes back THAT action only (a row edited since stays as edited)
-  const deleted = useRef<{ toast: number; items: { line: CustomLine; index: number }[] } | null>(null);
+  const deleted = useRef<DeleteSeries | null>(null);
   const removeLine = (id: string) => {
     const index = option.lines.findIndex((l) => l.id === id);
     const line = option.lines[index];
@@ -210,13 +210,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     setOpenId((cur) => (cur === id ? null : cur));
     // a series of deletions is ONE toast «Удалено позиций: N · Вернуть» (DS §15.2): while it is on screen, a new one adds to it
     const prev = deleted.current;
-    const series = prev && toast.showing(prev.toast) ? [...prev.items, { line, index }] : [{ line, index }];
+    const series = nextSeries(prev, !!prev && toast.showing(prev.toast), option.id, { line, index });
     const text = series.length === 1 ? t("est.row.deleted") : t("est2.row.deletedN", { n: series.length });
     const undo = localUndo(() => {
       deleted.current = null;
       setOption((o) => ({ ...o, lines: restoreDeleted(o.lines, series) }));
     });
-    deleted.current = { toast: toast.show(text, undo, { grow: prev?.toast }), items: series };
+    deleted.current = { toast: toast.show(text, undo, { grow: series.length > 1 ? prev?.toast : undefined }), optionId: option.id, items: series };
   };
   // what is wrong in the open row now: the line's own data and the number fields that hold text which is not a number
   const problemsOf = (l: CustomLine) => {
