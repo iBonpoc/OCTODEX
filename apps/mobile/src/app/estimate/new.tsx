@@ -8,7 +8,7 @@ import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, s
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
-import { canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
+import { appendTemplate, canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, removeAppended, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, nextOptionName, recommend, withoutOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
@@ -66,7 +66,7 @@ export default function EstimateBuilderScreen() {
   return <EstimateBuilder key={key} drafts={drafts} />;
 }
 
-type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string };
+type Params = { id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string; pick?: string };
 
 function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDrafts> }) {
   const params = useLocalSearchParams<Params>();
@@ -95,7 +95,19 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [unhiddenIds, setUnhiddenIds] = useState<string[]>(() => fromTpl?.unhidden ?? []);
   // «Сохранить в каталог» chosen on rows (by line id); done when the row folds with a right line
   const [wantCatalog, setWantCatalog] = useState<string[]>(() => draft?.wantCatalog ?? []);
-  const [startOpen, setStartOpen] = useState(() => !existing && !draft && !given && !tplEdit && templates.length > 0);
+  // «Сметы → ＋ → Из шаблона…» (DS §8.13): the sheet opens on the templates themselves (no «Пустая смета»), even with none
+  const askedTemplates = params.pick === "templates" && !existing && !given && !tplEdit;
+  // a draft is open: the template is ADDED to it (what is typed is never lost), as from the editor (code review)
+  const [startOpen, setStartOpen] = useState(() => askedTemplates || (!existing && !draft && !given && !tplEdit && templates.length > 0));
+  /** the sheet is a list of templates only: asked for («Из шаблона…»), not the first «С чего начать?» */
+  const [pickOnly, setPickOnly] = useState(askedTemplates);
+  /** the lines that came from a template, in order: «Кол-во» of each, «›» to the next (DS §8.13 «загрузил и меняю количество») */
+  const [qtyChain, setQtyChain] = useState<string[]>([]);
+  /** what to do once «С чего начать?» has gone (the cursor into «Кол-во»), and whether it was opened from the editor */
+  const afterStart = useRef<(() => void) | null>(null);
+  const startInEditor = useRef(askedTemplates && !!draft);
+  /** …or once the client is chosen, when the template was picked before the client («Сметы → ＋ → Из шаблона…») */
+  const afterClient = useRef<(() => void) | null>(null);
   const [doc, setDoc] = useState<EstimateDoc>(() =>
     existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
   );
@@ -170,19 +182,44 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   };
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
+    setPickOnly(false);
+    // asked from the editor («Из шаблона…», «⋯»): closing it is only closing — the client is chosen in the editor
+    const inEditor = startInEditor.current;
+    startInEditor.current = false;
+    // from the editor (or onto a draft) a template only ADDS: the sections, the note, the tax, the discount and the empty options
+    // typed before stay (DS §8.13 «набранное не теряется»; code review: the empty editor replaced them)
+    if (x && (inEditor || hasContent(doc))) return void addTemplate(x, hasContent(doc));
     if (x) {
       const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
+      const ci = Math.max(0, r.doc.options.findIndex((o) => o.recommended));
       setDoc(r.doc);
-      setCur(Math.max(0, r.doc.options.findIndex((o) => o.recommended)));
+      setCur(ci);
       setTemplateId(x.id);
       setCheckPrice(r.checkPrice);
       setUnhiddenIds(r.unhidden);
       if (!title.trim()) setTitle(x.name);
       toast.show(r.checkPrice.length ? t("est.tpl.checkPrice", { n: r.checkPrice.length }) : t("est.tpl.applied", { name: x.name }));
+      focusChain(activeLines(r.doc.options[ci]?.lines ?? []).map((l) => l.id), !customerId && !inEditor);
     }
-    if (!customerId) setClientPicker(true);
+    if (!customerId && !inEditor) {
+      // the client is asked next: the cursor goes into «Кол-во» once that sheet has gone too
+      afterStart.current = null;
+      setClientPicker(true);
+    }
   };
-
+  /** «Кол-во» of the first line of `ids` takes the cursor (the row opens in place); `ids` is the «›» chain */
+  const focusChain = (ids: string[], afterClientPick = false) => {
+    setQtyChain(ids);
+    const first = ids[0];
+    if (!first) return;
+    // after the sheet has gone: a field focused under a leaving sheet loses the cursor (as the catalog picker does)
+    const go = () => {
+      setFocusRow({ id: first, field: "qty" });
+      setOpenId(first);
+    };
+    if (afterClientPick) afterClient.current = go;
+    else afterStart.current = go;
+  };
   const customer = db.customers.find((c) => c.id === customerId);
   const property = db.properties.find((p) => p.id === propertyId) ?? db.properties.find((p) => p.customerId === customerId);
   const option = doc.options[Math.min(cur, doc.options.length - 1)]!;
@@ -449,8 +486,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const cid = option.lines.find((l) => l.id === id)?.catalogItemId;
     if (cid) router.push(`/catalog/${cid}`);
   };
-  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction });
-  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction };
+  /** «›» in «Кол-во» of a line that came from a template: the next one opens with the cursor in its «Кол-во» */
+  const nextQty = (id: string) => {
+    if (!leaveRow()) return;
+    // the next one was deleted meanwhile: the row only closes
+    if (!option.lines.some((l) => l.id === id)) return;
+    setFocusRow({ id, field: "qty" });
+    setOpenId(id);
+  };
+  const latest = useRef({ openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty });
+  latest.current = { openRow, leaveRow, patchLine, rowAction, openInCatalog, sectionAction, nextQty };
   const sectionApi = useMemo<SectionApi>(
     () => ({
       // folding a section closes the open row first: a wrong row speaks and stays, the section does not fold over it
@@ -478,6 +523,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       bad: (id, field, bad) => void (bad ? badFields.current.add(`${id}:${field}`) : badFields.current.delete(`${id}:${field}`)),
       wantCatalog: (id, on) => setWantCatalog((ids) => (on ? [...ids.filter((x) => x !== id), id] : ids.filter((x) => x !== id))),
       openInCatalog: (id) => latest.current.openInCatalog(id),
+      nextQty: (id) => latest.current.nextQty(id),
     }),
     [],
   );
@@ -521,6 +567,52 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       });
       setCur(at);
     }));
+  };
+  /** «Из шаблона…» (the empty editor) and «⋯ → Добавить из шаблона…»: the open row settles first, then the list of templates */
+  const openTemplates = () => {
+    if (!leaveRow()) return;
+    startInEditor.current = true;
+    setPickOnly(true);
+    setStartOpen(true);
+  };
+  /**
+   * «Добавить из шаблона…» into a typed estimate (DS §8.13): only adds — the lines at the end, sections as sections, options by
+   * number; «Добавлено позиций: N · Вернуть» takes out only what came (the edits since stay); «Кол-во» of the first that came
+   */
+  const addTemplate = (x: EstimateTemplate, typed: boolean) => {
+    const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
+    const a = appendTemplate(doc, r.doc, cur);
+    const before = doc.options.length;
+    setDoc(a.doc);
+    setCheckPrice((ids) => [...ids, ...r.checkPrice]);
+    setUnhiddenIds((ids) => [...ids, ...r.unhidden]);
+    const n = a.added.lineIds.length;
+    const words = [
+      typed ? t("est.tplIn.added", { n }) : t("est.tpl.applied", { name: x.name }),
+      // a line whose catalog item is gone came at the template's price: say so here too (code review)
+      ...(r.checkPrice.length ? [t("est.tpl.checkPrice", { n: r.checkPrice.length })] : []),
+      ...(a.added.skipped.length ? [t("est.tplIn.skipped", { names: a.added.skipped.join(", ") })] : []),
+    ].join(" · ");
+    if (!typed) {
+      // nothing was typed: no «Вернуть» — nothing to give back but the template itself (DS §8.13); it names the estimate
+      if (!templateId) setTemplateId(x.id);
+      if (!title.trim()) setTitle(x.name);
+      toast.show(words);
+    } else
+      toast.show(
+        words,
+        localUndo(() => {
+          const gone = new Set(a.added.lineIds);
+          setDoc((d) => removeAppended(d, a.added));
+          setCur((c) => Math.min(c, Math.max(0, before - 1)));
+          setQtyChain([]);
+          setCheckPrice((ids) => ids.filter((x) => !gone.has(x)));
+          setUnhiddenIds((ids) => ids.filter((x) => !gone.has(x)));
+          setFocusRow((f) => (f && gone.has(f.id) ? null : f));
+          setOpenId((o) => (o && gone.has(o) ? null : o));
+        }),
+      );
+    focusChain(a.added.chain);
   };
   const pickOption = (id: string) => {
     const i = doc.options.findIndex((o) => o.id === id);
@@ -803,6 +895,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     total={totalById.get(r.line.id) ?? 0}
                     costsVisible={seeCosts}
                     clientScreen={clientScreen}
+                    qtyNext={qtyChain.includes(r.line.id) ? qtyChain[qtyChain.indexOf(r.line.id) + 1] : undefined}
                     form={rowForm}
                     api={rowApi}
                     locked={signed}
@@ -831,6 +924,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <Button label={t("est.row.addCatalog")} icon="search" variant="secondary" full onPress={openCatalog} />
             </View>
           </RowView>
+          {/* the empty editor: «Из шаблона…» — a way to add lines, as its neighbours; gone after the first line (DS §8.13) */}
+          {!signed && !tplEdit && !hasContent(doc) ? (
+            <View testID="est-from-template">
+              <Button label={t("est.tplIn.from")} icon="doc" variant="secondary" full onPress={openTemplates} />
+            </View>
+          ) : null}
           {signed ? null : (
             <RowView>
               <View style={{ flex: 1 }} testID="est-group-by-kind">
@@ -875,7 +974,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             ) : null}
           </Card>
-          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} />
+          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} testID="ue-note" />
           {tplEdit ? (
             <View testID="est-tpl-save">
               <Button label={t("est.tpl.saveTemplate")} icon="check" full disabled={!title.trim()} onPress={saveTemplate} />
@@ -1074,18 +1173,33 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         </View>
       </Sheet>
       {/* «С чего начать?» (spec 07 §7.4): a choice menu in a sheet — rows (rule 12) */}
-      <Sheet visible={startOpen} onClose={() => start(null)} title={t("est.tpl.start")}>
+      <Sheet
+        visible={startOpen}
+        onClose={() => start(null)}
+        title={t("est.tpl.start")}
+        onExited={() => {
+          const next = afterStart.current;
+          afterStart.current = null;
+          // two frames on: the web gives the focus back to what opened the sheet («⋯», «Из шаблона…») right after it is gone —
+          // the row opened before that would lose the cursor in «Кол-во»
+          if (next) requestAnimationFrame(() => requestAnimationFrame(next));
+        }}
+      >
         <View testID="est-start" style={{ gap: space[1] }}>
-          <View testID="est-start-blank">
-            <ListRow title={t("est.tpl.blank")} subtitle={t("est.tpl.blankHint")} left={<Icon name="plus" />} onPress={() => start(null)} />
-          </View>
-          {templates.map((x) => (
+          {pickOnly ? null : (
+            <View testID="est-start-blank">
+              <ListRow title={t("est.tpl.blank")} subtitle={t("est.tpl.blankHint")} left={<Icon name="plus" />} onPress={() => start(null)} />
+            </View>
+          )}
+          {/* asked for templates and there are none: say how one is made (DS §8.13, §13) */}
+          {pickOnly && !templates.length ? <Empty icon="doc" title={t("est.tpl.empty")} hint={t("est.tpl.emptyHint")} testID="est-start-none" /> : null}
+          {templates.map((x, i) => (
             <View key={x.id} testID={`est-start-${x.id}`}>
-              <Divider />
+              {pickOnly && i === 0 ? null : <Divider />}
               <ListRow
                 title={x.name}
                 subtitle={`${t("est.tpl.options", { n: x.doc.options.length })} · ${t("est.tpl.from", { sum: money(templateFromCents(x.doc, db.catalog)) })}`}
-                left={<Icon name="copy" />}
+                left={<Icon name="doc" />}
                 onPress={() => start(x)}
               />
             </View>
@@ -1100,15 +1214,26 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           setPropertyId(pid);
           setClientPicker(false);
         }}
+        onExited={() => {
+          const next = afterClient.current;
+          afterClient.current = null;
+          // two frames on, as after «С чего начать?»: the web gives the focus back to the opener right after a sheet is gone
+          if (next) requestAnimationFrame(() => requestAnimationFrame(next));
+        }}
       />
       <Menu
         visible={!!estMenu}
         anchor={estMenu}
         title={t("est.actions")}
-        items={[{ key: "client" as const, label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" }]}
-        onSelect={() => {
+        items={[
+          { key: "client" as const, label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" },
+          // a typed estimate: a template only adds to it (the empty one has «Из шаблона…» under the add buttons)
+          ...(!signed && hasContent(doc) ? [{ key: "template" as const, label: t("est.tplIn.add"), icon: "doc" as const, testID: "est-menu-template" }] : []),
+        ]}
+        onSelect={(k) => {
           setEstMenu(null);
-          toggleClientScreen(!clientScreen);
+          if (k === "template") openTemplates();
+          else toggleClientScreen(!clientScreen);
         }}
         onClose={() => setEstMenu(null)}
       />
