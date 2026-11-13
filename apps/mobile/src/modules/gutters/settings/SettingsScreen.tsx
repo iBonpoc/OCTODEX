@@ -6,7 +6,7 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { GUTTER_MOUNTS } from "@octo/estimating-engine";
@@ -184,6 +184,9 @@ export default function GutterSettingsScreen() {
   const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
   const setRule = (key: string, v: unknown) => put(`gset-rule-${key}`, ["rules", key], v);
   /** a number rule as a stepper: its unit, range and step (spec П4) */
+  // the percent the company had before «без запаса»: switching it on again brings it back (in this visit; the stored value is 0 meanwhile)
+  const lastWaste = useRef<number>(RULE_NUMS.wastePct.def);
+  if (rules.wastePct > 0) lastWaste.current = rules.wastePct;
   const num = (key: keyof typeof RULE_NUMS, unit: string, label: string) => {
     const r = RULE_NUMS[key];
     return (
@@ -336,7 +339,7 @@ export default function GutterSettingsScreen() {
             {num("hangerSpacingIn", t(k("in")), t(k("r.hangerSpacingIn")))}
             <Switch testID="gset-rule-hangerExtra" on={rules.hangerExtra} onChange={(v) => setRule("hangerExtra", v)} label={t(k("r.hangerExtra"))} />
             {/* waste: a switch («без запаса» = 0 %, #1355) and the percent under it while it is on */}
-            <Switch testID="gset-rule-wasteOn" on={rules.wastePct > 0} onChange={(v) => setRule("wastePct", v ? RULE_NUMS.wastePct.def : 0)} label={t(k("r.wasteOn"))} />
+            <Switch testID="gset-rule-wasteOn" on={rules.wastePct > 0} onChange={(v) => setRule("wastePct", v ? lastWaste.current : 0)} label={t(k("r.wasteOn"))} />
             {rules.wastePct > 0 ? (
               <Step testID="gset-rule-wastePct">
                 <Stepper label={t(k("r.wastePct"))} unit="%" value={rules.wastePct} min={1} max={RULE_NUMS.wastePct.max} step={RULE_NUMS.wastePct.step} onChange={(v) => setRule("wastePct", v)} />

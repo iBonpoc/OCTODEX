@@ -6,7 +6,7 @@ import { setCornerMethod, setDsAttrs, setRunAttrs } from "../src/modules/gutters
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { cornerChoiceOf, findCorners, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
 import {
-  choicesFor, colorName, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, setPath, settingsFit, toggleOffer, toRulesOverride,
+  choicesFor, colorName, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, RULE_NUMS, setPath, settingsFit, toggleOffer, toRulesOverride,
 } from "../src/modules/gutters/settings";
 
 describe("чтение настроек", () => {
@@ -340,11 +340,15 @@ describe("#1355: запас на отход и запас на угол по в�
     expect(coil({ rules: { wastePct: 0 } })).toBeLessThan(coil({}));
     expect(coil({ rules: { wastePct: 0 } })).toBe(40); // 480 ″ of gutter, no corners: the installed length in whole feet
   });
-  it("диапазон углов расширен до 24″: 14″ помещается, 25″ — нет; старое поле (внутренний) работает как раньше", () => {
+  it("диапазон: наружный (новое поле) 0–24″ — 14″ помещается, 25″ нет; внутренний (старое поле) остаётся 0–12″ (правило 16)", () => {
     expect(readRules({ rules: { cutCornerOutIn: 14 } }).cutCornerOutIn).toBe(14);
     expect(readRules({ rules: { cutCornerOutIn: 24 } }).cutCornerOutIn).toBe(24);
     expect(readRules({ rules: { cutCornerOutIn: 25 } }).cutCornerOutIn).toBe(14);
-    expect(readRules({ rules: { cutCornerIn: 18 } }).cutCornerIn).toBe(18); // 0–12 before, 0–24 now
+    // rule 16: the old field keeps its range 0–12 — a phone with the old app reads more than 12 as «out of range» and takes 6; the two devices must count the same
+    expect(readRules({ rules: { cutCornerIn: 12 } }).cutCornerIn).toBe(12);
+    expect(readRules({ rules: { cutCornerIn: 13 } }).cutCornerIn).toBe(6);
+    expect(RULE_NUMS.cutCornerIn.max).toBe(12);
+    expect(RULE_NUMS.cutCornerOutIn.max).toBe(24);
     expect(toRulesOverride({ rules: { cutCornerIn: 9 } })).toMatchObject({ cutCornerAllowanceIn: 9, cutCornerOutAllowanceIn: 14 });
   });
   it("сохранённые настройки без нового поля (до #1355) читаются: наружный 14″, остальное как было", () => {

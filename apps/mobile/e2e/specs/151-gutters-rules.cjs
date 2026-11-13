@@ -78,7 +78,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await settings()).rules?.wastePct === 0, "«Считать запас» off: 0 % saved");
   await waitFor(async () => (await tid("gset-rule-wastePct").count()) === 0, "…and the percent goes away");
   await tid("gset-rule-wasteOn").getByRole("switch").click();
-  await waitFor(async () => (await settings()).rules?.wastePct === 10, "on again: 10 %");
+  await waitFor(async () => (await settings()).rules?.wastePct === 11, "on again: the percent the company had (11 %), not the default");
   // the corner allowance by kind: an outside corner 14″, an inside one 6″
   h.expect(/14/.test(await tid("gset-rule-cutCornerOutIn").innerText()) && /6/.test(await tid("gset-rule-cutCornerIn").innerText()), "an outside corner 14″, an inside one 6″ by default");
   await tid("gset-rule-cutCornerOutIn").getByRole("button", { name: /\+1$/ }).click();
