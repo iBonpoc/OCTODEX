@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
-import { Linking, ScrollView, View } from "react-native";
+import { Linking, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Person } from "@/data/types";
@@ -10,7 +10,7 @@ import { mailtoHref } from "@/features/contactLinks";
 import { smsWithBody } from "@/features/sms";
 import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import {
   firstEmail, firstPhone, messageJobChoices, messageLanguage, messagePeople, messageSubject, messageTemplates, messageText, ownerName, ownerPeople, TEMPLATE_LABEL,
@@ -113,7 +113,7 @@ function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: Mess
           ) : (
             <View style={{ gap: space[2] }} testID="msg-people">
               {preset.owner ? null : <TextField type="search" icon="search" value={query} onChangeText={setQuery} placeholder={t("w6.msg.toSearch")} />}
-              <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+              <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {people.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
                 ) : (
@@ -124,7 +124,7 @@ function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: Mess
                     </View>
                   ))
                 )}
-              </ScrollView>
+              </SheetScroll>
             </View>
           )}
         </Field>

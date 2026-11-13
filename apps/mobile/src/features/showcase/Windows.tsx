@@ -4,12 +4,12 @@ import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
-import { Sheet } from "@/ui/overlays";
-import { T } from "@/ui/primitives";
-import { Card, SectionTitle } from "@/ui/surfaces";
+import { Sheet, SheetScroll } from "@/ui/overlays";
+import { Icon, T } from "@/ui/primitives";
+import { Card, ListRow, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC";
+type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list";
 
 /** the third step of the chain: mounted by the owner's condition and recreated at each opening — the way a sheet is meant to be mounted */
 function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExited: () => void; onClose: () => void }) {
@@ -55,6 +55,7 @@ export function WindowsSection() {
         {row("medium", t("ds.sheet.medium"), t("ds.sheet.mediumHint"))}
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
+        {row("list", t("ds.sheet.list"), t("ds.sheet.listHint"))}
         {row("stuck", t("ds.sheet.stuck"), t("ds.sheet.stuckHint"))}
         {row("chainA", t("ds.sheet.chain"), t("ds.sheet.chainHint"))}
         <View testID="showcase-sheet-self" style={{ gap: space[1] }}>
@@ -141,6 +142,14 @@ export function WindowsSection() {
         footer={<Button label={t("ds.sheet.save")} full onPress={close} />}
       >
         <T v="body">{t("ds.sheet.body")}</T>
+      </Sheet>
+      {/* a long list in a sheet: the scroll bar stands in the sheet's side inset, not over the rows' arrows (#1339, DS Б1) */}
+      <Sheet visible={open === "list"} onClose={close} title={t("ds.sheet.list")} height="large">
+        <SheetScroll testID="showcase-sheet-list-scroll">
+          {Array.from({ length: 24 }, (_, i) => (
+            <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} right={<Icon name="chevronRight" />} onPress={close} />
+          ))}
+        </SheetScroll>
       </Sheet>
       <Sheet visible={open === "large"} onClose={close} title={t("ds.sheet.large")} height="large" footer={<Button label={t("ds.sheet.save")} full onPress={close} />}>
         <T v="body">{t("ds.sheet.body")}</T>
