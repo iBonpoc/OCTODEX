@@ -120,8 +120,8 @@ ${blocks}
 ${notesHtml}
 ${termsHtml}
 ${a ? `<p class="ok">✓ ${esc(t("portal.approved"))}</p>` : ""}
-<p class="notice">${esc(t("est.rescission"))}</p>
-${signatures}
+<div class="signoff"><p class="notice">${esc(t("est.rescission"))}</p>
+${signatures}</div>
 ${record}
 ${pagesHtml(doc?.pages)}`;
   return docPage({

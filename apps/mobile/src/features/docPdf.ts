@@ -110,8 +110,9 @@ th { color: ${P.mut}; font-weight: 500; font-size: ${fs.small}pt; }
 .tot td { font-weight: 700; font-size: ${fs.heading}pt; }
 .sums .tot td { border-top: 1px solid ${P.rule}; padding-top: 4pt; }
 .note { margin-top: 10pt; white-space: pre-wrap; }
-h2 { font-weight: 700; }
-.notice { font-size: ${P.contract.noticePt}pt; font-weight: 700; color: ${P.ink}; margin-top: ${s.sectionGapPt}pt; break-inside: avoid; break-after: avoid; }
+${contract ? `h2 { font-weight: 700; }
+.notice { font-size: ${P.contract.noticePt}pt; font-weight: 700; color: ${P.ink}; margin-top: ${s.sectionGapPt}pt; }
+.signoff { break-inside: avoid; page-break-inside: avoid; }` : ""}
 .ok { color: ${P.okText}; font-weight: 600; }
 .sigs { display: flex; gap: 24pt; margin-top: ${s.sectionGapPt}pt; break-inside: avoid; }
 .sig { flex: 1; }
