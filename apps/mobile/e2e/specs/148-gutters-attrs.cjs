@@ -143,7 +143,10 @@ exports.run = async (h) => {
   } else h.expect((await tid("attr-ds-kind").count()) === 1, "820/1280: the kind without «Ещё»");
   await more();
   h.expect((await tid("attr-ds-kind-rectPlain").getAttribute("aria-checked")) === "true", "rectangular, smooth by default");
+  // «Заливка» (DS «Выделение выбранного», #1306): the chosen kind carries the `check` in its corner, the other none
+  h.expect((await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 0, "the chosen kind has the check, the other has none");
   await tid("attr-ds-kind-roundPlain").click(); // the kind: round
+  await waitFor(async () => (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 0, "the check moved to the round kind");
   await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
   await choose("attr-wall", "Кирпич");
   await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + анкеры", "brick: its default wall kit");
