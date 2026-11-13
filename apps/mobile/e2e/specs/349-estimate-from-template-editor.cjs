@@ -39,7 +39,10 @@ exports.run = async (h) => {
   h.expect(from.y > add.y, "«Из шаблона…» under «＋ Новая позиция · Из каталога»");
   await h.shot("empty");
   // a note typed in the empty estimate: the template must not take it away
-  await tid("ue-note").locator("textarea, input").first().fill("Gate code 1234");
+  await tid("est-notes-row").click();
+  await tid("est-notes-field").locator("textarea, input").first().fill("Gate code 1234");
+  await tid("est-nt-done").getByRole("button").click();
+  await sheetGone(p);
   await tid("est-from-template").getByRole("button").click();
   await tid(`est-start-${TPL}`).waitFor({ timeout: 5000 });
   h.expect((await count("est-start-blank")) === 0, "asked for a template: the list of templates only");
@@ -50,7 +53,7 @@ exports.run = async (h) => {
   h.expect((await lineIds()).length === 2, "the template's two lines");
   h.expect((await p.locator('[data-testid^="est-section-"]').locator("visible=true").count()) >= 1, "its section came as a section");
   h.expect((await count("toast-undo")) === 0, "the empty estimate: no «Вернуть»");
-  h.expect((await tid("ue-note").locator("textarea, input").first().inputValue()) === "Gate code 1234", "the note typed before stays");
+  h.expect(/Gate code 1234/.test(await tid("est-notes-row").innerText()), "the note typed before stays");
   h.expect((await count("est-from-template")) === 0, "«Из шаблона…» is gone after the first line");
   await line.fold(h);
 
