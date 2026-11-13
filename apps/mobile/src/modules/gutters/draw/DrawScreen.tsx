@@ -54,7 +54,7 @@ import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
-import { localUndo } from "@/data/undo";
+import { localUndo, type GuardedUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -274,7 +274,7 @@ export default function DrawScreen() {
       if (next === prev) return;
       // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
       if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
-        announceDs.current(next.downspouts.length, () => commit(made, next, true));
+        announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
       }
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
       if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
@@ -728,7 +728,7 @@ export default function DrawScreen() {
     }
   };
   /** the toast «Водостоков стало N» (kept fresh each render: `commit` is made once) */
-  const announceDs = useRef<(n: number, undo: () => void) => void>(() => {});
+  const announceDs = useRef<(n: number, undo: GuardedUndo) => void>(() => {});
   announceDs.current = (n, undo) => toast.show(t("mod.gutters.draw.dsAutoCount", { n }), undo);
   /** «Расставить водостоки»: every chain of an old measurement gets its downspouts — one step of «Назад» (#1246) */
   const placeAutoDs = () => {
