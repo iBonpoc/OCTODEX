@@ -254,7 +254,6 @@ describe("design system: tokens only", () => {
       "app/auth/terms.tsx": 1,
       "app/auth/trade.tsx": 1,
       "app/company/[section].tsx": 1,
-      "app/estimate/new.tsx": 2, // ue.caWarn — #1377 (PR #1387)
       "app/help.tsx": 1,
       "app/lead/new.tsx": 1,
       "app/p/[token].tsx": 1,
