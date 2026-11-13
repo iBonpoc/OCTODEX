@@ -37,6 +37,8 @@ export const extraIcons = {
   /** «Скрыта от клиента» (DS 8.3): the eye crossed out */
   eyeOff: "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M4 4l16 16",
   box: "M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9",
+  /** «˄ Свернуть» of an open estimate line (DS §8.3) */
+  chevronUp: "M6 15l6-6 6 6",
   truck: "M2 6h12v10H2zM14 9h4l3 3.5V16h-7M5 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M15 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
   cart: "M3 4h2l2.4 11h10.8L20.5 7H6.3M9 20h.01M17 20h.01",
   repeat: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",

@@ -33,7 +33,7 @@ exports.run = async (h) => {
   await tid("est-add-new").getByRole("button").click();
   await waitCount('[data-testid^="est-name-"]', 1, "one open row: one name field");
   const folded = await rows().first().innerText();
-  h.expect(/Gutter/.test(folded) && /3 ea × \$10/.test(folded), `the first row folded with its words (${folded.replace(/\n/g, " ")})`);
+  h.expect(/Gutter/.test(folded) && /\$30/.test(folded), `the first row folded: «Кратко» — its name and sum (${folded.replace(/\n/g, " ")})`);
 
   // a wrong quantity keeps the row open: the error, the other row does not open
   await vis('[data-testid^="est-name-"]').first().locator("input").fill("Hanger");
