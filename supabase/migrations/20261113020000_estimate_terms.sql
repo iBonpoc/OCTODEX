@@ -8,9 +8,12 @@
 -- * The estimate's own Terms are a snapshot in the version: calc_inputs.terms (the phone's doc.terms) and its copy in
 --   estimate_versions.terms_text (a column since core, never written) — t08_terms_text derives it from calc_inputs on every
 --   write of calc_inputs, so every way of saving (save_estimate_version, the older separate requests, an older phone) agrees.
---   Sending locks the version (t40): the text the client signs never moves with a later change of the company's default.
+--   Sending or signing locks the version (locked_at; t40 then refuses any change): t06_terms_on_lock first writes the
+--   default in the client's language into a document still without `terms` (a draft made before #1304 — review of #1328),
+--   so the text the client reads and signs never moves with a later change of the company's default.
 -- * What the client reads (/p/, its PDF): app.client_doc passes `terms` (only a string); public.portal_estimate adds the
---   company's terms_by_lang (not for a signed estimate: it keeps the old single text it showed then) — the page picks (features/estimateTerms termsForClient): the estimate's own text when the key is
+--   company's terms_by_lang (not for a signed estimate: one locked before #1304 without its own keeps the old single
+--   text it showed then) — the page picks (features/estimateTerms termsForClient): the estimate's own text when the key is
 --   there ("" — no block), else the client's language → en → the old `terms`. The page's company.terms stays (a cached page).
 -- Rights: no new policies — companies_update lets only owner / admin change the defaults (core); a version is written by
 -- whoever may write the estimate. Rule 18: the new functions revoked from everyone (triggers and the definer page call them).
@@ -39,6 +42,11 @@ declare
 begin
   if jsonb_typeof(s) <> 'object' then
     return new;  -- not this trigger's business (the column's own shape)
+  end if;
+  -- estimate_settings written whole without the new key (an older writer that does not keep it): the stored defaults by
+  -- language stay — then the old key's change (if any) moves en below; es / ru are never lost (review of #1328)
+  if not (s ? 'terms_by_lang') and o ? 'terms_by_lang' then
+    s := jsonb_set(s, '{terms_by_lang}', o -> 'terms_by_lang');
   end if;
   -- only what this write changes is checked: an older row's value the migration could not move (too long, not a text)
   -- never blocks a save of the other settings (an older phone writes estimate_settings whole)
@@ -85,6 +93,33 @@ update public.companies
 
 create trigger t08_company_estimate_terms before insert or update of estimate_settings on public.companies
   for each row execute function app.tg_company_estimate_terms();
+
+-- a version being locked (sent / signed) whose document has no Terms of its own: the default in the client's language
+-- (app.estimate_doc_language — the same order as the phone's docLanguageFor without a person; features/estimateTerms
+-- withFrozenTerms the same). Definer: it reads its own company's defaults and the client's language only.
+create or replace function app.tg_version_terms_on_lock()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_lang text;
+  v_set  jsonb;
+begin
+  if old.locked_at is null and new.locked_at is not null
+     and jsonb_typeof(new.calc_inputs) = 'object' and not (new.calc_inputs ? 'terms') then
+    v_lang := app.estimate_doc_language(new.estimate_id);
+    select coalesce(co.estimate_settings, '{}'::jsonb) into v_set from public.companies co where co.id = new.company_id;
+    new.calc_inputs := new.calc_inputs || jsonb_build_object('terms', coalesce(
+      nullif(btrim(app.estimate_terms_by_lang(v_set) ->> v_lang), ''),
+      nullif(btrim(app.estimate_terms_by_lang(v_set) ->> 'en'), ''),
+      nullif(btrim(case when jsonb_typeof(v_set -> 'terms') = 'string' then v_set ->> 'terms' end), ''),
+      ''));
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_version_terms_on_lock() from public, anon, authenticated;
+-- before t08_terms_text (the copy follows) and t40 (the lock check sees the row as not locked yet: old.locked_at is null)
+create trigger t06_terms_on_lock before update of locked_at on public.estimate_versions
+  for each row execute function app.tg_version_terms_on_lock();
 
 -- the version's copy of its Terms: from the document, on every write of it (an older phone's document has none: null)
 create or replace function app.tg_version_terms_text()

@@ -41,7 +41,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
-import { syncCompanyTerms, termsForNew, termsOnClientChange, type TermsFor } from "@/features/estimateTerms";
+import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
 import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
@@ -2104,7 +2104,9 @@ export function StoreProvider({
         const token = (cur?.linkRevokedAt ? undefined : cur?.token) ?? tk ?? newToken();
         return mutate(
           "estimate.send",
-          (d) => {
+          (d0) => {
+            // #1304 (review): sending freezes the Terms (the server's t06_terms_on_lock the same)
+            const d = withFrozenTerms(d0, id);
             const est = d.estimates.find((e) => e.id === id);
             const now = new Date().toISOString();
             return {
@@ -2209,7 +2211,7 @@ export function StoreProvider({
         const token = e.token ?? newToken();
         const ids = { jobId: jobOfEstimate(dbRef.current, id)?.id ?? uid(), invoiceId: uid() };
         const now = new Date().toISOString();
-        return mutate("estimate.approve", (d) => withTaxSplit(clientSigned(d, id, a, ids, now, token), ids.invoiceId), {
+        return mutate("estimate.approve", (d) => withTaxSplit(clientSigned(withFrozenTerms(d, id), id, a, ids, now, token), ids.invoiceId), {
           k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
           // #1147: on site, the total the client saw (the option with its add-ons, as summarize counts it — the server the same)
           ...(a.channel === "on_site" ? { totalCents: summarize(e.doc, a).totalCents } : {}),

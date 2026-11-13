@@ -60,9 +60,20 @@ export function termsOnClientChange(db: DB, current: string | undefined, from: T
   return current === termsForNew(db, from).text ? next : current;
 }
 
-/** what the client reads as Terms: the estimate's own text when it has one ("" — none), otherwise (an estimate made before
- *  #1304) the company's default in the client's language — but a SIGNED one without its own keeps the old single text it
- *  showed before #1304, never a newer default in another language (security-check of #1304; the server the same) */
+/** sending or signing locks the version: an estimate still without its own Terms (a draft made before #1304) takes the
+ *  default in the client's language right then — what the client reads from that moment never moves (review of #1328;
+ *  the server's trigger t06_terms_on_lock does the same to the version it locks) */
+export function withFrozenTerms(db: DB, id: string): DB {
+  const e = db.estimates.find((x) => x.id === id);
+  if (!e?.doc || e.doc.terms !== undefined) return db;
+  const terms = termsForNew(db, { customerId: e.customerId, leadId: e.leadId }).text;
+  return { ...db, estimates: db.estimates.map((x) => (x.id === id ? { ...x, doc: { ...x.doc!, terms } } : x)) };
+}
+
+/** what the client reads as Terms: the estimate's own text when it has one ("" — none). Without it — a version locked
+ *  before #1304 (sending and signing now freeze it, withFrozenTerms): a signed one keeps the old single text it showed
+ *  then; an unsigned one (a draft) the company's current default in the client's language (security-check of #1304; the
+ *  server the same) */
 export function termsForClient(doc: Pick<EstimateDoc, "terms"> | undefined, co: Pick<Company, "estimate"> | null | undefined, lang: DocLang, signed = false): string {
   if (typeof doc?.terms === "string") return doc.terms;
   return signed ? (filled(co?.estimate.terms) ?? "") : termsDefault(co, lang);
