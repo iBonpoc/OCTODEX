@@ -41,10 +41,13 @@ export function ButtonsSection() {
         <View testID="showcase-btn-actionbar" style={{ gap: space[2] }}>
           <T v="heading">{t("ds.btn.bar")}</T>
           <T v="caption" tone="mut">{t("ds.btn.barHint")}</T>
-          <ActionBar summary={<T v="body" w="semibold">{t("ds.btn.barSummary")}</T>}>
-            <Button label={t("ds.btn.primary")} full onPress={press} />
-            <Button label={t("ds.btn.secondary")} variant="secondary" full onPress={press} />
-          </ActionBar>
+          <ActionBar
+            summary={<T v="body" w="semibold">{t("ds.btn.barSummary")}</T>}
+            second={<Button label={t("ds.btn.secondary")} size="bar" variant="secondary" full onPress={press} />}
+            main={<Button label={t("ds.btn.primary")} size="bar" full onPress={press} />}
+          />
+          <T v="caption" tone="mut">{t("ds.btn.barOne")}</T>
+          <ActionBar main={<Button label={t("ds.btn.primary")} size="bar" full onPress={press} />} />
         </View>
       </Card>
       <Card>

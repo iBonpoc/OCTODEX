@@ -45,7 +45,8 @@ export function Button({
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
-  size?: "sm" | "md" | "phone";
+  /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
+  size?: "sm" | "md" | "phone" | "bar";
   icon?: IconKey;
   disabled?: boolean;
   full?: boolean;
@@ -55,7 +56,8 @@ export function Button({
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
-  const h = component.button[size ?? (wide ? "md" : "phone")];
+  const bar = size === "bar";
+  const h = bar ? component.button.hit : component.button[size ?? (wide ? "md" : "phone")];
   const bg =
     variant === "primary" ? c.acc : variant === "secondary" ? c.surf2 : variant === "danger" ? c.status.bad.fill : "transparent";
   const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : c.ink;
@@ -69,7 +71,7 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       style={[
         {
-          height: h,
+          ...(bar ? { minHeight: h, paddingVertical: space[1] } : { height: h }),
           paddingHorizontal: space[4],
           borderRadius: radius.pill,
           backgroundColor: bg,
@@ -85,7 +87,7 @@ export function Button({
       ]}
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={fg} /> : null}
-      <T v="button" style={{ color: fg }} numberOfLines={1}>
+      <T v="button" style={bar ? { color: fg, flexShrink: 1, textAlign: "center" } : { color: fg }} numberOfLines={bar ? 2 : 1}>
         {label}
       </T>
     </Press>
@@ -468,6 +470,7 @@ export function TextField({
   label,
   icon,
   multiline,
+  rows,
   onSubmit,
   autoFocus,
   selectOnFocus,
@@ -492,6 +495,8 @@ export function TextField({
   label?: string;
   icon?: IconKey;
   multiline?: boolean;
+  /** a multi-line field: how many lines it shows empty (2 by default); it grows with the text either way */
+  rows?: 1 | 2;
   /** return key on the keyboard */
   onSubmit?: () => void;
   /** focus (and the keyboard) as soon as the field appears — a sheet opened for one value */
@@ -525,6 +530,12 @@ export function TextField({
   const f = FIELD[type];
   const multi = multiline ?? f.multiline ?? false;
   const h = wide ? component.field.h : component.field.phone;
+  // a multi-line field grows with its text (the browser's textarea does not by itself)
+  const [textH, setTextH] = useState(0);
+  // one line empty: the text's own line height, the frame padded to the field's height (44 phone / 36 wide)
+  const line = Math.round((font.size.body + 2) * font.lineHeight.body);
+  const one = multi && rows === 1;
+  const minH = one ? line : multi ? h * (rows ?? 2) : h;
   const input = useRef<React.ComponentRef<typeof TextInput>>(null);
   const len = useRef(value.length);
   len.current = value.length;
@@ -557,7 +568,8 @@ export function TextField({
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",
         paddingHorizontal: space[3],
-        paddingVertical: multi ? space[2] : 0,
+        // the same frame as a one-line field of this height (e2e 343 compares them)
+        paddingVertical: one ? Math.max(0, (h - line) / 2) : multi ? space[2] : 0,
         gap: space[2],
       }}
     >
@@ -576,12 +588,15 @@ export function TextField({
         aria-disabled={ro || undefined}
         onChangeText={(v) => {
           const nv = f.fmt ? f.fmt(v) : v;
+          // text taken away: measure again from the smallest height (a textarea's scrollHeight never drops below its height)
+          if (multi && nv.length < len.current) setTextH(0);
           field?.edit(nv);
           onChangeText(nv);
         }}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
         multiline={multi}
+        onContentSizeChange={multi && Platform.OS === "web" ? (e) => setTextH(Math.ceil(e.nativeEvent.contentSize.height)) : undefined}
         keyboardType={f.kb ?? "default"}
         inputMode={f.kb === "decimal-pad" ? "decimal" : f.kb === "number-pad" ? "numeric" : f.kb === "phone-pad" ? "tel" : f.kb === "email-address" ? "email" : f.kb === "url" ? "url" : type === "search" ? "search" : "text"}
         autoComplete={f.ac}
@@ -600,10 +615,13 @@ export function TextField({
         aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
-          minHeight: multi ? h * 2 : h,
+          minHeight: minH,
+          // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
+          height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
           fontFamily: font.families.regular,
           fontSize: font.size.body + 2,
+          lineHeight: one ? line : undefined,
           textAlignVertical: multi ? "top" : "center",
           fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,
           outlineStyle: "none",

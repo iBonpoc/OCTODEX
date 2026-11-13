@@ -307,7 +307,7 @@ function LineRowView(p: LineRowProps) {
         </View>
       ) : null}
       <TextField type="title" value={l.name} onChangeText={(v) => p.api.change(l.id, { name: v })} placeholder={t("ue.lineName")} label={t("ue.lineName")} field={f("name")} autoFocus={p.autoFocus === "name"} testID={`est-name-${l.id}`} />
-      <TextField type="note" value={l.description ?? ""} onChangeText={(v) => p.api.change(l.id, { description: v || undefined })} placeholder={t("est2.row.descHint")} label={t("ue.lineDesc")} />
+      <TextField type="note" rows={1} value={l.description ?? ""} onChangeText={(v) => p.api.change(l.id, { description: v || undefined })} placeholder={t("est2.row.descHint")} label={t("ue.lineDesc")} />
       {/* one row «Кол-во · Ед. · Цена за ед.» (the founder: «в одной строке», narrow fields) */}
       <RowView style={{ alignItems: "flex-start" }}>
         <View style={{ width: component.estRow.qty }}>
