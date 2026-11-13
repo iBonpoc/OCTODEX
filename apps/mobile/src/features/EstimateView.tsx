@@ -146,9 +146,11 @@ export function EstimateView({
         {tot.tax ? <Line label={t("ue.taxLine", { rate: ppmToPctText(taxRatePpm(s.tax)) })} v={money(tot.tax)} /> : null}
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="title">{t("ue.total")}</T>
-          <T v="display" tabular>
-            {money(tot.total)}
-          </T>
+          <View testID="est-client-total">
+            <T v="display" tabular>
+              {money(tot.total)}
+            </T>
+          </View>
         </RowView>
         {tot.deposit ? <Line label={t("portal.depositDue")} v={money(tot.deposit)} /> : null}
       </Card>

@@ -471,6 +471,8 @@ export const es: Dict = {
   // #1304 (docs/specs/40): what the client reads — headings on /p/, in the PDF, at signing on site (client language)
   "est.doc.notes": "Notas",
   "est.doc.terms": "Términos y condiciones",
+  // #1325: the contractor's Terms speak of arbitration (features/termsArbitration mentionsArbitration) — a warning, nothing blocked
+  "est.terms.arbitrationWarn": "El arbitraje en un contrato de mejoras del hogar en California requiere un aviso especial con las iniciales del cliente (B&P §7191). Consulte a su abogado.",
   "est.signedToast": "Presupuesto firmado: {name}",
   "est.depositDue": "Depósito a pagar",
   "est.recordDeposit": "Registrar depósito",
@@ -3122,6 +3124,8 @@ export const es: Dict = {
   "mod.gutters.set.r.dsStickFt": "Bajantes se compran en tramos de",
   "mod.gutters.set.r.dsShareOffcuts": "Los recortes de bajante sirven para otro bajante",
   "mod.gutters.set.r.dsExtensionIn": "Agregar a cada bajante",
+  "mod.gutters.set.r.dsAuto": "Poner un bajante en cada tramo de canalón automáticamente",
+  "mod.gutters.set.r.dsEdgeIn": "Bajante automático — distancia desde el extremo",
   "mod.gutters.set.r.rainBasis": "Tamaño de canaleta según lluvia",
   "mod.gutters.set.r.rain.smacna": "SMACNA (5 min, prudente)",
   "mod.gutters.set.r.rain.code": "Según código (60 min)",
@@ -3385,6 +3389,8 @@ export const es: Dict = {
   "mod.gutters.draw.save.phone": "Guardado en el teléfono: se enviará cuando haya conexión",
   "mod.gutters.draw.accItem": "Precisión de la medida",
   "mod.gutters.draw.layersItem": "Capas…",
+  "mod.gutters.draw.autoDsItem": "Colocar bajantes",
+  "mod.gutters.draw.dsAutoCount": "Bajantes ahora: {n}",
   "mod.gutters.draw.layersTitle": "Qué mostrar en el dibujo",
   "mod.gutters.draw.layersHint": "Una capa se oculta, no se borra: la medida, el cálculo y el presupuesto no cambian. Vuelve a activarla aquí.",
   "mod.gutters.draw.layer.grid": "Cuadrícula",

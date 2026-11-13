@@ -471,6 +471,8 @@ export const en: Dict = {
   // #1304 (docs/specs/40): what the client reads — headings on /p/, in the PDF, at signing on site (client language)
   "est.doc.notes": "Notes",
   "est.doc.terms": "Terms & conditions",
+  // #1325: the contractor's Terms speak of arbitration (features/termsArbitration mentionsArbitration) — a warning, nothing blocked
+  "est.terms.arbitrationWarn": "Arbitration in a California home-improvement contract needs a special notice with the client's initials (B&P §7191). Check with your lawyer.",
   "est.signedToast": "Estimate signed: {name}",
   "est.depositDue": "Deposit due",
   "est.recordDeposit": "Record deposit",
@@ -3122,6 +3124,8 @@ export const en: Dict = {
   "mod.gutters.set.r.dsStickFt": "Downspouts are bought in sticks of",
   "mod.gutters.set.r.dsShareOffcuts": "Downspout offcuts go into another downspout",
   "mod.gutters.set.r.dsExtensionIn": "Add to every downspout",
+  "mod.gutters.set.r.dsAuto": "Put a downspout on every gutter run by itself",
+  "mod.gutters.set.r.dsEdgeIn": "Automatic downspout — distance from the end",
   "mod.gutters.set.r.rainBasis": "Gutter size by rainfall",
   "mod.gutters.set.r.rain.smacna": "SMACNA (5 min, cautious)",
   "mod.gutters.set.r.rain.code": "By code (60 min)",
@@ -3385,6 +3389,8 @@ export const en: Dict = {
   "mod.gutters.draw.save.phone": "Saved on the phone — it goes out when there is a connection",
   "mod.gutters.draw.accItem": "How exact",
   "mod.gutters.draw.layersItem": "Layers…",
+  "mod.gutters.draw.autoDsItem": "Place downspouts",
+  "mod.gutters.draw.dsAutoCount": "Downspouts now: {n}",
   "mod.gutters.draw.layersTitle": "What to show on the drawing",
   "mod.gutters.draw.layersHint": "A layer is hidden, not deleted: the measurement, the takeoff and the estimate stay as they are. Turn it back on here.",
   "mod.gutters.draw.layer.grid": "Grid",

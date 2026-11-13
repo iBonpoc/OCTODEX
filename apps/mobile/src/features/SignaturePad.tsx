@@ -73,6 +73,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
           ...(Platform.OS === "web" ? ({ touchAction: "none" } as object) : null),
         }}
         accessibilityLabel={(label ?? t("visit.signHere"))}
+        testID="signature-pad"
         {...pan.panHandlers}
       >
         {!d ? (
@@ -93,7 +94,9 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
       ) : null}
       <RowView>
         {device === "phone" ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
-        <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
+        <View testID="signature-clear">
+          <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
+        </View>
         <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={disabled || d.length < 20} />
       </RowView>
       <SignatureFullscreen

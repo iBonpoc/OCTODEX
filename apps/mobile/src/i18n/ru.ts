@@ -470,6 +470,8 @@ export const ru = {
   // #1304 (docs/specs/40): what the client reads — headings on /p/, in the PDF, at signing on site (client language)
   "est.doc.notes": "Примечания",
   "est.doc.terms": "Условия",
+  // #1325: the contractor's Terms speak of arbitration (features/termsArbitration mentionsArbitration) — a warning, nothing blocked
+  "est.terms.arbitrationWarn": "Для арбитража в договоре на ремонт дома в Калифорнии нужен особый текст с инициалами клиента (B&P §7191) — согласуйте с юристом.",
   "est.signedToast": "Смета подписана: {name}",
   "est.depositDue": "Депозит к оплате",
   "est.recordDeposit": "Записать депозит",
@@ -3122,6 +3124,8 @@ export const ru = {
   "mod.gutters.set.r.dsStickFt": "Водосток покупаем кусками",
   "mod.gutters.set.r.dsShareOffcuts": "Обрезки водостока — в дело на другой водосток",
   "mod.gutters.set.r.dsExtensionIn": "Добавлять к каждому водостоку",
+  "mod.gutters.set.r.dsAuto": "Ставить водосток на каждую цепь желобов сам",
+  "mod.gutters.set.r.dsEdgeIn": "Автоматический водосток — отступ от края",
   "mod.gutters.set.r.rainBasis": "Подбор размера желоба — по дождю",
   "mod.gutters.set.r.rain.smacna": "SMACNA (5 мин, осторожно)",
   "mod.gutters.set.r.rain.code": "По коду (60 мин)",
@@ -3385,6 +3389,8 @@ export const ru = {
   "mod.gutters.draw.save.phone": "Сохранено на телефоне — отправится, когда будет связь",
   "mod.gutters.draw.accItem": "Точность замера",
   "mod.gutters.draw.layersItem": "Слои…",
+  "mod.gutters.draw.autoDsItem": "Расставить водостоки",
+  "mod.gutters.draw.dsAutoCount": "Водостоков стало {n}",
   "mod.gutters.draw.layersTitle": "Что показывать на чертеже",
   "mod.gutters.draw.layersHint": "Слой прячется, а не удаляется: замер, расчёт и смета не меняются. Включается заново здесь же.",
   "mod.gutters.draw.layer.grid": "Сетка",
