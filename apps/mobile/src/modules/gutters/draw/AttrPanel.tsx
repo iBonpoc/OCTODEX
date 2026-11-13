@@ -7,7 +7,7 @@
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, ScrollView, View } from "react-native";
+import { Keyboard, ScrollView, useWindowDimensions, View } from "react-native";
 import { measureAfterKeyboard } from "./afterKeyboard";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
@@ -78,8 +78,11 @@ function FracText({ value, testID }: { value: number; testID: string }) {
  * A tape to pull (founder 09.11: «как рулетка, бегунком проматывать длину»): it shows the length in the fields and sets
  * them — feet, inches and sixteenths — as it is dragged, to 1/16″.
  */
+/** a phone window shorter than this: the strip of the tape is lower and the fraction row's padding goes (the buttons stay above the number keyboard, #1345) */
+const SHORT_WINDOW = 700;
 function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: number; onPull: (x: { ft: number; inch: number; sixteenths: number }) => void; testID: string }) {
   const { t } = useI18n();
+  const short = useWindowDimensions().height < SHORT_WINDOW;
   const typed = tapeIn(ft, inc, e16);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
@@ -91,6 +94,7 @@ function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: 
       readout={fmtLen(last.current, "ftin")}
       onMarks={(m) => onPull(split(m / DENOM))}
       testID={testID}
+      short={short}
       label={t(k("pull"))}
       stepLabels={{ less: t(k("pullLess"), { step: "1/16″" }), more: t(k("pullMore"), { step: "1/16″" }) }}
     />
@@ -99,6 +103,7 @@ function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: 
 /** the same tape for one number: inches (1/16″ marks) or metric (millimetre marks); it writes the field in its unit */
 function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenUnit, "ftin">; onOne: (v: string) => void; testID: string }) {
   const { t } = useI18n();
+  const short = useWindowDimensions().height < SHORT_WINDOW;
   const typed = oneIn(one, unit);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
@@ -116,6 +121,7 @@ function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenU
       readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
       onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / DENOM))}
       testID={testID}
+      short={short}
       label={t(k("pull"))}
       stepLabels={{ less: t(k("pullLess"), { step: metric ? "1 mm" : "1/16″" }), more: t(k("pullMore"), { step: metric ? "1 mm" : "1/16″" }) }}
     />

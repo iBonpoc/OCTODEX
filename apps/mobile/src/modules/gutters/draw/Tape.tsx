@@ -22,7 +22,9 @@ import { useSheetHold } from "@/ui/overlays";
  *  (founder 13.11, #1315: «шаг больше… чуть растянутая, ничего страшного»; the token `tapeTick`) */
 const TICK = component.tapeTick;
 /** tall enough for the marks, the fractions under them and the length under the inch, readable (founder 09.11) */
-const H = size.hitMin * 3;
+const H_FULL = size.hitMin * 3;
+/** a short window (a phone of 667 pt with the number keyboard up): the strip is a little lower so the window's buttons stay above the keyboard (#1345) */
+const H_SHORT = size.hitMin * 2.5;
 /** a flick: the share of speed kept per millisecond, and the speed (marks per ms) at which it settles */
 const KEEP_PER_MS = 0.996;
 const STOP = 0.002;
@@ -74,7 +76,9 @@ export const SIXTEENTHS_SCALE_IN: Scale = (k) => (k % 16 === 0 ? { h: 0.45, text
 export const MM_SCALE: Scale = (k) =>
   k % 100 === 0 ? { h: 0.45, text: k ? `${k / 1000} m` : undefined, bold: true } : k % 10 === 0 ? { h: 0.45, text: `${k / 10} cm` } : { h: k % 5 === 0 ? 0.3 : 0.18 };
 
-export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepLabels }: {
+export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepLabels, short }: {
+  /** a short window: the lower strip (`H_SHORT`) */
+  short?: boolean;
   /** the value in marks (1/16″ or mm) */
   marks: number;
   onMarks: (k: number) => void;
@@ -87,6 +91,7 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
   stepLabels: { less: string; more: string };
 }) {
   const { c } = useTheme();
+  const H = short ? H_SHORT : H_FULL;
   const [w, setW] = useState(0);
   const v = Math.round(marks);
   const now = useRef({ v, onMarks });

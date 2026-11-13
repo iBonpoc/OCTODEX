@@ -43,7 +43,7 @@ export function FracPicker({ value, onChange, active, testID }: {
     // the frame is always as thick (transparent when the entry is not here): the rows do not shift
     <View
       testID={testID}
-      style={{ gap: space[2], padding: space[2], borderRadius: radius.field, borderWidth: component.selectedBorder, borderColor: active ? c.ink : "transparent" }}
+      style={{ gap: space[2], padding: 0, borderRadius: radius.field, borderWidth: component.selectedBorder, borderColor: active ? c.ink : "transparent" }}
     >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always">
         <View style={{ flexDirection: "row", gap: space[2], alignItems: "center" }}>
