@@ -65,8 +65,8 @@ type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
 
-/** a window opened BY a tap waits one frame: the `click` the browser sends after the touch must not land in it (see the tap handler) */
-const afterTap = (f: () => void) => requestAnimationFrame(f);
+/** a window opened BY a tap waits `durFast`: the `click` the browser sends after the touch — late on a busy page — must not land in it (see the tap handler) */
+const afterTap = (f: () => void) => { setTimeout(f, motion.durFast); };
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
 /** a tap this soon after a two-finger gesture began or ended is not a tap */
@@ -675,7 +675,7 @@ export default function DrawScreen() {
       }
       setSelected(h.id);
       if (!cur.current.canSave && h.kind === "end") return;
-      // the window opens a FRAME later: the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
+      // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
       // then — a row of a window opened in the same beat would be pressed by the tap that opened it (the toast has the same guard,
       // `toastArmMs`; found by e2e 211)
       afterTap(() => {
