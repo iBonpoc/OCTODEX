@@ -7,6 +7,8 @@ import { useAuth } from "@/cloud/auth";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Avatar } from "@/ui/controls";
+import { BrandMark } from "@/ui/brand";
+import { router } from "expo-router";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { meIsSub, menuGroups, sectionHref, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
@@ -52,6 +54,12 @@ export function SideNav() {
       style={{ width: sideNavWidth(device, menu.sideOpen, insets.left), borderRightWidth: component.hairline, borderRightColor: c.bd, backgroundColor: c.page, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3], paddingLeft: insets.left }}
     >
       <ScrollView testID="side-scroll" contentContainerStyle={{ paddingHorizontal: space[2], gap: space[1], alignItems: open ? "stretch" : "center" }}>
+        {/* GoRix on top (DS §18.2): the mark, no word; it opens «О приложении». The menu's «＋» is yellow — the dot is ink */}
+        <Press onPress={() => router.push("/settings")} visibleHeight={size.iconLg} accessibilityRole="button" accessibilityLabel={t("brand.side.about")} testID="side-brand">
+          <View style={{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[2] }}>
+            <BrandMark size={size.iconLg} screenHasPrimary />
+          </View>
+        </Press>
         <Item
           icon="menu"
           label={t(open ? "nav.collapse" : "nav.expand")}

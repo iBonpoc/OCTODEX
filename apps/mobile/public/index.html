@@ -51,6 +51,16 @@
 
   <body>
     <noscript> You need to enable JavaScript to run this app. </noscript>
-    <div id="root"></div>
+    <div id="root">
+      <!-- GoRix before the JS (DS §18.2, #1046): the GR mark as in the app's boot layer (ui/brandRules.ts, 56 high).
+           React's first render replaces it. Colours = tokens: ink and acc of the theme, the ring = light ink. -->
+      <div id="gx-boot" style="display:flex;flex:1;align-items:center;justify-content:center">
+        <svg viewBox="16 -736 1403 764" height="56" width="103" role="img" aria-label="GoRix">
+          <style>#gx-boot .i{fill:#F2F3F5}#gx-boot .ring{fill:none}#gx-boot .dot{fill:#FBFF00}@media (prefers-color-scheme:light){#gx-boot .i{fill:#15161A}#gx-boot .ring{fill:#15161A}}</style>
+          <g transform="translate(-143.9 -895.9) scale(1.05848)"><path class="i" d="M660 170 H442 A272 272 0 0 0 170 442 V582 A272 272 0 0 0 442 854 H582 A272 272 0 0 0 854 582 V450 H640 V574 H730 V582 A148 148 0 0 1 582 730 H442 A148 148 0 0 1 294 582 V442 A148 148 0 0 1 442 294 H660 Z"/><circle class="ring" cx="515" cy="512" r="106"/><circle class="dot" cx="515" cy="512" r="85"/></g>
+          <path class="i" transform="translate(-564 0)" d="M1394 0V-708H1679Q1732 -708 1780.5 -697.5Q1829 -687 1868.0 -662.0Q1907 -637 1929.5 -592.5Q1952 -548 1952 -479Q1952 -428 1935.0 -387.0Q1918 -346 1885.0 -317.0Q1852 -288 1806 -272L1963 0H1802L1664 -249H1537V0ZM1537 -376H1669Q1700 -376 1725.5 -381.5Q1751 -387 1769.5 -399.0Q1788 -411 1798.5 -431.0Q1809 -451 1809 -480Q1810 -517 1793.5 -537.5Q1777 -558 1747.5 -566.5Q1718 -575 1678 -575H1537Z"/>
+        </svg>
+      </div>
+    </div>
   </body>
 </html>

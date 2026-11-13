@@ -14,6 +14,10 @@ import { LocationSetting } from "@/features/LocationParts";
 import { PushSettingsSection } from "@/features/PushSettings";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
+import Constants from "expo-constants";
+import { component, space } from "@octo/design-tokens";
+import { BUILD } from "@/config/version";
+import { BrandLogo } from "@/ui/brand";
 
 /**
  * «Настройки приложения» (spec 26; was «Мои настройки», docs/specs/05 §4.1): how the app looks and behaves for me —
@@ -99,6 +103,14 @@ export default function Settings() {
       <SectionTitle title={t("settings.about")} />
       <Card>
         <View testID="settings-about">
+          {/* GoRix «О приложении» (DS §18.2): the logo, the version and the build — still, no move */}
+          <View testID="about-brand" style={{ alignItems: "center", gap: space[2], paddingVertical: space[4] }}>
+            <BrandLogo width={component.brand.about} />
+            <T v="caption" tone="mut" tabular>
+              {t("brand.about.version", { v: Constants.expoConfig?.version ?? "1.0.0", b: BUILD || "dev" })}
+            </T>
+          </View>
+          <Divider />
           <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
           <Divider />
           <ListRow title={t("legal.privacy.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.privacy) })} onPress={() => router.push(legalHref("privacy"))} />
