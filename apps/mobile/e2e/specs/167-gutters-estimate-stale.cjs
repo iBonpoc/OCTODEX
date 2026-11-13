@@ -8,7 +8,7 @@
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
-const { skipLength, openView } = require("../gutters.cjs");
+const { skipLength, openView, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -50,7 +50,7 @@ exports.run = async (h) => {
   await tid("module-gutters-measure").getByRole("button").click();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun(0.4);
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await waitFor(() => !!new URL(p.url()).searchParams.get("m"), "saved: the address names the measurement");
   const mid = new URL(p.url()).searchParams.get("m");
   // «Готово» → «Просмотр замера» → «Сделать смету» (#698 #699)

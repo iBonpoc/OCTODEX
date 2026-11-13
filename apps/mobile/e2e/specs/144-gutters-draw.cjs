@@ -15,7 +15,7 @@
  * Finds things by testID; waits on what it checks.
  */
 // the demo company's data on the phone: the module's slice DB.moduleData.gutters (spec 33 П21)
-const { skipLength, closeDsMenu } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, savedOnce } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -58,14 +58,19 @@ exports.run = async (h) => {
   h.expect((await tid("draw-money").count()) === 0 && (await tid("draw-total").count()) === 0, "no total under the drawing (#700)");
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the canvas");
   await h.shot("empty");
-  // П20.8: the words under the icons, whole
+  // #1274 (founder 12.11): the toolbar has pictures only — the words are the cells' names (screen reader), not drawn under them
   const bar = await tid("draw-toolbar").innerText();
   const phone = (h.layout?.width ?? 390) < 600;
-  for (const w of ["Желоб", "Водосток", ...(phone ? ["Свойства"] : []), "Эт 1", "Этаж", "Назад", "Вперёд"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
+  h.expect(!/Желоб|Водосток|Назад|Вперёд|Этаж|Свойства/.test(bar), `no words on the toolbar (${bar.replace(/\n/g, " | ")})`);
+  for (const [id, w] of [["draw-tool-line", "Желоб"], ["draw-tool-ds", "Водосток"], ...(phone ? [["draw-props", "Свойства"]] : []), ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
+    const name = (await tid(id).getByRole("button").getAttribute("aria-label")) || "";
+    h.expect(name.includes(w), `${id} is named «${w}» (${name})`);
+  }
   h.expect(!bar.includes("Выбрать"), "no «Выбрать» (#687): a tap picks with any tool");
   const cut = await p.getByTestId("draw-toolbar").locator("visible=true").first().evaluate((el) => [...el.querySelectorAll("div")].filter((d) => d.childElementCount === 0 && d.textContent && d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent));
   h.expect(cut.length === 0, `no word is cut off (${cut.join(", ")})`);
-  h.expect((await tid("draw-delete").count()) === 0, "«Удалить» only by what is picked: nothing picked — no button");
+  // the bin is on the toolbar always (#1274), dimmed and not pressable while nothing is picked
+  h.expect((await tid("draw-delete").count()) === 1 && (await tid("draw-delete").getAttribute("aria-disabled")) === "true", "the bin: nothing picked — it is there, disabled");
 
   // a run along the roof edge
   const b = await box();
@@ -169,15 +174,17 @@ exports.run = async (h) => {
   const yy = b2.y + b2.height * 0.42;
   await stroke([b2.x + b2.width * 0.25, yy], [b2.x + b2.width * 0.7, yy]);
   // on: the next step is offered under the $ (П20.9) and turns the downspout tool on
+  // the chip says what is picked while the new gutter is; the hint «Дальше: водостоки» is for nothing picked (#1274): a tap on the empty canvas
+  await p.mouse.click(b2.x + b2.width * 0.5, b2.y + b2.height * 0.65);
   await tid("draw-next").waitFor({ timeout: 3000 });
-  h.expect(/Дальше: поставьте водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts");
+  h.expect(/Дальше: водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts (in the summary chip)");
   await h.shot("next");
-  await tid("draw-next").getByRole("button").click();
+  await tid("draw-next").click(); // the hint is the chip: a tap puts the downspout tool on
   await tid("draw-hint").waitFor({ timeout: 3000 });
   h.expect((await tid("draw-next").count()) === 0, "the downspout tool is on: no «what next» line");
   await p.mouse.click(b2.x + b2.width * 0.47, yy + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout");
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await waitFor(async () => ((await stored())?.elements.length ?? 0) === 2, "the store has both (written to the phone)");
   const s = await stored();
   h.expect(!!s && s.m.status === "draft" && s.elements.length === 2, `stored: one run and one downspout (${JSON.stringify(s && s.elements.map((e) => e.kind))})`);
