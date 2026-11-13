@@ -195,6 +195,10 @@ describe("computeAllOptional: the total if the client ticks every add-on", () =>
     expect(computeCustomOption(one, S()).total).toBe(150000);
     expect(computeAllOptional(one, S())!.total).toBe(160000);
   });
+  it("an add-on the client cannot tick or that adds nothing (hidden, $0) does not count as one", () => {
+    expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "Free check", optional: true })] }, S())).toBeNull();
+    expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "Haul", optional: true, clientVisible: false })] }, S())).toBeNull();
+  });
   it("a blank add-on (no name, no price) does not count as one", () => {
     expect(computeAllOptional({ ...base, lines: [base.lines[0]!, L("service", "1", 0, { name: "", optional: true })] }, S())).toBeNull();
   });

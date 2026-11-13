@@ -4169,7 +4169,6 @@ export const es: Dict = {
   "est.tot.own": "Solo para usted",
   "est.tot.cost": "Costo",
   "est.tot.profit": "Ganancia",
-  "est.tot.loss": "con pérdida",
   "est.tot.open": "Ver de qué se compone el total",
   "est.tot.close": "Plegar el total",
   // «Экраны» #1304 (д): Notas / Términos en el presupuesto y en la empresa (DS §8.12)

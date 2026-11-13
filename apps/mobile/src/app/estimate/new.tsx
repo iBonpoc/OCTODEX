@@ -4,7 +4,7 @@ import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { component, motion, space, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, computeAllOptional, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
+import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
@@ -22,7 +22,7 @@ import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { OptionsCard } from "@/features/estimate/OptionsCard";
 import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
-import { totalsRows } from "@/features/estimate/totalsRows";
+import { allOptionalFor, totalsRows } from "@/features/estimate/totalsRows";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
@@ -245,7 +245,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
   const totals = useMemo(() => optionTotals(counted, option), [counted, option]);
   // «Если клиент включит всё на выбор — итог $Y» (#1362): the engine's totals with the add-ons ticked (rule 8)
-  const allOptional = useMemo(() => computeAllOptional(option, counted.settings), [counted, option]);
+  const signedNow = isSignedEstimate(existing);
+  const allOptional = useMemo(() => allOptionalFor(counted, option, signedNow), [counted, option, signedNow]);
   // each option's total under the segments (DS §8.10): the owner compares them without switching
   const optionSums = useMemo(() => Object.fromEntries(counted.options.map((o) => [o.id, optionTotals(counted, o).total])), [counted]);
   const s = counted.settings;

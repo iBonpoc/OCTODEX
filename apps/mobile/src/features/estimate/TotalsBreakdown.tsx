@@ -21,14 +21,11 @@ function Row({ r }: { r: TotalsRow }) {
   const { t, money } = useI18n();
   const { c } = useTheme();
   const big = r.key === "total";
-  const value =
-    r.cents === null
-      ? "—"
-      : r.key === "discount"
-        ? `−${money(r.cents)}`
-        : r.key === "profit" && r.pct !== null
-          ? `${money(r.cents)} · ${r.pct} %`
-          : money(r.cents);
+  // a loss reads «в минус $200 · 16.7 %» — the word carries the sign, no second minus
+  const loss = r.key === "profit" && r.loss;
+  const amount = (c: number) => money(loss ? Math.abs(c) : c);
+  const pct = r.key === "profit" && r.pct !== null ? (loss ? r.pct.replace(/^-/, "") : r.pct) : null;
+  const value = r.cents === null ? "—" : r.key === "discount" ? `−${money(r.cents)}` : pct !== null ? `${amount(r.cents)} · ${pct} %` : amount(r.cents);
   return (
     <View testID={`est-tot-${r.key}`}>
       <RowView style={{ justifyContent: "space-between", alignItems: "flex-start", gap: space[2] }}>
@@ -36,11 +33,11 @@ function Row({ r }: { r: TotalsRow }) {
           {t(LABEL[r.key])}
         </T>
         {/* profit in the red — the icon and the word, `bad` (rule 2); a profit above zero has no colour */}
-        {r.key === "profit" && r.loss ? (
+        {loss ? (
           <RowView style={{ gap: space[1] }}>
             <Icon name="alert" s={size.iconSm} color={c.status.bad.text} />
             <T v="caption" tone="bad" tabular>
-              {`${t("est.tot.loss")} ${value}`}
+              {`${t("est.row.loss")} ${value}`}
             </T>
           </RowView>
         ) : (

@@ -4169,7 +4169,6 @@ export const en: Dict = {
   "est.tot.own": "Only for you",
   "est.tot.cost": "Cost",
   "est.tot.profit": "Profit",
-  "est.tot.loss": "at a loss",
   "est.tot.open": "Show what the total is made of",
   "est.tot.close": "Fold the total",
   // «Экраны» #1304 (д): Notes / Terms in the estimate and the company (DS §8.12)

@@ -3,7 +3,8 @@
  * - a line in the red ($1,000, cost $1,200) and an add-on «на выбор клиента» ($500, тестовые цены);
  * - phone (390): the panel's «Итого $1,000 ˅» opens what the total is made of above the buttons — subtotal, «если клиент
  *   включит всё на выбор — итог $1,500» (the engine's), «Только для вас» with the profit «в минус»; a second press folds it;
- * - 820 / 1280 (no panel): the totals card has the same «если включит» row and «Только для вас».
+ * - 820 / 1280 (no panel): the totals card has the same «если включит» row and «Только для вас» (cost $1,200, «в минус $200»);
+ * - the tech: no «Только для вас» at all.
  */
 const DB_KEY = "octo.db.v5";
 
@@ -42,15 +43,16 @@ exports.run = async (h) => {
   if (phone) {
     // the panel: folded — only «Итого $1,000 ˅»
     await tid("est-bar-total").waitFor({ timeout: 3000 });
-    h.expect(/\$1,000\b/.test(await tid("est-bar-total").innerText()), "the panel: «Итого $1,000»");
+    h.expect(/\$1,000(?![.\d])/.test(await tid("est-bar-total").innerText()), "the panel: «Итого $1,000»");
     h.expect((await count("est-bar-breakdown")) === 0, "folded at first");
     await tid("est-bar-total").click();
     await tid("est-bar-breakdown").waitFor({ timeout: 3000 });
     const bd = tid("est-bar-breakdown");
-    h.expect(/\$1,000\b/.test(await bd.getByTestId("est-tot-subtotal").innerText()), "subtotal $1,000 (the add-on is not in it)");
-    h.expect(/\$1,500\b/.test(await bd.getByTestId("est-tot-ifAll").innerText()), "«если клиент включит всё на выбор» — $1,500");
+    h.expect(/\$1,000(?![.\d])/.test(await bd.getByTestId("est-tot-subtotal").innerText()), "subtotal $1,000 (the add-on is not in it)");
+    h.expect(/\$1,500(?![.\d])/.test(await bd.getByTestId("est-tot-ifAll").innerText()), "«если клиент включит всё на выбор» — $1,500");
+    h.expect(/\$1,200(?![.\d])/.test(await bd.getByTestId("est-tot-cost").innerText()), "«Только для вас»: the cost $1,200");
     const profit = await bd.getByTestId("est-tot-profit").innerText();
-    h.expect(/в минус/.test(profit) && /\$200/.test(profit), `«Только для вас»: the profit in the red (${profit})`);
+    h.expect(/в минус \$200(?![.\d])/.test(profit) && !/-/.test(profit), `«Только для вас»: the profit in the red, one sign — the word (${profit})`);
     h.expect((await tid("est-bar-total").getAttribute("aria-expanded")) === "true", "read out as open");
     await h.shot("open");
     await tid("est-bar-total").click();
@@ -61,7 +63,16 @@ exports.run = async (h) => {
   // the totals card (every width): the same «если включит» row and «Только для вас»
   const card = tid("est-card-breakdown");
   await card.scrollIntoViewIfNeeded();
-  h.expect(/\$1,500\b/.test(await card.getByTestId("est-tot-ifAll").innerText()), "the card: «если включит — итог $1,500»");
+  h.expect(/\$1,500(?![.\d])/.test(await card.getByTestId("est-tot-ifAll").innerText()), "the card: «если включит — итог $1,500»");
   h.expect((await card.getByTestId("est-tot-own").count()) === 1, "the card: «Только для вас»");
+  h.expect(/\$1,200(?![.\d])/.test(await card.getByTestId("est-tot-cost").innerText()), "the card: the cost $1,200");
+  h.expect(/в минус \$200(?![.\d])/.test(await card.getByTestId("est-tot-profit").innerText()), "the card: the profit in the red");
   await h.shot("card");
+
+  // the tech: no «Только для вас» anywhere (cost and profit are not his), «если включит» stays (the draft opens again)
+  await h.seed("octo.role.v1", "tech");
+  await h.go("/estimate/new?customerId=c2&propertyId=p2");
+  await tid("est-card-breakdown").waitFor({ timeout: 8000 });
+  h.expect((await p.getByTestId("est-tot-own").count()) === 0, "the tech: no «Только для вас»");
+  h.expect((await count("est-tot-ifAll")) >= 1, "the tech: «если включит» is there");
 };

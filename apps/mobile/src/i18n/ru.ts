@@ -4169,7 +4169,6 @@ export const ru = {
   "est.tot.own": "Только для вас",
   "est.tot.cost": "Себестоимость",
   "est.tot.profit": "Прибыль",
-  "est.tot.loss": "в минус",
   "est.tot.open": "Показать, из чего итог",
   "est.tot.close": "Свернуть итог",
   // «Экраны» #1304 (д): Notes / Terms в смете и в компании (DS §8.12)

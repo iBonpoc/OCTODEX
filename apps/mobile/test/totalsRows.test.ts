@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_TAX, computeAllOptional, computeCustomOption, type CustomLine, type CustomSettings } from "@octo/estimating-engine";
-import { totalsRows } from "@/features/estimate/totalsRows";
+import { allOptionalFor, totalsRows } from "@/features/estimate/totalsRows";
+import { exemptDoc } from "@/features/estimateDoc";
 
 // «Итого ˅» (DS §8.9, #1362): the rows, from the engine's totals only
 const L = (id: string, cents: number, over: Partial<CustomLine> = {}): CustomLine => ({ id, name: id, group: "service", quantity: "1", unit: "ea", unitPriceCents: cents, ...over });
@@ -30,5 +31,29 @@ describe("totalsRows", () => {
     expect(totalsRows({ totals: t, allOptional: null, own: false, costKnown: true }).own).toEqual([]);
     expect(totalsRows({ totals: t, allOptional: null, own: true, costKnown: false }).own).toEqual([{ key: "cost", cents: null }, { key: "profit", cents: null, pct: null, loss: false }]);
     expect(totalsRows({ totals: t, allOptional: null, own: true, costKnown: true }).own[1]).toMatchObject({ cents: -2000, loss: true });
+  });
+});
+
+describe("the editor's wiring (review of #1362, К1)", () => {
+  const taxOn = S({ tax: { enabled: true, rateBps: 1025, groups: { service: true, labor: true, material: true } } });
+  const o = opt([L("a", 100000), L("b", 50000, { optional: true })]);
+  it("a tax-exempt client: $Y has no tax, like the total above it (the screen passes the counted settings)", () => {
+    const doc = { options: [o], settings: taxOn };
+    const counted = exemptDoc(doc, true);
+    expect(allOptionalFor(counted, o, false)!.total).toBe(150000);
+    expect(allOptionalFor(counted, o, false)!.tax).toBe(0);
+    // not exempt: with the tax
+    expect(allOptionalFor(exemptDoc(doc, false), o, false)!.total).toBe(165375);
+  });
+  it("a signed estimate: no «если включит» (the client has decided)", () => {
+    expect(allOptionalFor({ settings: S() }, o, true)).toBeNull();
+  });
+  it("nothing typed yet: no «$0 cost, $0 profit»", () => {
+    const t = computeCustomOption(opt([]), S());
+    expect(totalsRows({ totals: t, allOptional: null, own: true, costKnown: true }).own).toEqual([]);
+  });
+  it("«если включит» equal to the total (a $0 add-on adds nothing): no row", () => {
+    const t = computeCustomOption(opt([L("a", 1000)]), S());
+    expect(totalsRows({ totals: t, allOptional: t, own: false, costKnown: true }).client.map((r) => r.key)).toEqual(["subtotal", "total"]);
   });
 });

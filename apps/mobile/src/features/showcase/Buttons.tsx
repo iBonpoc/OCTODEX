@@ -10,6 +10,9 @@ import { DEFAULT_TAX, computeAllOptional, computeCustomOption, type CustomOption
 import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
 import { totalsRows } from "@/features/estimate/totalsRows";
 
+import { Card, RowView, SectionTitle } from "@/ui/surfaces";
+import { SECTIONS } from "./registry";
+
 // a sample estimate for «Итого ˅» (тестовые цены, rule 9): a line, an add-on, a 10 % discount and deposit
 const SAMPLE: CustomOption = {
   id: "showcase",
@@ -20,8 +23,6 @@ const SAMPLE: CustomOption = {
   ],
 };
 const SAMPLE_SETTINGS: CustomSettings = { discount: { kind: "pct", value: "0.1" }, tax: DEFAULT_TAX, deposit: { kind: "pct", bps: 1000 } };
-import { Card, RowView, SectionTitle } from "@/ui/surfaces";
-import { SECTIONS } from "./registry";
 
 /**
  * Buttons (DS §7): every kind and every state, each one pressable — the counter says it was pressed. Sizes are the live
