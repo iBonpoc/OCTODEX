@@ -19,18 +19,22 @@ export function BrandSection() {
       </T>
       <SectionTitle title={t("ds.brand.marks")} />
       <Card>
-        <RowView style={{ flexWrap: "wrap", alignItems: "flex-end", gap: space[6] }}>
-          <View testID="showcase-brand-mark-24">
+        <RowView style={{ flexWrap: "wrap", alignItems: "flex-end", justifyContent: "space-around", gap: space[4] }}>
+          <View testID="showcase-brand-mark-24" style={{ alignItems: "center", gap: space[1] }}>
             <BrandMark size={size.iconLg} />
+            <T v="caption" tone="mut">{`${size.iconLg}`}</T>
           </View>
-          <View testID="showcase-brand-mark-48">
+          <View testID="showcase-brand-mark-48" style={{ alignItems: "center", gap: space[1] }}>
             <BrandMark size={component.brand.mark} />
+            <T v="caption" tone="mut">{`${component.brand.mark} · acc`}</T>
           </View>
-          <View testID="showcase-brand-mark-ink">
+          <View testID="showcase-brand-mark-ink" style={{ alignItems: "center", gap: space[1] }}>
             <BrandMark size={component.brand.mark} screenHasPrimary />
+            <T v="caption" tone="mut">{`${component.brand.mark} · ink`}</T>
           </View>
-          <View testID="showcase-brand-mark-56">
+          <View testID="showcase-brand-mark-56" style={{ alignItems: "center", gap: space[1] }}>
             <BrandMark size={component.brand.wait} />
+            <T v="caption" tone="mut">{`${component.brand.wait}`}</T>
           </View>
         </RowView>
       </Card>
@@ -44,8 +48,11 @@ export function BrandSection() {
       <Card>
         <View key={run} style={{ gap: space[4], alignItems: "center" }}>
           <BrandQuick size={component.brand.wait} testID="showcase-brand-quick" />
+          <T v="caption" tone="mut">{t("ds.brand.quick")}</T>
           <BrandWait size={component.brand.wait} testID="showcase-brand-wait" />
+          <T v="caption" tone="mut">{t("ds.brand.wait")}</T>
           <BrandIntro width={component.brand.intro} testID="showcase-brand-intro" />
+          <T v="caption" tone="mut">{t("ds.brand.intro")}</T>
         </View>
         <View testID="showcase-brand-replay">
           <Button label={t("ds.brand.replay")} icon="refresh" variant="secondary" onPress={() => setRun((n) => n + 1)} />

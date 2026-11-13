@@ -8,7 +8,7 @@ export default function NotFound() {
   const { t } = useI18n();
   return (
     <Screen title={t("empty.page")}>
-      <PageNotFound />
+      <PageNotFound titled={false} />
     </Screen>
   );
 }

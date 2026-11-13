@@ -66,18 +66,20 @@ export function NotFound({ title, listLabel, onList, testID = "not-found" }: { /
   );
 }
 
-export function PageNotFound({ testID = "page-not-found" }: { testID?: string }) {
+export function PageNotFound({ testID = "page-not-found", titled = true }: { testID?: string; /** false — the screen's own title already says «Страницы нет» */ titled?: boolean }) {
   const { t } = useI18n();
   // the app speaks for itself here — the GoRix mark, not an object's icon (DS §18.2); the screen has a yellow main
   // button, so the mark's dot is ink (one accent, rule 2)
   return (
-    <Card style={{ alignItems: "center", paddingVertical: space[8], gap: space[3] }}>
+    <Card style={{ alignItems: "center", paddingVertical: space[8], gap: space[3], alignSelf: "center", width: "100%", maxWidth: component.modalW }}>
       <View testID={testID}>
         <BrandMark size={component.brand.mark} screenHasPrimary testID={`${testID}-mark`} />
       </View>
-      <T v="heading" center>
-        {t("empty.page")}
-      </T>
+      {titled ? (
+        <T v="heading" center>
+          {t("empty.page")}
+        </T>
+      ) : null}
       <T v="body" tone="mut" center>
         {t("empty.pageHint")}
       </T>
