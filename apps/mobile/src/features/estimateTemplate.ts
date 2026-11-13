@@ -9,7 +9,7 @@ import type { DictKey } from "@/i18n";
 import type { StarterEstimate } from "@/modules/registry";
 import { catalogMatch } from "./catalogMatch";
 import { canEditTemplates, stableUuid } from "./checklist";
-import { catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, normalizeDoc, optionTotals, uid } from "./estimateDoc";
+import { MAX_OPTIONS, catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, nextOptionName, normalizeDoc, optionTotals, uid } from "./estimateDoc";
 
 /** The keys of a template line the server takes (app.valid_estimate_template_doc); a module's `source` never rides along */
 type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected" | "clientVisible" | "sectionId">;
@@ -161,8 +161,79 @@ export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Re
     }),
   }));
   // a hidden line takes the catalog price → it is priced, so it is shown again (Р3 п.2: normalizeDoc on every entrance of a document)
-  const made = normalizeDoc({ options, settings: { ...tpl.settings }, ...(tpl.note ? { note: tpl.note } : {}) });
+  // the tax never comes from a template: a new estimate has it off, always (founder 12.11; spec 39 §11.9 п.3, DS §8.7) — the
+  // client's total is the sum of the lines until the tax is switched on in this estimate
+  const made = normalizeDoc({ options, settings: { ...tpl.settings, tax: { ...DEFAULT_TAX, groups: { ...DEFAULT_TAX.groups } } }, ...(tpl.note ? { note: tpl.note } : {}) });
   return { doc: made.doc, checkPrice, unhidden: made.unhidden };
+}
+
+/** what «Добавить из шаблона…» brought into an estimate: «Вернуть» takes out only these (DS §8.13, §15.2) */
+export interface Appended {
+  lineIds: string[];
+  sectionIds: string[];
+  optionIds: string[];
+  /** the template's options that did not fit (three at most): their names, for the toast */
+  skipped: string[];
+  /** the arrived lines of the option being edited, in order: «Кол-во» of the first takes the cursor, «›» goes on */
+  chain: string[];
+}
+
+/**
+ * «Добавить из шаблона…» (DS §8.13, spec 39 §11.9 п.2): only adds — what is typed stays. `add` is the template as a new
+ * estimate's document (fromTemplate: today's catalog prices, no tax). One option in the template: its lines go to the end
+ * of the option being edited (`cur`); several: by number, the ones past the estimate's become new options while there are
+ * fewer than three (a name already there gets the next free one), the rest are named in `skipped`. Sections come as
+ * sections under new ids (the same template twice never clashes); the estimate's settings stay (no tax, no discount from
+ * the template); the template's note goes in only where the estimate's is empty.
+ */
+export function appendTemplate(doc: EstimateDoc, add: EstimateDoc, cur: number): { doc: EstimateDoc; added: Appended } {
+  const added: Appended = { lineIds: [], sectionIds: [], optionIds: [], skipped: [], chain: [] };
+  const options = [...doc.options];
+  const at = Math.max(0, Math.min(cur, options.length - 1));
+  add.options.forEach((src, i) => {
+    // the lines keep the ids fromTemplate gave them (fresh; «проверьте цену» and «Снова видна» point at them); the sections
+    // get new ones — the template's own ids would clash with the same template added before
+    const ids = new Map<string, string>();
+    const srcSecs = Array.isArray(src.sections) ? src.sections.filter((x) => !!x && typeof x === "object") : [];
+    for (const x of srcSecs) if (!ids.has(x.id)) ids.set(x.id, uid());
+    const to = (id: string | undefined) => (id !== undefined && ids.has(id) ? ids.get(id)! : id);
+    const lines = src.lines.map((l) => (l.sectionId !== undefined && ids.has(l.sectionId) ? { ...l, sectionId: to(l.sectionId) } : l));
+    const secs = srcSecs.map((x) => ({ ...x, id: to(x.id)!, ...(x.parentId !== undefined ? { parentId: to(x.parentId) } : {}) }));
+    const { recommended: _rec, ...plain } = src;
+    const c: CustomOption = { ...plain, id: uid(), lines, ...(srcSecs.length ? { sections: secs } : {}) };
+    const target = add.options.length === 1 ? at : i;
+    const into = options[target];
+    if (into) {
+      options[target] = { ...into, lines: [...into.lines, ...lines], ...(secs.length || into.sections ? { sections: [...(Array.isArray(into.sections) ? into.sections : []), ...secs] } : {}) };
+      if (target === at) added.chain.push(...lines.map((l) => l.id));
+    } else if (options.length < MAX_OPTIONS) {
+      const name = options.some((o) => o.name.trim() === c.name.trim()) ? nextOptionName(options) : c.name;
+      options.push({ ...c, name });
+      added.optionIds.push(c.id);
+    } else {
+      added.skipped.push(src.name);
+      return;
+    }
+    added.lineIds.push(...lines.map((l) => l.id));
+    added.sectionIds.push(...secs.map((x) => x.id));
+  });
+  const note = !doc.note?.trim() && add.note?.trim() ? { note: add.note } : {};
+  return { doc: { ...doc, ...note, options }, added };
+}
+
+/** «Вернуть» of «Добавить из шаблона…»: the arrived lines, sections and options go; every other edit since stays */
+export function removeAppended(doc: EstimateDoc, added: Appended): EstimateDoc {
+  const lines = new Set(added.lineIds);
+  const secs = new Set(added.sectionIds);
+  const opts = new Set(added.optionIds);
+  const options = doc.options
+    .filter((o) => !opts.has(o.id))
+    .map((o) => ({
+      ...o,
+      lines: o.lines.filter((l) => !lines.has(l.id)),
+      ...(Array.isArray(o.sections) ? { sections: o.sections.filter((x) => !secs.has(x.id)) } : {}),
+    }));
+  return { ...doc, options: options.length ? options : doc.options.slice(0, 1) };
 }
 
 /** «от $X» in the picker: the recommended option's total at today's catalog prices (the engine sums) */

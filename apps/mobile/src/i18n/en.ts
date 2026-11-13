@@ -4163,4 +4163,9 @@ export const en: Dict = {
   "est.client.off": "Client screen · exit",
   "est.client.onToast": "Client screen on",
   "est.client.offToast": "Client screen off",
+  // «Экраны» #1117 (е): «From template…» (DS §8.13)
+  "est.tplIn.from": "From template…",
+  "est.tplIn.add": "Add from template…",
+  "est.tplIn.added": "Items added: {n}",
+  "est.tplIn.skipped": "not added (three options at most): {names}",
 };

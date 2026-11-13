@@ -4163,6 +4163,11 @@ export const ru = {
   "est.client.off": "Экран для клиента · выйти",
   "est.client.onToast": "Экран для клиента включён",
   "est.client.offToast": "Экран для клиента выключен",
+  // «Экраны» #1117 (е): «Из шаблона…» (DS §8.13)
+  "est.tplIn.from": "Из шаблона…",
+  "est.tplIn.add": "Добавить из шаблона…",
+  "est.tplIn.added": "Добавлено позиций: {n}",
+  "est.tplIn.skipped": "не добавлены (не больше трёх вариантов): {names}",
 } as const;
 
 export type DictKey = keyof typeof ru;
