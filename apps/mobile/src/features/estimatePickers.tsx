@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { space, component } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind } from "@/data/types";
@@ -7,7 +7,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { catalogUnitPrice, kitPrice } from "./estimateDoc";
 import { ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet } from "@/ui/overlays";
+import { Sheet, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import { canServe } from "@/features/clients";
 
@@ -38,7 +38,7 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
       <View style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.catalogSearch")} icon="search" />
         <ChoiceChips value={kind} onChange={setKind} items={KINDS.filter((k) => k === "all" || !exclude?.includes(k)).map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
-        <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+        <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
           {items.length === 0 ? (
             <T v="body" tone="mut">
               {t("cat.empty")}
@@ -55,7 +55,7 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
               </View>
             ))
           )}
-        </ScrollView>
+        </SheetScroll>
       </View>
     </Sheet>
   );
@@ -73,7 +73,7 @@ export function ClientPicker({ visible, onClose, onPick }: { visible: boolean; o
     <Sheet visible={visible} onClose={onClose} title={t("est.for")}>
       <View style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.title")} icon="search" />
-        <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+        <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
           {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
           {rows.map(({ p, c }, i) => (
             <View key={p.id}>
@@ -81,7 +81,7 @@ export function ClientPicker({ visible, onClose, onPick }: { visible: boolean; o
               <ListRow title={c!.name} subtitle={`${p.address}, ${p.city}`} onPress={() => onPick(c!.id, p.id)} />
             </View>
           ))}
-        </ScrollView>
+        </SheetScroll>
       </View>
     </Sheet>
   );

@@ -30,7 +30,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
-import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
@@ -319,6 +319,8 @@ export default function DrawScreen() {
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
   const downTime = useRef(0);
+  /** the «joint of three ends» toast was shown in this drag (#1282) */
+  const threeShown = useRef(false);
   /** the hold that picks something up (canvas/holdLift.ts, #1272): the state of this touch, its timer, and what is lifted (the point is drawn bigger) */
   const hold = useRef<Hold>("idle");
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -353,6 +355,7 @@ export default function DrawScreen() {
     onBegin: (e) => {
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
+      threeShown.current = false;
       // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
       // 12.11: «не чувствую момента, когда можно тянуть»); the drag after it has no second «взял»
       hold.current = holdBegin().hold;
@@ -476,6 +479,14 @@ export default function DrawScreen() {
           if (pullTick(sw, g)) haptics.selection();
           g.held = sw.step;
           g.onEnd = sw.end ?? null;
+        } else {
+          // #1282: the end would join a corner → a joint of three ends (П35): say so, once per drag, the last frame stays
+          const r0 = g.before.runs.find((x) => x.id === g.id);
+          if (r0 && !threeShown.current && onCornerPoint(g.before, r0, new Set([g.id]), grabbedEnd(g.before, g.id, g.end, g.from, p), tolIn())) {
+            threeShown.current = true;
+            haptics.warning();
+            toast.show(t("mod.gutters.draw.hint.threeJoin"));
+          }
         }
       }
       else setDrawing(moveEnd(g.before, g.id, g.end, p, tolIn()));
@@ -1171,7 +1182,7 @@ export default function DrawScreen() {
                 size="sm"
                 onPress={() => {
                   const before = cur.current.drawing;
-                  const next = splitCorner(before, corner);
+                  const next = splitCorner(before, corner, tolIn());
                   setCornerSheet(null);
                   if (next === before) return;
                   commit(next, before);
