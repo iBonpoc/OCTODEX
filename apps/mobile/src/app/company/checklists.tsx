@@ -18,6 +18,7 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { withAfter } from "@/data/undo";
 
 export default function CompanyChecklists() {
   const store = useStore();
@@ -76,12 +77,8 @@ export default function CompanyChecklists() {
     if (!tpl) return;
     pressed.current.add(id);
     const undo = store.saveChecklistTemplate(tpl, { ifNew: true });
-    toast.show(store.online ? t("chk3.starterAdded") : t("offline.queued"), () => {
-      // too late (false): the template stays, and so does «pressed» (#1244)
-      const r = undo();
-      if (r !== false) pressed.current.delete(id);
-      return r;
-    });
+    // too late (false): the template stays, and so does «pressed» (#1244)
+    toast.show(store.online ? t("chk3.starterAdded") : t("offline.queued"), withAfter(undo, () => pressed.current.delete(id)));
   };
 
   return (

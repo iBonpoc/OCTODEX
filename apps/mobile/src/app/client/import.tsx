@@ -28,6 +28,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
+import { localUndo } from "@/data/undo";
 
 const FIELD_LABEL: Record<ImportField, DictKey> = {
   firstName: "client.import.f.firstName",
@@ -169,7 +170,8 @@ export default function ImportClients() {
     if (!cloud) demoMarkOpen(sha, null);
     else void store.refresh();
     const c = countsOf(res.answers);
-    toast.show(c.skipped ? t("client.import.done", { n: c.added + c.dupAdded, m: c.skipped }) : t("client.import.doneAll", { n: c.added + c.dupAdded }), () => {
+    toast.show(c.skipped ? t("client.import.done", { n: c.added + c.dupAdded, m: c.skipped }) : t("client.import.doneAll", { n: c.added + c.dupAdded }), localUndo(() => {
+      // the run's own undo (the server's, or the demo's per card): it says what went back
       void r.driver.undo().then(
         (u) => {
           if (cloud) void store.refresh();
@@ -177,7 +179,7 @@ export default function ImportClients() {
         },
         () => toast.show(t("client.import.fail.undo")),
       );
-    });
+    }));
   };
 
   const sha256 = (x: string) => Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, x);

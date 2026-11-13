@@ -54,6 +54,9 @@ vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), back
 
 import { render, settle, type Root } from "./support/miniReact";
 import { StoreProvider } from "../src/data/store";
+import { relink, setAccuracy } from "../src/modules/gutters/data";
+import guttersModule from "../src/modules/gutters/module";
+import { moduleDef, registerModule } from "../src/modules/registry";
 import { makeSeed } from "../src/data/seed";
 import type { CatalogItem, DB, EstimateDoc, EstimateTemplate, Supplier } from "../src/data/types";
 import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
@@ -325,26 +328,23 @@ describe("unit:undoOwnStore — undoTogether, the director's 3rd review of #1244
     await settle();
     expect(valueOf(r).db.customers.some((x) => x.id === made.id)).toBe(false);
   });
-  it("a part not made by the store throws: the store's parts are back all the same, and the result is true (the toast closes)", async () => {
+  it("a part the store did not make (a screen's reset, a throwing function): the whole «Отменить» is refused — nothing goes back, nothing runs (review of #1279; a screen's step — withAfter)", async () => {
     const r = await demo();
     const c = valueOf(r).db.customers[0]!;
     const undo = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
     await settle();
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     let after = false;
-    const all = call(r, "undoTogether", [undo, () => { throw new Error("a screen's reset (test)"); }, () => (after = true)]) as () => unknown;
-    expect(all()).toBe(true);
-    warn.mockRestore();
+    const all = call(r, "undoTogether", [undo, () => (after = true)]) as () => unknown;
+    expect(() => all()).toThrow(/did not make/);
     await settle();
-    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
-    expect(after).toBe(true);
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+    expect(after).toBe(false);
   });
-  it("nothing of the store's to take back — only empty functions, or a dropped part with them: undefined, nothing runs", async () => {
+  it("nothing of the store's to take back — no parts, or only «nothing to undo» (NO_UNDO): undefined", async () => {
     const r = await demo();
-    let ran = false;
-    expect((call(r, "undoTogether", [() => {}]) as () => unknown)()).toBeUndefined();
-    expect((call(r, "undoTogether", [() => (ran = true)]) as () => unknown)()).toBeUndefined();
-    expect(ran).toBe(false);
+    const { NO_UNDO } = await import("../src/data/undo");
+    expect((call(r, "undoTogether", [NO_UNDO]) as () => unknown)()).toBeUndefined();
+    expect((call(r, "undoTogether", [NO_UNDO, null, undefined]) as () => unknown)()).toBeUndefined();
     expect((call(r, "undoTogether", []) as () => unknown)()).toBeUndefined();
   });
   it("a dropped part among live ones (the server dropped a template save): the live ones go back — true", async () => {
@@ -436,6 +436,151 @@ describe("unit:undoOwnStore — the director's 4th review of #1244 Б2: each scr
     expect((call(r, "undoTogether", [x.undo, u2]) as () => unknown)()).toBe(false);
     await settle();
     expect(valueOf(r).db.customers.find((c) => c.id === x.id)?.lastName).toBe("Changed");
+  });
+});
+
+describe("unit:undoOwnStore — #1265: an op folded into a later one (coalesceKey) is not «too late» while it waits", () => {
+  const M = { id: "m-1265", label: null, status: "draft" as const, propertyId: null, leadId: null, accuracy: "rough" as const, updatedAt: "2026-11-10T10:00:00Z" };
+  const withGutters = async () => {
+    // the app finds its modules by require.context; a test registers the one it uses
+    if (!moduleDef("gutters")) registerModule(guttersModule);
+    const co = company();
+    const r = await signedIn({
+      company: { ...co.company!, modules: { gutters: { enabled: true, trialEndsAt: new Date(Date.now() + 86_400_000).toISOString(), settings: {}, rowVersion: 1 } } },
+      moduleData: { gutters: { measurements: [M], elements: [] } },
+    } as Partial<DB>);
+    return r;
+  };
+  const mOf = (r: Root<P>) => (valueOf(r).db.moduleData as { gutters: { measurements: (typeof M & { leadId: string | null; accuracy: string })[] } }).gutters.measurements.find((x) => x.id === M.id)!;
+  it("link a lead, then the accuracy (both measurement.save of the same measurement: one waiting op) → «Отменить» the link: true — the link back, the accuracy stays, the op says so", async () => {
+    const r = await withGutters();
+    const store = valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(store, M.id, { leadId: "l1" })!;
+    await settle();
+    setAccuracy(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, "tape");
+    await settle();
+    expect(mOf(r).leadId).toBe("l1");
+    expect(undoLink()).toBe(true);
+    await settle();
+    expect(mOf(r).leadId).toBeNull();
+    expect(mOf(r).accuracy).toBe("tape");
+    await tick();
+    const sent = server.sends.filter((x) => x.op.k === "module.op");
+    expect(sent).toHaveLength(1);
+    expect((sent[0]!.op.payload as { m: { leadId: string | null; accuracy: string } }).m).toMatchObject({ leadId: null, accuracy: "tape" });
+  }, 15000);
+  it("(а) «Отменить» the accuracy (B) first, then the link (A): both true — A was put back in its place and carries itself again (review of #1279 Б1)", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(st(), M.id, "tape")!;
+    await settle();
+    expect(undoAcc()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: "l1", accuracy: "rough" });
+    expect(undoLink()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+  it("(б) both in one «Отменить» (undoTogether [A, B]): true, nothing reaches the server — not A's link (review of #1279 Б1)", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(st(), M.id, "tape")!;
+    await settle();
+    expect((call(r, "undoTogether", [undoLink, undoAcc]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+  it("(б') the same in the other order (undoTogether [B, A]): true, nothing reaches the server", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(st(), M.id, "tape")!;
+    await settle();
+    expect((call(r, "undoTogether", [undoAcc, undoLink]) as () => unknown)()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+  it("A folded into B, B dropped by the server (module_inactive): «Отменить» A — undefined, the toast just closes (review of #1279 №2)", async () => {
+    const r = await withGutters();
+    const st = () => valueOf(r) as unknown as import("../src/modules/registry").ModuleStore;
+    const undoLink = relink(st(), M.id, { leadId: "l1" })!;
+    await settle();
+    setAccuracy(st(), M.id, "tape");
+    await tick();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    server.sends.find((x) => x.op.k === "module.op")!.d.reject(new PermanentError("module gutters is not active", 403, "42501", "module_inactive"));
+    await settle();
+    expect(undoLink()).toBeUndefined();
+  }, 15000);
+  it("then «Отменить» the accuracy too: the op goes — nothing reaches the server", async () => {
+    const r = await withGutters();
+    const undoLink = relink(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, { leadId: "l1" })!;
+    await settle();
+    const undoAcc = setAccuracy(valueOf(r) as unknown as import("../src/modules/registry").ModuleStore, M.id, "tape")!;
+    await settle();
+    expect(undoLink()).toBe(true);
+    await settle();
+    expect(undoAcc()).toBe(true);
+    await settle();
+    expect(mOf(r)).toMatchObject({ leadId: null, accuracy: "rough" });
+    await tick();
+    expect(server.sends.filter((x) => x.op.k === "module.op")).toEqual([]);
+  }, 15000);
+});
+
+describe("unit:undoOwnStore — a store's reverse step inside undoTogether (review of #1279 №3)", () => {
+  it("a function the store did not make (an undo passed through bind) in undoTogether: refused — nothing goes back (in tests it throws)", async () => {
+    const r = await demo();
+    const c = valueOf(r).db.customers[0]!;
+    const undoName = call(r, "updateCustomer", c.id, { name: "Renamed (test)" }) as () => boolean | undefined;
+    await settle();
+    const bound = undoName.bind(null);
+    expect(() => (call(r, "undoTogether", [undoName, bound]) as () => unknown)()).toThrow(/did not make/);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
+  });
+  it("a job line (a reverse step) + a client's name: true — both back; the line's own «Отменить» after it is too late (done)", async () => {
+    const r = await demo();
+    // a job of its own lines (no estimate: its lines are not the estimate's), not done, nothing billed on it (a line
+    // taken off below what was billed is refused — t19)
+    const job = valueOf(r).db.jobs.find((j) => !j.estimateId && j.status !== "done" && !valueOf(r).db.invoices.some((i) => i.jobId === j.id))!;
+    expect(job).toBeDefined();
+    const c = valueOf(r).db.customers[0]!;
+    const lineId = "00000000-0000-4000-8000-0000000007a1";
+    const undoLine = call(r, "saveJobLine", { id: lineId, jobId: job.id, position: 99, name: "Extra (test)", quantity: "1", unitPriceCents: 500, taxable: false }, true) as () => unknown;
+    await settle();
+    const undoName = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
+    await settle();
+    expect((call(r, "undoTogether", [undoLine, undoName]) as () => unknown)()).toBe(true);
+    await settle();
+    expect((valueOf(r).db.jobLines ?? []).some((l) => l.id === lineId)).toBe(false);
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe(c.name);
+    // done inside undoTogether: on its own toast it is too late, it does not run twice
+    expect(undoLine()).toBe(false);
+  });
+  it("the reverse step would be refused (the line under what was billed — t19): false — the client's name does not go back either", async () => {
+    const r = await demo();
+    const job = valueOf(r).db.jobs.find((j) => !j.estimateId && j.status !== "done" && valueOf(r).db.invoices.some((i) => i.jobId === j.id))!;
+    expect(job).toBeDefined();
+    const c = valueOf(r).db.customers[0]!;
+    const undoLine = call(r, "saveJobLine", { id: "00000000-0000-4000-8000-0000000007a2", jobId: job.id, position: 99, name: "Extra (test)", quantity: "1", unitPriceCents: 500, taxable: false }, true);
+    await settle();
+    const undoName = call(r, "updateCustomer", c.id, { name: "Renamed (test)" });
+    await settle();
+    expect((call(r, "undoTogether", [undoLine, undoName]) as () => unknown)()).toBe(false);
+    await settle();
+    expect(valueOf(r).db.customers.find((x) => x.id === c.id)!.name).toBe("Renamed (test)");
   });
 });
 

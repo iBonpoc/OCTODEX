@@ -14,6 +14,7 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { View } from "react-native";
+import { localUndo } from "@/data/undo";
 
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
 export default function Triage() {
@@ -36,7 +37,7 @@ export default function Triage() {
 
   const snooze = (it: AttentionItem, msg: string) => {
     setSnoozed((s) => [...s, it.id]);
-    toast.show(msg, () => setSnoozed((s) => s.filter((x) => x !== it.id)));
+    toast.show(msg, localUndo(() => setSnoozed((s) => s.filter((x) => x !== it.id))));
   };
 
   const actions = (it: AttentionItem) => {
