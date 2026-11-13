@@ -29,8 +29,10 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
+import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
+import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
-import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, PROFILE_ICON, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import type { GutterProfile } from "@octo/estimating-engine";
@@ -56,12 +58,15 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, capSide, houseSides, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 import { localUndo, type GuardedUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
+
+/** a window opened BY a tap waits `durFast`: the `click` the browser sends after the touch — late on a busy page — must not land in it (see the tap handler) */
+const afterTap = (f: () => void) => setTimeout(f, motion.durFast);
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
 /** a tap this soon after a two-finger gesture began or ended is not a tap */
@@ -214,6 +219,14 @@ export default function DrawScreen() {
   const sceneRef = useRef<Scene | null>(null);
   /** the corner tapped: inside / outside (founder 08.11) */
   const [cornerSheet, setCornerSheet] = useState<string | null>(null);
+  // «Конец желоба» (a double tap on a free end, #1273): the run and its end
+  const [endSheet, setEndSheet] = useState<{ id: string; end: 0 | 1 } | null>(null);
+  // the last tap on the canvas: a second one on the same object inside `motion.doubleTapMs` is a double tap (spec 33 §3); a single tap never waits for it
+  const lastTap = useRef<LastTap | null>(null);
+  // the window a double tap is about to open (`afterTap`): gone with the screen and with the tool
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current); }, []);
+  useEffect(() => { if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; } }, [tool]);
   /** a downspout just put blinks three times (founder 08.11: you see what appeared); `dim` — its off beat */
   const [fresh, setFresh] = useState<string | null>(null);
   const [dim, setDim] = useState(false);
@@ -243,8 +256,8 @@ export default function DrawScreen() {
   const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -595,7 +608,7 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
-      if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) return; // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
+      if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
       if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
@@ -645,22 +658,41 @@ export default function DrawScreen() {
       }
       const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (h) setHint(null);
-      // an end (founder 08.11): an end cap swaps left ↔ right (the whole line's face); a corner asks inside / outside
-      if (h?.kind === "end" && cur.current.canSave && !liftTap.current) {
-        const found = findCorners(d);
-        const corner = found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end));
-        if (corner) {
-          setSelected(h.id);
-          setCornerSheet(corner.id);
-          return;
-        }
-        if (runEnds(d, found)[h.id]?.[h.end]?.kind === "cap") {
-          commit(flipFace(d, h.id));
-          setSelected(h.id);
-          return;
-        }
+      // a tap picks AT ONCE and never waits for a second one (spec 33 §3, #1273); what used to happen on the spot — the corner's sheet on an end,
+      // the flip of a cap — is the second tap's (a double tap on the same object inside `doubleTapMs`) or a row of its sheet
+      const found = h?.kind === "end" ? findCorners(d) : [];
+      const corner = h?.kind === "end" ? found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end)) : undefined;
+      // a free end: not a corner, not butted to another gutter — and one with «без заглушки» stays one (its sheet brings the cap back)
+      const freeEnd = h?.kind === "end" && !corner && (!!d.runs.find((r) => r.id === h.id)?.noCap?.[h.end] || runEnds(d, found)[h.id]?.[h.end]?.kind !== "join");
+      const key = !h ? "" : corner ? `corner:${corner.id}` : h.kind === "end" ? `end:${h.id}:${h.end}` : h.id;
+      const now = Date.now();
+      const dbl = !liftTap.current && isDoubleTap(lastTap.current, now, key, motion.doubleTapMs);
+      lastTap.current = dbl || liftTap.current ? null : { at: now, id: key };
+      if (!dbl) {
+        if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
+        setSelected(h ? h.id : null);
+        return;
       }
-      setSelected(h ? h.id : null);
+      haptics.light();
+      if (!h) {
+        if (tl === "line" && cur.current.size.w) setView(fit(d, cur.current.size)); // two taps on the empty place: the whole drawing
+        return;
+      }
+      setSelected(h.id);
+      if (!cur.current.canSave && h.kind === "end") return;
+      // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
+      // then — a row of a window opened in the same beat would be pressed by the tap that opened it (the toast has the same guard,
+      // `toastArmMs`; found by e2e 211)
+      if (openTimer.current) clearTimeout(openTimer.current);
+      const pickedId = h.id;
+      openTimer.current = afterTap(() => {
+        openTimer.current = null;
+        // what was picked meanwhile or another tool: the tap that asked is no longer the person's wish
+        if (cur.current.selected !== pickedId || cur.current.tool !== tl) return;
+        if (corner) setCornerSheet(corner.id);
+        else if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end });
+        else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
+      });
     },
   });
   const fingers = useSimultaneousGestures(pan, tap);
@@ -751,6 +783,7 @@ export default function DrawScreen() {
     setM((x) => (x ? { ...x, accuracy: a } : x));
     later.current();
   };
+  const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
   const [sketchW, setSketchW] = useState(0);
@@ -883,9 +916,22 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
+  // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
+  const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
+  const endRows = (() => {
+    if (!endRun0) return [] as { end: 0 | 1; side: string }[];
+    const found = findCorners(drawing), kinds = runEnds(drawing, found)[endRun0.id], hs = houseSides(drawing)(endRun0);
+    return ([0, 1] as const).filter((e) => !!endRun0.noCap?.[e] || kinds?.[e]?.kind === "cap").map((e) => ({ end: e, side: capSide(e, hs) }));
+  })();
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
+    // «вписать» left the header (#1273): the whole drawing is a double tap on the empty place, and a row here
+    { key: "fit", label: t("mod.gutters.draw.fit") },
+    // what a double tap opens, as rows too (a screen reader has no double tap, a phone on its side has no panel): the properties of the picked
+    // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
+    ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
+    ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
     // «Как мерили, панель» the founder did not understand)
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
@@ -897,6 +943,9 @@ export default function DrawScreen() {
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
+    if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
+    if (k === "props") return setSheet(true);
+    if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
     if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
@@ -958,11 +1007,6 @@ export default function DrawScreen() {
       {grip}
       <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={lineIcon} label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} below={at === "top"} /></View>
       <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={dsIcon} label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} below={at === "top"} /></View>
-      {/* «Выбрать» is gone (founder 09.11, #687): a tap picks with any tool; in its place «Свойства» of what is picked —
-          on the phone (820/1280 show them in the side panel) */}
-      {!wide ? (
-        <View testID="draw-props" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} dim={!sel} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} below={at === "top"} /></View>
-      ) : null}
       <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} below={at === "top"} /></View>
       <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} below={at === "top"} /></View>
       {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
@@ -1048,7 +1092,6 @@ export default function DrawScreen() {
               </View>
             ) : null}
           </View>
-          <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
           {mPhotos && !wide && !flat && canSave ? (
             <View testID="draw-photos-open">
               <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
@@ -1057,7 +1100,7 @@ export default function DrawScreen() {
               </Press>
             </View>
           ) : null}
-          {canSave && !flat ? (
+          {canSave ? (
             <View ref={whoRef} collapsable={false} testID="draw-who">
               <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
             </View>
@@ -1218,6 +1261,17 @@ export default function DrawScreen() {
       <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
         {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
+      {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}
+      <Sheet visible={canSave && !!endRun} onClose={() => setEndSheet(null)}>
+        {endRun && endSheet ? (
+          <EndSheet
+            capOff={!!endRun.noCap?.[endSheet.end]}
+            side={houseSides(drawing)(endRun)}
+            onCap={(off) => commit(setCapOff(cur.current.drawing, endSheet.id, endSheet.end, off))}
+            onFlip={() => commit(flipFace(cur.current.drawing, endSheet.id))}
+          />
+        ) : null}
+      </Sheet>
       <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
         {corner ? (
           <View testID="corner-sheet" style={{ gap: space[3] }}>

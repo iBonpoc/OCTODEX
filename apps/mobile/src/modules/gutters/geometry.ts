@@ -383,10 +383,13 @@ export function runEnds(d: Pick<Drawing, "runs">, corners: FoundCorner[], tolIn 
     res[r.id] = ([0, 1] as const).map((e): RunEnd => {
       const corner = corners.find((c) => c.runs.some((x) => x.id === r.id && x.end === e));
       if (corner) return { kind: "corner", cornerId: corner.id };
+      // «Без заглушки» (#1273) is the person's explicit choice and comes first: also at an end freed from a corner (`openEnds`, #933) —
+      // otherwise the sheet says «no cap» while a cap is drawn and counted (review of #1366)
+      if (r.noCap?.[e]) return { kind: "join" };
       if (isOpenEnd(r, e)) return { kind: "cap" };
       const p = e ? r.b : r.a;
       const joined = d.runs.some((o) => o.id !== r.id && sameStory(o, r) && (dist(o.a, p) <= tolIn || dist(o.b, p) <= tolIn));
-      if (joined || r.noCap?.[e]) return { kind: "join" };
+      if (joined) return { kind: "join" };
       return { kind: "cap" };
     }) as [RunEnd, RunEnd];
   }

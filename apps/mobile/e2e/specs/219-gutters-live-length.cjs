@@ -31,10 +31,10 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const s = await p.getByTestId("draw-surface").boundingBox();
   // «Примерно — не для резки» is gone from the top (#681); the save mark is there instead
-  // #1274: the save mark is gone when all is saved; the live length must stay clear of what the top row has (back, fit, the mark if it is there)
+  // #1274: the save mark is gone when all is saved; the live length must stay clear of what the top row has (back, the mark if it is there)
   const topBoxes = async () => {
     const out = [];
-    for (const id of ["draw-back", "draw-fit", "draw-local", "draw-done"]) if (await tid(id).count()) out.push(await tid(id).first().boundingBox());
+    for (const id of ["draw-back", "draw-local", "draw-done"]) if (await tid(id).count()) out.push(await tid(id).first().boundingBox());
     return out;
   };
 
@@ -52,7 +52,7 @@ exports.run = async (h) => {
     const off = Math.abs((b[0] - a[0]) * (a[1] - cy) - (a[0] - cx) * (b[1] - a[1])) / len;
     h.expect(Math.hypot(cx - mx, cy - my) < box.width + box.height, `${what}: the chip is at the middle of the line (${Math.round(cx)},${Math.round(cy)} vs ${Math.round(mx)},${Math.round(my)})`);
     h.expect(off >= box.height / 2, `${what}: the chip is beside the line, not on it (${Math.round(off)})`);
-    for (const tb of await topBoxes()) h.expect(!overlap(box, tb), `${what}: not over the top row (back / fit / mark)`);
+    for (const tb of await topBoxes()) h.expect(!overlap(box, tb), `${what}: not over the top row (back / mark)`);
     await p.mouse.up();
     await skipLength(p);
     await waitFor(async () => (await chipBox()) === null, `${what}: the finger let go — the live chip is gone`);

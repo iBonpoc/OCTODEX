@@ -62,7 +62,7 @@ exports.run = async (h) => {
   const bar = await tid("draw-toolbar").innerText();
   const phone = (h.layout?.width ?? 390) < 600;
   h.expect(!/Желоб|Водосток|Назад|Вперёд|Этаж|Свойства/.test(bar), `no words on the toolbar (${bar.replace(/\n/g, " | ")})`);
-  for (const [id, w] of [["draw-tool-line", "Желоб"], ["draw-tool-ds", "Водосток"], ...(phone ? [["draw-props", "Свойства"]] : []), ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
+  for (const [id, w] of [["draw-tool-line", "Желоб"], ["draw-tool-ds", "Водосток"], ["draw-story", "Этаж"], ["draw-undo", "Назад"], ["draw-redo", "Вперёд"]]) {
     const name = (await tid(id).getByRole("button").getAttribute("aria-label")) || "";
     h.expect(name.includes(w), `${id} is named «${w}» (${name})`);
   }
