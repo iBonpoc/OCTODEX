@@ -16,6 +16,8 @@ import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/u
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
+import { fillStyle } from "@/ui/fill";
+import { SelectedCheck } from "@/ui/selectedCheck";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
@@ -491,10 +493,12 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
               {...({ "aria-checked": sel } as object)}
               accessibilityLabel={label.replace("\n", " ")}
               containerStyle={{ flexBasis: "47%", flexGrow: 1 }}
-              style={{ minHeight: sizes.hitMin + space[4], flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.inner, backgroundColor: c.surf2, borderWidth: sel ? component.selectedBorder : 1, borderColor: sel ? c.ink : c.bd }}
+              style={{ minHeight: sizes.hitMin + space[4], flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.inner, ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: sel ? "transparent" : c.bd }}
             >
-              <Icon name={x.icon} s={sizes.iconMd} color={c.ink} />
-              <T v="caption" w={sel ? "bold" : "semibold"} style={{ flex: 1 }}>{label}</T>
+              <Icon name={x.icon} s={sizes.iconMd} color={sel ? c.ink : c.mut} />
+              <T v="caption" w="semibold" style={{ flex: 1, color: sel ? c.ink : c.mut }}>{label}</T>
+              {/* a chosen option: «Заливка» + `check` in the corner (DS «Выделение выбранного», #1306): a card or a row carries the check */}
+              {sel ? <SelectedCheck small /> : null}
             </Press>
           );
         })}
