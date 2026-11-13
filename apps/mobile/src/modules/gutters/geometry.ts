@@ -229,6 +229,48 @@ export interface FoundCorner {
  * outside corner, away from the house an inside corner; a turn below 70° (between 20° and 70°) is a bay corner.
  * Turns under 20° are a straight join (no corner).
  */
+/**
+ * Two gutters of one storey that share BOTH ends (one lies exactly on the other, in either direction) — a duplicate (#1256: a line drawn
+ * over a gutter, from its a to its b, made a second gutter on it; the material and the corners were counted twice). Within `tolIn`.
+ */
+export function sameEnds(a: Pick<DrawnRun, "a" | "b" | "attrs">, b: Pick<DrawnRun, "a" | "b" | "attrs">, tolIn = 1): boolean {
+  if (!sameStory(a, b)) return false;
+  return (dist(a.a, b.a) <= tolIn && dist(a.b, b.b) <= tolIn) || (dist(a.a, b.b) <= tolIn && dist(a.b, b.a) <= tolIn);
+}
+
+/** a line from `a` to `b` on `story` would lie exactly on a gutter that is already there */
+export const wouldDuplicate = (d: Pick<Drawing, "runs">, a: P, b: P, story: number, tolIn = 1): DrawnRun | undefined =>
+  d.runs.find((r) => sameEnds(r, { a, b, attrs: { story } as DrawnRun["attrs"] }, tolIn));
+
+/** the groups of gutters that lie on each other (the first of a group is the one kept): none in a sound drawing, but an old one may have them */
+export function duplicateRuns(d: Pick<Drawing, "runs">, tolIn = 1): string[][] {
+  const out: string[][] = [];
+  const seen = new Set<string>();
+  d.runs.forEach((r, i) => {
+    if (seen.has(r.id)) return;
+    const same = d.runs.filter((o, j) => j > i && !seen.has(o.id) && sameEnds(r, o, tolIn));
+    if (same.length) { out.push([r.id, ...same.map((o) => o.id)]); same.forEach((o) => seen.add(o.id)); }
+  });
+  return out;
+}
+
+/** the drawing without the later gutters of every duplicate group; their downspouts move to the one kept (the distance from the other end if it runs the other way) */
+export function withoutDuplicates<D extends Pick<Drawing, "runs"> & { downspouts?: DrawnDownspout[] }>(d: D): D {
+  const groups = duplicateRuns(d);
+  if (!groups.length) return d;
+  const keepOf = new Map<string, string>();
+  for (const g of groups) for (const id of g.slice(1)) keepOf.set(id, g[0]!);
+  const byId = new Map(d.runs.map((r) => [r.id, r]));
+  const downspouts = (d.downspouts ?? []).map((s) => {
+    const k = keepOf.get(s.runId);
+    if (!k) return s;
+    const from = byId.get(s.runId)!, to = byId.get(k)!;
+    const reversed = dist(from.a, to.b) <= 1 && dist(from.b, to.a) <= 1;
+    return { ...s, runId: k, atIn: reversed ? Math.max(0, runLengthIn(to) - s.atIn) : s.atIn };
+  });
+  return { ...d, runs: d.runs.filter((r) => !keepOf.has(r.id)), downspouts };
+}
+
 export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] {
   const side = houseSides(d);
   const out: FoundCorner[] = [];
@@ -238,6 +280,7 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
       const A = rs[i]!, B = rs[j]!;
       // gutters on different storeys never meet (founder 09.11: a 2nd and a 3rd storey were joined into a corner)
       if (!sameStory(A, B)) continue;
+      if (sameEnds(A, B, tolIn)) continue; // one lies on the other (a duplicate): no corner — the pair would be found twice with one id (#1256)
       for (const ea of [0, 1] as const) {
         for (const eb of [0, 1] as const) {
           const pa = ea ? A.b : A.a, pb = eb ? B.b : B.a;
@@ -346,7 +389,9 @@ export function splashOff(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">
   return f.runs.every((end) => !!d.runs.find((r) => r.id === end.id)?.attrs.noSplash?.[end.end ? "b" : "a"]);
 }
 
-export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
+export function toMeasurement(d0: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
+  // an old drawing may have a gutter lying on another: it is counted once (#1256)
+  const d = withoutDuplicates(d0);
   const side = houseSides(d);
   const found = findCorners(d);
   const ends = runEnds(d, found);

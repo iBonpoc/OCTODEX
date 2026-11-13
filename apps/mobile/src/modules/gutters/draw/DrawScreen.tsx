@@ -52,7 +52,7 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, wouldDuplicate, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -439,6 +439,14 @@ export default function DrawScreen() {
         }
         liftTap.current = true;
         return;
+      }
+      // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
+      if (next === d && g.kind === "line") {
+        const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
+        if (!e.canceled && wouldDuplicate(d, g.a, b, Number(cur.current.story) || 1)) {
+          haptics.warning();
+          toast.show(t("mod.gutters.draw.dupRun"));
+        }
       }
       if (next !== d) {
         commit(next, d);
