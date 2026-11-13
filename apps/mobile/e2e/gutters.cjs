@@ -100,19 +100,26 @@ async function openProps(p, { force = false } = {}) {
   if (!force && (p.viewportSize()?.width ?? 0) > 390) return; // wider: the panel is beside the canvas already (a phone on its side asks with force)
   await p.getByTestId("draw-tool-line").locator("visible=true").getByRole("button").click();
   const at = await p.evaluate(() => {
-    const halo = document.querySelector('[id^="halo-"]');
+    const dots = [...document.querySelectorAll('[data-testid="draw-svg"] circle')].map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; });
+    const clear = (q) => dots.every((d) => Math.hypot(d[0] - q[0], d[1] - q[1]) > 24); // never a downspout's mark: that would open ITS menu
+    const halo = document.querySelector('[data-testid="draw-svg"] [id^="halo-"]');
     if (halo) {
       const r = halo.getBoundingClientRect();
-      // a third of the way along the picked gutter (the middle may be under a downspout's mark)
       const horizontal = r.width >= r.height;
-      return horizontal ? [r.x + r.width * 0.3, r.y + r.height / 2] : [r.x + r.width / 2, r.y + r.height * 0.3];
+      for (const k of [0.75, 0.3, 0.55, 0.9]) {
+        const q = horizontal ? [r.x + r.width * k, r.y + r.height / 2] : [r.x + r.width / 2, r.y + r.height * k];
+        if (clear(q)) return q;
+      }
+      return horizontal ? [r.x + r.width * 0.75, r.y + r.height / 2] : [r.x + r.width / 2, r.y + r.height * 0.75];
     }
-    const c = document.querySelector("circle");
-    if (!c) return null;
-    const r = c.getBoundingClientRect();
-    return [r.x + r.width / 2, r.y + r.height / 2];
+    if (dots.length) return dots[0]; // a downspout is what is picked: its own mark
+    // nothing is picked: take the first gutter — the tap below picks it, the second opens its properties
+    const line = document.querySelector('[data-testid="draw-svg"] line:not([id^="halo"]):not([id^="grid"])');
+    if (!line) return null;
+    const r = line.getBoundingClientRect();
+    return r.width >= r.height ? [r.x + r.width * 0.75, r.y + r.height / 2] : [r.x + r.width / 2, r.y + r.height * 0.75];
   });
-  if (!at) throw new Error("openProps: nothing is picked");
+  if (!at) throw new Error("openProps: no gutter on the canvas");
   await canvasAt(p, at[0], at[1]);
   await p.mouse.click(at[0], at[1]);
   await p.mouse.click(at[0], at[1]); // the second tap on the same object inside motion.doubleTapMs
@@ -134,6 +141,18 @@ async function pastDoubleTap(p) {
 async function fitAll(p) {
   await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
   await p.getByRole("menuitem", { name: "Весь рисунок", exact: true }).or(p.getByText("Весь рисунок", { exact: true })).last().click();
+  await sheetGone(p); // the menu's own layer takes touches while it goes out: the next pinch or stroke must land on the canvas
+  // the menu picks AFTER it has closed, and the view then settles into place: wait until the drawing stops moving, so the next
+  // pinch is not fighting the settle (#1273: «вписать» is a row now, it was a button in the header)
+  await p.waitForFunction(() => {
+    const el = document.querySelector('[data-testid="draw-svg"] [id^="face-"], [data-testid="draw-svg"] line');
+    if (!el) return true;
+    const w = Math.round(el.getBoundingClientRect().width);
+    const same = globalThis.__fitW === w;
+    globalThis.__fitW = w;
+    return same;
+  }, null, { polling: 120, timeout: 5000 });
+  await p.evaluate(() => { delete globalThis.__fitW; });
 }
 
 module.exports = { openProps, fitAll, doubleTap, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

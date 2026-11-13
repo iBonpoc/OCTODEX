@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { isDoubleTap, type LastTap } from "../canvas/gestureState";
+import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
 import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
@@ -64,6 +64,9 @@ import { localUndo, type GuardedUndo } from "@/data/undo";
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
+
+/** a window opened BY a tap waits one frame: the `click` the browser sends after the touch must not land in it (see the tap handler) */
+const afterTap = (f: () => void) => requestAnimationFrame(f);
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
 /** a tap this soon after a two-finger gesture began or ended is not a tap */
@@ -672,9 +675,14 @@ export default function DrawScreen() {
       }
       setSelected(h.id);
       if (!cur.current.canSave && h.kind === "end") return;
-      if (corner) setCornerSheet(corner.id);
-      else if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end });
-      else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
+      // the window opens a FRAME later: the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
+      // then — a row of a window opened in the same beat would be pressed by the tap that opened it (the toast has the same guard,
+      // `toastArmMs`; found by e2e 211)
+      afterTap(() => {
+        if (corner) setCornerSheet(corner.id);
+        else if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end });
+        else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
+      });
     },
   });
   const fingers = useSimultaneousGestures(pan, tap);

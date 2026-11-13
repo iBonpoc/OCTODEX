@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { motion } from "@octo/design-tokens";
-import { isDoubleTap } from "../src/modules/gutters/canvas/gestureState";
+import { isDoubleTap } from "../src/modules/gutters/canvas/doubleTap";
 
 /** #1273: a double tap = a second tap on the SAME object within motion.doubleTapMs */
 describe("isDoubleTap", () => {
