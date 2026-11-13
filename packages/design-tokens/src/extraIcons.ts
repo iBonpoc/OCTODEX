@@ -45,4 +45,11 @@ export const extraIcons = {
   cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9.5a4.3 4.3 0 0 1-.5 8.5z",
   lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
   tag: "M3 3h8l10 10-8 8L3 11zM7.5 7.5h.01",
+  // cross-section profiles of a long open-top part (a trade module shows the chosen one in its tool, #1274); first sketches on a 24 grid in the
+  // app's stroke: open at the top, so they are not taken for the closed round / rectangular tube shapes (`dsRect`, `dsRound`); the founder may redraw them
+  xsK: "M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",
+  xsHalf: "M4 8a8 8 0 0 0 16 0M3 8h3M18 8h3",
+  xsFascia: "M6 4v13.5a2.5 2.5 0 0 0 2.5 2.5H18V8.5h-3",
+  xsBox: "M5 5v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5",
+  xsEuro: "M4 8c0 6 3 10 8 10s8-4 8-10",
 } as const;

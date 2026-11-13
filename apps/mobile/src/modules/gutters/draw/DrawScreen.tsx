@@ -9,7 +9,7 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
@@ -32,7 +32,8 @@ import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
 import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
-import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { dsKindOf, PROFILE_ICON, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import type { GutterProfile } from "@octo/estimating-engine";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
 import { haptics } from "@/ui/haptics";
@@ -47,6 +48,7 @@ import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
+import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
@@ -67,20 +69,52 @@ const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
-/** 390 at the bottom: a cell is as wide as its word (the system font scale makes words wider: no «…», #1303), the spare width is shared */
-const GROW = { flexGrow: 1, flexShrink: 1, flexBasis: "auto" } as const;
+/** the name in the header (#1274): a button that SHRINKS — a long name or «Сделать заявкой» is cut with «…» in its own width, never under the icons beside it */
+function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+  const { c } = useTheme();
+  return (
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
+      style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
+      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
+    </Press>
+  );
+}
 
-/** one cell of the canvas toolbar (spec 33 П20.8): a 36 circle (44 to touch, rule 3) and its word under it — a picture
- *  alone was read wrong (founder's walk-through 08.11). `body` replaces the icon (the storey: «Эт N» in its colour) */
-function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean }) {
+/** one cell of the canvas toolbar (spec 33 П20.8; #1274, founder 12.11: «без длинных надписей, значки»): a 36 circle (44 to touch, rule 3), ONLY the picture —
+ *  its word is read aloud (`accessibilityLabel`), shown on the web by `title`, and written over it on a long press (`ToolHint`, a bubble for a moment).
+ *  `body` replaces the icon (the storey: «Эт N» in its colour) */
+function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabled, dim, below }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean; /** nothing to act on (the bin without a pick): muted, no action — but the long press still says its name */ disabled?: boolean; /** looks off, still answers a tap (it says why): the muted look of `disabled` without the lock */ dim?: boolean; /** the toolbar is at the top: the caption goes under it */ below?: boolean }) {
   const { c } = useTheme();
   const s = component.dockBtn;
+  const [tip, setTip] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const showTip = () => {
+    setTip(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setTip(false), motion.longPressMs * 3);
+  };
   return (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ selected: !!active }} containerStyle={grow ? GROW : undefined} style={{ alignItems: "center", gap: space[1], minWidth: sizes.hitMin }}>
+    <Press
+      onPress={disabled ? () => {} : onPress}
+      onLongPress={showTip}
+      delayLongPress={motion.longPressMs}
+      accessibilityRole="button"
+      accessibilityLabel={a11y ?? label}
+      accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      {...({ title: label } as object)}
+      containerStyle={grow ? { flex: 1 } : undefined}
+      style={{ alignItems: "center", minWidth: sizes.hitMin }}
+    >
       <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : disabled || dim ? c.mut : c.ink} /> : null}
       </View>
-      <T v="micro" center w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"}>{label}</T>
+      {tip ? (
+        <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
+          <T v="caption" w="semibold">{label}</T>
+        </View>
+      ) : null}
     </Press>
   );
 }
@@ -105,6 +139,21 @@ function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number
       style={{ position: "absolute", opacity: chip.w ? 1 : 0, ...ghostChipAt(a, b, chip, box, gap) }}
     >
       <StatusChip status="neutral" label={`${swing.deg}°`} />
+    </View>
+  );
+}
+
+/** the look of the summary chip (not glass: the overlay colour and a hairline, DS «Экран-холст») */
+const SUMMARY_CHIP = (c: { ov: string; bd: string }) => ({ height: component.button.phone, flexDirection: "row" as const, alignItems: "center" as const, gap: space[2], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd });
+
+/** «86′ · Дальше: водостоки» — the hint with its action */
+function NextDsLine({ gutterFt, icon, text }: { gutterFt: number; icon: IconKey; text: string }) {
+  const { c } = useTheme();
+  return (
+    <View testID="draw-next" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      <T v="caption" w="semibold">{`${gutterFt}′`}</T>
+      <T v="caption" tone="mut">{text}</T>
     </View>
   );
 }
@@ -718,6 +767,7 @@ export default function DrawScreen() {
     sel && m && stored.elements.some((e) => e.id === sel.id) && (canSave || has(sel.id)) ? (
       <MeasurePhotos measurementId={m.id} elementId={sel.id} testID="attr-photos" onRemoved={() => setSheet(false)} readOnly={!canSave} />
     ) : null;
+  const photoN = m ? photosOf(store.db, m.id).length : 0;
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
@@ -900,24 +950,36 @@ export default function DrawScreen() {
   );
   /** 390 at the bottom: the row takes the width, six cells share it */
   const grow = !side && !wide && !flat;
+  // the tools show what is chosen (#1274): the gutter's profile, the downspout's kind
+  const lineIcon = PROFILE_ICON[(newRunAttrs(ch, story).profile as GutterProfile)] ?? "channel";
+  const dsIcon = (() => { const a = newDsAttrs(ch); return dsKindOf(a.shape, a.dsStyle).icon; })();
   const tools = (
     <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
-      <View testID="draw-tool-line" style={grow ? GROW : { flexShrink: 0 }}><ToolCell icon="channel" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
-      <View testID="draw-tool-ds" style={grow ? GROW : { flexShrink: 0 }}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
+      <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={lineIcon} label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} below={at === "top"} /></View>
+      <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={dsIcon} label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} below={at === "top"} /></View>
       {/* «Выбрать» is gone (founder 09.11, #687): a tap picks with any tool; in its place «Свойства» of what is picked —
           on the phone (820/1280 show them in the side panel) */}
       {!wide ? (
-        <View testID="draw-props" style={[grow ? GROW : { flexShrink: 0 }, sel ? null : { opacity: component.dimOpacity }]}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} /></View>
+        <View testID="draw-props" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} dim={!sel} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} below={at === "top"} /></View>
       ) : null}
-      <View testID="draw-story" style={grow ? GROW : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
-      <View testID="draw-undo" style={grow ? GROW : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
+      <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} below={at === "top"} /></View>
+      <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} below={at === "top"} /></View>
       {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
           the accuracy mark at the top */}
-      <View testID="draw-redo" style={grow ? GROW : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} /></View>
+      <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} below={at === "top"} /></View>
+      {/* the bin (#1274, founder 12.11: «🗑 в панели, виден всегда, активен только при выборе»): «Отменить» for 5 s after (rule 5) */}
+      {/* the bin without a pick: a `disabled` button is deaf to the long press that says its name, so the cell is not disabled — it answers nothing, and the state is said here */}
+      <View testID="draw-delete" {...({ "aria-disabled": !sel || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel} below={at === "top"} /></View>
     </View>
   );
-  const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
+  // the summary chip: the parts are the engine's (rule 8) from the drawing as it is when the finger rests — not on every frame of a drag
+  const calmDrawing = useDeferredValue(drawing);
+  const parts = useMemo(() => (calmDrawing.runs.length ? computeGutterParts(toMeasurement(calmDrawing, { method: rules.corner }), rules.over).parts : []), [calmDrawing, rules]);
+  const summary0 = summaryOf(drawing, parts, selText ? { text: selText, dsIcon: selDsIcon } : null, tool === "ds" || !!ghost);
+  // a module that is off still says what is picked (as the old row did); the hint and the totals are for a drawing that is saved
+  const summary = canSave || summary0?.kind === "selected" ? summary0 : null;
+  const summaryA11y = !summary ? "" : summary.kind === "selected" ? summary.text : summary.kind === "nextDs" ? t("mod.gutters.draw.nextDs") : t("mod.gutters.draw.summaryA11y", { g: summary.gutterFt, d: summary.dsCount, p: summary.pipeFt });
   // #818 (founder 12.11: «не понимаю, как тянуть край»): once per opening of the canvas, when a gutter is first picked, the hint bubble says how
   // an end and a corner are taken, with any tool (the bubble the tools' hints use: it never replaces a toast with «Отменить», rule 5)
   const movedHint = useRef(false);
@@ -954,51 +1016,57 @@ export default function DrawScreen() {
         </CanvasView>
       </View>
 
-      {/* top: back, title, the save state; a module that is off or past the trial says it before the work starts */}
+      {/* top, ONE row (#1274, founder 12.11: «шапка — в одну строку»): back · the name (a lead, an address, «Привязать»; «Замер» before it is saved)
+          · a small mark when the drawing is only on the phone (no cloud when all is saved) · fit · photos · «⋯» · «Готово»; a module that is off or
+          past the trial says it under the row before the work starts */}
       <View pointerEvents="box-none" style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
-        <RowView>
+        <RowView style={{ alignItems: "center", gap: space[1] }}>
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
-          <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
-          <View style={{ flex: 1 }} />
+          <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1] }}>
+            {flat || !canSave ? (
+              <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
+            ) : lead ? (
+              <View testID="draw-lead" style={{ flexShrink: 1 }}>
+                <NameButton icon="user" label={lead.name} onPress={() => router.push(`/lead/${lead.id}`)} />
+              </View>
+            ) : addr ? (
+              // linked to a client's address (LinkSheet): that address, it opens the property
+              <View testID="draw-place" style={{ flexShrink: 1 }}>
+                <NameButton icon="pin" label={addr.address} onPress={() => router.push(`/property/${addr.id}`)} />
+              </View>
+            ) : inStore && !leadId && !inStore.propertyId ? (
+              <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
+                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
+              </View>
+            ) : (
+              <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
+            )}
+            {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
+            {canSave && !flat && (mark === "sending" || mark === "phone") ? (
+              <View testID="draw-local">
+                <IconButton icon={SAVE_ICON[mark]} label={t(`mod.gutters.draw.save.${mark}`)} onPress={() => toast.show(t(`mod.gutters.draw.save.${mark}`))} />
+              </View>
+            ) : null}
+          </View>
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
+          {mPhotos && !wide && !flat && canSave ? (
+            <View testID="draw-photos-open">
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
+                <Icon name="camera" s={sizes.iconMd} color={c.ink} />
+                {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
+              </Press>
+            </View>
+          ) : null}
+          {canSave && !flat ? (
+            <View ref={whoRef} collapsable={false} testID="draw-who">
+              <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
+            </View>
+          ) : null}
           {inStore ? (
             <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
-        {flat && canSave ? null : canSave ? (
-          <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
-            {/* the save mark (#507): an icon of three states, a tap says it in words; how it was measured is in «⋯» (#681) */}
-            {mark !== "none" ? (
-              <View testID="draw-saved">
-                <IconButton icon={SAVE_ICON[mark]} label={t(`mod.gutters.draw.save.${mark}`)} onPress={() => toast.show(t(`mod.gutters.draw.save.${mark}`))} />
-              </View>
-            ) : null}
-            {lead ? (
-              <View testID="draw-lead">
-                <Button label={lead.name} icon="user" size="sm" variant="ghost" onPress={() => router.push(`/lead/${lead.id}`)} />
-              </View>
-            ) : addr ? (
-              // linked to a client's address (LinkSheet): that address, it opens the property
-              <View testID="draw-place">
-                <Button label={addr.address} icon="pin" size="sm" variant="ghost" onPress={() => router.push(`/property/${addr.id}`)} />
-              </View>
-            ) : inStore && !leadId && !inStore.propertyId ? (
-              <View testID="draw-to-lead">
-                <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={() => setLinkSheet(true)} />
-              </View>
-            ) : null}
-            {mPhotos && !wide ? (
-              <View testID="draw-photos-open">
-                <Button label={t("mod.gutters.photo.open")} icon="camera" size="sm" variant="ghost" onPress={() => setPhotoSheet(true)} />
-              </View>
-            ) : null}
-            {canSave ? (
-              <View ref={whoRef} collapsable={false} testID="draw-who">
-                <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
-              </View>
-            ) : null}
-          </RowView>
-        ) : (
+        {canSave ? null : (
           <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <StatusChip status="warn" label={t("mod.gutters.draw.notSaved")} />
             <T v="caption">{t(access === "expired" ? "mod.gutters.draw.expired" : "mod.gutters.draw.off")}</T>
@@ -1020,6 +1088,8 @@ export default function DrawScreen() {
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
           <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
+          {/* the tools carry pictures only (#1274): where their words are, said while the drawing is still empty (the first opening) */}
+          <T v="caption" tone="mut" center>{t("mod.gutters.draw.emptyTools")}</T>
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
@@ -1065,13 +1135,6 @@ export default function DrawScreen() {
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
           </View>
         ) : null}
-        {/* what next (П20.9): gutters drawn, no downspout yet → put them — a bubble, not a row of the total (09.11) */}
-        {nextDs && !hintText && !gripping && !flat ? (
-          <View testID="draw-next" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[1], paddingLeft: space[3], paddingRight: space[1], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
-            <T v="caption" tone="mut">{t("mod.gutters.draw.nextDs")}</T>
-            <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
-          </View>
-        ) : null}
         {hintText && !gripping ? (
           <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{hintText}</T>
@@ -1079,21 +1142,46 @@ export default function DrawScreen() {
         ) : null}
         {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
-        {selText ? (
-        <View testID="draw-sel-bar" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
-          {/* one row (founder 09.11: the block took too much room): what is picked and «Свойства»; the total and the
-              estimate are on «Просмотр замера» now (#700) */}
-            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-              <View testID="draw-selected" style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                {selDsIcon ? <View testID="draw-selected-kind"><Icon name={selDsIcon} s={sizes.iconSm} color={c.ink} /></View> : null}
-                <T v="caption" w="semibold" numberOfLines={2} style={{ flex: 1 }}>{selText}</T>
-              </View>
-              {/* «Удалить» where «Свойства» was (founder 09.11, #687); «Свойства» is on the toolbar */}
-              <View testID="draw-delete">
-                <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="secondary" onPress={doDelete} />
-              </View>
-            </RowView>
-        </View>
+        {/* the summary chip (#1274, founder 12.11: «строки выбора нет — маленькая полупрозрачная плашка-сводка в нижнем углу», over the drawing, no row of its own):
+            what is picked, else «Дальше: водостоки», else the totals; a tap opens the measurement's «Просмотр» (the materials and the sum) */}
+        {summary && !gripping && (!flat || summary.kind === "selected") ? (
+          <View pointerEvents="box-none" style={{ alignItems: "flex-start", gap: space[2], flexShrink: 1 }}>
+            <Press
+              testID="draw-summary"
+              // «Дальше: водостоки» is a hint with its action (the downspout tool); the rest opens the measurement's «Просмотр»
+              onPress={() => { if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
+              disabled={!canSave || (summary.kind !== "nextDs" && !inStore)}
+              visibleHeight={component.button.phone}
+              accessibilityRole="button"
+              accessibilityLabel={summaryA11y}
+              style={SUMMARY_CHIP(c)}
+            >
+              {summary.kind === "selected" ? (
+                <View testID="draw-selected" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                  {summary.dsIcon ? <View testID="draw-selected-kind"><Icon name={summary.dsIcon} s={sizes.iconSm} color={c.ink} /></View> : null}
+                  <T v="caption" w="semibold" numberOfLines={1}>{summary.text}</T>
+                </View>
+              ) : summary.kind === "nextDs" ? (
+                <NextDsLine gutterFt={summary.gutterFt} icon={lineIcon} text={t("mod.gutters.draw.nextDsShort")} />
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                  <Icon name={lineIcon} s={sizes.iconSm} color={c.ink} />
+                  <T v="caption" w="semibold">{`${summary.gutterFt}′`}</T>
+                  <T v="caption" tone="mut">·</T>
+                  <Icon name={dsIcon} s={sizes.iconSm} color={c.ink} />
+                  <T v="caption" w="semibold">{`${summary.dsCount} · ${summary.pipeFt}′`}</T>
+                  {/* it opens «Просмотр замера»: the chevron says it is pressable */}
+                  <Icon name="chevronRight" s={sizes.iconSm} color={c.mut} />
+                </View>
+              )}
+            </Press>
+            {/* a picked one hides nothing: «Дальше: водостоки» stays under it until the first downspout is there (founder 12.11) */}
+            {summary.kind === "selected" && summary.next !== null && !flat && canSave ? (
+              <Press testID="draw-summary-next" onPress={() => pick("ds")} visibleHeight={component.button.phone} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.nextDs")} style={SUMMARY_CHIP(c)}>
+                <NextDsLine gutterFt={summary.next} icon={lineIcon} text={t("mod.gutters.draw.nextDsShort")} />
+              </Press>
+            ) : null}
+          </View>
         ) : null}
         {flat ? tools : null}
         </View>

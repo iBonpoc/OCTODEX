@@ -91,4 +91,7 @@ async function viewTotal(p) {
   return { total, test };
 }
 
-module.exports = { skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+/** the drawing is saved into the phone's copy (#1274: the cloud mark is gone — nothing is shown when all is saved, so a spec waits on the data itself) */
+const savedOnce = (p, timeout = 8000) => p.waitForFunction(() => { const g = (JSON.parse(localStorage.getItem("octo.db.v5") || "null") || {}).db?.moduleData?.gutters; return !!g && (g.elements || []).some((e) => !e.deletedAt); }, null, { timeout });
+
+module.exports = { savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
