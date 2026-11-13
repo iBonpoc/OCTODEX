@@ -33,7 +33,23 @@ describe("the summary chip", () => {
   });
   it("something picked: the chip says it, whatever else there is", () => {
     const d: Drawing = { runs: [A], downspouts: [ds("d1", "a", 24)] };
-    expect(summaryOf(d, parts(d), { text: "Желоб · 40′", dsIcon: null })).toEqual({ kind: "selected", text: "Желоб · 40′", dsIcon: null });
+    expect(summaryOf(d, parts(d), { text: "Желоб · 40′", dsIcon: null })).toEqual({ kind: "selected", text: "Желоб · 40′", dsIcon: null, next: null });
+  });
+  it("picked, gutters drawn, no downspout yet: «Дальше: водостоки» stays under the picked one (founder 12.11)", () => {
+    const d: Drawing = { runs: [A, B], downspouts: [] };
+    expect(summaryOf(d, parts(d), { text: "Желоб · 40′", dsIcon: null })).toEqual({ kind: "selected", text: "Желоб · 40′", dsIcon: null, next: 70 });
+    // gone with the first downspout, and while the downspout tool is on (hideNext)
+    expect(summaryOf(d, parts(d), { text: "x", dsIcon: null }, true)).toMatchObject({ next: null });
+    const d2: Drawing = { runs: [A, B], downspouts: [ds("d1", "a", 24)] };
+    expect(summaryOf(d2, parts(d2), { text: "x", dsIcon: null })).toMatchObject({ next: null });
+  });
+  it("three downspouts of one storey: the pipes are exactly 30 ft — 3 sticks of the engine, not a sum of heights", () => {
+    const r = run("c", [0, 0], [312, 0], 312); // 26 ft of gutter
+    const d: Drawing = { runs: [r], downspouts: [ds("d1", "c", 24), ds("d2", "c", 74), ds("d3", "c", 124)] };
+    const s = summaryOf(d, parts(d), null);
+    if (s?.kind !== "total") throw new Error("total expected");
+    expect(s.gutterFt).toBe(26);
+    expect(s.pipeFt).toBe(30);
   });
   it("the gutters' total counts a typed length, to whole feet", () => {
     expect(gutterFeet({ runs: [run("x", [0, 0], [100, 0], 149.6)] })).toBe(12); // 12′ 5⅝″ → 12 ft

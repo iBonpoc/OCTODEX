@@ -84,7 +84,7 @@ function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: st
 /** one cell of the canvas toolbar (spec 33 П20.8; #1274, founder 12.11: «без длинных надписей, значки»): a 36 circle (44 to touch, rule 3), ONLY the picture —
  *  its word is read aloud (`accessibilityLabel`), shown on the web by `title`, and written over it on a long press (`ToolHint`, a bubble for a moment).
  *  `body` replaces the icon (the storey: «Эт N» in its colour) */
-function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabled, below }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean; /** nothing to act on (the bin without a pick): dimmed, no press */ disabled?: boolean; /** the toolbar is at the top: the caption goes under it */ below?: boolean }) {
+function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabled, dim, below }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean; /** nothing to act on (the bin without a pick): muted, no action — but the long press still says its name */ disabled?: boolean; /** looks off, still answers a tap (it says why): the muted look of `disabled` without the lock */ dim?: boolean; /** the toolbar is at the top: the caption goes under it */ below?: boolean }) {
   const { c } = useTheme();
   const s = component.dockBtn;
   const [tip, setTip] = useState(false);
@@ -97,19 +97,18 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
   };
   return (
     <Press
-      onPress={onPress}
+      onPress={disabled ? () => {} : onPress}
       onLongPress={showTip}
       delayLongPress={motion.longPressMs}
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
-      disabled={disabled}
       {...({ title: label } as object)}
       containerStyle={grow ? { flex: 1 } : undefined}
-      style={{ alignItems: "center", minWidth: sizes.hitMin, opacity: disabled ? component.dimOpacity : 1 }}
+      style={{ alignItems: "center", minWidth: sizes.hitMin }}
     >
       <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : disabled || dim ? c.mut : c.ink} /> : null}
       </View>
       {tip ? (
         <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
@@ -140,6 +139,21 @@ function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number
       style={{ position: "absolute", opacity: chip.w ? 1 : 0, ...ghostChipAt(a, b, chip, box, gap) }}
     >
       <StatusChip status="neutral" label={`${swing.deg}°`} />
+    </View>
+  );
+}
+
+/** the look of the summary chip (not glass: the overlay colour and a hairline, DS «Экран-холст») */
+const SUMMARY_CHIP = (c: { ov: string; bd: string }) => ({ height: component.button.phone, flexDirection: "row" as const, alignItems: "center" as const, gap: space[2], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd });
+
+/** «86′ · Дальше: водостоки» — the hint with its action */
+function NextDsLine({ gutterFt, icon, text }: { gutterFt: number; icon: IconKey; text: string }) {
+  const { c } = useTheme();
+  return (
+    <View testID="draw-next" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      <T v="caption" w="semibold">{`${gutterFt}′`}</T>
+      <T v="caption" tone="mut">{text}</T>
     </View>
   );
 }
@@ -948,15 +962,16 @@ export default function DrawScreen() {
       {/* «Выбрать» is gone (founder 09.11, #687): a tap picks with any tool; in its place «Свойства» of what is picked —
           on the phone (820/1280 show them in the side panel) */}
       {!wide ? (
-        <View testID="draw-props" style={[grow ? { flex: 1 } : { flexShrink: 0 }, sel ? null : { opacity: component.dimOpacity }]}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} /></View>
+        <View testID="draw-props" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} dim={!sel} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} below={at === "top"} /></View>
       ) : null}
-      <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
-      <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
+      <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} below={at === "top"} /></View>
+      <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} below={at === "top"} /></View>
       {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
           the accuracy mark at the top */}
       <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} below={at === "top"} /></View>
       {/* the bin (#1274, founder 12.11: «🗑 в панели, виден всегда, активен только при выборе»): «Отменить» for 5 s after (rule 5) */}
-      <View testID="draw-delete" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel} below={at === "top"} /></View>
+      {/* the bin without a pick: a `disabled` button is deaf to the long press that says its name, so the cell is not disabled — it answers nothing, and the state is said here */}
+      <View testID="draw-delete" {...({ "aria-disabled": !sel || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel} below={at === "top"} /></View>
     </View>
   );
   // the summary chip: the parts are the engine's (rule 8) from the drawing as it is when the finger rests — not on every frame of a drag
@@ -1130,17 +1145,17 @@ export default function DrawScreen() {
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         {/* the summary chip (#1274, founder 12.11: «строки выбора нет — маленькая полупрозрачная плашка-сводка в нижнем углу», over the drawing, no row of its own):
             what is picked, else «Дальше: водостоки», else the totals; a tap opens the measurement's «Просмотр» (the materials and the sum) */}
-        {summary && !gripping && !flat ? (
-          <View pointerEvents="box-none" style={{ alignItems: "flex-start" }}>
+        {summary && !gripping && (!flat || summary.kind === "selected") ? (
+          <View pointerEvents="box-none" style={{ alignItems: "flex-start", gap: space[2], flexShrink: 1 }}>
             <Press
               testID="draw-summary"
               // «Дальше: водостоки» is a hint with its action (the downspout tool); the rest opens the measurement's «Просмотр»
               onPress={() => { if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
               disabled={!canSave || (summary.kind !== "nextDs" && !inStore)}
-              visibleHeight={sizes.hitMin}
+              visibleHeight={component.button.phone}
               accessibilityRole="button"
               accessibilityLabel={summaryA11y}
-              style={{ minHeight: sizes.hitMin, flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}
+              style={SUMMARY_CHIP(c)}
             >
               {summary.kind === "selected" ? (
                 <View testID="draw-selected" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
@@ -1148,11 +1163,7 @@ export default function DrawScreen() {
                   <T v="caption" w="semibold" numberOfLines={1}>{summary.text}</T>
                 </View>
               ) : summary.kind === "nextDs" ? (
-                <View testID="draw-next" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                  <Icon name={lineIcon} s={sizes.iconSm} color={c.ink} />
-                  <T v="caption" w="semibold">{`${summary.gutterFt}′`}</T>
-                  <T v="caption" tone="mut">{t("mod.gutters.draw.nextDsShort")}</T>
-                </View>
+                <NextDsLine gutterFt={summary.gutterFt} icon={lineIcon} text={t("mod.gutters.draw.nextDsShort")} />
               ) : (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
                   <Icon name={lineIcon} s={sizes.iconSm} color={c.ink} />
@@ -1165,6 +1176,12 @@ export default function DrawScreen() {
                 </View>
               )}
             </Press>
+            {/* a picked one hides nothing: «Дальше: водостоки» stays under it until the first downspout is there (founder 12.11) */}
+            {summary.kind === "selected" && summary.next !== null && !flat && canSave ? (
+              <Press testID="draw-summary-next" onPress={() => pick("ds")} visibleHeight={component.button.phone} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.nextDs")} style={SUMMARY_CHIP(c)}>
+                <NextDsLine gutterFt={summary.next} icon={lineIcon} text={t("mod.gutters.draw.nextDsShort")} />
+              </Press>
+            ) : null}
           </View>
         ) : null}
         {flat ? tools : null}

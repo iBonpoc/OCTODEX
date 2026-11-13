@@ -70,7 +70,7 @@ exports.run = async (h) => {
   const cut = await p.getByTestId("draw-toolbar").locator("visible=true").first().evaluate((el) => [...el.querySelectorAll("div")].filter((d) => d.childElementCount === 0 && d.textContent && d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent));
   h.expect(cut.length === 0, `no word is cut off (${cut.join(", ")})`);
   // the bin is on the toolbar always (#1274), dimmed and not pressable while nothing is picked
-  h.expect((await tid("draw-delete").count()) === 1 && (await tid("draw-delete").getByRole("button").getAttribute("aria-disabled")) === "true", "the bin: nothing picked — it is there, disabled");
+  h.expect((await tid("draw-delete").count()) === 1 && (await tid("draw-delete").getAttribute("aria-disabled")) === "true", "the bin: nothing picked — it is there, disabled");
 
   // a run along the roof edge
   const b = await box();

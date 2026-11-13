@@ -58,7 +58,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("side-nav").count()) === 0, "on its side: no app menu");
   h.expect((await tid("draw-panel").count()) === 0, "on its side: no side panel");
   // wait on it (rule 19): the header row goes with the layout's next render, not with the menu
-  await waitFor(async () => (await tid("draw-saved").count()) === 0 && (await tid("draw-to-lead").count()) === 0, "on its side: no «Сохранено» / «Сделать заявкой»");
+  await waitFor(async () => (await tid("draw-local").count()) === 0 && (await tid("draw-to-lead").count()) === 0, "on its side: no «Сохранено» / «Сделать заявкой»");
   h.expect((await tid("draw-back").count()) === 1 && (await tid("draw-fit").count()) === 1 && (await tid("draw-toolbar").count()) === 1, "back, fit and the toolbar stay");
   await tid("draw-fit").getByRole("button").click();
   await p.waitForTimeout(300);
