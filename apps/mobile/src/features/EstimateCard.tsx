@@ -21,6 +21,7 @@ import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms }
 import { canServe } from "@/features/clients";
 import { estimateNotes, type ModuleNote } from "@/modules/registry";
 import { docLanguageFor } from "@/data/people";
+import { termsForClient } from "@/features/estimateTerms";
 import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -261,10 +262,14 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
           <Button label={t("sch.another")} icon="plus" variant="ghost" size="sm" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
         ) : null}
       </Card>
-      <EstimateView doc={clientDoc(doc)} optionId={a.optionId} addonIds={a.addonIds} readOnly />
+      <EstimateView doc={clientDoc(doc)} optionId={a.optionId} addonIds={a.addonIds} readOnly terms={clientTerms(db, e)} />
     </>
   );
 }
+
+/** #1304: the Terms the client reads before signing on site — the same rule as /p/ and the PDF (termsForClient) */
+const clientTerms = (db: DB, e: Estimate) =>
+  termsForClient(e.doc, db.company, docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }), !!e.approval || e.status === "approved" || e.status === "awaiting_countersign");
 
 function OnSiteSign({ e }: { e: Estimate }) {
   const store = useStore();
@@ -287,10 +292,12 @@ function OnSiteSign({ e }: { e: Estimate }) {
     <>
       <I18nOverride lang={clientLang}>
         <View testID="sign-client-doc" style={{ gap: space[3] }}>
-          <EstimateView doc={shown} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} />
+          <EstimateView doc={shown} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} terms={clientTerms(store.db, e)} />
         </View>
       </I18nOverride>
-      <SectionTitle title={t("est.signOnSite")} />
+      <View testID="onsite-sign">
+        <SectionTitle title={t("est.signOnSite")} />
+      </View>
       {issues ? (
         <Card>
           <SendCheck

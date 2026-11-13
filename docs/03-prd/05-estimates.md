@@ -74,6 +74,7 @@
 
 **EST-US-02**
 - Given шаблон (`EstimateTemplate`) с 2 вариантами и текстами, When создаётся смета, Then копируются варианты, строки (цены из **текущего** каталога), intro/scope/terms/exclusions, правило депозита.
+  - **До 1.0 (#1304, `docs/specs/40`):** шаблон несёт Notes (`note`), но не Terms: Terms новой сметы — умолчание компании на языке клиента (`estimate_settings.terms_by_lang`, en — запасной). Именованные шаблоны Notes/Terms с «Вставить из шаблона» — после 1.0.
 
 **EST-US-03** — см. `06-gutters-module.md` §5 (GUT-US-10..12). Здесь: Given расчёт из чертежа, When создана версия, Then в версии сохранены `drawing_id`, `drawing_version`, `calc_inputs`, `engine_version`.
 

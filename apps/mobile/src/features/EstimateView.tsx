@@ -22,6 +22,7 @@ export function EstimateView({
   addonIds,
   onAddons,
   readOnly,
+  terms,
 }: {
   doc: EstimateDoc;
   optionId: string;
@@ -29,6 +30,9 @@ export function EstimateView({
   addonIds: string[];
   onAddons?: (ids: string[]) => void;
   readOnly?: boolean;
+  /** #1304: the «Terms & conditions» the client reads (termsForClient: the estimate's own, or the company's default for an
+   *  older estimate) — shown here, above the signature that follows the view; "" / absent — no block */
+  terms?: string;
 }) {
   const { t, money } = useI18n();
   const { c } = useTheme();
@@ -150,10 +154,22 @@ export function EstimateView({
         </RowView>
         {tot.deposit ? <Line label={t("portal.depositDue")} v={money(tot.deposit)} /> : null}
       </Card>
-      {doc.note ? (
-        <T v="body" tone="mut">
-          {doc.note}
-        </T>
+      {/* #1304: Notes and Terms under their headings, in the body font — the client reads them before signing */}
+      {typeof doc.note === "string" && doc.note.trim() ? (
+        <View testID="estimate-notes" style={{ gap: space[2] }}>
+          <SectionTitle title={t("est.doc.notes")} />
+          <Card>
+            <T v="body">{doc.note}</T>
+          </Card>
+        </View>
+      ) : null}
+      {terms?.trim() ? (
+        <View testID="estimate-terms" style={{ gap: space[2] }}>
+          <SectionTitle title={t("est.doc.terms")} />
+          <Card>
+            <T v="body">{terms}</T>
+          </Card>
+        </View>
       ) : null}
       <DocPagesView pages={doc.pages} />
     </View>
