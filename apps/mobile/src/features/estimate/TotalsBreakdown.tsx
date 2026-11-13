@@ -25,7 +25,7 @@ function Row({ r }: { r: TotalsRow }) {
   const loss = r.key === "profit" && r.loss;
   const amount = (c: number) => money(loss ? Math.abs(c) : c);
   const pct = r.key === "profit" && r.pct !== null ? (loss ? r.pct.replace(/^-/, "") : r.pct) : null;
-  const value = r.cents === null ? "—" : r.key === "discount" ? `−${money(r.cents)}` : pct !== null ? `${amount(r.cents)} · ${pct} %` : amount(r.cents);
+  const value = r.cents === null ? "—" : r.key === "discount" ? `−${money(r.cents)}` : pct !== null ? `${amount(r.cents)} · ${pct}%` : amount(r.cents);
   return (
     <View testID={`est-tot-${r.key}`}>
       <RowView style={{ justifyContent: "space-between", alignItems: "flex-start", gap: space[2] }}>
@@ -50,25 +50,55 @@ function Row({ r }: { r: TotalsRow }) {
   );
 }
 
-/** the rows of «Итого ˅» (DS §8.9): the client's part, then «Только для вас» (cost, profit) for who may see it */
-export function TotalsBreakdown({ client, own, testID }: { client: TotalsRow[]; own: TotalsRow[]; testID?: string }) {
+/** «Только для вас» (cost, profit): its own heading with a mark, set apart */
+function Own({ own }: { own: TotalsRow[] }) {
   const { t } = useI18n();
+  const { c } = useTheme();
+  if (!own.length) return null;
+  return (
+    <View testID="est-tot-own" style={{ gap: space[1] }}>
+      <RowView style={{ gap: space[1] }}>
+        <Icon name="eyeOff" s={size.iconSm} color={c.mut} />
+        <T v="caption" w="semibold" tone="mut">
+          {t("est.tot.own")}
+        </T>
+      </RowView>
+      {own.map((r) => (
+        <Row key={r.key} r={r} />
+      ))}
+    </View>
+  );
+}
+
+/**
+ * The rows of «Итого ˅» (DS §8.9). `panel` — above the panel's «Итого» line, read like a receipt from the bottom up: the
+ * parts of the total right above it (subtotal, discount, tax), then the deposit and «если клиент включит…», then «Только
+ * для вас»; else (the totals card, under its own rows) — the given rows, then «Только для вас».
+ */
+export function TotalsBreakdown({ client, own, testID, panel }: { client: TotalsRow[]; own: TotalsRow[]; testID?: string; panel?: boolean }) {
+  const parts = client.filter((r) => r.key === "subtotal" || r.key === "discount" || r.key === "tax");
+  const rest = client.filter((r) => r.key === "deposit" || r.key === "ifAll");
+  if (panel)
+    return (
+      <View testID={testID} style={{ gap: space[1] }}>
+        <Own own={own} />
+        {own.length && rest.length ? <Divider /> : null}
+        {rest.map((r) => (
+          <Row key={r.key} r={r} />
+        ))}
+        {(own.length || rest.length) && parts.length ? <Divider /> : null}
+        {parts.map((r) => (
+          <Row key={r.key} r={r} />
+        ))}
+      </View>
+    );
   return (
     <View testID={testID} style={{ gap: space[1] }}>
       {client.map((r) => (
         <Row key={r.key} r={r} />
       ))}
-      {own.length ? (
-        <View testID="est-tot-own" style={{ gap: space[1] }}>
-          <Divider />
-          <T v="caption" w="semibold" tone="mut">
-            {t("est.tot.own")}
-          </T>
-          {own.map((r) => (
-            <Row key={r.key} r={r} />
-          ))}
-        </View>
-      ) : null}
+      {own.length && client.length ? <Divider /> : null}
+      <Own own={own} />
     </View>
   );
 }

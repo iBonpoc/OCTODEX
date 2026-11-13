@@ -786,7 +786,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       <ActionBar testID="est-actionbar" summary={(
         <View style={{ gap: space[1] }}>
           {/* «Итого $… ˅» (DS §8.9, #1362): a press opens what the total is made of, above the buttons */}
-          {totalOpen ? <TotalsBreakdown client={totalRows.client.filter((r) => r.key !== "total")} own={totalRows.own} testID="est-bar-breakdown" /> : null}
+          {totalOpen ? <TotalsBreakdown panel client={totalRows.client.filter((r) => r.key !== "total")} own={totalRows.own} testID="est-bar-breakdown" /> : null}
           <Press
             onPress={() => setTotalOpen((o) => !o)}
             visibleHeight={size.hitMin}
@@ -1006,7 +1006,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             ) : null}
             {/* the same as «Итого ˅» of the phone's panel: «если клиент включит всё на выбор» and «Только для вас» (DS §8.9) */}
-            <TotalsBreakdown client={totalRows.client.filter((r) => r.key === "ifAll")} own={totalRows.own} testID="est-card-breakdown" />
+            {/* from 820 (no panel): the same «если включит» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
+            {wide && (totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length) ? (
+              <>
+                <Divider />
+                <TotalsBreakdown client={totalRows.client.filter((r) => r.key === "ifAll")} own={totalRows.own} testID="est-card-breakdown" />
+              </>
+            ) : null}
           </Card>
           <NotesTerms
             doc={doc}

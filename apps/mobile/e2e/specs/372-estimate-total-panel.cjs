@@ -4,6 +4,7 @@
  * - phone (390): the panel's «Итого $1,000 ˅» opens what the total is made of above the buttons — subtotal, «если клиент
  *   включит всё на выбор — итог $1,500» (the engine's), «Только для вас» with the profit «в минус»; a second press folds it;
  * - 820 / 1280 (no panel): the totals card has the same «если включит» row and «Только для вас» (cost $1,200, «в минус $200»);
+ *   a phone has them only in the panel (not twice);
  * - the tech: no «Только для вас» at all.
  */
 const DB_KEY = "octo.db.v5";
@@ -60,19 +61,28 @@ exports.run = async (h) => {
   } else {
     h.expect((await count("est-bar-total")) === 0, "no panel from 820");
   }
-  // the totals card (every width): the same «если включит» row and «Только для вас»
-  const card = tid("est-card-breakdown");
-  await card.scrollIntoViewIfNeeded();
-  h.expect(/\$1,500(?![.\d])/.test(await card.getByTestId("est-tot-ifAll").innerText()), "the card: «если включит — итог $1,500»");
-  h.expect((await card.getByTestId("est-tot-own").count()) === 1, "the card: «Только для вас»");
-  h.expect(/\$1,200(?![.\d])/.test(await card.getByTestId("est-tot-cost").innerText()), "the card: the cost $1,200");
-  h.expect(/в минус \$200(?![.\d])/.test(await card.getByTestId("est-tot-profit").innerText()), "the card: the profit in the red");
-  await h.shot("card");
+  if (!phone) {
+    // the totals card (820 / 1280): the same «если включит» row and «Только для вас»
+    const card = tid("est-card-breakdown");
+    await card.scrollIntoViewIfNeeded();
+    h.expect(/\$1,500(?![.\d])/.test(await card.getByTestId("est-tot-ifAll").innerText()), "the card: «если включит — итог $1,500»");
+    h.expect((await card.getByTestId("est-tot-own").count()) === 1, "the card: «Только для вас»");
+    h.expect(/\$1,200(?![.\d])/.test(await card.getByTestId("est-tot-cost").innerText()), "the card: the cost $1,200");
+    h.expect(/в минус \$200(?![.\d])/.test(await card.getByTestId("est-tot-profit").innerText()), "the card: the profit in the red");
+    await h.shot("card");
+  } else {
+    // a phone: in the panel only — not twice on the screen (design review)
+    h.expect((await p.getByTestId("est-card-breakdown").count()) === 0, "a phone: the card does not repeat the panel");
+  }
 
-  // the tech: no «Только для вас» anywhere (cost and profit are not his), «если включит» stays (the draft opens again)
+  // the tech: no «Только для вас» at all (cost and profit are not his), «если включит» stays (the draft opens again)
   await h.seed("octo.role.v1", "tech");
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
-  await tid("est-card-breakdown").waitFor({ timeout: 8000 });
+  await p.locator('[data-testid^="est-line-"]').first().waitFor({ timeout: 8000 });
+  if (phone) {
+    await tid("est-bar-total").click();
+    await tid("est-bar-breakdown").waitFor({ timeout: 3000 });
+  } else await tid("est-card-breakdown").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId("est-tot-own").count()) === 0, "the tech: no «Только для вас»");
   h.expect((await count("est-tot-ifAll")) >= 1, "the tech: «если включит» is there");
 };
