@@ -8,6 +8,7 @@
 exports.run = async (h) => {
   const p = h.page;
   const line = require("../estimateLine.cjs");
+  const { waited } = require("../sheet.cjs");
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const count = (sel) => p.locator(sel).locator("visible=true").count();
   const ids = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-line-", ""));
@@ -45,12 +46,12 @@ exports.run = async (h) => {
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-times-"]').length === 0 && document.querySelectorAll('[data-testid^="est-collapse-"]').length === 0, null, { timeout: 3000 });
   h.expect(true, "the list folded: every row short, the open row folded");
   // the held row is under the pointer (the fold moved the rows above it)
-  await p.waitForFunction(([id, py]) => {
+  const under = await waited(p.waitForFunction(([id, py]) => {
     const r = document.querySelector(`[data-testid="est-line-${id}"]`)?.getBoundingClientRect();
     return r && r.top - 24 <= py && py <= r.bottom + 24;
-  }, [d, y0 - 12], { timeout: 2000 }).catch(() => {});
+  }, [d, y0 - 12], { timeout: 2000 }));
   const held = await p.getByTestId(`est-line-${d}`).first().boundingBox();
-  h.expect(held && held.y - 24 <= y0 - 12 && y0 - 12 <= held.y + held.height + 24, `the held row is under the pointer (row ${held && Math.round(held.y)}–${held && Math.round(held.y + held.height)}, pointer ${Math.round(y0 - 12)})`);
+  h.expect(under, `the held row is under the pointer (row ${held && Math.round(held.y)}–${held && Math.round(held.y + held.height)}, pointer ${Math.round(y0 - 12)})`);
   await h.shot("held");
 
   // carry it to the very top of the list and let go (the list's own top: a row above may stand shifted to make room)
@@ -65,12 +66,12 @@ exports.run = async (h) => {
   await tid(`est-times-${a}`).waitFor({ timeout: 3000 });
   // the list unfolded and the landed row is still under the pointer (the page scrolled to keep it)
   const py = top + 4;
-  await p.waitForFunction(([id, y]) => {
+  const landed = await waited(p.waitForFunction(([id, y]) => {
     const r = document.querySelector(`[data-testid="est-line-${id}"]`)?.getBoundingClientRect();
     return r && r.top - 24 <= y && y <= r.bottom + 24;
-  }, [d, py], { timeout: 2000 }).catch(() => {});
+  }, [d, py], { timeout: 2000 }));
   const land = await p.getByTestId(`est-line-${d}`).first().boundingBox();
-  h.expect(land.y - 24 <= py && py <= land.y + land.height + 24, `after the unfold the row is under the pointer (row ${Math.round(land.y)}–${Math.round(land.y + land.height)}, pointer ${Math.round(py)})`);
+  h.expect(landed, `after the unfold the row is under the pointer (row ${Math.round(land.y)}–${Math.round(land.y + land.height)}, pointer ${Math.round(py)})`);
   h.expect((await count('[data-testid="toast-undo"]')) === 1, "the toast has «Вернуть»");
   await h.shot("landed");
 };
