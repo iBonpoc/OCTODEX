@@ -112,7 +112,7 @@ function toolbox(opts: { pg: boolean; faketime: boolean; aptWorks: boolean; fpr?
   // the stub apt, when it works, downloads PostgreSQL 17's package into the cache dir it is given (--download-only); the stub
   // dpkg «installs» what is there the way the package does: the binaries appear
   const debs = join(dir, "pg17-debs");
-  const installPg = `if [[ "$*" == *postgresql-17* && "$*" == *--download-only* ]]; then touch ${debs}/postgresql-17_17.4-1_amd64.deb ${debs}/libllvm19_1_amd64.deb; fi`;
+  const installPg = `if [[ "$*" == *postgresql-17* && "$*" == *--download-only* ]]; then touch ${debs}/postgresql-17_17.4-1_amd64.deb ${debs}/libllvm19_1_amd64.deb ${debs}/lock; mkdir -p ${debs}/partial; fi`;
   const dpkg = join(dir, "dpkg.sh");
   // a file «dpkg-fail-once» makes the next dpkg fail once (a cache that no longer fits the image)
   writeFileSync(dpkg, `#!/usr/bin/env bash\necho "dpkg $*" >> ${join(dir, "calls.log")}\nif [ -f ${join(dir, "dpkg-fail-once")} ]; then rm ${join(dir, "dpkg-fail-once")}; exit 1; fi\n${opts.dpkgWorks === false ? "exit 1" : `ls ${debs}/postgresql-17_*.deb >/dev/null 2>&1 || exit 1\nprintf '#!/usr/bin/env bash\\n' > ${bin}/initdb; printf "#!/usr/bin/env bash\\necho 'postgres (PostgreSQL) 17.4'\\n" > ${bin}/postgres; chmod +x ${bin}/initdb ${bin}/postgres`}\n`);
@@ -156,6 +156,11 @@ describe("scripts/dbTools.sh: the database tools without Ubuntu's mirrors", () =
     expect(t.calls()).toMatch(/pgdg-setup[\s\S]*apt update[\s\S]*apt install --no-install-recommends --download-only -o Dir::Cache::archives=\S*pg17-debs postgresql-17[\s\S]*dpkg/);
     expect(r.stdout).toContain("installed from PGDG");
     expect(r.stdout).toContain("dbtools: checked — postgres (PostgreSQL) 17.4, pgcrypto present");
+  });
+  it("#806: apt's own «lock» and «partial/» (root's) are not left in the cache — actions/cache could not read them and saved nothing", () => {
+    const t = toolbox({ pg: false, faketime: true, aptWorks: true });
+    expect(t.run("postgres").status).toBe(0);
+    expect(readdirSync(t.debs).sort()).toEqual(["libllvm19_1_amd64.deb", "postgresql-17_17.4-1_amd64.deb"]);
   });
   it("the next run (the cache restored, a fresh image): installed from the cached packages — no PGDG, no apt, no mirror", () => {
     const t = toolbox({ pg: false, faketime: true, aptWorks: true });

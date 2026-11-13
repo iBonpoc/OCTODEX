@@ -61,6 +61,8 @@ if has postgres; then
       # downloaded into the cache dir first (what the image lacks), then installed from it: the next run needs no mirror
       bash "$HERE/retry.sh" "apt: postgresql-$PG_MAJOR" bash -c "$APT_UPDATE && $APT_INSTALL --no-install-recommends --download-only -o Dir::Cache::archives=$PG_DEBS postgresql-$PG_MAJOR >/dev/null" || exit 1
       $DPKG_INSTALL "$PG_DEBS"/*.deb >/dev/null || { echo "::error::the downloaded PostgreSQL $PG_MAJOR packages did not install (dpkg -i $PG_DEBS)"; exit 1; }
+      # apt (root) leaves its «lock» and «partial/» here, unreadable for the runner: actions/cache then saves nothing (#806) — only the .deb stay
+      $INSTALL_SUDO rm -rf "$PG_DEBS/lock" "$PG_DEBS/partial"
       echo "dbtools: postgresql-$PG_MAJOR: installed from PGDG (packages kept in $PG_DEBS)"
     fi
   fi
