@@ -58,7 +58,9 @@ exports.run = async (h) => {
       await btn.click();
       // the paper's menu: the choice prints, and the menu goes
       if (choice) {
-        await tid(choice).waitFor({ timeout: 5000 });
+        // a press on a button still moving is cancelled: no menu — press again
+        const open = await tid(choice).waitFor({ timeout: 3000 }).then(() => true, () => false);
+        if (!open) continue;
         if (!shot) { shot = true; await h.shot("view-shop-paper"); }
         await tid(choice).click();
         await p.getByTestId(choice).waitFor({ state: "hidden", timeout: 5000 });
@@ -98,7 +100,7 @@ exports.run = async (h) => {
   h.expect(Math.min(...pts) >= 10.99, `no text below 11 pt (${Math.min(...pts).toFixed(2)})`);
 
   // the same sheets reduced to Letter
-  h.expect((await tid("view-doc-shop-letter").count()) === 0, "one row of the drawings, not two");
+  h.expect((await p.getByTestId("view-docs").locator('[data-testid^="view-doc-"]').count()) === 4, "four documents: the client's, the crew's, the shop drawings (one row), the order");
   const l = await printVia("view-pdf-shop", "view-shop-paper-letter");
   h.expect(l.includes("@page{size:8.5in 11in"), "Letter pages");
   h.expect(l.includes('height="11.000in"') && l.includes("ПЛАН ВОДОСТОКОВ"), "the whole sheet reduced to the page");
