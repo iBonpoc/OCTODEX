@@ -22,14 +22,17 @@ export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: s
         </T>
         <Toggle label={t("portal.consent")} on={consent} onChange={setConsent} />
       </RowView>
-      <T v="caption" tone="warn">
-        {t("est.rescission")}
-      </T>
       {!ready ? (
         <T v="caption" tone="mut">
           {t("portal.need")}
         </T>
       ) : null}
+      {/* #1324: the right to cancel — as on the contract PDF: large, bold, right before the signature (B&P §7159) */}
+      <View testID="sign-rescission">
+        <T v="heading" w="bold">
+          {t("est.rescission")}
+        </T>
+      </View>
       <SignaturePad consent="est.signConsent" confirmLabel={t("portal.approve")} disabled={!ready} onConfirm={(svg) => onSign(name.trim(), svg)} />
     </View>
   );
