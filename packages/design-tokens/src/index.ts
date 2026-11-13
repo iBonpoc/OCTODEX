@@ -132,6 +132,8 @@ export const component = {
   tip: { fs: 11.5, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
   fab: 36,
   dockBtn: 36,
+  /** a module's tape measure (Gutters): px between two marks, 1/16″ or 1 mm — stretched over a real tape so a finger can hit a mark (founder 13.11.2026, #1315: «чуть растянутая, ничего страшного») */
+  tapeTick: 16,
   sheetRadius: 24,
   modalW: 380,
   /** DS Б3 (Н-04): the confirm dialog's max width */

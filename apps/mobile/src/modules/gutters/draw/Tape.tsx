@@ -10,14 +10,17 @@ import { useEffect, useRef, useState } from "react";
 import { PanResponder, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
 import { component, drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
+import { haptics } from "@/ui/haptics";
+import { settleAt, tickDue } from "./tapeMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { useSheetHold } from "@/ui/overlays";
 
-/** px per mark (1/16″): room for a fraction under each eighth, as on a real tape (founder 09.11) */
-const TICK = space[2];
+/** px per mark (1/16″ or 1 mm): room for a fraction under each eighth, and wide enough for a finger to hit a mark — the tape is stretched over a real one
+ *  (founder 13.11, #1315: «шаг больше… чуть растянутая, ничего страшного»; the token `tapeTick`) */
+const TICK = component.tapeTick;
 /** tall enough for the marks, the fractions under them and the length under the inch, readable (founder 09.11) */
 const H = size.hitMin * 3;
 /** a flick: the share of speed kept per millisecond, and the speed (marks per ms) at which it settles */
@@ -99,9 +102,19 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
     fling.current = null;
   };
   useEffect(() => stop, []);
+  /** when the last tick was given (ms): a mark crossed gives one, a flick over many does not buzz (#1315) */
+  const lastTick = useRef(0);
   const set = (k: number) => {
-    const n = Math.min(max, Math.max(1, Math.round(k)));
-    if (n !== now.current.v) now.current.onMarks(n);
+    const n = settleAt(k, max);
+    if (n !== now.current.v) {
+      const t = Date.now();
+      // every mark crossed is felt in the hand (DS §15.6: the value changes by steps → `selection`)
+      if (tickDue(now.current.v, n, lastTick.current, t)) {
+        haptics.selection();
+        lastTick.current = t;
+      }
+      now.current.onMarks(n);
+    }
     return n;
   };
   /** past an end the tape gives a little (a third of the pull), as a real one does — the sample's edge */

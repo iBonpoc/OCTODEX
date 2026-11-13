@@ -9,7 +9,7 @@
  --switch-w:42px;--switch-h:24px;--switch-knob:16px;
  --help-visible:18px;--help-icon:11px;
  --tip-fs:var(--fs-caption);--tip-px:8px;--tip-py:4px;--tip-radius:8px;--tip-max:220px;--tip-gap:6px;
- --dock-btn:var(--control-lg);--modal-w:380px;--panel-w:360px;--palette-w:560px;
+ --dock-btn:var(--control-lg);--tape-tick:16px;--modal-w:380px;--panel-w:360px;--palette-w:560px;
  --alert-max-w:340px;--sheet-medium-ratio:.5;--popover-w:360px;
  /* карточки списков (docs/specs/06-list-cards.md): строка выбора в шторке, мин. ширина плитки цифр */
  --row-option:48px;--tile-min:78px;
