@@ -1,6 +1,6 @@
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { component, space } from "@octo/design-tokens";
@@ -13,7 +13,7 @@ import { canCreateJob, canDateNewJob, servable } from "@/features/newJob";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { NotifySheet, useVisitForm, VisitFormFields } from "@/features/VisitForm";
 import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/controls";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { withAfter, type GuardedUndo } from "@/data/undo";
@@ -250,7 +250,7 @@ export default function NewJob() {
               setPicker(false);
             }}
           />
-          <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+          <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
             {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
             {rows.map((c, i) => {
               const ps = db.properties.filter((p) => p.customerId === c.id);
@@ -269,7 +269,7 @@ export default function NewJob() {
                 </View>
               );
             })}
-          </ScrollView>
+          </SheetScroll>
         </View>
       </Sheet>
       <NotifySheet

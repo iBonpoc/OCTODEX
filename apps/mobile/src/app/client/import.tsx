@@ -7,7 +7,7 @@
  * (owner, admin, office) imports — sales no more (§14.4).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, ScrollView, View } from "react-native";
+import { Platform, View } from "react-native";
 import { router } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as Crypto from "expo-crypto";
@@ -24,7 +24,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { SourceField } from "@/features/lead/SourcePicker";
 import { guessMapping, IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_ROWS, parseCsv, planImport, rowsOf, type ImportField, type ImportMapping, type ImportRow, type SkipReason } from "@/features/client/csvImport";
 import { Button, ProgressBar, StatusChip } from "@/ui/controls";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
@@ -370,7 +370,7 @@ export default function ImportClients() {
       ) : null}
 
       <Sheet visible={pick !== null} onClose={() => setPick(null)} title={pick ? t(FIELD_LABEL[pick]) : ""}>
-        <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+        <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
           <ListRow title={t("client.import.notInFile")} onPress={() => { if (pick) setMapping((m) => ({ ...m, [pick]: undefined })); setPick(null); }} />
           {header.map((h, i) => (
             <View key={i}>
@@ -392,7 +392,7 @@ export default function ImportClients() {
               />
             </View>
           ))}
-        </ScrollView>
+        </SheetScroll>
       </Sheet>
     </Screen>
   );

@@ -23,6 +23,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
+import { NotFound } from "@/ui/emptyStates";
 import { type GuardedUndo } from "@/data/undo";
 
 type TermsKey = PaymentTerms | "none";
@@ -89,7 +90,7 @@ export default function SupplierScreen() {
   if (!found && id !== "new") {
     return (
       <Screen title={t("sup.edit")} back={back}>
-        <Empty icon="truck" title={t("sup.notFound")} />
+        <NotFound testID="sup-not-found" title={t("sup.notFound")} listLabel={t("empty.toSuppliers")} onList={() => router.replace("/suppliers")} />
       </Screen>
     );
   }

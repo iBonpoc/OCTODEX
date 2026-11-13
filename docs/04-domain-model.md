@@ -58,7 +58,7 @@
 | service_area | json: города, ZIP[] | нет | Зона работ (онбординг, онлайн-запись, SEO) |
 | onboarding_state | json | | Шаги онбординга и чек-лист «Настройка» |
 | brand | json: logo, цвета, подпись | нет | Для документов и портала |
-| default_client_locale | `en` / `es` | да | Язык документов и сообщений клиентам по умолчанию (`en`); отдельно от языка интерфейса `User.locale` (владелец работает на русском, клиенты читают на английском). `Contact.preferred_language` перекрывает (из анализа внешней CRM) |
+| default_client_locale | `en` / `es` / `ru` (В11) | да | Язык документов и сообщений клиентам по умолчанию (`en`); отдельно от языка интерфейса `User.locale` (владелец работает на русском, клиенты читают на английском). `Contact.preferred_language` перекрывает (из анализа внешней CRM) |
 | public_slug | text, unique | да | Адрес публичной страницы `octo.app/p/bonpoc-gutters` |
 | trade_modules | ← Entitlement | | Включённые модули |
 | stripe_account_id | text | нет | Stripe Connect |
@@ -72,7 +72,7 @@
 | sms_number | text | нет | Номер Twilio (PRD 13) |
 | a2p_brand_status, a2p_campaign_status | `not_started`/`pending`/`approved`/`rejected` | | 10DLC |
 | referral_reward | json | | Награда рефереру / скидка новому (по умолчанию $50 / $25) |
-| estimate_settings | json | | `default_expiry_days` (30), `min_margin_bps` (3500), `margin_override_role`, `ca_deposit_cap` (вкл. для CA; v0.3.1: для всех жилых HIC, не только от $500), `followup_days[]` (PRD 04, 05) |
+| estimate_settings | json | | `default_expiry_days` (30), `min_margin_bps` (3500), `margin_override_role`, `ca_deposit_cap` (вкл. для CA; v0.3.1: для всех жилых HIC, не только от $500), `followup_days[]` (PRD 04, 05). (#1304, `docs/specs/40`) `terms_by_lang` {en, es, ru} — Terms новой сметы по языку клиента, en — запасной; старое `terms` = en до шага 2 правила 16 (триггер `t08_company_estimate_terms` держит их одним) |
 | payment_settings | json | | `deposit_default_pct`, `terms_days`, `ach_recommend_threshold_cents` ($1,000), напоминания, `method_discount` (флаг, выкл.) (PRD 09). Реквизиты ручной оплаты для инвойса и портала (из анализа внешней CRM): `manual_methods[]` (`zelle`, `check`, `cash`, `bank_transfer`), `zelle_handle`, `check_payable_to`, `check_mail_address`, `bank_transfer_instructions`. (v0.3.1, LEG-17) `returned_check_fee` {`enabled` (false), `first_cents` ≤ 2500, `subsequent_cents` ≤ 3500; только `method=check`}, `method_discount.legal_review_confirmed_at` |
 | costing_settings | json | | `default_markup_pct` (billable), `target_margin_pct`, `default_labor_rate_cents`, `expense_alert_threshold_cents` (PRD 10) |
 | scheduling_settings | json | | Окна прибытия, длительности по типам визитов, рабочие часы, «время по бригаде» (PRD 07) |
@@ -160,7 +160,7 @@
 | name, phone, email | text | |
 | role | `owner`, `tenant`, `property_manager`, `spouse`, `other` | |
 | is_primary, is_active | bool | Один primary на клиента |
-| preferred_language | `en` / `es` | |
+| preferred_language | `en` / `es` / `ru` (В11) | |
 | sms_opt_in, sms_marketing_opt_in | bool + дата согласия | Транзакционные / маркетинговые SMS (TCPA). (v0.3.1) **Вычисляемые** из последней `ConsentRecord` по категории (§8) |
 | sms_consent_status | `unknown` / `opted_in` / `opted_out` / `pending_revocation_review` | (v0.3.1) Импорт всегда даёт `unknown` |
 | consent_source | `web_form`, `portal`, `estimate_sign`, `verbal_recorded_by_user`, `customer_texted_first`, `paper_form_photo`, `attestation` | (v0.3.1) `import` **удалён**: импорт никогда не создаёт согласие (LEG-10); источник последней записи `ConsentRecord` |
@@ -390,7 +390,7 @@
 | estimate_id | → Estimate | |
 | version_no | int | 1, 2, 3 |
 | drawing_id + drawing_version | → | Из какого чертежа посчитано |
-| intro_text, scope_text, terms_text, exclusions_text | text | |
+| intro_text, scope_text, terms_text, exclusions_text | text | | `intro_text` = Notes (`calc_inputs.note`); `terms_text` = Terms (#1304) — копия `calc_inputs.terms`, пишет триггер `t08_terms_text`, замораживается отправкой |
 | deposit_rule | json | % или сумма, когда вносится; CA-лимит (для `ca_service_repair` всегда 0) |
 | contract_type | `ca_home_improvement` / `ca_service_repair` / `non_hic` | (v0.3.1, LEG-01) Тип договора; определяет депозит, срок отказа, countersign, шаблон (PRD 05 §7.7.1) |
 | contract_template_id, contract_template_version | → ContractTemplate, text (снимок) | (v0.3.1, LEG-02) |
@@ -443,7 +443,7 @@
 | copied_from_line_id | uuid, null | (08.11, миграция `20261108200000`) Строка более ранней отправленной версии той же сметы, из которой скопирована эта строка при правке отправленной сметы. По ней сервер копирует себестоимость за единицу тому, кто её не видит (19 §9.1). Старые сборки не пишут |
 
 ### EstimateTemplate — шаблон сметы (новая)
-`company_id` (null = системный шаблон модуля), `name` («Чистка гаттеров», «Guards only», «Gutters G/B/B»), `module`, `options[]` (`name`, `is_recommended`, `input_overrides json` — пресеты G/B/B для движка, `lines`), `intro/scope/terms/exclusions`, `deposit_rule`, `is_system`. Цены при создании сметы берутся из **текущего** каталога.
+`company_id` (null = системный шаблон модуля), `name` («Чистка гаттеров», «Guards only», «Gutters G/B/B»), `module`, `options[]` (`name`, `is_recommended`, `input_overrides json` — пресеты G/B/B для движка, `lines`), `intro/scope/terms/exclusions`, `deposit_rule`, `is_system`. До 1.0 Terms в шаблоне нет (#1304): их даёт компания (`estimate_settings.terms_by_lang`). Цены при создании сметы берутся из **текущего** каталога.
 
 ### EstimateApproval — решение клиента
 `version_id`, `option_id` (выбранный вариант), `selected_optional_items[]`, `signer_name`, `signer_email`, `signature_file_id`, `signed_at`, `ip`, `user_agent`, `locale`, `channel (portal / in_person / ai_recorded / office_recorded)` (`office_recorded` — одобрение со слов клиента, без подписи: обязательна `office_note`, при сумме выше порога CA для home improvement — предупреждение «нужна подпись» (из анализа внешней CRM)), `signature_method (draw / type)` (из анализа внешней CRM), `document_hash` (= `content_hash` версии), `consent_text_version` (ESIGN/UETA), `rescission_ends_at` (CA: право отказа 3/5/7 рабочих дней; v0.3.1 — **от `executed_copy_delivered_at`**, а не от подписи клиента), `deposit_payment_id`, `offline bool` (подпись на устройстве без сети — приходит как заявка), `server_decision` (`accepted`/`rejected`), `rejection_reason`.

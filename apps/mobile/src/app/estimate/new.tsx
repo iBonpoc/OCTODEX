@@ -16,9 +16,10 @@ import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
 import { SortableList, type DropResult } from "@/features/SortableList";
 import type { Drop } from "@/features/sortable";
+import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
-import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { ActionBar } from "@/ui/actionBar";
 import { useReducedMotion } from "react-native-reanimated";
@@ -311,6 +312,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (a === "delete") return removeLine(id);
     if (a === "replace") return setPicker({ replace: id });
     if (a === "move") return setMoveFor(id);
+    if (a === "hide" || a === "show") {
+      if (signed || tplEdit) return;
+      const r = setHidden(option.lines, id, a);
+      if (r === "needZero") return void toast.show(t("est.row.hideNeedZero"));
+      setOption((o) => {
+        const next = setHidden(o.lines, id, a);
+        return next === "needZero" ? o : { ...o, lines: next };
+      });
+      return;
+    }
     const d = duplicateLine(option.lines, id);
     if (!d) return;
     setOption((o) => ({ ...o, lines: duplicateLine(o.lines, id, () => d.copyId)?.lines ?? o.lines }));
@@ -563,7 +574,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   );
 
   return (
-    <Screen onScrollBegin={() => void leaveRow(true)} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
+    <Screen onScrollBegin={() => {
+      swipes.closeOpen();
+      void leaveRow(true);
+    }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
       <ActionBar testID="est-actionbar" summary={<RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>}>
         {saveButtons}
       </ActionBar>

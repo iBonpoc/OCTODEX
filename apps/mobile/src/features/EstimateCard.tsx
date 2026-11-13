@@ -1,18 +1,18 @@
 import { visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { haptics } from "@/ui/haptics";
 import { space, type StatusName, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { DB, Estimate, PaymentMethod } from "@/data/types";
-import { useI18n, type DictKey } from "@/i18n";
+import { I18nOverride, useI18n, type DictKey } from "@/i18n";
 import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
-import { issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
+import { clientDoc, issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
 import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
@@ -21,6 +21,7 @@ import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms }
 import { canServe } from "@/features/clients";
 import { estimateNotes, type ModuleNote } from "@/modules/registry";
 import { docLanguageFor } from "@/data/people";
+import { termsForClient } from "@/features/estimateTerms";
 import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -261,10 +262,14 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
           <Button label={t("sch.another")} icon="plus" variant="ghost" size="sm" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
         ) : null}
       </Card>
-      <EstimateView doc={doc} optionId={a.optionId} addonIds={a.addonIds} readOnly />
+      <EstimateView doc={clientDoc(doc)} optionId={a.optionId} addonIds={a.addonIds} readOnly terms={clientTerms(db, e)} />
     </>
   );
 }
+
+/** #1304: the Terms the client reads before signing on site — the same rule as /p/ and the PDF (termsForClient) */
+const clientTerms = (db: DB, e: Estimate) =>
+  termsForClient(e.doc, db.company, docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }), !!e.approval || e.status === "approved" || e.status === "awaiting_countersign");
 
 function OnSiteSign({ e }: { e: Estimate }) {
   const store = useStore();
@@ -280,10 +285,19 @@ function OnSiteSign({ e }: { e: Estimate }) {
   const check = beforeSend(store.db, e, { force });
   const notes = estimateNotes(store.db, e);
   const issues = linesOrNotes(check, notes, force);
+  // the phone is handed to the client: they read what /p/ and the PDF show (no hidden $0 lines, no costs), in THEIR language (rule 7)
+  const clientLang = docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId });
+  const shown = useMemo(() => clientDoc(doc), [doc]);
   return (
     <>
-      <EstimateView doc={doc} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} />
-      <SectionTitle title={t("est.signOnSite")} />
+      <I18nOverride lang={clientLang}>
+        <View testID="sign-client-doc" style={{ gap: space[3] }}>
+          <EstimateView doc={shown} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} terms={clientTerms(store.db, e)} />
+        </View>
+      </I18nOverride>
+      <View testID="onsite-sign">
+        <SectionTitle title={t("est.signOnSite")} />
+      </View>
       {issues ? (
         <Card>
           <SendCheck
@@ -312,14 +326,16 @@ function OnSiteSign({ e }: { e: Estimate }) {
         </Card>
       ) : (
         <Card>
-          <SignBlock
-            defaultName={customer?.name ?? ""}
-            onSign={(name, svg) => {
-              haptics.success();
-              const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
-              toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
-            }}
-          />
+          <I18nOverride lang={clientLang}>
+            <SignBlock
+              defaultName={customer?.name ?? ""}
+              onSign={(name, svg) => {
+                haptics.success();
+                const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
+                toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
+              }}
+            />
+          </I18nOverride>
         </Card>
       )}
     </>

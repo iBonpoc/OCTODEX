@@ -64,6 +64,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.tip).toEqual({ fs: px("tip-fs"), px: px("tip-px"), py: px("tip-py"), radius: px("tip-radius"), max: px("tip-max"), gap: px("tip-gap") });
     expect(component.fab).toBe(px("fab"));
     expect(component.dockBtn).toBe(px("dock-btn"));
+    expect(component.tapeTick).toBe(px("tape-tick"));
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
     for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
   });
@@ -86,6 +87,10 @@ describe("app tokens mirror the founder's DS css", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
     expect(motion.durBrand).toBe(px("dur-brand"));
   });
+  it("small shadow of the raised «Заливка»", () => {
+    const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;
+    expect(component.shadowSm).toMatchObject({ offsetY: Number(m[1]), radius: Number(m[2]), opacity: Number(m[3]) }); // elevation — Android only, app-only
+  });
   it("motion", () => {
     expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart, motion.longPressMs]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart"), px("long-press-ms")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
@@ -98,6 +103,14 @@ describe("app tokens mirror the founder's DS css", () => {
   });
   describe.each(["dark", "light"] as const)("%s theme colours", (t) => {
     const c = themes[t];
+    it("surfSolid mirrors the css and is `surf` laid over `bg`", () => {
+      expect(norm(c.surfSolid)).toBe(norm(v("surf-solid", t)));
+      const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const m = c.surf.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)!;
+      const a = Number(m[4]);
+      const over = rgb(c.bg).map((b, i) => Math.round(b + (Number(m[i + 1]) - b) * a));
+      expect(rgb(c.surfSolid)).toEqual(over);
+    });
     it("surfaces, ink, accent", () => {
       for (const k of ["page", "bg", "ink", "mut", "surf", "surf2", "in", "bd", "track", "ov"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
       expect(norm(c.acc)).toBe(norm(v("acc", t)));
@@ -153,6 +166,8 @@ describe("print tokens mirror print.css (docs/specs/07 §2.2 В, §3.4)", () => 
     expect(s.sectionGapPt).toBe(px(k("section-gap")));
   });
   it("the default style is the base print type (classic)", () => expect(print.styles.classic.fontPt).toEqual(print.fontPt));
+  it("#1324: the contract floor (an estimate's PDF) mirrors print.css", () =>
+    expect(print.contract).toEqual({ minPt: px("print-contract-min"), headingPt: px("print-contract-heading"), noticePt: px("print-contract-notice") }));
   it("no colours in the styles: the brand band colour is a company setting", () => {
     expect(JSON.stringify(print.styles)).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });

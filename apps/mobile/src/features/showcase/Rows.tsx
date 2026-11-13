@@ -1,29 +1,135 @@
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { radius, size, space } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
+import { SwipeRow } from "@/features/estimate/SwipeRow";
 import { SortableList } from "@/features/SortableList";
 import { moveLine, sameLayout, viewRows } from "@/features/sectionLayout";
 import { Button, Toggle } from "@/ui/controls";
 import { Labeled, RatePctField } from "@/features/fields";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
-import { T } from "@/ui/primitives";
+import { fillStyle } from "@/ui/fill";
+import { SelectedCheck } from "@/ui/selectedCheck";
+import { Icon, Press, T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-/** the samples of the estimate editor (DS §8.3–8.5, Б13, §14.6): what is shown now, what comes with its component */
+/** the samples of the estimate editor (DS §8.3–8.5, §8.10–8.13, Б13, §14.6): what is shown now, what comes with its component */
 const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
-  { id: "swipe", title: "ds.rows.swipe", hint: "ds.rows.swipeHint" },
+  { id: "compact", title: "ds.rows.compact", hint: "ds.rows.compactHint" },
   { id: "section", title: "ds.rows.section", hint: "ds.rows.sectionHint" },
+  { id: "variants", title: "ds.rows.variants", hint: "ds.rows.variantsHint" },
+  { id: "firstHint", title: "ds.rows.firstHint", hint: "ds.rows.firstHintHint" },
+  { id: "notes", title: "ds.rows.notes", hint: "ds.rows.notesHint" },
+  { id: "fromTemplate", title: "ds.rows.fromTemplate", hint: "ds.rows.fromTemplateHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
   { id: "catalog", title: "ds.rows.catalog", hint: "ds.rows.catalogHint" },
 ];
 
 const demoLines = (): CustomLine[] => [1, 2, 3, 4].map((n) => ({ id: `demo${n}`, name: String(n), group: "service", quantity: "1", unit: "ea", unitPriceCents: 0 }));
+
+/** «Заливка» (DS «Выделение выбранного», #1306): the chosen one is a raised neutral fill with a small shadow — never `acc`, never a status colour */
+function FillSample() {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const [sel, setSel] = useState("brief");
+  const items = [
+    { key: "brief", label: t("ds.rows.fillA") },
+    { key: "full", label: t("ds.rows.fillB") },
+    { key: "sections", label: t("ds.rows.fillC") },
+  ];
+  return (
+    <Card>
+      <View testID="showcase-rows-fill" style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.rows.fill")}</T>
+        <T v="caption" tone="mut">{t("ds.rows.fillHint")}</T>
+        <RowView>
+          {items.map((it) => {
+            const on = sel === it.key;
+            return (
+              <Press
+                key={it.key}
+                testID={`showcase-fill-${it.key}`}
+                onPress={() => setSel(it.key)}
+                visibleHeight={size.controlLg}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on, checked: on }}
+                // web: a radio is read by aria-checked
+                {...({ "aria-checked": on } as object)}
+                accessibilityLabel={it.label}
+                style={[
+                  { minHeight: size.controlLg, paddingHorizontal: space[4], borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+                  on ? fillStyle(c) : null,
+                ]}
+              >
+                <T v="body" w={on ? "semibold" : "medium"} tone={on ? "ink" : "mut"}>
+                  {it.label}
+                </T>
+              </Press>
+            );
+          })}
+        </RowView>
+        {/* a chosen card or day: the same fill and the check in its corner (the fill alone is quiet: contrast ≈ 1.4) */}
+        <View testID="showcase-fill-card" style={[{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[4], borderRadius: radius.inner }, fillStyle(c)]}>
+          <T v="body" w="semibold">{t("ds.rows.fillCard")}</T>
+          <SelectedCheck />
+        </View>
+        <RowView>
+          <Icon name="eyeOff" s={size.iconMd} />
+          <T v="caption" tone="mut">{t("ds.rows.eyeOff")}</T>
+        </RowView>
+        <View testID="showcase-fill-chosen">
+          <T v="caption">{t("ds.rows.fillChosen", { name: items.find((x) => x.key === sel)!.label })}</T>
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+/** the swipe of an estimate row (DS Б13): on a phone — swipe it; the web has no swipe, its actions are in «⋯» of the row */
+function SwipeSample() {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const [last, setLast] = useState<string | null>(null);
+  return (
+    <Card>
+      <View testID="showcase-rows-swipe" style={{ gap: space[1] }}>
+        <T v="heading">{t("ds.rows.swipe")}</T>
+        <T v="caption" tone="mut">{Platform.OS === "web" ? t("ds.rows.swipeWeb") : t("ds.rows.swipeHint")}</T>
+        <SwipeRow
+          left={[{ key: "hide", label: t("est.row.hide"), icon: "eye", testID: "showcase-swipe-hide" }]}
+          right={[
+            { key: "replace", label: t("est.row.replace"), icon: "refresh", testID: "showcase-swipe-replace" },
+            { key: "delete", label: t("est.row.delete"), icon: "trash", tone: "bad", testID: "showcase-swipe-delete" },
+          ]}
+          onAct={setLast}
+        >
+          <View style={{ minHeight: size.rowMax, justifyContent: "center" }}>
+            <T v="body" w="semibold">{t("ds.rows.swipeRow")}</T>
+            <T v="caption" tone="mut">120 LF × $8.50</T>
+          </View>
+        </SwipeRow>
+        {/* the row of a swiped list is opaque: its tone must be the card's (`surfSolid` = `surf` over `bg`) */}
+        <RowView>
+          <Card style={{ flex: 1 }}>
+            <T v="caption">{t("ds.rows.swipeToneCard")}</T>
+          </Card>
+          <View testID="showcase-swipe-solid" style={{ flex: 1, backgroundColor: c.surfSolid, borderRadius: radius.card, padding: space[3] }}>
+            <T v="caption">{t("ds.rows.swipeToneSolid")}</T>
+          </View>
+        </RowView>
+        <View testID="showcase-swipe-last">
+          <T v="caption">{last ? t("ds.hap.last", { name: last }) : t("ds.hap.none")}</T>
+        </View>
+      </View>
+    </Card>
+  );
+}
 
 /** the tax sheet of the estimate (DS §8.7): the switch, the rate by hand, «as in the last estimate» (nothing is saved) */
 function TaxSample() {
@@ -122,6 +228,8 @@ export function RowsSection() {
         </View>
       </Card>
       <TaxSample />
+      <SwipeSample />
+      <FillSample />
       <LiveDrag />
       {PLANNED.map((p) => (
         <Card key={p.id}>

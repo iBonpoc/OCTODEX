@@ -101,10 +101,10 @@ exports.run = async (h) => {
     const cx = tb.x + tb.width / 2, cy = tb.y + tb.height / 2;
     await p.mouse.move(cx, cy);
     await p.mouse.down();
-    // one mark (1/16″) is 8 px: an eighth — 16 px, room for its fraction
-    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 8 * i) / 6, cy);
+    // one mark (1/16″) is 16 px (`tape-tick`, #1315): an eighth — 32 px, room for its fraction
+    for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 16 * i) / 6, cy);
     // the finger stops, then lifts: no flick (a flick runs on — the founder's sample; that is the arrows' and the unit's job)
-    await p.mouse.move(cx - marks * 8, cy);
+    await p.mouse.move(cx - marks * 16, cy);
     await p.waitForTimeout(200);
     await p.mouse.up();
   };
@@ -123,7 +123,9 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "⅜", "← one mark shorter: ⅜");
   // the tape says the whole length at every inch: «25′ 6″», «25′ 7″» … (founder 09.11)
   const marks = await tid("quick-length-tape").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
-  h.expect(["25′ 5″", "25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
+  // (the marks are 16 px apart, #1315: ±175 px of a phone-wide tape show the inches around the value — 25′ 6″ and 25′ 7″ — not a third one)
+  h.expect(marks.length >= 4, `the tape draws its marks (${marks.length})`);
+  h.expect(["25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
   // a tap on a number: the tape comes to it — the whole inch, no eighths (the sample's click on a page)
   const seven = await tid("quick-length-tape").locator("text").filter({ hasText: /^25′ 7″$/ }).first().boundingBox();
   await p.mouse.click(seven.x + seven.width / 2, seven.y + seven.height / 2);

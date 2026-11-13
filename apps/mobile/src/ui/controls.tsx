@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { fillStyle } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
@@ -283,7 +284,7 @@ export function Segmented<K extends string>({
       {ready ? (
         <Animated.View
           // selected: ink frame on a raised surface — yellow is kept for the one main action (rule 2, unslop 05.11 №1)
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill }, fillStyle(c), pill]}
         />
       ) : null}
       {items.map((it) => {
@@ -309,12 +310,10 @@ export function Segmented<K extends string>({
               // a choice in a form never grows past its card: the labels give way, they do not push the segment out
               ...(radio ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,
-              backgroundColor: !ready && sel ? c.surf2 : "transparent",
-              borderWidth: !ready && sel ? 1 : 0,
-              borderColor: c.ink,
+              ...(!ready && sel ? fillStyle(c) : { backgroundColor: "transparent" }),
             }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }} numberOfLines={1}>
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
               {it.label}
             </T>
           </Press>
@@ -724,13 +723,13 @@ function ChipsRow<K extends string>({ items, value, onChange, nowrap }: { items:
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              // selected: ink frame on the same surface — yellow is kept for the one main action (rule 2, spec 06 «Аудит» №1)
-              backgroundColor: c.surf2,
-              borderWidth: sel ? component.selectedBorder : 1,
-              borderColor: sel ? c.ink : c.bd,
+              // chosen: «Заливка» (DS «Выделение выбранного»); the unchosen keeps a hairline, no fill; yellow is the main action's alone (rule 2)
+              ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              borderWidth: component.hairline,
+              borderColor: sel ? "transparent" : c.bd,
             }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }}>
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>
@@ -771,13 +770,16 @@ export function MultiChips<K extends string>({
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              backgroundColor: sel ? c.acc : c.surf2,
-              borderWidth: sel ? 0 : 1,
-              borderColor: c.bd,
+              ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space[1],
+              borderWidth: component.hairline,
+              borderColor: sel ? "transparent" : c.bd,
             }}
           >
-            <T v="button" style={{ color: sel ? c.onAcc : c.ink }}>
-              {sel ? "✓ " : ""}
+            {sel ? <Icon name="check" s={sizes.iconSm} color={c.ink} /> : null}
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>
