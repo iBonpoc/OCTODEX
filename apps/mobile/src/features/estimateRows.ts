@@ -109,6 +109,13 @@ export function reinsertLine(lines: CustomLine[], line: CustomLine, index: numbe
   const at = Math.max(0, Math.min(index, lines.length));
   return [...lines.slice(0, at), line, ...lines.slice(at)];
 }
+/**
+ * «Вернуть» of a series of deletions (DS §15.2, О15): only the deleted lines come back, each to its place, in the reverse order of
+ * the deletions (each index was taken from the list as it stood then); everything else done in those seconds stays as it is.
+ */
+export function restoreDeleted(lines: CustomLine[], deleted: readonly { line: CustomLine; index: number }[]): CustomLine[] {
+  return [...deleted].reverse().reduce((acc, d) => reinsertLine(acc, d.line, d.index), lines);
+}
 /** the line as it was before the action (replace, clear) */
 export function restoreLine(lines: CustomLine[], old: CustomLine): CustomLine[] {
   return lines.map((l) => (l.id === old.id ? old : l));

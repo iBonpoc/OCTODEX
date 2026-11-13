@@ -20,7 +20,7 @@ import type { Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
-import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
+import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, replaceLine, restoreDeleted, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
 import { ActionBar } from "@/ui/actionBar";
 import { useReducedMotion } from "react-native-reanimated";
@@ -201,13 +201,22 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (unhiddenIds.includes(id)) setUnhiddenIds((ids) => ids.filter((x) => x !== id));
   };
   // «Отменить» of an action takes back THAT action only (a row edited since stays as edited)
+  const deleted = useRef<{ toast: number; items: { line: CustomLine; index: number }[] } | null>(null);
   const removeLine = (id: string) => {
     const index = option.lines.findIndex((l) => l.id === id);
     const line = option.lines[index];
     if (!line) return;
     setOption((o) => ({ ...o, lines: dropLine(o.lines, id) }));
     setOpenId((cur) => (cur === id ? null : cur));
-    toast.show(t("est.row.deleted"), localUndo(() => setOption((o) => ({ ...o, lines: reinsertLine(o.lines, line, index) }))));
+    // a series of deletions is ONE toast «Удалено позиций: N · Вернуть» (DS §15.2): while it is on screen, a new one adds to it
+    const prev = deleted.current;
+    const series = prev && toast.showing(prev.toast) ? [...prev.items, { line, index }] : [{ line, index }];
+    const text = series.length === 1 ? t("est.row.deleted") : t("est2.row.deletedN", { n: series.length });
+    const undo = localUndo(() => {
+      deleted.current = null;
+      setOption((o) => ({ ...o, lines: restoreDeleted(o.lines, series) }));
+    });
+    deleted.current = { toast: toast.show(text, undo, { grow: prev?.toast }), items: series };
   };
   // what is wrong in the open row now: the line's own data and the number fields that hold text which is not a number
   const problemsOf = (l: CustomLine) => {
@@ -572,12 +581,18 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
   /** «Сохранить и отправить» (the office: sending is theirs, #1113) and «Сохранить»: always active — a press with something missing says what */
+  // the pinned bar: in one row, «Сохранить» 2 : 3 «Сохранить и отправить», 44 high; the tech has one «Сохранить» across (DS §8.9)
+  const canSend = canSeeClientLink(store.role);
+  const sendButton = (bar: boolean) => (canSend ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" size={bar ? "bar" : undefined} full onPress={() => save(true)} /></View> : null);
+  const saveButton = (bar: boolean) => (
+    <View testID="ue-save">
+      <Button label={t("ue.save")} icon="check" size={bar ? "bar" : undefined} variant={canSend ? "secondary" : "primary"} full onPress={() => save(false)} />
+    </View>
+  );
   const saveButtons = (
     <>
-      {canSeeClientLink(store.role) ? <View testID="ue-save-send"><Button label={t("ue.saveSend")} icon="send" full onPress={() => save(true)} /></View> : null}
-      <View testID="ue-save">
-        <Button label={t("ue.save")} icon="check" variant={canSeeClientLink(store.role) ? "secondary" : "primary"} full onPress={() => save(false)} />
-      </View>
+      {sendButton(false)}
+      {saveButton(false)}
     </>
   );
 
@@ -590,9 +605,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // the page scrolls from a finger on the open row (to its lower fields): the row stays open; anywhere else it folds
       if (!inOpen) void leaveRow(true);
     }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
-      <ActionBar testID="est-actionbar" summary={<RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>}>
-        {saveButtons}
-      </ActionBar>
+      <ActionBar testID="est-actionbar" summary={<RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>} second={canSend ? saveButton(true) : undefined} main={canSend ? sendButton(true) : saveButton(true)} />
     )}>
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
       {existing && existing.status !== "draft" ? (

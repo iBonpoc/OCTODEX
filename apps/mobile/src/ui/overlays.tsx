@@ -732,27 +732,45 @@ export function HelpButton({ title, text, where }: { title: string; text: string
 /* ---------- Toast with 5-second Undo (DS rule 10) ---------- */
 
 interface ToastItem {
+  /** the toast itself (it slides in once); a toast that grows (`grow`) keeps it */
   id: number;
+  /** when its text last changed: «Вернуть» is armed from it and its ring burns down from it */
+  at: number;
   text: string;
   /** false: nothing could be taken back (it was changed since, #1193 п.6) — the toast then says so */
   undo?: GuardedUndo;
 }
-const ToastCtx = createContext<{ show: (text: string, undo?: GuardedUndo) => void } | null>(null);
+/**
+ * One toast at a time: a new one replaces the old (DS §15.2). `grow` — the id of the toast on screen, which then stays and takes the
+ * new text and «Вернуть» with 5 fresh seconds (a series of deletions is one toast «Удалено позиций: N»); if it is gone, a new one shows.
+ * `show` returns the toast's id; `showing(id)` — is it still on screen.
+ */
+type ToastApi = { show: (text: string, undo?: GuardedUndo, opts?: { grow?: number }) => number; showing: (id: number) => boolean };
+const ToastCtx = createContext<ToastApi | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [item, setItem] = useState<ToastItem | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((text: string, undo?: GuardedUndo) => {
-    if (timer.current) clearTimeout(timer.current);
-    const id = Date.now();
-    setItem({ id, text, undo });
-    timer.current = setTimeout(() => setItem((cur) => (cur?.id === id ? null : cur)), motion.toastUndoMs);
+  const [item, setItemState] = useState<ToastItem | null>(null);
+  const current = useRef<ToastItem | null>(null);
+  const setItem = useCallback((next: ToastItem | null | ((cur: ToastItem | null) => ToastItem | null)) => {
+    const v = typeof next === "function" ? next(current.current) : next;
+    current.current = v;
+    setItemState(v);
   }, []);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const show = useCallback((text: string, undo?: GuardedUndo, opts?: { grow?: number }) => {
+    if (timer.current) clearTimeout(timer.current);
+    const at = Date.now();
+    const id = opts?.grow !== undefined && current.current?.id === opts.grow ? opts.grow : at;
+    setItem({ id, at, text, undo });
+    timer.current = setTimeout(() => setItem((cur) => (cur?.id === id && cur.at === at ? null : cur)), motion.toastUndoMs);
+    return id;
+  }, [setItem]);
+  const showing = useCallback((id: number) => current.current?.id === id, []);
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
   return (
-    <ToastCtx.Provider value={{ show }}>
+    <ToastCtx.Provider value={{ show, showing }}>
       {children}
       <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />
     </ToastCtx.Provider>
@@ -798,9 +816,10 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
         </View>
         {item.undo ? (
           <UndoButton
+            key={item.at}
             onPress={() => {
-              // the second tap of the double tap that made the thing is not «Отменить» (item.id = when it showed)
-              if (!toastArmed(item.id, Date.now())) return;
+              // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
+              if (!toastArmed(item.at, Date.now())) return;
               // #1193 п.6: «Отменить» refused (the thing was changed since): say so instead of a silent nothing
               if (item.undo?.() === false) return onLate(t("common.undoLate"));
               onDone();
