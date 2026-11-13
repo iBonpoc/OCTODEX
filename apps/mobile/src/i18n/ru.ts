@@ -2970,6 +2970,7 @@ export const ru = {
   "mod.gutters.draw.overlapRun": "Линия лежит вдоль желоба — не добавлена. Чтобы удлинить желоб, тяните его конец",
   "mod.gutters.draw.dupCleaned": "Убран лишний желоб, лежавший поверх другого",
   "mod.gutters.draw.hint.threeEnds": "Стык из трёх концов не двигается — двигайте желоба по одному",
+  "mod.gutters.draw.hint.threeJoin": "Стык из трёх концов не делаем — конец остаётся на месте",
   "mod.gutters.draw.nextDs": "Дальше: поставьте водостоки на желоба",
   "mod.gutters.draw.fit": "Весь рисунок",
   "mod.gutters.draw.test": "тестовые цены",

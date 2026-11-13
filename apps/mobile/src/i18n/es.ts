@@ -2970,6 +2970,7 @@ export const es: Dict = {
   "mod.gutters.draw.overlapRun": "La línea queda a lo largo de un canalón: no se añadió. Para alargarlo, tire de su extremo",
   "mod.gutters.draw.dupCleaned": "Se quitó un canalón que estaba encima de otro",
   "mod.gutters.draw.hint.threeEnds": "Una unión de tres extremos no se mueve: mueva los canalones uno por uno",
+  "mod.gutters.draw.hint.threeJoin": "No hacemos una unión de tres extremos: el extremo se queda donde estaba",
   "mod.gutters.draw.nextDs": "Siguiente: ponga los bajantes en las canaletas",
   "mod.gutters.draw.fit": "Todo el dibujo",
   "mod.gutters.draw.test": "precios de prueba",

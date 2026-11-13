@@ -2970,6 +2970,7 @@ export const en: Dict = {
   "mod.gutters.draw.overlapRun": "The line lies along a gutter — not added. To make a gutter longer, pull its end",
   "mod.gutters.draw.dupCleaned": "A gutter lying on top of another was removed",
   "mod.gutters.draw.hint.threeEnds": "A joint of three ends does not move — move the gutters one by one",
+  "mod.gutters.draw.hint.threeJoin": "We do not make a joint of three ends — the end stays where it was",
   "mod.gutters.draw.nextDs": "Next: put the downspouts on the gutters",
   "mod.gutters.draw.fit": "Whole drawing",
   "mod.gutters.draw.test": "test prices",
