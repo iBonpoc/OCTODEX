@@ -62,11 +62,50 @@ export function newDoc(defaultDepositBps?: number | null): EstimateDoc {
   return { options: [newOption(0)], settings: { ...DEFAULT_SETTINGS, deposit } };
 }
 
-/** A copy of an option with fresh ids (for "add option"). */
-export function cloneOption(o: CustomOption, i: number): CustomOption {
-  // the sections go with it (the same ids — unique within an option): the lines keep their sectionId (Р4)
-  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })), ...(Array.isArray(o.sections) ? { sections: o.sections.filter((x) => !!x && typeof x === "object").map((x) => ({ ...x })) } : {}) };
+/** The name a new option takes: the first of Good / Better / Best no other option has, else «Option N». */
+export function nextOptionName(options: Pick<CustomOption, "name">[]): string {
+  const taken = new Set(options.map((o) => o.name.trim()));
+  const free = OPTION_NAMES.find((n) => !taken.has(n));
+  if (free) return free;
+  for (let i = options.length + 1; ; i++) if (!taken.has(`Option ${i}`)) return `Option ${i}`;
 }
+
+/**
+ * «Вариант — копия „…“» (DS §8.10, spec 39 §11.2.6): a full copy of the option's list with fresh ids for the lines AND the
+ * sections — a line keeps its place (its sectionId follows its section's new id, a subsection its parent's). The name is
+ * `name` (the screen gives nextOptionName); «recommended» does not go with the copy.
+ */
+export function cloneOption(o: CustomOption, name: string): CustomOption {
+  const secs = Array.isArray(o.sections) ? o.sections.filter((x) => !!x && typeof x === "object") : null;
+  const ids = new Map<string, string>();
+  for (const x of secs ?? []) if (typeof x.id === "string" && !ids.has(x.id)) ids.set(x.id, uid());
+  const to = (id: string | undefined) => (id !== undefined && ids.has(id) ? ids.get(id)! : id);
+  return {
+    id: uid(),
+    name,
+    lines: o.lines.map((l) => ({ ...l, id: uid(), ...(l.sectionId !== undefined ? { sectionId: to(l.sectionId) } : {}) })),
+    ...(secs ? { sections: secs.map((x) => ({ ...x, id: to(x.id)!, ...(x.parentId !== undefined ? { parentId: to(x.parentId) } : {}) })) } : {}),
+  };
+}
+
+/** Removing an option: the one picked to edit is the one before; «recommended» stays where it was, if that option stays. */
+export function withoutOption(options: CustomOption[], id: string): { options: CustomOption[]; cur: number } {
+  const i = options.findIndex((o) => o.id === id);
+  if (i < 0 || options.length < 2) return { options, cur: Math.max(0, i) };
+  const next = options.filter((o) => o.id !== id);
+  return { options: next, cur: Math.max(0, i - 1) };
+}
+
+/** «★ рекомендуем» on one option (at most one); off again — none. */
+export const recommend = (options: CustomOption[], id: string, on: boolean): CustomOption[] =>
+  options.map((o) => {
+    const rec = o.id === id ? on : on ? false : !!o.recommended;
+    if (rec === !!o.recommended) return o;
+    const c: CustomOption = { ...o };
+    if (rec) c.recommended = true;
+    else delete c.recommended;
+    return c;
+  });
 
 /** a section's title as it may be kept: no control characters, at most SECTION_TITLE_MAX (the server cuts the same) */
 // the same three sets as the server's app.client_title (migration 20261112150000): a control character (Cc) is a space,

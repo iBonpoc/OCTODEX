@@ -27,10 +27,10 @@ describe("unit:clientSections — the phone = the server (T199)", () => {
     d.options[0] = { ...d.options[0]!, sections: { a: 1 } as never };
     expect("sections" in clientDoc(d).options[0]! && clientDoc(d).options[0]!.sections !== undefined).toBe(false);
     expect(JSON.parse(JSON.stringify(clientDoc(d))).options[0].sections).toBeUndefined();
-    expect(() => cloneOption(d.options[0]!, 1)).not.toThrow();
-    expect(cloneOption(d.options[0]!, 1).sections).toBeUndefined();
+    expect(() => cloneOption(d.options[0]!, "Better")).not.toThrow();
+    expect(cloneOption(d.options[0]!, "Better").sections).toBeUndefined();
     d.options[0] = { ...d.options[0]!, sections: [null, { id: "s1" }] as never };
-    expect(cloneOption(d.options[0]!, 1).sections).toEqual([{ id: "s1" }]);
+    expect(cloneOption(d.options[0]!, "Better").sections).toEqual([{ id: expect.any(String) }]);
   });
   it("«false» written as a string at $0 is hidden, as the server reads it; a sectionId longer than 64 is no link", () => {
     const d: EstimateDoc = newDoc();

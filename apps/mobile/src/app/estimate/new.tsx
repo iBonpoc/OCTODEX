@@ -10,7 +10,7 @@ import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import { canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
-import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
+import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, nextOptionName, recommend, withoutOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
@@ -20,6 +20,7 @@ import { SortableList, type DropResult } from "@/features/SortableList";
 import { withLooseTarget, type Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
+import { OptionsCard } from "@/features/estimate/OptionsCard";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
@@ -29,9 +30,9 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { PickerSheet } from "@/ui/pickerSheet";
 import { Labeled, MoneyField, PctField, RatePctField } from "@/features/fields";
 import { isPartialTax, lastTaxRatePpm, taxChange, wholeTax, type TaxDiff } from "@/features/estimateTax";
-import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Avatar, Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
@@ -189,6 +190,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const exempt = !!customer?.taxExempt;
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
   const totals = useMemo(() => optionTotals(counted, option), [counted, option]);
+  // each option's total under the segments (DS §8.10): the owner compares them without switching
+  const optionSums = useMemo(() => Object.fromEntries(counted.options.map((o) => [o.id, optionTotals(counted, o).total])), [counted]);
   const s = counted.settings;
   const partialTax = isPartialTax(doc.settings.tax);
   const lastRate = lastTaxRatePpm(db.estimates, existing?.id);
@@ -478,21 +481,44 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     }),
     [],
   );
+  // «Варианты для клиента» (DS §8.10): the copy goes after the open row is settled (a wrong row speaks and stays)
   const addOption = () => {
-    if (doc.options.length >= MAX_OPTIONS) return;
-    const o = cloneOption(option, doc.options.length);
+    if (doc.options.length >= MAX_OPTIONS) return void toast.show(t("est.var.max"));
+    if (!leaveRow()) return;
+    const from = doc.options.find((o) => o.id === option.id) ?? option;
+    const o = cloneOption(from, nextOptionName(doc.options));
     setDoc((d) => ({ ...d, options: [...d.options, o] }));
     setCur(doc.options.length);
+    toast.show(t("est.var.copied", { name: o.name, from: from.name }));
   };
   const removeOption = () => {
     if (doc.options.length < 2) return;
+    if (!leaveRow()) return;
     const prev = doc;
-    setDoc((d) => ({ ...d, options: d.options.filter((o) => o.id !== option.id) }));
-    setCur(0);
-    toast.show(t("ue.optionRemoved"), localUndo(() => setDoc(prev)));
+    const prevCur = cur;
+    const r = withoutOption(doc.options, option.id);
+    setDoc((d) => ({ ...d, options: r.options }));
+    setCur(r.cur);
+    toast.show(t("est.var.deleted"), localUndo(() => {
+      setDoc(prev);
+      setCur(prevCur);
+    }));
   };
-  const setRecommended = (on: boolean) =>
-    setDoc((d) => ({ ...d, options: d.options.map((o) => ({ ...o, recommended: o.id === option.id ? on : on ? false : o.recommended })) }));
+  const pickOption = (id: string) => {
+    const i = doc.options.findIndex((o) => o.id === id);
+    if (i < 0 || i === cur || !leaveRow()) return;
+    setCur(i);
+  };
+  const setRecommended = (on: boolean) => setDoc((d) => ({ ...d, options: recommend(d.options, option.id, on) }));
+  const renameOption = (name: string) => setOption((o) => ({ ...o, name }));
+  /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
+  const [clientScreen, setClientScreen] = useState(false);
+  const [estMenu, setEstMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const estMenuRef = useRef<ComponentRef<typeof View>>(null);
+  const toggleClientScreen = (on: boolean) => {
+    setClientScreen(on);
+    toast.show(t(on ? "est.client.onToast" : "est.client.offToast"));
+  };
 
   // #1138: a tech saves a new estimate only where the server lets him (estimates_insert — a property he works at)
   // a signed estimate: its rows do not open (DS §8.3)
@@ -618,7 +644,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       touchInOpen.current = 0;
       // the page scrolls from a finger on the open row (to its lower fields): the row stays open; anywhere else it folds
       if (!inOpen) void leaveRow(true);
-    }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
+    }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" right={tplEdit ? undefined : (
+      <View ref={estMenuRef} collapsable={false} testID="est-menu">
+        <IconButton icon="more" label={t("est.actions")} onPress={() => estMenuRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setEstMenu({ x, y, w, h }))} />
+      </View>
+    )} footer={tplEdit ? undefined : (
       <ActionBar testID="est-actionbar" summary={(
         <View style={{ gap: space[1] }}>
           <RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>
@@ -628,6 +658,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       )} second={canSend ? saveButton(true) : undefined} main={canSend ? sendButton(true) : saveButton(true)} />
     )}>
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
+      {clientScreen ? (
+        <View testID="est-client-off" style={{ alignSelf: "flex-start" }}>
+          <Button label={t("est.client.off")} icon="eye" variant="secondary" size="sm" onPress={() => toggleClientScreen(false)} />
+        </View>
+      ) : null}
       {existing && existing.status !== "draft" ? (
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
@@ -679,19 +714,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             <TextField type="title" value={title} onChangeText={setTitle} placeholder={tplEdit ? t("est.tpl.name") : t("ue.jobTitle")} icon="note" />
           </View>
 
-          {doc.options.length > 1 ? (
-            <Card>
-              <Segmented full value={option.id} onChange={(id) => setCur(doc.options.findIndex((o) => o.id === id))} items={doc.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
-              <TextField type="title" value={option.name} onChangeText={(v) => setOption((o) => ({ ...o, name: v }))} placeholder={t("ue.optionName")} />
-              <RowView style={{ minHeight: size.hitMin }}>
-                <T v="body" style={{ flex: 1 }}>
-                  {t("ue.recommended")}
-                </T>
-                <Toggle label={t("ue.recommended")} on={!!option.recommended} onChange={setRecommended} />
-              </RowView>
-              <Button label={t("ue.removeOption")} icon="trash" variant="ghost" size="sm" onPress={removeOption} />
-            </Card>
-          ) : null}
+          <OptionsCard
+            options={doc.options}
+            curId={option.id}
+            totals={optionSums}
+            locked={signed}
+            onPick={pickOption}
+            onCopy={addOption}
+            onRecommend={setRecommended}
+            onRename={renameOption}
+            onDelete={removeOption}
+          />
 
           <SectionTitle title={t("ue.items")} right={act.length ? <T v="caption" tone="mut">{act.length}</T> : undefined} />
           {option.lines.length ? (
@@ -750,6 +783,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     open={openId === r.line.id}
                     total={totalById.get(r.line.id) ?? 0}
                     costsVisible={seeCosts}
+                    clientScreen={clientScreen}
                     form={rowForm}
                     api={rowApi}
                     locked={signed}
@@ -811,7 +845,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
               </T>
             ) : null}
-            {totals.cost > 0 && store.role !== "tech" ? (
+            {totals.cost > 0 && store.role !== "tech" && !clientScreen ? (
               <T v="caption" tone="mut">
                 {costComplete(option) ? t("ue.margin", { p: totals.marginPct ?? "0", cost: money(totals.cost) }) : t("ue.costPartial", { cost: money(totals.cost) })}
               </T>
@@ -822,16 +856,6 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             ) : null}
           </Card>
-          {doc.options.length < MAX_OPTIONS ? (
-            <View style={{ gap: space[1] }}>
-              <Button label={t("ue.addOption")} icon="plus" variant="ghost" size="sm" onPress={addOption} />
-              {doc.options.length === 1 ? (
-                <T v="caption" tone="mut">
-                  {t("ue.optionsHint")}
-                </T>
-              ) : null}
-            </View>
-          ) : null}
           <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} />
           {tplEdit ? (
             <View testID="est-tpl-save">
@@ -1057,6 +1081,17 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           setPropertyId(pid);
           setClientPicker(false);
         }}
+      />
+      <Menu
+        visible={!!estMenu}
+        anchor={estMenu}
+        title={t("est.actions")}
+        items={[{ key: "client" as const, label: t("est.client.on"), icon: "eye" as const, selected: clientScreen, testID: "est-menu-client" }]}
+        onSelect={() => {
+          setEstMenu(null);
+          toggleClientScreen(!clientScreen);
+        }}
+        onClose={() => setEstMenu(null)}
       />
     </Screen>
   );
