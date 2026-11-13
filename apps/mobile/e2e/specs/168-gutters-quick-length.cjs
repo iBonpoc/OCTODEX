@@ -72,7 +72,8 @@ exports.run = async (h) => {
   h.expect(await field("quick-length-ft").evaluate((el) => el.selectionStart === 0 && el.selectionEnd === el.value.length), "…selected: a digit replaces them");
   await h.shot("sheet");
   // #675: the unit is at the end of the number — no row of units above the fields; «дюйм» right of the inches
-  h.expect((await tid("quick-length").getByRole("radio").count()) === 0, "no unit chips above the fields");
+  // (the row of fractions under the fields, #1316, are radios too: only those outside it count)
+  h.expect((await tid("quick-length").locator('[role="radio"]').evaluateAll((rs) => rs.filter((r) => !r.closest('[data-testid="quick-length-fracs"]')).length)) === 0, "no unit chips above the fields");
   const ub = await tid("quick-length-unit").boundingBox();
   const ib = await tid("quick-length-in").boundingBox();
   h.expect(ub.x >= ib.x + ib.width - 1 && /дюйм/.test(await tid("quick-length-unit").innerText()), "«дюйм» at the end of the number");
