@@ -220,7 +220,8 @@ export default function DrawScreen() {
         // below is a real change, so an estimate made of this drawing says «Чертёж изменён» (#1314 review); «Отменить» puts it back
         const clean = withoutDuplicates(d);
         setDrawing(clean);
-        if (clean !== d) {
+        // read-only (or the module off): nothing is written, so nothing is said — the toast would come at every opening (director, 13.11)
+        if (clean !== d && cur.current.canSave) {
           later.current();
           toast.show(t("mod.gutters.draw.dupCleaned"), localUndo(() => commit(d, cur.current.drawing)));
         }
@@ -506,9 +507,10 @@ export default function DrawScreen() {
       // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
       if (next === d && g.kind === "line") {
         const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
-        if (!e.canceled && lineRefused(d, g.a, b, Number(cur.current.story) || 1)) {
+        const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1, tolIn());
+        if (why) {
           haptics.warning();
-          toast.show(t("mod.gutters.draw.dupRun"));
+          toast.show(t(why === "dup" ? "mod.gutters.draw.dupRun" : "mod.gutters.draw.overlapRun"));
         }
       }
       if (next !== d) {

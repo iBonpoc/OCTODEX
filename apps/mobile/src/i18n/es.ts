@@ -2954,6 +2954,7 @@ export const es: Dict = {
   "mod.gutters.draw.hint.select": "Primero toque una canaleta o un bajante para elegirlo",
   "mod.gutters.draw.hint.move": "Mantenga pulsado un extremo o una esquina y arrastre: se mueve libremente y se ajusta a 45° y 90°",
   "mod.gutters.draw.dupRun": "Ese canalón ya existe: no se añadió la línea",
+  "mod.gutters.draw.overlapRun": "La línea queda a lo largo de un canalón: no se añadió. Para alargarlo, tire de su extremo",
   "mod.gutters.draw.dupCleaned": "Se quitó un canalón que estaba encima de otro",
   "mod.gutters.draw.hint.threeEnds": "Una unión de tres extremos no se mueve: mueva los canalones uno por uno",
   "mod.gutters.draw.nextDs": "Siguiente: ponga los bajantes en las canaletas",
