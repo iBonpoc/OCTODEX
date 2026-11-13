@@ -196,3 +196,38 @@ export function settleOpenRow<O extends { lines: CustomLine[] }>(o: O, c: Settle
   const item: CatalogItem = { id: c.newId(), ...offer.item };
   return { closed: true, decision, option: { ...o, lines: o.lines.map((l) => (l.id === line.id ? { ...l, catalogItemId: item.id } : l)) }, newItems: [item], wantCatalog: rest };
 }
+
+/** what can be done with a row of the estimate (Р2): one list for the «⋯» menu, the swipe and the screen reader's actions */
+export type RowAct = "replace" | "duplicate" | "hide" | "show" | "move" | "delete";
+export interface RowActions {
+  /** the «⋯» menu, in order: «Удалить» last (red) */
+  menu: RowAct[];
+  /** a swipe LEFT shows these buttons on the right: «Заменить», «Удалить» */
+  swipeLeft: RowAct[];
+  /** a swipe RIGHT shows this one on the left: «Скрыть» (pale while the price is not $0, the press explains) / «Показать» */
+  swipeRight: RowAct[];
+}
+export function rowActions(l: Pick<CustomLine, "unitPriceCents" | "clientVisible" | "source">, o: { locked?: boolean; noHide?: boolean }): RowActions {
+  // a signed estimate does not change; the template editor keeps no hidden line yet
+  if (o.locked) return { menu: [], swipeLeft: [], swipeRight: [] };
+  const hide: RowAct[] = o.noHide ? [] : isHidden(l) ? ["show"] : ["hide"];
+  return {
+    menu: ["replace", "duplicate", ...hide, ...(l.source ? [] : (["move"] as RowAct[])), "delete"],
+    // «Заменить» keeps the module's mark (Р2); a module's line is replaced and deleted like any other
+    swipeLeft: ["replace", "delete"],
+    swipeRight: hide,
+  };
+}
+
+/** «Скрыть» / «Показать» from a menu, a swipe or the screen reader: only a $0 line hides (a priced hidden line makes the client's total not add up) */
+export function setHidden<L extends CustomLine>(lines: L[], id: string, act: "hide" | "show"): L[] | "needZero" {
+  const l = lines.find((x) => x.id === id);
+  if (!l) return lines;
+  if (act === "hide" && !canHide(l)) return "needZero";
+  return lines.map((x) => (x.id === id ? { ...x, clientVisible: act === "hide" ? false : undefined } : x));
+}
+
+/** the screen reader's action name → the row's action, only one the row offers (a name from outside does nothing) */
+export function actOfName(name: string, a: RowActions): RowAct | null {
+  return (a.menu as string[]).includes(name) ? (name as RowAct) : null;
+}

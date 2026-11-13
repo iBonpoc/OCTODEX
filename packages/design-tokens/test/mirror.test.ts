@@ -80,7 +80,7 @@ describe("app tokens mirror the founder's DS css", () => {
     });
   });
   it("drawing canvas sizes", () => {
-    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap") });
+    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap"), liftScale: parseFloat(v("draw-lift-scale")) });
   });
   it("dialog, sheet and popover sizes, the brand splash", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
@@ -98,6 +98,14 @@ describe("app tokens mirror the founder's DS css", () => {
   });
   describe.each(["dark", "light"] as const)("%s theme colours", (t) => {
     const c = themes[t];
+    it("surfSolid mirrors the css and is `surf` laid over `bg`", () => {
+      expect(norm(c.surfSolid)).toBe(norm(v("surf-solid", t)));
+      const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const m = c.surf.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)!;
+      const a = Number(m[4]);
+      const over = rgb(c.bg).map((b, i) => Math.round(b + (Number(m[i + 1]) - b) * a));
+      expect(rgb(c.surfSolid)).toEqual(over);
+    });
     it("surfaces, ink, accent", () => {
       for (const k of ["page", "bg", "ink", "mut", "surf", "surf2", "in", "bd", "track", "ov"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
       expect(norm(c.acc)).toBe(norm(v("acc", t)));

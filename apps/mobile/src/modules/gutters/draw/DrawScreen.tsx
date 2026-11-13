@@ -29,7 +29,8 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -47,18 +48,21 @@ import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { localUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
+/** a tap this soon after a two-finger gesture began or ended is not a tap */
+const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
@@ -179,7 +183,9 @@ export default function DrawScreen() {
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
   // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
-  const canvas = useCanvasGestures(viewNow, setView, live, 2);
+  // the limits of the scale (#1281): the whole drawing in a quarter of the screen at the farthest, 1″ as big as a finger's target at the nearest
+  const zoomLim = useMemo(() => zoomLimits(drawing.runs.flatMap((r) => [r.a, r.b]), size.w > 0 ? size : { w: 390, h: 844 }, space[8], sizes.hitMin), [drawing.runs, size]);
+  const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });
@@ -294,6 +300,33 @@ export default function DrawScreen() {
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
   const downTime = useRef(0);
+  /** the hold that picks something up (canvas/holdLift.ts, #1272): the state of this touch, its timer, and what is lifted (the point is drawn bigger) */
+  const hold = useRef<Hold>("idle");
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lifted, setLifted] = useState<Lift | null>(null);
+  const clearHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  useEffect(() => clearHold, []); // the screen is left with a touch down: no timer left running
+  /** the touch took something (at its first move): `light` once, unless the hold did it already; the point is lifted */
+  const takeTick = (target: Lift | null, atOnce = true) => {
+    const r = holdMove(hold.current, atOnce);
+    hold.current = r.hold;
+    if (r.light) haptics.light();
+    if (target) setLifted(target);
+  };
+  /** the hold ran out with the finger still: if it is on something that can be taken, `light` and the lifted look — before any move */
+  const liftAtHold = () => {
+    holdTimer.current = null;
+    const target = dragRef.current || !cur.current.canSave ? null : liftTarget(withoutDs(cur.current.drawing, !cur.current.layers.ds), plan(downAt.current[0], downAt.current[1]), tolIn());
+    const r = holdFire(hold.current, !!target);
+    hold.current = r.hold;
+    if (!r.light || !target) return;
+    haptics.light();
+    setSelected(target.id);
+    setLifted(target);
+  };
   const pan = usePanGesture({
     runOnJS: true,
     maxPointers: 1,
@@ -301,8 +334,20 @@ export default function DrawScreen() {
     onBegin: (e) => {
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
+      // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
+      // 12.11: «не чувствую момента, когда можно тянуть»); the drag after it has no second «взял»
+      hold.current = holdBegin().hold;
+      setLifted(null);
+      clearHold();
+      holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
+    },
+    onFinalize: () => {
+      clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
+      hold.current = holdCancel(hold.current).hold;
+      setLifted(null);
     },
     onActivate: () => {
+      clearHold(); // moved: before the hold it is drawing as ever; after it the pick-up was made already
       lineSnap.current = null;
       const { drawing: d, tool: tl } = cur.current;
       const p0 = plan(downAt.current[0], downAt.current[1]);
@@ -327,13 +372,13 @@ export default function DrawScreen() {
           if (corner && cornerMovable(d, corner.id)) {
             dragRef.current = { kind: "corner", cornerId: corner.id, before: d, from: p0, held: [true, true], tol: snapIn(), onEnd: null };
             setSelected(endHere.id);
-            haptics.light(); // picked up
+            takeTick({ kind: "corner", id: endHere.id, cornerId: corner.id }); // picked up (already, if the hold ran out first: #1272)
             return;
           }
           if (!corner && runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
             dragRef.current = { kind: "pull", id: endHere.id, end: endHere.end, before: d, from: p0, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
             setSelected(endHere.id);
-            haptics.light(); // picked up
+            takeTick({ kind: "end", id: endHere.id, end: endHere.end }); // picked up (already, if the hold ran out first: #1272)
             return;
           }
         }
@@ -341,7 +386,7 @@ export default function DrawScreen() {
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
         dragRef.current = { kind: "ds", id: h.id, before: d };
-        haptics.light();
+        takeTick({ kind: "ds", id: h.id });
         setSelected(h.id);
         return;
       }
@@ -367,7 +412,7 @@ export default function DrawScreen() {
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
           // along its own line: the end is taken and follows the finger (it may then leave the line: it swings, #818)
           dragRef.current = { kind: "pull", ...g.pullable, fromLine: true, from: g.a, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
-          haptics.light(); // picked up (the «Желоб» stroke turned into a pull)
+          takeTick({ kind: "end", id: g.pullable.id, end: g.pullable.end }); // picked up (the «Желоб» stroke turned into a pull)
           setGhost(null);
           setSelected(g.pullable.id);
           const sw = swingEnd(g.pullable.before, g.pullable.id, g.pullable.end, grabbedEnd(g.pullable.before, g.pullable.id, g.pullable.end, g.a, p), HELD_ORIGINAL, snapIn());
@@ -459,6 +504,8 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) return; // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
+      if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
@@ -536,6 +583,7 @@ export default function DrawScreen() {
             padX: space[1],
             gap: dt.labelGap,
             selected,
+            lift: lifted,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
             dsPad: DS_MARK_R,
@@ -552,7 +600,7 @@ export default function DrawScreen() {
             layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers],
+    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers, lifted],
   );
   sceneRef.current = scene;
 
@@ -663,7 +711,7 @@ export default function DrawScreen() {
     setSelected(null);
     const gone = selected;
     // «Отменить» puts back what was deleted and keeps what was drawn since
-    toast.show(t("mod.gutters.draw.deleted"), () => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing));
+    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing)));
   };
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
@@ -1085,7 +1133,7 @@ export default function DrawScreen() {
                   setCornerSheet(null);
                   if (next === before) return;
                   commit(next, before);
-                  toast.show(t("mod.gutters.draw.cornerSplit.done"), () => commit(before, cur.current.drawing));
+                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing)));
                 }}
               />
             </View>

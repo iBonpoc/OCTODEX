@@ -31,6 +31,7 @@ import { laborRows, materialRows, missingItems, partName, sampleJob } from "../s
 import type { MeasurementRow } from "../src/modules/gutters/canvas/model";
 import { tFor } from "../src/i18n/translate";
 import { newDoc } from "../src/features/estimateDoc";
+import { markUndo, type GuardedUndo } from "../src/data/undo";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const name = (p: PartQty) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;
@@ -132,13 +133,18 @@ describe("makeEstimate — through the core's store", () => {
         if (!active) return null;
         sent.push({ kind: c.kind, payload: c.payload });
         s.db = c.apply(s.db);
-        return () => undone.push(c.kind);
+        return markUndo(() => (undone.push(c.kind), true));
       },
-      leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: () => undone.push("target") }),
+      undoTogether: (us: readonly unknown[]) =>
+        markUndo(() => {
+          [...us].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
+          return true;
+        }),
+      leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: markUndo(() => (undone.push("target"), true)) }),
       saveEstimate: (e: (typeof saved)[number]) => {
         saved.push(e);
         s.db = { ...s.db, estimates: [...s.db.estimates.filter((x) => x.id !== e.id), { ...e, title: "T", totalCents: 0, status: "draft" } as Estimate] };
-        return () => undone.push("estimate");
+        return markUndo(() => (undone.push("estimate"), true));
       },
     };
     return { s, sent, saved, targets, undone };
@@ -170,10 +176,20 @@ describe("makeEstimate — through the core's store", () => {
     r.undo();
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
   });
+  it("#1279 (the director's review of 14bcd1f): an estimate of a place the client already has (its target's undo is NO_UNDO) — «Отменить» is not refused", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement({ ...M, leadId: null, propertyId: "p1" }))));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = ok(makeEstimate(h.s, input({ ...M, leadId: null, propertyId: "p1" })));
+    expect(r.undo()).toBe(true);
+    expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
+    // the estimate and the measurement back; the place's own «nothing to undo» changed nothing
+    expect(h.undone).toEqual(["estimate", K.mSave]);
+  });
   it("#1244 (the director's 3rd review): with the core's undoTogether — one «Отменить» of all three parts, all or none (too late → nothing undone)", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
     const asked: unknown[][] = [];
-    const st = { ...h.s, undoTogether: (undos: readonly unknown[]) => (asked.push([...undos]), () => false) };
+    const st = { ...h.s, undoTogether: (undos: readonly unknown[]) => (asked.push([...undos]), (() => false) as unknown as GuardedUndo) };
     // the harness's own functions write through h.s: keep the db in step
     Object.defineProperty(st, "db", { get: () => h.s.db });
     const r = ok(makeEstimate(st, input(M)));

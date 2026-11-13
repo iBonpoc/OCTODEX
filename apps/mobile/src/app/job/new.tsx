@@ -16,6 +16,7 @@ import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/cont
 import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { withAfter, type GuardedUndo } from "@/data/undo";
 
 const NEW = "__new";
 
@@ -89,7 +90,7 @@ export default function NewJob() {
     if (!ok) return;
     setSaved(true);
     haptics.success();
-    const undos: (() => void)[] = [];
+    const undos: GuardedUndo[] = [];
     let cid = client?.id;
     let pid = newAddress ? undefined : (propertyId as ID);
     if (newClient) {
@@ -106,25 +107,24 @@ export default function NewJob() {
     const job = store.addJob({ customerId: cid, propertyId: pid, title, description, jobTypeId: jobTypeId || undefined, serviceCategoryId: categoryId });
     undos.push(job.undo);
     // «Отменить» takes back everything this form made and leaves the job's screen (it would show an empty job)
-    const undoAll = () => {
-      // all or nothing (DS §15.2): too late for one part — nothing goes back, the toast says so
-      // nothing taken back (too late — false, or nothing to take back — undefined): the form stays as it is
-      const r = store.undoTogether(undos)();
-      if (r !== true) return r;
-      setNotifyId(null);
-      setCreatedId(null);
-      setSaved(false);
-      router.replace("/job/new");
-    };
+    // all or nothing (DS §15.2): too late for one part — nothing goes back, the toast says so; only when it went back the
+    // form starts over (made at the toast: the visit's undo joins first)
+    const undoAll = () =>
+      withAfter(store.undoTogether(undos), () => {
+        setNotifyId(null);
+        setCreatedId(null);
+        setSaved(false);
+        router.replace("/job/new");
+      });
     if (dating && when === "date") {
       const visitId = uid();
       undos.push(store.scheduleJob(job.id, { ...f.value, visitId }));
-      toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll);
+      toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll());
       setCreatedId(job.id);
       setNotifyId(visitId);
       return;
     }
-    toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll);
+    toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll());
     router.replace(`/job/${job.id}`);
   };
 

@@ -39,7 +39,7 @@ exports.run = async (h) => {
   const runs = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt), KEY);
   const lines = () => svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => Math.hypot(l.x2.baseVal.value - l.x1.baseVal.value, l.y2.baseVal.value - l.y1.baseVal.value)));
   /** two fingers pinching in about a point (CDP touch: the web has no other two-finger input) */
-  const pinchIn = async (cx, cy) => {
+  const pinchIn = async (cx, cy, to = 40, step = 5) => {
     const cdp = await p.context().newCDPSession(p);
     const pts = (d) => [{ x: cx - d, y: cy, id: 1 }, { x: cx + d, y: cy, id: 2 }];
     // fingers never land together: the first one has already moved a little when the second lands (on the phone the
@@ -47,7 +47,7 @@ exports.run = async (h) => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx - 150, y: cy, id: 1 }] });
     for (let d = 145; d >= 120; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx - d, y: cy, id: 1 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(120) });
-    for (let d = 115; d >= 40; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
+    for (let d = 115; d >= to; d -= step) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await cdp.detach();
     await p.waitForTimeout(400);
@@ -93,13 +93,22 @@ exports.run = async (h) => {
   await tid("draw-fit").getByRole("button").click();
   await p.waitForTimeout(300);
   const l0 = (await lines())[0];
-  await pinchIn(b.x + b.width / 2, b.y + b.height / 2);
+  // the farthest the canvas goes is the whole drawing in a quarter of the screen = half the «fit» size (#1281, П36), so the test
+  // first spreads (zoom in: room to go out), then pinches in twice (each ×⅓, the second ends at the limit), then once more
+  // the farthest the canvas goes is the whole drawing in a quarter of the screen = half the «fit» size (#1281, П36): two GENTLE pinches
+  // (many small steps, about ×0.7 each) stay above it, and the second one must still work; then a hard one ends at the limit
+  const mid = [b.x + b.width / 2, b.y + b.height / 2];
+  await pinchIn(mid[0], mid[1], 76, 2);
   const l1 = (await lines())[0];
-  h.expect(l1 < l0 * 0.8, `a pinch makes it smaller (${Math.round(l0)} → ${Math.round(l1)} px)`);
-  await pinchIn(b.x + b.width / 2, b.y + b.height / 2);
+  h.expect(l1 < l0 * 0.9 && l1 > l0 * 0.5, `a gentle pinch makes it smaller, above the limit (${Math.round(l0)} → ${Math.round(l1)} px)`);
+  await pinchIn(mid[0], mid[1], 76, 2);
   const l2 = (await lines())[0];
-  h.expect(l2 < l1 * 0.8, `…and a second pinch smaller again (${Math.round(l1)} → ${Math.round(l2)} px)`);
-  h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, "the pinch drew nothing (the first finger's stroke was dropped)");
+  h.expect(l2 < l1 * 0.92, `…and a second pinch smaller again (${Math.round(l1)} → ${Math.round(l2)} px)`);
+  await pinchIn(mid[0], mid[1]);
+  await pinchIn(mid[0], mid[1]);
+  const l3 = (await lines())[0];
+  h.expect(l3 >= l0 * 0.49 && l3 <= l0 * 0.51, `the farthest limit: half of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
+  h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, `the pinch drew nothing (the first finger's stroke was dropped): runs ${(await runs()).length}, length sheet ${await tid("quick-length").count()}`);
   await tid("draw-fit").getByRole("button").click();
   await p.waitForTimeout(300);
 

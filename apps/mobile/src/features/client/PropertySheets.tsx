@@ -14,6 +14,7 @@ import { Button, ChoiceChips, MultiChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
+import { type GuardedUndo } from "@/data/undo";
 
 /** a new property of this client, ready for the sheet */
 export const newProperty = (customerId: string): Property => ({
@@ -95,7 +96,7 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
   if (!value) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
   const dirty = notes !== (value.accessNotes ?? "") || gate !== (value.gateCode ?? "");
   const save = () => {
-    const undos: (() => void)[] = [];
+    const undos: GuardedUndo[] = [];
     if (notes !== (value.accessNotes ?? "")) undos.push(store.saveProperty({ ...value, accessNotes: notes }));
     if (gate !== (value.gateCode ?? "")) undos.push(store.setGateCode(value.id, gate));
     toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));

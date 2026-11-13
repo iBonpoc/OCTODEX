@@ -18,6 +18,7 @@ import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView } from "@/ui/surfaces";
+import { type GuardedUndo } from "@/data/undo";
 
 /** the checklist card of a visit at work (or an inspection on site) */
 export function ChecklistCard({ v, missing }: { v: Visit; missing: Missing }) {
@@ -198,7 +199,7 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
   const editHeld = useHeldSheet(editing); // the sheet goes out before it is unmounted (#1163)
   const [picking, setPicking] = useState(false);
-  const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  const say = (msg: string, undo: GuardedUndo) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const templates = templatesForVisit(v, store.db.checklistTemplates ?? []);
   const add = () => {
     if (!extra.trim()) return;
@@ -313,7 +314,7 @@ function EditItemSheet({ v, item, onClose, visible, onExited }: { v: Visit; item
     ...(required !== itemRequired(item) && canSetRequired(store.role, required) ? { required } : {}),
   };
   const dirty = Object.keys(next).length > 0;
-  const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  const say = (msg: string, undo: GuardedUndo) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const save = () => {
     onClose();
     if (dirty) say(t("chk3.edited"), store.editVisitItem(v.id, item.id, next));
