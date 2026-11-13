@@ -36,6 +36,8 @@ import { readLenFormat, readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
 import { measureSpec } from "./spec";
 import { drawingPdfHtml, drawingPdfName } from "./drawingPdf";
+import { shopFileName, shopHtml, shopJob, shopPagePt, shopSheets, type ShopPaper } from "./shop";
+import { saveShopPdf } from "./shop/savePdf";
 import { companyForPortal } from "@/cloud/portal";
 import { docDay } from "@/features/docPdf";
 import { saveEstimatePdf } from "@/features/estimatePdf";
@@ -189,6 +191,25 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
   };
 
+  // «Рабочие чертежи» (#1349): the plan sheets G-1 …, the schedules and the supplier's order — 11 × 17, or the same
+  // sheets reduced to Letter; the quantities are the estimate's (`parts`). The crew's are in the app's language, the
+  // supplier's order in English (spec 36 №19). A sheet with overlapping labels is still given, with a warning.
+  const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
+    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const tt = kind === "order" ? tFor("en") : t;
+    const r = readRules(settings);
+    const set = shopSheets(drawing, {
+      t: tt,
+      job: shopJob(company, { client: who, address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined, date: docDay(new Date().toISOString(), company.timezone) }),
+      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wastePct: r.wastePct, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
+      parts,
+      fmt,
+    });
+    const sheets = kind === "order" ? set.order : set.drawings;
+    if (set.problems.length) toast.show(t("mod.gutters.shop.problems", { n: set.problems.length }));
+    saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, who), paper), shopFileName(tt, kind, who), shopPagePt(sheets, paper)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+  };
+
   return (
     <>
       <View testID="view-screen" style={{ gap: space[4] }}>
@@ -244,6 +265,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               onOpen={() => (clientEst ? router.push(`/estimate/${clientEst.id}` as Href) : pdf("client"))}
             />
             <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} />
+            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" onOpen={() => shop("drawings", "ansiB")} />
+            <DocRow id="shop-letter" title={t("mod.gutters.shop.docLetter")} sub={t("mod.gutters.shop.docLetterSub")} openTestID="view-pdf-shop-letter" onOpen={() => shop("drawings", "letter")} />
+            <DocRow id="shop-order" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} />
           </Card>
           </View>
         ) : null}
