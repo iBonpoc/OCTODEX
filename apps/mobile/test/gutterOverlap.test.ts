@@ -47,6 +47,25 @@ describe("a line along a stretch of a gutter is no new gutter (#1318)", () => {
   });
 });
 
+describe("a touch is never exact: a line a few inches across the gutter still lies along it (#1318 review)", () => {
+  it("started 4″ across A in its middle, run along it with the same offset: refused with a finger's reach, not with 1″", () => {
+    const d = base();
+    expect(lineRefused(d, [200, 4], [300, 4], 1, 20)).toBe("overlap");
+    expect(lineRefused(d, [200, 4], [300, 4], 1)).toBeNull(); // no finger given: the strict 1″ (a ruler-exact line only)
+    expect(stroke(d, [200, 4], [300, 4])).toBe(d); // finishStroke gives its finger's reach (20)
+  });
+  it("the limit across: at most OVERLAP_ACROSS_MAX_IN (6″) however large the reach; a line 8″ beside is a parallel gutter", () => {
+    const d = base();
+    expect(lineRefused(d, [200, 5], [300, 5], 1, 500)).toBe("overlap");
+    expect(lineRefused(d, [200, 8], [300, 8], 1, 500)).toBeNull();
+  });
+  it("overlapsRun at the border of its tolerance: 0.9″ in, 1.1″ out (tolIn 1)", () => {
+    const d = base();
+    expect(overlapsRun(d, [100, 0.9], [200, 0.9], 1)).toBeDefined();
+    expect(overlapsRun(d, [100, 1.1], [200, 1.1], 1)).toBeUndefined();
+  });
+});
+
 describe("money: the material is not doubled", () => {
   it("the drawing after the refused line has the same parts as before", () => {
     const d = base();

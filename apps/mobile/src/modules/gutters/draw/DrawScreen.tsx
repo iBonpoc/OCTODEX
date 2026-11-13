@@ -496,7 +496,7 @@ export default function DrawScreen() {
       // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
       if (next === d && g.kind === "line") {
         const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
-        const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1);
+        const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1, tolIn());
         if (why) {
           haptics.warning();
           toast.show(t(why === "dup" ? "mod.gutters.draw.dupRun" : "mod.gutters.draw.overlapRun"));
