@@ -467,6 +467,8 @@ export const ru = {
   "est.signOnSite": "Подпись клиента на месте",
   "est.esign": "Клиент соглашается подписать электронно и получить копию по email (E-SIGN). Подрядчик подписывает договор следом.",
   "est.rescission": "Право отказа: 3 рабочих дня (65+ лет — 5, аварийные работы — 7). Суббота считается рабочим днём.",
+  // #1325: the contractor's Terms speak of arbitration (features/termsArbitration mentionsArbitration) — a warning, nothing blocked
+  "est.terms.arbitrationWarn": "Для арбитража в договоре на ремонт дома в Калифорнии нужен особый текст с инициалами клиента (B&P §7191) — согласуйте с юристом.",
   "est.signedToast": "Смета подписана: {name}",
   "est.depositDue": "Депозит к оплате",
   "est.recordDeposit": "Записать депозит",
