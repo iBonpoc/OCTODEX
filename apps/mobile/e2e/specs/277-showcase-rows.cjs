@@ -13,7 +13,10 @@ exports.run = async (h) => {
     const last = await vis("showcase-rows-last").innerText();
     h.expect(last.includes(name), `${id}: the last response is «${name}» (${last.replace(/\n/g, " ")})`);
   }
-  for (const id of ["row", "swipe", "section", "required", "profit", "catalog"]) {
+  // the swipe is live now (РС-7c2): on the web a hint about «⋯», not a «coming» stub; the rest still wait for their components
+  h.expect((await p.getByTestId("showcase-rows-swipe-soon").count()) === 0, "swipe: no stub any more");
+  h.expect(/«⋯»/.test(await vis("showcase-rows-swipe").innerText()), "swipe: the web names «⋯»");
+  for (const id of ["row", "section", "required", "profit", "catalog"]) {
     await vis(`showcase-rows-${id}-soon`).waitFor({ timeout: 3000 });
     h.expect((await vis(`showcase-rows-${id}`).innerText()).length > 20, `${id}: named, with its rule`);
   }
