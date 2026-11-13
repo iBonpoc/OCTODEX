@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { setCapOff } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
+import { computeGutterParts } from "@octo/estimating-engine";
 import { findCorners, runEnds, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
 
 /** #1273 «Без заглушки»: noCap[end] — the end has no cap, and none is counted */
@@ -26,5 +27,24 @@ describe("setCapOff", () => {
     const back = setCapOff(setCapOff(D, "a", 0, true), "a", 0, false);
     expect(back.runs[0]!.noCap).toEqual([false, false]);
     expect(capsOf(back)).toBe(2);
+  });
+});
+
+describe("a freed end (after «Разъединить угол») with «Без заглушки» (review of #1366)", () => {
+  // the end b was split from a corner: `openEnds` says «a cap here» — and «no cap» wins: it is the person's later, explicit choice
+  const R = { ...D.runs[0]!, attrs: { ...DEFAULT_RUN_ATTRS, openEnds: { b: true as const } } };
+  const F: Drawing = { runs: [R], downspouts: [] };
+  it("the freed end has a cap until «no cap» is chosen", () => {
+    expect(capsOf(F)).toBe(2);
+  });
+  it("«no cap» on a freed end: the end is without a cap in the measurement, and no end cap is counted for it (money)", () => {
+    const off = setCapOff(F, "a", 1, true);
+    expect(runEnds(off, findCorners(off))["a"]![1].kind).toBe("join");
+    expect(capsOf(off)).toBe(1);
+    const caps = (d: Drawing) => computeGutterParts(toMeasurement(d)).parts.filter((p) => /end_?cap/.test(p.key)).reduce((s, p) => s + Number(p.qty), 0);
+    expect(caps(off)).toBe(caps(F) - 1);
+  });
+  it("«with cap» again: the freed end has its cap back", () => {
+    expect(capsOf(setCapOff(setCapOff(F, "a", 1, true), "a", 1, false))).toBe(2);
   });
 });

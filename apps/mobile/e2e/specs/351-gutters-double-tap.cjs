@@ -78,11 +78,31 @@ exports.run = async (h) => {
   await tid("end-cap-off").click();
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt && e.geom.noCap && e.geom.noCap.some(Boolean)), KEY, { timeout: 8000 });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 1, null, { timeout: 5000 });
+  // closed and opened again: a double tap on the end WITHOUT a cap opens «Конец желоба» (not the gutter's properties) — «с заглушкой» is there (review of #1366)
+  await closeSheet();
+  await pastDoubleTap(p);
+  await canvasAt(p, capAt[0], capAt[1]);
+  await doubleTap(p, capAt[0], capAt[1]);
+  await tid("end-sheet").waitFor({ timeout: 5000 });
   await tid("end-cap-on").click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 2, null, { timeout: 5000 });
   await p.waitForFunction((k) => !((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt && e.geom.noCap && e.geom.noCap.some(Boolean)), KEY, { timeout: 8000 }); // «с заглушкой»: the mark is gone from the saved copy too
   await h.shot("end");
   await closeSheet();
+
+  // the same as rows of «⋯» (a screen reader has no double tap): «Конец желоба · L/R» of the picked gutter's free ends, and «Свойства» on the phone
+  const menuRow = async (re) => {
+    await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
+    await p.getByText(re).last().click();
+  };
+  await menuRow(/^Конец желоба · [LR]$/);
+  await tid("end-sheet").waitFor({ timeout: 5000 });
+  await closeSheet();
+  if (!wide) {
+    await menuRow(/^Свойства$/);
+    await tid("attr-panel").waitFor({ timeout: 5000 });
+    await closeSheet();
+  }
 
   // — a corner: a single tap picks, the second opens the corner's sheet
   await pastDoubleTap(p);

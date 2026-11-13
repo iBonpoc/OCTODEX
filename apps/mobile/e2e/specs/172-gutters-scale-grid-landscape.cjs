@@ -63,9 +63,11 @@ exports.run = async (h) => {
   // «вписать»: a double tap on the empty place (the header has no button, a phone on its side has no «⋯»)
   const sb = await tid("draw-surface").boundingBox();
   await canvasAt(p, sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
+  const pxBefore = await runLine();
   await p.mouse.click(sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
   await p.mouse.click(sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
-  await p.waitForTimeout(300);
+  // the drawing is fitted: its line changes size (the whole drawing now fills the canvas) — waited on, not slept on
+  await waitFor(async () => Math.abs((await runLine()) - pxBefore) > 2, `the double tap on the empty place fits the drawing (${Math.round(pxBefore)} px before)`);
   await h.shot("landscape");
   // the attributes in a sheet, as upright
   await openProps(p, { force: true }); // on its side: a double tap on the picked gutter opens its sheet
