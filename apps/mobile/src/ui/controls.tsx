@@ -471,6 +471,9 @@ export function TextField({
   onSubmit,
   autoFocus,
   selectOnFocus,
+  focusNow,
+  chain,
+  onFocus,
   field,
   error,
   testID,
@@ -495,6 +498,12 @@ export function TextField({
   autoFocus?: boolean;
   /** the text is selected when the field gets the focus: a typed digit replaces a prefilled value */
   selectOnFocus?: boolean;
+  /** a counter: each time it grows the field takes the focus AT ONCE (no sheet-opening wait) and selects its text — the next field of a chain; the keyboard stays up (#1316) */
+  focusNow?: number;
+  /** a field of a chain (feet → inches): the keyboard's key says «next» and keeps the focus on submit — no close-and-open of the keyboard (Android, #1316) */
+  chain?: boolean;
+  /** the field took the focus (a tap, or `focusNow`) */
+  onFocus?: () => void;
   /** a required field of a form (`useRequiredForm().field(id)`): its error, its place for the scroll, its focus */
   field?: FieldBinding;
   /** «что вписать» under the field: alert + text, the frame `status.bad` (DS §11 п.2; the form gives it through `field`) */
@@ -525,6 +534,13 @@ export function TextField({
   const shownError = error ?? field?.error;
   const tid = testID ?? field?.testID;
   useEffect(() => {
+    if (!focusNow) return;
+    input.current?.focus();
+    // all of the text selected AT ONCE (a digit typed right after replaces it): by hand on a phone, `select()` on the web's field
+    input.current?.setSelection?.(0, len.current);
+    (input.current as unknown as { select?: () => void } | null)?.select?.();
+  }, [focusNow]);
+  useEffect(() => {
     if (plan.focusAfterMs === null) return;
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
     return () => clearTimeout(id);
@@ -554,7 +570,7 @@ export function TextField({
         }}
         value={value}
         editable={!ro}
-        onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
+        onFocus={plan.selectByHand || onFocus ? () => { onFocus?.(); if (plan.selectByHand) setTimeout(selectAll, 0); } : undefined}
         onBlur={field || onBlurText ? () => { field?.blur(value); onBlurText?.(); } : undefined}
         inputAccessoryViewID={accessoryID}
         aria-disabled={ro || undefined}
@@ -575,11 +591,11 @@ export function TextField({
         spellCheck={f.correct ?? true}
         secureTextEntry={f.secure}
         maxLength={f.max}
-        returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
+        returnKeyType={multi ? "default" : chain ? "next" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
         autoFocus={plan.autoFocus}
         selectTextOnFocus={selectOnFocus}
-        submitBehavior={multi ? "newline" : "blurAndSubmit"}
+        submitBehavior={multi ? "newline" : chain ? "submit" : "blurAndSubmit"}
         accessibilityLabel={a11yLabel ?? label ?? placeholder}
         aria-invalid={shownError ? true : undefined}
         style={{
