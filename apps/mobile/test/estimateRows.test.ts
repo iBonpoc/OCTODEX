@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import type { CustomLine } from "@octo/estimating-engine";
 import type { CatalogItem } from "../src/data/types";
 import { catalogUnitPrice } from "../src/features/estimateDoc";
-import { applyPatch, canHide, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowFigures, rowProblems, rowSummary } from "../src/features/estimateRows";
+import { applyPatch, canHide, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, reinsertLine, replaceLine, restoreLine, rowFigures, rowProblems, rowSummary, rowActions, setHidden } from "../src/features/estimateRows";
 
 const line = (over: Partial<CustomLine> = {}): CustomLine => ({ id: "l1", name: "Gutter 5in", group: "material", quantity: "120", unit: "LF", unitPriceCents: 850, ...over });
 const money = (c: number) => `$${(c / 100).toFixed(2)}`;
@@ -223,5 +223,48 @@ describe("the row closes: one step for the screen and for «Сохранить»
   it("no open row: nothing changes", () => {
     const o = opt(line());
     expect(settleOpenRow(o, ctx({ openId: null }))).toMatchObject({ closed: true, decision: "none", option: o });
+  });
+});
+
+describe("row actions: menu, swipe and screen reader share one list (DS Б13, Р2)", () => {
+  it("an ordinary line: «⋯» has replace, duplicate, hide, move, delete (delete last); swipe left — replace, delete; right — hide", () => {
+    const a = rowActions(line(), {});
+    expect(a.menu).toEqual(["replace", "duplicate", "hide", "move", "delete"]);
+    expect(a.swipeLeft).toEqual(["replace", "delete"]);
+    expect(a.swipeRight).toEqual(["hide"]);
+  });
+  it("a hidden line offers «show», not «hide»", () => {
+    const a = rowActions(line({ unitPriceCents: 0, clientVisible: false }), {});
+    expect(a.menu).toContain("show");
+    expect(a.menu).not.toContain("hide");
+    expect(a.swipeRight).toEqual(["show"]);
+  });
+  it("a module's line is not moved by hand", () => {
+    expect(rowActions(line({ source: mark }), {}).menu).not.toContain("move");
+  });
+  it("the template editor keeps no hidden line: no hide / show", () => {
+    const a = rowActions(line(), { noHide: true });
+    expect(a.menu).not.toContain("hide");
+    expect(a.swipeRight).toEqual([]);
+  });
+  it("a signed estimate has no actions at all", () => {
+    expect(rowActions(line(), { locked: true })).toEqual({ menu: [], swipeLeft: [], swipeRight: [] });
+  });
+  it("hide: only a $0 line; a priced one is refused with a reason and nothing changes", () => {
+    const lines = [line({ id: "a", unitPriceCents: 0 }), line({ id: "b", unitPriceCents: 500 })];
+    expect(setHidden(lines, "b", "hide")).toBe("needZero");
+    const r = setHidden(lines, "a", "hide");
+    expect(r).not.toBe("needZero");
+    expect((r as typeof lines)[0]!.clientVisible).toBe(false);
+    expect((r as typeof lines)[1]).toBe(lines[1]);
+  });
+  it("show clears the mark (also on a priced line that came hidden)", () => {
+    const lines = [line({ id: "b", unitPriceCents: 500, clientVisible: false })];
+    const r = setHidden(lines, "b", "show") as typeof lines;
+    expect(r[0]!.clientVisible).toBeUndefined();
+  });
+  it("an unknown id changes nothing", () => {
+    const lines = [line()];
+    expect(setHidden(lines, "zzz", "hide")).toBe(lines);
   });
 });
