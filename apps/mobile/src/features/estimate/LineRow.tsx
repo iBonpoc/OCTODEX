@@ -72,23 +72,23 @@ export interface LineRowProps {
   unhiddenMark?: boolean;
   /** «Кратко» / «Подробно» — how a folded row looks (the device's choice) */
   view?: RowLook;
-  /** «Экран для клиента» (DS §8.3): no cost, no profit, no «расход» */
+  /** «Экран для клиента» (DS §8.3): no cost, no profit, no «расход». The mode itself comes with #1307 part «г»; the row is ready */
   clientScreen?: boolean;
   /** a finger went down on the open row: a scroll that starts there does not close it (DS §8.3) */
   onTouchOpen?: () => void;
 }
 
 /** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
-function Hatch({ color }: { color: string }) {
+function Hatch({ color, id }: { color: string; /** one pattern id per row: two equal ids on a web page draw only the first */ id: string }) {
   return (
     <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
       <Svg width="100%" height="100%">
         <Defs>
-          <Pattern id="est-hatch" patternUnits="userSpaceOnUse" width={space[2]} height={space[2]} patternTransform="rotate(45)">
+          <Pattern id={`est-hatch-${id}`} patternUnits="userSpaceOnUse" width={space[2]} height={space[2]} patternTransform="rotate(45)">
             <Line x1={0} y1={0} x2={0} y2={space[2]} stroke={color} strokeWidth={component.hairline * 2} />
           </Pattern>
         </Defs>
-        <Rect x={0} y={0} width="100%" height="100%" fill="url(#est-hatch)" />
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#est-hatch-${id})`} />
       </Svg>
     </View>
   );
@@ -243,7 +243,7 @@ function LineRowView(p: LineRowProps) {
     const trash = p.locked || !acts.menu.includes("delete") ? null : <Trash label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} testID={`est-trash-${l.id}`} />;
     const row = (inner: React.ReactNode) => (
       <View>
-        {hidden ? <Hatch color={c.track} /> : null}
+        {hidden ? <Hatch color={c.track} id={l.id} /> : null}
         <RowView style={{ alignItems: full ? "flex-start" : "center" }}>
           {inner}
           {trash}
@@ -334,9 +334,12 @@ function LineRowView(p: LineRowProps) {
       {figures ? (
         <View testID={`est-figures-${l.id}`} style={{ gap: space[1] }}>
           <T v="caption" tabular>
-            {isHidden(l)
-              ? t("est2.row.sumSpend", { total: money(0), spend: money(hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen }) ?? 0) })
-              : t("est.row.sum", { total: money(figures.total) })}
+            {(() => {
+              // a hidden line costs the client $0; «ваш расход» only for who sees costs (and a known cost)
+              const spend = isHidden(l) ? hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen }) : null;
+              if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: money(0), spend: money(spend) }) : t("est.row.sum", { total: money(0) });
+              return t("est.row.sum", { total: money(figures.total) });
+            })()}
             {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${figures.marginPct} %` : ""}` : ""}
             {l.optional ? ` · ${t("est2.row.optionalNote")}` : ""}
           </T>

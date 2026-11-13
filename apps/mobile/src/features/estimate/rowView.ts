@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 /**
@@ -13,16 +13,19 @@ export const parseRowView = (raw: string | null): RowView => (raw === '"full"' |
 
 export function useRowView(): [RowView, (v: RowView) => void] {
   const [view, setView] = useState<RowView>(DEFAULT_ROW_VIEW);
+  // a choice made before the device answered wins over what it read
+  const touched = useRef(false);
   useEffect(() => {
     let live = true;
     AsyncStorage.getItem(ROW_VIEW_KEY)
-      .then((raw) => live && setView(parseRowView(raw)))
+      .then((raw) => live && !touched.current && setView(parseRowView(raw)))
       .catch(() => {});
     return () => {
       live = false;
     };
   }, []);
   const set = (v: RowView) => {
+    touched.current = true;
     setView(v);
     AsyncStorage.setItem(ROW_VIEW_KEY, JSON.stringify(v)).catch(() => {});
   };

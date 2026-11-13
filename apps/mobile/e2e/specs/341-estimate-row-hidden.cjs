@@ -4,7 +4,8 @@
  * - a visible line at $0 carries «Нет цены» (a soft warning; «Сохранить» still works);
  * - hidden at $0 with a cost: «Скрыта от клиента», the hatch, the name pale; on the right — «расход $X» for the owner
  *   (who sees costs), $0 for the tech; the open row says «Сумма $0 · ваш расход $X»;
- * - a price typed in shows the line again: no «Скрыта», no «расход».
+ * - a price typed in shows the line again: no «Скрыта», no «расход», no «Нет цены»;
+ * - «На выбор клиента»: the mark on the folded row, «на выбор клиента, в итог не входит» in the open one.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -46,6 +47,11 @@ exports.run = async (h) => {
   await tid(`est-line-${id}`).waitFor({ timeout: 8000 });
   const right = await tid(`est-sum-${id}`).innerText();
   h.expect(!/расход/.test(right) && /\$0\b/.test(right), `the tech: $0, no «расход» (${right})`);
+  // open for the tech: «Сумма $0», no «ваш расход»
+  await tid(`est-line-${id}`).click();
+  const techFig = await tid(`est-figures-${id}`).innerText();
+  h.expect(/\$0\b/.test(techFig) && !/расход/.test(techFig), `the tech's open hidden row: no «ваш расход» (${techFig})`);
+  await line.fold(h);
   await h.seed("octo.role.v1", "director");
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid(`est-line-${id}`).waitFor({ timeout: 8000 });
@@ -57,4 +63,13 @@ exports.run = async (h) => {
   await line.fold(h);
   h.expect((await count(`[data-testid="est-hidden-${id}"]`)) === 0, "shown again: no «Скрыта от клиента»");
   h.expect(!/расход/.test(await tid(`est-sum-${id}`).innerText()), "shown again: no «расход»");
+  h.expect((await count(`[data-testid="est-noprice-${id}"]`)) === 0, "a line with a price: no «Нет цены»");
+
+  // «На выбор клиента»: the mark on the folded row, «в итог не входит» in the open one
+  await tid(`est-line-${id}`).click();
+  await tid(`est-more-${id}`).click();
+  await p.getByRole("switch", { name: "На выбор клиента" }).first().click();
+  h.expect(/на выбор клиента, в итог не входит/.test(await tid(`est-figures-${id}`).innerText()), "the open row: «на выбор клиента, в итог не входит»");
+  await line.fold(h);
+  h.expect(/На выбор клиента/.test(await tid(`est-optional-${id}`).innerText()), "the folded row: «На выбор клиента»");
 };
