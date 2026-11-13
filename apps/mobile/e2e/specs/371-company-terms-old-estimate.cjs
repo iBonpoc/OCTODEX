@@ -48,7 +48,7 @@ exports.run = async (h) => {
   await h.go(`/estimate/new?id=${old.id}`);
   await tid("est-terms-row").waitFor({ timeout: 8000 });
   const oldRow = await tid("est-terms-row").innerText();
-  h.expect(/Arbitraje vinculante/.test(oldRow) && /Español/.test(oldRow), `an old estimate: the company's default in its client's language (${oldRow})`);
+  h.expect(/Arbitraje vinculante/.test(oldRow) && (await tid("est-terms-lang").innerText()).trim() === "ES", `an old estimate: the company's default in its client's language (${oldRow})`);
   await tid("est-terms-row").click();
   await tid("est-terms-field").waitFor({ timeout: 3000 });
   await tid("est-nt-done").getByRole("button").click();

@@ -14,7 +14,7 @@ import { mentionsArbitration } from "@/features/termsArbitration";
 import { firstWords, termsShown, termsToWrite } from "./notesTerms";
 
 /** «согласуйте с юристом» under a Terms text that speaks of arbitration (#1325: a warning only, nothing is blocked) */
-export function ArbitrationWarn({ text, testID }: { text: string | undefined; testID?: string }) {
+export function ArbitrationWarn({ text, testID, short }: { text: string | undefined; testID?: string; short?: boolean }) {
   const { t } = useI18n();
   const { c } = useTheme();
   if (!mentionsArbitration(text)) return null;
@@ -23,7 +23,7 @@ export function ArbitrationWarn({ text, testID }: { text: string | undefined; te
       <RowView style={{ alignItems: "flex-start", gap: space[1] }}>
         <Icon name="alert" s={size.iconSm} color={c.status.warn.text} />
         <T v="caption" tone="warn" style={{ flex: 1 }}>
-          {t("est.terms.arbitrationWarn")}
+          {t(short ? "est.nt.arbShort" : "est.terms.arbitrationWarn")}
         </T>
       </RowView>
     </View>
@@ -79,11 +79,19 @@ export function NotesTerms(p: {
             <View testID="est-terms-row">
               <ListRow
                 title={t("est.nt.terms")}
-                subtitle={`${firstWords(terms.text) ?? empty} · ${DOC_LANG_LABEL[p.lang]}`}
+                subtitle={firstWords(terms.text) ?? empty}
+                // the language never cut with the text (design review): a short mark before the chevron, read out in full
+                right={
+                  <View accessibilityLabel={DOC_LANG_LABEL[p.lang]} testID="est-terms-lang">
+                    <T v="caption" tone="mut">
+                      {p.lang.toUpperCase()}
+                    </T>
+                  </View>
+                }
                 onPress={p.locked ? undefined : () => show("terms")}
               />
             </View>
-            <ArbitrationWarn text={terms.text} testID="est-terms-arb" />
+            <ArbitrationWarn text={terms.text} testID="est-terms-arb" short />
           </>
         )}
       </Card>

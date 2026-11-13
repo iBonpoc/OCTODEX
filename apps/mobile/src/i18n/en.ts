@@ -4173,9 +4173,10 @@ export const en: Dict = {
   "est.nt.empty": "Not filled in",
   "est.nt.notesHint": "What the work includes, timing, what the client should do",
   "est.nt.termsHint": "Warranty, cleanup, site access",
+  "est.nt.arbShort": "Arbitration — check with a lawyer",
   "est.nt.lang": "Goes to the client in their language: {lang}",
   "co.tl.title": "Terms for the client",
-  "co.tl.hint": "A new estimate takes the terms in the client's language; if there are none, the English ones.",
+  "co.tl.hint": "A new estimate takes the terms in the client's language; if there are none in it, the English ones go.",
   "co.tl.field": "Terms — {lang}",
   "co.tl.add": "Add: {lang}",
 };

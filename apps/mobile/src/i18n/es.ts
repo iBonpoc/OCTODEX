@@ -4173,9 +4173,10 @@ export const es: Dict = {
   "est.nt.empty": "Sin completar",
   "est.nt.notesHint": "Qué incluye el trabajo, plazos, qué debe hacer el cliente",
   "est.nt.termsHint": "Garantía, limpieza, acceso al lugar",
+  "est.nt.arbShort": "Arbitraje — consúltelo con un abogado",
   "est.nt.lang": "Se envía al cliente en su idioma: {lang}",
   "co.tl.title": "Términos para el cliente",
-  "co.tl.hint": "Un presupuesto nuevo toma los términos en el idioma del cliente; si no los hay, los de inglés.",
+  "co.tl.hint": "Un presupuesto nuevo toma los términos en el idioma del cliente; si no los hay, van los de inglés.",
   "co.tl.field": "Términos — {lang}",
   "co.tl.add": "Añadir: {lang}",
 };

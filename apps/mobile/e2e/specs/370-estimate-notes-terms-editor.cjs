@@ -36,7 +36,7 @@ exports.run = async (h) => {
   await rowSays("est-terms-row", /Neto 15/);
   h.expect((await p.locator('[data-testid^="est-line-"]').count()) === 1, "the template's line came");
   await line.fold(h);
-  h.expect(/Español/.test(await tid("est-terms-row").innerText()), "the language the client reads them in");
+  h.expect((await tid("est-terms-lang").innerText()).trim() === "ES", "the language the client reads them in");
   h.expect(/Не заполнено/.test(await tid("est-notes-row").innerText()), "Notes: nothing yet");
   await h.shot("new");
 
@@ -45,7 +45,7 @@ exports.run = async (h) => {
   await tid("est-client-pick-p1").click();
   await sheetGone(p);
   await rowSays("est-terms-row", /Net 15/);
-  h.expect(/English/.test(await tid("est-terms-row").innerText()), "English for this client");
+  h.expect((await tid("est-terms-lang").innerText()).trim() === "EN", "English for this client");
 
   // the text edited: it stays when the client changes; arbitration — the warning
   await tid("est-terms-row").click();

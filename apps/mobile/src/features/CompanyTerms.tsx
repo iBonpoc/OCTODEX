@@ -30,12 +30,16 @@ export function CompanyTerms({ est, onChange }: { est: Company["estimate"]; onCh
       </T>
       {shown.map((l) => (
         <View key={l} testID={`co-terms-${l}`} style={{ gap: space[1] }}>
+          {/* the language above its field, on the screen (design review: two fields with no name get mixed up) */}
+          <T v="caption" w="semibold">
+            {DOC_LANG_LABEL[l]}
+          </T>
           <TextField type="note" label={t("co.tl.field", { lang: DOC_LANG_LABEL[l] })} value={valueOf(l)} onChangeText={(v) => write(l, v)} />
           <ArbitrationWarn text={valueOf(l)} testID={`co-terms-arb-${l}`} />
         </View>
       ))}
       {ro ? null : (
-        <RowView style={{ flexWrap: "wrap" }}>
+        <RowView style={{ flexWrap: "wrap", gap: space[3] }}>
           {DOC_LANGS.filter((l) => !shown.includes(l)).map((l) => (
             <View key={l} testID={`co-terms-add-${l}`}>
               <Button label={t("co.tl.add", { lang: DOC_LANG_LABEL[l] })} icon="plus" variant="ghost" size="sm" onPress={() => setAdded((a) => [...a, l])} />
