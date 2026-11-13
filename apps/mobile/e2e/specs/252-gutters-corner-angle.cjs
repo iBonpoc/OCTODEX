@@ -1,5 +1,5 @@
 /**
- * e2e 252 — #933: the corner's chip on the canvas says the angle between the walls («внутр. 90°»). Every view.
+ * e2e 252 — #933: the corner's chip on the canvas says the angle between the walls («90°», without the kind word, #1275). Every view.
  * - two gutters at a right angle → one corner chip with «90°»;
  * - a skew one (a 45° turn) → «135°».
  * Finds things by id / testID; waits on what it checks.
