@@ -243,11 +243,22 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   }, [keys, abort]);
   // the screen has drawn the folded list (new rows): now every row stands where it will stay while the row is carried
   const pendingFold = useRef<string | null>(null);
+  /** the row let go, where the finger was in the window and its point on the row: once the list unfolds, the row stays under it */
+  const pendingLand = useRef<{ key: string; y: number; at: number } | null>(null);
   /** the held row whose folded list is measured: only then its place is looked for */
   const settled = useRef<string | null>(null);
   /** the held row whose list has folded and settled (a mark for the tests: `sort-folded`) */
   const [folded, setFolded] = useState<string | null>(null);
   useEffect(() => {
+    const land = pendingLand.current;
+    if (land) {
+      pendingLand.current = null;
+      // two frames: the unfolded list is drawn and laid out
+      requestAnimationFrame(() => requestAnimationFrame(() => nodes.current.get(land.key)?.measureInWindow((_x: number, y: number, _w: number, h: number) => {
+        const dy = y + land.at * h - land.y;
+        if (Math.abs(dy) > 1) latest.current.scroll?.scrollBy(dy);
+      })));
+    }
     const k = pendingFold.current;
     if (!k || activeKey.current !== k) return;
     pendingFold.current = null;
@@ -359,6 +370,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // let go where it was taken: nothing moved — no «medium», no move, no toast
         // (let go before the folded list was measured: its place is not known — nothing moves)
         const d = !canceled && settled.current === key && r && inside && r.p !== fromSlot.current ? resolveDrop(rs, key, r.p) : null;
+        // where the finger let the row go: the row stays under it when the list unfolds (DS §14.6 «Приземление»)
+        const landAt = absY.current;
         settled.current = null;
         setState({ active: null, to: 0, from: 0, h: 0 });
         hold?.(null);
@@ -369,6 +382,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
         // refused — «warning» (never «medium» for a move that did not happen)
         const res: DropResult = d ? drop(d) : "same";
+        if (res === "moved" && landAt !== null) pendingLand.current = { key, y: landAt, at: liftAt.current };
         const feel = feelOf(res);
         if (feel) haptics[feel]();
         // moved: the row's offset stays until the new order is drawn (zeroing it first showed the row at its old place for a frame)

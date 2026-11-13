@@ -77,6 +77,9 @@ export interface LineRowProps {
   clientScreen?: boolean;
   /** a finger went down on the open row: a scroll that starts there does not close it (DS §8.3) */
   onTouchOpen?: () => void;
+  /** the swipe hint of the first estimates plays on this row (DS §8.11): the screen gives it to the first line only */
+  swipeHint?: boolean;
+  onSwipeHintPlayed?: () => void;
 }
 
 /** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
@@ -278,7 +281,7 @@ function LineRowView(p: LineRowProps) {
         : row(body);
     }
     return (
-      <SwipeRow left={acts.swipeRight.map(swipeBtn)} right={acts.swipeLeft.map(swipeBtn)} onAct={(k) => p.api.action(l.id, k as RowAct)}>
+      <SwipeRow left={acts.swipeRight.map(swipeBtn)} right={acts.swipeLeft.map(swipeBtn)} onAct={(k) => p.api.action(l.id, k as RowAct)} hint={p.swipeHint} onHintPlayed={p.onSwipeHintPlayed}>
         {row(body)}
       </SwipeRow>
     );

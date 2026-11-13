@@ -63,6 +63,14 @@ exports.run = async (h) => {
   await p.getByTestId(`sort-flash-l:${d}`).first().waitFor({ state: "attached", timeout: 2000 });
   // «Подробно» again
   await tid(`est-times-${a}`).waitFor({ timeout: 3000 });
+  // the list unfolded and the landed row is still under the pointer (the page scrolled to keep it)
+  const py = top + 4;
+  await p.waitForFunction(([id, y]) => {
+    const r = document.querySelector(`[data-testid="est-line-${id}"]`)?.getBoundingClientRect();
+    return r && r.top - 24 <= y && y <= r.bottom + 24;
+  }, [d, py], { timeout: 2000 }).catch(() => {});
+  const land = await p.getByTestId(`est-line-${d}`).first().boundingBox();
+  h.expect(land.y - 24 <= py && py <= land.y + land.height + 24, `after the unfold the row is under the pointer (row ${Math.round(land.y)}–${Math.round(land.y + land.height)}, pointer ${Math.round(py)})`);
   h.expect((await count('[data-testid="toast-undo"]')) === 1, "the toast has «Вернуть»");
   await h.shot("landed");
 };
