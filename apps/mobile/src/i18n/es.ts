@@ -3063,6 +3063,7 @@ export const es: Dict = {
   "mod.gutters.attr.quickCancel": "Cancelar",
   "mod.gutters.attr.next": "Siguiente",
   "mod.gutters.attr.fracMore": "1/16",
+  "mod.gutters.attr.fracMoreA11y": "Dieciseisavos",
   "mod.gutters.attr.unit.ftin": "pies + pulg",
   "mod.gutters.attr.unit.in": "pulgadas",
   "mod.gutters.attr.unit.mm": "mm",

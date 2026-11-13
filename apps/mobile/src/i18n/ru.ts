@@ -3063,6 +3063,7 @@ export const ru = {
   "mod.gutters.attr.quickCancel": "Отменить",
   "mod.gutters.attr.next": "Далее",
   "mod.gutters.attr.fracMore": "1/16",
+  "mod.gutters.attr.fracMoreA11y": "Шестнадцатые",
   "mod.gutters.attr.unit.ftin": "фут + дюйм",
   "mod.gutters.attr.unit.in": "дюймы",
   "mod.gutters.attr.unit.mm": "мм",

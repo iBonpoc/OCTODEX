@@ -20,7 +20,7 @@ import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { FracPicker } from "./FracPicker";
-import { inchesComplete, nextStage, type EntryStage } from "./lengthEntry";
+import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -238,12 +238,13 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
   const [e16, setE16] = useState(f0.e16);
   const [one, setOne] = useState(f0.one);
   const [bad, setBad] = useState(false);
-  // the chain without «Done» (#1316): feet → inches → the fraction by buttons; `inKey` remounts the inches field so that it takes the focus
+  // the chain without «Done» (#1316): feet → inches → the fraction by buttons; the stage follows the focus (a tap on the inches is «in» too);
+  // `inFocus` is a counter: «Далее» puts the focus into the inches AT ONCE (digits typed right after it never go into the feet)
   const [stage, setStage] = useState<EntryStage>("ft");
-  const [inKey, setInKey] = useState(0);
+  const [inFocus, setInFocus] = useState(0);
   const goNext = () => {
     if (stage === "frac") return;
-    if (stage === "ft") setInKey((n) => n + 1);
+    if (stage === "ft") setInFocus((n) => n + 1);
     setStage(nextStage(stage));
   };
   // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
@@ -282,11 +283,11 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
         <>
           <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
-              <TextField type="integer" value={ft} onChangeText={edit(setFt)} label={t(k("ft"))} onSubmit={goNext} autoFocus selectOnFocus />
+              <TextField type="integer" value={ft} onChangeText={edit(setFt)} label={t(k("ft"))} onSubmit={goNext} onFocus={() => setStage("ft")} chain autoFocus selectOnFocus />
             </View>
             <T v="body" tone="mut">{t(k("ft"))}</T>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
-              <TextField key={`in${inKey}`} type="number" value={inc} onChangeText={(v) => { edit(setInc)(v); if (inchesComplete(v)) setStage("frac"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} autoFocus={inKey > 0} selectOnFocus />
+              <TextField type="number" value={inc} onChangeText={(v) => { edit(setInc)(v); const big = inchesTooBig(v); setBad(big); setStage(inchesComplete(v) && !big ? "frac" : "in"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} onFocus={() => setStage((s0) => (s0 === "frac" ? s0 : "in"))} focusNow={inFocus} chain selectOnFocus />
             </View>
             <FracText value={e16} testID="quick-length-frac" />
             <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />

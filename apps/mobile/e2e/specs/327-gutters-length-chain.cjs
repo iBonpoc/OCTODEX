@@ -56,14 +56,30 @@ exports.run = async (h) => {
   await tid("quick-length").waitFor({ timeout: 5000 });
   await focused("quick-length-ft");
   await field("quick-length-ft").fill("12");
-  await p.keyboard.press("Enter"); // the keyboard's own «next» goes on as «Далее» does
-  await focused("quick-length-in");
+  // «Далее» and the digits at once (no waiting for the focus): they go into the inches, never into the feet («127»)
+  await tid("quick-length-next").getByRole("button").click();
   await p.keyboard.type("7");
-  await tid("quick-length-fracs").getByRole("button", { name: "1/16", exact: true }).click();
+  h.expect((await field("quick-length-ft").inputValue()) === "12" && (await field("quick-length-in").inputValue()) === "7", `the digits after «Далее» are the inches (ft ${await field("quick-length-ft").inputValue()}, in ${await field("quick-length-in").inputValue()})`);
+  await tid("quick-length-fracs-more").click();
   await tid("quick-length-fracs-sixteenths").waitFor({ timeout: 5000 });
   await tid("quick-length-fracs").getByRole("radio", { name: "11/16", exact: true }).click();
   await tid("quick-length-apply").getByRole("button").click();
   await closed("after «Применить» (11/16)");
   await p.waitForFunction(([k]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && e.geom?.lengthIn === 151.6875), [KEY], { timeout: 8000 });
   h.expect((await lengths()).includes(151.6875), `12′ 7 11/16″ = 151.6875″ in the store (${JSON.stringify(await lengths())})`);
+
+  // the stage follows the focus: a tap on the inches directly is «inches» too («Далее» stays); 15″ is wrong at once; 0″ goes on to the fraction by itself
+  await stroke([b.x + b.width * 0.08, b.y + b.height * 0.7], [b.x + b.width * 0.4, b.y + b.height * 0.7]);
+  await tid("quick-length").waitFor({ timeout: 5000 });
+  await focused("quick-length-ft");
+  await field("quick-length-in").focus(); // a tap on the inches (the focus is what the stage follows)
+  await focused("quick-length-in");
+  h.expect((await tid("quick-length-next").count()) === 1, "a tap on the inches: still «Далее» (the fraction is not the stage yet)");
+  await p.keyboard.type("15");
+  await tid("quick-length-bad").waitFor({ timeout: 5000 });
+  await p.keyboard.press("Backspace");
+  await p.keyboard.press("Backspace");
+  await p.keyboard.type("0");
+  await tid("quick-length-next").waitFor({ state: "detached", timeout: 5000 }); // 0″ needs no «Далее»: the fraction is the step
+  await tid("quick-length-bad").waitFor({ state: "detached", timeout: 5000 });
 };
