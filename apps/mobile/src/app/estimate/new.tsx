@@ -33,6 +33,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
+import { localUndo, withAfter } from "@/data/undo";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -201,7 +202,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (!line) return;
     setOption((o) => ({ ...o, lines: dropLine(o.lines, id) }));
     setOpenId((cur) => (cur === id ? null : cur));
-    toast.show(t("est.row.deleted"), () => setOption((o) => ({ ...o, lines: reinsertLine(o.lines, line, index) })));
+    toast.show(t("est.row.deleted"), localUndo(() => setOption((o) => ({ ...o, lines: reinsertLine(o.lines, line, index) }))));
   };
   // what is wrong in the open row now: the line's own data and the number fields that hold text which is not a number
   const problemsOf = (l: CustomLine) => {
@@ -240,13 +241,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (r.newItems.length) {
       const back = store.undoTogether(writeCatalog(r.newItems));
       const ids = new Set(r.newItems.map((i) => i.id));
-      toast.show(t("est.row.catalogAdded"), () => {
-        // too late for one of them: the lines keep their items
-        const done = back();
-        if (done !== true) return done;
-        setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.catalogItemId && ids.has(x.catalogItemId) ? { ...x, catalogItemId: undefined } : x)) }));
-        return true;
-      });
+      // too late for one of them: the lines keep their items
+      toast.show(
+        t("est.row.catalogAdded"),
+        withAfter(back, () => setOption((o) => ({ ...o, lines: o.lines.map((x) => (x.catalogItemId && ids.has(x.catalogItemId) ? { ...x, catalogItemId: undefined } : x)) }))),
+      );
     }
     return true;
   };
@@ -283,7 +282,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       setCheckPrice((ids) => ids.filter((x) => x !== target));
       setWantCatalog((ids) => ids.filter((x) => x !== target));
       if (old.clientVisible === false && replaceLine(old, made[0]!).clientVisible === undefined) toast.show(t("est.row.unhiddenToast"));
-      toast.show(t("est.row.replaced"), () => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) })));
+      toast.show(t("est.row.replaced"), localUndo(() => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) }))));
       return;
     }
     setOption((o) => ({ ...o, lines: [...o.lines, ...made] }));
@@ -307,7 +306,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       setFocusRow({ id, field: "name" });
       setOpenId(id);
     };
-    toast.show(t("est.row.replaced"), () => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) })));
+    toast.show(t("est.row.replaced"), localUndo(() => setOption((o) => ({ ...o, lines: restoreLine(o.lines, old) }))));
   };
   const rowAction = (id: string, a: RowAction) => {
     if (a === "delete") return removeLine(id);
@@ -326,14 +325,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const d = duplicateLine(option.lines, id);
     if (!d) return;
     setOption((o) => ({ ...o, lines: duplicateLine(o.lines, id, () => d.copyId)?.lines ?? o.lines }));
-    toast.show(t("est.row.duplicated"), () => setOption((o) => ({ ...o, lines: dropLine(o.lines, d.copyId) })));
+    toast.show(t("est.row.duplicated"), localUndo(() => setOption((o) => ({ ...o, lines: dropLine(o.lines, d.copyId) }))));
   };
   /* ---- sections (DS §8.5): every change undoes itself only (the layout it changed), never the whole document ---- */
   const secTitle = (x: EstimateSection) => x.title ?? (x.kind && x.kind !== "module" ? t(`est.sec.${x.kind}` as DictKey) : t("est.sec.untitled"));
   // «Вернуть» takes back this change only (what the person did to the layout meanwhile stays — #1227, #1231, #1241)
   const showUndo = (text: DictKey, before: Opt, after: Opt) => {
-    const undo = layoutUndo(before, after);
-    toast.show(t(text), () => setOption((o) => undo(o)));
+    const restore = layoutUndo(before, after);
+    toast.show(t(text), localUndo(() => setOption((o) => restore(o))));
   };
   const addSectionBtn = (parentId?: string) => {
     if (signed || !leaveRow()) return;
@@ -365,14 +364,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const index = option.lines.findIndex((l) => l.id === lineId);
     const line = option.lines[index];
     if (!line) return;
-    const back = () => setOption((o) => putBack(o, lineId, { sectionId: line.sectionId, index }));
+    // the open document only (not saved yet): the screen's own state
+    const back = localUndo(() => setOption((o) => putBack(o, lineId, { sectionId: line.sectionId, index })));
     setMoveFor(null);
     if (key === "__up__" || key === "__down__") {
       const dir = key === "__up__" ? -1 : 1;
       const next = shiftLine(option, lineId, dir);
       if (next === option) return;
       setOption(() => next);
-      return void toast.show(t("est.sec.moved"), () => setOption((o) => shiftLine(o, lineId, (dir * -1) as -1 | 1)));
+      return void toast.show(t("est.sec.moved"), localUndo(() => setOption((o) => shiftLine(o, lineId, (dir * -1) as -1 | 1))));
     }
     const r = moveLine(option, lineId, { sectionId: key === "__none__" ? undefined : key });
     // only a real refusal speaks; «moved» is said only after a move
@@ -397,7 +397,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // it came to the same order (the drop at the end of its own section, a slot just above itself…): not a move
       if (sameLayout(option, r.option)) return "same";
       setOption(() => r.option);
-      toast.show(t("est.sec.moved"), () => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index })));
+      toast.show(t("est.sec.moved"), localUndo(() => setOption((o) => putBack(o, d.id, { sectionId: line.sectionId, index }))));
       return "moved";
     }
     const all = option.sections ?? [];
@@ -409,10 +409,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // «Вернуть» puts this section (with its subsections) back before the one that stood after its family — nothing else changes
     const family = new Set([d.id, ...all.filter((x) => x.parentId === d.id).map((x) => x.id)]);
     const next = all.slice(all.findIndex((x) => x.id === d.id) + 1).find((x) => !family.has(x.id) && (x.parentId ?? undefined) === (was.parentId ?? undefined));
-    toast.show(t("est.sec.moved"), () => setOption((o) => {
+    toast.show(t("est.sec.moved"), localUndo(() => setOption((o) => {
       const back = moveSection(o, d.id, { parentId: was.parentId, beforeId: next?.id });
       return back.ok ? back.option : o;
-    }));
+    })));
     return "moved";
   };
   // the rows are memoised: they get ONE object whose functions never change and always call the latest ones
@@ -460,7 +460,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const prev = doc;
     setDoc((d) => ({ ...d, options: d.options.filter((o) => o.id !== option.id) }));
     setCur(0);
-    toast.show(t("ue.optionRemoved"), () => setDoc(prev));
+    toast.show(t("ue.optionRemoved"), localUndo(() => setDoc(prev)));
   };
   const setRecommended = (on: boolean) =>
     setDoc((d) => ({ ...d, options: d.options.map((o) => ({ ...o, recommended: o.id === option.id ? on : on ? false : o.recommended })) }));
