@@ -38,6 +38,8 @@ interface Ctl {
   scrolled: ReturnType<typeof useSharedValue<number>>;
   /** counts the drops that moved something */
   snap: number;
+  /** the row that has just landed in a new place: it flashes (`durSlow`, DS §14.6) */
+  flash: string | null;
   layout: (key: string, y: number, h: number) => void;
   node: (key: string, n: ComponentRef<typeof View> | null) => void;
   begin: (key: string, absY: number) => void;
@@ -47,6 +49,13 @@ interface Ctl {
   canDrag: (key: string) => boolean;
 }
 const SortCtx = createContext<Ctl | null>(null);
+
+/**
+ * The handle «≡» of the OPEN line, drawn by the line itself in its header (DS §8.3: «˄ Свернуть» … корзина, «⋯», «≡»), not in a
+ * column beside the row — the row's fields then take the whole width. `null` outside an open line.
+ */
+const HandleCtx = createContext<ReactNode>(null);
+export const useRowHandle = (): ReactNode => useContext(HandleCtx);
 
 export type { DropResult };
 
@@ -104,6 +113,11 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   const activeKey = useRef<string | null>(null);
   /** counts the drops that moved something: the rows stand where the new order puts them, at once, no sliding from ±h */
   const [snap, setSnap] = useState(0);
+  const [flash, setFlash] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
   const [, bump] = useState(0);
   /** the list folded when the row was lifted: how far the held row's top moved up (the row is kept under the finger by it) */
   const foldShift = useRef(0);
@@ -256,6 +270,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
       dragY,
       scrolled,
       snap,
+      flash,
       layout: (key, y, h) => void layouts.current.set(key, { y, h }),
       node: (key, n) => void nodes.current.set(key, n),
       canDrag: (key) => !latest.current.locked && !!keys.includes(key),
@@ -357,12 +372,18 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         const feel = feelOf(res);
         if (feel) haptics[feel]();
         // moved: the row's offset stays until the new order is drawn (zeroing it first showed the row at its old place for a frame)
-        if (res === "moved") setSnap((n) => n + 1);
-        else dragY.value = reduce ? 0 : withSpring(0, motion.spring);
+        if (res === "moved") {
+          setSnap((n) => n + 1);
+          // the row landed: it flashes where it stands now, under the finger (a frame that fades — no movement, so also under
+          // reduced motion, as the frame of the held row stays there, DS §14.6)
+          setFlash(key);
+          if (flashTimer.current) clearTimeout(flashTimer.current);
+          flashTimer.current = setTimeout(() => setFlash((f) => (f === key ? null : f)), motion.durSlow);
+        } else dragY.value = reduce ? 0 : withSpring(0, motion.spring);
         lift.value = reduce ? 0 : withSpring(0, motion.spring);
       },
     }),
-    [keys, state, snap, lift, held, activeSV, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, afterFold, insets.top, insets.bottom, winH],
+    [keys, state, snap, flash, lift, held, activeSV, dragY, scrolled, lock, reduce, refresh, place, stop, measureAll, afterFold, insets.top, insets.bottom, winH],
   );
 
   // the bar: where the held row will stand
@@ -481,24 +502,38 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
     };
   });
 
+  // the landed row flashes: a frame `acc` that fades out over `durSlow`
+  const fl = useSharedValue(0);
+  const flashing = ctl.flash === k;
+  useEffect(() => {
+    if (!flashing) return;
+    fl.value = 1;
+    fl.value = withTiming(0, { duration: motion.durSlow, easing: Easing.out(Easing.cubic) });
+  }, [flashing, fl]);
+  const flashStyle = useAnimatedStyle(() => ({ opacity: fl.value }));
+
   const canDrag = dragKind !== null && ctl.canDrag(k);
+  // an open LINE draws its handle in its own header; any other row has it in a column on the right
+  const inHeader = open && k.startsWith("l:");
+  const handleEl = canDrag ? (
+    <GestureDetector gesture={handle}>
+      <View testID={`sort-handle-${k}`} accessibilityRole="button" accessibilityLabel={t("est.sec.drag")} style={inHeader ? { width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}>
+        <Icon name="menu" s={size.iconMd} color={c.mut} />
+      </View>
+    </GestureDetector>
+  ) : null;
   const body = (
     <View style={{ flex: 1 }} testID={`sort-row-${k}`}>
-      {children}
+      {inHeader ? <HandleCtx.Provider value={handleEl}>{children}</HandleCtx.Provider> : children}
     </View>
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
-        {canDrag ? (
-          <GestureDetector gesture={handle}>
-            <View testID={`sort-handle-${k}`} accessibilityRole="button" accessibilityLabel={t("est.sec.drag")} style={{ width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}>
-              <Icon name="menu" s={size.iconMd} color={c.mut} />
-            </View>
-          </GestureDetector>
-        ) : null}
+        {inHeader ? null : handleEl}
       </View>
+      {flashing ? <Animated.View pointerEvents="none" testID={`sort-flash-${k}`} style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, flashStyle]} /> : null}
     </Animated.View>
   );
 }

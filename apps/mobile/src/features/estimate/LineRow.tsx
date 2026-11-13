@@ -19,6 +19,7 @@ import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPri
 import type { RowView as RowLook } from "./rowView";
 import { LineMarks } from "@/features/LineMarks";
 import { SwipeRow, type SwipeBtn } from "./SwipeRow";
+import { useRowHandle } from "@/features/SortableList";
 import { swipes } from "./swipeState";
 
 /**
@@ -113,6 +114,8 @@ function LineRowView(p: LineRowProps) {
   const toast = useToast();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
+  // the list's handle «≡» of this open line, drawn in the header (DS §8.3)
+  const handle = useRowHandle();
   const [more, setMore] = useState(false);
   // «Своя…»: the unit is written by hand — chosen so, or not one of the list (a catalog thing, a module, «Отменить»)
   const known = (UNITS as readonly string[]).includes(l.unit);
@@ -284,7 +287,7 @@ function LineRowView(p: LineRowProps) {
   unitItems.push({ key: OWN, label: t("est.row.unitOwn") });
   return (
     <Animated.View style={[{ paddingVertical: space[3], gap: space[3] }, fade]} testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
-      {/* the header (DS §8.3): «˄ Свернуть» on the left (the founder's words); the trash and «⋯» on the right; the list draws «≡» after them */}
+      {/* the header (DS §8.3): «˄ Свернуть» on the left (the founder's words); on the right the trash, «⋯» and «≡» (the list's handle) */}
       <RowView style={{ justifyContent: "space-between" }}>
         <View testID={`est-collapse-${l.id}`}>
           <Button label={t("est.row.collapse")} icon="chevronUp" variant="ghost" size="sm" onPress={p.api.close} />
@@ -296,6 +299,7 @@ function LineRowView(p: LineRowProps) {
               <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
             </View>
           </View>
+          {handle}
         </RowView>
       </RowView>
       {marks.length ? (
