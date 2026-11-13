@@ -2939,6 +2939,8 @@ export const en: Dict = {
   "mod.gutters.draw.hint.ds": "Tap the gutter where the downspout goes",
   "mod.gutters.draw.hint.select": "First tap a gutter or a downspout to pick it",
   "mod.gutters.draw.hint.move": "Press and hold an end or a corner, then drag — it moves freely and snaps to 45° and 90°",
+  "mod.gutters.draw.dupRun": "That gutter is already there — the line was not added",
+  "mod.gutters.draw.dupCleaned": "A gutter lying on top of another was removed",
   "mod.gutters.draw.hint.threeEnds": "A joint of three ends does not move — move the gutters one by one",
   "mod.gutters.draw.nextDs": "Next: put the downspouts on the gutters",
   "mod.gutters.draw.fit": "Whole drawing",
