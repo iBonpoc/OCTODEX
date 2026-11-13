@@ -69,9 +69,12 @@ exports.run = async (h) => {
   await h.go(`/estimate/new?template=${tpl.id}&customerId=${customerId}`);
   await tid("ue-save").waitFor({ timeout: 8000 });
   h.expect((await tid("est-start").count()) === 0, "a template given: no «С чего начать?»");
-  const body = await h.text();
-  h.expect(/× \$150 /.test(body) && !/\$99\b/.test(body), "the catalog line takes today's catalog price ($150, not $99)");
-  h.expect(/× \$7 /.test(body), "the gone item keeps the template's price");
+  // the folded rows say «$150 × 1 ea» in «Подробно» (DS §8.3, #1307 «а»; «Кратко» shows only the sum) — read them by testID
+  await tid("est-row-view").getByText("Подробно", { exact: true }).click();
+  await p.locator('[data-testid^="est-times-"]').first().waitFor({ timeout: 5000 });
+  const times = (await p.locator('[data-testid^="est-times-"]').locator("visible=true").allInnerTexts()).join(" | ");
+  h.expect(/\$150(\.00)? ×/.test(times) && !/\$99\b/.test(times), `the catalog line takes today's catalog price ($150, not $99): ${times}`);
+  h.expect(/\$7(\.00)? ×/.test(times), `the gone item keeps the template's price: ${times}`);
   h.expect((await p.getByTestId(/^est-checkprice-/).locator("visible=true").count()) === 1, "one line marked «нет в каталоге, проверьте цену»");
   await h.shot("builder");
 
