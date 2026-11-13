@@ -98,7 +98,7 @@ describe("shop drawings: the sheets of the reference job", () => {
     expect(row(/^Hanger/).qty).toBe(`${qty("hanger.")} ea`);
     expect(row(/^Hanger/).basis).toBe('24" o.c. + ends');
     expect(row(/Seamless coil/).qty).toBe(fi(qty("coil.") * 12));
-    expect(row(/Seamless coil/).basis).toBe("251'-4\" + 5% waste");
+    expect(row(/Seamless coil/).basis).toBe("251'-4\" + 10% waste");
     expect(rows.slice(0, 4).map((r) => [r.tag, r.qty, r.basis])).toEqual([["A", "2 ea", "Plan tag A"], ["B", "2 ea", "Plan tag B"], ["C", "2 ea", "45° cut each side"], ["D", "2 ea", "27° cut each side"]]);
     // every material of the estimate is on the list, none twice
     expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0).length + 2);

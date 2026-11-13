@@ -21,9 +21,9 @@ describe("computeGutterParts — one straight run", () => {
   };
   const { parts, advice } = computeGutterParts(input);
 
-  it("gutter: client sees installed feet, supplier gets coil with 5% waste, whole feet", () => {
+  it("gutter: client sees installed feet, supplier gets coil with 10% waste, whole feet (#1355: 5% → 10%)", () => {
     expect(q(parts, "gutter.k.6.alu_032.white")).toBe("40");
-    expect(q(parts, "coil.k.6.alu_032.white")).toBe("42");
+    expect(q(parts, "coil.k.6.alu_032.white")).toBe("44");
     expect(parts.find((p) => p.key === "coil.k.6.alu_032.white")!.use).toBe("purchase");
   });
   it("hidden hangers every 24 in; a left and a right end cap", () => {
@@ -87,7 +87,7 @@ describe("corners: cut on site vs ready-made", () => {
     corners: [{ id: "c", kind: "out", method, profile: "k", size: "6", material: "alu_032", color: "white", story: 1 }],
     downspouts: [ds({ id: "d", runId: "1" })],
   });
-  it("cut corner: no strip miter (П18.3 №8), corner-cut labor, +6 in of gutter before waste, 6 rivets, a touch-up can", () => {
+  it("cut corner: no strip miter (П18.3 №8), corner-cut labor, +14 in (an OUTSIDE corner, #1355) of gutter before waste, 6 rivets, a touch-up can", () => {
     const { parts } = computeGutterParts(two("cut"));
     expect(q(parts, "stripmiter.k.6.alu_032.white")).toBeUndefined();
     expect(q(parts, "labor.corner_cut")).toBe("1");
@@ -96,14 +96,14 @@ describe("corners: cut on site vs ready-made", () => {
     expect(q(parts, "paint.white")).toBe("1");
     expect(q(parts, "corner.out.k.6.alu_032.white")).toBeUndefined();
     expect(q(parts, "gutter.k.6.alu_032.white")).toBe("40");
-    // (480 + 6) × 1.05 / 12 = 42.525 → 43
-    expect(q(parts, "coil.k.6.alu_032.white")).toBe("43");
+    // (480 + 14) × 1.10 / 12 = 45.28 → 46
+    expect(q(parts, "coil.k.6.alu_032.white")).toBe("46");
   });
-  it("strip corner: a strip miter to buy, cut labor, +6 in, 8 rivets, a touch-up can", () => {
+  it("strip corner: a strip miter to buy, cut labor, +14 in (outside), 8 rivets, a touch-up can", () => {
     const { parts } = computeGutterParts(two("strip"));
     expect(q(parts, "stripmiter.k.6.alu_032.white")).toBe("1");
     expect(q(parts, "labor.corner_cut")).toBe("1");
-    expect(q(parts, "coil.k.6.alu_032.white")).toBe("43");
+    expect(q(parts, "coil.k.6.alu_032.white")).toBe("46");
     expect(q(parts, "rivet.42.aluminum.painted.white")).toBe("26");
     expect(q(parts, "paint.white")).toBe("1");
   });
@@ -111,7 +111,7 @@ describe("corners: cut on site vs ready-made", () => {
     const { parts } = computeGutterParts(two("prefab"));
     expect(q(parts, "corner.out.k.6.alu_032.white")).toBe("1");
     expect(q(parts, "labor.corner_cut")).toBeUndefined();
-    expect(q(parts, "coil.k.6.alu_032.white")).toBe("42");
+    expect(q(parts, "coil.k.6.alu_032.white")).toBe("44");
     expect(q(parts, "rivet.42.aluminum.painted.white")).toBe("26");
     expect(q(parts, "paint.white")).toBeUndefined();
   });
@@ -243,7 +243,7 @@ describe("П18: stock — material, gauge, finish; coil blank", () => {
     const { parts } = one({ material: "aluminum", gauge: ".032", finish: "painted" });
     expect(q(parts, "gutter.k.6.aluminum.032.white")).toBe("40");
     const coil = parts.find((p) => p.key === "coil.k.6.aluminum.032.white")!;
-    expect(coil.qty).toBe("42");
+    expect(coil.qty).toBe("44");
     expect(coil.attrs).toMatchObject({ gauge: ".032", finish: "painted", blankIn: "15", buy: "coil" });
   });
   it(".027 and .032 of one color are two coil lines", () => {
@@ -252,8 +252,8 @@ describe("П18: stock — material, gauge, finish; coil blank", () => {
       corners: [],
       downspouts: [],
     });
-    expect(q(parts, "coil.k.6.aluminum.027.white")).toBe("21");
-    expect(q(parts, "coil.k.6.aluminum.032.white")).toBe("21");
+    expect(q(parts, "coil.k.6.aluminum.027.white")).toBe("22");
+    expect(q(parts, "coil.k.6.aluminum.032.white")).toBe("22");
   });
   it("5 in K coil is 11 7/8 wide; half round has no blank by default", () => {
     expect(one({ size: "5" }).parts.find((p) => p.key.startsWith("coil."))!.attrs.blankIn).toBe("11.875");
@@ -472,7 +472,7 @@ describe("bad input never gives Infinity or negative parts", () => {
     expect(q(one({ lengthIn: 479.6 }).parts, "gutter.k.6.alu_032.white")).toBe("40");
   });
   it("undefined in an override keeps the default", () => {
-    expect(q(one({}, [], { wastePct: undefined, dsStickIn: undefined }).parts, "coil.k.6.alu_032.white")).toBe("42");
+    expect(q(one({}, [], { wastePct: undefined, dsStickIn: undefined }).parts, "coil.k.6.alu_032.white")).toBe("44");
   });
   it("purchaseQty refuses a negative quantity; downspoutSticks a bad stick", () => {
     expect(() => purchaseQty(-1, 10)).toThrow();
@@ -609,5 +609,59 @@ describe("elbows by default follow the shape (#871, X-07)", () => {
     const a = computeGutterParts(job("rect")).parts, b = computeGutterParts(job("round")).parts;
     const rivets = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "rivet").map((p) => p.qty).join();
     expect(rivets(b)).toBe(rivets(a));
+  });
+});
+
+describe("#1355: waste and the allowance of a field-cut corner", () => {
+  const corner = (kind: "out" | "in" | "bay", method: "cut" | "strip" | "prefab" = "cut"): MeasurementInput => ({
+    runs: [
+      run({ id: "1", lengthIn: 240, ends: [{ kind: "cap" }, { kind: "corner", cornerId: "c" }] }),
+      run({ id: "2", lengthIn: 240, ends: [{ kind: "corner", cornerId: "c" }, { kind: "cap" }] }),
+    ],
+    corners: [{ id: "c", kind, method, profile: "k", size: "6", material: "alu_032", color: "white", story: 1 }],
+    downspouts: [],
+  });
+  const coil = (i: MeasurementInput, over?: Parameters<typeof computeGutterParts>[1]) => q(computeGutterParts(i, over).parts, "coil.k.6.alu_032.white");
+  it("defaults: waste 10 %, an outside corner 14″, an inside corner 6″", () => {
+    expect(DEFAULT_GUTTER_RULES.wastePct).toBe("0.10");
+    expect(DEFAULT_GUTTER_RULES.cutCornerOutAllowanceIn).toBe(14);
+    expect(DEFAULT_GUTTER_RULES.cutCornerAllowanceIn).toBe(6);
+  });
+  it("an outside cut corner takes 14″, an inside one 6″, a bay 6″ until the founder says otherwise (480″ of gutter, 10 % waste)", () => {
+    expect(coil(corner("out"))).toBe("46"); // (480 + 14) × 1.10 / 12 = 45.28
+    expect(coil(corner("in"))).toBe("45"); // (480 + 6) × 1.10 / 12 = 44.55
+    expect(coil(corner("bay"))).toBe("45");
+  });
+  it("a strip corner takes the same allowance by kind; a ready-made corner takes none, whatever its kind", () => {
+    expect(coil(corner("out", "strip"))).toBe("46");
+    expect(coil(corner("in", "strip"))).toBe("45");
+    expect(coil(corner("out", "prefab"))).toBe("44"); // 480 × 1.10 / 12
+    expect(coil(corner("in", "prefab"))).toBe("44");
+  });
+  it("the allowance is the company's: separate numbers for the two kinds", () => {
+    expect(coil(corner("out"), { cutCornerOutAllowanceIn: 0 })).toBe("44");
+    expect(coil(corner("out"), { cutCornerAllowanceIn: 30 })).toBe("46"); // the inside number does not move an outside corner
+    expect(coil(corner("in"), { cutCornerOutAllowanceIn: 24 })).toBe("45");
+    expect(coil(corner("in"), { cutCornerAllowanceIn: 24 })).toBe("47"); // (480 + 24) × 1.10 / 12 = 46.2 → 47
+  });
+  it("«Без запаса»: waste 0 — the purchase is the installed length plus the corners, whole feet; the client's line never had waste", () => {
+    const off = { wastePct: "0" };
+    expect(coil(corner("out"), off)).toBe("42"); // (480 + 14) / 12 = 41.17 → 42
+    expect(coil(corner("out", "prefab"), off)).toBe("40");
+    const { parts } = computeGutterParts(corner("out"), off);
+    expect(q(parts, "gutter.k.6.alu_032.white")).toBe("40"); // the estimate line is the same with and without waste
+    expect(computeGutterParts(corner("out")).parts.find((p) => p.key === "gutter.k.6.alu_032.white")!.qty).toBe("40");
+  });
+  it("waste is on the gutter only: hangers, caps, screws, rivets and sticks do not change with it", () => {
+    const keysOf = (over?: Parameters<typeof computeGutterParts>[1]) => computeGutterParts(corner("out"), over).parts.filter((p) => !p.key.startsWith("coil.")).map((p) => `${p.key}=${p.qty}`).sort();
+    expect(keysOf({ wastePct: "0" })).toEqual(keysOf({ wastePct: "0.10" }));
+    expect(keysOf({ wastePct: "0.50" })).toEqual(keysOf({ wastePct: "0.10" }));
+  });
+  it("a saved company without the new field gets 14″ for an outside corner; its own inside value stays", () => {
+    const r = resolveGutterRules({ cutCornerAllowanceIn: 9 });
+    expect(r.cutCornerOutAllowanceIn).toBe(14);
+    expect(r.cutCornerAllowanceIn).toBe(9);
+    expect(resolveGutterRules({ cutCornerOutAllowanceIn: -1 }).cutCornerOutAllowanceIn).toBe(14); // not a number of inches: the default
+    expect(resolveGutterRules({ cutCornerOutAllowanceIn: 20 }).cutCornerOutAllowanceIn).toBe(20);
   });
 });
