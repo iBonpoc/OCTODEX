@@ -177,7 +177,11 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       if (ends[r.id]?.[e]?.kind !== "cap") return;
       let at = toScreen(o.view, e ? r.b : r.a);
       // a split corner (#933): two caps stand at one point — each is drawn a little along its own gutter, so both are seen (the drawing only, not the data)
-      if (isOpenEnd(r, e) && o.dsPad) {
+      // only while another gutter's end still stands at that point (#1282: a freed end that was set back lies at its own point — drawn where it is, so
+      // the finger that takes the cap takes the end)
+      const point = e ? r.b : r.a;
+      const shared = d.runs.some((x) => x.id !== r.id && [x.a, x.b].some((q) => Math.hypot(q[0] - point[0], q[1] - point[1]) <= 1.5));
+      if (isOpenEnd(r, e) && o.dsPad && shared) {
         const to = toScreen(o.view, e ? r.a : r.b);
         const n = Math.hypot(to[0] - at[0], to[1] - at[1]) || 1;
         const k = Math.min(o.dsPad * 2, n / 2) / n;

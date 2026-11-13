@@ -204,32 +204,46 @@ export function splitCorner(d: Drawing, corner: Pick<FoundCorner, "runs">, offse
   const marked = d.runs.map((r) => (ids.has(r.id) ? { ...r, attrs: { ...r.attrs, openEnds: { ...r.attrs.openEnds, [ids.get(r.id) ? "b" : "a"]: true } } } : r));
   if (offsetIn <= 0) return { ...d, runs: marked };
   // #1282: a freed end that still lies on a point where another gutter of the storey has an end (a third end at the joint) is
-  // set `offsetIn` back along its OWN gutter, so it can be seen, taken and pulled; the measured length stays what it was
-  const others = (r: DrawnRun, q: P) => marked.some((o) => !ids.has(o.id) && sameStory(o, r) && [o.a, o.b].some((e) => Math.hypot(e[0] - q[0], e[1] - q[1]) <= 1.5));
-  return {
-    ...d,
-    runs: marked.map((r) => {
-      const end = ids.get(r.id);
-      if (end === undefined) return r;
-      const at = end ? r.b : r.a, far = end ? r.a : r.b;
-      const len = Math.hypot(far[0] - at[0], far[1] - at[1]);
-      if (!others(r, at) || len < offsetIn * 2) return r;
-      const k = offsetIn / len;
-      const moved: P = [at[0] + (far[0] - at[0]) * k, at[1] + (far[1] - at[1]) * k];
-      return { ...r, lengthIn: runLengthIn(r), ...(end === 0 ? { a: moved } : { b: moved }) };
-    }),
-    downspouts: d.downspouts.map((s) => {
-      const r = marked.find((x) => x.id === s.runId);
-      return r && ids.get(r.id) === 0 && ids.has(r.id) && marked.some((o) => !ids.has(o.id) && sameStory(o, r) && [o.a, o.b].some((e) => Math.hypot(e[0] - r.a[0], e[1] - r.a[1]) <= 1.5)) ? { ...s, atIn: Math.max(0, s.atIn - offsetIn) } : s;
-    }),
-  };
+  // set back along its OWN gutter, so it can be seen, taken and pulled; the measured length stays what it was. Set back `offsetIn`,
+  // at most a share of the gutter (SET_BACK_SHARE): a short gutter is freed too — never left on the joint (#1338 review: at a small
+  // scale `offsetIn` is tens of inches)
+  const others = (r: DrawnRun, q: P) => marked.some((o) => !ids.has(o.id) && sameStory(o, r) && [o.a, o.b].some((e) => Math.hypot(e[0] - q[0], e[1] - q[1]) <= SAME_POINT_IN));
+  /** the share of its drawn length each moved end went back (by run id), and which end */
+  const moved = new Map<string, { end: 0 | 1; k: number }>();
+  const runs = marked.map((r) => {
+    const end = ids.get(r.id);
+    if (end === undefined) return r;
+    const at = end ? r.b : r.a, far = end ? r.a : r.b;
+    const len = Math.hypot(far[0] - at[0], far[1] - at[1]);
+    if (len <= 0 || !others(r, at)) return r;
+    const k = Math.min(offsetIn, len * SET_BACK_SHARE) / len;
+    moved.set(r.id, { end, k });
+    const to: P = [at[0] + (far[0] - at[0]) * k, at[1] + (far[1] - at[1]) * k];
+    return { ...r, lengthIn: runLengthIn(r), ...(end === 0 ? { a: to } : { b: to }) };
+  });
+  // a downspout stays at the same POINT of the plan: its place along the gutter is a share of the length (`atIn` ÷ the measured length)
+  const downspouts = d.downspouts.map((s) => {
+    const m = moved.get(s.runId);
+    const r = d.runs.find((x) => x.id === s.runId);
+    if (!m || !r) return s;
+    const len = runLengthIn(r) || 1;
+    const t = Math.min(1, Math.max(0, s.atIn / len));
+    const t2 = m.end === 0 ? (t - m.k) / (1 - m.k) : t / (1 - m.k);
+    return { ...s, atIn: Math.round(Math.min(1, Math.max(0, t2)) * len * 1000) / 1000 };
+  });
+  return { ...d, runs, downspouts };
 }
+
+/** two ends are one point when they are within this many inches (the tolerance the corners and the magnets use) */
+export const SAME_POINT_IN = 1.5;
+/** a freed end goes back at most this share of its gutter: even a short gutter leaves the joint */
+export const SET_BACK_SHARE = 1 / 3;
 
 /** #1282: is `p` a point where two ends of a storey already meet (a corner)? An end let go there would make a joint of three ends (П35, not done) */
 export function onCornerPoint(d: Drawing, story: DrawnRun, skip: Set<string>, p: P, tolIn: number): boolean {
   const near = (q: P) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= tolIn;
   const ends = d.runs.filter((x) => !skip.has(x.id) && sameStory(x, story)).flatMap((x) => [x.a, x.b]).filter(near);
-  return ends.length >= 2 && ends.every((q) => Math.hypot(q[0] - ends[0]![0], q[1] - ends[0]![1]) <= 1.5);
+  return ends.length >= 2 && ends.every((q) => Math.hypot(q[0] - ends[0]![0], q[1] - ends[0]![1]) <= SAME_POINT_IN);
 }
 
 export interface Swing {
@@ -347,6 +361,8 @@ export function swingEnd(d: Drawing, runId: string, end: 0 | 1, p: P, held: numb
   };
   // another gutter's end beats every direction: the end lands exactly on it (a corner forms on release)
   const tgt = endNear(d, r, new Set([runId]), p, tolIn, onEnd, [fixed]);
+  // a joint of two ends takes no third (П35, #1282): the end is not taken there — the caller says why (`onCornerPoint`); the last frame stays
+  if (tgt && onCornerPoint(d, r, new Set([runId]), tgt, SAME_POINT_IN)) return null;
   if (tgt) {
     const len = Math.round(Math.hypot(tgt[0] - fixed[0], tgt[1] - fixed[1]));
     if (len >= MIN_RUN_IN && len <= MAX_RUN_IN) {
