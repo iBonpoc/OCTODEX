@@ -2562,6 +2562,7 @@ export const en: Dict = {
   "ds.rows.fillB": "Detailed",
   "ds.rows.fillC": "Sections",
   "ds.rows.fillChosen": "Chosen: {name}",
+  "ds.rows.fillCard": "A chosen card: fill and a check",
   "ds.rows.compact": "“Brief / Detailed” and the bin",
   "ds.rows.compactHint": "Two views of a folded row; the bin is always visible, one toast for several deletions (§8.3, §15.2).",
   "ds.rows.variants": "Good / Better / Best variants",

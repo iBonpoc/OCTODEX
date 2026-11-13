@@ -89,7 +89,7 @@ describe("app tokens mirror the founder's DS css", () => {
   });
   it("small shadow of the raised «Заливка»", () => {
     const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;
-    expect(component.shadowSm).toEqual({ offsetY: Number(m[1]), radius: Number(m[2]), opacity: Number(m[3]) });
+    expect(component.shadowSm).toMatchObject({ offsetY: Number(m[1]), radius: Number(m[2]), opacity: Number(m[3]) }); // elevation — Android only, app-only
   });
   it("motion", () => {
     expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart, motion.longPressMs]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart"), px("long-press-ms")]);

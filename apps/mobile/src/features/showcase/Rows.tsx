@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { component, radius, size, space } from "@octo/design-tokens";
+import { radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
@@ -11,6 +11,8 @@ import { Button, Toggle } from "@/ui/controls";
 import { Labeled, RatePctField } from "@/features/fields";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
+import { fillStyle } from "@/ui/fill";
+import { SelectedCheck } from "@/ui/selectedCheck";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
@@ -61,9 +63,7 @@ function FillSample() {
                 accessibilityLabel={it.label}
                 style={[
                   { minHeight: size.controlLg, paddingHorizontal: space[4], borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-                  on
-                    ? { backgroundColor: c.surf2, shadowColor: c.shadow.color, shadowOpacity: component.shadowSm.opacity, shadowRadius: component.shadowSm.radius, shadowOffset: { width: 0, height: component.shadowSm.offsetY } }
-                    : null,
+                  on ? fillStyle(c) : null,
                 ]}
               >
                 <T v="body" w={on ? "semibold" : "medium"} tone={on ? "ink" : "mut"}>
@@ -73,6 +73,11 @@ function FillSample() {
             );
           })}
         </RowView>
+        {/* a chosen card or day: the same fill and the check in its corner (the fill alone is quiet: contrast ≈ 1.4) */}
+        <View testID="showcase-fill-card" style={[{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[4], borderRadius: radius.inner }, fillStyle(c)]}>
+          <T v="body" w="semibold">{t("ds.rows.fillCard")}</T>
+          <SelectedCheck />
+        </View>
         <RowView>
           <Icon name="eyeOff" s={size.iconMd} />
           <T v="caption" tone="mut">{t("ds.rows.eyeOff")}</T>

@@ -180,7 +180,7 @@ export const component = {
   /** selected card / drop target border */
   selectedBorder: 2,
   /** the small shadow of a raised «Заливка» (the chosen segment, tab, chip): DS «Выделение выбранного», foundation.css --shadow-sm */
-  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25 },
+  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25, /** Android has no shadow* props: the same lift as `elevation` (app-only, not in the CSS) */ elevation: 2 },
   /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
   swipeAction: { w: 80, full: 0.6 },
   /** hairline border */

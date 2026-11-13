@@ -23,11 +23,13 @@ import { jobStatusView } from "@/features/jobs";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { fillStyle } from "@/ui/fill";
 import { Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardList, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { ListCard, type CardLead } from "@/ui/listCard";
 import type { Density, FactKey } from "@/ui/listCardLayout";
+import { SelectedCheck } from "@/ui/selectedCheck";
 
 /** desktop row columns of the Plan's cards (06 §5 «Визиты»: адрес · работа · кто) */
 const PLAN_COLUMNS: readonly FactKey[] = ["addr", "work", "by"];
@@ -253,7 +255,7 @@ function FreeRow({ label, a11y, onAdd }: { label: string; a11y: string; onAdd?: 
 /**
  * One day of the Week strip and of the Month (24 §B): the date, the number of the Feed's items («В плане: N» to a screen
  * reader), yellow only when an open visit has nobody on it; a day off of the picked person is the word «выходной»,
- * no colour. The picked day is an ink frame on surf2 (not the accent); today is bold. Tap → the Day.
+ * no colour. The picked day is «Заливка» with a check (DS «Выделение выбранного», not the accent); today is bold. Tap → the Day.
  */
 export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayKey; load?: DayLoad; selected: boolean; dim?: boolean; head?: string; onPress: () => void }) {
   const { t, dayOf } = useI18n();
@@ -274,15 +276,17 @@ export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayK
       style={{
         minHeight: component.rowCompact + space[4],
         borderRadius: component.checkbox.radius,
-        borderWidth: selected ? component.selectedBorder : component.hairline,
-        borderColor: selected ? c.ink : c.bd,
-        backgroundColor: selected ? c.surf2 : c.in,
+        // chosen day: «Заливка» + a check (DS «Выделение выбранного»), not an ink frame
+        ...(selected ? fillStyle(c) : { backgroundColor: c.in }),
+        borderWidth: component.hairline,
+        borderColor: selected ? "transparent" : c.bd,
         opacity: dim ? component.dimOpacity : 1,
         alignItems: "center",
         justifyContent: "center",
         gap: space[1],
       }}
     >
+      {selected ? <SelectedCheck small /> : null}
       {head ? (
         <T v="micro" tone="mut" numberOfLines={1}>
           {head}

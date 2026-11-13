@@ -14,6 +14,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
 import { Sheet } from "./overlays";
+import { SelectedCheck } from "./selectedCheck";
 import {
   FACT_ICON, FACT_MAX_LINES, contactActions, edgeTone, layoutFacts, rowColumns, touchPad,
   type Contact, type ContactAction, type Density, type FactKey, type Facts, type OS,
@@ -263,9 +264,10 @@ export function ListCard(p: ListCardProps) {
         padding: compact ? space[2] : space[3],
         paddingLeft: space[4],
         borderRadius: compact ? radius.field : radius.inner,
-        backgroundColor: c.surf,
-        borderWidth: p.selected ? component.selectedBorder : component.hairline,
-        borderColor: p.selected ? c.ink : c.bd,
+        // the open one (panel on 1280): «Заливка» + a check, not an ink frame (DS «Выделение выбранного»)
+        backgroundColor: p.selected ? c.surf2 : c.surf,
+        borderWidth: component.hairline,
+        borderColor: p.selected ? "transparent" : c.bd,
         overflow: "hidden",
         shadowColor: c.shadow.color,
         shadowOpacity: compact ? 0 : c.shadow.opacity,
@@ -274,6 +276,7 @@ export function ListCard(p: ListCardProps) {
       }}
     >
       {edge ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: component.statusEdge, backgroundColor: c.status[edge].fill }} /> : null}
+      {p.selected ? <SelectedCheck /> : null}
       {/* header */}
       <View style={{ flexDirection: "row", gap: space[3], alignItems: "flex-start" }}>
         <Lead lead={p.lead} small={compact} />
@@ -415,13 +418,15 @@ function ListCardRow(p: ListCardProps) {
         paddingVertical: space[2],
         paddingHorizontal: space[3],
         borderRadius: radius.field,
-        backgroundColor: c.surf,
-        borderWidth: p.selected ? component.selectedBorder : component.hairline,
-        borderColor: p.selected ? c.ink : c.bd,
+        // the open one (panel on 1280): «Заливка» + a check, not an ink frame (DS «Выделение выбранного»)
+        backgroundColor: p.selected ? c.surf2 : c.surf,
+        borderWidth: component.hairline,
+        borderColor: p.selected ? "transparent" : c.bd,
         overflow: "hidden",
       }}
     >
       {edge ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: component.statusEdge, backgroundColor: c.status[edge].fill }} /> : null}
+      {p.selected ? <SelectedCheck /> : null}
       <Lead lead={p.lead} small />
       <View style={{ flex: 1.3, minWidth: 0, gap: spaceHalf.hair }}>
         <Txt w="semibold" color={c.ink}>{p.title}</Txt>

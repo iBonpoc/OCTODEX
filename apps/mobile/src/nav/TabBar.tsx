@@ -20,6 +20,7 @@ import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
 import { sectionHref, tabs, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
+import { fillStyle } from "@/ui/fill";
 
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
@@ -205,7 +206,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
           <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
-              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
+              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyle(c), pill]}
             />
             {ordered}
           </View>
