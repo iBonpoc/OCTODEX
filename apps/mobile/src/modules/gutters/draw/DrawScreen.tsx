@@ -217,7 +217,8 @@ export default function DrawScreen() {
         // below is a real change, so an estimate made of this drawing says «Чертёж изменён» (#1314 review); «Отменить» puts it back
         const clean = withoutDuplicates(d);
         setDrawing(clean);
-        if (clean !== d) {
+        // read-only (or the module off): nothing is written, so nothing is said — the toast would come at every opening (director, 13.11)
+        if (clean !== d && cur.current.canSave) {
           later.current();
           toast.show(t("mod.gutters.draw.dupCleaned"), localUndo(() => commit(d, cur.current.drawing)));
         }
