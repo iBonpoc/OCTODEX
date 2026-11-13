@@ -53,6 +53,12 @@ exports.run = async (h) => {
   await h.go("/settings/design-system");
   await vis("showcase-row-brand").waitFor({ timeout: 5000 });
 
+  // the boot layer ran and left (#1046): the first launch marked the intro as shown for this version; with the app up
+  // nothing of it stays under the shell (no loop behind the app)
+  const seen = await p.evaluate(() => localStorage.getItem("octo.brand.seen.v1"));
+  h.expect(/^"?\d+\.\d+\.\d+"?$/.test(seen || ""), `the intro is marked as shown for this version (${seen})`);
+  for (const id of ["boot-brand", "boot-still", "boot-intro", "boot-quick", "boot-wait"]) h.expect((await p.getByTestId(id).count()) === 0, `${id}: gone once the app is up`);
+
   // before the JS: the HTML already has the mark on the theme's background (#1046 — never a white page)
   const html = await (await p.request.get(new URL("/", p.url()).toString())).text();
   h.expect(/id="gx-boot"/.test(html) && /viewBox="16 -736 1403 764"/.test(html), "index.html carries the GR mark before the JS");

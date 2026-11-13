@@ -80,12 +80,12 @@ export function gToMark(p: { x: number; y: number }): { x: number; y: number } {
   return { x: (p.x * G_PLACE.k + G_PLACE.dx - GR_VIEW.x) / GR_VIEW.w, y: (p.y * G_PLACE.k + G_PLACE.dy - GR_VIEW.y) / GR_VIEW.h };
 }
 
-/** which launch the brand shows (DS §18.2 «Запуск»): the full intro once per install and version; the short GR
- *  entry while the company still loads; nothing when the data is already on the phone */
-export type Launch = "intro" | "quick" | "none";
-export function launchKind(o: { seenVersion: string | null; version: string; dataOnPhone: boolean }): Launch {
-  if (o.seenVersion !== o.version) return "intro";
-  return o.dataOnPhone ? "none" : "quick";
+/** which launch the brand shows (DS §18.2 «Запуск»): the full intro once per install and version, else the short GR
+ *  entry. «Data already on the phone — straight to the first screen» needs no branch: the boot layer lies under the app
+ *  and goes the moment the shell is up (`useBootDone`), whatever it was showing */
+export type Launch = "intro" | "quick";
+export function launchKind(o: { seenVersion: string | null; version: string }): Launch {
+  return o.seenVersion !== o.version ? "intro" : "quick";
 }
 
 /** the dot's colour (DS §18.2 «Цвет»): yellow — only on a mark bigger than 24 and on a screen without a yellow main

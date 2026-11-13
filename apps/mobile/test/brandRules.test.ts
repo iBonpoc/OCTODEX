@@ -3,12 +3,10 @@ import { motion } from "@octo/design-tokens";
 import { DOT, dotTone, dotWay, gToMark, launchKind, pointOnWay, waitStage } from "../src/ui/brandRules";
 
 describe("unit:brandRules — GoRix in the app (DS §18.2, #1156)", () => {
-  it("the launch: the intro once per version; then the short GR only while the company loads", () => {
-    expect(launchKind({ seenVersion: null, version: "1.0.0", dataOnPhone: false })).toBe("intro");
-    expect(launchKind({ seenVersion: null, version: "1.0.0", dataOnPhone: true })).toBe("intro");
-    expect(launchKind({ seenVersion: "0.9.0", version: "1.0.0", dataOnPhone: true })).toBe("intro"); // after an update
-    expect(launchKind({ seenVersion: "1.0.0", version: "1.0.0", dataOnPhone: false })).toBe("quick");
-    expect(launchKind({ seenVersion: "1.0.0", version: "1.0.0", dataOnPhone: true })).toBe("none");
+  it("the launch: the intro once per version (and after an update), then the short GR", () => {
+    expect(launchKind({ seenVersion: null, version: "1.0.0" })).toBe("intro");
+    expect(launchKind({ seenVersion: "0.9.0", version: "1.0.0" })).toBe("intro");
+    expect(launchKind({ seenVersion: "1.0.0", version: "1.0.0" })).toBe("quick");
   });
 
   it("the dot: yellow on a big mark; ink at 24 and less on light and on any screen with a yellow main button", () => {

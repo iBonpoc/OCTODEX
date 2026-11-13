@@ -8,7 +8,7 @@ import { getLocales } from "expo-localization";
 import { component, motion, space, themes } from "@octo/design-tokens";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { StaticThemeProvider } from "@/theme/ThemeProvider";
-import { BrandIntro, BrandQuick, BrandWait } from "@/ui/brand";
+import { BrandIntro, BrandMark, BrandQuick, BrandWait } from "@/ui/brand";
 import { BRAND_SEEN_KEY, launchKind, waitStage } from "@/ui/brandRules";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -77,18 +77,20 @@ function BootBrand({ words }: { words: boolean }) {
     const tick = setInterval(() => setElapsed(Date.now() - started.current), motion.spinnerDelayMs);
     return () => clearInterval(tick);
   }, []);
-  const kind = seen === undefined ? null : launchKind({ seenVersion: seen, version: VERSION, dataOnPhone: false });
+  const kind = seen === undefined ? null : launchKind({ seenVersion: seen, version: VERSION });
+  // the intro counts as shown once it starts: a fast start covers it within a frame, and it must not come back each time
+  useEffect(() => {
+    if (kind === "intro") AsyncStorage.setItem(BRAND_SEEN_KEY, VERSION).catch(() => {});
+  }, [kind]);
   useEffect(() => {
     if (kind !== "quick") return;
     const id = setTimeout(() => setPhase("wait"), motion.durBrandQuick);
     return () => clearTimeout(id);
   }, [kind]);
-  const introDone = useCallback(() => {
-    AsyncStorage.setItem(BRAND_SEEN_KEY, VERSION).catch(() => {});
-    setPhase("wait");
-  }, []);
-  if (kind === null) return null;
+  const introDone = useCallback(() => setPhase("wait"), []);
   const stage = waitStage(elapsed);
+  // the mark is still while the device's memory is read: the native splash and index.html show the same GR, no gap
+  if (kind === null) return <BrandMark size={component.brand.wait} testID="boot-still" />;
   return (
     <View testID="boot-brand" style={{ alignItems: "center", gap: space[4] }}>
       {phase === "entry" && kind === "intro" ? (
@@ -98,7 +100,8 @@ function BootBrand({ words }: { words: boolean }) {
       ) : (
         <BrandWait size={component.brand.wait} testID="boot-wait" />
       )}
-      {words && phase === "wait" && stage !== "silent" ? (
+      {/* the words wait for the fonts — but «Повторить» never does: fonts that never load must not leave a silent screen */}
+      {(words || stage === "failed") && phase === "wait" && stage !== "silent" ? (
         stage === "failed" ? (
           <View testID="boot-failed" style={{ alignItems: "center", gap: space[3] }}>
             <T v="body" tone="mut">

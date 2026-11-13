@@ -55,7 +55,7 @@ export function SideNav() {
     >
       <ScrollView testID="side-scroll" contentContainerStyle={{ paddingHorizontal: space[2], gap: space[1], alignItems: open ? "stretch" : "center" }}>
         {/* GoRix on top (DS §18.2): the mark, no word; it opens «О приложении». The menu's «＋» is yellow — the dot is ink */}
-        <Press onPress={() => router.push("/settings")} visibleHeight={size.iconLg} accessibilityRole="link" accessibilityLabel={t("brand.side.about")} testID="side-brand">
+        <Press onPress={() => router.push("/settings")} visibleHeight={size.iconLg} accessibilityRole="button" accessibilityLabel={t("brand.side.about")} testID="side-brand">
           <View style={{ minHeight: size.hitMin, justifyContent: "center", paddingHorizontal: space[2] }}>
             <BrandMark size={size.iconLg} screenHasPrimary />
           </View>

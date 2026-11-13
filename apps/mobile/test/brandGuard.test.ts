@@ -44,6 +44,15 @@ describe("design system: the GoRix brand (DS §18.2, #1156)", () => {
     for (const img of [plug.image, plug.dark.image]) expect(fs.existsSync(path.join(__dirname, "..", img))).toBe(true);
     expect(app.userInterfaceStyle).toBe("automatic");
   });
+  it("index.html's mark before the JS: the themes' ink and acc (rule 1 — the same as the boot layer draws)", () => {
+    const html = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
+    const boot = /<div id="gx-boot"[\s\S]*?<\/div>/.exec(html)?.[0] ?? "";
+    expect(boot).toContain(`.i{fill:${themes.dark.ink}}`);
+    expect(boot).toContain(`.dot{fill:${themes.dark.acc}}`);
+    expect(boot).toContain(`.i{fill:${themes.light.ink}}`);
+    expect(boot).toContain(`.ring{fill:${themes.light.ink}}`);
+    expect(themes.light.acc).toBe(themes.dark.acc);
+  });
   it("the splash module is loaded lazily (spec 30 п.9: an update reaches builds made without it)", () => {
     const boot = fs.readFileSync(path.join(SRC, "features", "boot.tsx"), "utf8");
     expect(boot).not.toMatch(/^import \* as \w+ from "expo-splash-screen"/m);
