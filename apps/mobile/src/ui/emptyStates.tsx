@@ -2,7 +2,10 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
-import { Empty } from "@/ui/surfaces";
+import { component, space } from "@octo/design-tokens";
+import { BrandMark } from "@/ui/brand";
+import { T } from "@/ui/primitives";
+import { Card, Empty } from "@/ui/surfaces";
 
 /**
  * The empty states of a screen (DS §13, Н-65, S-42…S-47). Three kinds of «empty» and two of «not found», one wording each:
@@ -65,17 +68,22 @@ export function NotFound({ title, listLabel, onList, testID = "not-found" }: { /
 
 export function PageNotFound({ testID = "page-not-found" }: { testID?: string }) {
   const { t } = useI18n();
+  // the app speaks for itself here — the GoRix mark, not an object's icon (DS §18.2); the screen has a yellow main
+  // button, so the mark's dot is ink (one accent, rule 2)
   return (
-    <Empty
-      icon="alert"
-      title={t("empty.page")}
-      hint={t("empty.pageHint")}
-      testID={testID}
-      action={
-        <View testID={`${testID}-home`}>
-          <Button label={t("empty.home")} onPress={() => router.replace("/today")} />
-        </View>
-      }
-    />
+    <Card style={{ alignItems: "center", paddingVertical: space[8], gap: space[3] }}>
+      <View testID={testID}>
+        <BrandMark size={component.brand.mark} screenHasPrimary testID={`${testID}-mark`} />
+      </View>
+      <T v="heading" center>
+        {t("empty.page")}
+      </T>
+      <T v="body" tone="mut" center>
+        {t("empty.pageHint")}
+      </T>
+      <View testID={`${testID}-home`}>
+        <Button label={t("empty.home")} onPress={() => router.replace("/")} />
+      </View>
+    </Card>
   );
 }

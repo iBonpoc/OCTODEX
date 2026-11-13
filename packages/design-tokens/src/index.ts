@@ -104,6 +104,12 @@ export const motion = {
   chartStagger: 40,
   /** DS §14.2 (#brand): the GoRix mark's splash, ms — longer than a chart's growth (durChart), only here */
   durBrand: 1600,
+  /** DS §18.2 (#1156): the short launch on GR (the dot drives in), the dot fading at the ends of the wait's loop,
+   *  the intro's pause and its fold GoRix → GR — only the brand */
+  durBrandQuick: 600,
+  durBrandEdge: 120,
+  durBrandPause: 150,
+  durBrandFold: 450,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
@@ -184,7 +190,7 @@ export const component = {
   /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
   swipeAction: { w: 80, full: 0.6 },
   /** DS §18.2 (#1156): the GoRix mark («Страницы нет», «Новая компания»), the full-screen wait, the «О приложении» logo, the splash, the first-launch intro */
-  brand: { mark: 48, wait: 56, about: 96, splash: 120, intro: 160 },
+  brand: { mark: 48, wait: 56, about: 160, splash: 120, intro: 200 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */

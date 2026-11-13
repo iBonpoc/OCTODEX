@@ -24,7 +24,7 @@
  --shadow-sm:0 2px 8px rgba(0,0,0,.25);--shadow-md:0 6px 16px rgba(0,0,0,.35);--shadow-lg:0 30px 80px rgba(0,0,0,.35);--scrim-crop:rgba(0,0,0,.55);--veil:rgba(0,0,0,.18);--veil-strong:rgba(0,0,0,.3);--crop-line:rgba(255,255,255,.35);
  --on-fill-btn-bg:rgba(255,255,255,.35);--on-fill-btn-bd:rgba(0,0,0,.35);
  --shadow-knob:0 2px 6px rgba(0,0,0,.25);--shadow-thumb:0 4px 10px rgba(0,0,0,.3);--shadow-drop:0 6px 10px rgba(0,0,0,.35);--pulse-a:rgba(255,107,107,.55);--pulse-b:rgba(255,107,107,0);--on-scrim:#FFFFFF;
- --dur-brand:1600ms;
+ --dur-brand:1600ms;--dur-brand-quick:600ms;--dur-brand-edge:120ms;--dur-brand-pause:150ms;--dur-brand-fold:450ms;
  --z-nav:2;--z-fab:4;--z-scrim:5;--z-sheet:6;--z-modal:7;--z-toast:8;
 }
 @media (prefers-reduced-motion:reduce){:root{--dur-fast:0ms;--dur-base:0ms;--dur-slow:0ms;--dur-chart:0ms}}

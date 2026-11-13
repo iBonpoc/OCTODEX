@@ -1,6 +1,14 @@
-import { Redirect } from "expo-router";
+import { useI18n } from "@/i18n";
+import { PageNotFound } from "@/ui/emptyStates";
+import { Screen } from "@/ui/surfaces";
 
-/** Unknown path (e.g. the web build opened from a sub-path or a stale link): go to the role's home. */
+/** An address the app does not have (a stale link, a typo): «Страницы нет» with the way home — no silent redirect
+ *  (DS §13, S-46; the GoRix mark, §18.2) */
 export default function NotFound() {
-  return <Redirect href="/" />;
+  const { t } = useI18n();
+  return (
+    <Screen title={t("empty.page")}>
+      <PageNotFound />
+    </Screen>
+  );
 }

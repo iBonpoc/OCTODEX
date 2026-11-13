@@ -87,6 +87,7 @@ describe("app tokens mirror the founder's DS css", () => {
   it("dialog, sheet and popover sizes, the brand splash", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
     expect(motion.durBrand).toBe(px("dur-brand"));
+    expect([motion.durBrandQuick, motion.durBrandEdge, motion.durBrandPause, motion.durBrandFold]).toEqual([px("dur-brand-quick"), px("dur-brand-edge"), px("dur-brand-pause"), px("dur-brand-fold")]);
   });
   it("small shadow of the raised «Заливка»", () => {
     const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;
