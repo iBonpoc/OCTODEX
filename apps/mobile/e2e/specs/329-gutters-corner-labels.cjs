@@ -1,5 +1,5 @@
 /**
- * e2e 328 — #1275 (founder 12.11): on the canvas a corner is written as its degrees alone («90°», small, by the arc) — no «наруж.» /
+ * e2e 329 — #1275 (founder 12.11): on the canvas a corner is written as its degrees alone («90°», small, by the arc) — no «наруж.» /
  * «внутр.» / «эркер»; «· эт N» after a length only when the drawing has more than one storey. Every view. Finds things by the svg's
  * own texts; waits on what it checks (no pauses).
  */

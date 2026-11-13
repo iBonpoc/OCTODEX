@@ -45,7 +45,7 @@ exports.run = async (h) => {
   await skipLength(p);
 
   // the label on the canvas
-  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /\d+ mm · эт 1$/.test(t.textContent || "")), null, { timeout: 8000 });
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /^\d+ mm$/.test((t.textContent || "").trim())), null, { timeout: 8000 }); // one storey: the length alone (#1275)
   h.expect(!(await p.getByTestId("draw-svg").first().locator("text").evaluateAll((ts) => ts.some((t) => /\d′/.test(t.textContent || "")))), "no feet on the canvas");
 
   // the picked gutter's panel
