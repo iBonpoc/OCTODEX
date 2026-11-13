@@ -1023,7 +1023,7 @@ export default function DrawScreen() {
             ) : null}
           </View>
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
-          {mPhotos && !wide && !flat ? (
+          {mPhotos && !wide && !flat && canSave ? (
             <View testID="draw-photos-open">
               <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
                 <Icon name="camera" s={sizes.iconMd} color={c.ink} />

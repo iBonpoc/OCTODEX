@@ -43,11 +43,11 @@ export const extraIcons = {
   cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9.5a4.3 4.3 0 0 1-.5 8.5z",
   lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
   tag: "M3 3h8l10 10-8 8L3 11zM7.5 7.5h.01",
-  // the gutter's profile as a cross-section — the «Желоб» tool shows the chosen one (#1274, founder 12.11: «иконка… показывает выбранный»);
+  // a profile of a channel (a cross-section) — the module's «Желоб» tool shows the chosen one (#1274, founder 12.11: «иконка… показывает выбранный»);
   // first sketches (a 24 grid, the app's stroke): the founder may redraw them
-  gutterK: "M4 6h16M4 6v3h2.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9H20V6",
-  gutterHalf: "M4 7h16a8 8 0 0 1-16 0z",
-  gutterFascia: "M4 5h16v3.5h-3V18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V8.5H4z",
-  gutterBox: "M5 6h14v12H5z",
-  gutterEuro: "M4 7h16v4a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z",
+  profK: "M4 6h16M4 6v3h2.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9H20V6",
+  profHalf: "M4 7h16a8 8 0 0 1-16 0z",
+  profFascia: "M4 5h16v3.5h-3V18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V8.5H4z",
+  profBox: "M5 6h14v12H5z",
+  profEuro: "M4 7h16v4a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z",
 } as const;
