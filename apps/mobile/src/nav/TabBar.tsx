@@ -1,3 +1,4 @@
+import { fillStyle } from "@/ui/fill";
 import { useEffect, useState, type ReactNode } from "react";
 import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
 import { View, type LayoutChangeEvent } from "react-native";
@@ -205,7 +206,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
           <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
-              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
+              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill }, fillStyle(c), pill]}
             />
             {ordered}
           </View>
