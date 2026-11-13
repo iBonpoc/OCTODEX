@@ -5,7 +5,8 @@
 import { describe, expect, it } from "vitest";
 import { bisector, buildScene } from "../src/modules/gutters/canvas/scene";
 import { fitView } from "../src/modules/gutters/canvas/scene";
-import { candidates } from "../src/modules/gutters/canvas/labels";
+import { candidates, overlaps } from "../src/modules/gutters/canvas/labels";
+import { font } from "@octo/design-tokens";
 import { cornerCut, cutAngleDeg, findCorners, type Drawing, type DrawnRun, type P } from "../src/modules/gutters/geometry";
 
 const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
@@ -44,10 +45,12 @@ describe("a corner is written as its degrees alone, on the bisector (#1275)", ()
 });
 
 describe("the cut of a piece at a corner is half the turn (#1275)", () => {
-  it("(180° − the angle between the walls) / 2: 45° for a right angle, 22.5° for 135°", () => {
-    expect(cutAngleDeg(90)).toBe(45);
-    expect(cutAngleDeg(45)).toBe(22.5);
-    for (const turn of [20, 45, 70, 90, 120]) expect(cutAngleDeg(turn)).toBeCloseTo((180 - (180 - turn)) / 2, 9);
+  it("(180° − the angle between the walls) / 2 — measured from what `cornerCut` says: 45° for a right angle, 22.5° for 135°", () => {
+    const turn = (d: Drawing) => findCorners(d)[0]!.turnDeg;
+    const V: Drawing = { runs: [run("a", [0, 0], [300, 0]), run("b", [300, 0], [300 + 212, 212])], downspouts: [] };
+    for (const d of [L, V]) expect(cutAngleDeg(turn(d))).toBeCloseTo((180 - cornerCut(d, findCorners(d)[0]!).angleDeg) / 2, 9);
+    expect(cutAngleDeg(turn(L))).toBe(45);
+    expect(cutAngleDeg(turn(V))).toBe(22.5);
   });
 });
 
@@ -79,5 +82,61 @@ describe("«· эт N» only with more than one storey (#1275)", () => {
   });
   it("two storeys: each length with its storey", () => {
     expect(lens(two).every((t) => t.includes("эт"))).toBe(true);
+  });
+});
+
+describe("the degrees and the lengths never lie on each other, and the degrees are not lost (#1352 review)", () => {
+  /** two runs from a joint at (300, 0): `a` runs from the left, `b` leaves at `turnDeg` (left turn); an interior angle of 180 − turn */
+  const wedge = (turnDeg: number, bLen = 220, houseSide?: "L" | "R"): Drawing => {
+    const t = (turnDeg * Math.PI) / 180;
+    return { runs: [run("a", [0, 0], [300, 0], houseSide), run("b", [300, 0], [300 + bLen * Math.cos(t), bLen * Math.sin(t)], houseSide)], downspouts: [] };
+  };
+  const view = (d: Drawing) => fitView(d.runs.flatMap((r) => [r.a, r.b]), { w: 390, h: 700 }, 100);
+  const sceneOf = (d: Drawing) => buildScene(d, { ...opts(view(d)), lenWithStory: true });
+  const apart = (ls: { x: number; y: number; w: number; h: number }[]) => {
+    for (let i = 0; i < ls.length; i++) for (let j = i + 1; j < ls.length; j++) {
+      const bx = (l: (typeof ls)[0]) => ({ x0: l.x - l.w / 2, y0: l.y - l.h / 2, x1: l.x + l.w / 2, y1: l.y + l.h / 2 });
+      if (overlaps(bx(ls[i]!), bx(ls[j]!))) return false;
+    }
+    return true;
+  };
+
+  it.each([30, 60, 90, 135, 150])("a wedge with a %d° interior angle: the degrees are there, the labels are apart", (_i) => {
+    const turn = 180 - _i; // the interior angle `_i`
+    const s = sceneOf(wedge(turn));
+    const corner = s.labels.find((l) => l.kind === "corner");
+    expect(corner, `the degrees of ${_i}° are not lost`).toBeDefined();
+    expect(corner!.text).toBe(`${_i}°`);
+    expect(apart(s.labels)).toBe(true);
+  });
+  it("a sharp wedge (30°): the degrees' box does not lie over either gutter's line", () => {
+    const s = sceneOf(wedge(150));
+    const c = s.labels.find((l) => l.kind === "corner")!;
+    const bx = { x0: c.x - c.w / 2, y0: c.y - c.h / 2, x1: c.x + c.w / 2, y1: c.y + c.h / 2 };
+    const hits = (a: [number, number], b: [number, number]) => {
+      const n = 60;
+      for (let i = 0; i <= n; i++) { const x = a[0] + ((b[0] - a[0]) * i) / n, y = a[1] + ((b[1] - a[1]) * i) / n; if (x > bx.x0 && x < bx.x1 && y > bx.y0 && y < bx.y1) return true; }
+      return false;
+    };
+    for (const r of s.runs) expect(hits(r.a, r.b), `the gutter ${r.id}`).toBe(false);
+  });
+  it("a very short gutter (no arc on the screen): the degrees are there, apart from its length", () => {
+    const d: Drawing = { runs: [run("a", [0, 0], [300, 0]), run("b", [300, 0], [300, 14])], downspouts: [] };
+    const s = sceneOf(d);
+    expect(s.corners[0]!.arc).toBeNull();
+    expect(s.labels.find((l) => l.kind === "corner")).toBeDefined();
+    expect(apart(s.labels)).toBe(true);
+  });
+  it.each(["L", "R"] as const)("the house on the %s: the face side and the bisector may meet — still apart, the degrees there", (side) => {
+    const s = sceneOf(wedge(90, 220, side));
+    expect(s.labels.find((l) => l.kind === "corner")).toBeDefined();
+    expect(apart(s.labels)).toBe(true);
+  });
+  it("the corner's box is as small as its text: from `font.size.micro`, not the length labels' size", () => {
+    const s = sceneOf(wedge(90));
+    const c = s.labels.find((l) => l.kind === "corner")!;
+    const len = s.labels.find((l) => l.kind === "len")!;
+    expect(c.h).toBe(Math.ceil(font.size.micro * 1.4));
+    expect(c.h).toBeLessThan(len.h);
   });
 });

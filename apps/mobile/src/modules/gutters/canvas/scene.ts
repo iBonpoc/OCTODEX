@@ -3,7 +3,7 @@
  * The painter (SvgPainter today; Skia only if the device check fails — rule 17) draws exactly this, nothing else,
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
-import { drawing as DT } from "@octo/design-tokens";
+import { drawing as DT, font } from "@octo/design-tokens";
 import { dsCode } from "./attrs";
 import { capSide, cornerCut, findCorners, houseSides, isOpenEnd, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen, type LenFormat } from "./format";
@@ -234,10 +234,13 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   const manyStories = new Set(runs.map((r) => r.story)).size > 1;
   const texts = new Map<string, { text: string; kind: SceneLabel["kind"] }>();
   const want: LabelWant[] = [];
-  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number, must?: boolean, side?: [number, number], first?: (w: number) => [number, number], sidePad?: number) => {
+  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number, must?: boolean, side?: [number, number], first?: (w: number) => [number, number][], sidePad?: number) => {
     texts.set(id, { text, kind });
-    const w = labelWidth(text, o.fontSize, o.padX);
-    want.push({ id, a, b, w, h, priority, pad, ...(must ? { must } : {}), ...(side ? { side } : {}), ...(sidePad ? { sidePad } : {}), ...(first ? { first: first(w) } : {}) });
+    // a corner's degrees are written small (`font.size.micro`, SvgPainter): its box is as small as its text (#1352 review)
+    const small = kind === "corner";
+    const w = labelWidth(text, small ? font.size.micro : o.fontSize, o.padX);
+    const hh = small ? Math.ceil(font.size.micro * 1.4) : h;
+    want.push({ id, a, b, w, h: hh, priority, pad, ...(must ? { must } : {}), ...(side ? { side } : {}), ...(sidePad ? { sidePad } : {}), ...(first ? { first: first(w) } : {}) });
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
@@ -260,9 +263,18 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   if (o.cornerText) for (const k of corners) {
     // the degrees sit on the bisector of the angle, just outside its arc (founder 12.11: «градус возле дуги, с той стороны, где угол», #1275)
     const rr = k.arc ? k.arc.r : o.dsPad ?? 0;
-    add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", -1, o.dsPad, undefined, undefined, (w) => {
-      const reach = Math.abs(k.bis[0]) * (w / 2) + Math.abs(k.bis[1]) * (h / 2) + o.gap;
-      return [k.at[0] + k.bis[0] * (rr + reach), k.at[1] + k.bis[1] * (rr + reach)];
+    // the degrees are placed BEFORE the lengths (a length slides along its gutter; the angle has one place) and have many places to try: on the
+    // bisector, then turned off it, then farther — a sharp wedge still finds one free of the lines (#1352 review: the angle is not lost)
+    const hc = Math.ceil(font.size.micro * 1.4);
+    add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", 1e5, o.dsPad, undefined, undefined, (w) => {
+      const reach = Math.abs(k.bis[0]) * (w / 2) + Math.abs(k.bis[1]) * (hc / 2) + o.gap;
+      const out: [number, number][] = [];
+      for (const far of [1, 1.7]) for (const deg of [0, 20, -20, 40, -40, 65, -65]) {
+        const a = (deg * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
+        const bx = k.bis[0] * c - k.bis[1] * sn, by = k.bis[0] * sn + k.bis[1] * c;
+        out.push([k.at[0] + bx * (rr + reach) * far, k.at[1] + by * (rr + reach) * far]);
+      }
+      return out;
     });
   }
   for (const x of o.extra ?? []) {
@@ -271,7 +283,7 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   }
   const marks = o.dsPad ? [...ds.map((x) => x.at), ...caps.map((x) => x.at), ...corners.map((x) => x.at)].map((at) => ({ at, r: o.dsPad! })) : [];
   // the gutters and their faces are lines no word lies on (#1185)
-  const lines = runs.flatMap((r) => [{ a: r.a, b: r.b }, { a: r.face[0], b: r.face[1] }]);
+  const lines = [...runs.flatMap((r) => [{ a: r.a, b: r.b }, { a: r.face[0], b: r.face[1] }]), ...corners.flatMap((k) => (k.arc ? [{ a: k.arc.from, b: k.arc.to }] : []))];
   const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, marks, lines);
   return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })), ...(o.gridMinPx ? { grid: buildGrid(o.view, o.viewport, o.gridMinPx) } : {}) };
 }

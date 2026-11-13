@@ -21,8 +21,8 @@ export interface LabelWant {
   side?: [number, number];
   /** how far the face line stands on that side: the label clears it too (it would lie on the dashed line otherwise) */
   sidePad?: number;
-  /** a place tried before every other (a point label: a corner's degrees on the bisector of its angle, #1275) */
-  first?: [number, number];
+  /** places tried before every other, best first (a point label: a corner's degrees on the bisector of its angle, then turned a little off it, #1275) */
+  first?: readonly [number, number][];
   /** the label may lie over a line when there is no clear place (a long gutter's length, the picked one's): the others are
    *  hidden instead — a word on a line it does not belong to reads as someone else's (#1185) */
   must?: boolean;
@@ -74,19 +74,23 @@ export function candidates(l: LabelWant, gap: number): [number, number][] {
   const [nx, ny] = L > 0 ? [-dy / L, dx / L] : [0, -1];
   const pad = l.pad ?? 0;
   const reach = Math.abs(nx) * (l.w / 2) + Math.abs(ny) * (l.h / 2) + gap + pad;
-  const out: [number, number][] = l.first ? [l.first] : [];
+  const out: [number, number][] = l.first ? [...l.first] : [];
   // the preferred side (away from the house) is tried before the other one
   const sg = l.side && nx * l.side[0] + ny * l.side[1] < 0 ? -1 : 1;
   const along = L > 0 ? [0.5, 0.3, 0.7, 0.15, 0.85, 0.05, 0.95] : [0.5];
   // beside the line first; then a little further off it (the room next to a short run is taken by its neighbours)
+  // every place on the preferred side (outside from the house) first, near then far; only then the other side (#1352 review)
+  const pre = l.side ? (l.sidePad ?? 0) : 0;
+  const other: [number, number][] = [];
   for (const far of [1, 1.8]) {
     for (const t of along) {
       const cx = ax + dx * t;
       const cy = ay + dy * t;
-      const pre = l.side ? (l.sidePad ?? 0) : 0;
-      out.push([cx + sg * nx * (reach + pre) * far, cy + sg * ny * (reach + pre) * far], [cx - sg * nx * reach * far, cy - sg * ny * reach * far]);
+      out.push([cx + sg * nx * (reach + pre) * far, cy + sg * ny * (reach + pre) * far]);
+      other.push([cx - sg * nx * reach * far, cy - sg * ny * reach * far]);
     }
   }
+  out.push(...other);
   if (L === 0) out.push([ax + l.w / 2 + gap * 2 + pad, ay], [ax - l.w / 2 - gap * 2 - pad, ay], [ax, ay + l.h + gap + pad]);
   return out;
 }
