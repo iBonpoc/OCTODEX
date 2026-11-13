@@ -79,6 +79,8 @@ exports.run = async (h) => {
   await vis('[data-testid^="est-name-"]').first().locator("input").fill("Fastener (тестовые)");
   await vis('[data-testid^="est-price-"]').first().locator("input").fill("9");
   const sid = (await vis('[data-testid^="est-collapse-"]').first().getAttribute("data-testid")).replace("est-collapse-", "");
+  // «Вид» is a list now (DS §8.3, #1307): open it, then pick «Материал»
+  await tid(`est-kind-${sid}-button`).click();
   await tid(`est-kind-${sid}-material`).click();
   await tid(`est-save-catalog-${sid}`).waitFor({ timeout: 3000 });
   h.expect(/себестоимост/.test(await tid(`est-save-catalog-${sid}`).innerText()), "a material with no cost: the reason under the toggle");

@@ -3,7 +3,7 @@ import { canSeeClientLink } from "@/features/estimateSign";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { haptics } from "@/ui/haptics";
-import { component, space, size } from "@octo/design-tokens";
+import { component, motion, space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import { canMakeEstimateAt, canSeeEstimate } from "@/features/access";
@@ -14,6 +14,7 @@ import { MAX_OPTIONS, linesFromCatalog, newLine, cloneOption, costComplete, esti
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker, itemPrice, kindLabel } from "@/features/estimatePickers";
 import { LineRow, rowFieldId, type RowAction, type RowApi } from "@/features/estimate/LineRow";
+import { useRowView } from "@/features/estimate/rowView";
 import { SortableList, type DropResult } from "@/features/SortableList";
 import type { Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
@@ -101,6 +102,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // the open row of the list (DS §8.3: one open; it closes and keeps what is typed when another opens, «Новая позиция»,
   // «Из каталога», a finger starts to scroll or the estimate is saved); the focus it takes when it opens
   const [openId, setOpenId] = useState<string | null>(null);
+  // «Кратко / Подробно» of the folded rows — the device remembers it (DS §8.3)
+  const [rowLook, setRowLook] = useRowView();
+  // a finger went down on the open row: a scroll that starts there leaves it open (DS §8.3, spec §11 п.5)
+  const touchInOpen = useRef(0);
   const [focusRow, setFocusRow] = useState<{ id: string; field: "name" | "qty" } | null>(null);
   const [picker, setPicker] = useState<"add" | { replace: string } | { addTo: string } | null>(null);
   // sections (DS §8.5): the folded ones are the phone's own state; the one being renamed in place; the row to move (its sheet)
@@ -437,6 +442,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     }),
     [],
   );
+  const markTouchInOpen = useMemo(() => () => {
+    touchInOpen.current = Date.now();
+  }, []);
   const rowApi = useMemo<RowApi>(
     () => ({
       open: (id) => latest.current.openRow(id),
@@ -576,7 +584,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   return (
     <Screen onScrollBegin={() => {
       swipes.closeOpen();
-      void leaveRow(true);
+      // the finger that starts this scroll went down a moment ago; an older touch (a tap on a field) does not count
+      const inOpen = Date.now() - touchInOpen.current < motion.durSlow * 3;
+      touchInOpen.current = 0;
+      // the page scrolls from a finger on the open row (to its lower fields): the row stays open; anywhere else it folds
+      if (!inOpen) void leaveRow(true);
     }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
       <ActionBar testID="est-actionbar" summary={<RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>}>
         {saveButtons}
@@ -649,6 +661,11 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           ) : null}
 
           <SectionTitle title={t("ue.items")} right={act.length ? <T v="caption" tone="mut">{act.length}</T> : undefined} />
+          {option.lines.length ? (
+            <View testID="est-row-view">
+              <Segmented<"brief" | "full"> full label={t("est2.view.label")} value={rowLook} onChange={setRowLook} items={[{ key: "brief", label: t("est2.view.brief") }, { key: "full", label: t("est2.view.full") }]} />
+            </View>
+          ) : null}
           <View ref={linesRef} collapsable={false} style={{ gap: space[1] }}>
           <Card style={missing === "lines" ? { borderColor: c.status.bad.fill } : undefined}>
             {option.lines.length === 0 ? (
@@ -705,6 +722,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                     catalog={openId === r.line.id && store.role !== "tech" ? catalogStateOf(r.line) : undefined}
                     autoFocus={focusRow?.id === r.line.id ? focusRow.field : undefined}
                     checkPrice={checkPrice.includes(r.line.id)}
+                    view={rowLook}
+                    onTouchOpen={openId === r.line.id ? markTouchInOpen : undefined}
                   />
                 </View>
               )

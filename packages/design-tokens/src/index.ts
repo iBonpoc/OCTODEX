@@ -183,6 +183,8 @@ export const component = {
   shadowSm: { offsetY: 2, radius: 8, opacity: 0.25, /** Android has no shadow* props: the same lift as `elevation` (app-only, not in the CSS) */ elevation: 2 },
   /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
   swipeAction: { w: 80, full: 0.6 },
+  /** DS §8.3 (#1307): the open estimate line's numbers in one row — the quantity and the unit narrow, the price takes the rest */
+  estRow: { qty: 80, unit: 88 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */
