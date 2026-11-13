@@ -591,8 +591,12 @@ export type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
 export interface EstimateDoc {
   options: CustomOption[];
   settings: CustomSettings;
-  /** note to the client (scope, terms) */
+  /** «Notes» — a note to the client (scope, what is included) */
   note?: string;
+  /** «Terms & conditions» (#1304, docs/specs/40): the text the client reads before signing, a snapshot in the version — a later
+   *  change of the company's default never moves it. Absent = an estimate made before #1304 (the client sees the company's
+   *  default in their language, features/estimateTerms termsForClient); "" = cleared on purpose (no block). ≤ TERMS_MAX */
+  terms?: string;
   /** when the phone last saved this version: the server's version row has no time of its own, and estimates.updated_at moves with
    *  anything (a client's view, sending, signing) — «the last estimate» reads this (РС-7a) */
   savedAt?: string;
@@ -917,7 +921,14 @@ export interface Company {
   visitSettings?: Partial<VisitSettings>;
   /** the «not done» card looks at visits started from here (docs/specs/08 §11.5 №26; companies.checklist_since) */
   checklistSince?: string;
-  estimate: { validDays: number; depositBps: number | null; terms?: string };
+  estimate: {
+    validDays: number;
+    depositBps: number | null;
+    /** the old single default (rule 16, step 1: still written = termsByLang.en for older phones; read only as the last fallback) */
+    terms?: string;
+    /** #1304: the default «Terms & conditions» of a new estimate by the client's language — en is the fallback, es / ru optional */
+    termsByLang?: Partial<Record<import("@/i18n/translate").DocLang, string>>;
+  };
   payment: { zelle?: string; checkPayableTo?: string };
   licenses: CompanyLicense[];
   contacts: CompanyContact[];
