@@ -628,11 +628,8 @@ export default function DrawScreen() {
             dsPad: DS_MARK_R,
             dsText: (n) => t("mod.gutters.ds", { n }),
             storyText: (n) => t("mod.gutters.story", { n }),
-            cornerText: (kind, splash, angleDeg) => {
-              // the word and the angle between the walls (#933): «внутр. 90°», a skew one «наруж. 106°»
-              const k = `${t(kind === "in" ? "mod.gutters.draw.cornerIn" : kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay")} ${angleDeg}°`;
-              return splash ? t("mod.gutters.draw.cornerSplash", { k }) : k;
-            },
+            // only the angle between the walls, «135°» (founder 12.11, #1275): no «наруж./внутр./эркер» on the canvas; the kind and the guard are in the corner's sheet
+            cornerText: (_kind, _splash, angleDeg) => `${angleDeg}°`,
             faceOff: dt.runW * 2,
             dimDs: dim ? fresh : null,
             gridMinPx: space[6],

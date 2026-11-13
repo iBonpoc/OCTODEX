@@ -347,6 +347,13 @@ export const faceOffsetIn = (r: Pick<DrawnRun, "attrs">) => {
 };
 
 /**
+ * The angle each piece is cut at a corner (the mitre; #1275): half the turn — (180° − the angle between the walls) / 2: 45° for a right angle,
+ * 22½° for 135°. The angle is taken at the BACK wall (the lines at the wall; the face runs parallel to them, so the angle is the same, only
+ * the lengths differ — `cornerCut`).
+ */
+export const cutAngleDeg = (turnDeg: number): number => turnDeg / 2;
+
+/**
  * The cut of a corner (founder 08.11): for each of its runs, the length along the back (the wall) and along the face.
  * At a corner end the face is longer (outside) or shorter (inside) by offset · tan(turn / 2) — 90° → the offset itself;
  * a cap end adds nothing. Both ends of a run count (a run between two corners). To the nearest 1/16″.
