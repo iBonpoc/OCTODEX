@@ -121,7 +121,13 @@ jobs:
         with:
           path: ~/libfaketime
           key: libfaketime-v0.9.10-${{ runner.os }}-${{ runner.arch }}-d475b925943ad404c6c728ac868dc73949e7281c
-      - name: Database tests (PostgreSQL 16)
+      # PostgreSQL 17 is not on the image: its packages (PGDG + what the image lacks) are kept between runs, so a run installs
+      # them with dpkg and needs no mirror (#806, #1060); a new image that no longer fits them — apt again (scripts/dbTools.sh)
+      - uses: actions/cache@v4
+        with:
+          path: ~/pg17-debs
+          key: pg17-debs-${{ runner.os }}-${{ runner.arch }}-ubuntu-24.04-v1
+      - name: Database tests (PostgreSQL 17)
         run: |
           bash scripts/aptRetries.sh
           bash scripts/dbTools.sh postgres faketime
