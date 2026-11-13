@@ -320,8 +320,12 @@ interface NumRule { min: number; max: number; def: number; step: number }
 export const RULE_NUMS = {
   storyFt: { min: 8, max: 20, def: 10, step: 1 },
   hangerSpacingIn: { min: 12, max: 36, def: 24, step: 2 },
-  wastePct: { min: 0, max: 100, def: 5, step: 1 },
+  /** 0 = «без запаса» (#1355, founder 13.11: «10 % запас должен настраиваться и убираться»); a whole percent otherwise */
+  wastePct: { min: 0, max: 100, def: 10, step: 1 },
+  /** an INSIDE (and a bay) field-cut corner takes this much gutter, inches. Stays 0–12 until rule 16 step 2: a phone with the old app reads a value above 12 as «out of range» and takes 6 — two devices of one company would buy differently (review of #1381) */
   cutCornerIn: { min: 0, max: 12, def: 6, step: 1 },
+  /** an OUTSIDE field-cut corner (#1355, founder 13.11: «для наружного 14 инчей. Для внутреннего 6 инчей»): 14 does not fit 0–12, hence 0–24 here, in a new field the old app does not read */
+  cutCornerOutIn: { min: 0, max: 24, def: 14, step: 1 },
   runPerDsFt: { min: 30, max: 50, def: 40, step: 1 },
   expansionFt: { min: 40, max: 50, def: 50, step: 1 },
   dsExtensionIn: { min: 0, max: 60, def: 0, step: 6 },
@@ -342,6 +346,7 @@ export interface Rules {
   hangerExtra: boolean;
   wastePct: number;
   cutCornerIn: number;
+  cutCornerOutIn: number;
   runPerDsFt: number;
   expansionFt: number;
   expansionPart: boolean;
@@ -387,6 +392,7 @@ export function readRules(raw: unknown): Rules {
     hangerExtra: bool(r.hangerExtra, d.hangerAtEnds),
     wastePct: num(r.wastePct, RULE_NUMS.wastePct),
     cutCornerIn: num(r.cutCornerIn, RULE_NUMS.cutCornerIn),
+    cutCornerOutIn: num(r.cutCornerOutIn, RULE_NUMS.cutCornerOutIn),
     runPerDsFt: num(r.runPerDsFt, RULE_NUMS.runPerDsFt),
     expansionFt: num(r.expansionFt, RULE_NUMS.expansionFt),
     expansionPart: bool(r.expansionPart, d.expansionJointPart),
@@ -444,6 +450,7 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     hangerAtEnds: r.hangerExtra,
     wastePct: (r.wastePct / 100).toFixed(2),
     cutCornerAllowanceIn: r.cutCornerIn,
+    cutCornerOutAllowanceIn: r.cutCornerOutIn,
     maxRunPerDownspoutIn: r.runPerDsFt * 12,
     expansionJointIn: r.expansionFt * 12,
     expansionJointPart: r.expansionPart,

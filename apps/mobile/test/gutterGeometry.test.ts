@@ -226,14 +226,14 @@ describe("drawing → engine", () => {
     expect(Number(q("endcap.L.k.6.alu_032.white") ?? 0) + Number(q("endcap.R.k.6.alu_032.white") ?? 0)).toBe(2);
     expect(q("labor.downspout.story1")).toBe("1");
   });
-  it("a cut corner keeps the runs' gauge and finish: one coil line, the corner's 6 in included", () => {
+  it("a cut corner keeps the runs' gauge and finish: one coil line, the corner's 14 in (an outside corner) included", () => {
     const g = { ...attrs, material: "aluminum", gauge: ".032", finish: "painted" as const };
     const d: Drawing = { runs: [{ ...rect[0]!, attrs: g }, { ...rect[1]!, attrs: g }], downspouts: [] };
     const m = toMeasurement(d, { method: "cut" });
     expect(m.corners[0]).toMatchObject({ gauge: ".032", finish: "painted" });
     const coils = computeGutterParts(m).parts.filter((p) => p.key.startsWith("coil."));
-    // (480 + 360 + 6) × 1.05 / 12 = 74.025 → 75
-    expect(coils.map((p) => [p.key, p.qty])).toEqual([["coil.k.6.aluminum.032.white", "75"]]);
+    // (480 + 360 + 14) × 1.10 / 12 = 78.28 → 79
+    expect(coils.map((p) => [p.key, p.qty])).toEqual([["coil.k.6.aluminum.032.white", "79"]]);
   });
   it("a downspout on a deleted run is dropped", () => {
     const m = toMeasurement({ runs: [rect[0]!], downspouts: [{ id: "d", runId: "gone", atIn: 0, shape: "rect", size: "3x4", material: "alu", bottom: { kind: "none" } }] });
