@@ -2913,6 +2913,7 @@ export const ru = {
   "mod.gutters.draw.hint.select": "Сначала нажмите на желоб или водосток — он выберется",
   "mod.gutters.draw.hint.move": "Зажмите конец или угол и тяните — он двигается свободно, с прилипанием к 45° и 90°",
   "mod.gutters.draw.hint.threeEnds": "Стык из трёх концов не двигается — двигайте желоба по одному",
+  "mod.gutters.draw.hint.threeJoin": "Стык из трёх концов не делаем — конец остаётся на месте",
   "mod.gutters.draw.nextDs": "Дальше: поставьте водостоки на желоба",
   "mod.gutters.draw.fit": "Весь рисунок",
   "mod.gutters.draw.test": "тестовые цены",

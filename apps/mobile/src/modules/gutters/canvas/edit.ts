@@ -194,10 +194,38 @@ export function moveEndAlong(d: Drawing, runId: string, end: 0 | 1, p: P): Drawi
  * and lengths (a measured length is the estimate's input), and carry `openEnds` at the meeting ends, so the corner is not
  * found there and each end is an end cap. Moving that end later drops the mark (`closeEnd`).
  */
-export function splitCorner(d: Drawing, corner: Pick<FoundCorner, "runs">): Drawing {
+export function splitCorner(d: Drawing, corner: Pick<FoundCorner, "runs">, offsetIn = 0): Drawing {
   const ids = new Map(corner.runs.map((x) => [x.id, x.end] as const));
   if (!corner.runs.every((x) => d.runs.some((r) => r.id === x.id))) return d;
-  return { ...d, runs: d.runs.map((r) => (ids.has(r.id) ? { ...r, attrs: { ...r.attrs, openEnds: { ...r.attrs.openEnds, [ids.get(r.id) ? "b" : "a"]: true } } } : r)) };
+  const marked = d.runs.map((r) => (ids.has(r.id) ? { ...r, attrs: { ...r.attrs, openEnds: { ...r.attrs.openEnds, [ids.get(r.id) ? "b" : "a"]: true } } } : r));
+  if (offsetIn <= 0) return { ...d, runs: marked };
+  // #1282: a freed end that still lies on a point where another gutter of the storey has an end (a third end at the joint) is
+  // set `offsetIn` back along its OWN gutter, so it can be seen, taken and pulled; the measured length stays what it was
+  const others = (r: DrawnRun, q: P) => marked.some((o) => !ids.has(o.id) && sameStory(o, r) && [o.a, o.b].some((e) => Math.hypot(e[0] - q[0], e[1] - q[1]) <= 1.5));
+  return {
+    ...d,
+    runs: marked.map((r) => {
+      const end = ids.get(r.id);
+      if (end === undefined) return r;
+      const at = end ? r.b : r.a, far = end ? r.a : r.b;
+      const len = Math.hypot(far[0] - at[0], far[1] - at[1]);
+      if (!others(r, at) || len < offsetIn * 2) return r;
+      const k = offsetIn / len;
+      const moved: P = [at[0] + (far[0] - at[0]) * k, at[1] + (far[1] - at[1]) * k];
+      return { ...r, lengthIn: runLengthIn(r), ...(end === 0 ? { a: moved } : { b: moved }) };
+    }),
+    downspouts: d.downspouts.map((s) => {
+      const r = marked.find((x) => x.id === s.runId);
+      return r && ids.get(r.id) === 0 && ids.has(r.id) && marked.some((o) => !ids.has(o.id) && sameStory(o, r) && [o.a, o.b].some((e) => Math.hypot(e[0] - r.a[0], e[1] - r.a[1]) <= 1.5)) ? { ...s, atIn: Math.max(0, s.atIn - offsetIn) } : s;
+    }),
+  };
+}
+
+/** #1282: is `p` a point where two ends of a storey already meet (a corner)? An end let go there would make a joint of three ends (П35, not done) */
+export function onCornerPoint(d: Drawing, story: DrawnRun, skip: Set<string>, p: P, tolIn: number): boolean {
+  const near = (q: P) => Math.hypot(q[0] - p[0], q[1] - p[1]) <= tolIn;
+  const ends = d.runs.filter((x) => !skip.has(x.id) && sameStory(x, story)).flatMap((x) => [x.a, x.b]).filter(near);
+  return ends.length >= 2 && ends.every((q) => Math.hypot(q[0] - ends[0]![0], q[1] - ends[0]![1]) <= 1.5);
 }
 
 export interface Swing {
