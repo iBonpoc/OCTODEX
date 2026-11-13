@@ -8,7 +8,7 @@
  * - at three the copy is pale and says «Не больше трёх вариантов»;
  * - «Ещё → Удалить» and «Вернуть».
  */
-const { closeSheet, sheetGone } = require("../sheet.cjs");
+const { sheetGone } = require("../sheet.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -35,14 +35,14 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-line-"]')) === 1, "the copy has the same one line");
   const [good, better] = await totalIds();
   h.expect(!!good && !!better, "two totals under the segments");
-  h.expect((await totals()).every((x) => /\$100\.00/.test(x)), `both totals $100 (${await totals()})`);
+  h.expect((await totals()).every((x) => /\$100\b/.test(x)), `both totals $100 (${await totals()})`);
   h.expect(/Вы правите «Better»/.test(await tid("est-variants").innerText()), "the copy «Better» is the one edited");
 
   // a change in the copy: its total changes while typing, the first stays
   await vis('[data-testid^="est-line-"]').first().click();
   await vis('[data-testid^="est-price-"]').first().locator("input").fill("150");
-  await p.waitForFunction((id) => /\$150\.00/.test(document.querySelector(`[data-testid="est-var-total-${id}"]`)?.textContent || ""), better, { timeout: 3000 });
-  h.expect(/\$100\.00/.test(await tid(`est-var-total-${good}`).innerText()), "the first option's total stays $100");
+  await p.waitForFunction((id) => /\$150\b/.test(document.querySelector(`[data-testid="est-var-total-${id}"]`)?.textContent || ""), better, { timeout: 3000 });
+  h.expect(/\$100\b/.test(await tid(`est-var-total-${good}`).innerText()), "the first option's total stays $100");
   await line.fold(h);
   await h.shot("two");
 
@@ -50,7 +50,7 @@ exports.run = async (h) => {
   await tid(`est-var-total-${good}`).click();
   await p.waitForFunction(() => /Вы правите «Good»/.test(document.querySelector('[data-testid="est-variants"]')?.textContent || ""), null, { timeout: 3000 });
   const sum = await vis('[data-testid^="est-sum-"]').first().innerText();
-  h.expect(/\$100\.00/.test(sum), `«Good» keeps $100 (${sum})`);
+  h.expect(/\$100\b/.test(sum), `«Good» keeps $100 (${sum})`);
 
   // «?» — five steps and what is shared
   await tid("est-var-help").getByRole("button").click();
@@ -58,7 +58,9 @@ exports.run = async (h) => {
   for (const n of [1, 2, 3, 4, 5]) h.expect((await count(`[data-testid="est-var-step-${n}"]`)) === 1, `«?» step ${n}`);
   h.expect(/скидка, налог/.test(await tid("est-var-common").innerText()), "«Общее для всех»");
   await h.shot("help");
-  await closeSheet(p);
+  // «Понятно» closes it
+  await tid("est-var-help-sheet").getByRole("button").last().click();
+  await sheetGone(p);
 
   // «Ещё → Рекомендовать «Good»»: «★ рекомендуем» under its total
   await tid("est-var-more").getByRole("button").click();

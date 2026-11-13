@@ -1,13 +1,12 @@
 import { useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
-import { size, space } from "@octo/design-tokens";
+import { component, size, space } from "@octo/design-tokens";
 import type { CustomOption } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton, Segmented, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
-import { ReadOnly } from "@/ui/readOnly";
 import { Card, RowView } from "@/ui/surfaces";
 import { MAX_OPTIONS } from "@/features/estimateDoc";
 
@@ -99,7 +98,7 @@ export function OptionsCard(p: {
                   accessibilityRole="button"
                   accessibilityLabel={`${o.name}: ${money(p.totals[o.id] ?? 0)}${o.recommended ? `, ${t("est.var.recommended")}` : ""}`}
                   testID={`est-var-total-${o.id}`}
-                  style={{ flex: 1 }}
+                  containerStyle={{ flex: 1 }}
                 >
                   <View style={{ minHeight: size.hitMin, alignItems: "center", justifyContent: "center" }}>
                     <T v="body" w={o.id === cur.id ? "semibold" : undefined} tone={o.id === cur.id ? "ink" : "mut"} tabular center>
@@ -126,11 +125,9 @@ export function OptionsCard(p: {
               <RowView style={{ flexWrap: "wrap" }}>
                 {full ? (
                   // three already: the button is pale and does not copy; a press says why (DS §8.10)
-                  <Press onPress={() => toast.show(t("est.var.max"))} visibleHeight={size.hitMin} accessibilityRole="button" accessibilityLabel={`${t("est.var.copy", { name: cur.name })}. ${t("est.var.max")}`} testID="est-var-copy-max">
-                    <ReadOnly value>
-                      <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" size="sm" />
-                    </ReadOnly>
-                  </Press>
+                  <View testID="est-var-copy-max" style={{ opacity: component.dimOpacity }}>
+                    <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" size="sm" accessibilityLabel={`${t("est.var.copy", { name: cur.name })}. ${t("est.var.max")}`} onPress={() => toast.show(t("est.var.max"))} />
+                  </View>
                 ) : (
                   <View testID="est-var-copy">
                     <Button label={t("est.var.copy", { name: cur.name })} icon="copy" variant="ghost" size="sm" onPress={p.onCopy} />

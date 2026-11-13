@@ -11,7 +11,11 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const vis = (sel) => p.locator(sel).locator("visible=true");
   const count = (sel) => vis(sel).count();
-  const page = () => p.evaluate(() => document.body.innerText);
+  // the page's words without the toast (the toast of the mode itself names «себестоимость»)
+  const page = () => p.evaluate(() => {
+    const toasts = [...document.querySelectorAll('[data-testid="toast-text"]')].map((e) => e.innerText);
+    return toasts.reduce((all, x) => all.split(x).join(""), document.body.innerText);
+  });
 
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid("est-add-new").waitFor({ timeout: 8000 });
