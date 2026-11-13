@@ -17,11 +17,11 @@ exports.run = async (h) => {
   const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
   raw.db.company.estimate = { ...raw.db.company.estimate, termsByLang: { en: "Net 15 (тестовые)." }, terms: "Net 15 (тестовые)." };
   raw.db.estimateTemplates = [];
-  raw.db.customers = raw.db.customers.map((c) =>
-    c.id !== "c2" ? c : { ...c, people: c.people?.length ? c.people.map((x, i) => (i === 0 ? { ...x, language: "es" } : x)) : [{ id: "pp371", name: c.name, role: "main", phones: [], emails: [], language: "es" }] });
-  // an estimate made before #1304: no `terms` key, not signed (it can still be changed)
-  const old = raw.db.estimates.find((e) => e.doc && !["approved", "awaiting_countersign", "declined"].includes(e.status));
+  // an estimate made before #1304: no `terms` key, not signed (it can still be changed); its client reads Spanish too
+  const old = raw.db.estimates.find((e) => e.doc && !e.leadId && !e.approval && !["approved", "awaiting_countersign", "declined"].includes(e.status));
   delete old.doc.terms;
+  const es = (c, id) => ({ ...c, people: c.people?.length ? c.people.map((x, i) => (i === 0 ? { ...x, language: "es" } : x)) : [{ id, name: c.name, role: "main", phones: [], emails: [], language: "es" }] });
+  raw.db.customers = raw.db.customers.map((c) => (c.id === "c2" ? es(c, "pp371") : c.id === old.customerId ? es(c, "pp371b") : c));
   await h.seed(DB_KEY, raw);
   await h.seed("octo.role.v1", "director");
 
@@ -30,9 +30,9 @@ exports.run = async (h) => {
   await tid("co-terms-en").waitFor({ timeout: 8000 });
   h.expect((await count("co-terms-es")) === 0, "Spanish is not there until added");
   await tid("co-terms-add-es").getByRole("button").click();
-  const es = tid("co-terms-es").locator("textarea, input").first();
-  await es.waitFor({ timeout: 3000 });
-  await es.fill("Neto 15. Arbitraje vinculante (pruebas).");
+  const esField = tid("co-terms-es").locator("textarea, input").first();
+  await esField.waitFor({ timeout: 3000 });
+  await esField.fill("Neto 15. Arbitraje vinculante (pruebas).");
   await tid("co-terms-arb-es").waitFor({ timeout: 3000 });
   h.expect((await count("co-terms-arb-en")) === 0, "no warning on the English text");
   await h.shot("company");
@@ -47,7 +47,8 @@ exports.run = async (h) => {
   // the old estimate: the row shows the default its client reads; opened, closed unchanged, saved — still no key
   await h.go(`/estimate/new?id=${old.id}`);
   await tid("est-terms-row").waitFor({ timeout: 8000 });
-  h.expect(/Neto 15|Net 15/.test(await tid("est-terms-row").innerText()), "an old estimate: the company's default on the row");
+  const oldRow = await tid("est-terms-row").innerText();
+  h.expect(/Arbitraje vinculante/.test(oldRow) && /Español/.test(oldRow), `an old estimate: the company's default in its client's language (${oldRow})`);
   await tid("est-terms-row").click();
   await tid("est-terms-field").waitFor({ timeout: 3000 });
   await tid("est-nt-done").getByRole("button").click();

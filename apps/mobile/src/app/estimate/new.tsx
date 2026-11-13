@@ -112,11 +112,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const afterClient = useRef<(() => void) | null>(null);
   /** #1304: a new estimate starts with the company's Terms in its client's language (a template never carries them, spec 40 §7);
    *  an estimate already saved keeps what it has — an old one without the key goes on showing the default (no key added) */
+  /** the lead the estimate is for: its own (opened by id), or the one it is made from — /p/, the PDF and the card read the same */
+  const leadOf = existing?.leadId ?? params.leadId;
   const withNewTerms = (d: EstimateDoc, cid: string | undefined): EstimateDoc =>
-    d.terms === undefined ? { ...d, terms: store.estimateTerms({ customerId: cid, leadId: params.leadId }).text } : d;
+    d.terms === undefined ? { ...d, terms: store.estimateTerms({ customerId: cid, leadId: leadOf }).text } : d;
   const [doc, setDoc] = useState<EstimateDoc>(() =>
-    existing?.doc
-      ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc)
+    existing
+      ? // an estimate saved already never gets the key here (one without a doc — an older phone's — starts empty, no Terms)
+        existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
       : tplEdit
         ? templateForEdit(tplEdit, seeCosts)
         : withNewTerms(draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps), draft?.customerId ?? params.customerId),
@@ -988,11 +991,12 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           <NotesTerms
             doc={doc}
             company={db.company}
-            lang={docLanguageFor(db, { customerId, leadId: params.leadId })}
+            lang={docLanguageFor(db, { customerId, leadId: leadOf })}
             onNote={(v) => setDoc((d) => ({ ...d, note: v }))}
             onTerms={(v) => setDoc((d) => ({ ...d, terms: v }))}
             noTerms={!!tplEdit}
             locked={signed}
+            signed={!!existing && (!!existing.approval || existing.status === "approved" || existing.status === "awaiting_countersign")}
           />
           {tplEdit ? (
             <View testID="est-tpl-save">
@@ -1230,7 +1234,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onClose={() => setClientPicker(false)}
         onPick={(cid, pid) => {
           // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
-          if (!existing && !tplEdit && cid !== customerId) setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: params.leadId }, to: { customerId: cid, leadId: params.leadId } }) }));
+          // (a draft saved before too — spec 40 §2.5, map S5: Terms of a draft follow its client; a sent one keeps its text)
+          if ((!existing || existing.status === "draft") && !tplEdit && cid !== customerId && doc.terms !== undefined)
+            setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: leadOf }, to: { customerId: cid, leadId: leadOf } }) }));
           setCustomerId(cid);
           setPropertyId(pid);
           setClientPicker(false);

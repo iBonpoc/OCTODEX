@@ -4,7 +4,7 @@
  */
 import type { Company, EstimateDoc } from "@/data/types";
 import { DOC_LANGS, type DocLang } from "@/i18n/translate";
-import { termsForClient } from "@/features/estimateTerms";
+import { cleanTerms, termsForClient } from "@/features/estimateTerms";
 
 /** how much of a text a row shows (one line on a phone) */
 export const PREVIEW_MAX = 60;
@@ -25,8 +25,9 @@ export function firstWords(text: string | undefined | null, max = PREVIEW_MAX): 
  * an estimate made before #1304 (no key) — what its client reads now, the company's default in their language, and the
  * key is NOT added until the text is changed here (spec 40 §6: the old estimate keeps showing the default)
  */
-export function termsShown(doc: Pick<EstimateDoc, "terms">, co: Pick<Company, "estimate"> | null | undefined, lang: DocLang): { text: string; own: boolean } {
-  return { text: termsForClient(doc, co, lang), own: typeof doc.terms === "string" };
+export function termsShown(doc: Pick<EstimateDoc, "terms">, co: Pick<Company, "estimate"> | null | undefined, lang: DocLang, signed = false): { text: string; own: boolean } {
+  // a signed estimate without its own text shows what its client signed (the old single text) — as /p/, the PDF and the card
+  return { text: termsForClient(doc, co, lang, signed), own: typeof doc.terms === "string" };
 }
 
 /**
@@ -42,4 +43,13 @@ export function termsToWrite(doc: Pick<EstimateDoc, "terms">, shown: string, typ
 /** the company's Terms fields on the screen: English always (the fallback), the others once written or added */
 export function termsLangsShown(est: Pick<Company["estimate"], "termsByLang">, added: DocLang[]): DocLang[] {
   return DOC_LANGS.filter((l) => l === "en" || est.termsByLang?.[l] !== undefined || added.includes(l));
+}
+
+/**
+ * The company's Terms after one language's field is written: the old single text stands for English when the record has no
+ * languages yet (a company cached by an older build) — else saving Spanish alone would send no English and wipe it (review)
+ */
+export function companyTermsWrite(est: Pick<Company["estimate"], "terms" | "termsByLang">, lang: DocLang, v: string): Partial<Record<DocLang, string>> {
+  const base = est.termsByLang ?? (est.terms?.trim() ? { en: est.terms } : {});
+  return { ...base, [lang]: cleanTerms(v) ?? "" };
 }

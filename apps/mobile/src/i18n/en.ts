@@ -2583,7 +2583,7 @@ export const en: Dict = {
   "ds.rows.firstHint": "First-estimate hints",
   "ds.rows.firstHintHint": "The “How to work with lines” card and the first line’s nudge: 1.4 and 0.8 of a button, the first three estimates (§8.11).",
   "ds.rows.notes": "Notes and Terms",
-  "ds.rows.notesHint": "Two estimate rows with a bottom window; a new estimate gets the company’s text (§8.12, #1304).",
+  "ds.rows.notesHint": "Two estimate rows, each opens a sheet; a new estimate gets the company Terms in the client’s language (shown beside them), Notes start empty; arbitration — a warning (§8.12, #1304).",
   "ds.rows.fromTemplate": "From template…",
   "ds.rows.fromTemplateHint": "“＋” in Estimates — “New estimate” or “From template…”; an empty estimate has a “From template…” button, then “⋯ → Add from template…”. Adds only; focus on the first line’s quantity, “›” goes to the next one (§8.13, #1117).",
   "ds.rows.eyeOff": "“Hidden from the client” icon (eyeOff)",

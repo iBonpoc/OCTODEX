@@ -6,9 +6,8 @@ import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DocLang } from "@/i18n";
 import { Button, TextField, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { TERMS_MAX } from "@/features/estimateTerms";
 import { ArbitrationWarn } from "@/features/estimate/NotesTerms";
-import { termsLangsShown } from "@/features/estimate/notesTerms";
+import { companyTermsWrite, termsLangsShown } from "@/features/estimate/notesTerms";
 
 /**
  * The company's default Terms by the client's language (DS §8.12, spec 40 §6, #1304): English always on the screen (the
@@ -22,7 +21,7 @@ export function CompanyTerms({ est, onChange }: { est: Company["estimate"]; onCh
   const [added, setAdded] = useState<DocLang[]>([]);
   const shown = termsLangsShown(est, added);
   const valueOf = (l: DocLang) => est.termsByLang?.[l] ?? (l === "en" ? (est.terms ?? "") : "");
-  const write = (l: DocLang, v: string) => onChange({ ...est, termsByLang: { ...(est.termsByLang ?? {}), [l]: Array.from(v).slice(0, TERMS_MAX).join("") } });
+  const write = (l: DocLang, v: string) => onChange({ ...est, termsByLang: companyTermsWrite(est, l, v) });
   return (
     <View testID="co-terms" style={{ gap: space[2] }}>
       <T v="heading">{t("co.tl.title")}</T>

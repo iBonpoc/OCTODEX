@@ -2583,7 +2583,7 @@ export const es: Dict = {
   "ds.rows.firstHint": "Pistas del primer presupuesto",
   "ds.rows.firstHintHint": "La tarjeta «Cómo trabajar con las líneas» y el empujón de la primera línea: 1,4 y 0,8 de un botón, los tres primeros presupuestos (§8.11).",
   "ds.rows.notes": "Notes y Terms",
-  "ds.rows.notesHint": "Dos filas del presupuesto con ventana inferior; un presupuesto nuevo lleva el texto de la empresa (§8.12, #1304).",
+  "ds.rows.notesHint": "Dos filas del presupuesto, cada una abre una hoja; un presupuesto nuevo toma los Términos de la empresa en el idioma del cliente (indicado al lado), las Notas empiezan vacías; arbitraje — un aviso (§8.12, #1304).",
   "ds.rows.fromTemplate": "Desde plantilla…",
   "ds.rows.fromTemplateHint": "«＋» en Presupuestos — «Nuevo presupuesto» o «Desde plantilla…»; un presupuesto vacío tiene el botón «Desde plantilla…», luego «⋯ → Añadir desde plantilla…». Solo añade; el foco va a la cantidad de la primera línea, «›» pasa a la siguiente (§8.13, #1117).",
   "ds.rows.eyeOff": "Icono «Oculta al cliente» (eyeOff)",

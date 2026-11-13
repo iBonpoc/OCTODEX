@@ -44,11 +44,13 @@ export function NotesTerms(p: {
   onTerms: (v: string) => void;
   noTerms?: boolean;
   locked?: boolean;
+  /** signed by the client (as /p/ and the card count it): an old one without its own text shows what was signed */
+  signed?: boolean;
 }) {
   const { t } = useI18n();
   const [open, setOpen] = useState<null | "note" | "terms">(null);
   const [draft, setDraft] = useState("");
-  const terms = termsShown(p.doc, p.company, p.lang);
+  const terms = termsShown(p.doc, p.company, p.lang, p.signed);
   const show = (which: "note" | "terms") => {
     if (p.locked) return;
     setDraft(which === "note" ? (p.doc.note ?? "") : terms.text);
