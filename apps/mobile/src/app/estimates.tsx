@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { useI18n } from "@/i18n";
 import { EstimatesBoard } from "@/features/boards";
-import { Button } from "@/ui/controls";
+import { IconButton } from "@/ui/controls";
 import { Menu } from "@/ui/overlays";
 import { Screen } from "@/ui/surfaces";
 
@@ -16,7 +16,8 @@ export default function Estimates() {
   const ref = useRef<ComponentRef<typeof View>>(null);
   const add = (
     <View ref={ref} collapsable={false} testID="est-list-add">
-      <Button label={t("est.new")} icon="plus" size="sm" variant="secondary" onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
+      {/* «＋» opens a choice (DS §8.13): the label names the choice, not one of its items (design review) */}
+      <IconButton icon="plus" label={t("est.tplIn.create")} onPress={() => ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
     </View>
   );
   return (
@@ -31,7 +32,6 @@ export default function Estimates() {
       <Menu
         visible={!!menu}
         anchor={menu}
-        title={t("est.new")}
         items={[
           { key: "blank" as const, label: t("est.new"), icon: "plus" as const, testID: "est-list-add-blank" },
           { key: "template" as const, label: t("est.tplIn.from"), icon: "doc" as const, testID: "est-list-add-template" },

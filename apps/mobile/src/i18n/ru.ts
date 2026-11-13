@@ -4164,6 +4164,7 @@ export const ru = {
   "est.client.onToast": "Экран для клиента включён",
   "est.client.offToast": "Экран для клиента выключен",
   // «Экраны» #1117 (е): «Из шаблона…» (DS §8.13)
+  "est.tplIn.create": "Создать смету",
   "est.tplIn.from": "Из шаблона…",
   "est.tplIn.add": "Добавить из шаблона…",
   "est.tplIn.added": "Добавлено позиций: {n}",

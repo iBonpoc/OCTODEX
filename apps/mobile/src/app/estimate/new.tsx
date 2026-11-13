@@ -1176,7 +1176,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       <Sheet
         visible={startOpen}
         onClose={() => start(null)}
-        title={pickOnly ? t("est.tpl.title") : t("est.tpl.start")}
+        title={t("est.tpl.start")}
         onExited={() => {
           const next = afterStart.current;
           afterStart.current = null;
@@ -1199,7 +1199,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <ListRow
                 title={x.name}
                 subtitle={`${t("est.tpl.options", { n: x.doc.options.length })} · ${t("est.tpl.from", { sum: money(templateFromCents(x.doc, db.catalog)) })}`}
-                left={<Icon name="copy" />}
+                left={<Icon name="doc" />}
                 onPress={() => start(x)}
               />
             </View>
