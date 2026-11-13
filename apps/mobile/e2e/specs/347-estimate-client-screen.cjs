@@ -2,6 +2,7 @@
  * e2e 347 — «Экран для клиента» (DS §8.3, spec 2026-11-12 §11.2.8, #1307 part «г»), every view, by testID:
  * - «⋯» in the header → «Экран для клиента»: the «расход» of a hidden line, the profit of the open row and the margin under
  *   the totals are gone; under the title — «Экран для клиента · выйти»;
+ * - the options card keeps no owner's button («Добавить вариант»);
  * - «выйти» brings them back.
  */
 exports.run = async (h) => {
@@ -44,6 +45,7 @@ exports.run = async (h) => {
   await sheetGone(p);
   await tid("est-client-off").waitFor({ timeout: 3000 });
   h.expect((await count(`[data-testid="est-spend-${b}"]`)) === 0, "client screen: no «расход» of the hidden line");
+  h.expect((await count('[data-testid="est-var-add"]')) === 0, "client screen: no «Добавить вариант» (the owner's button)");
   h.expect(!/Маржа|себестоимость/i.test(await page()), "client screen: no margin, no cost under the totals");
   await tid(`est-line-${a}`).click();
   const fig = await tid(`est-figures-${a}`).innerText();
@@ -56,5 +58,6 @@ exports.run = async (h) => {
   await tid("est-client-off").getByRole("button").click();
   await tid(`est-spend-${b}`).waitFor({ timeout: 3000 });
   h.expect((await count('[data-testid="est-client-off"]')) === 0, "«выйти» is gone");
+  h.expect((await count('[data-testid="est-var-add"]')) === 1, "«Добавить вариант» is back");
   h.expect(/Маржа/.test(await page()), "the margin is back");
 };

@@ -692,14 +692,15 @@ export function Sheet({
 }
 
 /* ---------- "?" help: visible 18, hit 44 ---------- */
-export function HelpButton({ title, text, where }: { title: string; text: string; where?: string }) {
+/** «?» (DS Б7). `onPress` — the screen opens its own sheet (several steps, not one text): the same «?», the same place */
+export function HelpButton({ title, text, where, onPress, testID }: { title: string; text?: string; where?: string; onPress?: () => void; testID?: string }) {
   const [open, setOpen] = useState(false);
   const { c } = useTheme();
   const { t } = useI18n();
   const s = component.help.visible;
   return (
     <>
-      <Press onPress={() => setOpen(true)} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`}>
+      <Press onPress={onPress ?? (() => setOpen(true))} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`} testID={testID}>
         <View
           style={{
             width: s,

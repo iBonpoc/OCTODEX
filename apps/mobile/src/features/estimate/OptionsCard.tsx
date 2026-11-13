@@ -4,9 +4,9 @@ import { component, size, space } from "@octo/design-tokens";
 import type { CustomOption } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, IconButton, Segmented, TextField } from "@/ui/controls";
+import { Button, Segmented, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
+import { HelpButton, Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
 import { MAX_OPTIONS, OPTION_NAME_MAX } from "@/features/estimateDoc";
 
@@ -28,6 +28,8 @@ export function OptionsCard(p: {
   totals: Record<string, number>;
   /** a signed estimate: the options are shown, not changed */
   locked?: boolean;
+  /** «Экран для клиента»: the segments and the totals stay (the client compares), the owner's words and buttons go */
+  clientScreen?: boolean;
   onPick: (id: string) => void;
   onCopy: () => void;
   onRecommend: (id: string, on: boolean) => void;
@@ -74,16 +76,14 @@ export function OptionsCard(p: {
           <T v="heading" style={{ flex: 1 }}>
             {t("est.var.title")}
           </T>
-          <View testID="est-var-help">
-            <IconButton icon="help" label={t("est.var.help")} tone="plain" onPress={() => setHelp(true)} />
-          </View>
+          <HelpButton title={t("est.var.help")} onPress={() => setHelp(true)} testID="est-var-help" />
         </RowView>
         {!many ? (
           <>
             <T v="caption" tone="mut">
               {t("est.var.one")}
             </T>
-            {p.locked ? null : (
+            {p.locked || p.clientScreen ? null : (
               <View testID="est-var-add" style={{ alignSelf: "flex-start" }}>
                 <Button label={t("est.var.add")} icon="copy" variant="secondary" onPress={p.onCopy} />
               </View>
@@ -91,7 +91,7 @@ export function OptionsCard(p: {
           </>
         ) : (
           <>
-            <Segmented radio full label={t("est.var.pick")} testID="est-var-seg" value={cur.id} onChange={p.onPick} items={p.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
+            <Segmented radio full equal label={t("est.var.pick")} testID="est-var-seg" value={cur.id} onChange={p.onPick} items={p.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
             <RowView style={{ gap: space[1], alignItems: "stretch" }}>
               {p.options.map((o) => (
                 <View key={o.id} style={{ flex: 1 }}>
@@ -129,10 +129,12 @@ export function OptionsCard(p: {
                 </View>
               ))}
             </RowView>
-            <T v="caption" tone="mut">
-              {t("est.var.editing", { name: cur.name })}
-            </T>
-            {p.locked ? null : (
+            {p.clientScreen ? null : (
+              <T v="caption" tone="mut">
+                {t("est.var.editing", { name: cur.name })}
+              </T>
+            )}
+            {p.locked || p.clientScreen ? null : (
               <RowView style={{ flexWrap: "wrap" }}>
                 {full ? (
                   // three already: the button is pale and does not copy; a press says why (DS §8.10)

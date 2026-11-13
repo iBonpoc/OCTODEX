@@ -4156,7 +4156,7 @@ export const ru = {
   "est.actions": "Действия со сметой",
   "est.client.on": "Экран для клиента",
   "est.client.off": "Экран для клиента · выйти",
-  "est.client.onToast": "Экран для клиента: себестоимость и прибыль скрыты",
+  "est.client.onToast": "Экран для клиента включён",
   "est.client.offToast": "Экран для клиента выключен",
 } as const;
 

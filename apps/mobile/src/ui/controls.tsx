@@ -216,6 +216,7 @@ export function Segmented<K extends string>({
   testID,
   radio,
   label,
+  equal,
 }: {
   items: { key: K; label: string }[];
   value: K;
@@ -229,6 +230,8 @@ export function Segmented<K extends string>({
   radio?: boolean;
   /** what the group is a choice of — read with the group (the caption above it is not tied to it) */
   label?: string;
+  /** with `full`: every segment the same width — a column under each lines up with it (the totals of the options, DS §8.10) */
+  equal?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -298,6 +301,7 @@ export function Segmented<K extends string>({
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
+            containerStyle={equal ? { flex: 1 } : undefined}
             accessibilityRole={radio ? "radio" : "tab"}
             accessibilityState={radio ? { selected: sel, checked: sel } : { selected: sel }}
             {...(radio ? ({ "aria-checked": sel } as object) : null)}
@@ -309,6 +313,7 @@ export function Segmented<K extends string>({
               height: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
+              ...(equal ? { alignItems: "center" } : null),
               // a choice in a form never grows past its card: the labels give way, they do not push the segment out
               ...(radio ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,

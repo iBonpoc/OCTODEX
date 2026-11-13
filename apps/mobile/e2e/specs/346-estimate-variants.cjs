@@ -58,7 +58,7 @@ exports.run = async (h) => {
   h.expect((await count('[data-testid^="est-line-"]')) === 1, "«Good» has one line (the blank row did not stay)");
 
   // «?» — five steps and what is shared
-  await tid("est-var-help").getByRole("button").click();
+  await tid("est-var-help").click();
   await tid("est-var-help-sheet").waitFor({ timeout: 3000 });
   for (const n of [1, 2, 3, 4, 5]) h.expect((await count(`[data-testid="est-var-step-${n}"]`)) === 1, `«?» step ${n}`);
   h.expect(/скидка, налог/.test(await tid("est-var-common").innerText()), "«Общее для всех»");

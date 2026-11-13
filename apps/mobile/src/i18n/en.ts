@@ -4156,6 +4156,6 @@ export const en: Dict = {
   "est.actions": "Estimate actions",
   "est.client.on": "Client screen",
   "est.client.off": "Client screen · exit",
-  "est.client.onToast": "Client screen: cost and profit hidden",
+  "est.client.onToast": "Client screen on",
   "est.client.offToast": "Client screen off",
 };

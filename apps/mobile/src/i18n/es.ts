@@ -4156,6 +4156,6 @@ export const es: Dict = {
   "est.actions": "Acciones del presupuesto",
   "est.client.on": "Pantalla para el cliente",
   "est.client.off": "Pantalla para el cliente · salir",
-  "est.client.onToast": "Pantalla para el cliente: costo y ganancia ocultos",
+  "est.client.onToast": "Pantalla para el cliente activada",
   "est.client.offToast": "Pantalla para el cliente desactivada",
 };

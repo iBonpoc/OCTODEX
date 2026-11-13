@@ -737,6 +737,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
             curId={option.id}
             totals={optionSums}
             locked={signed}
+            clientScreen={clientScreen}
             onPick={pickOption}
             onCopy={addOption}
             onRecommend={setRecommended}
