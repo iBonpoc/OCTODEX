@@ -21,6 +21,8 @@ import { withLooseTarget, type Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { OptionsCard } from "@/features/estimate/OptionsCard";
+import { NotesTerms } from "@/features/estimate/NotesTerms";
+import { docLanguageFor } from "@/data/people";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
@@ -108,8 +110,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const startInEditor = useRef(askedTemplates && !!draft);
   /** …or once the client is chosen, when the template was picked before the client («Сметы → ＋ → Из шаблона…») */
   const afterClient = useRef<(() => void) | null>(null);
+  /** #1304: a new estimate starts with the company's Terms in its client's language (a template never carries them, spec 40 §7);
+   *  an estimate already saved keeps what it has — an old one without the key goes on showing the default (no key added) */
+  const withNewTerms = (d: EstimateDoc, cid: string | undefined): EstimateDoc =>
+    d.terms === undefined ? { ...d, terms: store.estimateTerms({ customerId: cid, leadId: params.leadId }).text } : d;
   const [doc, setDoc] = useState<EstimateDoc>(() =>
-    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
+    existing?.doc
+      ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc)
+      : tplEdit
+        ? templateForEdit(tplEdit, seeCosts)
+        : withNewTerms(draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps), draft?.customerId ?? params.customerId),
   );
   const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
@@ -166,7 +176,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const restart = () => {
     setAskRestart(false);
     const fromHere = fromTpl ? (JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps);
-    const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: fromHere, templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
+    const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: withNewTerms(fromHere, params.customerId), templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
     setDraft(undefined);
     setOpened({ snapshot: draftSnapshot(fresh), restored: false });
     setDoc(fresh.doc);
@@ -192,7 +202,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (x) {
       const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
       const ci = Math.max(0, r.doc.options.findIndex((o) => o.recommended));
-      setDoc(r.doc);
+      // the estimate's Terms stay: a template never carries them (spec 40 §7)
+      setDoc(doc.terms !== undefined ? { ...r.doc, terms: doc.terms } : r.doc);
       setCur(ci);
       setTemplateId(x.id);
       setCheckPrice(r.checkPrice);
@@ -800,7 +811,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <T v="caption" tone="mut">{t("est.tpl.editHint")}</T>
             </View>
           ) : (
-          <View ref={clientRef} collapsable={false} style={{ gap: space[1] }}>
+          <View ref={clientRef} collapsable={false} style={{ gap: space[1] }} testID="est-client">
           <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")} style={missing === "client" ? { borderColor: c.status.bad.fill } : undefined}>
             <RowView>
               {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
@@ -974,7 +985,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             ) : null}
           </Card>
-          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} testID="ue-note" />
+          <NotesTerms
+            doc={doc}
+            company={db.company}
+            lang={docLanguageFor(db, { customerId, leadId: params.leadId })}
+            onNote={(v) => setDoc((d) => ({ ...d, note: v }))}
+            onTerms={(v) => setDoc((d) => ({ ...d, terms: v }))}
+            noTerms={!!tplEdit}
+            locked={signed}
+          />
           {tplEdit ? (
             <View testID="est-tpl-save">
               <Button label={t("est.tpl.saveTemplate")} icon="check" full disabled={!title.trim()} onPress={saveTemplate} />
@@ -1210,6 +1229,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         visible={clientPicker}
         onClose={() => setClientPicker(false)}
         onPick={(cid, pid) => {
+          // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
+          if (!existing && !tplEdit && cid !== customerId) setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: params.leadId }, to: { customerId: cid, leadId: params.leadId } }) }));
           setCustomerId(cid);
           setPropertyId(pid);
           setClientPicker(false);
