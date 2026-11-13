@@ -76,6 +76,15 @@ exports.run = async (h) => {
   h.expect(/^Как у желоба/.test(await tid("attr-color-value").innerText()), "the colour: «Как у желоба»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
+  // the length is a dropdown now (#1276: size, colour and length are folded rows): «по этажу» by default, a number of feet on a pick, back to «по этажу»
+  h.expect((await tid("attr-ds-length-value").count()) === 1 && /^По этажу/.test(await tid("attr-ds-length-value").innerText()), "the length: a folded row, «По этажу» by default");
+  await tid("attr-ds-length-open").click();
+  await p.getByRole("button", { name: "20′", exact: true }).or(p.getByText("20′", { exact: true })).last().click();
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20′ picked: the downspout's own height is 240″");
+  await tid("attr-ds-length-open").click();
+  await p.getByText("По этажу", { exact: true }).last().click();
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "«По этажу»: no own height");
+
   // offsets: 1, then 3″, then its own 2½″
   await tid("attr-offset-qty").getByRole("button", { name: /\+1$/ }).click();
   await tid("attr-offset-len").getByRole("radio", { name: "3″", exact: true }).click();

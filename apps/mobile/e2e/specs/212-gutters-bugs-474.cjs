@@ -3,7 +3,7 @@
  * - a pinch whose first finger has moved before the second lands (always so on a phone): the drawing gets smaller —
  *   and again (two pinches), and nothing is drawn;
  * - the corner sheet: «наружный» / «внутренний» switch the kind and the sheet stays open;
- * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the letters A, B, C;
+ * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the arc with its degrees (no letters: #1276);
  *   the triangle says A, B, C in plain words;
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
  * Finds things by testID / id; waits on what it checks.
@@ -136,17 +136,17 @@ exports.run = async (h) => {
   h.expect(sk.width >= sheetW * 0.9, `the sketch is as wide as the sheet (${Math.round(sk.width)} of ${Math.round(sheetW)})`);
   const texts = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
   h.expect(texts.filter((t) => /^стена /.test(t)).length === 2 && texts.filter((t) => /^лицевая /.test(t)).length === 2, `«стена …», «лицевая …» on each gutter (${texts.join(" | ")})`);
-  h.expect(["A", "B", "C"].every((x) => texts.includes(x)), "the letters A, B, C");
+  h.expect(!["A", "B", "C"].some((x) => texts.includes(x)) && texts.includes("90°"), "no letters A, B, C on the drawing (#1276: they are the triangle's, in words); the arc says 90°");
   // the chips do not overlap
   const boxes = await tid("corner-sketch").locator("rect").evaluateAll((rs) => rs.map((r) => { const b = r.getBoundingClientRect(); return [b.x, b.y, b.x + b.width, b.y + b.height]; }));
   const overlap = boxes.some((a, i) => boxes.some((c, j) => j > i && a[0] < c[2] && c[0] < a[2] && a[1] < c[3] && c[1] < a[3]));
   h.expect(!overlap, "the chips do not overlap");
   // the face is away from the house: on an outside corner the «лицевая» chips are outside the angle (farther from the
-  // C diagonal than the «стена» ones), on an inside corner inside it
+  // arc's degrees than the «стена» ones), on an inside corner inside it
   const pos = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => { const r = t.getBoundingClientRect(); return { t: (t.textContent || "").trim(), x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
   const at = (re) => pos.filter((q) => re.test(q.t));
-  const [la, lb] = [at(/^A$/)[0], at(/^B$/)[0]];
-  const cm = [(la.x + lb.x) / 2, (la.y + lb.y) / 2];
+  const deg = at(/^\d+°$/)[0]; // the arc's degrees stand inside the angle (the letters A, B and the C line are gone, #1276)
+  const cm = [deg.x, deg.y];
   const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - cm[0], q.y - cm[1]), 0) / qs.length;
   const faceOut = far(at(/^лицевая /)) > far(at(/^стена /));
   h.expect(faceOut === (kind0 === "наружный"), `${kind0}: the face is ${kind0 === "наружный" ? "outside" : "inside"} the angle`);
