@@ -83,6 +83,13 @@ exports.run = async (h) => {
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   await tid("corner-cut").waitFor({ timeout: 3000 });
   h.expect(/90°/.test(await tid("corner-cut-angle").innerText()), "the angle: 90°");
+  // #1276: the kind is two pictures with their words; the drawing is above the table; the cut of each piece is written (90° → 45°)
+  const kinds = tid("corner-kind").getByRole("radio");
+  h.expect((await kinds.count()) === 2 && (await kinds.nth(0).locator("svg").count()) >= 1 && (await kinds.nth(1).locator("svg").count()) >= 1, "the kind: two pictures with their words");
+  const skBox = await tid("corner-sketch").boundingBox(), firstCard = await p.locator('[data-testid^="corner-cut-"]:visible:has([data-testid="cut-back"])').first().boundingBox();
+  h.expect(skBox.y + skBox.height <= firstCard.y + 1, "the corner's drawing is above the table");
+  h.expect((await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((x) => (x.textContent || "").trim()))).includes("90°"), "the arc says 90°");
+  h.expect((await p.locator('[data-testid="cut-miter"]:visible').allInnerTexts()).every((x) => x.trim() === "45°"), "the cut: 45° for each piece");
   const kind = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
   const c0 = await cuts();
   h.expect(c0.length === 2, `two gutters in the cut (${c0.length})`);
@@ -114,6 +121,7 @@ exports.run = async (h) => {
   await tid("tri-count").getByRole("button").click();
   await waitFor(async () => /110/.test(await tid("corner-cut-angle").innerText()), "the corner is 110° now");
   h.expect(/110/.test(await tid("tri-result").innerText()), "the triangle says 110°");
+  h.expect((await p.locator('[data-testid="cut-miter"]:visible').allInnerTexts()).every((x) => x.trim() === "35°"), "110°: the cut is 35° for each piece");
   const c2 = await cuts();
   h.expect(c2.every((x) => Math.abs(Math.abs(x.front - x.back) - 3.5) < 0.01), `110°: the face differs by 3½″ (${JSON.stringify(c2)})`);
   await h.shot("triangle");

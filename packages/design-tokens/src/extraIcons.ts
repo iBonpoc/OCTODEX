@@ -45,6 +45,9 @@ export const extraIcons = {
   cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9.5a4.3 4.3 0 0 1-.5 8.5z",
   lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
   tag: "M3 3h8l10 10-8 8L3 11zM7.5 7.5h.01",
+  // the two kinds of a corner of a drawing (spec 33, #1276): a hollow diamond outside, the same with a dot inside — as on the canvas
+  cornerOut: "M12 3l9 9-9 9-9-9z",
+  cornerIn: "M12 3l9 9-9 9-9-9zM12 11l1 1-1 1-1-1z",
   // cross-section profiles of a long open-top part (a trade module shows the chosen one in its tool, #1274); first sketches on a 24 grid in the
   // app's stroke: open at the top, so they are not taken for the closed round / rectangular tube shapes (`dsRect`, `dsRound`); the founder may redraw them
   xsK: "M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",

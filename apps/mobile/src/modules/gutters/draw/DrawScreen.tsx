@@ -30,6 +30,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
+import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
 import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
@@ -786,7 +787,6 @@ export default function DrawScreen() {
   const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
-  const [sketchW, setSketchW] = useState(0);
   const cornerKind = (kind: "in" | "out") => {
     // the sheet stays open (founder 09.11: a tap closed it) — the kind switches, the cut below follows
     if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
@@ -1274,68 +1274,25 @@ export default function DrawScreen() {
       </Sheet>
       <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
         {corner ? (
-          <View testID="corner-sheet" style={{ gap: space[3] }}>
-            <T v="heading" w="semibold">{t("mod.gutters.draw.cornerTitle")}</T>
-            {corner.kind === "bay" ? <T tone="mut">{t("mod.gutters.draw.cornerBay")}</T> : null}
-            <View testID="corner-kind">
-              <ChoiceChips
-                items={(["out", "in"] as const).map((k) => ({ key: k, label: t(k === "in" ? "mod.gutters.attr.ck.in" : "mod.gutters.attr.ck.out") }))}
-                value={corner.kind === "in" ? "in" : "out"}
-                onChange={(k) => cornerKind(k)}
-              />
-            </View>
-            {corner.kind === "in" ? (
-              <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
-                <T v="body" style={{ flex: 1 }}>{t("mod.gutters.draw.splash")}</T>
-                <View testID="corner-splash"><Toggle on={!splashOff(drawing, corner)} onChange={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))} label={t("mod.gutters.draw.splash")} /></View>
-              </RowView>
-            ) : null}
-            <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
-            {/* the cut (founder 08.11): each run along the wall and along the face, to 1/16″ */}
-            {cut ? (
-              <View testID="corner-cut" style={{ gap: space[2] }}>
-                <RowView style={{ justifyContent: "space-between" }}>
-                  <T v="body" w="semibold">{t("mod.gutters.draw.cutTitle")}</T>
-                  <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>
-                </RowView>
-                {cut.runs.map((r) => (
-                  <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[1], padding: space[3], borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd }}>
-                    <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: drawing.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
-                    <RowView style={{ justifyContent: "space-between" }}>
-                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutBack")}</T>
-                      <View testID="cut-back"><T v="body" tabular>{fmtLen(r.backIn, ch.lenFormat)}</T></View>
-                    </RowView>
-                    <RowView style={{ justifyContent: "space-between" }}>
-                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutFront")}</T>
-                      <View testID="cut-front"><T v="body" w="semibold" tabular>{fmtLen(r.frontIn, ch.lenFormat)}</T></View>
-                    </RowView>
-                  </View>
-                ))}
-                {!tape ? <View testID="corner-cut-rough"><StatusChip status="warn" label={t("mod.gutters.draw.accRoughCut")} soft /></View> : null}
-                <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
-                  {sketchW > 0 ? <CornerSketch d={drawing} f={corner} cut={cut.runs} w={sketchW} fmt={ch.lenFormat} /> : null}
-                </View>
-                <T v="caption" tone="mut">{t("mod.gutters.draw.cutNote", { off: cut.runs[0]!.offsetIn })}</T>
-              </View>
-            ) : null}
-            {/* «Разъединить угол» (#933): two gutters with their own end caps; «Назад» and the toast bring it back */}
-            <View testID="corner-split">
-              <Button
-                label={t("mod.gutters.draw.cornerSplit")}
-                variant="secondary"
-                size="sm"
-                onPress={() => {
-                  const before = cur.current.drawing;
-                  const next = splitCorner(before, corner, tolIn());
-                  setCornerSheet(null);
-                  if (next === before) return;
-                  commit(next, before);
-                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
-                }}
-              />
-            </View>
-            {<CornerTriangle key={corner.id} d={drawing} f={corner} onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))} />}
-          </View>
+          <CornerSheet
+            d={drawing}
+            f={corner}
+            cut={cut}
+            fmt={ch.lenFormat}
+            tape={tape}
+            splashOn={!splashOff(drawing, corner)}
+            onKind={cornerKind}
+            onSplash={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))}
+            onSplit={() => {
+              const before = cur.current.drawing;
+              const next = splitCorner(before, corner, tolIn());
+              setCornerSheet(null);
+              if (next === before) return;
+              commit(next, before);
+              toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
+            }}
+            onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))}
+          />
         ) : null}
       </Sheet>
       <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
