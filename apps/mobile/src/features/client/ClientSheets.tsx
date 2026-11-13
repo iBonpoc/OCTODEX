@@ -16,6 +16,7 @@ import { Button, ChoiceChips, IconButton, MultiChips, StatusChip, TextField } fr
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
+import { type GuardedUndo } from "@/data/undo";
 
 const ROLES: PersonRole[] = ["main", "spouse", "assistant", "tenant", "property_manager", "accountant", "other"];
 const LABELS: PhoneLabel[] = ["mobile", "home", "work", "other"];
@@ -40,7 +41,7 @@ export function PeopleEditSheet({
   mainName: string;
   people: Person[];
   /** returns the undo for the toast */
-  onSave: (people: Person[]) => () => void;
+  onSave: (people: Person[]) => GuardedUndo;
   onClose: () => void;
 }) {
   const { t } = useI18n();

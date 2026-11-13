@@ -3,7 +3,7 @@
  * (a link for its site, Google Business Profile, Facebook, a QR) and a key for Zapier / Make; the journal of requests and
  * «Принять / Отклонить» for the held ones. Cloud only and online: the server makes links and keys (like «Команда»).
  * The director changes the ways in (owner / admin); the office reads the journal and decides held requests (T112).
- * The top line says in words whether the form takes requests — never silently «on» without INTAKE_IP_SECRET (director 08.11).
+ * The top line says in words whether the form takes requests — never silently «on» without the IP secret on the server (director 08.11).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";

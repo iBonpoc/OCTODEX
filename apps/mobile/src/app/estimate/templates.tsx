@@ -22,6 +22,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { withAfter } from "@/data/undo";
 
 export default function EstimateTemplates() {
   const store = useStore();
@@ -61,13 +62,9 @@ export default function EstimateTemplates() {
     // lines the catalog lacked: price 0 — said at once (and «проверьте цену» in the builder)
     const unpriced = fromTemplate(tpl.doc, store.db.catalog, {}, false, true).checkPrice;
     const msg = unpriced.length ? t("est.tpl.starterNoPrice", { n: unpriced.length }) : t("est.tpl.starterAdded", { name: tpl.name });
-    toast.show(store.online ? msg : t("offline.queued"), () => {
-      // the insert waits on the phone while the toast is up (SEND_AFTER_MS): «Отменить» takes it out of the queue; too
-      // late (false) — the template stays, and so does «pressed» (#1244)
-      const r = undo();
-      if (r !== false) pressed.current.delete(id);
-      return r;
-    });
+    // the insert waits on the phone while the toast is up (SEND_AFTER_MS): «Отменить» takes it out of the queue; too
+    // late (false) — the template stays, and so does «pressed» (#1244)
+    toast.show(store.online ? msg : t("offline.queued"), withAfter(undo, () => pressed.current.delete(id)));
   };
   const copy = (x: EstimateTemplate) => {
     const c = copyTemplate(x, t("est.tpl.copyName", { name: x.name }), seeCosts);
