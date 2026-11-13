@@ -3,7 +3,7 @@
  * (#677 founder 09.11: «Материал, профиль, толщина — селекторы»; «Строка "Размер" слишком широкая»). Every view.
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -21,7 +21,7 @@ exports.run = async (h) => {
   for (let i = 1; i <= 12; i++) await p.mouse.move(b.x + b.width * (0.08 + (0.37 * i) / 12), y);
   await p.mouse.up();
   await skipLength(p);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   if (await tid("attr-more").count()) {
     await tid("attr-more").getByRole("button").click();

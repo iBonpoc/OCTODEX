@@ -69,6 +69,8 @@ export const motion = {
   durSlow: 350,
   /** a press held this long is a long press (iOS 0.5 s): the canvas takes an end or a corner by it (founder 12.11, #818) */
   longPressMs: 500,
+  /** a second tap on the same object within this is a double tap (app-only like longPressMs; = the toast's arm time): the canvas opens properties by it (spec 33, #1273) */
+  doubleTapMs: 300,
   durChart: 900,
   easeOut: [0.2, 0.8, 0.2, 1] as const,
   /** components.css --ease-spring (overrides foundation's .3,1.4,.5,1) */
@@ -116,6 +118,10 @@ export const gesture = {
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
   autoScrollEdge: 64,
+  /** the fastest the page scrolls at the very edge while a row is held, px a frame (the speed grows with the depth squared) — DS §14.6 */
+  autoScrollMax: 18,
+  /** a held row's place changes only once its middle is this far past a neighbour's middle (no flicker between two places), px */
+  slotHysteresis: 6,
   /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
   slop: 10,
 } as const;
@@ -183,6 +189,8 @@ export const component = {
   shadowSm: { offsetY: 2, radius: 8, opacity: 0.25, /** Android has no shadow* props: the same lift as `elevation` (app-only, not in the CSS) */ elevation: 2 },
   /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
   swipeAction: { w: 80, full: 0.6 },
+  /** DS §8.3 (#1307): the open estimate line's numbers in one row — the quantity and the unit narrow, the price takes the rest */
+  estRow: { qty: 80, unit: 88 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */

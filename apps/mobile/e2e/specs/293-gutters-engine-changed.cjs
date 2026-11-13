@@ -5,7 +5,7 @@
  * lines carry the current version, the words are gone. A signed estimate is only told, never offered «Обновить».
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, openView } = require("../gutters.cjs");
+const { skipLength, openView, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -38,7 +38,7 @@ exports.run = async (h) => {
   for (let i = 1; i <= 12; i++) await p.mouse.move(b.x + b.width * (0.25 + (0.45 * i) / 12), y);
   await p.mouse.up();
   await skipLength(p);
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await p.waitForFunction(() => !!new URL(location.href).searchParams.get("m"), null, { timeout: 8000 });
   const mid = new URL(p.url()).searchParams.get("m");
   await openView(p);

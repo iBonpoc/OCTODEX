@@ -37,10 +37,22 @@ export const extraIcons = {
   /** «Скрыта от клиента» (DS 8.3): the eye crossed out */
   eyeOff: "M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6M4 4l16 16",
   box: "M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9",
+  /** «˄ Свернуть» of an open estimate line (DS §8.3) */
+  chevronUp: "M6 15l6-6 6 6",
   truck: "M2 6h12v10H2zM14 9h4l3 3.5V16h-7M5 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M15 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
   cart: "M3 4h2l2.4 11h10.8L20.5 7H6.3M9 20h.01M17 20h.01",
   repeat: "M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
   cloud: "M7 18a4 4 0 0 1-.6-8A6 6 0 0 1 18 9.5a4.3 4.3 0 0 1-.5 8.5z",
   lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
   tag: "M3 3h8l10 10-8 8L3 11zM7.5 7.5h.01",
+  // the two kinds of a corner of a drawing (spec 33, #1276): a hollow diamond outside, the same with a dot inside — as on the canvas
+  cornerOut: "M12 3l9 9-9 9-9-9z",
+  cornerIn: "M12 3l9 9-9 9-9-9zM12 11l1 1-1 1-1-1z",
+  // cross-section profiles of a long open-top part (a trade module shows the chosen one in its tool, #1274); first sketches on a 24 grid in the
+  // app's stroke: open at the top, so they are not taken for the closed round / rectangular tube shapes (`dsRect`, `dsRound`); the founder may redraw them
+  xsK: "M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",
+  xsHalf: "M4 8a8 8 0 0 0 16 0M3 8h3M18 8h3",
+  xsFascia: "M6 4v13.5a2.5 2.5 0 0 0 2.5 2.5H18V8.5h-3",
+  xsBox: "M5 5v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5",
+  xsEuro: "M4 8c0 6 3 10 8 10s8-4 8-10",
 } as const;

@@ -722,12 +722,27 @@ export function Screen({
   /** the last jump we made with scrollTo: scroll events of the jumps before it may still arrive and are older than it */
   const lastJump = useRef<{ y: number; at: number } | null>(null);
   const viewH = useRef(0);
+  /** the browser's page: where it is scrolled to right now (a phone: unknown here — the scroll events tell) */
+  const realTop = (): number | undefined => {
+    if (Platform.OS !== "web") return undefined;
+    const top = (scrollRef.current as unknown as { getScrollableNode?: () => { scrollTop?: number } | null } | null)?.getScrollableNode?.()?.scrollTop;
+    return typeof top === "number" ? top : undefined;
+  };
   const screenScroll = useRef<ScreenScroll>({
     scrollBy: (dy) => {
       // the place is kept at once: the next tick of a held row must not read the old one while the scroll event is on its way
       offset.current = Math.max(0, Math.min(offset.current + dy, contentH.current > 0 ? Math.max(0, contentH.current - viewH.current) : Number.POSITIVE_INFINITY));
-      lastJump.current = { y: offset.current, at: Date.now() };
       scrollRef.current?.scrollTo({ y: offset.current, animated: false });
+      // the browser scrolls at once and stops at the real end (the page may have got shorter a moment ago — a held row folds the
+      // list): read where it really is, else the asked place runs past the end and a held row drifts from the finger (#1307 «б»)
+      const real = realTop();
+      if (real !== undefined) offset.current = real;
+      lastJump.current = { y: offset.current, at: Date.now() };
+    },
+    offsetNow: () => {
+      const real = realTop();
+      if (real !== undefined) offset.current = real;
+      return offset.current;
     },
     measureVisible: (cb) => {
       const sv = scrollRef.current;

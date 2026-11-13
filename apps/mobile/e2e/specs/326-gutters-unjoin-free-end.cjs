@@ -4,7 +4,7 @@
  * pulled; the toast «Отменить» puts everything back (the points, the marks). Every view. Finds things by testID / id;
  * waits on what it checks (no pauses).
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { doubleTap, skipLength, canvasAt } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -48,7 +48,7 @@ exports.run = async (h) => {
     // the corner's sheet → «Разъединить угол»
     const k = await svg().locator('[id^="c:"]').first().boundingBox();
     await canvasAt(p, k.x + k.width / 2, k.y + k.height / 2);
-    await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+    await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
     await tid("corner-sheet").waitFor({ timeout: 5000 });
     await tid("corner-split").getByRole("button").click();
     await tid("corner-sheet").waitFor({ state: "detached", timeout: 5000 });

@@ -7,7 +7,7 @@
  *   the toolbar and the drawing; a tap on a gutter opens its attributes in a sheet («Свойства»).
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, canvasAt, openProps } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -58,13 +58,18 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("side-nav").count()) === 0, "on its side: no app menu");
   h.expect((await tid("draw-panel").count()) === 0, "on its side: no side panel");
   // wait on it (rule 19): the header row goes with the layout's next render, not with the menu
-  await waitFor(async () => (await tid("draw-saved").count()) === 0 && (await tid("draw-to-lead").count()) === 0, "on its side: no «Сохранено» / «Сделать заявкой»");
-  h.expect((await tid("draw-back").count()) === 1 && (await tid("draw-fit").count()) === 1 && (await tid("draw-toolbar").count()) === 1, "back, fit and the toolbar stay");
-  await tid("draw-fit").getByRole("button").click();
-  await p.waitForTimeout(300);
+  await waitFor(async () => (await tid("draw-local").count()) === 0 && (await tid("draw-to-lead").count()) === 0, "on its side: no «Сохранено» / «Сделать заявкой»");
+  h.expect((await tid("draw-back").count()) === 1 && (await tid("draw-fit").count()) === 0 && (await tid("draw-toolbar").count()) === 1, "back and the toolbar stay; no «fit» in the header (#1273)");
+  // «вписать»: a double tap on the empty place (the header has no button, a phone on its side has no «⋯»)
+  const sb = await tid("draw-surface").boundingBox();
+  await canvasAt(p, sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
+  const pxBefore = await runLine();
+  await p.mouse.click(sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
+  await p.mouse.click(sb.x + sb.width * 0.9, sb.y + sb.height * 0.6);
+  // the drawing is fitted: its line changes size (the whole drawing now fills the canvas) — waited on, not slept on
+  await waitFor(async () => Math.abs((await runLine()) - pxBefore) > 2, `the double tap on the empty place fits the drawing (${Math.round(pxBefore)} px before)`);
   await h.shot("landscape");
   // the attributes in a sheet, as upright
-  await waitFor(async () => (await tid("draw-props").count()) === 1, "on its side: «Свойства» for the picked gutter");
-  await tid("draw-props").getByRole("button").click();
+  await openProps(p, { force: true }); // on its side: a double tap on the picked gutter opens its sheet
   await tid("attr-panel").waitFor({ timeout: 5000 });
 };

@@ -19,7 +19,7 @@ import { Menu } from "@/ui/overlays";
 import { fillStyle } from "@/ui/fill";
 import { SelectedCheck } from "@/ui/selectedCheck";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { FracPicker } from "./FracPicker";
 import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
@@ -539,6 +539,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
         <>
       <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
           <Stock a={ds} set={onAttrs} ch={ch} part="color" run={run} />
+          <DsLength ds={ds} onAttrs={onAttrs} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
           <More open0={rareSet(ds)} id={ds.id} label={t(k("moreDs"))}>
@@ -555,6 +556,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
       <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
       <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={ds} set={onAttrs} ch={ch} run={run} />
+      <DsLength ds={ds} onAttrs={onAttrs} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
@@ -566,6 +568,26 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
         </>
       )}
     </>
+  );
+}
+
+/** the downspout's length (#1276, founder 12.11: «размер, цвет и длина — выпадающими»): by the storey, or a number of feet — it was a stepper behind «Ещё» */
+const DS_LENGTHS_FT = [6, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 30, 35, 40, 50, 60] as const;
+function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
+  const { t } = useI18n();
+  const cur = Math.round((ds.heightIn ?? 0) / 12);
+  const fts: number[] = [...DS_LENGTHS_FT];
+  if (cur && !fts.includes(cur)) fts.push(cur); // a length set before (or by the stepper of old) stays pickable
+  fts.sort((x, y) => x - y);
+  return (
+    <Select
+      fit
+      label={t(k("dsLength"))}
+      testID="attr-ds-length"
+      items={[{ key: "0", label: t(k("heightAuto")) }, ...fts.map((n) => ({ key: String(n), label: `${n}′` }))]}
+      value={String(cur)}
+      onChange={(v) => onAttrs({ heightIn: Number(v) ? Number(v) * 12 : undefined })}
+    />
   );
 }
 
@@ -617,7 +639,7 @@ function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsA
  * The rare fields of a downspout behind «Ещё» (M7c, debt of M5c №9): its own height, offsets, a size change on the way
  * down, what sits on top, a rain-barrel diverter, an outlet screen. «Ещё» opens by itself when one of them is set.
  */
-const rareSet = (ds: DrawnDownspout) => !!(ds.heightIn || ds.offsets?.length || ds.reducers?.length || ds.head || ds.funnel || ds.diverter || ds.outletScreen);
+const rareSet = (ds: DrawnDownspout) => !!(ds.offsets?.length || ds.reducers?.length || ds.head || ds.funnel || ds.diverter || ds.outletScreen);
 
 function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
@@ -625,10 +647,6 @@ function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
   const smaller = smallerSizes(ds.shape, ds.size);
   return (
     <View style={{ gap: space[4] }}>
-      <View testID="attr-height">
-        <Stepper label={t(k("height"))} unit={t(k("ft"))} value={Math.round((ds.heightIn ?? 0) / 12)} min={0} max={MAX_DS_HEIGHT_FT} onChange={(ft) => onAttrs({ heightIn: ft ? ft * 12 : undefined })} />
-        <T v="caption" tone="mut">{t(k("heightHint"))}</T>
-      </View>
       <Pick label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")) }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={ds.reducers?.[0]?.to ?? ""} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} />
       <Pick label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
       <Switch testID="attr-diverter" on={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} />
