@@ -14,5 +14,7 @@ export function fillStyle(c: ThemeColors): ViewStyle {
     shadowOpacity: component.shadowSm.opacity,
     shadowRadius: component.shadowSm.radius,
     shadowOffset: { width: 0, height: component.shadowSm.offsetY },
+    // Android draws no shadow* props: the same lift as an elevation
+    elevation: component.shadowSm.elevation,
   };
 }

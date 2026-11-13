@@ -9,8 +9,10 @@ import { isWorkday } from "@/features/schedule";
 import { businessHoursOf } from "@/features/scheduleSettings";
 import { useStore } from "@/data/store";
 import { IconButton } from "@/ui/controls";
+import { fillStyle } from "@/ui/fill";
 import { Press, T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
+import { SelectedCheck } from "@/ui/selectedCheck";
 
 /**
  * «Другая дата» in the visit form (docs/specs/03 §7.1, wave П3b): a month calendar. Past days cannot be picked; days off
@@ -63,14 +65,16 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
                 style={{
                   minHeight: component.rowCompact,
                   borderRadius: component.checkbox.radius,
-                  borderWidth: selected ? component.selectedBorder : component.hairline,
-                  borderColor: selected ? c.ink : c.bd,
-                  backgroundColor: x.key === today ? c.surf2 : c.in,
+                  // the chosen day: «Заливка» + a check (DS «Выделение выбранного»); today keeps its raised surface
+                  ...(selected ? fillStyle(c) : { backgroundColor: x.key === today ? c.surf2 : c.in }),
+                  borderWidth: component.hairline,
+                  borderColor: selected ? "transparent" : c.bd,
                   opacity: past || !x.inMonth ? component.dimOpacity : off ? component.dimOpacity : 1,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
+                {selected ? <SelectedCheck small /> : null}
                 <T v="caption" w={selected ? "bold" : "regular"} tabular>
                   {Number(x.key.slice(8))}
                 </T>

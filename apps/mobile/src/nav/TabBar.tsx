@@ -1,4 +1,3 @@
-import { fillStyle } from "@/ui/fill";
 import { useEffect, useState, type ReactNode } from "react";
 import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
 import { View, type LayoutChangeEvent } from "react-native";
@@ -21,6 +20,7 @@ import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
 import { sectionHref, tabs, type SectionId } from "./sections";
 import { moduleTabs } from "@/modules/registry";
+import { fillStyle } from "@/ui/fill";
 
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.

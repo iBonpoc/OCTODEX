@@ -1,4 +1,3 @@
-import { fillStyle } from "./fill";
 import { useEffect, useRef, useState, type ElementRef, type ReactNode } from "react";
 import { Platform, ScrollView, TextInput, View } from "react-native";
 import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
@@ -9,6 +8,7 @@ import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
 import { Button, TextField } from "./controls";
 import { activeFilterCount, chosenFilters, chosenLabel, filterLabel, SEARCH_FROM, searchAfter, sheetOptions, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
+import { fillStyle } from "./fill";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 

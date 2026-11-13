@@ -2559,6 +2559,7 @@ export const es: Dict = {
   "ds.rows.fillB": "Detallado",
   "ds.rows.fillC": "Secciones",
   "ds.rows.fillChosen": "Elegido: {name}",
+  "ds.rows.fillCard": "Tarjeta elegida: relleno y marca",
   "ds.rows.compact": "«Breve / Detallado» y la papelera",
   "ds.rows.compactHint": "Dos vistas de la fila plegada; la papelera siempre visible, un aviso para varias eliminaciones (§8.3, §15.2).",
   "ds.rows.swipeToneCard": "Tarjeta",

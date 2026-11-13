@@ -2558,6 +2558,7 @@ export const ru = {
   "ds.rows.fillB": "Подробно",
   "ds.rows.fillC": "Разделы",
   "ds.rows.fillChosen": "Выбрано: {name}",
+  "ds.rows.fillCard": "Выбранная карточка: заливка и галочка",
   "ds.rows.compact": "«Кратко / Подробно» и корзина",
   "ds.rows.compactHint": "Два вида свёрнутой строки; корзина всегда на виду, один тост на несколько удалений (§8.3, §15.2).",
   "ds.rows.swipeToneCard": "Карточка",
