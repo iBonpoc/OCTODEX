@@ -9,7 +9,7 @@
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { openProps, skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -90,7 +90,7 @@ exports.run = async (h) => {
   // the gutter turns black → the downspout follows
   await tid("draw-tool-line").getByRole("button").click(); // a tap picks with any tool but «Водосток» (#687)
   await p.mouse.click(x0 + 1, y1 - (y1 - y0) * 0.15);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await panel().waitFor({ timeout: 5000 });
   await pickIn("attr-color", "Чёрный");
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.color === "black", "the downspout follows its gutter: black");

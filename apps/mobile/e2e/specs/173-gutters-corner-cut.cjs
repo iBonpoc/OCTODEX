@@ -10,7 +10,7 @@
  * Finds things by testID; waits on what it checks.
  */
 
-const { canvasAt } = require("../gutters.cjs");
+const { doubleTap, canvasAt } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -79,7 +79,7 @@ exports.run = async (h) => {
   // a tap on the corner
   const corner = await p.getByTestId("draw-svg").first().locator('[id^="c:"]').boundingBox();
   await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // the length sheet has gone off the canvas
-  await p.mouse.click(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await doubleTap(p, corner.x + corner.width / 2, corner.y + corner.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   await tid("corner-cut").waitFor({ timeout: 3000 });
   h.expect(/90°/.test(await tid("corner-cut-angle").innerText()), "the angle: 90°");
@@ -99,7 +99,7 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
   await canvasAt(p, corner.x + corner.width / 2, corner.y + corner.height / 2); // …and has gone off the canvas
-  await p.mouse.click(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await doubleTap(p, corner.x + corner.width / 2, corner.y + corner.height / 2);
   await tid("corner-cut").waitFor({ timeout: 5000 });
   const c1 = await cuts();
   h.expect(c1.every((x) => Math.abs(x.front - x.back + sign * 5) < 0.01), `the other kind: the face ${sign > 0 ? "−" : "+"}5″ (${JSON.stringify(c1)})`);

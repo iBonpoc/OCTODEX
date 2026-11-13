@@ -22,7 +22,9 @@ describe("setCapOff", () => {
     expect(setCapOff(D, "a", 0, false)).toBe(D);
     expect(setCapOff(D, "zz", 0, true)).toBe(D);
   });
-  it("both back on: the mark is gone from the data", () => {
-    expect(setCapOff(setCapOff(D, "a", 0, true), "a", 0, false).runs[0]!.noCap).toBeUndefined();
+  it("both back on: written as [false, false] (a missing key could stay in a saved copy), and counted as caps again", () => {
+    const back = setCapOff(setCapOff(D, "a", 0, true), "a", 0, false);
+    expect(back.runs[0]!.noCap).toEqual([false, false]);
+    expect(capsOf(back)).toBe(2);
   });
 });
