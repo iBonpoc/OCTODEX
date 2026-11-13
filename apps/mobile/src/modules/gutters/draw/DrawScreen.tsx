@@ -53,6 +53,7 @@ import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, wouldDuplicate, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { localUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -671,7 +672,7 @@ export default function DrawScreen() {
     setSelected(null);
     const gone = selected;
     // «Отменить» puts back what was deleted and keeps what was drawn since
-    toast.show(t("mod.gutters.draw.deleted"), () => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing));
+    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing)));
   };
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
@@ -1093,7 +1094,7 @@ export default function DrawScreen() {
                   setCornerSheet(null);
                   if (next === before) return;
                   commit(next, before);
-                  toast.show(t("mod.gutters.draw.cornerSplit.done"), () => commit(before, cur.current.drawing));
+                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing)));
                 }}
               />
             </View>
