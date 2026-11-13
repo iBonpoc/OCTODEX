@@ -398,6 +398,18 @@ export const drawingPrint = {
   sheetW: 800, pageW: 420, margin: 24, runW: 2.5, thinW: 1, dimOff: 30, dimStep: 18, extGap: 4, tick: 5, numR: 10, dsR: 6, font: 13, fontSm: 11, stampH: 76, scalePx: 120, panelMin: 120, panelGap: 28, insetFrac: 0.1, insetW: 190, insetH: 96, insetSheetFrac: 0.5,
 } as const;
 
+/**
+ * The shop drawings of a module's measurement (#1349): an ANSI B sheet drawn in inches, printed 11 × 17 or reduced whole to
+ * Letter. Text heights are cap heights in inches: the smallest (textSm) is 11 pt on the sheet — 7 pt on Letter;
+ * lineweights are millimetres (by AIA layer); `band` is the one gray — the fill of the run's band.
+ */
+export const shopSheet = {
+  wIn: 11, hIn: 17, letterWIn: 8.5, letterHIn: 11, borderIn: 0.375, minPt: 11, letterMinPt: 7, capEm: 0.716,
+  textSm: 0.11, text: 0.125, textTitle: 0.19, textSheet: 0.42,
+  lwBorder: 0.7, lwRun: 0.6, lwHeavy: 0.5, lwBlock: 0.35, lwMed: 0.25, lwThin: 0.2, lwHair: 0.13,
+  band: "#AFAFAF",
+} as const;
+
 export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close" | "note"> = {
   ok: "check",
   info: "clock",
@@ -410,5 +422,5 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
-export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint } as const;
+export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint, shopSheet } as const;
 export type Tokens = typeof tokens;
