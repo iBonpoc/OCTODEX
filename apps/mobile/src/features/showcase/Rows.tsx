@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Platform, View } from "react-native";
-import { radius, size, space } from "@octo/design-tokens";
+import { component, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import type { CustomLine } from "@octo/estimating-engine";
@@ -11,13 +11,14 @@ import { Button, Toggle } from "@/ui/controls";
 import { Labeled, RatePctField } from "@/features/fields";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { haptics } from "@/ui/haptics";
-import { T } from "@/ui/primitives";
+import { Press, T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 /** the samples of the estimate editor (DS §8.3–8.5, Б13, §14.6): what is shown now, what comes with its component */
 const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
   { id: "row", title: "ds.rows.row", hint: "ds.rows.rowHint" },
+  { id: "compact", title: "ds.rows.compact", hint: "ds.rows.compactHint" },
   { id: "section", title: "ds.rows.section", hint: "ds.rows.sectionHint" },
   { id: "required", title: "ds.rows.required", hint: "ds.rows.requiredHint" },
   { id: "profit", title: "ds.rows.profit", hint: "ds.rows.profitHint" },
@@ -25,6 +26,57 @@ const PLANNED: { id: string; title: DictKey; hint: DictKey }[] = [
 ];
 
 const demoLines = (): CustomLine[] => [1, 2, 3, 4].map((n) => ({ id: `demo${n}`, name: String(n), group: "service", quantity: "1", unit: "ea", unitPriceCents: 0 }));
+
+/** «Заливка» (DS «Выделение выбранного», #1306): the chosen one is a raised neutral fill with a small shadow — never `acc`, never a status colour */
+function FillSample() {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const [sel, setSel] = useState("brief");
+  const items = [
+    { key: "brief", label: t("ds.rows.fillA") },
+    { key: "full", label: t("ds.rows.fillB") },
+    { key: "sections", label: t("ds.rows.fillC") },
+  ];
+  return (
+    <Card>
+      <View testID="showcase-rows-fill" style={{ gap: space[2] }}>
+        <T v="heading">{t("ds.rows.fill")}</T>
+        <T v="caption" tone="mut">{t("ds.rows.fillHint")}</T>
+        <RowView>
+          {items.map((it) => {
+            const on = sel === it.key;
+            return (
+              <Press
+                key={it.key}
+                testID={`showcase-fill-${it.key}`}
+                onPress={() => setSel(it.key)}
+                visibleHeight={size.controlLg}
+                accessibilityRole="radio"
+                accessibilityState={{ selected: on, checked: on }}
+                // web: a radio is read by aria-checked
+                {...({ "aria-checked": on } as object)}
+                accessibilityLabel={it.label}
+                style={[
+                  { minHeight: size.controlLg, paddingHorizontal: space[4], borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+                  on
+                    ? { backgroundColor: c.surf2, shadowColor: c.shadow.color, shadowOpacity: component.shadowSm.opacity, shadowRadius: component.shadowSm.radius, shadowOffset: { width: 0, height: component.shadowSm.offsetY } }
+                    : null,
+                ]}
+              >
+                <T v="body" w={on ? "semibold" : "medium"} tone={on ? "ink" : "mut"}>
+                  {it.label}
+                </T>
+              </Press>
+            );
+          })}
+        </RowView>
+        <View testID="showcase-fill-chosen">
+          <T v="caption">{t("ds.rows.fillChosen", { name: items.find((x) => x.key === sel)!.label })}</T>
+        </View>
+      </View>
+    </Card>
+  );
+}
 
 /** the swipe of an estimate row (DS Б13): on a phone — swipe it; the web has no swipe, its actions are in «⋯» of the row */
 function SwipeSample() {
@@ -164,6 +216,7 @@ export function RowsSection() {
       </Card>
       <TaxSample />
       <SwipeSample />
+      <FillSample />
       <LiveDrag />
       {PLANNED.map((p) => (
         <Card key={p.id}>
