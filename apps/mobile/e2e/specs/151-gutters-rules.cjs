@@ -70,8 +70,19 @@ exports.run = async (h) => {
   h.expect(/10/.test(await tid("gset-rule-storyFt").innerText()), "story height 10 ft by default");
   await tid("gset-rule-storyFt").getByRole("button", { name: "Высота этажа +1" }).click();
   await waitFor(async () => (await settings()).rules?.storyFt === 11, "story height 11 ft saved");
+  // waste (#1355): 10 % by default, a switch takes it away («без запаса» = 0), the percent is there only while it is on
+  h.expect(/10/.test(await tid("gset-rule-wastePct").innerText()), "waste 10 % by default");
   await tid("gset-rule-wastePct").getByRole("button", { name: "Запас на отход +1" }).click();
-  await waitFor(async () => (await settings()).rules?.wastePct === 6, "waste 6 % saved");
+  await waitFor(async () => (await settings()).rules?.wastePct === 11, "waste 11 % saved");
+  await tid("gset-rule-wasteOn").getByRole("switch").click();
+  await waitFor(async () => (await settings()).rules?.wastePct === 0, "«Считать запас» off: 0 % saved");
+  await waitFor(async () => (await tid("gset-rule-wastePct").count()) === 0, "…and the percent goes away");
+  await tid("gset-rule-wasteOn").getByRole("switch").click();
+  await waitFor(async () => (await settings()).rules?.wastePct === 10, "on again: 10 %");
+  // the corner allowance by kind: an outside corner 14″, an inside one 6″
+  h.expect(/14/.test(await tid("gset-rule-cutCornerOutIn").innerText()) && /6/.test(await tid("gset-rule-cutCornerIn").innerText()), "an outside corner 14″, an inside one 6″ by default");
+  await tid("gset-rule-cutCornerOutIn").getByRole("button", { name: /\+1$/ }).click();
+  await waitFor(async () => (await settings()).rules?.cutCornerOutIn === 15, "outside corner 15″ saved");
   await nth("gset-rule-corner", 2).click();
   await waitFor(async () => (await settings()).rules?.corner === "prefab", "corners by default: ready-made");
   await h.shot("rules");

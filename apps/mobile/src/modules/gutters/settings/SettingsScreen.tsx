@@ -335,7 +335,16 @@ export default function GutterSettingsScreen() {
             {num("storyFt", t(k("ft")), t(k("r.storyFt")))}
             {num("hangerSpacingIn", t(k("in")), t(k("r.hangerSpacingIn")))}
             <Switch testID="gset-rule-hangerExtra" on={rules.hangerExtra} onChange={(v) => setRule("hangerExtra", v)} label={t(k("r.hangerExtra"))} />
-            {num("wastePct", "%", t(k("r.wastePct")))}
+            {/* waste: a switch («без запаса» = 0 %, #1355) and the percent under it while it is on */}
+            <Switch testID="gset-rule-wasteOn" on={rules.wastePct > 0} onChange={(v) => setRule("wastePct", v ? RULE_NUMS.wastePct.def : 0)} label={t(k("r.wasteOn"))} />
+            {rules.wastePct > 0 ? (
+              <Step testID="gset-rule-wastePct">
+                <Stepper label={t(k("r.wastePct"))} unit="%" value={rules.wastePct} min={1} max={RULE_NUMS.wastePct.max} step={RULE_NUMS.wastePct.step} onChange={(v) => setRule("wastePct", v)} />
+              </Step>
+            ) : (
+              <T v="caption" tone="mut">{t(k("r.wasteOff"))}</T>
+            )}
+            {num("cutCornerOutIn", t(k("in")), t(k("r.cutCornerOutIn")))}
             {num("cutCornerIn", t(k("in")), t(k("r.cutCornerIn")))}
             <Field label={t(k("r.corner"))} testID="gset-rule-corner">
               <ChoiceChips items={CORNER_METHODS.map((m) => ({ key: m, label: t(a(`cm.${m}`)) }))} value={rules.corner} onChange={(m) => setRule("corner", m)} />
