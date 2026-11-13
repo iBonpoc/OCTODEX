@@ -198,8 +198,9 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // the row's place IN THE LIST in one read (the list and the row together): two reads in the window, a frame apart, gave
         // nonsense while the page was scrolling (a row 388 px off, #1307 «б»)
         if (n && boxNode) {
+          const rel = boxNode as Parameters<typeof n.measureLayout>[0];
           n.measureLayout(
-            boxNode as never,
+            rel,
             (_x: number, y: number, _w: number, h: number) => {
               layouts.current.set(k, { y, h });
               one();
