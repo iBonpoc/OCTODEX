@@ -98,7 +98,10 @@ export function alongChain(d: Drawing, runId: string, side: "L" | "R"): Drawing 
 
 export type Hit = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "run"; id: string };
 
-/** what is under the finger: a downspout, then a line's end (to drag), then a line */
+/**
+ * What is under the finger: the nearest of a downspout and a line's end (a downspout wins a tie), then a line. The nearest, not
+ * «a downspout first»: an automatic downspout stands 12″ from the end (#1246) and must not take the touch that goes on from the end.
+ */
 export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
   let best: { h: Hit; dist: number } | null = null;
   const take = (h: Hit, dist: number) => {
@@ -111,7 +114,6 @@ export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
     const t = Math.min(1, Math.max(0, s.atIn / (runLengthIn(r) || 1)));
     take({ kind: "ds", id: s.id }, Math.hypot(p[0] - (r.a[0] + (r.b[0] - r.a[0]) * t), p[1] - (r.a[1] + (r.b[1] - r.a[1]) * t)));
   }
-  if (best) return (best as { h: Hit }).h;
   for (const r of d.runs) {
     take({ kind: "end", id: r.id, end: 0 }, Math.hypot(p[0] - r.a[0], p[1] - r.a[1]));
     take({ kind: "end", id: r.id, end: 1 }, Math.hypot(p[0] - r.b[0], p[1] - r.b[1]));
@@ -516,8 +518,21 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
 
 /** remove a line (with its downspouts) or a downspout */
 export function removeElement(d: Drawing, id: string): Drawing {
-  if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
-  return { ...d, downspouts: d.downspouts.filter((s) => s.id !== id) };
+  const line = d.runs.find((r) => r.id === id);
+  if (line) {
+    // the count of removed automatic downspouts does not go with the gutter: a gutter of its chain that is left takes it (#1246)
+    const n = Number(line.attrs.dsAutoOff) || 0;
+    const heir = n ? [...chainOf(d, id)].find((x) => x !== id) : undefined;
+    return {
+      ...d,
+      runs: d.runs.filter((r) => r.id !== id).map((r) => (r.id === heir ? { ...r, attrs: { ...r.attrs, dsAutoOff: (Number(r.attrs.dsAutoOff) || 0) + n } } : r)),
+      downspouts: d.downspouts.filter((s) => s.runId !== id),
+    };
+  }
+  // a downspout the program had put, taken off by hand: the chain wants one less (a count on its gutter, #1246)
+  const gone = d.downspouts.find((s) => s.id === id);
+  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, attrs: { ...r.attrs, dsAutoOff: (Number(r.attrs.dsAutoOff) || 0) + 1 } } : r)) : d.runs;
+  return { ...d, runs, downspouts: d.downspouts.filter((s) => s.id !== id) };
 }
 
 /** the same drawing back when nothing changes (no empty «назад» step) */
@@ -547,7 +562,8 @@ export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?:
   if (!s) return d;
   const { id: _id, runId, atIn, ...was } = s;
   const attrs = changeDs(was, patch, ch);
-  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, id, runId, atIn } : x)) };
+  // changed by hand it is the user's own now (no more `auto`): the program does not move it or count it as its own
+  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, auto: undefined, id, runId, atIn } : x)) };
 }
 
 /**
@@ -611,7 +627,23 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
   const runs = back.runs.filter((r) => !haveR.has(r.id));
   const ids = new Set([...cur.runs, ...runs].map((r) => r.id));
   const downspouts = back.downspouts.filter((s) => !haveD.has(s.id) && ids.has(s.runId));
-  return runs.length || downspouts.length ? { ...cur, runs: [...cur.runs, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
+  // an automatic downspout taken off and brought back: its gutter's count of removed ones goes down by one (removeElement had raised it);
+  // a gutter brought back with its own count: the gutter that took the count over gives it back
+  const asked = before.downspouts.find((s) => s.id === removedId);
+  const dec = (rs: DrawnRun[], runId: string, n: number): DrawnRun[] => rs.map((r) => {
+    if (r.id !== runId) return r;
+    const left = (Number(r.attrs.dsAutoOff) || 0) - n;
+    const { dsAutoOff: _o, ...rest } = r.attrs;
+    return { ...r, attrs: left > 0 ? { ...rest, dsAutoOff: left } : rest };
+  });
+  let base = cur.runs;
+  if (asked?.auto && downspouts.some((s) => s.id === removedId)) base = dec(base, asked.runId, 1);
+  const back0 = run && runs.length ? Number(run.attrs.dsAutoOff) || 0 : 0;
+  if (back0) {
+    const heir = [...chainOf({ runs: [...base, ...runs] }, run!.id)].find((x) => x !== run!.id && (Number(base.find((r) => r.id === x)?.attrs.dsAutoOff) || 0) >= back0);
+    if (heir) base = dec(base, heir, back0);
+  }
+  return runs.length || downspouts.length ? { ...cur, runs: [...base, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
 }
 
 /**
@@ -639,7 +671,8 @@ export function moveDs(d: Drawing, id: string, p: P): Drawing {
   const r = s && d.runs.find((x) => x.id === s.runId);
   if (!s || !r) return d;
   const atIn = Math.min(runLengthIn(r), Math.max(0, projectOnRun(r, p).atIn));
-  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn } : x)) };
+  // moved by hand it is the user's own now (no more `auto`): the program does not take it away or count it as its own
+  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn, auto: undefined } : x)) };
 }
 
 /**
