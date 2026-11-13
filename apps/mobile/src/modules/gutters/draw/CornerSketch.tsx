@@ -17,6 +17,7 @@ import { asFields, tapeIn } from "../canvas/attrs";
 import { DENOM, fmtLen, type LenFormat } from "../canvas/format";
 import { labelWidth } from "../canvas/labels";
 import { countOnKeyboardHide, triKey } from "./triangleCount";
+import { angleArc, cutPoint } from "../canvas/cornerPlan";
 import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Drawing, type FoundCorner, type P } from "../geometry";
 
 /**
@@ -25,7 +26,7 @@ import { angleFromTriangle, houseSides, runLengthIn, type CornerCutRun, type Dra
  * the corner to where the faces meet; on each gutter two labels in their own chips — «стена …» on the house side,
  * «лицевая …» beyond the face — and the gutter's letter (A, B) at its end, as in the triangle below.
  */
-export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: FoundCorner; cut: CornerCutRun[]; w: number; /** the company's format of lengths (#1092) */ fmt?: LenFormat }) {
+export function CornerSketch({ d, f, cut, w, angleDeg, fmt = "ftin" }: { d: Drawing; f: FoundCorner; cut: CornerCutRun[]; w: number; /** the angle between the walls, whole degrees: written at the arc */ angleDeg: number; /** the company's format of lengths (#1092) */ fmt?: LenFormat }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const FS = font.size.caption;
@@ -41,7 +42,7 @@ export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: Fo
       return { id, u: [vx / L, vy / L] as [number, number], side: sideOf(r), lead: end ? 1 : 0 };
     });
     // the face side of each leg: away from the house (the run's right of a→b when the house is on its left)
-    const off = space[4];
+    const off = space[6];
     const withN = legs.map((l) => {
       // the run's own a→b: from the corner when the corner is its start (end 0), towards it when it is its end
       const dir = l.lead ? ([-l.u[0], -l.u[1]] as [number, number]) : l.u;
@@ -62,12 +63,9 @@ export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: Fo
     const corner = S([0, 0]);
     const lines = withN.map((l) => ({ id: l.id, far: S(l.u), u: l.u, n: [l.n[0] * off, l.n[1] * off] as [number, number], nu: l.n }));
     const [a, b] = lines as [(typeof lines)[0], (typeof lines)[0]];
-    const p0: [number, number] = [corner[0] + a.n[0], corner[1] + a.n[1]];
-    const q0: [number, number] = [corner[0] + b.n[0], corner[1] + b.n[1]];
-    const den = a.u[0] * b.u[1] - a.u[1] * b.u[0];
-    const tt = Math.abs(den) < 1e-6 ? 0 : ((q0[0] - p0[0]) * b.u[1] - (q0[1] - p0[1]) * b.u[0]) / den;
-    const m: [number, number] = [p0[0] + a.u[0] * tt, p0[1] + a.u[1] * tt];
-    return { corner, lines, m };
+    const m = cutPoint(corner, { u: a.u, n: a.nu }, { u: b.u, n: b.nu }, off);
+    const arc = angleArc(corner, a.u, b.u, space[6], FS * 1.5);
+    return { corner, lines, m, arc };
   }, [d, f, w, H, t, FS]);
   const byId = new Map(cut.map((x) => [x.id, x]));
   const th = FS + space[2];
@@ -91,7 +89,7 @@ export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: Fo
       </G>
     );
   };
-  const GAP_WALL = space[2], GAP_FACE = space[4] + space[2];
+  const GAP_WALL = space[2], GAP_FACE = space[6] + space[2]; // the face chip stands beyond the strip (the strip is `space[6]` wide)
   const gapOf = (sign: 1 | -1) => (sign > 0 ? GAP_FACE : GAP_WALL);
   /** the chip on leg i, side `sign`: in the middle; inside the angle moved out along the leg past the other leg's chips */
   const chipOn = (i: number, sign: 1 | -1, text: string, strong: boolean, key: string, gap: number) => {
@@ -105,14 +103,18 @@ export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: Fo
       const oSign = ((o.nu[0] * l.u[0] + o.nu[1] * l.u[1]) > 0 ? 1 : -1) as 1 | -1;
       const reach = gapOf(oSign) + th;
       const sin = Math.max(0.5, Math.abs(l.u[0] * o.u[1] - l.u[1] * o.u[0]));
-      along = Math.min(Lpx - tw / 2, Math.max(along, reach / sin + tw / 2 + space[2]));
+      // …and past the arc with its degrees
+      along = Math.min(Lpx - tw / 2, Math.max(along, reach / sin + tw / 2 + space[2] + space[6]));
     }
     return chipBy(geo.corner[0] + l.u[0] * along, geo.corner[1] + l.u[1] * along, l.u, l.nu, sign, text, strong, key, gap);
   };
-  const letters = ["A", "B"];
   return (
     <View testID="corner-sketch">
       <Svg width={w} height={H}>
+        {/* the gutters as strips seen from above: the wall's line to the face's, from the corner to the cut */}
+        {geo.lines.map((l) => (
+          <Path key={`s${l.id}`} d={`M${geo.corner[0]} ${geo.corner[1]}L${l.far[0]} ${l.far[1]}L${l.far[0] + l.n[0]} ${l.far[1] + l.n[1]}L${geo.m[0]} ${geo.m[1]}Z`} fill={c.surf2} stroke="none" />
+        ))}
         {geo.lines.map((l, i) => {
           const x = byId.get(l.id)!;
           // the labels stand clear of the lines: the wall's on the house side, the face's beyond the dashed face line
@@ -122,14 +124,18 @@ export function CornerSketch({ d, f, cut, w, fmt = "ftin" }: { d: Drawing; f: Fo
               <Path d={`M${geo.m[0]} ${geo.m[1]}L${l.far[0] + l.n[0]} ${l.far[1] + l.n[1]}`} stroke={c.ink} strokeWidth={dt.runW / 2} strokeDasharray={`${dt.runW} ${dt.runW}`} fill="none" />
               {chipOn(i, -1, `${t("mod.gutters.draw.cutWall")} ${fmtLen(x.backIn, fmt)}`, false, `b${i}`, GAP_WALL)}
               {chipOn(i, 1, `${t("mod.gutters.draw.cutFace")} ${fmtLen(x.frontIn, fmt)}`, true, `f${i}`, GAP_FACE)}
-              <SvgText x={l.far[0] + l.u[0] * FS * 1.4} y={l.far[1] + l.u[1] * FS * 1.4 + FS * 0.35} fontSize={FS} fontFamily={font.families.bold} fill={c.ink} textAnchor="middle">{letters[i]}</SvgText>
             </G>
           );
         })}
-        <Path d={`M${geo.corner[0]} ${geo.corner[1]}L${geo.m[0]} ${geo.m[1]}`} stroke={c.mut} strokeWidth={dt.runW / 2} fill="none" />
-        {/* C — straight between the ends of A and B (the triangle below) */}
-        <Path d={`M${geo.lines[0]!.far[0]} ${geo.lines[0]!.far[1]}L${geo.lines[1]!.far[0]} ${geo.lines[1]!.far[1]}`} stroke={c.mut} strokeWidth={1} strokeDasharray={`${dt.runW * 2} ${dt.runW * 2}`} fill="none" />
-        <SvgText x={(geo.lines[0]!.far[0] + geo.lines[1]!.far[0]) / 2} y={(geo.lines[0]!.far[1] + geo.lines[1]!.far[1]) / 2 - FS * 0.6} fontSize={FS} fontFamily={font.families.bold} fill={c.mut} textAnchor="middle">C</SvgText>
+        {/* the cut line (the miter): from the corner of the walls to where the faces meet — plain, in the ink */}
+        <Path d={`M${geo.corner[0]} ${geo.corner[1]}L${geo.m[0]} ${geo.m[1]}`} stroke={c.ink} strokeWidth={dt.runW} strokeLinecap="round" fill="none" />
+        {/* the angle between the walls: a dash-dot arc and its degrees (the same mark as on the canvas, #1275) */}
+        {geo.arc ? (
+          <>
+            <Path d={`M${geo.arc.from[0]} ${geo.arc.from[1]}A${space[6]} ${space[6]} 0 0 ${geo.arc.sweep} ${geo.arc.to[0]} ${geo.arc.to[1]}`} stroke={c.mut} strokeWidth={dt.runW / 2} strokeDasharray={`${dt.runW * 2} ${dt.runW} ${dt.runW / 2} ${dt.runW}`} fill="none" />
+            <SvgText x={geo.arc.label[0]} y={geo.arc.label[1] + FS * 0.35} fontSize={FS} fontFamily={font.families.semibold} fill={c.ink} textAnchor="middle">{`${angleDeg}°`}</SvgText>
+          </>
+        ) : null}
       </Svg>
     </View>
   );
