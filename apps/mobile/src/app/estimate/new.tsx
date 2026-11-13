@@ -715,8 +715,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               onDrop={dropRow}
               onHold={setHoldSection}
               onLift={setLifted}
-              // the open row folds first (the whole list folds): a wrong one stays and the drag does not start
-              beforeBegin={() => leaveRow(true)}
+              // the open row folds first (the whole list folds): a wrong one stays, says why (the errors, the scroll) and the drag does
+              // not start — never silently (code review of «б»)
+              beforeBegin={() => leaveRow(false)}
               renderRow={(r, i) =>
 
               r.type === "section" ? (

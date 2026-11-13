@@ -1,7 +1,7 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { View, useWindowDimensions } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { component, gesture, motion, radius, size, space, z } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
@@ -51,11 +51,13 @@ interface Ctl {
 const SortCtx = createContext<Ctl | null>(null);
 
 /**
- * The handle «≡» of the OPEN line, drawn by the line itself in its header (DS §8.3: «˄ Свернуть» … корзина, «⋯», «≡»), not in a
- * column beside the row — the row's fields then take the whole width. `null` outside an open line.
+ * The handle «≡» of the OPEN line stands in its header (DS §8.3: «˄ Свернуть» … корзина, «⋯», «≡»), not in a column beside the
+ * row — the row's fields take the whole width. The handle itself stays where it always is in the tree (the list draws it over the
+ * header's right end): taken by it, the open row folds, and a handle that moved in the tree would lose the finger (code review of «б»).
+ * `true` — the line keeps the place for it at the right end of its header.
  */
-const HandleCtx = createContext<ReactNode>(null);
-export const useRowHandle = (): ReactNode => useContext(HandleCtx);
+const HandleCtx = createContext(false);
+export const useRowHandle = (): boolean => useContext(HandleCtx);
 
 export type { DropResult };
 
@@ -125,6 +127,9 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   const liftTop = useRef(0);
   const liftH = useRef(0);
   const liftAt = useRef(0.5);
+  const foldGap = useRef(0);
+  /** how far the edge zone has scrolled the page since the row was taken (the finger's scroll; any other is the fold's) */
+  const edgeScrolled = useRef(0);
   const latest = useRef({ rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked });
   latest.current = { rows, onDrop, onHold, onLift, beforeBegin, state, scroll, openKey, locked };
 
@@ -181,16 +186,28 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
       const pending = [...nodes.current.entries()].filter(([k, n]) => !!n && (withHeld || k !== activeKey.current));
       let left = pending.length;
       if (!left) return void done?.();
-      pending.forEach(([k, n]) =>
-        n?.measureInWindow((_nx: number, ny: number, _w: number, nh: number) => {
-          layouts.current.set(k, { y: ny - cy, h: nh });
-          // the bar is drawn from these: draw it again with the new numbers
-          if (--left === 0) {
-            bump((v) => v + 1);
-            done?.();
-          }
-        }),
-      );
+      const one = () => {
+        // the bar is drawn from these: draw it again with the new numbers
+        if (--left === 0) {
+          bump((v) => v + 1);
+          done?.();
+        }
+      };
+      const boxNode = boxRef.current;
+      pending.forEach(([k, n]) => {
+        // the row's place IN THE LIST in one read (the list and the row together): two reads in the window, a frame apart, gave
+        // nonsense while the page was scrolling (a row 388 px off, #1307 «б»)
+        if (n && boxNode) {
+          n.measureLayout(
+            boxNode as never,
+            (_x: number, y: number, _w: number, h: number) => {
+              layouts.current.set(k, { y, h });
+              one();
+            },
+            () => one(),
+          );
+        } else one();
+      });
     });
   }, []);
 
@@ -206,6 +223,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     dragY.value = 0;
     foldShift.current = 0;
     settled.current = null;
+    pendingFold.current = null;
+    setFolded(null);
     setState({ active: null, to: 0, from: 0, h: 0 });
     latest.current.onHold?.(null);
     latest.current.onLift?.(null);
@@ -228,16 +247,27 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     // the finger keeps the same point of the row (its handle is in the row's middle, a folded row is shorter)
     const shift = liftTop.current + liftAt.current * liftH.current - (top + liftAt.current * h);
     layouts.current.set(key, { y: top, h });
-    foldShift.current = shift;
-    settled.current = key;
     setState((s) => (s.active === key ? { ...s, h } : s));
-    if (shift) latest.current.scroll?.scrollBy(-shift);
-    // the place is found again at once (a finger that does not move gives no move to do it); the page's offset settles a frame later
-    requestAnimationFrame(() => {
-      refresh(key, true);
-      setFolded(key);
-    });
-  }, [refresh]);
+    // the page scrolls so the row's place comes under the finger — as far as it CAN (at the top, or a page that got shorter than the
+    // screen, it cannot; `scrollBy` reads where the page really stopped). The row is kept under the finger only by what the page
+    // really scrolled; the rest puts it on its own place in the folded list (else it hung past the list's end, cut off by the card,
+    // or covered a neighbour — design review of #1307 «б»)
+    const sc = latest.current.scroll;
+    if (shift) sc?.scrollBy(-shift);
+    // how far the page went up for the fold: all it moved since the row was taken but what the edge zone scrolled (that one is the
+    // finger's). The browser itself trims the scroll when the page gets shorter — that is the fold's too.
+    const now = sc?.offsetNow?.() ?? sc?.offset() ?? 0;
+    const scrolledBy = startOffset.current - now + edgeScrolled.current;
+    // the row stands on its own place moved by the finger (the page's scroll is taken back): under the finger where the page
+    // scrolled the place there, else off it by the rest — `foldGap`: the edges and the landing go by the ROW
+    foldShift.current = scrolledBy;
+    foldGap.current = shift - scrolledBy;
+    dragY.value = lastT.current;
+    settled.current = key;
+    refresh(key, true);
+    // the folded list is drawn and the page has stood: a mark for the tests
+    requestAnimationFrame(() => setFolded((f) => (activeKey.current === key ? key : f)));
+  }, [refresh, dragY]);
   useEffect(() => {
     if (heldGone(activeKey.current, keys)) abort();
   }, [keys, abort]);
@@ -249,7 +279,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
   const settled = useRef<string | null>(null);
   /** the held row whose list has folded and settled (a mark for the tests: `sort-folded`) */
   const [folded, setFolded] = useState<string | null>(null);
-  useEffect(() => {
+  // before the folded list is painted (a phone measures at once): the held row is put back under the finger in the same frame
+  useLayoutEffect(() => {
     const land = pendingLand.current;
     if (land) {
       pendingLand.current = null;
@@ -295,13 +326,50 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         if (!row || !me) return;
         activeKey.current = key;
         activeSV.value = key;
-        startOffset.current = sc?.offset() ?? 0;
+        // where the page REALLY is (a scroll the browser made a moment ago may not have told the app yet: a stale start put the row
+        // 388 px off the finger, #1307 «б»)
+        startOffset.current = sc?.offsetNow?.() ?? sc?.offset() ?? 0;
         // the finger's place is known from the first moment (before, the page ran up from a 0 and the row with it)
         absY.current = y;
         visible.current = null;
         sc?.measureVisible((v) => (visible.current = v));
+        lastT.current = 0;
+        dragY.value = 0;
+        scrolled.value = 0;
+        foldShift.current = 0;
+        foldGap.current = 0;
+        edgeScrolled.current = 0;
+        settled.current = null;
+        pendingFold.current = null;
+        setFolded(null);
+        lock(true);
+        haptics.light();
+        held.value = 1;
+        // reduced motion: no lift (the frame and the ground still show which row is held)
+        lift.value = reduce ? 0 : withTiming(1, { duration: motion.durSlow });
+        const { at } = withoutBlock(rs, key);
+        // `from`: the slot of the held row among the others
+        fromSlot.current = at;
+        slot.current = at;
+        setState({ active: key, from: at, to: at, h: me.h });
+        // the page follows the held row near the edges of what can be seen (below the header, above the bottom bar)
+        timer.current = setInterval(() => {
+          const s = latest.current.scroll;
+          if (!s) return;
+          const v = visible.current ?? { top: insets.top, bottom: winH - insets.bottom };
+          // the HELD ROW near the edges, not the finger: where the list's end kept the row off the finger (`foldGap`), the finger
+          // may be near an edge while the row is not — the page must not run then
+          const at = absY.current === null ? null : absY.current - foldGap.current;
+          const step = edgeStep(at, v.top, v.bottom, gesture.autoScrollEdge, gesture.autoScrollMax);
+          if (!step) return;
+          const was = s.offsetNow?.() ?? s.offset();
+          s.scrollBy(step);
+          edgeScrolled.current += (s.offsetNow?.() ?? s.offset()) - was;
+          refresh(key, true);
+        }, 16);
+        // where every row stands now (the held one too), THEN the list folds: the held row's top before the fold is known exactly.
+        // Everything above is set up FIRST: on a phone (Fabric) the measure answers at once, inside this call (code review of «б»).
         liftTop.current = me.y;
-        // where every row stands now (the held one too), THEN the list folds: the held row's top before the fold is known exactly
         measureAll(true, () => {
           if (activeKey.current !== key) return;
           const was = layouts.current.get(key) ?? me;
@@ -317,34 +385,16 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
           if (!latest.current.onLift && row.type !== "section") {
             pendingFold.current = null;
             afterFold(key);
+            return;
           }
+          // the same row taken again at once: the screen's «lifted» went key → null → key in one batch and the rows did not change —
+          // no new rows will come; two frames on, measure anyway (else the place was never looked for)
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (pendingFold.current !== key || activeKey.current !== key) return;
+            pendingFold.current = null;
+            measureAll(false, () => afterFold(key));
+          }));
         });
-        lastT.current = 0;
-        dragY.value = 0;
-        scrolled.value = 0;
-        foldShift.current = 0;
-        settled.current = null;
-        lock(true);
-        haptics.light();
-        held.value = 1;
-        // reduced motion: no lift (the frame and the ground still show which row is held)
-        lift.value = reduce ? 0 : withTiming(1, { duration: motion.durSlow });
-        const { at } = withoutBlock(rs, key);
-        // `from`: the slot of the held row among the others
-        fromSlot.current = at;
-        slot.current = at;
-        setState({ active: key, from: at, to: at, h: me.h });
-        // (the whole list folds into short rows once every row is measured, above; a section folds too)
-        // the page follows the held row near the edges of what can be seen (below the header, above the bottom bar)
-        timer.current = setInterval(() => {
-          const s = latest.current.scroll;
-          if (!s) return;
-          const v = visible.current ?? { top: insets.top, bottom: winH - insets.bottom };
-          const step = edgeStep(absY.current, v.top, v.bottom, gesture.autoScrollEdge, gesture.autoScrollMax);
-          if (!step) return;
-          s.scrollBy(step);
-          refresh(key, true);
-        }, 16);
       },
       move: (key, ty, y) => {
         if (!ownsDrag(activeKey.current, key)) return;
@@ -373,6 +423,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // where the finger let the row go: the row stays under it when the list unfolds (DS §14.6 «Приземление»)
         const landAt = absY.current;
         settled.current = null;
+        pendingFold.current = null;
+        setFolded(null);
         setState({ active: null, to: 0, from: 0, h: 0 });
         hold?.(null);
         latest.current.onLift?.(null);
@@ -382,7 +434,8 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
         // what the drop CAME TO decides the feel, and it is known before the buzz: moved — «medium»; ended where it was — nothing;
         // refused — «warning» (never «medium» for a move that did not happen)
         const res: DropResult = d ? drop(d) : "same";
-        if (res === "moved" && landAt !== null) pendingLand.current = { key, y: landAt, at: liftAt.current };
+        if (res === "moved" && landAt !== null) pendingLand.current = { key, y: landAt - foldGap.current, at: liftAt.current };
+        foldGap.current = 0;
         const feel = feelOf(res);
         if (feel) haptics[feel]();
         // moved: the row's offset stays until the new order is drawn (zeroing it first showed the row at its old place for a frame)
@@ -420,7 +473,7 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
           </Item>
         ))}
         {state.active && folded === state.active ? <View pointerEvents="none" testID="sort-folded" style={{ position: "absolute", width: 0, height: 0 }} /> : null}
-        {state.active ? <View pointerEvents="none" testID="sort-bar" style={{ position: "absolute", left: 0, right: 0, top: barY - component.selectedBorder / 2, height: component.selectedBorder, backgroundColor: c.ink, zIndex: z.lift }} /> : null}
+        {state.active && state.to !== state.from ? <View pointerEvents="none" testID="sort-bar" style={{ position: "absolute", left: 0, right: 0, top: barY - component.selectedBorder / 2, height: component.selectedBorder, backgroundColor: c.ink, zIndex: z.lift }} /> : null}
       </View>
     </SortCtx.Provider>
   );
@@ -522,7 +575,8 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   useEffect(() => {
     if (!flashing) return;
     fl.value = 1;
-    fl.value = withTiming(0, { duration: motion.durSlow, easing: Easing.out(Easing.cubic) });
+    // a fade is not a movement: it plays under «уменьшить движение» too (DS §14.6) — the system setting must not skip it
+    fl.value = withTiming(0, { duration: motion.durSlow, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.Never });
   }, [flashing, fl]);
   const flashStyle = useAnimatedStyle(() => ({ opacity: fl.value }));
 
@@ -531,21 +585,27 @@ function Item({ k, index, dragKind, open, children }: { k: string; index: number
   const inHeader = open && k.startsWith("l:");
   const handleEl = canDrag ? (
     <GestureDetector gesture={handle}>
-      <View testID={`sort-handle-${k}`} accessibilityRole="button" accessibilityLabel={t("est.sec.drag")} style={inHeader ? { width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}>
+      <View
+        testID={`sort-handle-${k}`}
+        accessibilityRole="button"
+        accessibilityLabel={t("est.sec.drag")}
+        // in the open line's header: over its right end, centred on its buttons (the row's top padding `space[3]`, `dockBtn` high)
+        style={inHeader ? { position: "absolute", right: 0, top: space[3] + (component.dockBtn - size.hitMin) / 2, width: size.hitMin, height: size.hitMin, alignItems: "center", justifyContent: "center" } : { width: size.hitMin, minHeight: size.hitMin, alignItems: "center", justifyContent: "center", alignSelf: "stretch" }}
+      >
         <Icon name="menu" s={size.iconMd} color={c.mut} />
       </View>
     </GestureDetector>
   ) : null;
   const body = (
     <View style={{ flex: 1 }} testID={`sort-row-${k}`}>
-      {inHeader ? <HandleCtx.Provider value={handleEl}>{children}</HandleCtx.Provider> : children}
+      <HandleCtx.Provider value={inHeader && canDrag}>{children}</HandleCtx.Provider>
     </View>
   );
   return (
     <Animated.View ref={(n: unknown) => ctl.node(k, n as ComponentRef<typeof View> | null)} collapsable={false} onLayout={(e) => ctl.layout(k, e.nativeEvent.layout.y, e.nativeEvent.layout.height)} style={a}>
       <View style={{ flexDirection: "row", alignItems: "center" }}>
         {canDrag && !open ? <GestureDetector gesture={hold}>{body}</GestureDetector> : body}
-        {inHeader ? null : handleEl}
+        {handleEl}
       </View>
       {flashing ? <Animated.View pointerEvents="none" testID={`sort-flash-${k}`} style={[{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, borderRadius: radius.inner, borderWidth: component.selectedBorder, borderColor: c.acc }, flashStyle]} /> : null}
     </Animated.View>

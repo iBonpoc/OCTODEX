@@ -15,7 +15,8 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const order = () => p.locator('[data-testid^="est-line-"], [data-testid^="est-section-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid").replace("est-line-", "l:").replace("est-section-", "s:")));
   // `target`: a number, or a function that reads the place on the screen AFTER the row is taken (the page may have moved)
-  const drag = async (key, target, { release = true } = {}) => {
+  // `bar: false` — let go where it was taken: the bar shows only once the place differs (DS §14.6)
+  const drag = async (key, target, { release = true, bar = true } = {}) => {
     const hd = tid(`sort-handle-${key}`);
     await hd.scrollIntoViewIfNeeded();
     const b = await hd.boundingBox();
@@ -29,7 +30,7 @@ exports.run = async (h) => {
     const toY = typeof target === "function" ? await target() : target;
     await p.mouse.move(x, toY, { steps: 12 });
     if (release) {
-      await p.getByTestId("sort-bar").first().waitFor({ timeout: 3000 });
+      if (bar) await p.getByTestId("sort-bar").first().waitFor({ timeout: 3000 });
       await p.mouse.up();
     }
   };
@@ -80,7 +81,7 @@ exports.run = async (h) => {
   const keep = (await order()).join(" ");
   const lastKey = (await order()).filter((x) => x.startsWith("l:")).pop();
   const lb = await tid(`est-line-${lastKey.slice(2)}`).boundingBox();
-  await drag(`l:${lastKey.slice(2)}`, lb.y + lb.height / 2);
+  await drag(`l:${lastKey.slice(2)}`, lb.y + lb.height / 2, { bar: false });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
   h.expect((await order()).join(" ") === keep && (await p.getByTestId("toast-undo").count()) === 0, "let go where it was taken: the same order, no toast");
 
@@ -107,7 +108,8 @@ exports.run = async (h) => {
   await p.mouse.move(bb.x + 40, bb.y + bb.height / 2);
   await p.mouse.down();
   await p.mouse.move(bb.x + 40, bb.y + bb.height / 2 + 14, { steps: 4 });
-  await p.getByTestId("sort-bar").first().waitFor({ timeout: 3000 });
+  // taken (the list folded); the bar shows only once the place differs from where the row was taken
+  await p.getByTestId("sort-folded").first().waitFor({ state: "attached", timeout: 3000 });
   await p.mouse.up();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
 

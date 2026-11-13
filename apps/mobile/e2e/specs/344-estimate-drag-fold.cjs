@@ -39,24 +39,29 @@ exports.run = async (h) => {
   await p.mouse.move(x, y0);
   await p.mouse.down();
   await p.mouse.move(x, y0 - 12, { steps: 4 });
-  await p.getByTestId("sort-bar").first().waitFor({ timeout: 3000 });
-  // the list has folded and settled (the page scrolled the row's place under the pointer)
+  // the list has folded and settled (the page scrolled the row's place under the pointer, as far as it could)
   await p.getByTestId("sort-folded").first().waitFor({ state: "attached", timeout: 3000 });
   // the whole list is short: the open row folded, no «× qty» anywhere
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-times-"]').length === 0 && document.querySelectorAll('[data-testid^="est-collapse-"]').length === 0, null, { timeout: 3000 });
   h.expect(true, "the list folded: every row short, the open row folded");
-  // the held row is under the pointer (the fold moved the rows above it)
-  const under = await waited(p.waitForFunction(([id, py]) => {
-    const r = document.querySelector(`[data-testid="est-line-${id}"]`)?.getBoundingClientRect();
-    return r && r.top - 24 <= py && py <= r.bottom + 24;
-  }, [d, y0 - 12], { timeout: 2000 }));
-  const held = await p.getByTestId(`est-line-${d}`).first().boundingBox();
-  h.expect(under, `the held row is under the pointer (row ${held && Math.round(held.y)}–${held && Math.round(held.y + held.height)}, pointer ${Math.round(y0 - 12)})`);
+  // the held row is seen: inside the list (not cut off past its end, not over a neighbour), and under the pointer unless the page
+  // could not scroll that far (it stands on its own place then)
+  const seen = await p.evaluate(([id, py]) => {
+    const row = document.querySelector(`[data-testid="est-line-${id}"]`)?.getBoundingClientRect();
+    const list = document.querySelector('[data-testid="sort-folded"]')?.parentElement?.getBoundingClientRect();
+    let e = document.querySelector('[data-testid^="est-line-"]');
+    while (e && !(e.scrollHeight > e.clientHeight + 50 && getComputedStyle(e).overflowY !== "visible")) e = e.parentElement;
+    const atTop = !e || e.scrollTop <= 1;
+    const under = !!row && row.top - 24 <= py && py <= row.bottom + 24;
+    const inside = !!row && !!list && row.top >= list.top - 8 && row.bottom <= list.bottom + 8;
+    return { inside, under, atTop, row: row && [Math.round(row.top), Math.round(row.bottom)], list: list && [Math.round(list.top), Math.round(list.bottom)] };
+  }, [d, y0 - 12]);
+  h.expect(seen.inside && (seen.under || seen.atTop), `the held row is seen (${JSON.stringify(seen)}, pointer ${Math.round(y0 - 12)})`);
   await h.shot("held");
 
   // carry it to the very top of the list and let go (the list's own top: a row above may stand shifted to make room)
-  const top = await p.getByTestId("sort-bar").first().evaluate((el) => el.parentElement.getBoundingClientRect().top);
-  await p.mouse.move(x, top + 4, { steps: 12 });
+  const top = await p.getByTestId("sort-folded").first().evaluate((el) => el.parentElement.getBoundingClientRect().top);
+  await line.carry(h, `l:${d}`, x, y0 - 12, top + 8);
   await p.mouse.up();
   await p.waitForFunction((first) => document.querySelector('[data-testid^="est-line-"]')?.getAttribute("data-testid") === `est-line-${first}`, d, { timeout: 4000 });
   await p.waitForFunction(() => /Позиция перенесена/.test(document.querySelector('[data-testid="toast-text"]')?.textContent || ""), null, { timeout: 3000 });

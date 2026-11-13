@@ -117,8 +117,8 @@ function LineRowView(p: LineRowProps) {
   const toast = useToast();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
-  // the list's handle «≡» of this open line, drawn in the header (DS §8.3)
-  const handle = useRowHandle();
+  // the list draws «≡» of this open line over the right end of its header (DS §8.3): the header keeps the place
+  const handleInHeader = useRowHandle();
   const [more, setMore] = useState(false);
   // «Своя…»: the unit is written by hand — chosen so, or not one of the list (a catalog thing, a module, «Отменить»)
   const known = (UNITS as readonly string[]).includes(l.unit);
@@ -302,7 +302,7 @@ function LineRowView(p: LineRowProps) {
               <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
             </View>
           </View>
-          {handle}
+          {handleInHeader ? <View style={{ width: size.hitMin }} /> : null}
         </RowView>
       </RowView>
       {marks.length ? (
