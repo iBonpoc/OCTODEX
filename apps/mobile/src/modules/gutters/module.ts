@@ -6,7 +6,7 @@
  * the company's settings (M7b, spec 33 П22), /module/gutters/prices — labor prices and the price list's items (M7d, П22.10).
  */
 import { moduleHref, type ModuleDef } from "../registry";
-import { asGutterData, guttersOps, linkLead, loadGutters, measureHref } from "./data";
+import { asGutterData, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
 import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
 
 const draw = moduleHref("gutters", "draw");
@@ -112,6 +112,7 @@ const gutters: ModuleDef = {
     return notes;
   },
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
+  rebuild: rebuildOp,
   screens: {
     draw: () => require("./draw/DrawScreen").default,
     view: () => require("./view/ViewScreen").default,

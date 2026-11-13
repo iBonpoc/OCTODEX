@@ -23,6 +23,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
+import { localUndo } from "@/data/undo";
 
 export default function PurchaseOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -180,7 +181,7 @@ export default function PurchaseOrderScreen() {
                       const before = o.lines;
                       set({ lines: o.lines.filter((x) => x.id !== l.id) });
                       // «Отменить» 5 s (rule 5): the line back where it was
-                      toast.show(t("po.lineRemoved", { name: l.name }), () => set({ lines: before }));
+                      toast.show(t("po.lineRemoved", { name: l.name }), localUndo(() => set({ lines: before })));
                     }}
                   />
                 </>

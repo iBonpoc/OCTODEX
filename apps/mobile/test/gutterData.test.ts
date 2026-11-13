@@ -33,6 +33,7 @@ import gutters from "../src/modules/gutters/module";
 import { dropElement, dropMeasurement, elementFromRow, gutterData, guttersOps, K, loadGutters, measurementOf, putElement, putMeasurement, withGutterData } from "../src/modules/gutters/data";
 import { makeSeed } from "../src/data/seed";
 import type { ElementRow, MeasurementRow } from "../src/modules/gutters/canvas/model";
+import { markUndo } from "../src/data/undo";
 
 registerModule(gutters);
 const M: MeasurementRow = { id: "m1", label: null, status: "draft", propertyId: null, leadId: "l1" };
@@ -155,7 +156,7 @@ describe("unit:gutterData — the canvas's store on the queue (makeModuleStore)"
         const { apply, ...rest } = c;
         sent.push(rest);
         s.db = apply(s.db as never);
-        return () => {};
+        return markUndo(() => true);
       },
     };
     return { s, sent };
@@ -242,7 +243,7 @@ describe("review M5a: fixes", () => {
       moduleOp: (_m: string, c: { kind: string; payload: Record<string, unknown>; apply: (d: never) => never }) => {
         sent.push({ kind: c.kind, payload: c.payload });
         s.db = c.apply(s.db as never);
-        return () => {};
+        return markUndo(() => true);
       },
     };
     return { s, sent };
@@ -342,7 +343,7 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
       moduleOp: (_k: string, c: { kind: string; payload: Record<string, unknown>; apply: (d: never) => never; coalesceKey?: string }) => {
         sent.push({ kind: c.kind, payload: c.payload, coalesceKey: c.coalesceKey });
         s.db = c.apply(s.db as never);
-        return () => void (undone += 1);
+        return markUndo(() => ((undone += 1), true));
       },
     };
     const undo = linkLead(s as never, "m1", "lead-9");
@@ -388,7 +389,7 @@ describe("unit:gutterData — M5d: photos of a measurement and its element (spec
         const before = db;
         db = ch.apply(db);
         sent.push(ch);
-        return () => { db = before; };
+        return markUndo(() => ((db = before), true));
       },
     };
     addPhoto(store, { id: "p1", measurementId: "m1", at: "2026-11-08T10:00:00Z", uri: "file:///a.jpg" });

@@ -10,6 +10,7 @@ import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
 import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
 import { DemoBadge } from "@/features/DemoBadge";
 import { SECTIONS } from "./registry";
+import { localUndo, TOO_LATE } from "@/data/undo";
 
 /** Notices (DS §15): a toast, a toast with «Отменить» for 5 seconds, the «no network» badge. Each one is live. */
 export function NoticesSection() {
@@ -58,7 +59,7 @@ export function NoticesSection() {
         <T v="heading">{t("ds.note.undo")}</T>
         <T v="caption" tone="mut">{t("ds.note.undoHint", { s: motion.toastUndoMs / 1000 })}</T>
         <View testID="showcase-note-undo">
-          <Button label={t("ds.note.undoShow")} variant="secondary" onPress={() => toast.show(t("ds.note.undoText"), () => setUndone((n) => n + 1))} />
+          <Button label={t("ds.note.undoShow")} variant="secondary" onPress={() => toast.show(t("ds.note.undoText"), localUndo(() => setUndone((n) => n + 1)))} />
         </View>
         <View testID="showcase-note-undone">
           <T v="body">{t("ds.note.undone", { n: undone })}</T>
@@ -69,7 +70,7 @@ export function NoticesSection() {
         <T v="heading">{t("ds.note.late")}</T>
         <T v="caption" tone="mut">{t("ds.note.lateHint")}</T>
         <View testID="showcase-note-late">
-          <Button label={t("ds.note.lateShow")} variant="secondary" onPress={() => toast.show(t("ds.note.lateText"), () => false)} />
+          <Button label={t("ds.note.lateShow")} variant="secondary" onPress={() => toast.show(t("ds.note.lateText"), TOO_LATE)} />
         </View>
       </Card>
       <Card>

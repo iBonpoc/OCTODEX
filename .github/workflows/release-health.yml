@@ -1,0 +1,48 @@
+# Daily (#1143, the stop #1141): is the Supabase key still accepted, and did the last Release on main pass? A refused key
+# stops every release silently (11.11: 7 hours). Each problem keeps ONE task with the label «остановка» open while it lasts
+# and closes it when it passes again (scripts/releaseHealthIssue.cjs). The key is never printed: the step only says ok / not.
+name: Release health
+on:
+  schedule:
+    - cron: '23 13 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+  actions: read
+concurrency:
+  group: release-health
+  cancel-in-progress: false
+jobs:
+  health:
+    name: Supabase key and the last release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: kgiaxygsjkyiquhjbxdg
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          # exact version, as release.yml: "latest" asks the GitHub API and fails on its rate limit
+          version: 3.0.0
+      - id: key
+        name: The Supabase key is accepted
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          # only ok / not: neither the key nor the list goes to the log. 3 tries 30 s apart: a passing outage of the network
+          # or of Supabase is not a stop (a task «остановка» pauses every PR — the director)
+          ok=false
+          for try in 1 2 3; do
+            if [ -n "$SUPABASE_ACCESS_TOKEN" ] && supabase projects list -o json 2>/dev/null | grep -q "\"$PROJECT_REF\""; then ok=true; break; fi
+            echo "the key check: try $try did not pass"
+            if [ "$try" -lt 3 ]; then sleep 30; fi
+          done
+          echo "ok=$ok" >> "$GITHUB_OUTPUT"
+      - name: Keep the «остановка» tasks in step
+        env:
+          GH_TOKEN: ${{ github.token }}
+          KEY_OK: ${{ steps.key.outputs.ok }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/releaseHealthIssue.cjs

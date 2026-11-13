@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Одноразовый локальный Postgres 16: initdb во временный каталог → заглушка auth →
+# Одноразовый локальный Postgres 17 (версия боевой базы, #806): initdb во временный каталог → заглушка auth →
 # миграции → тесты RLS (ON_ERROR_STOP) → остановка и удаление.
 # Использование: supabase/tests/run.sh   (PGBIN, PGPORT, PG_RUN_USER можно переопределить;
 #                VERBOSE=1 — печатать текст каждой ожидаемой ошибки;
@@ -9,7 +9,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-PGBIN="${PGBIN:-/usr/lib/postgresql/16/bin}"
+PGBIN="${PGBIN:-/usr/lib/postgresql/17/bin}"
 PGPORT="${PGPORT:-54329}"
 PGUSER_DB="postgres"
 
