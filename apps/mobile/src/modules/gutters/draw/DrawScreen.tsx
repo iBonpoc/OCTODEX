@@ -29,7 +29,9 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
@@ -47,19 +49,21 @@ import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
-import { localUndo } from "@/data/undo";
+import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { localUndo, type GuardedUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
+/** a tap this soon after a two-finger gesture began or ended is not a tap */
+const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
@@ -123,6 +127,8 @@ export default function DrawScreen() {
   const ch = useMemo(() => choicesFor(settings), [settings]);
   // the company's rules and use (M7c) and its corner method: the $ under the drawing counts by them
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
+  /** the downspouts it puts by itself (#1246): the company's setting — one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
+  const autoDs = useMemo(() => { const r = readRules(settings); return r.dsAuto ? { spacingIn: r.runPerDsFt * 12, edgeIn: r.dsEdgeIn } : null; }, [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -180,11 +186,13 @@ export default function DrawScreen() {
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
   // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
-  const canvas = useCanvasGestures(viewNow, setView, live, 2);
+  // the limits of the scale (#1281): the whole drawing in a quarter of the screen at the farthest, 1″ as big as a finger's target at the nearest
+  const zoomLim = useMemo(() => zoomLimits(drawing.runs.flatMap((r) => [r.a, r.b]), size.w > 0 ? size : { w: 390, h: 844 }, space[8], sizes.hitMin), [drawing.runs, size]);
+  const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -208,7 +216,14 @@ export default function DrawScreen() {
         // «saved» is what the screen would write for this drawing: only a real change is sent — opening the canvas
         // never turns a ready measurement into a draft (review M8b №7, e2e 154)
         saver.seed(toElements(d, mid), v.m);
-        setDrawing(d);
+        // an old drawing may have a gutter lying on another (#1256): cleaned once, here, keeping the one with the smallest id; the write
+        // below is a real change, so an estimate made of this drawing says «Чертёж изменён» (#1314 review); «Отменить» puts it back
+        const clean = withoutDuplicates(d);
+        setDrawing(clean);
+        if (clean !== d) {
+          later.current();
+          toast.show(t("mod.gutters.draw.dupCleaned"), localUndo(() => commit(d, cur.current.drawing)));
+        }
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
       const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
@@ -265,8 +280,16 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (next: Drawing, prev = cur.current.drawing) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false) => {
+      // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
+      const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
+      // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
+      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+        announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
+      }
+      // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
+      if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
       setHint(null);
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
@@ -297,6 +320,33 @@ export default function DrawScreen() {
   const downTime = useRef(0);
   /** the «joint of three ends» toast was shown in this drag (#1282) */
   const threeShown = useRef(false);
+  /** the hold that picks something up (canvas/holdLift.ts, #1272): the state of this touch, its timer, and what is lifted (the point is drawn bigger) */
+  const hold = useRef<Hold>("idle");
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lifted, setLifted] = useState<Lift | null>(null);
+  const clearHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  useEffect(() => clearHold, []); // the screen is left with a touch down: no timer left running
+  /** the touch took something (at its first move): `light` once, unless the hold did it already; the point is lifted */
+  const takeTick = (target: Lift | null, atOnce = true) => {
+    const r = holdMove(hold.current, atOnce);
+    hold.current = r.hold;
+    if (r.light) haptics.light();
+    if (target) setLifted(target);
+  };
+  /** the hold ran out with the finger still: if it is on something that can be taken, `light` and the lifted look — before any move */
+  const liftAtHold = () => {
+    holdTimer.current = null;
+    const target = dragRef.current || !cur.current.canSave ? null : liftTarget(withoutDs(cur.current.drawing, !cur.current.layers.ds), plan(downAt.current[0], downAt.current[1]), tolIn());
+    const r = holdFire(hold.current, !!target);
+    hold.current = r.hold;
+    if (!r.light || !target) return;
+    haptics.light();
+    setSelected(target.id);
+    setLifted(target);
+  };
   const pan = usePanGesture({
     runOnJS: true,
     maxPointers: 1,
@@ -305,8 +355,20 @@ export default function DrawScreen() {
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
       threeShown.current = false;
+      // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
+      // 12.11: «не чувствую момента, когда можно тянуть»); the drag after it has no second «взял»
+      hold.current = holdBegin().hold;
+      setLifted(null);
+      clearHold();
+      holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
+    },
+    onFinalize: () => {
+      clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
+      hold.current = holdCancel(hold.current).hold;
+      setLifted(null);
     },
     onActivate: () => {
+      clearHold(); // moved: before the hold it is drawing as ever; after it the pick-up was made already
       lineSnap.current = null;
       const { drawing: d, tool: tl } = cur.current;
       const p0 = plan(downAt.current[0], downAt.current[1]);
@@ -331,13 +393,13 @@ export default function DrawScreen() {
           if (corner && cornerMovable(d, corner.id)) {
             dragRef.current = { kind: "corner", cornerId: corner.id, before: d, from: p0, held: [true, true], tol: snapIn(), onEnd: null };
             setSelected(endHere.id);
-            haptics.light(); // picked up
+            takeTick({ kind: "corner", id: endHere.id, cornerId: corner.id }); // picked up (already, if the hold ran out first: #1272)
             return;
           }
           if (!corner && runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
             dragRef.current = { kind: "pull", id: endHere.id, end: endHere.end, before: d, from: p0, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
             setSelected(endHere.id);
-            haptics.light(); // picked up
+            takeTick({ kind: "end", id: endHere.id, end: endHere.end }); // picked up (already, if the hold ran out first: #1272)
             return;
           }
         }
@@ -345,7 +407,7 @@ export default function DrawScreen() {
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
         dragRef.current = { kind: "ds", id: h.id, before: d };
-        haptics.light();
+        takeTick({ kind: "ds", id: h.id });
         setSelected(h.id);
         return;
       }
@@ -371,7 +433,7 @@ export default function DrawScreen() {
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
           // along its own line: the end is taken and follows the finger (it may then leave the line: it swings, #818)
           dragRef.current = { kind: "pull", ...g.pullable, fromLine: true, from: g.a, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
-          haptics.light(); // picked up (the «Желоб» stroke turned into a pull)
+          takeTick({ kind: "end", id: g.pullable.id, end: g.pullable.end }); // picked up (the «Желоб» stroke turned into a pull)
           setGhost(null);
           setSelected(g.pullable.id);
           const sw = swingEnd(g.pullable.before, g.pullable.id, g.pullable.end, grabbedEnd(g.pullable.before, g.pullable.id, g.pullable.end, g.a, p), HELD_ORIGINAL, snapIn());
@@ -452,6 +514,14 @@ export default function DrawScreen() {
         liftTap.current = true;
         return;
       }
+      // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
+      if (next === d && g.kind === "line") {
+        const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
+        if (!e.canceled && lineRefused(d, g.a, b, Number(cur.current.story) || 1)) {
+          haptics.warning();
+          toast.show(t("mod.gutters.draw.dupRun"));
+        }
+      }
       if (next !== d) {
         commit(next, d);
         // a new gutter, or one that grew straight on from its free end (founder 09.11): its length sheet
@@ -471,6 +541,8 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) return; // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
+      if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
@@ -548,6 +620,7 @@ export default function DrawScreen() {
             padX: space[1],
             gap: dt.labelGap,
             selected,
+            lift: lifted,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
             dsPad: DS_MARK_R,
@@ -564,7 +637,7 @@ export default function DrawScreen() {
             layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers],
+    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers, lifted],
   );
   sceneRef.current = scene;
 
@@ -675,7 +748,7 @@ export default function DrawScreen() {
     setSelected(null);
     const gone = selected;
     // «Отменить» puts back what was deleted and keeps what was drawn since
-    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing)));
+    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing, true))); // put back as it was: no recount (#1264)
   };
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
@@ -727,6 +800,17 @@ export default function DrawScreen() {
       setSheet(false);
     }
   };
+  /** the toast «Водостоков стало N» (kept fresh each render: `commit` is made once) */
+  const announceDs = useRef<(n: number, undo: GuardedUndo) => void>(() => {});
+  announceDs.current = (n, undo) => toast.show(t("mod.gutters.draw.dsAutoCount", { n }), undo);
+  /** «Расставить водостоки»: every chain of an old measurement gets its downspouts — one step of «Назад» (#1246) */
+  const placeAutoDs = () => {
+    const o = cur.current.autoDs;
+    if (!o) return;
+    const next = autoDownspouts(cur.current.drawing, { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, undefined, true);
+    if (!layers.ds) setLayers((x) => ({ ...x, ds: true }));
+    commit(next, cur.current.drawing, true);
+  };
   const pick = (tl: Tool) => {
     // «Водосток» needs the downspouts seen: the layer comes back on (a downspout is never put in the dark, #930 review)
     if (tl === "ds" && !layers.ds) setLayers((x) => ({ ...x, ds: true }));
@@ -745,7 +829,7 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "layers" | "relink" | "unlink" | "delete";
+  type WhoKey = "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
@@ -753,11 +837,14 @@ export default function DrawScreen() {
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
+    // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
+    ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
     if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -1097,7 +1184,7 @@ export default function DrawScreen() {
                   setCornerSheet(null);
                   if (next === before) return;
                   commit(next, before);
-                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing)));
+                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
                 }}
               />
             </View>

@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { findCorners, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, MIN_TURN_DEG, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { findCorners, runEnds, wouldDuplicate, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, MIN_TURN_DEG, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -98,7 +98,10 @@ export function alongChain(d: Drawing, runId: string, side: "L" | "R"): Drawing 
 
 export type Hit = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "run"; id: string };
 
-/** what is under the finger: a downspout, then a line's end (to drag), then a line */
+/**
+ * What is under the finger: the nearest of a downspout and a line's end (a downspout wins a tie), then a line. The nearest, not
+ * «a downspout first»: an automatic downspout stands 12″ from the end (#1246) and must not take the touch that goes on from the end.
+ */
 export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
   let best: { h: Hit; dist: number } | null = null;
   const take = (h: Hit, dist: number) => {
@@ -111,7 +114,6 @@ export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
     const t = Math.min(1, Math.max(0, s.atIn / (runLengthIn(r) || 1)));
     take({ kind: "ds", id: s.id }, Math.hypot(p[0] - (r.a[0] + (r.b[0] - r.a[0]) * t), p[1] - (r.a[1] + (r.b[1] - r.a[1]) * t)));
   }
-  if (best) return (best as { h: Hit }).h;
   for (const r of d.runs) {
     take({ kind: "end", id: r.id, end: 0 }, Math.hypot(p[0] - r.a[0], p[1] - r.a[1]));
     take({ kind: "end", id: r.id, end: 1 }, Math.hypot(p[0] - r.b[0], p[1] - r.b[1]));
@@ -128,6 +130,8 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
   const fixed = end === 0 ? r.b : r.a;
   const at = endAt(d, fixed, p, tolIn, runId);
   if (Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) < MIN_RUN_IN) return d;
+  // the end dropped so that the gutter lies exactly on another one (both ends shared) is no move: that would be a duplicate (#1256)
+  if (wouldDuplicate({ runs: d.runs.filter((x) => x.id !== runId) }, fixed, at, Number(r.attrs.story) || 1)) return d;
   const { lengthIn: _typed, ...rest } = r;
   const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, a: at } : { ...rest, b: at }, end);
   // downspouts stay on the line: at most its new length
@@ -544,8 +548,21 @@ export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs:
 
 /** remove a line (with its downspouts) or a downspout */
 export function removeElement(d: Drawing, id: string): Drawing {
-  if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
-  return { ...d, downspouts: d.downspouts.filter((s) => s.id !== id) };
+  const line = d.runs.find((r) => r.id === id);
+  if (line) {
+    // the count of removed automatic downspouts does not go with the gutter: a gutter of its chain that is left takes it (#1246)
+    const n = Number(line.attrs.dsAutoOff) || 0;
+    const heir = n ? [...chainOf(d, id)].find((x) => x !== id) : undefined;
+    return {
+      ...d,
+      runs: d.runs.filter((r) => r.id !== id).map((r) => (r.id === heir ? { ...r, attrs: { ...r.attrs, dsAutoOff: (Number(r.attrs.dsAutoOff) || 0) + n } } : r)),
+      downspouts: d.downspouts.filter((s) => s.runId !== id),
+    };
+  }
+  // a downspout the program had put, taken off by hand: the chain wants one less (a count on its gutter, #1246)
+  const gone = d.downspouts.find((s) => s.id === id);
+  const runs = gone?.auto ? d.runs.map((r) => (r.id === gone.runId ? { ...r, attrs: { ...r.attrs, dsAutoOff: (Number(r.attrs.dsAutoOff) || 0) + 1 } } : r)) : d.runs;
+  return { ...d, runs, downspouts: d.downspouts.filter((s) => s.id !== id) };
 }
 
 /** the same drawing back when nothing changes (no empty «назад» step) */
@@ -575,7 +592,8 @@ export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?:
   if (!s) return d;
   const { id: _id, runId, atIn, ...was } = s;
   const attrs = changeDs(was, patch, ch);
-  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, id, runId, atIn } : x)) };
+  // changed by hand it is the user's own now (no more `auto`): the program does not move it or count it as its own
+  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, auto: undefined, id, runId, atIn } : x)) };
 }
 
 /**
@@ -639,7 +657,39 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
   const runs = back.runs.filter((r) => !haveR.has(r.id));
   const ids = new Set([...cur.runs, ...runs].map((r) => r.id));
   const downspouts = back.downspouts.filter((s) => !haveD.has(s.id) && ids.has(s.runId));
-  return runs.length || downspouts.length ? { ...cur, runs: [...cur.runs, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
+  // an automatic downspout taken off and brought back: its gutter's count of removed ones goes down by one (removeElement had raised it);
+  // a gutter brought back with its own count: the gutter that took the count over gives it back
+  const asked = before.downspouts.find((s) => s.id === removedId);
+  const dec = (rs: DrawnRun[], runId: string, n: number): DrawnRun[] => rs.map((r) => {
+    if (r.id !== runId) return r;
+    const left = (Number(r.attrs.dsAutoOff) || 0) - n;
+    const { dsAutoOff: _o, ...rest } = r.attrs;
+    return { ...r, attrs: left > 0 ? { ...rest, dsAutoOff: left } : rest };
+  });
+  let base = cur.runs;
+  if (asked?.auto && downspouts.some((s) => s.id === removedId)) base = dec(base, asked.runId, 1);
+  const back0 = run && runs.length ? Number(run.attrs.dsAutoOff) || 0 : 0;
+  if (back0) {
+    const heir = [...chainOf({ runs: [...base, ...runs] }, run!.id)].find((x) => x !== run!.id && (Number(base.find((r) => r.id === x)?.attrs.dsAutoOff) || 0) >= back0);
+    if (heir) base = dec(base, heir, back0);
+  }
+  return runs.length || downspouts.length ? { ...cur, runs: [...base, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
+}
+
+/**
+ * What a finger held still on `p` for the long-press time picks up (#1272, founder 12.11): a downspout, a free end (a cap), or a corner
+ * that can be moved — with the id to select (the picked ring is the visible «поднято»); a joint of three ends, a line, nothing — null.
+ */
+export type Lift = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "corner"; id: string; cornerId: string };
+export function liftTarget(d: Drawing, p: P, tolIn: number): Lift | null {
+  const h = hitTest(d, p, tolIn);
+  if (!h) return null;
+  if (h.kind === "ds") return { kind: "ds", id: h.id };
+  if (h.kind !== "end") return null;
+  const found = findCorners(d);
+  const corner = found.find((c) => c.runs.some((x) => x.id === h.id && x.end === h.end));
+  if (corner) return cornerMovable(d, corner.id) ? { kind: "corner", id: h.id, cornerId: corner.id } : null;
+  return runEnds(d, found)[h.id]?.[h.end]?.kind === "cap" ? { kind: "end", id: h.id, end: h.end } : null;
 }
 
 /** a one-finger stroke in progress */
@@ -651,7 +701,8 @@ export function moveDs(d: Drawing, id: string, p: P): Drawing {
   const r = s && d.runs.find((x) => x.id === s.runId);
   if (!s || !r) return d;
   const atIn = Math.min(runLengthIn(r), Math.max(0, projectOnRun(r, p).atIn));
-  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn } : x)) };
+  // moved by hand it is the user's own now (no more `auto`): the program does not take it away or count it as its own
+  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn, auto: undefined } : x)) };
 }
 
 /**
@@ -666,8 +717,13 @@ export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, cancele
   if (g.kind === "pull") return canceled ? g.before : (swingEnd(g.before, g.id, g.end, grabbedEnd(g.before, g.id, g.end, g.from, p), g.held ?? null, g.tol, g.onEnd ?? null)?.drawing ?? d);
   if (canceled) return d;
   const b = endAt(d, g.a, p, tolIn);
+  // a line drawn over a gutter from one of its ends to the other is no new gutter (#1256): the same drawing back, the caller says why (`lineRefused`)
+  if (lineRefused(d, g.a, b, Number(newRun.attrs.story) || 1)) return d;
   return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);
 }
+
+/** the line `a`→`b` is refused (it lies on a gutter that is there): the one place that says so — `finishStroke` drops it, the screen tells why */
+export const lineRefused = (d: Drawing, a: P, b: P, story: number): boolean => !!wouldDuplicate(d, a, b, story);
 
 /** a turn under this (degrees) from a gutter's free end is the same gutter going on, not a new one with a corner */
 export const STRAIGHT_ON_DEG = 10;

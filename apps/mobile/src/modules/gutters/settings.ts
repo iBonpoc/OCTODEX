@@ -325,6 +325,8 @@ export const RULE_NUMS = {
   runPerDsFt: { min: 30, max: 50, def: 40, step: 1 },
   expansionFt: { min: 40, max: 50, def: 50, step: 1 },
   dsExtensionIn: { min: 0, max: 60, def: 0, step: 6 },
+  /** an automatic downspout stands this far from the end of its chain, inches (#1246) */
+  dsEdgeIn: { min: 6, max: 36, def: 12, step: 6 },
 } as const satisfies Record<string, NumRule>;
 export const USE_NUMS = {
   rivets: { min: 0, max: 16, def: 0, step: 1 },
@@ -347,6 +349,9 @@ export interface Rules {
   dsStickFt: (typeof STICK_FT)[number];
   dsShareOffcuts: boolean;
   dsExtensionIn: number;
+  /** the program puts a downspout on every chain by itself (#1246); one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
+  dsAuto: boolean;
+  dsEdgeIn: number;
   seamless: boolean;
   corner: CornerMethod;
 }
@@ -389,6 +394,8 @@ export function readRules(raw: unknown): Rules {
     dsStickFt: (STICK_FT as readonly unknown[]).includes(r.dsStickFt) ? (r.dsStickFt as Rules["dsStickFt"]) : 10,
     dsShareOffcuts: bool(r.dsShareOffcuts, d.dsShareOffcuts),
     dsExtensionIn: num(r.dsExtensionIn, RULE_NUMS.dsExtensionIn),
+    dsAuto: bool(r.dsAuto, true),
+    dsEdgeIn: num(r.dsEdgeIn, RULE_NUMS.dsEdgeIn),
     seamless: bool(r.seamless, d.seamless),
     corner: one(r.corner, CORNER_METHODS, "cut"),
   };

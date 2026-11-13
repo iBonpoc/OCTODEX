@@ -60,7 +60,7 @@ exports.run = async (h) => {
     // the client signs on site: the bar stays until a signature is drawn, then it is away until cleared / left
     await h.go("/estimate/e6");
     await p.waitForTimeout(600);
-    const pad = p.getByLabel(/расписывается здесь/).locator("visible=true").first();
+    const pad = p.getByTestId("signature-pad").locator("visible=true").first();
     h.expect((await pad.count()) === 1, "the estimate e6 shows the signature pad on site");
     h.expect((await bars()) === 1, "the pad is there, nothing drawn yet: the bar stays (review #274)");
     await pad.scrollIntoViewIfNeeded();
@@ -74,7 +74,7 @@ exports.run = async (h) => {
     };
     await draw();
     h.expect((await bars()) === 0, "a signature being drawn: no bottom bar");
-    await p.getByRole("button", { name: "Очистить", exact: true }).locator("visible=true").first().click();
+    await p.getByTestId("signature-clear").locator("visible=true").first().getByRole("button").click();
     await p.waitForTimeout(300);
     h.expect((await bars()) === 1, "cleared: the bar is back");
     await draw();

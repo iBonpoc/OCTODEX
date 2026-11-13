@@ -1,5 +1,5 @@
 /**
- * e2e 310 — #1282 (founder 12.11: «нажал "разъединить", заглушка не двигается, прилипла к углу»): three gutters meet in a
+ * e2e 326 — #1282 (founder 12.11: «нажал "разъединить", заглушка не двигается, прилипла к углу»): three gutters meet in a
  * point; «Разъединить угол» frees a pair — each freed end is set back along its gutter, off the joint, so it can be taken and
  * pulled; the toast «Отменить» puts everything back (the points, the marks). Every view. Finds things by testID / id;
  * waits on what it checks (no pauses).

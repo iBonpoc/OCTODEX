@@ -4,6 +4,7 @@ import { useI18n } from "@/i18n";
 import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
 import { Empty, Screen } from "@/ui/surfaces";
 import { canSeeEstimate } from "@/features/access";
+import { NotFound } from "@/ui/emptyStates";
 
 /** Estimate: send by link (SMS/email), client view, PDF, on-site signature, deposit → job in the plan (body — features/EstimateCard). */
 export default function EstimateScreen() {
@@ -15,7 +16,7 @@ export default function EstimateScreen() {
   if (!e)
     return (
       <Screen title={t("est.detail")} back={back}>
-        <Empty icon="invoice" title={t("clients.empty")} />
+        <NotFound testID="estimate-not-found" title={t("est.notFound")} listLabel={t("empty.toEstimates")} onList={() => router.replace("/estimates")} />
       </Screen>
     );
   // not the tech's (#868): no access, as the server would answer

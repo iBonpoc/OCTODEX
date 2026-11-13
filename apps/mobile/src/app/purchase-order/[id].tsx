@@ -22,6 +22,7 @@ import { Button, ChoiceChips, IconButton, StatusChip, TextField, Toggle } from "
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { NotFound } from "@/ui/emptyStates";
 import { localUndo } from "@/data/undo";
 
 export default function PurchaseOrderScreen() {
@@ -58,7 +59,7 @@ export default function PurchaseOrderScreen() {
   if (!found || !o) {
     return (
       <Screen title={t("po.order")} back={back}>
-        <Empty icon="truck" title={t("po.notFound")} />
+        <NotFound testID="po-not-found" title={t("po.notFound")} listLabel={t("empty.toOrders")} onList={() => router.replace("/purchase-orders")} />
       </Screen>
     );
   }
