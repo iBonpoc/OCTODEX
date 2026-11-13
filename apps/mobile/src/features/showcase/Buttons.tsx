@@ -15,8 +15,8 @@ const SAMPLE: CustomOption = {
   id: "showcase",
   name: "Good",
   lines: [
-    { id: "s1", name: "Install gutters (тестовые)", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 100000, unitCostCents: 60000 },
-    { id: "s2", name: "Gutter guards (тестовые)", group: "material", quantity: "1", unit: "ea", unitPriceCents: 50000, unitCostCents: 20000, optional: true },
+    { id: "s1", name: "Install railing (тестовые)", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 100000, unitCostCents: 60000 },
+    { id: "s2", name: "Extended warranty (тестовые)", group: "service", quantity: "1", unit: "ea", unitPriceCents: 50000, unitCostCents: 20000, optional: true },
   ],
 };
 const SAMPLE_SETTINGS: CustomSettings = { discount: { kind: "pct", value: "0.1" }, tax: DEFAULT_TAX, deposit: { kind: "pct", bps: 1000 } };
