@@ -59,7 +59,15 @@ exports.run = async (h, { browser, BASE, layouts, installClock }) => {
         const want = s.split("?")[0];
         if (here.pathname !== want && !REDIRECTS[s]) errs.push(`${s} ${width} ${theme}: opened ${here.pathname}${here.search} instead (a wrong route? add it to REDIRECTS only if the redirect is by design)`);
         const body = await p.locator("body").innerText();
-        const missing = body.match(NOT_THERE);
+        // the «not found» screen is found by its testID (DS §13, NotFound: «lead-not-found», «not-found»…), not by its words; the
+        // showcase's samples of it («showcase-states») are not a screen that is missing and are left out of the word check
+        const notFound = await p.locator('[data-testid$="-not-found"], [data-testid="not-found"], [data-testid="page-not-found"]').count();
+        if (notFound && !NOT_THERE_OK.includes(s)) errs.push(`${s} ${width} ${theme}: the screen is a «not found» screen`);
+        const shown = await p.evaluate(() => {
+          const sample = document.querySelector('[data-testid="showcase-states"]');
+          return sample ? document.body.innerText.replace(sample.innerText, "") : document.body.innerText;
+        });
+        const missing = shown.match(NOT_THERE);
         if (missing && !NOT_THERE_OK.includes(s)) errs.push(`${s} ${width} ${theme}: the screen says «${missing[0]}»`);
         if (!/OCTODEX v\d/.test(body) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header with the version label`);
         const over = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

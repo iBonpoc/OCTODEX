@@ -104,6 +104,35 @@ async function waitPastCompanyMidnight() {
     page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
     const h = helpers(page, BASE, OUT, `${file.replace(/\.cjs$/, "")}-${layout.width}-${layout.theme}`, { legacyWaits: !!spec.fixedWaits });
     h.layout = layout;
+    // The downspouts the canvas puts by itself (#1246) are switched off — by the company's REAL setting, rules.dsAuto = false — in the
+    // specs written before them: they count the downspouts they put themselves. A spec about them says `exports.autoDs = true` (296).
+    // The stored database gets the setting (a module that is not switched on yet is the same as none: access "off", no trial used) around
+    // every navigation; when it had to be written the page is loaded again so the app reads it.
+    if (!spec.autoDs) {
+      const go = h.go;
+      // a record of the module that is not there is made only for the gutter specs (they switch it on themselves later); a spec about the
+      // modules page (141: «nothing stored after «Отменить»») must not find a record it did not make
+      const makeIt = /gutter/i.test(file);
+      const patch = () => page.evaluate(([k, make]) => {
+        try {
+          const s = JSON.parse(localStorage.getItem(k) || "null");
+          if (!s || !s.db || !s.db.company) return false;
+          const m = s.db.company.modules || {};
+          if (!m.gutters && !make) return false;
+          const g = m.gutters || { enabled: false, rowVersion: 0 };
+          if (g.settings && g.settings.rules && g.settings.rules.dsAuto === false) return false;
+          m.gutters = { ...g, settings: { ...(g.settings || {}), rules: { ...((g.settings || {}).rules || {}), dsAuto: false } } };
+          s.db.company.modules = m;
+          localStorage.setItem(k, JSON.stringify(s));
+          return true;
+        } catch (e) { return false; }
+      }, ["octo.db.v5", makeIt]).catch(() => false);
+      h.go = async (...a) => {
+        await patch();
+        await go(...a);
+        if (await patch()) await go(...a);
+      };
+    }
     try {
       await spec.run(h, { browser, BASE, layout, layouts, installClock });
       if (errors.length) throw new Error(errors.join("\n"));
