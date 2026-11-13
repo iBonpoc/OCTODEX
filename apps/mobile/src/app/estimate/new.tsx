@@ -21,6 +21,9 @@ import { withLooseTarget, type Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { OptionsCard } from "@/features/estimate/OptionsCard";
+import { NotesTerms } from "@/features/estimate/NotesTerms";
+import { isSignedEstimate } from "@/features/estimate/notesTerms";
+import { docLanguageFor } from "@/data/people";
 import { canAddSection, addSection, deleteSection, layoutByKind, moveLine, moveSection, putBack, layoutUndo, renameSection, sameLayout, shiftLine, viewRows, type Opt } from "@/features/sectionLayout";
 import { applyPatch, catalogOffer, clearLine, settleOpenRow, dropLine, duplicateLine, isBlank, leaveDecision, nextSeries, replaceLine, restoreDeleted, type DeleteSeries, restoreLine, rowProblems, setHidden } from "@/features/estimateRows";
 import { FieldError, useRequiredForm, useScreenScroll } from "@/ui/requiredForm";
@@ -108,8 +111,19 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const startInEditor = useRef(askedTemplates && !!draft);
   /** …or once the client is chosen, when the template was picked before the client («Сметы → ＋ → Из шаблона…») */
   const afterClient = useRef<(() => void) | null>(null);
+  /** #1304: a new estimate starts with the company's Terms in its client's language (a template never carries them, spec 40 §7);
+   *  an estimate already saved keeps what it has — an old one without the key goes on showing the default (no key added) */
+  /** the lead the estimate is for: its own (opened by id), or the one it is made from — /p/, the PDF and the card read the same */
+  const leadOf = existing?.leadId ?? params.leadId;
+  const withNewTerms = (d: EstimateDoc, cid: string | undefined): EstimateDoc =>
+    d.terms === undefined ? { ...d, terms: store.estimateTerms({ customerId: cid, leadId: leadOf }).text } : d;
   const [doc, setDoc] = useState<EstimateDoc>(() =>
-    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
+    existing
+      ? // an estimate saved already never gets the key here (one without a doc — an older phone's — starts empty, no Terms)
+        existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
+      : tplEdit
+        ? templateForEdit(tplEdit, seeCosts)
+        : withNewTerms(draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps), draft?.customerId ?? params.customerId),
   );
   const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
@@ -166,7 +180,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const restart = () => {
     setAskRestart(false);
     const fromHere = fromTpl ? (JSON.parse(JSON.stringify(fromTpl.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps);
-    const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: fromHere, templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
+    const fresh = { estimateId, customerId: params.customerId, propertyId: params.propertyId, title: given?.name ?? "", doc: withNewTerms(fromHere, params.customerId), templateId: given?.id, checkPrice: fromTpl?.checkPrice ?? [] };
     setDraft(undefined);
     setOpened({ snapshot: draftSnapshot(fresh), restored: false });
     setDoc(fresh.doc);
@@ -192,7 +206,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (x) {
       const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
       const ci = Math.max(0, r.doc.options.findIndex((o) => o.recommended));
-      setDoc(r.doc);
+      // the estimate's Terms stay: a template never carries them (spec 40 §7)
+      setDoc(doc.terms !== undefined ? { ...r.doc, terms: doc.terms } : r.doc);
       setCur(ci);
       setTemplateId(x.id);
       setCheckPrice(r.checkPrice);
@@ -632,7 +647,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
 
   // #1138: a tech saves a new estimate only where the server lets him (estimates_insert — a property he works at)
   // a signed estimate: its rows do not open (DS §8.3)
-  const signed = !!existing && (existing.status === "awaiting_countersign" || existing.status === "approved");
+  // one rule with the card, /p/ and the PDF: a signature on it, or a status after signing (review of #1376)
+  const signed = isSignedEstimate(existing);
   const mayHere = !!existing || canMakeEstimateAt(db, { role: store.role, mode: store.mode, me: db.me }, property?.id);
   const ok = !!customer && !!property && hasContent(doc);
   /** what a press of «Сохранить» found missing (shown under it, the page scrolls there) and the nudge for the scroll */
@@ -800,7 +816,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               <T v="caption" tone="mut">{t("est.tpl.editHint")}</T>
             </View>
           ) : (
-          <View ref={clientRef} collapsable={false} style={{ gap: space[1] }}>
+          <View ref={clientRef} collapsable={false} style={{ gap: space[1] }} testID="est-client">
           <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")} style={missing === "client" ? { borderColor: c.status.bad.fill } : undefined}>
             <RowView>
               {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
@@ -974,7 +990,16 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             ) : null}
           </Card>
-          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} testID="ue-note" />
+          <NotesTerms
+            doc={doc}
+            company={db.company}
+            lang={docLanguageFor(db, { customerId, leadId: leadOf })}
+            onNote={(v) => setDoc((d) => ({ ...d, note: v }))}
+            onTerms={(v) => setDoc((d) => ({ ...d, terms: v }))}
+            noTerms={!!tplEdit}
+            locked={signed}
+            signed={signed}
+          />
           {tplEdit ? (
             <View testID="est-tpl-save">
               <Button label={t("est.tpl.saveTemplate")} icon="check" full disabled={!title.trim()} onPress={saveTemplate} />
@@ -1210,6 +1235,10 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         visible={clientPicker}
         onClose={() => setClientPicker(false)}
         onPick={(cid, pid) => {
+          // a new estimate: Terms nobody touched follow the new client's language; an edited text stays (spec 40 §4)
+          // (a draft saved before too — spec 40 §2.5, map S5: Terms of a draft follow its client; a sent one keeps its text)
+          if ((!existing || existing.status === "draft") && !tplEdit && cid !== customerId && doc.terms !== undefined)
+            setDoc((d) => ({ ...d, terms: store.estimateTermsOnClientChange(d.terms, { from: { customerId, leadId: leadOf }, to: { customerId: cid, leadId: leadOf } }) }));
           setCustomerId(cid);
           setPropertyId(pid);
           setClientPicker(false);
