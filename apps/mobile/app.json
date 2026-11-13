@@ -80,6 +80,19 @@
       ],
       "expo-status-bar",
       "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "resizeMode": "contain",
+          "backgroundColor": "#EFEBE5",
+          "dark": {
+            "image": "./assets/splash-icon-dark.png",
+            "backgroundColor": "#24272D"
+          }
+        }
+      ],
       "expo-localization",
       [
         "expo-image-picker",

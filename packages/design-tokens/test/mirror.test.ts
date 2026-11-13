@@ -65,6 +65,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.fab).toBe(px("fab"));
     expect(component.dockBtn).toBe(px("dock-btn"));
     expect(component.tapeTick).toBe(px("tape-tick"));
+    expect(component.brand).toEqual({ mark: px("brand-mark"), wait: px("brand-wait"), about: px("brand-about"), splash: px("brand-splash"), intro: px("brand-intro") });
     expect(component.estRow).toEqual({ qty: px("est-qty-w"), unit: px("est-unit-w") });
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
     for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
@@ -99,6 +100,7 @@ describe("app tokens mirror the founder's DS css", () => {
   it("dialog, sheet and popover sizes, the brand splash", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
     expect(motion.durBrand).toBe(px("dur-brand"));
+    expect([motion.durBrandQuick, motion.durBrandEdge, motion.durBrandPause, motion.durBrandFold]).toEqual([px("dur-brand-quick"), px("dur-brand-edge"), px("dur-brand-pause"), px("dur-brand-fold")]);
   });
   it("small shadow of the raised «Заливка»", () => {
     const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;

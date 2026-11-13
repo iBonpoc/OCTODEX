@@ -20,9 +20,12 @@ import { TabBar } from "@/nav/TabBar";
 import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
+import { BootRoot, useBootDone } from "@/features/boot";
 
 function Shell() {
   const { c, name } = useTheme();
+  // the app is on screen: the boot layer under it goes (DS §18.2 «Запуск», #1046)
+  useBootDone();
   return (
     <View style={{ flex: 1, backgroundColor: c.page }}>
       <StatusBar style={name === "dark" ? "light" : "dark"} />
@@ -51,8 +54,11 @@ function Shell() {
 
 export default function RootLayout() {
   const [loaded] = useFonts({ Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_700Bold });
-  if (!loaded) return null;
+  // never a blank frame (#654, #1046): until the fonts, the theme, the language and the company's cache are read,
+  // the boot layer shows the brand in the system's theme
+  if (!loaded) return <BootRoot fontsReady={false} />;
   return (
+    <BootRoot fontsReady>
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <ThemeProvider>
@@ -70,5 +76,6 @@ export default function RootLayout() {
         </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
+    </BootRoot>
   );
 }
