@@ -69,6 +69,18 @@ const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
+/** the name in the header (#1274): a button that SHRINKS — a long name or «Сделать заявкой» is cut with «…» in its own width, never under the icons beside it */
+function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+  const { c } = useTheme();
+  return (
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
+      style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
+      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
+    </Press>
+  );
+}
+
 /** one cell of the canvas toolbar (spec 33 П20.8; #1274, founder 12.11: «без длинных надписей, значки»): a 36 circle (44 to touch, rule 3), ONLY the picture —
  *  its word is read aloud (`accessibilityLabel`), shown on the web by `title`, and written over it on a long press (`ToolHint`, a bubble for a moment).
  *  `body` replaces the icon (the storey: «Эт N» in its colour) */
@@ -1001,16 +1013,16 @@ export default function DrawScreen() {
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
             ) : lead ? (
               <View testID="draw-lead" style={{ flexShrink: 1 }}>
-                <Button label={lead.name} icon="user" size="sm" variant="ghost" onPress={() => router.push(`/lead/${lead.id}`)} />
+                <NameButton icon="user" label={lead.name} onPress={() => router.push(`/lead/${lead.id}`)} />
               </View>
             ) : addr ? (
               // linked to a client's address (LinkSheet): that address, it opens the property
               <View testID="draw-place" style={{ flexShrink: 1 }}>
-                <Button label={addr.address} icon="pin" size="sm" variant="ghost" onPress={() => router.push(`/property/${addr.id}`)} />
+                <NameButton icon="pin" label={addr.address} onPress={() => router.push(`/property/${addr.id}`)} />
               </View>
             ) : inStore && !leadId && !inStore.propertyId ? (
               <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
-                <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={() => setLinkSheet(true)} />
+                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
               </View>
             ) : (
               <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
@@ -1148,6 +1160,8 @@ export default function DrawScreen() {
                   <T v="caption" tone="mut">·</T>
                   <Icon name={dsIcon} s={sizes.iconSm} color={c.ink} />
                   <T v="caption" w="semibold">{`${summary.dsCount} · ${summary.pipeFt}′`}</T>
+                  {/* it opens «Просмотр замера»: the chevron says it is pressable */}
+                  <Icon name="chevronRight" s={sizes.iconSm} color={c.mut} />
                 </View>
               )}
             </Press>

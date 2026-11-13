@@ -44,10 +44,10 @@ export const extraIcons = {
   lock: "M6 11h12v10H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3",
   tag: "M3 3h8l10 10-8 8L3 11zM7.5 7.5h.01",
   // a profile of a channel (a cross-section) — the module's «Желоб» tool shows the chosen one (#1274, founder 12.11: «иконка… показывает выбранный»);
-  // first sketches (a 24 grid, the app's stroke): the founder may redraw them
-  profK: "M4 6h16M4 6v3h2.5v8a1 1 0 0 0 1 1h9a1 1 0 0 0 1-1V9H20V6",
-  profHalf: "M4 7h16a8 8 0 0 1-16 0z",
-  profFascia: "M4 5h16v3.5h-3V18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V8.5H4z",
-  profBox: "M5 6h14v12H5z",
-  profEuro: "M4 7h16v4a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6z",
+  // first sketches (a 24 grid, the app's stroke): OPEN-top channels, so they are not taken for the downspout's closed shapes (`dsRect`, `dsRound`); the founder may redraw them
+  profK: "M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",
+  profHalf: "M4 8a8 8 0 0 0 16 0M3 8h3M18 8h3",
+  profFascia: "M6 4v13.5a2.5 2.5 0 0 0 2.5 2.5H18V8.5h-3",
+  profBox: "M5 5v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V5",
+  profEuro: "M4 8c0 6 3 10 8 10s8-4 8-10",
 } as const;
