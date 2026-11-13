@@ -3,7 +3,7 @@
     "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
     "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
     "NSLocationWhenInUseUsageDescription": "Только во время вашего выезда и только с вашего согласия: офис видит, как далеко вы от адреса работы.",
-    "NSLocationAlwaysAndWhenInUseUsageDescription": "OCTODEX не использует геопозицию в фоне: только пока приложение открыто, во время выезда и с вашего согласия.",
-    "NSLocationAlwaysUsageDescription": "OCTODEX не использует геопозицию в фоне: только пока приложение открыто, во время выезда и с вашего согласия."
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "GoRix не использует геопозицию в фоне: только пока приложение открыто, во время выезда и с вашего согласия.",
+    "NSLocationAlwaysUsageDescription": "GoRix не использует геопозицию в фоне: только пока приложение открыто, во время выезда и с вашего согласия."
   }
 }

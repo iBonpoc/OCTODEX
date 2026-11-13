@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import { useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
@@ -48,7 +49,7 @@ export default function ReceiptScreen() {
   // Stripe's fee is the company's cost: staff who see payments, on the screen only — never on the client's PDF or message
   const fee = canSeePayments(store.role) && p.feeCents ? p.feeCents : undefined;
   const cust = db.customers.find((c) => c.id === p.customerId);
-  const company = companyForPortal(db, store.companyName ?? "OCTODEX");
+  const company = companyForPortal(db, store.companyName ?? APP_NAME);
   const canRefund = mayRefund(auth.company?.role, store.mode, store.role) && refundable(p) > 0;
   // the client's PDF and message know payments of invoices; an advance goes as one without an invoice (no invoice lines)
   const asPayment = { ...p, invoiceId: p.invoiceId ?? "" };

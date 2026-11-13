@@ -108,7 +108,7 @@ describe("send-push: the words", () => {
   });
   it("a message carries only the route — no amount, name or id other than the path", () => {
     const m = message(row("1", 1, "estimate.client_signed", "es"), { device_id: "d", token: tok(1), lang: "es" });
-    expect(m).toEqual({ to: tok(1), title: "Presupuesto firmado", body: "Abre OCTODEX para verlo.", data: { route: "/invoice/abc" },
+    expect(m).toEqual({ to: tok(1), title: "Presupuesto firmado", body: "Abre GoRix para verlo.", data: { route: "/invoice/abc" },
       sound: "default", channelId: "default", priority: "high" });
     const bad = message({ ...row("1", 1), route: "https://evil.test" }, { device_id: "d", token: tok(1), lang: "en" });
     expect(bad.data.route).toBe("/notifications");
