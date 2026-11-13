@@ -6,7 +6,8 @@ import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, SectionTitle, SyncBadge } from "@/ui/surfaces";
+import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
+import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
 import { DemoBadge } from "@/features/DemoBadge";
 import { SECTIONS } from "./registry";
 import { localUndo, TOO_LATE } from "@/data/undo";
@@ -22,11 +23,31 @@ export function NoticesSection() {
   onlineNow.current = online;
   const s = SECTIONS.find((x) => x.id === "notices")!;
   const [undone, setUndone] = useState(0);
+  const [pressed, setPressed] = useState<string | null>(null);
   // leaving the screen puts the network back — only if this screen changed it (the demo queue must not be reset otherwise)
   useEffect(() => () => { if (was.current !== null) void setOnline(was.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <View testID="showcase-notices">
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
+      {/* DS §13 (Н-65): the empty states, one wording each; the lists take them in later steps */}
+      <View testID="showcase-states" style={{ gap: space[3] }}>
+        <T v="heading">{t("ds.state.title")}</T>
+        <T v="caption" tone="mut">{t("ds.state.hint")}</T>
+        <Empty
+          icon="invoice"
+          title={t("ds.state.noneTitle")}
+          hint={t("ds.state.noneHint")}
+          testID="showcase-state-none"
+          action={<Button label={t("ds.state.noneBtn")} onPress={() => setPressed(t("ds.state.noneBtn"))} />}
+        />
+        <EmptyFilter testID="showcase-state-filter" onReset={() => setPressed(t("empty.filterReset"))} />
+        <EmptySearch testID="showcase-state-search" q="Roof" inAll={{ n: 3, onShow: () => setPressed(t("empty.searchAll", { n: 3 })) }} />
+        <NotFound testID="showcase-state-notfound" title={t("ds.state.notFoundTitle")} listLabel={t("ds.state.notFoundBtn")} onList={() => setPressed(t("ds.state.notFoundBtn"))} />
+        <PageNotFound testID="showcase-state-page" />
+        <View testID="showcase-state-pressed">
+          <T v="caption">{pressed ? t("ds.state.pressed", { name: pressed }) : t("ds.hap.none")}</T>
+        </View>
+      </View>
       <Card>
         <T v="heading">{t("ds.note.toast")}</T>
         <T v="caption" tone="mut">{t("ds.note.toastHint")}</T>
