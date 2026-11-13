@@ -116,6 +116,8 @@ export const gesture = {
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
   autoScrollEdge: 64,
+  /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
+  slop: 10,
 } as const;
 
 /* ---------- components.css ---------- */
@@ -175,6 +177,8 @@ export const component = {
   statusEdge: 3,
   /** selected card / drop target border */
   selectedBorder: 2,
+  /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
+  swipeAction: { w: 80, full: 0.6 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */
@@ -242,6 +246,8 @@ export interface ThemeColors {
   mut: string;
   surf: string;
   surf2: string;
+  /** `surf` laid over `bg`, opaque: the tone a card shows to the eye, for a thing that must hide what is under it (a swiped row) */
+  surfSolid: string;
   in: string;
   bd: string;
   track: string;
@@ -275,6 +281,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     mut: "#CDD1DA",
     surf: "rgba(255,255,255,0.07)",
     surf2: "rgba(255,255,255,0.11)",
+    surfSolid: "#33363C",
     in: "rgba(255,255,255,0.05)",
     bd: "rgba(255,255,255,0.14)",
     track: "rgba(255,255,255,0.12)",
@@ -308,6 +315,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     mut: "#575C68",
     surf: "rgba(255,255,255,0.62)",
     surf2: "rgba(255,255,255,0.85)",
+    surfSolid: "#F9F7F5",
     in: "rgba(255,255,255,0.55)",
     bd: "rgba(20,22,30,0.1)",
     track: "rgba(20,22,30,0.09)",
