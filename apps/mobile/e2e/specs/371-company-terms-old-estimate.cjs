@@ -18,7 +18,7 @@ exports.run = async (h) => {
   raw.db.company.estimate = { ...raw.db.company.estimate, termsByLang: { en: "Net 15 (тестовые)." }, terms: "Net 15 (тестовые)." };
   raw.db.estimateTemplates = [];
   // an estimate made before #1304: no `terms` key, not signed (it can still be changed); its client reads Spanish too
-  const old = raw.db.estimates.find((e) => e.doc && !e.leadId && !e.approval && !["approved", "awaiting_countersign", "declined"].includes(e.status));
+  const old = raw.db.estimates.find((e) => e.doc && !e.approval && !["approved", "awaiting_countersign", "declined"].includes(e.status));
   delete old.doc.terms;
   const es = (c, id) => ({ ...c, people: c.people?.length ? c.people.map((x, i) => (i === 0 ? { ...x, language: "es" } : x)) : [{ id, name: c.name, role: "main", phones: [], emails: [], language: "es" }] });
   raw.db.customers = raw.db.customers.map((c) => (c.id === "c2" ? es(c, "pp371") : c.id === old.customerId ? es(c, "pp371b") : c));
