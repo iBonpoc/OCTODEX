@@ -3058,6 +3058,8 @@ export const es: Dict = {
   "mod.gutters.attr.reset": "Del dibujo",
   "mod.gutters.attr.badLength": "Largo de 1″ a 500′, pulgadas de 0 a 11",
   "mod.gutters.attr.quickCancel": "Cancelar",
+  "mod.gutters.attr.next": "Siguiente",
+  "mod.gutters.attr.fracMore": "1/16",
   "mod.gutters.attr.unit.ftin": "pies + pulg",
   "mod.gutters.attr.unit.in": "pulgadas",
   "mod.gutters.attr.unit.mm": "mm",

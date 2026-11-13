@@ -3058,6 +3058,8 @@ export const en: Dict = {
   "mod.gutters.attr.reset": "From drawing",
   "mod.gutters.attr.badLength": "Length 1″ to 500′, inches 0 to 11",
   "mod.gutters.attr.quickCancel": "Cancel",
+  "mod.gutters.attr.next": "Next",
+  "mod.gutters.attr.fracMore": "1/16",
   "mod.gutters.attr.unit.ftin": "ft + in",
   "mod.gutters.attr.unit.in": "inches",
   "mod.gutters.attr.unit.mm": "mm",
