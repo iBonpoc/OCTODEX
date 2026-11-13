@@ -3591,7 +3591,7 @@ export const es: Dict = {
   "mod.gutters.shop.fileDrawings": "Planos de taller de canalones",
   "mod.gutters.shop.fileOrder": "Pedido de materiales",
   "mod.gutters.shop.doc": "Planos de taller",
-  "mod.gutters.shop.docSize": "Plano, tablas, materiales · 11×17",
+  "mod.gutters.shop.docSize": "Plano y tablas · 11×17",
   "mod.gutters.shop.docLetter": "Planos de taller, Letter",
   "mod.gutters.shop.docLetterSub": "Reducido a Letter",
   "mod.gutters.shop.docOrder": "Pedido de materiales",
