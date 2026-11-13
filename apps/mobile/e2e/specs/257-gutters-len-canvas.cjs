@@ -4,7 +4,7 @@
  * after «Применить» the label on the canvas is in mm and the picked gutter's panel says its length in mm; there is no unit
  * choice per line any more.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -50,7 +50,7 @@ exports.run = async (h) => {
 
   // the picked gutter's panel
   await p.mouse.click((a[0] + c[0]) / 2, y);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   h.expect(/\d+ mm/.test(await tid("attr-panel").innerText()), "the panel says the length in mm");
   h.expect((await tid("attr-unit").count()) === 0, "no unit choice per line");

@@ -9,7 +9,7 @@
  * - the toolbar dropped at the top → it stands at the top.
  * Finds things by testID / id; waits on what it checks.
  */
-const { savedOnce, skipLength, sheetGone } = require("../gutters.cjs");
+const { openProps, savedOnce, skipLength, sheetGone } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -59,8 +59,8 @@ exports.run = async (h) => {
   h.expect((await tid("draw-accuracy").count()) === 0, "no «Примерно — не для резки» at the top (#681)");
   // «Свойства» on the toolbar of the phone (#687)
   if (!wide) {
-    h.expect((await tid("draw-props").count()) === 1 && (await tid("draw-tool-select").count()) === 0, "«Свойства» where «Выбрать» was");
-    await tid("draw-props").getByRole("button").click();
+    h.expect((await tid("draw-props").count()) === 0 && (await tid("draw-tool-select").count()) === 0, "no «Свойства» and no «Выбрать» on the toolbar (a double tap opens the properties, #1273)");
+    await openProps(p);
     await tid("attr-panel").waitFor({ timeout: 5000 });
     // the properties sheet has no title: a tap outside it closes it (as e2e 211)
     await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
@@ -109,7 +109,7 @@ exports.run = async (h) => {
   // the first gutter picked (its unit is no longer a per-line choice: one format for the company, e2e 257)
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y0);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   h.expect((await tid("attr-unit").count()) === 0, "no unit choice per line any more");
   if (!wide) await closeSheet();

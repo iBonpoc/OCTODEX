@@ -8,7 +8,7 @@
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { doubleTap, skipLength, canvasAt, fitAll } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   // 5) straight on from the free end: one gutter, the sum
   await stroke([x0, y], [x1, y], 45);
   await waitFor(async () => (await runs()).some((r) => r.geom.lengthIn === 540), "45 ft");
-  await tid("draw-fit").getByRole("button").click(); // 45 ft runs off the screen: the whole drawing in view
+  await fitAll(p); // 45 ft runs off the screen: the whole drawing in view
   await p.waitForTimeout(300);
   const caps = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const right = caps.sort((a, c) => c[0] - a[0])[0];
@@ -76,7 +76,7 @@ exports.run = async (h) => {
   // grown again, then «Отменить» in its length sheet: back to the length before — the gutter stays (part 1 × #479)
   const before = (await runs())[0].geom.lengthIn;
   // grown, its end may run under the properties panel beside the canvas (820/1280): the whole drawing in view first
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
   const caps3 = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const r3 = caps3.sort((a, c) => c[0] - a[0])[0];
@@ -90,7 +90,7 @@ exports.run = async (h) => {
   await waitFor(async () => { const rs = await runs(); return rs.length === 1 && rs[0].geom.lengthIn === before; }, `«Отменить» after growing: one gutter, ${before}″ again`);
 
   // 1) a pinch after a long length and a moved view: smaller, and smaller again
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
   const l0 = (await lines())[0];
   // the farthest the canvas goes is the whole drawing in a quarter of the screen = half the «fit» size (#1281, П36), so the test
@@ -109,7 +109,7 @@ exports.run = async (h) => {
   const l3 = (await lines())[0];
   h.expect(l3 >= l0 * 0.49 && l3 <= l0 * 0.51, `the farthest limit: half of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
   h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, `the pinch drew nothing (the first finger's stroke was dropped): runs ${(await runs()).length}, length sheet ${await tid("quick-length").count()}`);
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
 
   // a corner: a second gutter down from the right end
@@ -120,7 +120,7 @@ exports.run = async (h) => {
 
   // 2) the corner sheet stays open while the kind switches
   const k = await svg().locator('[id^="c:"]').boundingBox();
-  await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+  await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   const kind0 = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
   const other = kind0 === "наружный" ? "внутренний" : "наружный";

@@ -5,7 +5,7 @@
  *   its prices — no Cyrillic on the screen (the demo has no Russian names on these screens).
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { doubleTap, openProps, skipLength } = require("../gutters.cjs");
 
 exports.init = { lang: "en" };
 
@@ -60,7 +60,7 @@ exports.run = async (h) => {
     // a gutter's properties
     await tid("draw-tool-line").getByRole("button").click();
     await p.mouse.click(x0 + (x1 - x0) * 0.3, y0);
-    if (!wide) await tid("draw-props").getByRole("button").click();
+    if (!wide) await openProps(p);
     await tid("attr-panel").waitFor({ timeout: 5000 });
     if (await tid("attr-more").count()) await tid("attr-more").getByRole("button").click();
     await clean("a gutter's properties", lang);
@@ -81,7 +81,7 @@ exports.run = async (h) => {
     // a corner's sheet
     await tid("draw-tool-line").getByRole("button").click();
     const k = await svg().locator('[id^="c:"]').boundingBox();
-    await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+    await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
     await tid("corner-sheet").waitFor({ timeout: 5000 });
     await clean("a corner's sheet", lang);
     await scrim();
