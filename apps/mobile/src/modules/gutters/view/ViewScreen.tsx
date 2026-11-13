@@ -6,7 +6,7 @@
  * canvas. Reads the store only (offline: the same). A technician sees the drawing and the list, never money (the
  * total, the estimates, the estimate action — canSeeClientMoney).
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ElementRef, type RefObject } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
@@ -20,7 +20,7 @@ import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
@@ -90,6 +90,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const action = m ? estimateAction(store.db, m, drawing.runs.length > 0) : ({ kind: "none" } as const);
   const estimates = m ? store.db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id)))) : [];
   const [linkOpen, setLinkOpen] = useState(false);
+  // the paper menu of «Рабочие чертежи» (#1349): its button's place. Hooks stand above the «not found» return below —
+  // a measurement that goes (deleted, a copy undone) must not change their count
+  const shopRef = useRef<ElementRef<typeof View>>(null);
+  const [shopAt, setShopAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // «Подробно» (П25.3 Б7): what the drawing is made of — folded; the sheet, the action and the documents come first
   const [details, setDetails] = useState(false);
 
@@ -213,6 +217,17 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
   return (
     <>
+      <Menu
+        visible={!!shopAt}
+        anchor={shopAt}
+        title={t("mod.gutters.shop.paper")}
+        items={[
+          { key: "ansiB" as const, label: t("mod.gutters.shop.paperB"), testID: "view-shop-paper-ansiB" },
+          { key: "letter" as const, label: t("mod.gutters.shop.paperLetter"), testID: "view-shop-paper-letter" },
+        ]}
+        onSelect={(k) => shop("drawings", k)}
+        onClose={() => setShopAt(null)}
+      />
       <View testID="view-screen" style={{ gap: space[4] }}>
         <CardHead m={m} drawn={drawing.runs.length > 0} onGone={onGone} />
         {/* 820 / 1280 on its own page: two columns — the sheet and the action on the left, the documents, the photos and
@@ -266,8 +281,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               onOpen={() => (clientEst ? router.push(`/estimate/${clientEst.id}` as Href) : pdf("client"))}
             />
             <DocRow id="crew" title={t("mod.gutters.card.docCrew")} sub={t("mod.gutters.card.docCrewSub", { n: spec.parts.length })} openTestID="view-pdf-crew" onOpen={() => pdf("crew")} />
-            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" onOpen={() => shop("drawings", "ansiB")} />
-            <DocRow id="shop-letter" title={t("mod.gutters.shop.docLetter")} sub={t("mod.gutters.shop.docLetterSub")} openTestID="view-pdf-shop-letter" onOpen={() => shop("drawings", "letter")} />
+            {/* one row, the paper is chosen on the press (founder 13.11: «объединить в одну»): 11 × 17, or the same sheets reduced to Letter */}
+            <DocRow id="shop" title={t("mod.gutters.shop.doc")} sub={t("mod.gutters.shop.docSize")} openTestID="view-pdf-shop" anchorRef={shopRef} onOpen={() => shopRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setShopAt({ x, y, w, h }))} />
             <DocRow id="shop-order" title={t("mod.gutters.shop.docOrder")} sub={t("mod.gutters.shop.docOrderSub")} openTestID="view-pdf-shop-order" onOpen={() => shop("order", "letter")} />
           </Card>
           </View>
@@ -369,7 +384,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 }
 
 /** a row of «Документы»: who reads it, what it is, «Открыть» (rule 12: rows of one object inside its card) */
-function DocRow({ id, title, sub, openTestID, onOpen }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void }) {
+/** `anchorRef` — the place of the button, for a menu that opens at it */
+function DocRow({ id, title, sub, openTestID, onOpen, anchorRef }: { id: string; title: string; sub: string; openTestID: string; onOpen: () => void; anchorRef?: RefObject<ElementRef<typeof View> | null> }) {
   const { t } = useI18n();
   return (
     <View testID={`view-doc-${id}`}>
@@ -377,7 +393,7 @@ function DocRow({ id, title, sub, openTestID, onOpen }: { id: string; title: str
         title={title}
         subtitle={sub}
         left={<Icon name="invoice" />}
-        right={<View testID={openTestID}><Button label={t("mod.gutters.card.open")} variant="secondary" size="sm" onPress={onOpen} /></View>}
+        right={<View testID={openTestID} ref={anchorRef} collapsable={false}><Button label={t("mod.gutters.card.open")} variant="secondary" size="sm" onPress={onOpen} /></View>}
       />
     </View>
   );
