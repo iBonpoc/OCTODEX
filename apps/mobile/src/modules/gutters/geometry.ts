@@ -237,6 +237,25 @@ export const wouldDuplicate = (d: Pick<Drawing, "runs">, a: P, b: P, story: numb
   d.runs.find((r) => sameEnds(r, { a, b, attrs: { story } as DrawnRun["attrs"] }, tolIn));
 
 /**
+ * A line `a`→`b` on `story` lies along a gutter that is already there for a stretch (#1318): both its points on that gutter's line
+ * (within `tolIn` across) and the stretches overlap by more than `minIn` — the material would be counted twice. Touching at a point
+ * (a straight join, a gutter growing on from its end) is no overlap. The gutter it lies on, else undefined.
+ */
+export function overlapsRun(d: Pick<Drawing, "runs">, a: P, b: P, story: number, tolIn = 1, minIn = 2): DrawnRun | undefined {
+  return d.runs.find((r) => {
+    if (!sameStory(r, { attrs: { story } as DrawnRun["attrs"] })) return false;
+    const L = dist(r.a, r.b);
+    if (L < 1e-6) return false;
+    const u: P = [(r.b[0] - r.a[0]) / L, (r.b[1] - r.a[1]) / L];
+    const along = (p: P) => (p[0] - r.a[0]) * u[0] + (p[1] - r.a[1]) * u[1];
+    const across = (p: P) => Math.abs(-(p[0] - r.a[0]) * u[1] + (p[1] - r.a[1]) * u[0]);
+    if (across(a) > tolIn || across(b) > tolIn) return false;
+    const lo = Math.max(0, Math.min(along(a), along(b))), hi = Math.min(L, Math.max(along(a), along(b)));
+    return hi - lo > minIn;
+  });
+}
+
+/**
  * the groups of gutters that lie on each other: none in a sound drawing, but an old one may have them. The one kept is the
  * one with the smallest id — NOT the first in the array: a saved row moves to the end of it (`putElement`) and a sync reorders it,
  * so «the first» would change under the user's hands and an edit of the kept gutter would be dropped from the material (#1314 review)
