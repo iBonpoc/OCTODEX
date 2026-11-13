@@ -18,7 +18,7 @@ exports.run = async (h) => {
   // `bar: false` — let go where it was taken: the bar shows only once the place differs (DS §14.6)
   const drag = async (key, target, { release = true, bar = true } = {}) => {
     const hd = tid(`sort-handle-${key}`);
-    await hd.scrollIntoViewIfNeeded();
+    await line.toMiddle(h, hd);
     const b = await hd.boundingBox();
     const x = b.x + b.width / 2;
     await p.mouse.move(x, b.y + b.height / 2);
@@ -44,6 +44,8 @@ exports.run = async (h) => {
   const [a, , c] = ids;
 
   // C above A
+  // the page is set first (the handle in the middle), then the place is read — `drag` does not move the page again
+  await line.toMiddle(h, tid(`sort-handle-${c}`));
   const aBox = await tid(`est-line-${a.slice(2)}`).boundingBox();
   await drag(`l:${c.slice(2)}`, aBox.y + 2);
   await p.waitForFunction((first) => document.querySelector('[data-testid^="est-line-"]')?.getAttribute("data-testid") === `est-line-${first}`, c.slice(2), { timeout: 4000 });
@@ -80,6 +82,7 @@ exports.run = async (h) => {
   // let go where it was taken: nothing moved, no toast
   const keep = (await order()).join(" ");
   const lastKey = (await order()).filter((x) => x.startsWith("l:")).pop();
+  await line.toMiddle(h, tid(`sort-handle-${lastKey}`));
   const lb = await tid(`est-line-${lastKey.slice(2)}`).boundingBox();
   await drag(`l:${lastKey.slice(2)}`, lb.y + lb.height / 2, { bar: false });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="sort-bar"]').length === 0, null, { timeout: 3000 });
@@ -118,7 +121,7 @@ exports.run = async (h) => {
   const ordLong = (await order()).filter((x) => x.startsWith("l:"));
   const first = ordLong[0];
   const hd = tid(`sort-handle-${first}`);
-  await hd.scrollIntoViewIfNeeded();
+  await line.toMiddle(h, hd);
   // the page's own scroll event reaches the app a frame or two later: take the row once the page has stood still
   await p.waitForFunction(() => new Promise((r) => { let n = 0; const f = () => (++n > 12 ? r(true) : requestAnimationFrame(f)); f(); }), null, { timeout: 5000 });
   const hb = await hd.boundingBox();

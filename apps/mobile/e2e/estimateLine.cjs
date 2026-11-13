@@ -58,3 +58,14 @@ exports.carry = async (h, key, x, pointerY, y) => {
   await h.page.mouse.move(x, to, { steps: 12 });
   return to;
 };
+
+/**
+ * A handle is taken where a person takes it — in the middle of the screen, not at its bottom edge: a pointer that starts in the
+ * edge zone scrolls the page while it moves away (DS §14.6), and the row would not land where the spec aims. A longer editor
+ * (the options card, #1307 «г») put the last rows at the edge at 390.
+ */
+exports.toMiddle = async (h, loc) => {
+  await loc.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  // the scroll event reaches the screen a frame later: wait two frames so the page stands
+  await h.page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+};

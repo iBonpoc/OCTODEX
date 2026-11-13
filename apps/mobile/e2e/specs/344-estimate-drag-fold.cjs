@@ -32,7 +32,7 @@ exports.run = async (h) => {
 
   // take D by its handle and hold it
   const hd = tid(`sort-handle-l:${d}`);
-  await hd.scrollIntoViewIfNeeded();
+  await line.toMiddle(h, hd);
   const hb = await hd.boundingBox();
   const x = hb.x + hb.width / 2;
   const y0 = hb.y + hb.height / 2;
@@ -52,11 +52,13 @@ exports.run = async (h) => {
     let e = document.querySelector('[data-testid^="est-line-"]');
     while (e && !(e.scrollHeight > e.clientHeight + 50 && getComputedStyle(e).overflowY !== "visible")) e = e.parentElement;
     const atTop = !e || e.scrollTop <= 1;
+    // or at its end: the page could not scroll the row's place up to the pointer either (SortableList afterFold)
+    const atEnd = !!e && e.scrollTop >= e.scrollHeight - e.clientHeight - 1;
     const under = !!row && row.top - 24 <= py && py <= row.bottom + 24;
     const inside = !!row && !!list && row.top >= list.top - 8 && row.bottom <= list.bottom + 8;
-    return { inside, under, atTop, row: row && [Math.round(row.top), Math.round(row.bottom)], list: list && [Math.round(list.top), Math.round(list.bottom)] };
+    return { inside, under, atTop, atEnd, row: row && [Math.round(row.top), Math.round(row.bottom)], list: list && [Math.round(list.top), Math.round(list.bottom)] };
   }, [d, y0 - 12]);
-  h.expect(seen.inside && (seen.under || seen.atTop), `the held row is seen (${JSON.stringify(seen)}, pointer ${Math.round(y0 - 12)})`);
+  h.expect(seen.inside && (seen.under || seen.atTop || seen.atEnd), `the held row is seen (${JSON.stringify(seen)}, pointer ${Math.round(y0 - 12)})`);
   await h.shot("held");
 
   // carry it to the very top of the list and let go (the list's own top: a row above may stand shifted to make room)

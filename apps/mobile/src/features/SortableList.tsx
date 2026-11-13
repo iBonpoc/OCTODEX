@@ -254,7 +254,15 @@ export function SortableList({ rows, openKey, locked, onDrop, onHold, onLift, be
     // really scrolled; the rest puts it on its own place in the folded list (else it hung past the list's end, cut off by the card,
     // or covered a neighbour — design review of #1307 «б»)
     const sc = latest.current.scroll;
-    if (shift) sc?.scrollBy(-shift);
+    // the place to scroll to is counted from where the page stood when the row was taken (plus what the edge zone scrolled), not
+    // from where it is now: the page got shorter and the browser may already have trimmed its scroll — counting from the trimmed
+    // place scrolled the page too far by the trim, and the row stood off the finger though the page could scroll right (#1307 «г»,
+    // e2e 344 at 390 with the options card above the list)
+    if (sc) {
+      const want = startOffset.current + edgeScrolled.current - shift;
+      const cur = sc.offsetNow?.() ?? sc.offset();
+      if (want !== cur) sc.scrollBy(want - cur);
+    }
     // how far the page went up for the fold: all it moved since the row was taken but what the edge zone scrolled (that one is the
     // finger's). The browser itself trims the scroll when the page gets shorter — that is the fold's too.
     const now = sc?.offsetNow?.() ?? sc?.offset() ?? 0;
