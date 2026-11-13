@@ -834,6 +834,7 @@ export const ru = {
   "est2.row.kind": "Вид",
   "est2.row.descHint": "видит клиент · необязательно",
   "est2.row.deletedN": "Удалено позиций: {n}",
+  "est2.bar.officeSends": "Отправит офис",
   "est.row.unhiddenMark": "Снова видна клиенту",
   "est.row.unhiddenToast": "Позиция снова видна клиенту",
   "est.row.saveCatalog": "Сохранить в каталог",

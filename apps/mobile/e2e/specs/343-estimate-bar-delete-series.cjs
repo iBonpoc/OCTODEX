@@ -1,7 +1,7 @@
 /**
  * e2e 343 — the estimate's action bar and a series of deletions (DS §8.9, §15.2, §8.3; #1307 part «в»), every view, by testID:
  * - 390: the pinned bar has the buttons IN ONE ROW — «Сохранить» on the left, «Сохранить и отправить» on the right, widths
- *   2 : 3, each 44 high; the tech has one «Сохранить» across the bar; 820 / 1280: no bar, the buttons stand in the column;
+ *   2 : 3, each 44 high; the tech has one «Сохранить» across the bar and «Отправит офис»; 820 / 1280: no bar, the buttons stand in the column;
  * - three lines deleted one after another: ONE toast «Удалено позиций: 3» (the count grows, the toast is not replaced);
  *   a price changed between the deletions stays after «Вернуть», and all three lines are back on their places;
  * - the empty description of the open row is one line high and grows with the text.
@@ -80,6 +80,8 @@ exports.run = async (h) => {
     await tid("est-actionbar").waitFor({ timeout: 8000 });
     h.expect((await vis('[data-testid="est-actionbar"] [data-testid="ue-save-send"]').count()) === 0, "the tech: no «Сохранить и отправить»");
     const [bar, save] = [await box('[data-testid="est-actionbar"]'), await box('[data-testid="est-actionbar"] [data-testid="ue-save"] [role="button"]')];
+    h.expect(/Отправит офис/.test(await tid("est-bar-office").innerText()), "the tech: «Отправит офис» under the total");
+    await h.shot("tech");
     h.expect(save.width > bar.width * 0.85, `the tech's «Сохранить» across the bar (${Math.round(save.width)} of ${Math.round(bar.width)})`);
   }
 };

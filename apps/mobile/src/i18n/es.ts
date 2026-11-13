@@ -835,6 +835,7 @@ export const es: Dict = {
   "est2.row.kind": "Tipo",
   "est2.row.descHint": "lo ve el cliente · opcional",
   "est2.row.deletedN": "Artículos eliminados: {n}",
+  "est2.bar.officeSends": "La oficina lo envía",
   "est.row.unhiddenMark": "Visible de nuevo para el cliente",
   "est.row.unhiddenToast": "El artículo vuelve a verse para el cliente",
   "est.row.saveCatalog": "Guardar en el catálogo",

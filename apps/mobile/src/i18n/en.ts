@@ -835,6 +835,7 @@ export const en: Dict = {
   "est2.row.kind": "Kind",
   "est2.row.descHint": "the client sees it · optional",
   "est2.row.deletedN": "Items deleted: {n}",
+  "est2.bar.officeSends": "The office sends it",
   "est.row.unhiddenMark": "Shown to the client again",
   "est.row.unhiddenToast": "The item is shown to the client again",
   "est.row.saveCatalog": "Save to catalog",

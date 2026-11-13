@@ -605,7 +605,13 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       // the page scrolls from a finger on the open row (to its lower fields): the row stays open; anywhere else it folds
       if (!inOpen) void leaveRow(true);
     }} title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder" footer={tplEdit ? undefined : (
-      <ActionBar testID="est-actionbar" summary={<RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>} second={canSend ? saveButton(true) : undefined} main={canSend ? sendButton(true) : saveButton(true)} />
+      <ActionBar testID="est-actionbar" summary={(
+        <View style={{ gap: space[1] }}>
+          <RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>
+          {/* the tech saves; the office sends (#1113, DS §8.9) */}
+          {canSend ? null : <View testID="est-bar-office"><T v="caption" tone="mut">{t("est2.bar.officeSends")}</T></View>}
+        </View>
+      )} second={canSend ? saveButton(true) : undefined} main={canSend ? sendButton(true) : saveButton(true)} />
     )}>
       <RevealOnTick tick={revealTick} target={missing === "client" ? clientRef : linesRef} />
       {existing && existing.status !== "draft" ? (
