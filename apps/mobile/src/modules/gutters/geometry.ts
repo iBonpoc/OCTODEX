@@ -23,6 +23,10 @@ export interface DrawnRun {
     noSplash?: { a?: true; b?: true };
     /** the join at its start (a) / end (b) was split by the user («Разъединить угол», #933): two end caps, no corner — both runs carry it; the lengths are not touched */
     openEnds?: { a?: true; b?: true };
+    /** the program puts downspouts on this gutter's chain by itself (#1246): written where an old phone copies it whole (rule 16); a drawing without it from before the feature gets none by an edit */
+    dsAuto?: true;
+    /** how many downspouts the program had put on this gutter the user took off by hand (#1246): the chain wants that many less (a count, not a ban: one removal never removes the rest) */
+    dsAutoOff?: number;
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
@@ -34,6 +38,8 @@ export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
   runId: string;
   /** distance from the run's start, inches */
   atIn: number;
+  /** put by the program (spec 33-gutters-ds-auto, #1246), not by hand: it is recounted when the chain changes; moved or edited by hand — it is yours */
+  auto?: true;
 }
 
 export interface CornerChoice {
@@ -423,7 +429,7 @@ export function toMeasurement(d0: Drawing, defaultCorner: CornerChoice = { metho
   const ends = runEnds(d, found);
   const runs: MeasuredRun[] = d.runs.map((r) => {
     // the corner methods are the drawing's, not the engine's run input
-    const { cornerMethod: _cm, noSplash: _ns, openEnds: _oe, ...attrs } = r.attrs;
+    const { cornerMethod: _cm, noSplash: _ns, openEnds: _oe, dsAuto: _da, dsAutoOff: _dao, ...attrs } = r.attrs;
     return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: side(r), ends: ends[r.id]! };
   });
   const byId = new Map(d.runs.map((r) => [r.id, r]));
@@ -436,7 +442,7 @@ export function toMeasurement(d0: Drawing, defaultCorner: CornerChoice = { metho
     const splashGuard = choice.splashGuard ?? (f.kind === "in" && !splashOff(d, f) ? true : undefined);
     return { id: f.id, kind: f.kind, method: choice.method, ...(splashGuard !== undefined ? { splashGuard } : {}), profile, size, material, gauge, finish, color, story };
   });
-  const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);
+  const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, auto: _auto, ...x }) => x);
   return { runs, corners, downspouts };
 }
 

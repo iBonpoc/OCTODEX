@@ -29,6 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
+import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
 import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
@@ -54,7 +55,7 @@ import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
-import { localUndo } from "@/data/undo";
+import { localUndo, type GuardedUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -126,6 +127,8 @@ export default function DrawScreen() {
   const ch = useMemo(() => choicesFor(settings), [settings]);
   // the company's rules and use (M7c) and its corner method: the $ under the drawing counts by them
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
+  /** the downspouts it puts by itself (#1246): the company's setting — one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
+  const autoDs = useMemo(() => { const r = readRules(settings); return r.dsAuto ? { spacingIn: r.runPerDsFt * 12, edgeIn: r.dsEdgeIn } : null; }, [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -188,8 +191,8 @@ export default function DrawScreen() {
   const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -278,8 +281,16 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (next: Drawing, prev = cur.current.drawing) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false) => {
+      // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
+      const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
+      // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
+      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+        announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
+      }
+      // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
+      if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
       setHint(null);
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
@@ -728,7 +739,7 @@ export default function DrawScreen() {
     setSelected(null);
     const gone = selected;
     // «Отменить» puts back what was deleted and keeps what was drawn since
-    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing)));
+    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing, true))); // put back as it was: no recount (#1264)
   };
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
@@ -780,6 +791,17 @@ export default function DrawScreen() {
       setSheet(false);
     }
   };
+  /** the toast «Водостоков стало N» (kept fresh each render: `commit` is made once) */
+  const announceDs = useRef<(n: number, undo: GuardedUndo) => void>(() => {});
+  announceDs.current = (n, undo) => toast.show(t("mod.gutters.draw.dsAutoCount", { n }), undo);
+  /** «Расставить водостоки»: every chain of an old measurement gets its downspouts — one step of «Назад» (#1246) */
+  const placeAutoDs = () => {
+    const o = cur.current.autoDs;
+    if (!o) return;
+    const next = autoDownspouts(cur.current.drawing, { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, undefined, true);
+    if (!layers.ds) setLayers((x) => ({ ...x, ds: true }));
+    commit(next, cur.current.drawing, true);
+  };
   const pick = (tl: Tool) => {
     // «Водосток» needs the downspouts seen: the layer comes back on (a downspout is never put in the dark, #930 review)
     if (tl === "ds" && !layers.ds) setLayers((x) => ({ ...x, ds: true }));
@@ -798,7 +820,7 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "layers" | "relink" | "unlink" | "delete";
+  type WhoKey = "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
@@ -806,11 +828,14 @@ export default function DrawScreen() {
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
+    // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
+    ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
     if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -1150,7 +1175,7 @@ export default function DrawScreen() {
                   setCornerSheet(null);
                   if (next === before) return;
                   commit(next, before);
-                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing)));
+                  toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
                 }}
               />
             </View>
