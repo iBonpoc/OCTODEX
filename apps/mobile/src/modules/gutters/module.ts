@@ -99,6 +99,40 @@ const gutters: ModuleDef = {
       ],
     },
   ],
+  // starter ESTIMATE templates (docs/specs/07 §12, #1323): «загрузил и меняю количество» — the office adds them on «Сметы → Шаблоны»; every line names
+  // the company's price-list item by its properties and unit (the same as a drawing's estimate line), the price is the item's today
+  // (a test one is marked «тестовая цена» in the list, rule 9); a line without an item is $0 with «проверьте цену». The quantities
+  // are only a start. They never touch a measurement's lines — the main way is «Смета из замера»
+  estimateTemplates: [
+    {
+      key: "clean",
+      nameKey: "mod.gutters.est.tpl.clean",
+      options: [{ key: "main", nameKey: "mod.gutters.est.tpl.clean.opt", recommended: true, lines: [
+        { key: "clean", nameKey: "mod.gutters.est.tpl.clean.l1", group: "labor", quantity: "100", unit: "ft", match: { work: "cleaning" } },
+        { key: "flush", nameKey: "mod.gutters.est.tpl.clean.l2", group: "labor", quantity: "4", unit: "ea", match: { work: "flush" } },
+      ] }],
+    },
+    {
+      key: "guards",
+      nameKey: "mod.gutters.est.tpl.guards",
+      options: [{ key: "main", nameKey: "mod.gutters.est.tpl.guards.opt", recommended: true, lines: [
+        { key: "guard", nameKey: "mod.gutters.est.tpl.guards.l1", group: "material", quantity: "100", unit: "ft", match: { part: "guard_run" } },
+        { key: "install", nameKey: "mod.gutters.est.tpl.guards.l2", group: "labor", quantity: "100", unit: "ft", match: { work: "guard_install" } },
+      ] }],
+    },
+    {
+      key: "replace",
+      nameKey: "mod.gutters.est.tpl.replace",
+      options: [{ key: "main", nameKey: "mod.gutters.est.tpl.replace.opt", recommended: true, lines: [
+        { key: "tearoff", nameKey: "mod.gutters.est.tpl.replace.l1", group: "labor", quantity: "100", unit: "ft", match: { work: "tearoff" } },
+        { key: "gutter", nameKey: "mod.gutters.est.tpl.replace.l2", group: "material", quantity: "100", unit: "ft", match: { part: "gutter" } },
+        { key: "caps", nameKey: "mod.gutters.est.tpl.replace.l3", group: "material", quantity: "4", unit: "ea", match: { part: "end_cap" } },
+        { key: "ds", nameKey: "mod.gutters.est.tpl.replace.l4", group: "material", quantity: "20", unit: "ft", match: { part: "downspout" } },
+        { key: "install", nameKey: "mod.gutters.est.tpl.replace.l5", group: "labor", quantity: "100", unit: "ft", match: { work: "install", story: "1" } },
+        { key: "dsinstall", nameKey: "mod.gutters.est.tpl.replace.l6", group: "labor", quantity: "2", unit: "ea", match: { work: "downspout", story: "1" } },
+      ] }],
+    },
+  ],
   rejectedKey: "mod.gutters.rejected",
   // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the review's «Перенести изменения в смету»)
   estimateNotes: (e, db) => {

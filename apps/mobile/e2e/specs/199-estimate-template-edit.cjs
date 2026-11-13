@@ -1,7 +1,7 @@
 /**
  * e2e 199 — E3c and the debts of E3b (docs/specs/07 §12; S5t «Шаблон → смета», S0b). Every view.
  * - a module's template shows the module's NAME («Из модуля Водостоки (Gutters)»), never its key «gutters»;
- * - a module switched on with no starter estimates of its own: no «Шаблоны модулей» section (the core has none, В6);
+ * - a module switched on: its starters («Чистка гаттеров», «Только guards», «Замена гаттеров», #1323) are offered in «Шаблоны модулей» — the core has none (В6);
  *   the section itself with a module's starters — unit:estimateStarters (no stand-in module in the app, §12 №13);
  * - «Копировать»: a new template «… (копия)», the company's own (no module's mark), the original untouched; «Отменить»
  *   takes it away (not to the archive);
@@ -59,13 +59,13 @@ exports.run = async (h) => {
   const chk = await tid("chk-tpl-chk-e2e-199").innerText();
   h.expect(/Водостоки \(Gutters\)/.test(chk) && !/Модуль: gutters/.test(chk), `the module's name on the checklist card: ${chk}`);
 
-  // switched on, but the module has no starter estimates yet: still no section
+  // switched on: the module's own starters are offered (the core has none; #1323)
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitFor(async () => !!(await h.db()).company?.modules?.gutters?.enabled, "Gutters on");
   await h.go("/estimate/templates");
   await tid(`est-tpl-${T_OWN}`).waitFor({ timeout: 8000 });
-  h.expect((await tid("est-starters").count()) === 0, "a module without starter estimates: no section");
+  h.expect((await tid("est-starters").count()) === 1 && (await p.locator('[data-testid^="est-starter-gutters-"]:visible').count()) === 3, "the module on: its three starter estimates are offered");
   await h.shot("list");
 
   // «Копировать»
