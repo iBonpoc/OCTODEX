@@ -84,7 +84,7 @@
  "e2e/specs/17-sheets-ios.cjs": 9,
  "e2e/specs/170-gutters-ds-mark.cjs": 3,
  "e2e/specs/171-gutters-toolbar-grip.cjs": 2,
- "e2e/specs/172-gutters-scale-grid-landscape.cjs": 2,
+ "e2e/specs/172-gutters-scale-grid-landscape.cjs": 1,
  "e2e/specs/173-gutters-corner-cut.cjs": 1,
  "e2e/specs/174-gutters-accuracy.cjs": 2,
  "e2e/specs/176-checklist-module-starters.cjs": 2,

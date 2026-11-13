@@ -9,7 +9,7 @@
  * - the toolbar dropped at the top → it stands at the top.
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, sheetGone } = require("../gutters.cjs");
+const { openProps, savedOnce, skipLength, sheetGone } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -43,7 +43,7 @@ exports.run = async (h) => {
   await h.go("/module/gutters/draw");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   h.expect((await tid("draw-more").count()) === 0 && (await tid("draw-redo").count()) === 1, "«Вперёд» on the toolbar, no «Ещё»");
-  h.expect((await tid("draw-delete").count()) === 0, "nothing picked: no «Удалить»");
+  h.expect((await tid("draw-delete").count()) === 1 && (await tid("draw-delete").getAttribute("aria-disabled")) === "true", "nothing picked: the bin is there, disabled (#1274)");
   // the total is on «Просмотр замера» now (#700): nothing under the drawing
   h.expect((await tid("draw-money").count()) === 0 && (await tid("draw-total").count()) === 0, "no total under the drawing");
   const b = await p.getByTestId("draw-surface").boundingBox();
@@ -52,17 +52,15 @@ exports.run = async (h) => {
   await stroke([x0, y0], [x1, y0]);
   await stroke([x1, y0], [x1, y1]);
   await waitFor(async () => (await svg().locator('[id^="c:"]').count()) === 1, "a corner");
-  h.expect((await tid("draw-delete").count()) === 1, "something picked: «Удалить» in its row (#687)");
-  // the save mark (#507): an icon, not words; a tap says it in words
-  await tid("draw-saved").waitFor({ timeout: 5000 });
-  h.expect((await tid("draw-saved").innerText()).trim() === "", "the save mark has no words on it");
-  await tid("draw-saved").getByRole("button").click();
-  await h.expectText(/Сохранено и отправлено|Сохранено, отправляется|Сохранено на телефоне/, "a tap on the save mark says it in words");
+  h.expect((await tid("draw-delete").getAttribute("aria-disabled")) !== "true", "something picked: the bin is active (#687, #1274)");
+  // no cloud when all is saved and sent (#1274, founder 12.11): the data is saved, nothing is drawn for it at the top
+  await savedOnce(p);
+  h.expect((await tid("draw-local").count()) === 0, "all saved: no save mark at the top");
   h.expect((await tid("draw-accuracy").count()) === 0, "no «Примерно — не для резки» at the top (#681)");
   // «Свойства» on the toolbar of the phone (#687)
   if (!wide) {
-    h.expect((await tid("draw-props").count()) === 1 && (await tid("draw-tool-select").count()) === 0, "«Свойства» where «Выбрать» was");
-    await tid("draw-props").getByRole("button").click();
+    h.expect((await tid("draw-props").count()) === 0 && (await tid("draw-tool-select").count()) === 0, "no «Свойства» and no «Выбрать» on the toolbar (a double tap opens the properties, #1273)");
+    await openProps(p);
     await tid("attr-panel").waitFor({ timeout: 5000 });
     // the properties sheet has no title: a tap outside it closes it (as e2e 211)
     await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
@@ -111,7 +109,7 @@ exports.run = async (h) => {
   // the first gutter picked (its unit is no longer a per-line choice: one format for the company, e2e 257)
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y0);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   h.expect((await tid("attr-unit").count()) === 0, "no unit choice per line any more");
   if (!wide) await closeSheet();

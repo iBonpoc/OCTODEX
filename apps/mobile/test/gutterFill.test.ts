@@ -24,3 +24,11 @@ describe("the module's chosen options use «Заливка»", () => {
     expect(read("settings/SettingsScreen.tsx")).toMatch(/Icon name="check"/);
   });
 });
+
+describe("the fraction picker uses «Заливка» too (#1345 follow-up)", () => {
+  it("draw/FracPicker.tsx: fillStyle for the open «1/16», no ink frame (selectedBorder)", () => {
+    const s = read("draw/FracPicker.tsx");
+    expect(s).toMatch(/fillStyle\(c\)/);
+    expect(s).not.toMatch(/selectedBorder/);
+  });
+});

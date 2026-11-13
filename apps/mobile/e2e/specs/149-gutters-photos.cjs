@@ -9,7 +9,7 @@
  * - web: a photo picked before a reload (a dead blob:) is never loaded — the tile shows the picture sign (CI 08.11).
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 exports.run = async (h) => {
@@ -48,7 +48,7 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun();
   await tid("draw-not-saved").waitFor({ timeout: 5000 });
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await p.waitForTimeout(1300);
   h.expect((await tid("attr-photos").count()) === 0 && (await tid("draw-photos-open").count()) === 0 && (await tid("draw-photos").count()) === 0,
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   const { measurements: [m], elements: [run] } = await gutters();
 
   // the run's photo
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-photos").waitFor({ timeout: 5000 });
   await addIn("attr-photos");
   await waitFor(async () => (await photos()).some((f) => f.measurementId === m.id && f.elementId === run.id), "a photo of the run: measurement and element");

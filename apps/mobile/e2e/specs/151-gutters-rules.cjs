@@ -7,7 +7,7 @@
  * - the office reads the rules, cannot change them.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -40,7 +40,7 @@ exports.run = async (h) => {
   const panel = () => tid("attr-panel");
   const openAttrs = async () => {
     // a downspout just put opens its menu by itself (founder 09.11)
-    if (!wide && !(await panel().count())) await tid("draw-props").getByRole("button").click();
+    if (!wide && !(await panel().count())) await openProps(p);
     await panel().waitFor({ timeout: 5000 });
   };
   const closeAttrs = async () => {

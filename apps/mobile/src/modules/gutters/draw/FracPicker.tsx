@@ -11,6 +11,7 @@ import type { DictKey } from "@/i18n";
 import { component, radius, space } from "@octo/design-tokens";
 import { ChoiceChips } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
+import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fracLabel } from "../canvas/format";
 
@@ -27,7 +28,7 @@ export function FracPicker({ value, onChange, active, testID }: {
   /** the fraction in sixteenths, 0..15 */
   value: number;
   onChange: (e16: number) => void;
-  /** the entry has come to the fraction: the row is framed (an ink frame, not a colour, rule 2) */
+  /** the entry has come to the fraction: the row stands on the field's ground (`in`) — no ink frame (DS «Выделение выбранного»: a frame is not a way to mark a choice) */
   active: boolean;
   testID: string;
 }) {
@@ -40,10 +41,10 @@ export function FracPicker({ value, onChange, active, testID }: {
   }, [value]);
   const eighth = eighthKey(value);
   return (
-    // the frame is always as thick (transparent when the entry is not here): the rows do not shift
+    // the same padding either way (the rows do not shift): the ground only changes
     <View
       testID={testID}
-      style={{ gap: space[2], padding: 0, borderRadius: radius.field, borderWidth: component.selectedBorder, borderColor: active ? c.ink : "transparent" }}
+      style={{ gap: space[2], padding: space[1], borderRadius: radius.field, backgroundColor: active ? c.in : "transparent" }}
     >
       <ScrollView horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="always">
         <View style={{ flexDirection: "row", gap: space[2], alignItems: "center" }}>
@@ -53,7 +54,7 @@ export function FracPicker({ value, onChange, active, testID }: {
             value={eighth ?? NONE}
             onChange={(key) => onChange(Number(key) * 2)}
           />
-          {/* «1/16»: a chip like the others (the ink frame when open — never the accent, that is «Применить»'s), read as «Шестнадцатые» */}
+          {/* «1/16»: a chip like the others («Заливка» when open — never the accent, that is «Применить»'s), read as «Шестнадцатые» */}
           <Press
             testID={`${testID}-more`}
             onPress={() => setMore(!more)}
@@ -61,9 +62,9 @@ export function FracPicker({ value, onChange, active, testID }: {
             accessibilityRole="button"
             accessibilityLabel={t("mod.gutters.attr.fracMoreA11y" as DictKey)}
             accessibilityState={{ expanded: more }}
-            style={{ height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", backgroundColor: c.surf2, borderWidth: more ? component.selectedBorder : 1, borderColor: more ? c.ink : c.bd }}
+            style={{ height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", ...(more ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: more ? "transparent" : c.bd }}
           >
-            <T v="button" w={more ? "bold" : undefined} style={{ color: c.ink }}>{t("mod.gutters.attr.fracMore" as DictKey)}</T>
+            <T v="button" w={more ? "semibold" : undefined} style={{ color: more ? c.ink : c.mut }}>{t("mod.gutters.attr.fracMore" as DictKey)}</T>
           </Press>
         </View>
       </ScrollView>

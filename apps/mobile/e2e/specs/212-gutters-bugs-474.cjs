@@ -3,12 +3,12 @@
  * - a pinch whose first finger has moved before the second lands (always so on a phone): the drawing gets smaller —
  *   and again (two pinches), and nothing is drawn;
  * - the corner sheet: «наружный» / «внутренний» switch the kind and the sheet stays open;
- * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the letters A, B, C;
+ * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the arc with its degrees (no letters: #1276);
  *   the triangle says A, B, C in plain words;
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { doubleTap, skipLength, canvasAt, fitAll } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   // 5) straight on from the free end: one gutter, the sum
   await stroke([x0, y], [x1, y], 45);
   await waitFor(async () => (await runs()).some((r) => r.geom.lengthIn === 540), "45 ft");
-  await tid("draw-fit").getByRole("button").click(); // 45 ft runs off the screen: the whole drawing in view
+  await fitAll(p); // 45 ft runs off the screen: the whole drawing in view
   await p.waitForTimeout(300);
   const caps = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const right = caps.sort((a, c) => c[0] - a[0])[0];
@@ -76,7 +76,7 @@ exports.run = async (h) => {
   // grown again, then «Отменить» in its length sheet: back to the length before — the gutter stays (part 1 × #479)
   const before = (await runs())[0].geom.lengthIn;
   // grown, its end may run under the properties panel beside the canvas (820/1280): the whole drawing in view first
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
   const caps3 = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const r3 = caps3.sort((a, c) => c[0] - a[0])[0];
@@ -90,7 +90,7 @@ exports.run = async (h) => {
   await waitFor(async () => { const rs = await runs(); return rs.length === 1 && rs[0].geom.lengthIn === before; }, `«Отменить» after growing: one gutter, ${before}″ again`);
 
   // 1) a pinch after a long length and a moved view: smaller, and smaller again
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
   const l0 = (await lines())[0];
   // the farthest the canvas goes is the whole drawing in a quarter of the screen = half the «fit» size (#1281, П36), so the test
@@ -109,7 +109,7 @@ exports.run = async (h) => {
   const l3 = (await lines())[0];
   h.expect(l3 >= l0 * 0.49 && l3 <= l0 * 0.51, `the farthest limit: half of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
   h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, `the pinch drew nothing (the first finger's stroke was dropped): runs ${(await runs()).length}, length sheet ${await tid("quick-length").count()}`);
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
 
   // a corner: a second gutter down from the right end
@@ -120,7 +120,7 @@ exports.run = async (h) => {
 
   // 2) the corner sheet stays open while the kind switches
   const k = await svg().locator('[id^="c:"]').boundingBox();
-  await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+  await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   const kind0 = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
   const other = kind0 === "наружный" ? "внутренний" : "наружный";
@@ -136,17 +136,17 @@ exports.run = async (h) => {
   h.expect(sk.width >= sheetW * 0.9, `the sketch is as wide as the sheet (${Math.round(sk.width)} of ${Math.round(sheetW)})`);
   const texts = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
   h.expect(texts.filter((t) => /^стена /.test(t)).length === 2 && texts.filter((t) => /^лицевая /.test(t)).length === 2, `«стена …», «лицевая …» on each gutter (${texts.join(" | ")})`);
-  h.expect(["A", "B", "C"].every((x) => texts.includes(x)), "the letters A, B, C");
+  h.expect(!["A", "B", "C"].some((x) => texts.includes(x)) && texts.includes("90°"), "no letters A, B, C on the drawing (#1276: they are the triangle's, in words); the arc says 90°");
   // the chips do not overlap
   const boxes = await tid("corner-sketch").locator("rect").evaluateAll((rs) => rs.map((r) => { const b = r.getBoundingClientRect(); return [b.x, b.y, b.x + b.width, b.y + b.height]; }));
   const overlap = boxes.some((a, i) => boxes.some((c, j) => j > i && a[0] < c[2] && c[0] < a[2] && a[1] < c[3] && c[1] < a[3]));
   h.expect(!overlap, "the chips do not overlap");
   // the face is away from the house: on an outside corner the «лицевая» chips are outside the angle (farther from the
-  // C diagonal than the «стена» ones), on an inside corner inside it
+  // arc's degrees than the «стена» ones), on an inside corner inside it
   const pos = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => { const r = t.getBoundingClientRect(); return { t: (t.textContent || "").trim(), x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
   const at = (re) => pos.filter((q) => re.test(q.t));
-  const [la, lb] = [at(/^A$/)[0], at(/^B$/)[0]];
-  const cm = [(la.x + lb.x) / 2, (la.y + lb.y) / 2];
+  const deg = at(/^\d+°$/)[0]; // the arc's degrees stand inside the angle (the letters A, B and the C line are gone, #1276)
+  const cm = [deg.x, deg.y];
   const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - cm[0], q.y - cm[1]), 0) / qs.length;
   const faceOut = far(at(/^лицевая /)) > far(at(/^стена /));
   h.expect(faceOut === (kind0 === "наружный"), `${kind0}: the face is ${kind0 === "наружный" ? "outside" : "inside"} the angle`);

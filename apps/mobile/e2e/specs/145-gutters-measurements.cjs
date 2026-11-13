@@ -7,7 +7,7 @@
  * - a draft the previous version kept on the phone (M4b, device-wide, no owner) is forgotten, never moved in.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, closeDsMenu } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 const OLD = "octo.mod.gutters.draft.v1";
 
@@ -55,7 +55,7 @@ exports.run = async (h) => {
   await p.mouse.click(b.x + b.width * 0.47, y + 3);
   await closeDsMenu(p);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout");
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await waitFor(() => !!idInUrl(), "the address names the measurement");
   const m1 = idInUrl();
   await waitFor(async () => (await data()).elements.filter((e) => e.measurementId === m1).length === 2, "the store: the run and the downspout under the measurement");
@@ -72,7 +72,7 @@ exports.run = async (h) => {
   await drawRun(0.3);
   await drawRun(0.6);
   await waitFor(async () => (await runs()) === 2, "two runs");
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await waitFor(() => !!idInUrl() && idInUrl() !== m1, "its own id");
   const m2 = idInUrl();
   await waitFor(async () => (await data()).elements.filter((e) => e.measurementId === m2).length === 2, "the second measurement has its two runs");

@@ -347,6 +347,13 @@ export const faceOffsetIn = (r: Pick<DrawnRun, "attrs">) => {
 };
 
 /**
+ * The angle each piece is cut at a corner (the mitre; #1275): half the turn — (180° − the angle between the walls) / 2: 45° for a right angle,
+ * 22½° for 135°. The angle is taken at the BACK wall (the lines at the wall; the face runs parallel to them, so the angle is the same, only
+ * the lengths differ — `cornerCut`).
+ */
+export const cutAngleDeg = (turnDeg: number): number => turnDeg / 2;
+
+/**
  * The cut of a corner (founder 08.11): for each of its runs, the length along the back (the wall) and along the face.
  * At a corner end the face is longer (outside) or shorter (inside) by offset · tan(turn / 2) — 90° → the offset itself;
  * a cap end adds nothing. Both ends of a run count (a run between two corners). To the nearest 1/16″.
@@ -376,10 +383,13 @@ export function runEnds(d: Pick<Drawing, "runs">, corners: FoundCorner[], tolIn 
     res[r.id] = ([0, 1] as const).map((e): RunEnd => {
       const corner = corners.find((c) => c.runs.some((x) => x.id === r.id && x.end === e));
       if (corner) return { kind: "corner", cornerId: corner.id };
+      // «Без заглушки» (#1273) is the person's explicit choice and comes first: also at an end freed from a corner (`openEnds`, #933) —
+      // otherwise the sheet says «no cap» while a cap is drawn and counted (review of #1366)
+      if (r.noCap?.[e]) return { kind: "join" };
       if (isOpenEnd(r, e)) return { kind: "cap" };
       const p = e ? r.b : r.a;
       const joined = d.runs.some((o) => o.id !== r.id && sameStory(o, r) && (dist(o.a, p) <= tolIn || dist(o.b, p) <= tolIn));
-      if (joined || r.noCap?.[e]) return { kind: "join" };
+      if (joined) return { kind: "join" };
       return { kind: "cap" };
     }) as [RunEnd, RunEnd];
   }

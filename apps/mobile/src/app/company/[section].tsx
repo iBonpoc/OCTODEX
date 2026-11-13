@@ -12,6 +12,7 @@ import { Labeled, PctField } from "@/features/fields";
 import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
+import { CompanyTerms } from "@/features/CompanyTerms";
 import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -202,7 +203,9 @@ export default function CompanySection() {
             {draft.estimate.depositBps !== null ? (
               <PctField bps={draft.estimate.depositBps} onChange={(b) => set({ estimate: { ...draft.estimate, depositBps: Math.min(b, 10000) } })} />
             ) : null}
-            <TextField type="note" value={draft.estimate.terms ?? ""} onChangeText={(v) => set({ estimate: { ...draft.estimate, terms: v } })} placeholder={t("co.terms")} />
+          </Card>
+          <Card>
+            <CompanyTerms est={draft.estimate} onChange={(estimate) => set({ estimate })} />
           </Card>
           <Card>
             <T v="heading">{t("co.payment")}</T>
@@ -218,7 +221,9 @@ export default function CompanySection() {
           <Button label={SETUP_STEPS[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
         ) : null
       ) : (
-        <Button label={isWizard ? (SETUP_STEPS[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
+        <View testID="co-save">
+          <Button label={isWizard ? (SETUP_STEPS[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
+        </View>
       )}
       {isWizard && !ro ? <Button label={t("co.skip")} variant="ghost" full onPress={skip} /> : null}
     </Screen>

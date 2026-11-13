@@ -12,6 +12,8 @@
  --dock-btn:var(--control-lg);--tape-tick:16px;--modal-w:380px;--panel-w:360px;--palette-w:560px;
   /* GoRix mark and logo (DS §18.2, #1156): «Страницы нет» / «Новая компания», full-screen wait, «О приложении», splash, first-launch intro */
   --brand-mark:48px;--brand-wait:56px;--brand-about:160px;--brand-splash:120px;--brand-intro:200px;
+  /* the open estimate line: one row «Кол-во · Ед. · Цена» (DS §8.3, #1307) */
+  --est-qty-w:80px;--est-unit-w:88px;
  --alert-max-w:340px;--sheet-medium-ratio:.5;--popover-w:360px;
  /* карточки списков (docs/specs/06-list-cards.md): строка выбора в шторке, мин. ширина плитки цифр */
  --row-option:48px;--tile-min:78px;
