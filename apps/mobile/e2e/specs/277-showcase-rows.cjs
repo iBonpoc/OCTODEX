@@ -17,7 +17,7 @@ exports.run = async (h) => {
   await vis("showcase-rows-line").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId("showcase-rows-row-soon").count()) === 0 && (await p.getByTestId("showcase-rows-compact-soon").count()) === 0, "line and «Кратко / Подробно»: no stub any more");
   await vis("est-trash-ds-l1").waitFor({ timeout: 3000 });
-  h.expect(/расход \$280/.test(await vis("est-sum-ds-l2").innerText()), "the hidden sample line: «расход $280»");
+  h.expect(/расход \$280/.test(await vis("est-spend-ds-l2").innerText()), "the hidden sample line: «расход $280»");
   await vis("showcase-rows-line").getByText("Подробно", { exact: true }).click();
   await vis("est-times-ds-l1").waitFor({ timeout: 3000 });
   // the swipe is live now (РС-7c2): on the web a hint about «⋯», not a «coming» stub; the rest still wait for their components

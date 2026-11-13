@@ -36,7 +36,8 @@ exports.run = async (h) => {
   await line.fold(h);
   await tid(`est-hidden-${id}`).waitFor({ timeout: 3000 });
   h.expect(/Скрыта от клиента/.test(await tid(`est-hidden-${id}`).innerText()), "«Скрыта от клиента»");
-  h.expect(/расход \$280/.test(await tid(`est-sum-${id}`).innerText()), "the owner sees «расход $280»");
+  h.expect(/расход \$280/.test(await tid(`est-spend-${id}`).innerText()), "the owner sees «расход $280» under the name");
+  h.expect(/\$0\b/.test(await tid(`est-sum-${id}`).innerText()), "the sum on the right is $0 — the client pays nothing for it");
   h.expect((await count(`[data-testid="est-noprice-${id}"]`)) === 0, "a hidden line has no «Нет цены»");
   await h.shot("hidden");
 
@@ -46,7 +47,7 @@ exports.run = async (h) => {
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
   await tid(`est-line-${id}`).waitFor({ timeout: 8000 });
   const right = await tid(`est-sum-${id}`).innerText();
-  h.expect(!/расход/.test(right) && /\$0\b/.test(right), `the tech: $0, no «расход» (${right})`);
+  h.expect(/\$0\b/.test(right) && (await count(`[data-testid="est-spend-${id}"]`)) === 0, `the tech: $0, no «расход» (${right})`);
   // open for the tech: «Сумма $0», no «ваш расход»
   await tid(`est-line-${id}`).click();
   const techFig = await tid(`est-figures-${id}`).innerText();
@@ -62,7 +63,7 @@ exports.run = async (h) => {
   await p.getByText(/снова видна клиенту/i).first().waitFor({ timeout: 3000 });
   await line.fold(h);
   h.expect((await count(`[data-testid="est-hidden-${id}"]`)) === 0, "shown again: no «Скрыта от клиента»");
-  h.expect(!/расход/.test(await tid(`est-sum-${id}`).innerText()), "shown again: no «расход»");
+  h.expect((await count(`[data-testid="est-spend-${id}"]`)) === 0, "shown again: no «расход»");
   h.expect((await count(`[data-testid="est-noprice-${id}"]`)) === 0, "a line with a price: no «Нет цены»");
 
   // «На выбор клиента»: the mark on the folded row, «в итог не входит» in the open one

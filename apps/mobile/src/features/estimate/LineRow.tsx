@@ -149,8 +149,9 @@ function LineRowView(p: LineRowProps) {
     const full = p.view === "full";
     const hidden = isHidden(l);
     const spend = hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen });
-    // the right side of a folded row: the line's sum; a hidden line — its «расход» for who sees costs, $0.00 for the rest
-    const right = hidden ? (spend !== null ? t("est2.row.spend", { spend: money(spend) }) : money(0)) : money(p.total);
+    // the right side of a folded row: the line's sum ($0 for a hidden line — the client pays nothing for it); the hidden
+    // line's «расход» goes under the name, by its mark, for who sees costs — the name keeps its width
+    const right = hidden ? money(0) : money(p.total);
     const chips = (
       <>
         {hidden ? (
@@ -161,6 +162,13 @@ function LineRowView(p: LineRowProps) {
                 {t("est.row.hidden")}
               </T>
             </RowView>
+          </View>
+        ) : null}
+        {spend !== null ? (
+          <View testID={`est-spend-${l.id}`}>
+            <T v="caption" tone="mut" tabular>
+              {t("est2.row.spend", { spend: money(spend) })}
+            </T>
           </View>
         ) : null}
         {l.optional ? (
