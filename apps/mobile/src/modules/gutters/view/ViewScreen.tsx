@@ -90,6 +90,10 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const action = m ? estimateAction(store.db, m, drawing.runs.length > 0) : ({ kind: "none" } as const);
   const estimates = m ? store.db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id)))) : [];
   const [linkOpen, setLinkOpen] = useState(false);
+  // the paper menu of «Рабочие чертежи» (#1349): its button's place. Hooks stand above the «not found» return below —
+  // a measurement that goes (deleted, a copy undone) must not change their count
+  const shopRef = useRef<ElementRef<typeof View>>(null);
+  const [shopAt, setShopAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   // «Подробно» (П25.3 Б7): what the drawing is made of — folded; the sheet, the action and the documents come first
   const [details, setDetails] = useState(false);
 
@@ -194,8 +198,6 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // «Рабочие чертежи» (#1349): the plan sheets G-1 …, the schedules and the supplier's order — 11 × 17, or the same
   // sheets reduced to Letter; the quantities are the estimate's (`parts`). The crew's are in the app's language, the
   // supplier's order in English (spec 36 №19). A sheet with overlapping labels is still given, with a warning.
-  const shopRef = useRef<ElementRef<typeof View>>(null);
-  const [shopAt, setShopAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
     const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
     const tt = kind === "order" ? tFor("en") : t;
