@@ -485,23 +485,41 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const addOption = () => {
     if (doc.options.length >= MAX_OPTIONS) return void toast.show(t("est.var.max"));
     if (!leaveRow()) return;
-    const from = doc.options.find((o) => o.id === option.id) ?? option;
-    const o = cloneOption(from, nextOptionName(doc.options));
-    setDoc((d) => ({ ...d, options: [...d.options, o] }));
+    const id = option.id;
+    const name = nextOptionName(doc.options);
+    // the copy is made from the document as the settled row leaves it (a blank row gone, a catalog link on its line):
+    // the updater runs after leaveRow's own, so `d` holds the settled option
+    setDoc((d) => {
+      if (d.options.length >= MAX_OPTIONS) return d;
+      const from = d.options.find((o) => o.id === id);
+      return from ? { ...d, options: [...d.options, cloneOption(from, name)] } : d;
+    });
     setCur(doc.options.length);
-    toast.show(t("est.var.copied", { name: o.name, from: from.name }));
+    toast.show(t("est.var.copied", { name, from: option.name }));
   };
   const removeOption = () => {
     if (doc.options.length < 2) return;
     if (!leaveRow()) return;
-    const prev = doc;
-    const prevCur = cur;
-    const r = withoutOption(doc.options, option.id);
-    setDoc((d) => ({ ...d, options: r.options }));
-    setCur(r.cur);
+    const id = option.id;
+    const at = doc.options.findIndex((o) => o.id === id);
+    // «Вернуть» puts back only this option at its place; the edits made since stay (DS §15.2)
+    let removed: CustomOption | null = null;
+    setDoc((d) => {
+      const o = d.options.find((x) => x.id === id);
+      if (!o || d.options.length < 2) return d;
+      removed = o;
+      return { ...d, options: withoutOption(d.options, id).options };
+    });
+    setCur(withoutOption(doc.options, id).cur);
     toast.show(t("est.var.deleted"), localUndo(() => {
-      setDoc(prev);
-      setCur(prevCur);
+      const back = removed;
+      if (!back) return;
+      setDoc((d) => {
+        if (d.options.length >= MAX_OPTIONS || d.options.some((x) => x.id === back.id)) return d;
+        const i = Math.min(at, d.options.length);
+        return { ...d, options: [...d.options.slice(0, i), back, ...d.options.slice(i)] };
+      });
+      setCur(at);
     }));
   };
   const pickOption = (id: string) => {
@@ -509,7 +527,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     if (i < 0 || i === cur || !leaveRow()) return;
     setCur(i);
   };
-  const setRecommended = (on: boolean) => setDoc((d) => ({ ...d, options: recommend(d.options, option.id, on) }));
+  const setRecommended = (id: string, on: boolean) => setDoc((d) => ({ ...d, options: recommend(d.options, id, on) }));
   const renameOption = (name: string) => setOption((o) => ({ ...o, name }));
   /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
   const [clientScreen, setClientScreen] = useState(false);

@@ -8,7 +8,7 @@ import { Button, IconButton, Segmented, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast, type MenuItem } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
-import { MAX_OPTIONS } from "@/features/estimateDoc";
+import { MAX_OPTIONS, OPTION_NAME_MAX } from "@/features/estimateDoc";
 
 /** the five steps of «?» and the closing «Общее для всех» (DS §8.10) — the e2e reads them by these ids */
 export const OPTION_HELP_STEPS = [1, 2, 3, 4, 5] as const;
@@ -30,7 +30,7 @@ export function OptionsCard(p: {
   locked?: boolean;
   onPick: (id: string) => void;
   onCopy: () => void;
-  onRecommend: (on: boolean) => void;
+  onRecommend: (id: string, on: boolean) => void;
   onRename: (name: string) => void;
   onDelete: () => void;
 }) {
@@ -53,14 +53,17 @@ export function OptionsCard(p: {
   const onMore = (k: MoreKey) => {
     setMenu(null);
     if (k === "recommend") {
-      p.onRecommend(!cur.recommended);
+      p.onRecommend(cur.id, !cur.recommended);
       if (!cur.recommended) toast.show(t("est.var.recommendedToast", { name: cur.name }));
     } else if (k === "rename") setRenaming(cur.name);
     else p.onDelete();
   };
+  // a name the client reads: not empty, not another option's (two «Good» side by side), at most OPTION_NAME_MAX characters
   const commitRename = () => {
-    const name = (renaming ?? "").trim();
-    if (name) p.onRename(name);
+    const name = Array.from((renaming ?? "").trim()).slice(0, OPTION_NAME_MAX).join("").trim();
+    if (!name) return;
+    if (p.options.some((o) => o.id !== cur.id && o.name.trim().toLowerCase() === name.toLowerCase())) return void toast.show(t("est.var.nameTaken", { name }));
+    p.onRename(name);
     setRenaming(null);
   };
 
@@ -91,31 +94,39 @@ export function OptionsCard(p: {
             <Segmented radio full label={t("est.var.pick")} testID="est-var-seg" value={cur.id} onChange={p.onPick} items={p.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
             <RowView style={{ gap: space[1], alignItems: "stretch" }}>
               {p.options.map((o) => (
-                <Press
-                  key={o.id}
-                  onPress={() => p.onPick(o.id)}
-                  visibleHeight={size.hitMin}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${o.name}: ${money(p.totals[o.id] ?? 0)}${o.recommended ? `, ${t("est.var.recommended")}` : ""}`}
-                  testID={`est-var-total-${o.id}`}
-                  containerStyle={{ flex: 1 }}
-                >
-                  <View style={{ minHeight: size.hitMin, alignItems: "center", justifyContent: "center" }}>
-                    <T v="body" w={o.id === cur.id ? "semibold" : undefined} tone={o.id === cur.id ? "ink" : "mut"} tabular center>
-                      {money(p.totals[o.id] ?? 0)}
-                    </T>
-                    {o.recommended ? (
-                      <View testID={`est-var-rec-${o.id}`}>
-                        <RowView style={{ gap: space[1], justifyContent: "center" }}>
-                          <Icon name="star" s={size.iconXs} color={c.mut} />
-                          <T v="caption" tone="mut">
-                            {t("est.var.recommended")}
-                          </T>
-                        </RowView>
-                      </View>
-                    ) : null}
-                  </View>
-                </Press>
+                <View key={o.id} style={{ flex: 1 }}>
+                  <Press
+                    onPress={() => p.onPick(o.id)}
+                    visibleHeight={size.hitMin}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${o.name}: ${money(p.totals[o.id] ?? 0)}`}
+                    testID={`est-var-total-${o.id}`}
+                  >
+                    <View style={{ minHeight: size.hitMin, alignItems: "center", justifyContent: "center" }}>
+                      <T v="body" w={o.id === cur.id ? "semibold" : undefined} tone={o.id === cur.id ? "ink" : "mut"} tabular center>
+                        {money(p.totals[o.id] ?? 0)}
+                      </T>
+                    </View>
+                  </Press>
+                  {o.recommended ? (
+                    // «★ рекомендуем» — a checkbox with the option's name (DS §8.10): a press takes the mark off
+                    <Press
+                      onPress={p.locked ? undefined : () => p.onRecommend(o.id, false)}
+                      visibleHeight={size.hitMin}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: true, disabled: !!p.locked }}
+                      accessibilityLabel={`${t("est.var.recommended")}: ${o.name}`}
+                      testID={`est-var-rec-${o.id}`}
+                    >
+                      <RowView style={{ gap: space[1], justifyContent: "center", minHeight: size.hitMin }}>
+                        <Icon name="star" s={size.iconXs} color={c.mut} />
+                        <T v="caption" tone="mut">
+                          {t("est.var.recommended")}
+                        </T>
+                      </RowView>
+                    </Press>
+                  ) : null}
+                </View>
               ))}
             </RowView>
             <T v="caption" tone="mut">

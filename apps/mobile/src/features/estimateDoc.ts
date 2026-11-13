@@ -36,6 +36,8 @@ export const uid = (): string => {
 };
 export const MAX_OPTIONS = 3;
 export const OPTION_NAMES = ["Good", "Better", "Best"];
+/** an option's name as the screen keeps it — the same cap a template keeps (toTemplateDoc) */
+export const OPTION_NAME_MAX = 120;
 
 export const DEFAULT_SETTINGS: CustomSettings = {
   discount: null,
