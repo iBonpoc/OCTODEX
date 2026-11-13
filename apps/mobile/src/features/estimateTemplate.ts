@@ -233,7 +233,8 @@ export function removeAppended(doc: EstimateDoc, added: Appended): EstimateDoc {
       lines: o.lines.filter((l) => !lines.has(l.id)),
       ...(Array.isArray(o.sections) ? { sections: o.sections.filter((x) => !secs.has(x.id)) } : {}),
     }));
-  return { ...doc, options: options.length ? options : doc.options.slice(0, 1) };
+  // every own option was deleted after the add: an empty one stays (an estimate has one), never the template's lines
+  return { ...doc, options: options.length ? options : [{ ...doc.options[0]!, lines: [], sections: [] }] };
 }
 
 /** «от $X» in the picker: the recommended option's total at today's catalog prices (the engine sums) */

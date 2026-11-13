@@ -1,7 +1,7 @@
 /**
  * e2e 349 — «Из шаблона…» in the editor (DS §8.13, spec 39 §11.9, #1117), every view, by testID:
  * - the empty editor: «Из шаблона…» under the add buttons → the template's lines (sections as sections), the first open with
- *   the cursor in «Кол-во»; no «Вернуть» (nothing typed to give back); the button is gone after the first line;
+ *   the cursor in «Кол-во»; a note typed before stays (only adds — code review); no «Вернуть»; the button is gone after;
  * - a typed estimate: «⋯ → Добавить из шаблона…» only adds — the lines at the end, «Добавлено позиций: 2 · Вернуть»;
  *   an edit made after it stays when «Вернуть» takes the template's lines out.
  */
@@ -15,7 +15,6 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true").first();
   const count = (id) => p.getByTestId(id).locator("visible=true").count();
   const lineIds = async () => (await p.locator('[data-testid^="est-line-"]').evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")))).map((x) => x.replace("est-line-", ""));
-  const toastSays = (re) => p.waitForFunction((src) => [...document.querySelectorAll('[data-testid="toast-text"]')].some((e) => new RegExp(src).test(e.textContent || "")), re.source, { timeout: 3000 });
 
   await h.go("/today");
   const l = (id, name, cents, sectionId) => ({ id, name, group: "service", quantity: "1", unit: "ea", unitPriceCents: cents, ...(sectionId ? { sectionId } : {}) });
@@ -39,6 +38,8 @@ exports.run = async (h) => {
   const [add, from] = [await tid("est-add-new").boundingBox(), await tid("est-from-template").boundingBox()];
   h.expect(from.y > add.y, "«Из шаблона…» under «＋ Новая позиция · Из каталога»");
   await h.shot("empty");
+  // a note typed in the empty estimate: the template must not take it away
+  await tid("ue-note").locator("textarea, input").first().fill("Gate code 1234");
   await tid("est-from-template").getByRole("button").click();
   await tid(`est-start-${TPL}`).waitFor({ timeout: 5000 });
   h.expect((await count("est-start-blank")) === 0, "asked for a template: the list of templates only");
@@ -49,6 +50,7 @@ exports.run = async (h) => {
   h.expect((await lineIds()).length === 2, "the template's two lines");
   h.expect((await p.locator('[data-testid^="est-section-"]').locator("visible=true").count()) >= 1, "its section came as a section");
   h.expect((await count("toast-undo")) === 0, "the empty estimate: no «Вернуть»");
+  h.expect((await tid("ue-note").locator("textarea, input").first().inputValue()) === "Gate code 1234", "the note typed before stays");
   h.expect((await count("est-from-template")) === 0, "«Из шаблона…» is gone after the first line");
   await line.fold(h);
 
@@ -58,18 +60,21 @@ exports.run = async (h) => {
   await tid(`est-start-${TPL}`).waitFor({ timeout: 5000 });
   await tid(`est-start-${TPL}`).click();
   await sheetGone(p);
-  await toastSays(/Добавлено позиций: 2/);
+  // «Вернуть» is there (by testID), four lines: the template's at the end, the typed ones first
+  await tid("toast-undo").waitFor({ timeout: 3000 });
+  await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 4, null, { timeout: 3000 });
   const ids = await lineIds();
-  h.expect(ids.length === 4 && ids[0] === a, "the template's lines at the end; the typed ones stay first");
+  h.expect(ids[0] === a, "the template's lines at the end; the typed ones stay first");
+  // the cursor in «Кол-во» of the first line that came
   await p.waitForFunction((id) => document.activeElement?.closest(`[data-testid="est-qty-${id}"]`), ids[2], { timeout: 5000 });
-  await h.shot("added");
-  // an edit after it: the first line's price
-  await line.fold(h);
+  // an edit right after it (inside the toast's 5 s): the first line's price
   await tid(`est-line-${a}`).click();
   await p.locator(`[data-testid="est-price-${a}"] input`).locator("visible=true").first().fill("41");
   await line.fold(h);
+  h.expect((await count("toast-undo")) === 1, "«Вернуть» still there");
   // «Вернуть»: the template's lines go, the edit stays
   h.expect(await line.undo(h), "«Вернуть» pressed");
   await p.waitForFunction(() => document.querySelectorAll('[data-testid^="est-line-"]').length === 2, null, { timeout: 3000 });
   h.expect(/\$41\b/.test(await tid(`est-sum-${a}`).innerText()), "the edit made after it stays");
+  await h.shot("undone");
 };

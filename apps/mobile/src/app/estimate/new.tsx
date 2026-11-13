@@ -96,7 +96,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   // «Сохранить в каталог» chosen on rows (by line id); done when the row folds with a right line
   const [wantCatalog, setWantCatalog] = useState<string[]>(() => draft?.wantCatalog ?? []);
   // «Сметы → ＋ → Из шаблона…» (DS §8.13): the sheet opens on the templates themselves (no «Пустая смета»), even with none
-  const askedTemplates = params.pick === "templates" && !existing && !draft && !given && !tplEdit;
+  const askedTemplates = params.pick === "templates" && !existing && !given && !tplEdit;
+  // a draft is open: the template is ADDED to it (what is typed is never lost), as from the editor (code review)
   const [startOpen, setStartOpen] = useState(() => askedTemplates || (!existing && !draft && !given && !tplEdit && templates.length > 0));
   /** the sheet is a list of templates only: asked for («Из шаблона…»), not the first «С чего начать?» */
   const [pickOnly, setPickOnly] = useState(askedTemplates);
@@ -104,7 +105,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [qtyChain, setQtyChain] = useState<string[]>([]);
   /** what to do once «С чего начать?» has gone (the cursor into «Кол-во»), and whether it was opened from the editor */
   const afterStart = useRef<(() => void) | null>(null);
-  const startInEditor = useRef(false);
+  const startInEditor = useRef(askedTemplates && !!draft);
   /** …or once the client is chosen, when the template was picked before the client («Сметы → ＋ → Из шаблона…») */
   const afterClient = useRef<(() => void) | null>(null);
   const [doc, setDoc] = useState<EstimateDoc>(() =>
@@ -185,7 +186,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // asked from the editor («Из шаблона…», «⋯»): closing it is only closing — the client is chosen in the editor
     const inEditor = startInEditor.current;
     startInEditor.current = false;
-    if (x && hasContent(doc)) return void addTemplate(x);
+    // from the editor (or onto a draft) a template only ADDS: the sections, the note, the tax, the discount and the empty options
+    // typed before stay (DS §8.13 «набранное не теряется»; code review: the empty editor replaced them)
+    if (x && (inEditor || hasContent(doc))) return void addTemplate(x, hasContent(doc));
     if (x) {
       const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
       const ci = Math.max(0, r.doc.options.findIndex((o) => o.recommended));
@@ -486,6 +489,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   /** «›» in «Кол-во» of a line that came from a template: the next one opens with the cursor in its «Кол-во» */
   const nextQty = (id: string) => {
     if (!leaveRow()) return;
+    // the next one was deleted meanwhile: the row only closes
+    if (!option.lines.some((l) => l.id === id)) return;
     setFocusRow({ id, field: "qty" });
     setOpenId(id);
   };
@@ -574,22 +579,39 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
    * «Добавить из шаблона…» into a typed estimate (DS §8.13): only adds — the lines at the end, sections as sections, options by
    * number; «Добавлено позиций: N · Вернуть» takes out only what came (the edits since stay); «Кол-во» of the first that came
    */
-  const addTemplate = (x: EstimateTemplate) => {
+  const addTemplate = (x: EstimateTemplate, typed: boolean) => {
     const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
     const a = appendTemplate(doc, r.doc, cur);
+    const before = doc.options.length;
     setDoc(a.doc);
     setCheckPrice((ids) => [...ids, ...r.checkPrice]);
     setUnhiddenIds((ids) => [...ids, ...r.unhidden]);
     const n = a.added.lineIds.length;
-    toast.show(
-      a.added.skipped.length ? `${t("est.tplIn.added", { n })} · ${t("est.tplIn.skipped", { names: a.added.skipped.join(", ") })}` : t("est.tplIn.added", { n }),
-      localUndo(() => {
-        setDoc((d) => removeAppended(d, a.added));
-        setCur((c) => Math.min(c, Math.max(0, doc.options.length - 1)));
-        setQtyChain([]);
-        setOpenId((o) => (o && a.added.lineIds.includes(o) ? null : o));
-      }),
-    );
+    const words = [
+      typed ? t("est.tplIn.added", { n }) : t("est.tpl.applied", { name: x.name }),
+      // a line whose catalog item is gone came at the template's price: say so here too (code review)
+      ...(r.checkPrice.length ? [t("est.tpl.checkPrice", { n: r.checkPrice.length })] : []),
+      ...(a.added.skipped.length ? [t("est.tplIn.skipped", { names: a.added.skipped.join(", ") })] : []),
+    ].join(" · ");
+    if (!typed) {
+      // nothing was typed: no «Вернуть» — nothing to give back but the template itself (DS §8.13); it names the estimate
+      if (!templateId) setTemplateId(x.id);
+      if (!title.trim()) setTitle(x.name);
+      toast.show(words);
+    } else
+      toast.show(
+        words,
+        localUndo(() => {
+          const gone = new Set(a.added.lineIds);
+          setDoc((d) => removeAppended(d, a.added));
+          setCur((c) => Math.min(c, Math.max(0, before - 1)));
+          setQtyChain([]);
+          setCheckPrice((ids) => ids.filter((x) => !gone.has(x)));
+          setUnhiddenIds((ids) => ids.filter((x) => !gone.has(x)));
+          setFocusRow((f) => (f && gone.has(f.id) ? null : f));
+          setOpenId((o) => (o && gone.has(o) ? null : o));
+        }),
+      );
     focusChain(a.added.chain);
   };
   const pickOption = (id: string) => {
@@ -952,7 +974,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             ) : null}
           </Card>
-          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} />
+          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} testID="ue-note" />
           {tplEdit ? (
             <View testID="est-tpl-save">
               <Button label={t("est.tpl.saveTemplate")} icon="check" full disabled={!title.trim()} onPress={saveTemplate} />
@@ -1195,7 +1217,8 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         onExited={() => {
           const next = afterClient.current;
           afterClient.current = null;
-          next?.();
+          // two frames on, as after «С чего начать?»: the web gives the focus back to the opener right after a sheet is gone
+          if (next) requestAnimationFrame(() => requestAnimationFrame(next));
         }}
       />
       <Menu

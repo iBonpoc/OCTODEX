@@ -4165,7 +4165,7 @@ export const es: Dict = {
   "est.client.offToast": "Pantalla para el cliente desactivada",
   // «Экраны» #1117 (е): «Desde plantilla…» (DS §8.13)
   "est.tplIn.from": "Desde plantilla…",
-  "est.tplIn.add": "Agregar desde plantilla…",
+  "est.tplIn.add": "Añadir desde plantilla…",
   "est.tplIn.added": "Partidas agregadas: {n}",
   "est.tplIn.skipped": "no agregadas (tres opciones como máximo): {names}",
 };
