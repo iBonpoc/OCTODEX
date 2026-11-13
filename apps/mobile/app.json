@@ -124,7 +124,7 @@
         }
       ]
     ],
-    "scheme": "octodex",
+    "scheme": ["gorix", "octodex"],
     "owner": "octodex-team",
     "extra": {
       "eas": {
