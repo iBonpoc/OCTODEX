@@ -62,7 +62,7 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
 }
 
 /** Pick a client and one of their properties. */
-export function ClientPicker({ visible, onClose, onPick }: { visible: boolean; onClose: () => void; onPick: (customerId: string, propertyId: string) => void }) {
+export function ClientPicker({ visible, onClose, onPick, onExited }: { visible: boolean; onClose: () => void; onPick: (customerId: string, propertyId: string) => void; onExited?: () => void }) {
   const { db } = useStore();
   const { t } = useI18n();
   const [q, setQ] = useState("");
@@ -70,13 +70,13 @@ export function ClientPicker({ visible, onClose, onPick }: { visible: boolean; o
     .map((p) => ({ p, c: db.customers.find((c) => c.id === p.customerId) }))
     .filter((r) => r.c && canServe(db, r.c.id) && (!q.trim() || `${r.c.name} ${r.p.address}`.toLowerCase().includes(q.trim().toLowerCase())));
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("est.for")}>
+    <Sheet visible={visible} onClose={onClose} title={t("est.for")} onExited={onExited}>
       <View style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.title")} icon="search" />
         <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
           {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
           {rows.map(({ p, c }, i) => (
-            <View key={p.id}>
+            <View key={p.id} testID={`est-client-pick-${p.id}`}>
               {i > 0 ? <Divider /> : null}
               <ListRow title={c!.name} subtitle={`${p.address}, ${p.city}`} onPress={() => onPick(c!.id, p.id)} />
             </View>

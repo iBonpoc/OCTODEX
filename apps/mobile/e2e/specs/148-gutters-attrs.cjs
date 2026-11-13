@@ -9,7 +9,7 @@
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -55,8 +55,9 @@ exports.run = async (h) => {
   const openAttrs = async () => {
     if (!wide) {
       // a downspout just put opens its menu by itself (founder 09.11)
-      if (!(await panel().count())) await tid("draw-props").getByRole("button").click();
-    } else h.expect((await tid("draw-props").count()) === 0, "820/1280: no «Свойства» button — the panel is on the side");
+      if (!(await panel().count())) await openProps(p);
+    }
+    h.expect((await tid("draw-props").count()) === 0, "no «Свойства» button on the toolbar — a double tap opens them (#1273), the panel is on the side on 820/1280");
     await panel().waitFor({ timeout: 5000 });
   };
   const closeAttrs = async () => {

@@ -82,18 +82,19 @@ describe("the ways in and out", () => {
     expect(versionRows(d).lines.map((l) => l.clientVisible)).toEqual([false, undefined]);
   });
   it("«Добавить вариант» of an option with no sections: none on the copy", () => {
-    expect("sections" in cloneOption(docOf([line({ id: "a" })]).options[0]!, 1)).toBe(false);
+    expect("sections" in cloneOption(docOf([line({ id: "a" })]).options[0]!, "Better")).toBe(false);
   });
   it("clientDoc: sections past 40, a subsection without its parent, a repeated id — as the engine counts them", () => {
     const secs = [{ id: "a" }, { id: "a", parentId: "b" }, { id: "sub", parentId: "nope" }, ...Array.from({ length: SECTIONS_MAX }, (_, i) => ({ id: `s${i}` }))];
     const o = clientDoc(docOf([], secs)).options[0]!;
     expect(o.sections!.map((x) => x.id)).toEqual(["a", ...Array.from({ length: SECTIONS_MAX - 3 }, (_, i) => `s${i}`)]);
   });
-  it("«Добавить вариант» keeps the sections (the lines keep their sectionId)", () => {
+  it("«Вариант — копия» keeps the sections under new ids (the lines follow their section, DS §8.10)", () => {
     const o = docOf([line({ id: "a", sectionId: "s1" })], [{ id: "s1", title: "Roof" }]).options[0]!;
-    const c = cloneOption(o, 1);
-    expect(c.sections).toEqual([{ id: "s1", title: "Roof" }]);
-    expect(c.sections).not.toBe(o.sections);
-    expect(c.lines[0]!.sectionId).toBe("s1");
+    const c = cloneOption(o, "Better");
+    expect(c.sections).toHaveLength(1);
+    expect(c.sections![0]!.title).toBe("Roof");
+    expect(c.sections![0]!.id).not.toBe("s1");
+    expect(c.lines[0]!.sectionId).toBe(c.sections![0]!.id);
   });
 });

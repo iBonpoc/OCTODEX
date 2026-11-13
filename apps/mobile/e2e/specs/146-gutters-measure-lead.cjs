@@ -6,7 +6,7 @@
  * - a property → «Замер»: its own new measurement linked to it.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, pressWhenStill } = require("../gutters.cjs");
+const { skipLength, pressWhenStill, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -57,7 +57,7 @@ exports.run = async (h) => {
   h.expect(new URL(p.url()).searchParams.get("lead") === lead.id, "the canvas knows the lead");
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun();
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await waitFor(() => !!idInUrl(), "saved: the address names it");
   const mid = idInUrl();
   await waitFor(async () => (await data()).measurements.some((m) => m.id === mid && m.leadId === lead.id && m.propertyId === (lead.propertyId ?? null)), "the measurement is the lead's (and its property's)");

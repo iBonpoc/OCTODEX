@@ -5,7 +5,7 @@
  * - Настройки Gutters → «Дом и крыша» → «Вынос крыши»: 2 ft by default, another pick is kept after a reload.
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { skipLength, sheetGone } = require("../gutters.cjs");
+const { openProps, skipLength, sheetGone } = require("../gutters.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -72,7 +72,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("draw-tool-line").count()) === 1, "the toolbar is there");
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(run0[0], run0[1]);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   h.expect((await tid("attr-ds-size").count()) === 0 && (await tid("attr-size").count()) === 1, "a touch on the hidden downspout's place picks the gutter (its properties), not the downspout");
   h.expect((await dsCount()) === 1, "nothing changed in the store");

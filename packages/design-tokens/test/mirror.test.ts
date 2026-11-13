@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, drawing, drawingPrint, font, icons, motion, print, radius, size, space, spaceHalf, themes } from "../src/index";
+import { component, drawing, drawingPrint, font, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -65,6 +65,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.fab).toBe(px("fab"));
     expect(component.dockBtn).toBe(px("dock-btn"));
     expect(component.tapeTick).toBe(px("tape-tick"));
+    expect(component.estRow).toEqual({ qty: px("est-qty-w"), unit: px("est-unit-w") });
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
     for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
   });
@@ -79,6 +80,18 @@ describe("app tokens mirror the founder's DS css", () => {
       numR: px("draw-print-num-r"), dsR: px("draw-print-ds-r"), font: px("draw-print-font"), fontSm: px("draw-print-font-sm"),
       stampH: px("draw-print-stamp-h"), scalePx: px("draw-print-scale-px"), panelMin: px("draw-print-panel-min"), panelGap: px("draw-print-panel-gap"), insetFrac: px("draw-print-inset-frac"), insetW: px("draw-print-inset-w"), insetH: px("draw-print-inset-h"), insetSheetFrac: px("draw-print-inset-sheet-frac"),
     });
+  });
+  it("the shop drawings' sheet (#1349)", () => {
+    const n = (k: string) => parseFloat(v(k));
+    expect(shopSheet).toEqual({
+      wIn: n("shop-w-in"), hIn: n("shop-h-in"), letterWIn: n("shop-letter-w-in"), letterHIn: n("shop-letter-h-in"), borderIn: n("shop-border-in"), minPt: n("shop-min-pt"), letterMinPt: n("shop-letter-min-pt"), capEm: n("shop-cap-em"),
+      textSm: n("shop-text-sm"), text: n("shop-text"), textTitle: n("shop-text-title"), textSheet: n("shop-text-sheet"),
+      lwBorder: n("shop-lw-border"), lwRun: n("shop-lw-run"), lwHeavy: n("shop-lw-heavy"), lwBlock: n("shop-lw-block"), lwMed: n("shop-lw-med"), lwThin: n("shop-lw-thin"), lwHair: n("shop-lw-hair"),
+      band: v("shop-band"),
+    });
+    // 11 pt on the sheet is 7 pt when the sheet is reduced to Letter
+    expect((shopSheet.textSm / shopSheet.capEm) * 72).toBeGreaterThanOrEqual(shopSheet.minPt);
+    expect(shopSheet.minPt * Math.min(shopSheet.letterWIn / shopSheet.wIn, shopSheet.letterHIn / shopSheet.hIn)).toBeGreaterThanOrEqual(shopSheet.letterMinPt);
   });
   it("drawing canvas sizes", () => {
     expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap"), liftScale: parseFloat(v("draw-lift-scale")) });
