@@ -128,6 +128,8 @@ export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: numb
   const fixed = end === 0 ? r.b : r.a;
   const at = endAt(d, fixed, p, tolIn, runId);
   if (Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) < MIN_RUN_IN) return d;
+  // the end dropped so that the gutter lies exactly on another one (both ends shared) is no move: that would be a duplicate (#1256)
+  if (wouldDuplicate({ runs: d.runs.filter((x) => x.id !== runId) }, fixed, at, Number(r.attrs.story) || 1)) return d;
   const { lengthIn: _typed, ...rest } = r;
   const moved: DrawnRun = closeEnd(end === 0 ? { ...rest, a: at } : { ...rest, b: at }, end);
   // downspouts stay on the line: at most its new length
@@ -654,10 +656,13 @@ export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, cancele
   if (g.kind === "pull") return canceled ? g.before : (swingEnd(g.before, g.id, g.end, grabbedEnd(g.before, g.id, g.end, g.from, p), g.held ?? null, g.tol, g.onEnd ?? null)?.drawing ?? d);
   if (canceled) return d;
   const b = endAt(d, g.a, p, tolIn);
-  // a line drawn over a gutter from one of its ends to the other is no new gutter (#1256): the same drawing back, the caller says why
-  if (wouldDuplicate(d, g.a, b, Number(newRun.attrs.story) || 1)) return d;
+  // a line drawn over a gutter from one of its ends to the other is no new gutter (#1256): the same drawing back, the caller says why (`lineRefused`)
+  if (lineRefused(d, g.a, b, Number(newRun.attrs.story) || 1)) return d;
   return extendRun(d, g.a, b, newRun.attrs) ?? addRun(d, newRun.id, g.a, b, newRun.attrs);
 }
+
+/** the line `a`→`b` is refused (it lies on a gutter that is there): the one place that says so — `finishStroke` drops it, the screen tells why */
+export const lineRefused = (d: Drawing, a: P, b: P, story: number): boolean => !!wouldDuplicate(d, a, b, story);
 
 /** a turn under this (degrees) from a gutter's free end is the same gutter going on, not a new one with a corner */
 export const STRAIGHT_ON_DEG = 10;

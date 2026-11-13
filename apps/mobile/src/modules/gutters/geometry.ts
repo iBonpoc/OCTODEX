@@ -224,12 +224,6 @@ export interface FoundCorner {
 }
 
 /**
- * Corners from topology: two run ends at the same point (after snapping).
- * Walk the first run towards the meeting point and continue along the second: a turn towards the house is an
- * outside corner, away from the house an inside corner; a turn below 70° (between 20° and 70°) is a bay corner.
- * Turns under 20° are a straight join (no corner).
- */
-/**
  * Two gutters of one storey that share BOTH ends (one lies exactly on the other, in either direction) — a duplicate (#1256: a line drawn
  * over a gutter, from its a to its b, made a second gutter on it; the material and the corners were counted twice). Within `tolIn`.
  */
@@ -242,14 +236,21 @@ export function sameEnds(a: Pick<DrawnRun, "a" | "b" | "attrs">, b: Pick<DrawnRu
 export const wouldDuplicate = (d: Pick<Drawing, "runs">, a: P, b: P, story: number, tolIn = 1): DrawnRun | undefined =>
   d.runs.find((r) => sameEnds(r, { a, b, attrs: { story } as DrawnRun["attrs"] }, tolIn));
 
-/** the groups of gutters that lie on each other (the first of a group is the one kept): none in a sound drawing, but an old one may have them */
+/**
+ * the groups of gutters that lie on each other: none in a sound drawing, but an old one may have them. The one kept is the
+ * one with the smallest id — NOT the first in the array: a saved row moves to the end of it (`putElement`) and a sync reorders it,
+ * so «the first» would change under the user's hands and an edit of the kept gutter would be dropped from the material (#1314 review)
+ */
 export function duplicateRuns(d: Pick<Drawing, "runs">, tolIn = 1): string[][] {
   const out: string[][] = [];
   const seen = new Set<string>();
   d.runs.forEach((r, i) => {
     if (seen.has(r.id)) return;
     const same = d.runs.filter((o, j) => j > i && !seen.has(o.id) && sameEnds(r, o, tolIn));
-    if (same.length) { out.push([r.id, ...same.map((o) => o.id)]); same.forEach((o) => seen.add(o.id)); }
+    if (!same.length) return;
+    const ids = [r.id, ...same.map((o) => o.id)].sort();
+    ids.forEach((id) => seen.add(id));
+    out.push(ids);
   });
   return out;
 }
@@ -271,6 +272,12 @@ export function withoutDuplicates<D extends Pick<Drawing, "runs"> & { downspouts
   return { ...d, runs: d.runs.filter((r) => !keepOf.has(r.id)), downspouts };
 }
 
+/**
+ * Corners from topology: two run ends at the same point (after snapping).
+ * Walk the first run towards the meeting point and continue along the second: a turn towards the house is an
+ * outside corner, away from the house an inside corner; a turn below 70° (between 20° and 70°) is a bay corner.
+ * Turns under 20° are a straight join (no corner).
+ */
 export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] {
   const side = houseSides(d);
   const out: FoundCorner[] = [];

@@ -29,7 +29,7 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCornerAngle, setCornerSplash, hitTest, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
@@ -53,7 +53,7 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, wouldDuplicate, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 import { localUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
@@ -213,7 +213,14 @@ export default function DrawScreen() {
         // «saved» is what the screen would write for this drawing: only a real change is sent — opening the canvas
         // never turns a ready measurement into a draft (review M8b №7, e2e 154)
         saver.seed(toElements(d, mid), v.m);
-        setDrawing(d);
+        // an old drawing may have a gutter lying on another (#1256): cleaned once, here, keeping the one with the smallest id; the write
+        // below is a real change, so an estimate made of this drawing says «Чертёж изменён» (#1314 review); «Отменить» puts it back
+        const clean = withoutDuplicates(d);
+        setDrawing(clean);
+        if (clean !== d) {
+          later.current();
+          toast.show(t("mod.gutters.draw.dupCleaned"), localUndo(() => commit(d, cur.current.drawing)));
+        }
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
       const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
@@ -488,7 +495,7 @@ export default function DrawScreen() {
       // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
       if (next === d && g.kind === "line") {
         const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
-        if (!e.canceled && wouldDuplicate(d, g.a, b, Number(cur.current.story) || 1)) {
+        if (!e.canceled && lineRefused(d, g.a, b, Number(cur.current.story) || 1)) {
           haptics.warning();
           toast.show(t("mod.gutters.draw.dupRun"));
         }
