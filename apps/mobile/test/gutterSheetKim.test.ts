@@ -10,7 +10,7 @@ import { tFor } from "../src/i18n/translate";
 import { blueprint, contours } from "../src/modules/gutters/view/blueprint";
 import { kim } from "./fixtures/kimSheet";
 
-const stamp = { company: "OCTODEX Demo Home Services", address: "4512 Ventura Canyon Ave", date: "11/11/2026", rough: true };
+const stamp = { company: "GoRix Demo Home Services", address: "4512 Ventura Canyon Ave", date: "11/11/2026", rough: true };
 const rects = (items: DocPrim[]) => items.filter((p): p is Extract<DocPrim, { t: "r" }> => p.t === "r");
 const texts = (items: DocPrim[]) => items.filter((p): p is Extract<DocPrim, { t: "x" }> => p.t === "x").map((p) => p.s);
 const overlap = (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;

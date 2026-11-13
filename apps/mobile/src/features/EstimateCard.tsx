@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import { visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useState } from "react";
@@ -74,7 +75,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
   const pdf = (checked = false) => {
     if (!checked && pdfIssues && (issueCount(pdfIssues) > 0 || notes.length > 0)) return setPdfOpen(true);
     setPdfOpen(false);
-    const p = portalFromEstimate(db, e, store.companyName ?? "OCTODEX");
+    const p = portalFromEstimate(db, e, store.companyName ?? APP_NAME);
     saveEstimatePdf(estimateHtml(p, { lang: p.lang }), estimateFileName(p)).catch((err) =>
       toast.show(t("portal.error", { msg: String(err?.message ?? err) })),
     );
@@ -347,7 +348,7 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   const { t, money } = useI18n();
   const toast = useToast();
   const customer = store.db.customers.find((c) => c.id === e.customerId);
-  const company = store.companyName ?? "OCTODEX";
+  const company = store.companyName ?? APP_NAME;
   /** to the client in the client's language (rule 7), whatever the app language is */
   const msg = (url: string) => estimateMessage(docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId }), { company, name: customer?.name ?? "", totalCents: e.totalCents, number: e.number, link: url });
   // C5 (spec 33 П23.9): «Всё равно отправить» for a test price / a line not in the measurement; never for «нет цены»
@@ -602,7 +603,7 @@ function CountersignCard({ e }: { e: Estimate }) {
   const [sheet, setSheet] = useState<"reopen" | "decline" | null>(null);
   const me = store.db.members.find((m) => m.id === store.db.me);
   const a = e.approval;
-  const company = store.companyName ?? "OCTODEX";
+  const company = store.companyName ?? APP_NAME;
   const option = a && e.doc ? e.doc.options.find((o) => o.id === a.optionId)?.name ?? "" : "";
   const manage = canManageLink(store.db, store.db.me);
   const mine = mySignature(store.db, store.db.me);

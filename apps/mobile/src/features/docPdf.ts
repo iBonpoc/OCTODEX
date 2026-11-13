@@ -7,6 +7,7 @@
  * Money in $, dates US numeric (11/05/2026) in every language. Colours and sizes only from the `print` tokens;
  * the brand colour is the company's own setting and is used only if it is a plain hex colour.
  */
+import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
 import { contractStatement } from "@octo/estimating-engine";
@@ -81,7 +82,7 @@ export function docPage({ title, meta, footer, company: c, body, opts, contract 
     ...c.licenses.map(licenseLine),
   ].filter(Boolean) as string[];
   const logo = c.logo && c.logo.startsWith("data:image/") ? `<img class="logo" src="${esc(c.logo)}" alt="">` : "";
-  const who = `<div class="who">${logo}<div><h1>${esc(c.name || "OCTODEX")}</h1>${lines.map((l) => `<div class="mut">${esc(l)}</div>`).join("")}</div></div>`;
+  const who = `<div class="who">${logo}<div><h1>${esc(c.name || APP_NAME)}</h1>${lines.map((l) => `<div class="mut">${esc(l)}</div>`).join("")}</div></div>`;
   const what = `<div class="what"><h1>${esc(title)}</h1>${meta.map((m) => `<div class="mut">${esc(m)}</div>`).join("")}</div>`;
   return `<!doctype html><html lang="${opts.lang}"><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>

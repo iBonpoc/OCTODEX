@@ -6,6 +6,7 @@
  * canvas. Reads the store only (offline: the same). A technician sees the drawing and the list, never money (the
  * total, the estimates, the estimate action — canSeeClientMoney).
  */
+import { APP_NAME } from "@/config/product";
 import { useEffect, useMemo, useRef, useState, type ElementRef, type RefObject } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
@@ -118,7 +119,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     busy.current = true;
     const tc = tFor(clientLangOf(store.db, m));
     // the drawing as on paper (#739), in the client's language: the estimate's page on /p/ and in its PDF (S6g, #705)
-    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     const page = drawing.runs.length
       ? sheetPage(
           pageIdOf(m.id),
@@ -148,7 +149,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const [w, setW] = useState(0);
   const sheet = useMemo(() => {
     if (!drawing.runs.length || !w) return null;
-    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     return blueprint(drawing, t, {
       company: company.name,
       address: placeText(),
@@ -176,7 +177,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   const clientEst = money$ ? estimateOfMeasurement(store.db, m.id) : undefined;
   const clientLang = clientLangOf(store.db, m);
   const pdf = (kind: "client" | "crew") => {
-    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     const docLang = kind === "client" ? clientLangOf(store.db, m) : lang;
     const tt = kind === "client" ? tFor(docLang) : t;
     const html = drawingPdfHtml({
@@ -199,7 +200,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   // sheets reduced to Letter; the quantities are the estimate's (`parts`). The crew's are in the app's language, the
   // supplier's order in English (spec 36 №19). A sheet with overlapping labels is still given, with a warning.
   const shop = (kind: "drawings" | "order", paper: ShopPaper) => {
-    const company = companyForPortal(store.db, store.companyName ?? "OCTODEX");
+    const company = companyForPortal(store.db, store.companyName ?? APP_NAME);
     const tt = kind === "order" ? tFor("en") : t;
     const r = readRules(settings);
     const set = shopSheets(drawing, {

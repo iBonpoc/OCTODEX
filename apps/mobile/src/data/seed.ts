@@ -144,8 +144,8 @@ export const SEED_SERVICE_CATEGORIES: ServiceCategory[] = ["handyman", "plumbing
 /** Demo company: partly filled so the setup checklist shows what is left. Test license number. */
 export const DEMO_COMPANY: Company = {
   id: "demo-company",
-  name: "OCTODEX Demo Home Services",
-  legalName: "OCTODEX Demo Home Services LLC",
+  name: "GoRix Demo Home Services",
+  legalName: "GoRix Demo Home Services LLC",
   entityType: "llc",
   phone: "(626) 555-0100",
   email: "office@example.com",

@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { useState } from "react";
 import { View } from "react-native";
@@ -52,7 +53,7 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
   // no part, no reference (the server's deposit function takes neither)
   const right = paymentRight(store.role, inv, { fromEstimate: !!job?.estimateId, pendingCents });
   const chip = invoiceChip(inv);
-  const company = companyForPortal(db, store.companyName ?? "OCTODEX");
+  const company = companyForPortal(db, store.companyName ?? APP_NAME);
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
   const lang = docLanguageFor(db, { customerId: inv.customerId });
   const reminder = () => reminderMessage(db, inv, company.name, lang);

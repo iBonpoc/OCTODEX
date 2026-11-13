@@ -3,6 +3,7 @@
  * a change of a sent one is a new revision when sent again), «Отправить» (the PDF in English to share), «Отменить
  * заказ» (asked first). The tech of the job: where to pick it up, the lines without prices, «Отметить получение».
  */
+import { APP_NAME } from "@/config/product";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -99,7 +100,7 @@ export default function PurchaseOrderScreen() {
     const html = poHtml(
       db,
       { ...o, status: "sent", revision: found.revision + 1, sentAt: new Date().toISOString(), supplierName: sup?.name, supplierPhone: sup?.phone, supplierEmail: sup?.email, supplierAddress: sup?.address },
-      companyForPortal(db, store.companyName ?? "OCTODEX"),
+      companyForPortal(db, store.companyName ?? APP_NAME),
       { lang: "en" },
     );
     saveEstimatePdf(html, `PO ${found.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));

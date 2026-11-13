@@ -172,7 +172,7 @@ jobs:
       - name: Build the web app
         working-directory: apps/mobile
         run: npx expo export --platform web
-      - name: Deploy the web app (octodex.expo.app)
+      - name: Deploy the web app (production)
         working-directory: apps/mobile
         run: npx eas-cli@27.4.1 deploy --prod --non-interactive
       - name: Mark this commit released (tag `released`)

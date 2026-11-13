@@ -3,7 +3,7 @@
  * PLACEHOLDER until the founder gives the real address (docs/specs/19 §5.5 q.1): `.example` is a reserved domain,
  * nothing is delivered there. Replace SUPPORT_EMAIL and set SUPPORT_PLACEHOLDER = false.
  */
-export const SUPPORT_EMAIL = "support@octodex.example";
+export const SUPPORT_EMAIL = "support@gorix.example";
 export const SUPPORT_PLACEHOLDER = true;
 
 /** mailto: with a subject and a body (encoded); «Сообщить о проблеме» puts the app version and the platform in */

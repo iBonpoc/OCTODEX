@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "OCTODEX",
+    "name": "GoRix",
     "slug": "octodex",
     "version": "1.0.0",
     "orientation": "default",
@@ -109,8 +109,8 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
-          "locationAlwaysAndWhenInUsePermission": "OCTODEX never uses your location in the background: only while the app is open, during your visit and with your consent.",
-          "locationAlwaysPermission": "OCTODEX never uses your location in the background: only while the app is open, during your visit and with your consent.",
+          "locationAlwaysAndWhenInUsePermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
+          "locationAlwaysPermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
           "motionUsagePermission": false,
           "locationFullAccuracyPermission": false
         }
