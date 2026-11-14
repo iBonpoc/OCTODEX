@@ -5,7 +5,7 @@
  * gestures commit at their end, every `scaleChange` multiplies, the render drops the whole live transform) — it fails every one of them.
  */
 import { describe, expect, it } from "vitest";
-import { applyTf, endGesture, idleState, EDGE_FREE, IDENTITY, panFrame, pinchFrame, RUBBER, rubber, settle, sub, unrubber, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
+import { applyTf, endGesture, idleState, EDGE_FREE, IDENTITY, panFrame, pinchFrame, RUBBER, rubber, settle, settleDone, sub, unrubber, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
 
 type Ev =
   | { t: "pinch"; n: number; k: number; fx?: number; fy?: number }
@@ -298,3 +298,26 @@ describe("#1281 / #1403 — the limits of the scale: a rubber without a wall, on
 });
 
 
+
+describe("#1403 — settleDone: which commit the render took, without reading the live transform", () => {
+  const v = (k: number): View => ({ k, ox: 0, oy: 0 });
+  it("a view of ours: its commit is `done`, the later pending ones are re-based on it", () => {
+    const a: Pending = { view: v(2), tf: { S: 2, Tx: 10, Ty: 0 } };
+    const b: Pending = { view: v(4), tf: { S: 4, Tx: 30, Ty: 0 } };
+    const r = settleDone([a, b], a.view);
+    expect(r.done).toEqual(a.tf);
+    expect(r.pending).toHaveLength(1);
+    expect(r.pending[0]!.view).toBe(b.view);
+    expect(r.pending[0]!.tf).toEqual(sub(b.tf, a.tf));
+  });
+  it("a view that is not ours (the «fit» button, a new size): no `done`, nothing pending — the live transform goes whole", () => {
+    expect(settleDone([{ view: v(2), tf: { S: 2, Tx: 0, Ty: 0 } }], v(9))).toEqual({ done: null, pending: [] });
+    expect(settleDone([], v(1))).toEqual({ done: null, pending: [] });
+  });
+  it("it is the same step as `settle` (the live transform minus `done`, or the identity)", () => {
+    const a: Pending = { view: v(2), tf: { S: 2, Tx: 10, Ty: 5 } };
+    const live = { S: 3, Tx: 25, Ty: 9 };
+    expect(settle(live, [a], a.view).live).toEqual(sub(live, a.tf));
+    expect(settle(live, [a], v(7)).live).toEqual(IDENTITY);
+  });
+});

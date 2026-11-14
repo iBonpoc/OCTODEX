@@ -153,8 +153,19 @@ export interface Pending { view: View; tf: Tf }
  * re-based on it); a view that is not ours (the «fit» button, a new size) — the live transform is dropped, as before.
  */
 export function settle(live: Tf, pending: Pending[], view: View): { live: Tf; pending: Pending[] } {
+  const r = settleDone(pending, view);
+  return { live: r.done ? sub(live, r.done) : tf(IDENTITY), pending: r.pending };
+}
+
+/**
+ * The same step without the live transform (#1403): which commit of ours the render took (`done`; null — the view is not ours: the live
+ * transform is dropped whole), and the pending ones re-based on it. The live transform lives on the UI thread, where fingers change it between
+ * frames: reading it here and writing it back from the JS thread loses the frames in between (a jump when a new pinch has begun before the
+ * render of the last commit) — so the screen hands `done` to the UI thread, and the subtraction is made there, in one step.
+ */
+export function settleDone(pending: Pending[], view: View): { done: Tf | null; pending: Pending[] } {
   const i = pending.findIndex((p) => p.view === view);
-  if (i < 0) return { live: tf(IDENTITY), pending: [] };
+  if (i < 0) return { done: null, pending: [] };
   const done = pending[i]!.tf;
-  return { live: sub(live, done), pending: pending.slice(i + 1).map((p) => ({ view: p.view, tf: sub(p.tf, done) })) };
+  return { done, pending: pending.slice(i + 1).map((p) => ({ view: p.view, tf: sub(p.tf, done) })) };
 }

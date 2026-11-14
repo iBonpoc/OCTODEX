@@ -7,10 +7,10 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { motion } from "@octo/design-tokens";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
-import { applyTf, endGesture, panFrame, pinchFrame, settle, type LiveState, type Pending, type Tf } from "./gestureState";
+import { applyTf, endGesture, IDENTITY, panFrame, pinchFrame, settleDone, sub, type LiveState, type Pending, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
 export interface Live { tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number> }
@@ -54,16 +54,11 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     pending.current.push({ view: v, tf: t });
     now.current.onView(v);
   };
-  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it */
+  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it. The subtraction is made ON THE UI THREAD, in one step with the new base scale (#1403) */
   const settleView = (v: PlanView) => {
-    const r = settle({ S: s.value, Tx: tx.value, Ty: ty.value }, pending.current, v);
+    const r = settleDone(pending.current, v);
     pending.current = r.pending;
-    baseK.value = v.k;
-    tx.value = r.live.Tx;
-    ty.value = r.live.Ty;
-    s.value = r.live.S;
-    fx.value = 0;
-    fy.value = 0;
+    scheduleOnUI(applySettle, v.k, r.done);
   };
   // the live transform is kept in the origin form (fx = fy = 0): p' = S·p + T
   const seg = useSharedValue(false);
@@ -83,6 +78,17 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     kMin.value = zoom ? zoom.lim.kMin : 0;
     kMax.value = zoom ? zoom.lim.kMax : 0;
   }, [zoom?.lim.kMin, zoom?.lim.kMax, kMin, kMax]);
+  /** the settle, on the UI thread: between two frames of the fingers, so none of their changes is lost; `done` null — a view that is not ours, the live transform goes whole */
+  const applySettle = (k: number, done: Tf | null) => {
+    "worklet";
+    const next = done ? sub({ S: s.value, Tx: tx.value, Ty: ty.value }, done) : IDENTITY;
+    baseK.value = k;
+    tx.value = next.Tx;
+    ty.value = next.Ty;
+    s.value = next.S;
+    fx.value = 0;
+    fy.value = 0;
+  };
   const state = (): LiveState => {
     "worklet";
     return { S: s.value, Tx: tx.value, Ty: ty.value, seg: seg.value, nPinch: nPinch.value, nPan: nPan.value, fx: fxLast.value, fy: fyLast.value, edge: edge.value };
@@ -169,10 +175,15 @@ function OwnGestures(props: Parameters<typeof CanvasView>[0]) {
 
 function Canvas({ view, live, size, onSize, gestures, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
   const { tx, ty, s, fx, fy } = live;
-  // the painter has redrawn at the committed view: drop the live transform in the same frame
+  // the painter has redrawn at the committed view: drop the live transform in the same frame. ONLY when the view is a new one (#1403, founder
+  // 14.11, iPhone: «то больше, то меньше, прыгнуло»): `gestures` is a new object on every render of the screen, and an effect that lists it
+  // ran on every render — a blink, a save, a toast, a turn — and took the live transform away in the middle of a pinch (the picture went back
+  // to the size before it and the fingers went on from there). The settle is called through a ref, the effect waits for the view alone.
+  const settle = useRef(gestures.settleView);
+  settle.current = gestures.settleView;
   useLayoutEffect(() => {
-    gestures.settleView(view);
-  }, [view, gestures]);
+    settle.current(view);
+  }, [view]);
 
   const st = useAnimatedStyle(() => {
     const cx = size.w / 2;
