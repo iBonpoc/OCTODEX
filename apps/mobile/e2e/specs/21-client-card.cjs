@@ -8,11 +8,11 @@ const { expectOneAccent } = require("../accent.cjs");
 exports.run = async (h) => {
   const p = h.page;
   // the client's sections are view tabs (#1343, DS §9 А1п): a tab shows its list in place; «Люди» is a row on «Обзор»
-  const TAB = { "История": "history", "Счета и квитанции": "invoices", "Задачи": "tasks", "Файлы": "files" };
+  // by the tabs' keys (CHECKS §9: a test finds by testID, not by words)
   const row = async (name) => {
-    if (name === "Люди") await p.getByTestId("client-people").locator("visible=true").first().getByRole("button").first().click();
+    if (name === "people") await p.getByTestId("client-people").locator("visible=true").first().getByRole("button").first().click();
     else {
-      const k = TAB[name];
+      const k = name;
       const pill = p.getByTestId(`client-tabs-${k}`).locator("visible=true").first();
       await pill.scrollIntoViewIfNeeded();
       await pill.click();
@@ -32,16 +32,16 @@ exports.run = async (h) => {
   await h.expectText(/Выставлено/, "invoiced");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
-  await row("История");
+  await row("history");
   h.expect(/[?&]tab=history\b/.test(p.url()), `«История» opens in place, the address keeps it (${p.url()})`);
   await h.expectText(/Смета подписана/, "history: estimate signed");
   await h.expectText(/Оплата/, "history: payment (office)");
   await h.go("/client/c1");
-  await row("Счета и квитанции");
+  await row("invoices");
   await h.expectText(/INV-0105/, "invoices: invoice");
   await h.expectText(/RCT-0102/, "invoices: receipt");
   await h.go("/client/c1");
-  await row("Задачи");
+  await row("tasks");
   await h.expectText(/Задач нет/, "tasks: empty state");
   // wave 6: the one task form (TaskSheet) — the client is already «к чему»
   await h.click("Новая задача");
@@ -72,12 +72,12 @@ exports.run = async (h) => {
   await h.expectText(/Задача снова открыта/, "the toast says reopened");
   h.expect((await savedOpen()) && (await doneCard.count()) === 0, "task reopened");
   await h.go("/client/c1");
-  await row("Файлы");
+  await row("files");
   await h.expectText(/Фото с выездов|Файлов нет/, "files list renders");
 
   // People: + Phone is a button; the new phone of the spouse is saved and shown
   await h.go("/client/c1");
-  await row("Люди");
+  await row("people");
   await p.getByRole("button", { name: "Люди", exact: true }).last().click();
   await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Телефон", exact: true }).last().click();

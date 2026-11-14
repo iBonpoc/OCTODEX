@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { canImportClients } from "@/features/client/importRun";
+import { isClientTab } from "@/features/clientRows";
 import { View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
@@ -70,7 +71,9 @@ export default function Clients() {
     .sort((a, b) => a.name.localeCompare(b.name));
   const { device } = useDevice();
   // 1280: the open card beside the list, `/clients?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts)
-  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
+  const { tab: cardTab } = useLocalSearchParams<{ tab?: string }>();
+  // «Открыть» takes the open tab to the card's own screen
+  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}${isClientTab(cardTab) ? `?tab=${cardTab}` : ""}`, (id) => clients.some((c) => c.id === id));
   const { desktop, openId } = panel;
   const openC = openId ? clients.find((c) => c.id === openId) : undefined;
   const toast = useToast();
@@ -162,7 +165,8 @@ export default function Clients() {
             onOpen={panel.full}
             onClose={panel.close}
           >
-            <ClientCardBody key={openC.id} c={openC} />
+            {/* the open tab lives in the address beside ?open= (as on the client's screen): «Назад» from a document returns to it */}
+            <ClientCardBody key={openC.id} c={openC} tab={isClientTab(cardTab) ? cardTab : undefined} onTab={(k) => router.setParams({ tab: k })} />
           </ListPanel>
         ) : undefined
       }

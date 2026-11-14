@@ -87,6 +87,13 @@ exports.run = async (h) => {
   const card = await panel(h).locator('[data-testid^="client-property-"]').locator("visible=true").first().boundingBox().catch(() => null);
   const box = await panel(h).boundingBox();
   if (card && box) h.expect(card.width > box.width * 0.7, `one column in the panel (card ${Math.round(card.width)} of ${Math.round(box.width)})`);
+  // the open tab lives in the address beside ?open= (#1417 review): it survives «Назад» like on the client's screen
+  const jobsPill = panel(h).getByTestId("client-tabs-jobs").locator("visible=true").first();
+  await jobsPill.scrollIntoViewIfNeeded();
+  await jobsPill.click();
+  await p.waitForFunction(() => /[?&]tab=jobs\b/.test(location.search) && /[?&]open=/.test(location.search), null, { timeout: 4000 });
+  await panel(h).getByTestId("client-tab-jobs").locator("visible=true").first().waitFor({ timeout: 4000 });
+  await panel(h).getByTestId("client-tabs-overview").locator("visible=true").first().click();
   h.expect((await panel(h).getByTestId("list-panel-outside").count()) === 0, "in the list: no «not in the list» mark");
 
   // out of the filter: the panel says so; back to «Все» — the mark is gone

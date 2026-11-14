@@ -103,7 +103,7 @@ function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: Mess
       ).slice(0, 20);
   return (
     <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("w6.msg.new")} dirty={text.trim().length > 0} onSave={ok ? send : undefined}>
-      <View style={{ gap: space[3] }}>
+      <View style={{ gap: space[3] }} testID="msg-sheet">
         <Field label={t("w6.msg.to")}>
           {to ? (
             <ListRow

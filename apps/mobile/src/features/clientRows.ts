@@ -100,6 +100,7 @@ export function clientWaiting(r: ReturnType<typeof clientRecords>): Partial<Reco
   return {
     estimates: n(r.estimates.filter((e) => e.status === "sent" || e.status === "awaiting_countersign").length),
     invoices: n(r.invoices.filter((i) => i.status !== "void" && invoiceState(i) !== "paid").length),
+    // not done: «unscheduled» waits to be planned, «scheduled» / «in_progress» wait to be done
     jobs: n(r.jobs.filter((j) => j.status !== "done").length),
     tasks: n(r.tasks.filter((x) => !x.doneAt).length),
   };
