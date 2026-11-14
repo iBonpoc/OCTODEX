@@ -103,6 +103,8 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
   it("#656: the new App Store record; Android stops at once until Firebase has com.gorix.app (#1444)", () => {
     expect(eas.submit.testflight.ios.ascAppId).toBe("6834689554");
     expect(wf).toMatch(/Android paused[\s\S]*?inputs\.platform == 'android'[\s\S]*?exit 1/);
+    // while Android is paused, a build started without a choice is iOS (review #1448)
+    expect(wf).toMatch(/options: \[android, ios\]\s*default: ios/);
     for (const f of [JSON.stringify(app), JSON.stringify(eas)]) expect(f).not.toMatch(/com\.octodex\.app|6831904411/);
   });
   // A JS update reaches a build made before a new native module was added: the update must load such a module lazily
