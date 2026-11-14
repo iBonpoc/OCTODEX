@@ -1,7 +1,7 @@
 import { APP_NAME } from "@/config/product";
 import { visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { haptics } from "@/ui/haptics";
@@ -23,9 +23,9 @@ import { canServe } from "@/features/clients";
 import { estimateNotes, type ModuleNote } from "@/modules/registry";
 import { docLanguageFor } from "@/data/people";
 import { termsForClient } from "@/features/estimateTerms";
-import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
 import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
@@ -46,7 +46,16 @@ export function estimateSubtitle(db: DB, e: Estimate): string {
  * estimate's own screen (`/estimate/<id>`) and in the panel beside the list on 1280 (`/estimates?open=<id>`,
  * docs/specs/06-list-cards.md «Панель 1280»). `openSend` — the screen's `?send=1` (the send sheet opens at once).
  */
-export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: boolean }) {
+/**
+ * Where the card's actions stand (#1412, DS §7.3, §8.9, Б4): `more` — «⋯» with the other actions (the screen's header, the panel's
+ * header row), `main` — the one main button, the estimate's next step (the screen's pinned bar on a phone, the top of the content
+ * from 820), `body` — the rest. No frame: «⋯» and the main button in one row above the body.
+ */
+export type EstimateFrame = (parts: { more: ReactNode; main: ReactNode | null; mainBar: ReactNode | null; body: ReactNode }) => ReactElement;
+
+type EstAction = "edit" | "client" | "template" | "pdf" | "revoke";
+
+export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend?: boolean; frame?: EstimateFrame }) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -82,7 +91,50 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
     );
   };
 
-  return (
+  // #1412: one main button (the next step) and «⋯» with the rest in Б4's order, the dangerous last — no row of pills under the card
+  // a client-signed estimate changes only through «don't sign — change it» (with a reason)
+  const canEdit = universal && isEstimateEditable(e.status) && e.status !== "awaiting_countersign";
+  // sending (and its «Copy link») is the office side's: a tech with the link could sign as the client (spec 35 §4д п.10)
+  const canSend = universal && (e.status === "draft" || e.status === "sent") && maySend;
+  // E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office
+  const canRevoke = universal && !!e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me);
+  const actions: { key: EstAction; label: string; icon: "pencil" | "user" | "copy" | "invoice" | "close"; destructive?: boolean; testID: string }[] = [
+    ...(canEdit ? [{ key: "edit" as const, label: t("ue.edit"), icon: "pencil" as const, testID: "est-act-edit" }] : []),
+    // the client's page only for the office side (spec 35 §4д п.10)
+    ...(universal && e.token && canSeeClientLink(store.role) ? [{ key: "client" as const, label: t("ue.openClient"), icon: "user" as const, testID: "est-act-client" }] : []),
+    // E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued)
+    ...(universal && e.doc && canEditEstimateTemplates(store.role) && !store.db.estimateTemplatesMissing ? [{ key: "template" as const, label: t("est.tpl.saveAs"), icon: "copy" as const, testID: "est-act-template" }] : []),
+    ...(universal ? [{ key: "pdf" as const, label: t("ue.pdf"), icon: "invoice" as const, testID: "est-act-pdf" }] : []),
+    // undone by the toast's «Отменить» (rule 5): no dialog (Б4 — a dialog only for what cannot be undone)
+    ...(canRevoke ? [{ key: "revoke" as const, label: t("est.revoke.button"), icon: "close" as const, destructive: true, testID: "est-act-revoke" }] : []),
+  ];
+  const act = (k: EstAction) => {
+    if (k === "edit") router.push(`/estimate/new?id=${e.id}`);
+    else if (k === "client" && e.token) router.push(`/p/${e.token}`);
+    else if (k === "template") setTplOpen(true);
+    else if (k === "pdf") pdf();
+    else if (k === "revoke") toast.show(t("est.revoke.done"), store.revokeEstimateLink(e.id));
+  };
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const label = [e.number, e.title].filter(Boolean).join(" · ");
+  const more = actions.length ? (
+    <View ref={moreRef} collapsable={false} testID="est-more">
+      <IconButton
+        icon="more"
+        label={label ? `${t("est.actions")}: ${label}` : t("est.actions")}
+        onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))}
+      />
+    </View>
+  ) : null;
+  const sendButton = (bar: boolean) =>
+    canSend ? (
+      <View testID="est-send">
+        <Button label={t("ue.send")} icon="send" size={bar ? "bar" : undefined} full onPress={() => setSendOpen(true)} />
+      </View>
+    ) : null;
+
+  const body = (
     <>
       <Card status={st.s}>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -142,24 +194,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
 
       {universal ? (
         <>
-          <RowView style={{ flexWrap: "wrap" }}>
-            {/* a client-signed estimate changes only through «don't sign — change it» (with a reason) */}
-            {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
-            {/* sending (and its «Copy link») is the office side's: a tech with the link could sign as the client (spec 35 §4д п.10) */}
-            {(e.status === "draft" || e.status === "sent") && maySend ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
-            {e.status === "draft" && store.role === "tech" && canServe(db, e.customerId) ? <View testID="est-send-office"><T v="caption" tone="mut">{t("est.tech.officeSends")}</T></View> : null}
-            {/* the client's page only for the office side: a tech with the link could sign as the client (spec 35 §4д п.10) */}
-            {e.token && canSeeClientLink(store.role) ? <View testID="est-open-client"><Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /></View> : null}
-            {/* E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued) */}
-            {e.doc && canEditEstimateTemplates(store.role) && !store.db.estimateTemplatesMissing ? (
-              <View testID="est-save-template"><Button label={t("est.tpl.saveAs")} icon="copy" variant="ghost" onPress={() => setTplOpen(true)} /></View>
-            ) : null}
-            <View testID="est-pdf"><Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={() => pdf()} /></View>
-            {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
-            {e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me) ? (
-              <Button label={t("est.revoke.button")} icon="close" variant="ghost" onPress={() => toast.show(t("est.revoke.done"), store.revokeEstimateLink(e.id))} />
-            ) : null}
-          </RowView>
+          {e.status === "draft" && store.role === "tech" && canServe(db, e.customerId) ? <View testID="est-send-office"><T v="caption" tone="mut">{t("est.tech.officeSends")}</T></View> : null}
           {e.status === "approved" && e.approval ? (
             <ApprovedCard e={e} jobId={job?.id} />
           ) : e.status === "awaiting_countersign" ? (
@@ -230,6 +265,31 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
           />
         </Sheet>
       ) : null}
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={t("est.actions")}
+        items={actions.map(({ key, label: l, icon, destructive, testID }) => ({ key, label: l, icon, destructive, testID }))}
+        onSelect={(k) => {
+          setMoreAt(null);
+          act(k);
+        }}
+        onClose={() => setMoreAt(null)}
+      />
+    </>
+  );
+  const main = sendButton(false);
+  const mainBar = sendButton(true);
+  if (frame) return frame({ more, main, mainBar, body });
+  return (
+    <>
+      {more || main ? (
+        <RowView style={{ justifyContent: "space-between" }}>
+          <View style={{ flex: 1 }}>{main}</View>
+          {more}
+        </RowView>
+      ) : null}
+      {body}
     </>
   );
 }

@@ -7,6 +7,7 @@
  * - «Перенести изменения»: a second run → the same page id, its drawing now has two gutters.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const { skipLength, openView, backToCanvas, pressWhenStill } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 const TOKEN = "e2e223gutterpage0000000000000001";
@@ -77,7 +78,7 @@ exports.run = async (h) => {
       return r;
     };
   });
-  await pressWhenStill(tid("est-pdf").getByRole("button"));
+  await estAct(p, "pdf");
   // a module's word may ask first (the check before the PDF, C5): then «Всё равно»; else the PDF prints at once
   const printedOrAsked = () =>
     p.waitForFunction(

@@ -9,6 +9,7 @@
  * - a tech: no «Сохранить как шаблон», no rename / archive, but «Новая смета» from a template.
  * Test prices («тестовые», rule 9). By testID; waits on what it checks.
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const DB_KEY = "octo.db.v5";
 const EID = "e-e2e-177";
 const ITEM = "cat-e2e-177";
@@ -45,7 +46,7 @@ exports.run = async (h) => {
 
   // «Сохранить как шаблон» (any status: this one is sent)
   await h.go(`/estimate/${EID}`);
-  await tid("est-save-template").getByRole("button").click();
+  await estAct(p, "template");
   await tid("est-tpl-save-sheet").waitFor({ timeout: 8000 });
   await tid("est-tpl-save-name").locator("input").fill("Inspection visit");
   await h.shot("save-sheet");
@@ -101,8 +102,8 @@ exports.run = async (h) => {
   // a tech uses templates but does not make or change them
   await role("tech");
   await h.go(`/estimate/${EID}`);
-  await tid("est-pdf").waitFor({ timeout: 8000 });
-  h.expect((await tid("est-save-template").count()) === 0, "a tech: no «Сохранить как шаблон»");
+  await estMore(p);
+  h.expect(!(await estHas(p, "template")), "a tech: no «Сохранить как шаблон»");
   await h.go("/estimate/templates");
   await tid(`est-tpl-${tpl.id}`).click();
   await tid("est-tpl-sheet").waitFor({ timeout: 8000 });

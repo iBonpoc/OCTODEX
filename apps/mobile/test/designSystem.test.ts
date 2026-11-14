@@ -318,3 +318,46 @@ describe("design system: a text under a centred icon is centred", () => {
     expect([...new Set(hits)], "add `center` to the text (DS §18, #1166)").toEqual([]);
   });
 });
+
+/**
+ * #1412 (founder 14.11 on the estimate: «Что это вообще за уродливая вёрстка?… чтобы такого не было больше»; DS §7.3, §8.9, Б4):
+ * a record's card has one main button (its next step) and «⋯» with the rest — no row of three and more pill buttons.
+ */
+describe("design system: a record's card has no row of pill buttons (#1412)", () => {
+  /** rows (`RowView`, to its own closing tag) with 3+ `<Button`, by the line the row opens on */
+  const pillRows = (src: string): number[] => {
+    const re = /<RowView\b|<\/RowView>/g;
+    const open: number[] = [];
+    const rows: number[] = [];
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src))) {
+      if (m[0] === "<RowView") {
+        const close = src.indexOf(">", m.index);
+        if (src[close - 1] !== "/") open.push(m.index);
+        continue;
+      }
+      const start = open.pop();
+      if (start === undefined) continue;
+      if ((src.slice(start, m.index).match(/<Button\b/g) ?? []).length >= 3) rows.push(src.slice(0, start).split("\n").length);
+    }
+    return rows;
+  };
+  /** cards still to move (#1474) and rows that are not a card's actions — exact counts, the list only shrinks */
+  const ALLOWED: Record<string, { n: number; why: string }> = {
+    "app/job/[id].tsx": { n: 2, why: "карточка работы — #1474" },
+    "app/receipt/[id].tsx": { n: 1, why: "квитанция — #1474" },
+    "app/property/[id].tsx": { n: 1, why: "карточка объекта — #1474" },
+    "features/invoice/InvoiceCard.tsx": { n: 1, why: "карточка счёта — #1474" },
+    "features/EstimateCard.tsx": { n: 1, why: "шторка «Отправить»: три способа отправки — выбор внутри начатого действия, не действия карточки" },
+  };
+  it("no row of 3+ buttons on a record's card (src/app/**/[id].tsx, features/**/*Card.tsx)", () => {
+    const bad: string[] = [];
+    for (const f of code.filter((x) => /\[id\]\.tsx$|Card\.tsx$/.test(x) && !x.includes(join("src", "ui")) && !x.includes(join("src", "modules")) && !x.includes(join("features", "estimate", "")))) {
+      const rel = relative(ROOT, f).split("\\").join("/");
+      const n = pillRows(readFileSync(f, "utf8")).length;
+      const allowed = ALLOWED[rel]?.n ?? 0;
+      if (n !== allowed) bad.push(`${rel}: ${n} row(s) of pill buttons, the list says ${allowed}`);
+    }
+    expect(bad, "one main button (ActionBar / the top of the content from 820) and «⋯» with the rest (Б4)").toEqual([]);
+  });
+});
