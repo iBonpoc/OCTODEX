@@ -249,4 +249,12 @@ describe("#1355: the coil's basis says the waste the engine counts", () => {
   };
   it("10 ft of waste for every gutter stock", () => expect(basisOf(10)).toBe("251'-4\" + 10 ft waste per gutter stock"));
   it("no waste: «no waste», not «+ 0 ft»", () => expect(basisOf(0)).toBe("251'-4\", no waste"));
+  it("two kinds of gutter: each coil's basis is the length of its own kind, not of the whole measurement (#1374)", () => {
+    // run 2 (104'-9") in white 6", run 1 (146'-7") stays black 5"
+    const d = { ...REF, runs: REF.runs.map((r) => (r.id === "e" || r.id === "f" ? { ...r, attrs: { ...r.attrs, size: "6", color: "white" } } : r)) } as Drawing;
+    const x2 = ctxOf(d);
+    const coils = materialRows(x2, shopModel(d)).filter((r) => /Seamless coil/.test(r.item));
+    expect(coils.map((r) => [r.color, r.basis]).sort()).toEqual([["Black", "146'-7\" + 10 ft waste per gutter stock"], ["White", "104'-9\" + 10 ft waste per gutter stock"]]);
+    expect(orderRows(x2, shopModel(d)).filter((r) => /Seamless coil/.test(r.item)).map((r) => r.basis).sort()).toEqual(["104'-9\" + 10 ft waste per gutter stock", "146'-7\" + 10 ft waste per gutter stock"]);
+  });
 });
