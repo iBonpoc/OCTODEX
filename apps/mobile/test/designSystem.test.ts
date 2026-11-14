@@ -430,9 +430,7 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
   };
   /** cards still to move (#1474) and rows that are not a card's actions — exact counts, the list only shrinks */
   const ALLOWED: Record<string, { n: number; why: string }> = {
-    "app/job/[id].tsx": { n: 2, why: "карточка работы — #1474" },
     "app/property/[id].tsx": { n: 1, why: "карточка объекта — #1474" },
-    "features/invoice/InvoiceCard.tsx": { n: 1, why: "карточка счёта — #1474" },
     "features/EstimateCard.tsx": { n: 1, why: "шторка «Отправить»: три способа отправки — выбор внутри начатого действия, не действия карточки" },
   };
   it("no row of 3+ buttons on a record's card (src/app/**/[id].tsx, features/**/*Card.tsx)", () => {
