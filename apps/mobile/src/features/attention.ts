@@ -271,7 +271,9 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   for (const [visitId, n] of failedBy) {
     const v = db.visits.find((x) => x.id === visitId);
     const name = v ? visitContext(db, v).customer?.name ?? "" : "";
-    out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
+    // which visit (a client may have several): its date, as «Не сделано» says it
+    const date = v ? new Date(v.start).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "";
+    out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
   return out.sort((a, b) => b.score - a.score);
 }
