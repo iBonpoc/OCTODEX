@@ -137,7 +137,7 @@
 - `claimed=1 … failed=1` или `retry=1` — ошибка на стороне Expo или ключа `EXPO_ACCESS_TOKEN`;
 - `claimed=0` — телефон не записан: выключите и снова включите переключатель из шага 1.
 ### 5.6. Если нет ключа пушей (Push Key)
-Проверка: https://expo.dev/accounts/octodex-team/projects/octodex/credentials → **iOS** → `com.octodex.app` → строка **Push Key**. Если там пусто — один раз на Mac:
+Проверка: https://expo.dev/accounts/octodex-team/projects/octodex/credentials → **iOS** → `com.gorix.app` → строка **Push Key** (bundle id с 14.11, #656; у старого `com.octodex.app` свой ключ, он больше не нужен). Если там пусто — один раз на Mac:
 1. Терминал → `cd ~/OCTODEX/apps/mobile`
 2. `npx eas-cli@27.4.1 credentials -p ios`
 3. **Which build profile?** — стрелками ↓ выбрать `testflight` → `Return`.
