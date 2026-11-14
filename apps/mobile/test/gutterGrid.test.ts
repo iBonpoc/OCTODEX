@@ -121,6 +121,11 @@ describe("#1434 guard: nothing on the canvas leans on `overflow: visible` of an 
     expect(canvas.indexOf("{under}")).toBeLessThan(canvas.indexOf("<Animated.View"));
     expect(src("draw/DrawScreen.tsx")).toMatch(/under=\{[^}]*<GridLayer/);
   });
+  it("liveView is the canvas's own transform: CanvasView shifts by (f − c)(1 − s) + t, THEN scales by s about the centre (code-reviewer #1434)", () => {
+    // if the style's order or terms change, the grid would drift off the drawing mid-gesture while the formula test stays green
+    const canvas = src("canvas/CanvasView.tsx").replace(/\s+/g, " ");
+    expect(canvas).toContain("transform: [{ translateX: (fx.value - cx) * (1 - s.value) + tx.value }, { translateY: (fy.value - cy) * (1 - s.value) + ty.value }, { scale: s.value }]");
+  });
   it("no Svg of the module asks for overflow: visible", () => {
     for (const f of ["canvas/SvgPainter.tsx", "canvas/GridLayer.tsx", "draw/DrawScreen.tsx", "bench/BenchScreen.tsx"]) expect(src(f), f).not.toMatch(/<Svg[^>]*overflow:\s*["']visible["']/);
   });
