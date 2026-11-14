@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { liveUri, madeHere } from "./photoUri";
+import { shrinkPicked } from "@/data/photoShrink";
 import { component, radius, size, space } from "@octo/design-tokens";
 import type { Photo } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -25,10 +26,11 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
     const perm = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
     const res =
       perm?.granted
-        ? await ImagePicker.launchCameraAsync({ quality: 0.7 }).catch(() => null)
-        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
+        ? await ImagePicker.launchCameraAsync({ quality: 1 }).catch(() => null)
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
     if (!res || res.canceled) return;
-    const uri = res.assets[0]?.uri;
+    // made smaller once here, before the photo is kept and queued (#642)
+    const uri = await shrinkPicked(res);
     madeHere(uri);
     onAdd?.(uri);
   };

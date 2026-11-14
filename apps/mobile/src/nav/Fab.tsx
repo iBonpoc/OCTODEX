@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { madeHere } from "@/features/photoUri";
+import { shrinkPicked } from "@/data/photoShrink";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -43,12 +44,13 @@ function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
   const { db, addPhoto } = useStore();
   const toast = useToast();
   const takePhoto = async (visitId: string) => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
     if (!res || res.canceled) return;
     const v = db.visits.find((x) => x.id === visitId);
     if (!v) return;
     const kind = v.step === "working" || v.step === "signed" ? "after" : "before";
-    const uri = res.assets[0]?.uri;
+    // made smaller before it is kept and queued (#642)
+    const uri = await shrinkPicked(res);
     madeHere(uri);
     toast.show(t("toast.photo"), addPhoto(v.id, kind, uri));
   };
