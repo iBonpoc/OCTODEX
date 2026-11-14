@@ -151,6 +151,9 @@ const gutters: ModuleDef = {
   },
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
   rebuild: rebuildOp,
+  // the canvas and its speed check take the whole screen: no bottom tabs, no side menu (#1426, DS Б11); the list, the review,
+  // the settings and the prices keep them
+  fullScreen: ["draw", "bench"],
   screens: {
     draw: () => require("./draw/DrawScreen").default,
     view: () => require("./view/ViewScreen").default,

@@ -35,7 +35,7 @@ export function SideNav() {
   const menu = useNavMenu();
   const current = useMenuCurrent();
   const path = usePathname();
-  // a screen that needs the whole screen (useHideTabBar: the signature pad, a drawing canvas on a phone in landscape)
+  // a screen that needs the whole screen (useHideTabBar: the signature pad, a module's full-screen screens — a drawing canvas, #1426)
   const hidden = useTabBarHidden();
   if (!wide || hidden || !isAppPath(path)) return null;
   const open = device === "desktop" && menu.sideOpen;
@@ -170,10 +170,14 @@ function Item({
           borderRadius: radius.pill,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: accent ? c.acc : undefined,
+          // «＋ Создать» stands out by its round plate, not by yellow: it is on every screen, the yellow is only the main action and
+          // «Главная»'s «＋» (DS §3.1 п.3, §5.3, #1395)
+          backgroundColor: accent ? c.surf2 : undefined,
+          borderWidth: accent ? component.hairline : 0,
+          borderColor: c.bd,
         }}
       >
-        <Icon name={icon} s={size.iconMd} color={accent ? c.onAcc : c.ink} />
+        <Icon name={icon} s={size.iconMd} color={c.ink} />
       </View>
       {showLabel ? (
         <T v={open ? "body" : "micro"} w={selected || accent ? "semibold" : "medium"} numberOfLines={1} style={open ? { flex: 1 } : { maxWidth: component.navRail - space[2] }}>

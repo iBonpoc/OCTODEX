@@ -21,6 +21,8 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("module-gutters-bench").count()) === 0, "«Модули»: no «Проверка скорости» for an owner of this build");
   await h.go("/module/gutters/bench");
   await tid("bench-drawing").waitFor({ timeout: 8000 });
+  // the route hides the bar (ModuleDef.fullScreen, #1426) after its first frame: wait for it to be gone, not one look
+  await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="tab-bar"]')].some((el) => el.getBoundingClientRect().width > 0), null, { timeout: 5000 });
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the bench");
 
   const svg = p.getByTestId("bench-drawing").locator("svg").first();
