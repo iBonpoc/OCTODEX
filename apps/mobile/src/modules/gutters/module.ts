@@ -9,6 +9,7 @@ import { moduleHref, type ModuleDef } from "../registry";
 import { asGutterData, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
 import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
 import { starterWant } from "./prices";
+import { benchOfferedHere } from "./bench/visible";
 
 const draw = moduleHref("gutters", "draw");
 /** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
@@ -49,7 +50,7 @@ const gutters: ModuleDef = {
     ],
     // «Замеры» in the bottom tabs and the side menu (founder 09.11: «делай»): every measurement, the drafts too
     tab: () => [{ id: "list", labelKey: "mod.gutters.list.tab", icon: "note", href: moduleHref("gutters", "list") }],
-    // the module's own card in «Компания → Модули»: the speed check saves nothing, so it is there even when off
+    // the module's own card in «Компания → Модули»: the speed check saves nothing, so it is there even when off (in Expo Go / dev only)
     // the canvas draws even when off: it says at once that nothing will be saved (§6, founder О2)
     // «Настройки» (M7b, spec 33 П22): the director changes them, the office reads them; a tech or a seller never needs the page
     settings: (ctx) => [
@@ -58,7 +59,8 @@ const gutters: ModuleDef = {
       ...(ctx.role !== "tech" ? [{ id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") }] : []),
       { id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") },
       { id: "draw", labelKey: "mod.gutters.draw.action", icon: "pencil", href: draw },
-      { id: "bench", labelKey: "mod.gutters.bench.action", icon: "clock", href: moduleHref("gutters", "bench") },
+      // the speed check is a developer's screen (DS §12.8, #1426): offered in Expo Go and a dev build only, never to an owner of the store app or the web
+      ...(benchOfferedHere() ? [{ id: "bench", labelKey: "mod.gutters.bench.action" as const, icon: "clock" as const, href: moduleHref("gutters", "bench") }] : []),
     ],
   },
   // the measurement's tables (spec 33 П19) and its changes (П21): DB.moduleData.gutters

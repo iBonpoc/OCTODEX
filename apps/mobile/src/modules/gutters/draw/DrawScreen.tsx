@@ -28,6 +28,7 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
+import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
 import { CornerSheet } from "./CornerSheet";
@@ -110,12 +111,20 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
-      {...({ title: label } as object)}
+      // a tool is a toggle: the web says «pressed» (accessibilityState.selected is not rendered on a button there)
+      {...({ title: label, ...(active !== undefined ? { "aria-pressed": !!active } : {}) } as object)}
       containerStyle={grow ? { flex: 1 } : undefined}
       style={{ alignItems: "center", minWidth: sizes.hitMin }}
     >
-      <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : disabled || dim ? c.mut : c.ink} /> : null}
+      {/* a tool (active is given): the chosen one — «Заливка» (DS «Выделение выбранного»: surf2 + shadow-sm, ink), the other — no
+          fill, mut; never acc — yellow is the screen's main action (#1426, design audit). An action (active not given): surf2 + bd */}
+      <View
+        style={[
+          { minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+          active ? fillStyle(c) : { backgroundColor: active === false ? "transparent" : c.surf2, borderWidth: ring ? dt.runW / 2 : component.hairline, borderColor: ring ?? c.bd },
+        ]}
+      >
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.ink : active === false || disabled || dim ? c.mut : c.ink} /> : null}
       </View>
       {tip ? (
         <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>

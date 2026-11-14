@@ -1,7 +1,7 @@
 /**
  * e2e 143 — «Проверка скорости холста» модуля Gutters (docs/specs/33-gutters-canvas.md П20.3; спека 33 §9). Every view.
- * - «Компания → Модули»: the Gutters card has «Проверка скорости» even while the module is off (it saves nothing);
- *   it opens /module/gutters/bench without the bottom bar;
+ * - «Компания → Модули»: the web build does not offer «Проверка скорости» (a developer's screen: Expo Go and dev builds only,
+ *   #1426); /module/gutters/bench opens by its address, without the bottom bar;
  * - the bench drawing is the founder's load: 50 lines, 40 downspouts, 150 labels; storeys by colour with «эт N»;
  * - «Начать» runs the four checks and shows each with a number and «прошло / не прошло» (icon + word); «Скопировать
  *   итог» appears. The speed thresholds are NOT checked here: the browser in CI is not a phone (the founder measures
@@ -16,9 +16,10 @@ exports.run = async (h) => {
   await h.go("/company/modules");
   await tid("module-gutters").waitFor({ timeout: 5000 });
   h.expect(/^Не подключён$/.test((await tid("module-gutters-status").innerText()).trim()), "the module is off");
-  await tid("module-gutters-bench").scrollIntoViewIfNeeded();
-  await tid("module-gutters-bench").getByRole("button").click();
-  await p.waitForURL(/\/module\/gutters\/bench$/, { timeout: 5000 });
+  // the speed check is a developer's screen (#1426, DS §12.8): the web build does not offer it to an owner; the route still opens it
+  await tid("module-gutters-settings").first().waitFor({ timeout: 5000 });
+  h.expect((await p.getByTestId("module-gutters-bench").count()) === 0, "«Модули»: no «Проверка скорости» for an owner of this build");
+  await h.go("/module/gutters/bench");
   await tid("bench-drawing").waitFor({ timeout: 8000 });
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the bench");
 
