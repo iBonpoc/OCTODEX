@@ -8,6 +8,8 @@
 # Both builds take Expo updates from the channel `preview`, like Expo Go now (release.yml publishes there).
 # The only secret: EXPO_TOKEN (repo → Settings → Secrets and variables → Actions). No Apple key lives in GitHub.
 # Android's FCM key and google-services.json live in expo.dev (Credentials; Environment variables → GOOGLE_SERVICES_JSON), not here.
+# Android is paused (#1444): the package is com.gorix.app (#656) and google-services.json still names com.octodex.app — the
+# build would fail on it. Until Firebase has the new app and the EAS variable holds its file, an android run stops at once.
 # Our BUILD (src/config/version.ts, the header's number) is written before the build (#733); the store build number is EAS's own (autoIncrement).
 # --no-wait: the build runs on EAS (its page is on expo.dev); with ios_submit the TestFlight submission is queued on EAS at start.
 # eas-cli pinned as in release.yml (27.4.1).
@@ -43,6 +45,11 @@ jobs:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+      - name: Android paused until Firebase has com.gorix.app (#1444)
+        if: inputs.platform == 'android'
+        run: |
+          echo "::error::Android is paused: google-services.json is for com.octodex.app, the app is com.gorix.app now (#656). Add the Android app com.gorix.app in Firebase and its file in expo.dev → GOOGLE_SERVICES_JSON (#1444), then remove this step."
+          exit 1
       - name: Secrets are set
         run: |
           if [ -z "$EXPO_TOKEN" ]; then echo "::error::Add EXPO_TOKEN in Settings → Secrets and variables → Actions"; exit 1; fi

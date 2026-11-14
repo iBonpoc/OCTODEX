@@ -8,7 +8,7 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.octodex.app",
+      "bundleIdentifier": "com.gorix.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Photos before and after the work are attached to the visit.",
         "NSPhotoLibraryUsageDescription": "Photos of the work are attached to the visit.",
@@ -61,7 +61,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.octodex.app",
+      "package": "com.gorix.app",
       "blockedPermissions": [
         "android.permission.ACCESS_BACKGROUND_LOCATION"
       ]
@@ -124,7 +124,7 @@
         }
       ]
     ],
-    "scheme": ["gorix", "octodex"],
+    "scheme": "gorix",
     "owner": "octodex-team",
     "extra": {
       "eas": {
