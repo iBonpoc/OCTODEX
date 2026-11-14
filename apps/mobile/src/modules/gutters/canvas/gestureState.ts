@@ -25,41 +25,16 @@ export interface LiveState extends Tf {
   /** the finger count of the last pinch / pan frame (a change makes the next frame a jump: it is dropped) */
   nPinch: number;
   nPan: number;
-  /** where the fingers of the last pinch frame were (screen px): the release at a limit goes back about this point, so the picture does not jump (#1403) */
-  fx: number;
-  fy: number;
-  /** the pinch is past a limit of the scale: −1 the farthest, 1 the nearest, 0 free. It frees only when the scale is back inside by EDGE_FREE (a hysteresis), so a hand shaking at the limit ticks once, not on every frame (#1403, #1406) */
+  /** the pinch is at a limit of the scale: −1 the farthest, 1 the nearest, 0 free (the tick is made when it becomes nonzero) */
   edge: -1 | 0 | 1;
 }
-/** how far inside a limit (a share of it) the scale must come back before the next tick may be made */
-export const EDGE_FREE = 0.02;
 
-/** the scale the live transform may reach, as a factor of the view on the screen (kMin / k, kMax / k); beyond it the scale gives way as a rubber does */
+/** the scale the live transform may reach, as a factor of the view on the screen (kMin / k, kMax / k); a little beyond it gives way softly */
 export interface ScaleLimit { lo: number; hi: number }
-/**
- * The rubber past a limit (#1403, founder 14.11: «пальцы отлипают»; the way UIScrollView bounces a zoom — Maps, Photos, Freeform): the
- * visible scale goes on for ever, the further the slower, to RUBBER (a share of the limit) at most, and its slope is 1 at the limit — no
- * step, no wall. The fingers' own scale (`raw`) is what the pinch multiplies; the screen shows `rubber(raw)`; the release goes back to the limit.
- */
-export const RUBBER = 0.15;
+/** how far past a limit the live scale may go (a soft stop, as in Photos): a share of the limit; the commit goes back to the limit */
+export const OVERSHOOT = 0.05
 
-/** the scale the screen shows for the fingers' scale `raw` */
-export function rubber(raw: number, lim: ScaleLimit): number {
-  "worklet";
-  if (raw > lim.hi) return lim.hi * (1 + RUBBER * (1 - Math.exp(-(raw / lim.hi - 1) / RUBBER)));
-  if (raw < lim.lo) return lim.lo / (1 + RUBBER * (1 - Math.exp(-(lim.lo / raw - 1) / RUBBER)));
-  return raw;
-}
-
-/** the fingers' scale for the scale on the screen (the inverse of `rubber`; a value on the screen is always inside the rubber's reach) */
-export function unrubber(vis: number, lim: ScaleLimit): number {
-  "worklet";
-  if (vis > lim.hi) return lim.hi * (1 - RUBBER * Math.log(1 - Math.min(vis / lim.hi - 1, RUBBER * (1 - 1e-9)) / RUBBER));
-  if (vis < lim.lo) return lim.lo / (1 - RUBBER * Math.log(1 - Math.min(lim.lo / vis - 1, RUBBER * (1 - 1e-9)) / RUBBER));
-  return vis;
-}
-
-export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, fx: 0, fy: 0, edge: 0 });
+export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, edge: 0 });
 
 /** a copy of the transform. A WORKLET like its callers: a plain function cannot be called on the UI thread of a phone (the app went down on every pinch, #1390) */
 function tf(st: Tf): Tf {
@@ -68,20 +43,13 @@ function tf(st: Tf): Tf {
 }
 
 /** the segment (two fingers down) ends: the commit to make, if the live transform moved (defined first: a worklet is a const once compiled) */
-function closeSegment(st: LiveState, lim?: ScaleLimit): Tf | null {
+function closeSegment(st: LiveState): Tf | null {
   "worklet";
   if (!st.seg) return null;
   st.seg = false;
   st.edge = 0;
   const moved = st.S !== 1 || st.Tx !== 0 || st.Ty !== 0;
-  if (!moved) return null;
-  const t = tf(st);
-  // let go past a limit: the commit is the transform GONE BACK to the limit about the fingers' point (the screen animates to it, then commits; no jump)
-  if (lim && (st.S > lim.hi || st.S < lim.lo)) {
-    const k = (st.S > lim.hi ? lim.hi : lim.lo) / st.S;
-    return { S: t.S * k, Tx: k * t.Tx + (1 - k) * st.fx, Ty: k * t.Ty + (1 - k) * st.fy };
-  }
-  return t;
+  return moved ? tf(st) : null;
 }
 
 /** one frame of the pinch: scale about the frame's own focal point (it follows the fingers) while two fingers are down; the commit to make, if the frame closes a segment */
@@ -89,21 +57,16 @@ export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPoin
   "worklet";
   const jump = st.nPinch !== 0 && e.numberOfPointers !== st.nPinch;
   st.nPinch = e.numberOfPointers;
-  if (e.numberOfPointers < 2) return closeSegment(st, lim);
+  if (e.numberOfPointers < 2) return closeSegment(st);
   st.seg = true;
   if (jump) return null; // the first frame after the count changed: its delta is the jump
-  st.fx = e.focalX;
-  st.fy = e.focalY;
   let k = e.scaleChange;
-  // the rubber at a limit of the scale: the fingers' scale goes on, the screen shows it softened, and the factor applied is the screen's own step
-  if (lim) k = rubber(unrubber(st.S, lim) * k, lim) / st.S;
-  const S1 = st.S * k;
-  // the tick when the pinch reaches a limit (founder 14.11: «вибрация на пределах была»): once, then again only after the scale was back inside by EDGE_FREE
   if (lim) {
-    if (S1 > lim.hi) st.edge = 1;
-    else if (S1 < lim.lo) st.edge = -1;
-    else if (st.edge === 1 && S1 < lim.hi * (1 - EDGE_FREE)) st.edge = 0;
-    else if (st.edge === -1 && S1 > lim.lo * (1 + EDGE_FREE)) st.edge = 0;
+    // a soft stop at the limit of the scale: up to OVERSHOOT past it the scale gives way (the further, the less), no further
+    const target = st.S * k;
+    const room = target > lim.hi ? Math.min(lim.hi * (1 + OVERSHOOT), lim.hi * (1 + (target / lim.hi - 1) * 0.3)) : target < lim.lo ? Math.max(lim.lo / (1 + OVERSHOOT), lim.lo * (1 - (1 - target / lim.lo) * 0.3)) : target;
+    st.edge = target > lim.hi ? 1 : target < lim.lo ? -1 : 0;
+    k = room / st.S;
   }
   // scale about the focal point f: p' = f + k·(p − f)
   st.Tx = k * st.Tx + (1 - k) * e.focalX;
@@ -113,11 +76,11 @@ export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPoin
 }
 
 /** one frame of the pan: the fingers' centre moves (`need` fingers or more: 2 where one finger draws, 1 on a canvas that only looks) */
-export function panFrame(st: LiveState, e: { changeX: number; changeY: number; numberOfPointers: number }, need: number, lim?: ScaleLimit): Tf | null {
+export function panFrame(st: LiveState, e: { changeX: number; changeY: number; numberOfPointers: number }, need: number): Tf | null {
   "worklet";
   const jump = st.nPan !== 0 && e.numberOfPointers !== st.nPan;
   st.nPan = e.numberOfPointers;
-  if (e.numberOfPointers < need) return closeSegment(st, lim);
+  if (e.numberOfPointers < need) return closeSegment(st);
   st.seg = true;
   if (jump) return null;
   st.Tx += e.changeX;
@@ -126,11 +89,11 @@ export function panFrame(st: LiveState, e: { changeX: number; changeY: number; n
 }
 
 /** a gesture (pan or pinch) ended: the commit to make if a segment was going on (the second of the two ends finds none) */
-export function endGesture(st: LiveState, lim?: ScaleLimit): Tf | null {
+export function endGesture(st: LiveState): Tf | null {
   "worklet";
   st.nPinch = 0;
   st.nPan = 0;
-  return closeSegment(st, lim);
+  return closeSegment(st);
 }
 
 
