@@ -77,7 +77,11 @@ const qtyText = (x: ShopCtx, p: PartQty) => {
 function partRow(x: ShopCtx, m: ShopModel, p: PartQty): MatRow {
   const { t, rules: r } = x, part = partOf(p), { color, ...rest } = p.attrs;
   const tag = part === "end_cap" ? (p.attrs.side === "L" ? "A" : p.attrs.side === "R" ? "B" : "") : "";
-  const total = m.chains.reduce((n, c) => n + c.totalIn, 0);
+  // the stock a coil (or its sections) is bought for: the gutters of THIS kind — the engine's own «gutter.<stock>» length,
+  // not the whole measurement (two kinds of gutter are two coils, each with its own waste, #1355); none found — all of it
+  const stock = p.key.slice(p.key.indexOf(".") + 1);
+  const own = x.parts.find((q) => q.key === `gutter.${stock}`);
+  const total = own && Number.isFinite(Number(own.qty)) ? Number(own.qty) * 12 : m.chains.reduce((n, c) => n + c.totalIn, 0);
   const basis =
     part === "end_cap" && tag ? sw(t, "b.planTag", { tag })
     : part === "coil" ? sw(t, r.wasteFt > 0 ? "b.coil" : "b.coilNone", { len: lenText(total, x.fmt), ft: r.wasteFt })

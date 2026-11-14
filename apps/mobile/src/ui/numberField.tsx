@@ -107,7 +107,7 @@ export function NumberField(props: NumberFieldProps) {
   const unit = props.unit ?? sign.after;
   return (
     <View style={{ gap: space[1] }}>
-      <T v="micro" tone="mut">
+      <T v="caption" tone="mut">
         {props.label}
       </T>
       <TextField

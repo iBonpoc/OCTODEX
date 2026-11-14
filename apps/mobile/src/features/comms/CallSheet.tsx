@@ -25,7 +25,7 @@ export type CallPreset = Partial<Pick<CallInput, "subjectType" | "subjectId" | "
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={{ gap: space[1] }}>
-      <T v="micro" tone="mut">
+      <T v="caption" tone="mut">
         {label}
       </T>
       {children}

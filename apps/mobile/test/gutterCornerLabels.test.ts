@@ -11,7 +11,8 @@ import { cornerCut, cutAngleDeg, findCorners, type Drawing, type DrawnRun, type 
 
 const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
 const run = (id: string, a: P, b: P, houseSide?: "L" | "R"): DrawnRun => ({ id, a, b, attrs: { ...attrs }, ...(houseSide ? { houseSide } : {}) });
-const opts = (view: ReturnType<typeof fitView>) => ({ view, viewport: { w: 390, h: 700 }, fontSize: 11, padX: 4, gap: 4, dsText: (n: number) => `DS ${n}`, storyText: (n: number) => `эт ${n}`, dsPad: 10, faceOff: 8, cornerText: (_k: string, _s: boolean, deg: number) => `${deg}°` });
+// fontSize — the length labels' size in the app (SvgPainter LABEL_FONT = font.size.caption), not a number of its own
+const opts = (view: ReturnType<typeof fitView>) => ({ view, viewport: { w: 390, h: 700 }, fontSize: font.size.caption, padX: 4, gap: 4, dsText: (n: number) => `DS ${n}`, storyText: (n: number) => `эт ${n}`, dsPad: 10, faceOff: 8, cornerText: (_k: string, _s: boolean, deg: number) => `${deg}°` });
 // an L: a runs 0,0 → 300,0; b runs 300,0 → 300,200 (a right-angle turn: the walls make 90°)
 const L: Drawing = { runs: [run("a", [0, 0], [300, 0]), run("b", [300, 0], [300, 200])], downspouts: [] };
 // a wide margin: the room on both sides of every gutter is free (a label is kept inside the screen — at the very edge the other side wins)
