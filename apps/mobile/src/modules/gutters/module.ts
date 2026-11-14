@@ -8,6 +8,7 @@
 import { moduleHref, type ModuleDef } from "../registry";
 import { asGutterData, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
 import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
+import { starterWant } from "./prices";
 
 const draw = moduleHref("gutters", "draw");
 /** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
@@ -103,6 +104,7 @@ const gutters: ModuleDef = {
   // the company's price-list item by its properties and unit (the same as a drawing's estimate line), the price is the item's today
   // (a test one is marked «тестовая цена» in the list, rule 9); a line without an item is $0 with «проверьте цену». The quantities
   // are only a start. They never touch a measurement's lines — the main way is «Смета из замера»
+  starterWant,
   estimateTemplates: [
     {
       key: "clean",

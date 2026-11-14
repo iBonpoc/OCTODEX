@@ -12,7 +12,7 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { EstimateTemplate } from "@/data/types";
 import {
-  canEditEstimateTemplates, copyTemplate, ESTIMATE_TEMPLATE_NAME_MAX, estimateStartersToAdd, pickableTemplates, starterEstimateId, starterEstimateTemplate,
+  canEditEstimateTemplates, copyTemplate, ESTIMATE_TEMPLATE_NAME_MAX, estimateStartersToAdd, pickableTemplates, starterAllUnpriced, starterEstimateId, starterEstimateTemplate,
   fromTemplate, templateFromCents,
 } from "@/features/estimateTemplate";
 import { tFor } from "@/i18n/translate";
@@ -52,11 +52,18 @@ export default function EstimateTemplates() {
   const addStarter = (module: string, starter: StarterEstimate) => {
     const id = starterEstimateId(companyId, module, starter.key);
     if (pressed.current.has(id)) return;
+    const want = (m: Record<string, string>) => moduleDef(module)?.starterWant?.(store.db.company?.modules?.[module]?.settings, m) ?? m;
     const tpl = starterEstimateTemplate(module, starter, {
       id, catalog: store.db.catalog, tApp: t, tDoc: tFor(store.db.company?.docLanguage ?? "en"),
-      depositBps: store.db.company?.estimate.depositBps, costsVisible: seeCosts,
+      depositBps: store.db.company?.estimate.depositBps, costsVisible: seeCosts, want,
     });
     if (!tpl) return;
+    // #1336: no line of the starter priced (an empty price list, or several equally fitting items): not added, the way is said
+    const blocked = starterAllUnpriced(starter, { catalog: store.db.catalog, want });
+    if (blocked) {
+      toast.show(t(blocked === "several" ? "est.tpl.starterSeveral" : "est.tpl.starterNeedPrices"));
+      return;
+    }
     pressed.current.add(id);
     const undo = store.saveEstimateTemplate(tpl, { ifNew: true });
     // lines the catalog lacked: price 0 — said at once (and «проверьте цену» in the builder)

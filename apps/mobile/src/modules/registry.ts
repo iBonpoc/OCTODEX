@@ -193,6 +193,12 @@ export interface ModuleDef {
   checklistTemplates?: StarterChecklist[];
   /** starter estimate templates the office may add (optional; docs/specs/07 §12) */
   estimateTemplates?: StarterEstimate[];
+  /**
+   * which price-list item a starter's line means FOR THIS COMPANY (#1336): the line's `match` made narrower by the company's own defaults
+   * (a trade's own stock: the properties a new item of the company is made with, the same ones its estimate lines ask for). `settings` — the
+   * company's module settings (CompanyModule.settings). Pure; without it the line's own `match` is all there is.
+   */
+  starterWant?: (settings: unknown, match: Record<string, string>) => Record<string, string>;
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
