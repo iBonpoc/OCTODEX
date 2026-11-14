@@ -16,7 +16,7 @@ export const font = {
     semibold: "Onest_600SemiBold",
     bold: "Onest_700Bold",
   },
-  size: { display: 28, title: 20, heading: 15, body: 13, button: 12.5, caption: 11.5, micro: 10.5 },
+  size: { display: 28, title: 22, heading: 17, body: 15, button: 15, caption: 13, micro: 11, input: 17 },
   lineHeight: { tight: 1.15, body: 1.45, snug: 1.35 },
   weight: { regular: "400", medium: "500", semibold: "600", bold: "700" },
   /** Minimum readable text size (DS rule 6). */
@@ -146,7 +146,7 @@ export const component = {
   tab: { h: 30, fadeW: 32 },
   switch: { w: 42, h: 24, knob: 16 },
   help: { visible: 18, icon: 11 },
-  tip: { fs: 11.5, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
+  tip: { fs: 13, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
   fab: 36,
   dockBtn: 36,
   /** a module's tape measure: px between two marks, 1/16″ or 1 mm — stretched over a real tape so a finger can hit a mark (founder 13.11.2026, #1315: «чуть растянутая, ничего страшного») */

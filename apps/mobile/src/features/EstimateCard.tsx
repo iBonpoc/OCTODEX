@@ -104,7 +104,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
             </View>
           ) : null}
           {margin?.kind === "missing" ? (
-            <View testID="est-margin-missing">
+            <View testID="est-margin-missing" style={{ maxWidth: "100%" }}>
               <StatusChip status="warn" soft label={t("est.marginMissing", { n: margin.lines })} />
             </View>
           ) : null}

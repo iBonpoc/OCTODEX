@@ -10,7 +10,7 @@ import { T } from "@/ui/primitives";
 export function Labeled({ label, children, flex = 1 }: { label: string; children: ReactNode; flex?: number }) {
   return (
     <View style={{ flex, gap: space[1] }}>
-      <T v="micro" tone="mut">
+      <T v="caption" tone="mut">
         {label}
       </T>
       {children}

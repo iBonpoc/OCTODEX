@@ -10,7 +10,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
+import { component, spaceHalf, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { fillStyle, fillStyleFlat } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
@@ -71,9 +71,10 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       style={[
         {
-          ...(bar ? { minHeight: h, paddingVertical: space[1] } : { height: h }),
+          minHeight: h,
           paddingHorizontal: space[4],
           borderRadius: radius.pill,
+          ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
           borderWidth: variant === "secondary" ? 1 : 0,
           borderColor: c.bd,
@@ -144,7 +145,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
       accessibilityRole="text"
       accessibilityLabel={label}
       style={{
-        height: component.chip.h,
+        minHeight: component.chip.h,
         paddingHorizontal: component.chip.px,
         borderRadius: radius.chip,
         backgroundColor: bg,
@@ -154,10 +155,13 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
         alignItems: "center",
         gap: space[1],
         alignSelf: "flex-start",
+        // a long word (RU / ES, a bigger system font) wraps inside the chip, it is never cut (#1303)
+        maxWidth: "100%",
+        paddingVertical: spaceHalf.hair,
       }}
     >
       <Icon name={statusIcon[status]} s={sizes.iconSm} color={fg} />
-      <T v="caption" w="semibold" style={{ color: fg }} numberOfLines={1}>
+      <T v="caption" w="semibold" style={{ color: fg, flexShrink: 1 }}>
         {label}
       </T>
     </View>
@@ -278,7 +282,7 @@ export function Segmented<K extends string>({
       accessibilityRole={radio ? "radiogroup" : "tablist"}
       accessibilityLabel={label}
       style={{
-        height: h,
+        minHeight: h,
         padding: pad,
         borderRadius: radius.pill,
         backgroundColor: c.track,
@@ -310,7 +314,7 @@ export function Segmented<K extends string>({
               setLayouts((p) => (p[it.key]?.x === x && p[it.key]?.w === w ? p : { ...p, [it.key]: { x, w } }));
             }}
             style={{
-              height: h - pad * 2,
+              minHeight: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
               ...(equal ? { alignItems: "center" } : null),
@@ -359,7 +363,7 @@ export function TagChip({ label, onPress }: { label: string; onPress?: () => voi
   const body = (
     <View
       style={{
-        height: component.button.sm,
+        minHeight: component.button.sm,
         paddingHorizontal: space[3],
         borderRadius: radius.pill,
         borderWidth: 1,
@@ -409,7 +413,7 @@ export function Avatar({ initials, s = component.avatar.md, sub }: { initials: s
 export function MetaTag({ label, icon }: { label: string; icon?: IconKey }) {
   const { c } = useTheme();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], height: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
       {icon ? <Icon name={icon} s={sizes.iconXs} color={c.mut} /> : null}
       <T v="caption" w="medium" style={{ color: icon ? c.ink : c.mut }}>
         {label}
@@ -538,7 +542,7 @@ export function TextField({
   // a multi-line field grows with its text (the browser's textarea does not by itself)
   const [textH, setTextH] = useState(0);
   // one line empty: the text's own line height, the frame padded to the field's height (44 phone / 36 wide)
-  const line = Math.round((font.size.body + 2) * font.lineHeight.body);
+  const line = Math.round(font.size.input * font.lineHeight.body);
   const one = multi && rows === 1;
   const minH = one ? line : multi ? h * (rows ?? 2) : h;
   const input = useRef<React.ComponentRef<typeof TextInput>>(null);
@@ -625,7 +629,7 @@ export function TextField({
           height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
           fontFamily: font.families.regular,
-          fontSize: font.size.body + 2,
+          fontSize: font.size.input,
           lineHeight: one ? line : undefined,
           textAlignVertical: multi ? "top" : "center",
           fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,
@@ -758,7 +762,7 @@ function ChipsRow<K extends string>({ items, value, onChange, nowrap }: { items:
             {...({ "aria-checked": sel } as object)}
             accessibilityLabel={it.label}
             style={{
-              height: h,
+              minHeight: h,
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
@@ -805,7 +809,7 @@ export function MultiChips<K extends string>({
             accessibilityState={{ checked: sel }}
             accessibilityLabel={it.label}
             style={{
-              height: h,
+              minHeight: h,
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
