@@ -144,3 +144,32 @@ export function rebase(base: View, live: Tf, ref: View): Tf {
   const S = (base.k * live.S) / ref.k;
   return { S, Tx: live.S * base.ox + live.Tx - S * ref.ox, Ty: live.S * base.oy + live.Ty - S * ref.oy };
 }
+
+/** the step a settle makes on the screen (UI thread): the picture of `ref` becomes the picture of `view` (the limits' clamp; identity without one) */
+export function stepOf(ref: View, view: View): Tf {
+  const S = view.k / ref.k;
+  return { S, Tx: view.ox - S * ref.ox, Ty: view.oy - S * ref.oy };
+}
+
+/** a settle the JS thread has sent to the UI thread: its view, and the step it makes there (null — a view not ours: the live transform went whole) */
+export interface SentSettle { view: View; step: Tf | null }
+
+const sameView = (a: View, b: View) => a.k === b.k && a.ox === b.ox && a.oy === b.oy;
+
+/**
+ * The view a commit made, before the clamp (#1403, code-reviewer, 2nd round): the live transform `t` was taken on the UI thread against
+ * `base`. The settles sent after `base`'s own run there before this commit's settle, and each makes its step (a clamp to a limit): the
+ * picture `t` showed gets them too. Without this, a commit taken before an earlier clamp had run on the UI thread clamped it twice.
+ */
+export function commitRef(base: View, t: Tf, sent: readonly SentSettle[]): View {
+  let v = applyTf(base, t);
+  let j = -1;
+  for (let i = sent.length - 1; i >= 0; i--) if (sameView(sent[i]!.view, base)) { j = i; break; }
+  if (j < 0) return v;
+  for (let i = j + 1; i < sent.length; i++) {
+    const st = sent[i]!.step;
+    if (!st) return applyTf(base, t); // a view not ours ran after it: nothing to carry over
+    v = applyTf(v, st);
+  }
+  return v;
+}

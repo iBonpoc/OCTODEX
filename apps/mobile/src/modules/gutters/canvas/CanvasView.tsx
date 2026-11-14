@@ -9,7 +9,7 @@ import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "re
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
-import { applyTf, endGesture, IDENTITY, panFrame, pinchFrame, rebase, type LiveState, type Tf } from "./gestureState";
+import { commitRef, endGesture, IDENTITY, panFrame, pinchFrame, rebase, stepOf, type LiveState, type SentSettle, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
 export interface Live {
@@ -44,6 +44,8 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   now.current = { view, onView, zoom };
   // commits made and not rendered yet: the view set (clamped) and the commit's own view (`ref`, before the clamp)
   const pending = useRef<{ view: PlanView; ref: PlanView }[]>([]);
+  /** the settles sent to the UI thread, the latest few: a commit taken there before some of them ran gets their steps (commitRef) */
+  const sent = useRef<SentSettle[]>([]);
   /** when a two-finger segment last began or ended (ms): a tap right after it is the fingers lifting, not a tap (a pinch that ends over a length label opened its sheet) */
   const multiAt = useRef(0);
   const markMulti = () => {
@@ -58,7 +60,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     markMulti();
     const t = { S, Tx, Ty };
     const z = now.current.zoom;
-    const raw = applyTf(bk > 0 ? { k: bk, ox: box, oy: boy } : now.current.view, t);
+    const raw = bk > 0 ? commitRef({ k: bk, ox: box, oy: boy }, t, sent.current) : commitRef(now.current.view, t, []);
     const v = z ? clampView(raw, z.lim, z.viewport) : raw;
     pending.current.push({ view: v, ref: raw });
     now.current.onView(v);
@@ -72,6 +74,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     const i = pending.current.findIndex((p) => p.view === v);
     const ref = i < 0 ? null : pending.current[i]!.ref; // a view not ours (the «fit» button, a new size): the live transform goes whole
     pending.current = i < 0 ? [] : pending.current.slice(i + 1);
+    sent.current = [...sent.current.slice(-15), { view: { k: v.k, ox: v.ox, oy: v.oy }, step: ref ? stepOf(ref, v) : null }];
     scheduleOnUI(applySettle, v.k, v.ox, v.oy, ref);
   };
   /**

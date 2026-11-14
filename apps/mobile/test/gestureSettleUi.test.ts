@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { applyTf, idleState, IDENTITY, pinchFrame, rebase, sub, type LiveState, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
+import { applyTf, commitRef, idleState, IDENTITY, pinchFrame, rebase, stepOf, sub, type LiveState, type SentSettle, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
 
 const tfOf = (st: LiveState): Tf => ({ S: st.S, Tx: st.Tx, Ty: st.Ty });
 const near = (a: View, b: View) => {
@@ -51,9 +51,12 @@ class Threads {
   pending: { view: View; ref: View }[] = [];
   queue: { v: View; ref: View | null }[] = []; // settles sent to the UI thread, not run yet
   commitsToJs: { t: Tf; base: View }[] = [];
-  constructor(v: View, private old = false) {
+  sent: SentSettle[] = [];
+  /** the limits' clamp at the commit (CanvasView: clampView); none — no limits */
+  constructor(v: View, private old = false, private clamp: (v: View) => View = (x) => x) {
     this.base = v;
     this.jsView = v;
+    this.sent = [{ view: v, step: null }]; // the first settle, on mount
   }
   /** the picture on the screen: the UI's base under the live transform */
   screen = () => applyTf(this.base, tfOf(this.st));
@@ -64,8 +67,8 @@ class Threads {
   /** the JS thread takes the commits the UI thread sent (scheduleOnRN) */
   jsCommits() {
     for (const c of this.commitsToJs) {
-      const raw = applyTf(this.old ? this.jsView : c.base, c.t); // before: against the JS thread's view
-      this.pending.push({ view: raw, ref: raw });
+      const raw = this.old ? applyTf(this.jsView, c.t) : commitRef(c.base, c.t, this.sent); // before: against the JS thread's view
+      this.pending.push({ view: this.clamp(raw), ref: raw });
     }
     this.commitsToJs = [];
   }
@@ -75,6 +78,7 @@ class Threads {
     this.jsView = p.view;
     this.pending = this.pending.slice(which + 1);
     this.queue.push({ v: p.view, ref: p.ref });
+    this.sent.push({ view: p.view, step: stepOf(p.ref, p.view) });
   }
   /** the UI thread runs the settles waiting for it */
   uiSettles() {
@@ -139,6 +143,37 @@ describe("#1403: a pinch with a finger lifting twice — the picture never moves
     const { m, atB } = scenario(new Threads({ k: 2, ox: 195, oy: 422 }, true), "commit-first");
     expect(Math.abs(m.jsView.k / atB.k - 1)).toBeGreaterThan(0.1); // the view the screen committed is not the one the fingers made
   });
+  it("at a limit, B taken before A's clamp ran on the UI thread: the clamp steps once, the live transform ends whole (code-reviewer, 2nd round)", () => {
+    // a pinch in past the nearest limit (k 10): the commit is clamped to it; a finger lifts twice, the second before A's settle ran
+    const kMax = 10;
+    const clamp = (v: View): View => (v.k <= kMax ? v : { k: kMax, ox: 195 + (kMax / v.k) * (v.ox - 195), oy: 422 + (kMax / v.k) * (v.oy - 422) });
+    for (const order of ["settle-first", "commit-first", "skip-first"] as const) {
+      const m = new Threads({ k: 5, ox: 195, oy: 422 }, false, clamp);
+      for (let i = 0; i < 15; i++) m.frame(1.05); // 5 · 1.05^15 ≈ 10.4: past the limit
+      lift(m);
+      m.jsCommits();
+      m.frame(1.01); // the fingers go on (a little further past it) before the second lift
+      if (order === "settle-first") {
+        m.render();
+        m.uiSettles();
+        lift(m);
+        m.jsCommits();
+      } else if (order === "commit-first") {
+        m.render();
+        lift(m);
+        m.jsCommits();
+        m.uiSettles();
+      } else {
+        lift(m);
+        m.jsCommits();
+      }
+      m.render();
+      m.uiSettles();
+      expect(m.base.k, order).toBeCloseTo(kMax, 9); // at the limit
+      expect(m.st.S, order).toBeCloseTo(1, 9); // and nothing of the live transform left: the picture IS the committed view
+      near(m.screen(), m.base);
+    }
+  });
   it("a view not ours (the «fit» button) drops the live transform whole, as before", () => {
     const m = new Threads({ k: 2, ox: 0, oy: 0 });
     for (let i = 0; i < 4; i++) m.frame(0.9);
@@ -153,7 +188,9 @@ describe("#1403 guard: the wiring in CanvasView, the drawing screen and the grid
   const canvas = src("canvas/CanvasView.tsx");
   it("a commit carries the view it is against on the UI thread; the JS thread builds the view on it", () => {
     expect(canvas).toMatch(/scheduleOnRN\(commit, req\.S, req\.Tx, req\.Ty, vk\.value, vox\.value, voy\.value\)/);
-    expect(canvas).toMatch(/applyTf\(bk > 0 \? \{ k: bk, ox: box, oy: boy \} : now\.current\.view, t\)/);
+    expect(canvas).toMatch(/commitRef\(\{ k: bk, ox: box, oy: boy \}, t, sent\.current\)/);
+    // every settle sent is noted with its step, so a commit taken before it ran gets the step once (the clamp)
+    expect(canvas).toMatch(/step: ref \? stepOf\(ref, v\) : null/);
   });
   it("settleView hands the view to the UI thread and writes no shared value; applySettle re-bases and writes the view in one step", () => {
     const body = canvas.slice(canvas.indexOf("const settleView = "), canvas.indexOf("const applySettle = "));
