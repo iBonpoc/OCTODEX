@@ -130,7 +130,7 @@ export default function Team() {
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("team.invite")}>
         <View style={{ gap: space[3] }}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("co.personName")} icon="user" />
-          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("co.email")} icon="message" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("co.email")} icon="mail" />
           {!cloud ? <TextField type="phone" value={phone} onChangeText={setPhone} placeholder={t("co.phone")} icon="phone" /> : null}
           <ChoiceChips
             value={kind}

@@ -101,7 +101,7 @@ export default function CompanySection() {
             <TextField type="phone" value={draft.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder="(555) 555-0100" icon="phone" />
           </Labeled>
           <Labeled label={t("co.email")}>
-            <TextField type="email" value={draft.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder="office@company.com" icon="message" />
+            <TextField type="email" value={draft.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder="office@company.com" icon="mail" />
           </Labeled>
           <Labeled label={t("co.website")}>
             <TextField type="url" value={draft.website ?? ""} onChangeText={(v) => set({ website: v })} placeholder="https://" icon="globe" />
@@ -284,7 +284,7 @@ function ContactsEditor() {
           <TextField type="name" value={edit.name} onChangeText={(v) => setEdit({ ...edit, name: v })} placeholder={t("co.personName")} icon="user" />
           <TextField type="jobTitle" value={edit.title ?? ""} onChangeText={(v) => setEdit({ ...edit, title: v })} placeholder={t("co.personTitle")} />
           <TextField type="phone" value={edit.phone ?? ""} onChangeText={(v) => setEdit({ ...edit, phone: v })} placeholder={t("co.phone")} icon="phone" />
-          <TextField type="email" value={edit.email ?? ""} onChangeText={(v) => setEdit({ ...edit, email: v })} placeholder={t("co.email")} icon="message" />
+          <TextField type="email" value={edit.email ?? ""} onChangeText={(v) => setEdit({ ...edit, email: v })} placeholder={t("co.email")} icon="mail" />
           <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("co.primary")}

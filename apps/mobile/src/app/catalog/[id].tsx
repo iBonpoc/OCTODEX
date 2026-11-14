@@ -14,7 +14,7 @@ import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
 import { canEditCatalog } from "@/features/access";
@@ -77,7 +77,7 @@ export default function CatalogItemScreen() {
 
   return (
     <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>
-      <Card>
+      <FieldGroup>
         <ChoiceChips value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
         <View testID="catalog-name">
           <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
@@ -90,20 +90,20 @@ export default function CatalogItemScreen() {
             <T v="caption" tone="mut">{t("cat.attributes", { list: attributesLine(it.attributes) })}</T>
           </View>
         ) : null}
-      </Card>
+      </FieldGroup>
 
       {it.kind === "service" || it.kind === "labor" || (it.kind === "material" && noCosts) ? (
-        <Card>
+        <FieldGroup>
           <Labeled label={t("cat.price")}>
             <View testID="catalog-price">
               <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
             </View>
           </Labeled>
-        </Card>
+        </FieldGroup>
       ) : null}
 
       {isMat ? (
-        <Card>
+        <FieldGroup>
           {/* spec 36 (S0c): the main supplier from the company's list — owner, admin, office; others keep the old text */}
           {supPick ? (
             <View testID="catalog-supplier">
@@ -145,7 +145,7 @@ export default function CatalogItemScreen() {
           <T v="heading" tabular>
             {t("cat.clientPrice", { amount: money(price) })}
           </T>
-        </Card>
+        </FieldGroup>
       ) : null}
 
       {isMat && found && !noCosts ? <CostHistory entries={historyOf(store.db, { itemId: it.id }, 5)} testID="catalog-history" /> : null}

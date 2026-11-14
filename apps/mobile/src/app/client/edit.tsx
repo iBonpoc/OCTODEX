@@ -1,3 +1,4 @@
+import { space } from "@octo/design-tokens";
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -19,9 +20,9 @@ import {
   type NameParts,
   type PhoneLine,
 } from "@/features/clientForm";
-import { Button, ChoiceChips, IconButton, TextField, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, TextField, Toggle } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
-import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 
 /**
@@ -94,7 +95,7 @@ export default function EditClient() {
 
   return (
     <Screen title={creating ? t("clients.new") : t("client.editTitle")} back={back}>
-      <Card>
+      <FieldGroup>
         <Labeled label={t("client.f.first")}>
           <TextField type="name" value={name.first} onChangeText={setPart("first")} placeholder={t("client.f.first")} icon="user" />
         </Labeled>
@@ -109,44 +110,49 @@ export default function EditClient() {
             {t("client.f.nameNeeded")}
           </T>
         ) : null}
-      </Card>
+      </FieldGroup>
 
-      <Card>
+      <FieldGroup>
         <Labeled label={t("client.f.phones")}>
-          <View>
+          <View style={{ gap: space[2] }}>
             {phones.map((n, i) => (
-              <RowView key={i}>
-                <View style={{ flex: 1 }}>
-                  <TextField type="phone" value={n.number} onChangeText={setPhone(i)} placeholder="(555) 555-0100" icon="phone" label={`${t("co.phone")} ${i + 1}`} />
-                </View>
-                {i > 0 ? <IconButton icon="close" label={`${t("person.removePhone")} ${i + 1}`} onPress={() => setPhones((x) => x.filter((_, j) => j !== i))} /> : null}
-              </RowView>
+              // «убрать номер» — an icon inside the field (DS §11 п.18, #1411): every number field is as wide as the first
+              <TextField
+                key={i}
+                type="phone"
+                value={n.number}
+                onChangeText={setPhone(i)}
+                placeholder="(555) 555-0100"
+                icon="phone"
+                label={`${t("co.phone")} ${i + 1}`}
+                action={i > 0 ? { icon: "close", label: `${t("person.removePhone")} ${i + 1}`, onPress: () => setPhones((x) => x.filter((_, j) => j !== i)), testID: `client-phone-remove-${i}` } : undefined}
+              />
             ))}
           </View>
         </Labeled>
         {!creating ? <Button label={t("client.f.addPhone")} icon="plus" variant="ghost" size="sm" onPress={() => setPhones((x) => [...x, blank])} /> : null}
         <Labeled label={t("co.email")}>
-          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="mail" />
         </Labeled>
-      </Card>
+      </FieldGroup>
 
       {p || creating ? (
-        <Card>
+        <FieldGroup>
           <Labeled label={t("co.street")}>
             <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
           </Labeled>
           <Labeled label={t("co.city")}>
             <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena, CA 91103" />
           </Labeled>
-        </Card>
+        </FieldGroup>
       ) : null}
 
-      <Card>
+      <FieldGroup>
         <SourceField value={sourceId} onChange={setSourceId} />
-      </Card>
+      </FieldGroup>
 
       {!creating ? (
-        <Card>
+        <FieldGroup>
           <Toggle on={taxExempt} onChange={setTaxExempt} label={t("client.f.taxExempt")} />
           {taxExempt ? (
             <Labeled label={t("client.f.taxExemptNote")}>
@@ -156,13 +162,11 @@ export default function EditClient() {
           <T v="caption" tone="mut">
             {t("client.f.taxExemptHint")}
           </T>
-        </Card>
+        </FieldGroup>
       ) : null}
 
       {!creating ? (
-        <>
-          <SectionTitle title={t("client.row.billing")} />
-          <Card>
+          <FieldGroup title={t("client.row.billing")}>
             <ChoiceChips<"same" | "own">
               value={billingOwn ? "own" : "same"}
               onChange={(v) => setBillingOwn(v === "own")}
@@ -195,8 +199,7 @@ export default function EditClient() {
             <T v="caption" tone="mut">
               {t("client.f.billingHint")}
             </T>
-          </Card>
-        </>
+          </FieldGroup>
       ) : null}
 
       <Button label={creating ? t("clients.create") : t("ue.save")} icon="check" full disabled={!ok} onPress={save} />

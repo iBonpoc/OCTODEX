@@ -21,7 +21,7 @@ import { CostHistory } from "@/features/SupplierParts";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
+import { CardList, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
 import { NotFound } from "@/ui/emptyStates";
 import { type GuardedUndo } from "@/data/undo";
@@ -100,7 +100,7 @@ export default function SupplierScreen() {
 
   return (
     <Screen title={found ? t("sup.edit") : t("sup.new")} back={back}>
-      <Card>
+      <FieldGroup>
         <View testID="sup-name">
           <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} field={form.field("name")} />
         </View>
@@ -119,9 +119,9 @@ export default function SupplierScreen() {
             {mail ? <Button label={t("sup.write")} icon="mail" variant="secondary" size="sm" onPress={() => void Linking.openURL(mail).catch(() => undefined)} /> : null}
           </RowView>
         ) : null}
-      </Card>
+      </FieldGroup>
 
-      <Card>
+      <FieldGroup>
         <ChoiceChips<TermsKey>
           label={t("sup.terms")}
           testID="supplier-terms"
@@ -158,7 +158,7 @@ export default function SupplierScreen() {
         )}
         <T v="caption" tone="mut">{t("sup.taxHint")}</T>
         <TextField type="note" value={s.notes ?? ""} onChangeText={(v) => set({ notes: v })} placeholder={t("sup.notes")} multiline />
-      </Card>
+      </FieldGroup>
 
       <View testID="sup-save">
         <Button label={t("ue.save")} icon="check" full testID="supplier-save" onPress={submit} />
