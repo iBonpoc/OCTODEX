@@ -29,7 +29,7 @@ const norm = (c: string) => c.replace(/\s+/g, "").replace(/(\d)\.0+\b/g, "$1").r
 
 describe("app tokens mirror the founder's DS css", () => {
   it("type scale and weights", () => {
-    expect(font.size).toMatchObject({ display: px("fs-display"), title: px("fs-title"), heading: px("fs-heading"), body: px("fs-body"), caption: px("fs-caption"), micro: px("fs-micro") });
+    expect(font.size).toMatchObject({ display: px("fs-display"), title: px("fs-title"), heading: px("fs-heading"), body: px("fs-body"), caption: px("fs-caption"), micro: px("fs-micro"), input: px("fs-input") });
     expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body"), snug: px("lh-snug") });
     expect(font.size.button).toBe(px("fs-btn"));
   });

@@ -6,7 +6,7 @@ import { component, extraIcons, font, icons, iconMeta, motion, size, type Status
 import { useTheme } from "@/theme/ThemeProvider";
 
 /* ---------- Text ---------- */
-export type TextVariant = keyof typeof font.size;
+export type TextVariant = Exclude<keyof typeof font.size, "input">;
 type Weight = keyof typeof font.families;
 type Tone = "ink" | "mut" | "onAcc" | StatusName;
 

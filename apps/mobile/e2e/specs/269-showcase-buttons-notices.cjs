@@ -23,7 +23,11 @@ exports.run = async (h) => {
     n++;
     h.expect((await counter()) === n, `${id} presses (${n})`);
   }
-  await vis("showcase-btn-state-disabled").getByRole("button").first().click({ force: true });
+  // a forced click goes to the point, not to the button: centre it first, else at 390 it can sit under the tab bar and the
+  // click lands on a tab (#1310: the bigger font moved it there)
+  const disabled = vis("showcase-btn-state-disabled").getByRole("button").first();
+  await disabled.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await disabled.click({ force: true });
   h.expect((await counter()) === n, "a disabled button does not press");
   await vis("showcase-btn-iconbutton").getByRole("button").first().click();
   h.expect((await counter()) === n + 1, "the round button presses");
