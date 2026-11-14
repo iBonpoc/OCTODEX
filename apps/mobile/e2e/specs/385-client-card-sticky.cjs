@@ -3,7 +3,8 @@
  * - phone and tablet: scrolled down, the tabs stick to the top under the mini header «name · call · write · route»
  *   (not shown before they stick); another tab keeps them stuck (no jump back to the page's top);
  * - desktop (1280): two columns — the tabs on the left, the summary («Создать смету», money) in a side column 360 on the right;
- * - an unselected tab has no plate (DS А1п; only the selected one has «Заливка»);
+ * - an unselected tab has no plate (DS А1п; only the selected one has «Заливка»); the mouse over it shows a light one (desktop);
+ * - desktop: the summary is read before the tabs (DOM order), though it stands on the right;
  * - «История»: the filters are one row (the list's FilterBar), not a second row of tabs that wraps;
  * - «Обзор»: the next visit is its own line, not under «Ждёт действия».
  */
@@ -35,6 +36,19 @@ exports.run = async (h) => {
     h.expect(side && Math.abs(side.width - 360) <= 1, `the summary column is 360 wide (${side && side.width})`);
     h.expect(side && tabs && side.x > tabs.x + tabs.width - 1, "the summary is on the right of the tabs");
     h.expect((await p.getByTestId("client-make-estimate").locator("visible=true").count()) === 1, "«Создать смету» is in the side column");
+    // the summary is read first (a screen reader, the Tab key), though it stands on the right (DS §12.3)
+    const first = await p.evaluate(() => {
+      const side = [...document.querySelectorAll('[data-testid="client-side"]')].find((e) => e.offsetParent !== null);
+      const tabs = [...document.querySelectorAll('[data-testid="client-tabs"]')].find((e) => e.offsetParent !== null);
+      return !!side && !!tabs && !!(side.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    h.expect(first, "the summary comes before the tabs in reading order");
+    // the mouse over an unselected tab: a light plate (a button, not words — DS А1п)
+    await tid("client-tabs-notes").hover();
+    await p.waitForFunction(() => {
+      const t = document.querySelector('[data-testid="client-tabs-notes"]');
+      return !!t && [t, ...t.querySelectorAll("div")].some((e) => !["rgba(0, 0, 0, 0)", "transparent"].includes(getComputedStyle(e).backgroundColor));
+    }, null, { timeout: 3000 });
   } else {
     h.expect((await p.getByTestId("tabs-mini").count()) === 0, "no mini header before the tabs stick");
     // scroll the page down with the wheel (a finger's scroll): the tabs stick under the mini header

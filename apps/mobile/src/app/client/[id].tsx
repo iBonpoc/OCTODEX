@@ -67,13 +67,14 @@ export default function ClientScreen() {
         device === "desktop" ? (
           // desktop (DS §12.3, #1416): the tabs and their content on the left, the summary in a side column 360 on the right
           <Screen title={c.name} back={back} right={edit}>
-            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space[6] }}>
+            {/* the summary first for a screen reader and the Tab key (DS §12.3: header, summary, then the tabs), on the right to the eye */}
+            <View style={{ flexDirection: "row-reverse", alignItems: "flex-start", gap: space[6] }}>
+              <View testID="client-side" style={{ width: component.panelW, gap: space[3] }}>
+                {summary}
+              </View>
               <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>
                 {tabs}
                 {content}
-              </View>
-              <View testID="client-side" style={{ width: component.panelW, gap: space[3] }}>
-                {summary}
               </View>
             </View>
             {rest}
