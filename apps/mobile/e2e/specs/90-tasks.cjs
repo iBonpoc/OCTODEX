@@ -13,7 +13,7 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const m = menuApi(h);
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
 
   // «Ещё» → «Задачи»
   await h.go("/today");

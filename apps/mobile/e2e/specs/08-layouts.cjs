@@ -72,6 +72,9 @@ exports.run = async (h, { browser, BASE, layouts, installClock }) => {
         if (!/GoRix v\d/.test(body) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header with the version label`);
         const over = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
         if (over) errs.push(`horizontal overflow ${s} ${width} ${theme}`);
+        // #1395 (DS §3.1 п.3, §5.3): the yellow floating «＋» only on the director's «Главная» (/today); it covered content elsewhere
+        const fabs = await p.getByTestId("fab").locator("visible=true").count();
+        if (fabs && want !== "/today") errs.push(`${s} ${width} ${theme}: a yellow floating «＋» off «Главная»`);
         const cards = CARD_SCREENS.find((x) => x.path === s);
         if (cards) {
           const fake = { page: p, layout: { width }, expect: (ok, msg) => { if (!ok) errs.push(`alignment ${s} ${width} ${theme}: ${msg}`); } };

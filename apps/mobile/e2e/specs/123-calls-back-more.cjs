@@ -1,7 +1,7 @@
 /**
  * «Звонки» is a section of «Ещё» now (docs/specs/28): opened from the tile it is pushed over the tabs —
  * «‹ Ещё» and the browser's/phone's back return to «Ещё» (before: no button, no swipe). The floating «＋» of a section
- * outside the tabs sits above the bar and never covers the last card; the toast «Отменить» is not under the bar.
+ * outside the tabs is in the header, not floating (#1395); the toast «Отменить» is not under the bar.
  */
 const path = (h) => new URL(h.page.url()).pathname;
 const box = async (l) => (await l.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
@@ -26,15 +26,13 @@ exports.run = async (h) => {
   h.expect(path(h) === "/more", `back → /more (${p.url()})`);
 
   if (!wide) {
-    // «＋» above the bar and above the last card on a section outside the tabs
+    // «＋» of a section outside the tabs: in the header (#1395)
     await h.go("/tasks");
     await p.evaluate(() => document.querySelectorAll("*").forEach((el) => el.scrollHeight > el.clientHeight + 4 && (el.scrollTop = el.scrollHeight)));
     await p.waitForTimeout(500);
-    const fab = await box(p.getByTestId("fab").locator("visible=true"));
-    const bar = await box(p.getByTestId("tab-bar").locator("visible=true"));
-    h.expect(fab.y + fab.height <= bar.y + 1, `«＋» above the bar (${fab.y + fab.height} vs ${bar.y})`);
-    const last = await box(p.locator('[data-testid^="task-"]:visible').last());
-    h.expect(last.y + last.height <= fab.y + 1, `the last card ends above «＋» (${last.y + last.height} vs ${fab.y})`);
+    // #1395 (DS §5.3): no yellow floating «＋» off «Главная» — it covered the cards; the tasks' «＋» is in the header
+    h.expect((await p.getByTestId("fab").locator("visible=true").count()) === 0, "no floating «＋» on Tasks");
+    h.expect((await p.getByTestId("fab-header").locator("visible=true").count()) === 1, "Tasks: «＋» in the header");
     await h.shot("tasks-fab");
     // the toast «Отменить» on a section outside the tabs: above the bar, not on it (it was hidden before — no bar here)
     await h.go("/tasks");
@@ -45,6 +43,7 @@ exports.run = async (h) => {
     await p.waitForTimeout(600); // the slide-in
     await h.shot("toast");
     const tb = await box(undo);
+    const bar = await box(p.getByTestId("tab-bar").locator("visible=true"));
     h.expect(tb.y + tb.height <= bar.y + 1, `«Отменить» above the bar (${tb.y + tb.height} vs ${bar.y})`);
     await undo.click();
   }

@@ -10,7 +10,7 @@ const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   // the client card has no «＋» (#1343): what makes something new there is «Создать смету» and «＋» on the «Работы» tab
   const make = () => p.locator('[data-testid="client-make-estimate"]:visible');
   const newJob = async () => {

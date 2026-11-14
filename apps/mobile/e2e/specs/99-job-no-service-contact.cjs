@@ -8,7 +8,7 @@ const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   const patch = (fn) => p.evaluate(fn);
 
   // an ordinary job: «＋» and «Ещё один выезд» / «Запланировать работу» are there

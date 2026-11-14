@@ -7,7 +7,7 @@
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   await h.go("/today");
   // someone else's client with a person and a message; a lead that is not his
   await p.evaluate(() => {

@@ -9,10 +9,10 @@ import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-rou
 import { isAppPath, navInsets } from "@/nav/shell";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
-import { isTabScreen } from "@/nav/roles";
+import { isTabScreen, roleHome } from "@/nav/roles";
 import { BackSwipe } from "@/nav/BackSwipe";
 import { tabBackSwipe } from "@/nav/backSwipe";
-import { showsTabBar } from "@/nav/tabBarRule";
+import { showsTabBar, tabRouteKey } from "@/nav/tabBarRule";
 import { useAuth } from "@/cloud/auth";
 import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
@@ -605,9 +605,14 @@ export function Screen({
       };
     }, [pathname]),
   );
-  /** 820/1280: the screen's «＋» sits in its header, no floating button (13 v2 §2.5) */
-  const headerFab = fab && wide ? <Fab placement="header" set={fab} ctx={fabCtx} on={fabOn} /> : null;
-  const floatFab = !!fab && !wide;
+  /**
+   * The yellow floating «＋» only on the role's «Главная» on a phone (founder 14.11, variant А, #1395; DS §3.1 п.3, §5.3): elsewhere it
+   * covered the content («Ответить» on «Разбор», sums on «План»). Every other «＋» — and «Главная» from 820 — is a secondary button with
+   * words in the header (DS §12.2).
+   */
+  const onHome = fab === "home" && tabRouteKey(routeName) === roleHome[store.role];
+  const floatFab = !!fab && !wide && onHome;
+  const headerFab = fab && !floatFab ? <Fab placement="header" set={fab} ctx={fabCtx} on={fabOn} /> : null;
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
             {pinned && up ? (
@@ -653,8 +658,9 @@ export function Screen({
             ) : null}
             {right || headerFab ? (
               <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-                {right}
+                {/* «?» · «＋» · «⋯» (DS §5.3, §12.2): the screen's «⋯» comes in `right` */}
                 {headerFab}
+                {right}
               </RowView>
             ) : null}
           </RowView>
@@ -705,8 +711,8 @@ export function Screen({
           </RowView>
           {right || headerFab || home ? (
             <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
-              {right}
               {headerFab}
+              {right}
               {home ? <HomeHeader /> : null}
             </RowView>
           ) : null}

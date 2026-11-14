@@ -13,7 +13,7 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   const lines = () => p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count();
   const cards = () => p.locator('[data-testid^="measurement-"]:visible');
   const waitFor = async (ok, what, tries = 40) => {

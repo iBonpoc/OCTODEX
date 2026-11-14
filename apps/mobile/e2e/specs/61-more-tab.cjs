@@ -63,15 +63,11 @@ exports.run = async (h) => {
   for (const id of ["leads", "jobs", "estimates", "catalog", "calls", "settings"]) h.expect((await tile(id).count()) === 1, `tech: tile «${id}»`);
   await setRole(h, "director");
 
-  // the floating «＋» never covers the last card (phone)
+  // no floating «＋» over the cards of a list (#1395, DS §5.3: the yellow one is only on «Главная»)
   if (!wide) {
     await h.go("/clients");
-    await p.evaluate(() => document.querySelectorAll("*").forEach((el) => el.scrollHeight > el.clientHeight + 4 && (el.scrollTop = el.scrollHeight)));
-    await p.waitForTimeout(500);
-    const cards = p.locator('[data-testid="list-card"]:visible');
-    const last = await box(cards.last());
-    const fab = await box(p.getByTestId("fab").locator("visible=true"));
-    h.expect(last.y + last.height <= fab.y + 1, `the last card ends above «＋» (${last.y + last.height} vs ${fab.y})`);
+    await p.getByTestId("fab-header").locator("visible=true").first().waitFor({ timeout: 3000 });
+    h.expect((await p.getByTestId("fab").locator("visible=true").count()) === 0, "Clients: no floating «＋»");
   }
 
   h.expect(!(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), `no horizontal scroll at ${w}`);

@@ -10,7 +10,7 @@ const queue = (p) => p.evaluate(() => JSON.parse(localStorage.getItem("octo.queu
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   await h.go("/today");
   await p.evaluate((id) => {
     const k = "octo.db.v5";

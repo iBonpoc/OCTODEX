@@ -15,8 +15,8 @@ exports.run = async (h) => {
   const w = h.layout.width;
   const wide = w >= 820;
   const vis = (id) => p.getByTestId(id).locator("visible=true");
-  /** the «＋» of the open screen: floating on the phone, in the header on 820/1280 */
-  const plus = () => vis(wide ? "fab-header" : "fab");
+  /** the «＋» of the open screen: floating only on the phone's «Главная», in the header everywhere else (#1395, DS §5.3) */
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   const sheet = () => p.locator('[aria-modal="true"]').filter({ hasText: "Быстрые действия" }).last();
   /** the «＋» sheet once its items are in (the sheet slides in) */
   const sheetText = async () => {
@@ -94,6 +94,7 @@ exports.run = async (h) => {
   // Clients: one item — straight to the new client form
   await h.go("/clients");
   h.expect((await plus().count()) === 1, "Clients: one «＋» (its only item goes straight to the form)");
+  h.expect((await vis("fab").count()) === 0 && (await vis("fab-header").count()) === 1, "Clients: «＋» in the header, no yellow floating one (#1395)");
   await plus().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/client/edit", `Clients «＋» → /client/edit (${p.url()})`);

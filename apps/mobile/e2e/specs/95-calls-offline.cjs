@@ -9,7 +9,7 @@ exports.run = async (h) => {
   const p = h.page;
   const m = menuApi(h);
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   const go = async (name) => {
     await m.open();
     await m.menu().getByRole("button", { name, exact: true }).locator("visible=true").click(); await p.waitForTimeout(700);
