@@ -3,6 +3,8 @@ import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { liveUri, madeHere } from "./photoUri";
 import { shrinkPicked } from "@/data/photoShrink";
+import { canRetry } from "@/data/photoUpload";
+import { StatusNote } from "@/ui/statusNote";
 import { component, radius, size, space } from "@octo/design-tokens";
 import type { Photo } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -14,7 +16,7 @@ import { Sheet } from "@/ui/overlays";
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile) */ onAdd?: (uri?: string) => void; onRemove?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
+export function PhotoStrip({ photos, onAdd, onRemove, onRetry, title }: { photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile) */ onAdd?: (uri?: string) => void; onRemove?: (id: string) => void; /** #1431 «Повторить» on a photo the cloud did not take (its file is on this phone) */ onRetry?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [opened, setOpen] = useState<Photo | null>(null);
@@ -22,6 +24,9 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
   // and a console error otherwise)
   const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
   const open = opened ? { ...opened, uri: liveUri(opened.uri) } : null;
+  // #1431: photos the cloud did not take — said under the strip (StatusNote) and, with the reason, in the viewer
+  const failed = photos.filter((p) => p.upload).length;
+  const openFailed = open ? photos.find((p) => p.id === open.id)?.upload : undefined;
   // a second tap while the photo is being made smaller does nothing (no second picker, no photo twice)
   const busy = useRef(false);
   const pick = async () => {
@@ -47,6 +52,7 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
     onAdd?.(uri);
   };
   return (
+    <>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
       {onAdd ? (
         // the add tile (DS «Плитка добавления»): the size of a thumbnail, a one-line caption on every language, the frame
@@ -83,7 +89,7 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
           key={p.id}
           onPress={() => setOpen(p)}
           accessibilityRole="button"
-          accessibilityLabel={`${title ?? (p.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}, ${t("photo.nOf", { n: i + 1, total: shown.length })}`}
+          accessibilityLabel={`${title ?? (p.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}, ${t("photo.nOf", { n: i + 1, total: shown.length })}${p.upload ? `, ${t("photoUp.a11y")}` : ""}`}
           testID={`photo-thumb-${p.id}`}
           style={{ width: THUMB, height: THUMB, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
         >
@@ -98,6 +104,24 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
             <Icon name="image" s={size.iconLg} color={c.mut} />
           )}
         </View>
+        {open && openFailed ? (
+          <StatusNote tone="bad" v="body" testID="photo-upload-reason">
+            {t(`photoUp.reason.${openFailed.failed}`)}
+            {!open.uri && openFailed.failed !== "gone" ? ` ${t("photoUp.otherPhone")}` : ""}
+          </StatusNote>
+        ) : null}
+        {open && onRetry && canRetry({ ...open, upload: openFailed }) ? (
+          <Button
+            label={t("photoUp.retry")}
+            icon="cloudUp"
+            full
+            testID="photo-upload-retry"
+            onPress={() => {
+              onRetry(open.id);
+              setOpen(null);
+            }}
+          />
+        ) : null}
         {onRemove && open ? (
           <Button
             label={t("photo.delete")}
@@ -112,5 +136,11 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
         ) : null}
       </Sheet>
     </ScrollView>
+    {failed ? (
+      <StatusNote tone="bad" testID="photo-upload-failed">
+        {t("photoUp.strip", { n: failed })}
+      </StatusNote>
+    ) : null}
+    </>
   );
 }

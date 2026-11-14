@@ -4250,4 +4250,17 @@ export const en: Dict = {
   "co.tl.hint": "A new estimate takes the terms in the client's language; if there are none in it, the English ones go.",
   "co.tl.field": "Terms — {lang}",
   "co.tl.add": "Add: {lang}",
+  // #1431 «Данные»: a photo the cloud did not take
+  "photoUp.att": "{name} · photos not uploaded: {n}",
+  "photoUp.title": "Visit photos",
+  "photoUp.chip": "Not uploaded",
+  "photoUp.strip": "Not uploaded to the cloud: {n}",
+  "photoUp.reason.tooBig": "The file is over 25 MB — the cloud does not take it.",
+  "photoUp.reason.type": "The cloud does not take this type of file.",
+  "photoUp.reason.gone": "The file is no longer on this phone — nothing to send.",
+  "photoUp.reason.refused": "The cloud did not take the photo.",
+  "photoUp.otherPhone": "The file is on the phone the photo was taken with.",
+  "photoUp.retry": "Retry",
+  "photoUp.retried": "Sending the photo again",
+  "photoUp.a11y": "not uploaded",
 };
