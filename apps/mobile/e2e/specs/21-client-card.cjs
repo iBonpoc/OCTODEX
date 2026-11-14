@@ -26,10 +26,10 @@ exports.run = async (h) => {
   await expectOneAccent(h, "client card");
   await h.expectText(/CLT-0001/, "client number in the header");
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
-  await h.expectText(/Должен[\s\S]*\$0[\s\S]*Оплатил всего[\s\S]*\$582\b/, "owes / paid total");
+  await h.expectText(/Долг[\s\S]*\$0[\s\S]*Оплачено[\s\S]*\$582\b/, "owes / paid (one word each, #1417)");
   await h.expectText(/Контакты[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
   await h.expectText(/Люди[\s\S]*Tom Mitchell/, "the spouse in the row «Люди»");
-  await h.expectText(/Выставлено всего/, "invoiced total");
+  await h.expectText(/Выставлено/, "invoiced");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
   await row("История");
@@ -128,7 +128,7 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/client/c2");
   const txt = await h.text();
-  h.expect(/David Kim/.test(txt) && !/Должен/.test(txt) && !/Оплатил всего/.test(txt), "tech sees own client without money");
+  h.expect(/David Kim/.test(txt) && !/Долг/.test(txt) && !/Оплачено/.test(txt), "tech sees own client without money");
   // the client's jobs: the cards are there, the sums are not (value only for the office)
   await h.go("/client/c2?s=jobs");
   await p.locator('[data-testid^="client-job-"]').locator("visible=true").first().waitFor({ timeout: 5000 });

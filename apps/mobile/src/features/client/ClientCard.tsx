@@ -104,92 +104,101 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
 
   return (
     <>
-      {/* one line: number · status · tags */}
-      <RowView style={{ flexWrap: "wrap", marginTop: -space[2] }}>
-        {c.number ? (
-          <T v="caption" tone="mut" tabular>
-            {c.number}
+      {/* the summary (status, actions, «Создать смету», money) is a column no wider than a form: on 1280 it does not stretch
+          to the window (#1417 review; the side column of #1416 comes later) */}
+      <View testID="client-summary" style={{ width: "100%", maxWidth: component.sheetFormMax, alignSelf: "flex-start", gap: space[3] }}>
+        {/* one line: number · status · tags */}
+        <RowView style={{ flexWrap: "wrap", marginTop: -space[2] }}>
+          {c.number ? (
+            <T v="caption" tone="mut" tabular>
+              {c.number}
+            </T>
+          ) : null}
+          {office && statusOptions.length ? (
+            <View ref={statusRef} collapsable={false}>
+              <Press onPress={openStatusMenu} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
+                <StatusChip status={chip.s} label={t(chip.l)} />
+              </Press>
+            </View>
+          ) : (
+            <StatusChip status={chip.s} label={t(chip.l)} />
+          )}
+          {c.taxExempt ? <StatusChip status="neutral" label={t("client.f.taxExempt")} soft /> : null}
+          {tags.map((x) => (
+            <TagChip key={x.id} label={tagLabel(x, t)} onPress={office ? () => setSheet("tags") : undefined} />
+          ))}
+          {office ? (
+            // «＋ Метка» always with its word (a lone «+» on a line of its own read as nothing, #1417 review); the zone is a real 44
+            <Press testID="client-add-tag" onPress={() => setSheet("tags")} accessibilityRole="button" accessibilityLabel={t("client.addTag")} style={{ minHeight: size.hitMin, justifyContent: "center" }}>
+              <TagChip label={`＋ ${t("client.addTag")}`} />
+            </Press>
+          ) : null}
+        </RowView>
+        {office && c.sourceId ? (
+          <T v="caption" tone="mut">
+            {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
           </T>
         ) : null}
-        {office && statusOptions.length ? (
-          <View ref={statusRef} collapsable={false}>
-            <Press onPress={openStatusMenu} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
-              <StatusChip status={chip.s} label={t(chip.l)} />
-            </Press>
-          </View>
-        ) : (
-          <StatusChip status={chip.s} label={t(chip.l)} />
-        )}
-        {c.taxExempt ? <StatusChip status="neutral" label={t("client.f.taxExempt")} soft /> : null}
-        {tags.map((x) => (
-          <TagChip key={x.id} label={tagLabel(x, t)} onPress={office ? () => setSheet("tags") : undefined} />
-        ))}
-        {office ? <TagChip label={tags.length ? "+" : t("client.addTag")} onPress={() => setSheet("tags")} /> : null}
-      </RowView>
-      {office && c.sourceId ? (
-        <T v="caption" tone="mut">
-          {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
-        </T>
-      ) : null}
-      {status === "do_not_service" ? (
-        <T v="caption" tone="mut">
-          {[c.statusReason ? t("client.reason", { r: c.statusReason }) : null, t("client.noServiceHint")].filter(Boolean).join(" · ")}
-        </T>
-      ) : null}
-      {/* step 17 C3: other clients with the same phone / email / address — «Слить» or «Не дубль» (docs/specs/04 §13) */}
-      <ClientDupCards c={c} />
+        {status === "do_not_service" ? (
+          <T v="caption" tone="mut">
+            {[c.statusReason ? t("client.reason", { r: c.statusReason }) : null, t("client.noServiceHint")].filter(Boolean).join(" · ")}
+          </T>
+        ) : null}
+        {/* step 17 C3: other clients with the same phone / email / address — «Слить» or «Не дубль» (docs/specs/04 §13) */}
+        <ClientDupCards c={c} />
 
-      {/* Позвонить · Написать · Маршрут (prototype v6, #1343): a word under each, nothing to do — no tile */}
-      <View testID="client-actions" style={{ flexDirection: "row", gap: space[2] }}>
-        {tel ? (
-          <ActionTile
-            testID="client-call"
-            icon="phone"
-            label={t("client.call")}
-            // the outcome sheet opens after the call, not under the system dialer (spec 20 §3, founder 07.11)
-            onPress={() => dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }))}
-          />
+        {/* Позвонить · Написать · Маршрут (prototype v6, #1343): a word under each, nothing to do — no tile */}
+        <View testID="client-actions" style={{ flexDirection: "row", gap: space[2] }}>
+          {tel ? (
+            <ActionTile
+              testID="client-call"
+              icon="phone"
+              label={t("client.call")}
+              // the outcome sheet opens after the call, not under the system dialer (spec 20 §3, founder 07.11)
+              onPress={() => dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }))}
+            />
+          ) : null}
+          {main && (tel || mail) ? (
+            <ActionTile
+              testID="client-write"
+              icon="sms"
+              label={t("visit.message")}
+              // both — ask how; one — straight to it (wave 6-3: a ready text in the client's language, the event is written)
+              onPress={() => (tel && mail ? setWriteAsk(true) : tel ? setWriting({ owner: { type: "customer", id: c.id }, person: main }) : Linking.openURL(mail!).catch(() => {}))}
+            />
+          ) : null}
+          {props[0] ? (
+            <ActionTile
+              testID="client-route"
+              icon="navigate"
+              label={t("client.route")}
+              onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${props[0]!.address}, ${props[0]!.city}`)}`)}
+            />
+          ) : null}
+        </View>
+        {lateCalls ? <StatusChip status="warn" label={t("client.lateCalls")} /> : null}
+
+        {/* #1094/#879: the card's main action — in one place, a verb: the estimate (the «＋» keeps the rest) */}
+        {estimateItem && canServe(db, c.id) ? (
+          <Button testID="client-make-estimate" label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
         ) : null}
-        {main && (tel || mail) ? (
-          <ActionTile
-            testID="client-write"
-            icon="sms"
-            label={t("visit.message")}
-            // both — ask how; one — straight to it (wave 6-3: a ready text in the client's language, the event is written)
-            onPress={() => (tel && mail ? setWriteAsk(true) : tel ? setWriting({ owner: { type: "customer", id: c.id }, person: main }) : Linking.openURL(mail!).catch(() => {}))}
-          />
+
+        {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
+        <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id) }} />
+
+        {canSeeClientMoney(role) ? (
+          // money only, three equal tiles on one line — unslop 05.11
+          <Card>
+            <RowView style={{ alignItems: "flex-start" }}>
+              <MoneyCell testID="client-owes" label={t("cl6.money.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
+              <MoneyCell testID="client-paid" label={t("cl6.money.paid")} value={moneyWhole(m.paidTotalCents)} />
+              <MoneyCell testID="client-invoiced" label={t("cl6.money.invoiced")} value={moneyWhole(m.invoicedCents)} />
+            </RowView>
+          </Card>
         ) : null}
-        {props[0] ? (
-          <ActionTile
-            testID="client-route"
-            icon="navigate"
-            label={t("client.route")}
-            onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${props[0]!.address}, ${props[0]!.city}`)}`)}
-          />
-        ) : null}
+        {/* spec 35 §4г («Деньги и отчёты»): the client's money without an invoice — apply or refund it on its receipt */}
+        {canSeeClientMoney(role) ? <AdvancesBlock customerId={c.id} /> : null}
       </View>
-      {lateCalls ? <StatusChip status="warn" label={t("client.lateCalls")} /> : null}
-
-      {/* #1094/#879: the card's main action — in one place, a verb: the estimate (the «＋» keeps the rest) */}
-      {estimateItem && canServe(db, c.id) ? (
-        <Button testID="client-make-estimate" label={t("path.estimateNew")} icon="invoice" full onPress={() => router.push(estimateItem.href as Href)} />
-      ) : null}
-
-      {/* add-on modules' place (spec 33 П24 А3): nothing unless a module is switched on */}
-      <ModulePlaces place="client" ctx={{ customerId: c.id, leadIds: db.leads.filter((l) => l.customerId === c.id).map((l) => l.id) }} />
-
-      {canSeeClientMoney(role) ? (
-        // money only, three equal tiles on one line — unslop 05.11
-        <Card>
-          <RowView style={{ alignItems: "flex-start" }}>
-            <MoneyCell testID="client-owes" label={t("client.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
-            <MoneyCell testID="client-paid" label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} />
-            <MoneyCell testID="client-invoiced" label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} />
-          </RowView>
-        </Card>
-      ) : null}
-      {/* spec 35 §4г («Деньги и отчёты»): the client's money without an invoice — apply or refund it on its receipt */}
-      {canSeeClientMoney(role) ? <AdvancesBlock customerId={c.id} /> : null}
 
       {/* the client's sections as view tabs (DS §9 А1п, #1343): all always, the number — what waits for an action */}
       <ViewTabs
@@ -212,6 +221,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
                       <ListRow
                         title={t("client.nextVisit")}
                         subtitle={[day(nextVisit.start), r.jobs.find((j) => j.id === nextVisit.jobId)?.title].filter(Boolean).join(" · ")}
+                        lines={2}
                         left={<Icon name="route" />}
                         onPress={() => router.push(`/visit/${nextVisit.id}`)}
                       />
@@ -330,10 +340,11 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
 function MoneyCell({ label, value, tone = "ink", testID }: { label: string; value: string; tone?: "ink" | "warn"; testID?: string }) {
   return (
     <View testID={testID} style={{ alignItems: "flex-start", flex: 1 }}>
-      <T v="caption" tone="mut">
+      <T v="caption" tone="mut" numberOfLines={1}>
         {label}
       </T>
-      <T v="heading" tabular tone={tone}>
+      {/* a sum is never broken onto two lines (#1417 review): the three stay on one line */}
+      <T v="heading" tabular tone={tone} numberOfLines={1}>
         {value}
       </T>
     </View>
