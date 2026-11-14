@@ -112,6 +112,10 @@ export const motion = {
   durBrandEdge: 120,
   durBrandPause: 150,
   durBrandFold: 450,
+  /** DS §18.2 (#1394): the launch keeps the mark still this long; only a longer load shows the wait with its word */
+  durBrandHold: 1000,
+  /** DS §18.2 (#1394): the launch layer's mark grows to this while it fades into the first screen */
+  brandExitScale: 1.06,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
