@@ -338,11 +338,21 @@ describe("stripe-pay: rate limits (spec 35 §4д)", () => {
       expect(logs.join(" ")).not.toContain("203.0.113.7");
     }
   });
-  it("the limits failing let the payment through (a miss keeps its own answer), with a line in the log", async () => {
+  it("a limit that fails: 429 «wait», no intent is made or cancelled (a miss keeps its own answer), with a line in the log", async () => {
     const boom = async () => { throw new Error("db"); };
-    const ok = deps({ rate: boom, invoiceRate: boom });
-    expect((await handlePay(req(), ok.d)).status).toBe(200);
-    expect(ok.logs.join(" ")).toContain("rate limit failed");
+    const byLink = deps({ rate: boom });
+    const r1 = await handlePay(req(), byLink.d);
+    expect(r1.status).toBe(429);
+    expect(body(r1)).toEqual({ error: "rate_limited", retryAfter: 30 });
+    expect(byLink.opened).toEqual([]);
+    expect(byLink.calls).toEqual([]);
+    expect(byLink.logs.join(" ")).toContain("rate limit failed");
+    const byInvoice = deps({ invoiceRate: boom, a: attempt({ stale_intents: ["pi_Old1"] }) });
+    const r2 = await handlePay(req(), byInvoice.d);
+    expect(r2.status).toBe(429);
+    expect(r2.headers["Retry-After"]).toBe("30");
+    expect(byInvoice.calls).toEqual([]);
+    expect(byInvoice.logs.join(" ")).toContain("invoice rate limit failed");
     const miss = deps({ a: unknown(), rateMiss: boom });
     expect(body(await handlePay(req(), miss.d))).toEqual({ error: "nothing_to_pay" });
   });

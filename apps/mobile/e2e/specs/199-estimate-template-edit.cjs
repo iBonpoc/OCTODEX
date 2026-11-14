@@ -1,7 +1,7 @@
 /**
  * e2e 199 — E3c and the debts of E3b (docs/specs/07 §12; S5t «Шаблон → смета», S0b). Every view.
  * - a module's template shows the module's NAME («Из модуля Водостоки (Gutters)»), never its key «gutters»;
- * - a module switched on: its starters («Чистка гаттеров», «Только guards», «Замена гаттеров», #1323) are offered in «Шаблоны модулей» — the core has none (В6);
+ * - a module switched on: its starters («Чистка желобов», «Только guards», «Замена желобов», #1323) are offered in «Шаблоны модулей» — the core has none (В6);
  *   the section itself with a module's starters — unit:estimateStarters (no stand-in module in the app, §12 №13);
  * - «Копировать»: a new template «… (копия)», the company's own (no module's mark), the original untouched; «Отменить»
  *   takes it away (not to the archive);
