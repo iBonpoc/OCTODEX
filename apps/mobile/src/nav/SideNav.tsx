@@ -35,7 +35,7 @@ export function SideNav() {
   const menu = useNavMenu();
   const current = useMenuCurrent();
   const path = usePathname();
-  // a screen that needs the whole screen (useHideTabBar: the signature pad, a drawing canvas on a phone in landscape)
+  // a screen that needs the whole screen (useHideTabBar: the signature pad, a module's full-screen screens — a drawing canvas, #1426)
   const hidden = useTabBarHidden();
   if (!wide || hidden || !isAppPath(path)) return null;
   const open = device === "desktop" && menu.sideOpen;
