@@ -82,7 +82,8 @@ const Label = memo(function Label({ l, bg, ink }: { l: SceneLabel; bg: string; i
   return (
     <G id={`lbl-${l.id}`}>
       <Rect x={l.x - l.w / 2} y={l.y - l.h / 2} width={l.w} height={l.h} rx={radius.chip} fill={bg} />
-      <SvgText x={l.x} y={l.y + FS * 0.35} fontSize={FS} fontFamily={font.families.medium} fill={ink} textAnchor="middle">
+      {/* a corner's degrees are small (founder 12.11: «маленькими буквами», #1275) */}
+      <SvgText x={l.x} y={l.y + (l.kind === "corner" ? font.size.micro : FS) * 0.35} fontSize={l.kind === "corner" ? font.size.micro : FS} fontFamily={font.families.medium} fill={ink} textAnchor="middle">
         {l.text}
       </SvgText>
     </G>

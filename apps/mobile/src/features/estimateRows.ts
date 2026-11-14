@@ -64,7 +64,7 @@ export function duplicateLine(lines: CustomLine[], id: string, newId: () => stri
   return { lines: [...lines.slice(0, i + 1), copy, ...lines.slice(i + 1)], copyId: copy.id };
 }
 
-/** «Сумма $510.00 · Заработок $186.00 · 36.5 %» — numbers of an open row; profit only for who sees costs; null while the quantity is not a number */
+/** «Сумма $510.00 · прибыль $186.00 · 36.5 %» — numbers of an open row; profit only for who sees costs; null while the quantity is not a number */
 export function rowFigures(l: CustomLine, costsVisible: boolean): { total: number; profit: number | null; marginPct: string | null } {
   let total = 0;
   try {
@@ -83,6 +83,24 @@ export function rowFigures(l: CustomLine, costsVisible: boolean): { total: numbe
   return { total, profit, marginPct: profit === null ? null : marginPctOf(total, total - profit) };
 }
 
+/** «$12.00 × 86 LF» — the folded row in «Подробно» (DS §8.3): the price first, then the quantity */
+export function rowPriceTimes(l: Pick<CustomLine, "quantity" | "unit" | "unitPriceCents">, money: (c: number) => string, shownQty: (q: CustomLine["quantity"]) => string): string {
+  return `${money(l.unitPriceCents)} × ${shownQty(l.quantity)} ${l.unit}`;
+}
+
+/** «Нет цены» (DS §8.3, spec §11.2.2): a line the client sees, priced $0 — a soft warning; «Сохранить» is not blocked */
+export const noPrice = (l: Pick<CustomLine, "unitPriceCents" | "clientVisible">): boolean => l.unitPriceCents === 0 && l.clientVisible !== false;
+
+/**
+ * «расход $280.00» of a hidden line (DS §8.3, spec §11.2.3): what the line costs the company — only for who sees costs and
+ * never on «Экран для клиента»; null otherwise (the row says $0.00 then, as the client's total does)
+ */
+export function hiddenSpend(l: CustomLine, o: { costsVisible: boolean; clientScreen: boolean }): number | null {
+  if (!isHidden(l) || !o.costsVisible || o.clientScreen) return null;
+  const f = rowFigures(l, true);
+  return f.profit === null ? null : -f.profit;
+}
+
 /* ---- «Отменить» of one action takes back that action only (a later edit of another row stays) ---- */
 
 /** the line back where it was (by its place in the list at the time), unless it is there already */
@@ -90,6 +108,21 @@ export function reinsertLine(lines: CustomLine[], line: CustomLine, index: numbe
   if (lines.some((l) => l.id === line.id)) return lines;
   const at = Math.max(0, Math.min(index, lines.length));
   return [...lines.slice(0, at), line, ...lines.slice(at)];
+}
+/**
+ * «Вернуть» of a series of deletions (DS §15.2, О15): only the deleted lines come back, each to its place, in the reverse order of
+ * the deletions (each index was taken from the list as it stood then); everything else done in those seconds stays as it is.
+ */
+export type DeleteSeries = { toast: number; optionId: string; items: { line: CustomLine; index: number }[] };
+/**
+ * The deletions «Вернуть» takes back after one more: added to the series while its toast is on screen AND it is the same variant
+ * (Good / Better / Best) — a line deleted in another variant starts a new series, so nothing comes back into a wrong variant.
+ */
+export function nextSeries(prev: DeleteSeries | null, toastOnScreen: boolean, optionId: string, item: { line: CustomLine; index: number }): DeleteSeries["items"] {
+  return prev && toastOnScreen && prev.optionId === optionId ? [...prev.items, item] : [item];
+}
+export function restoreDeleted(lines: CustomLine[], deleted: readonly { line: CustomLine; index: number }[]): CustomLine[] {
+  return [...deleted].reverse().reduce((acc, d) => reinsertLine(acc, d.line, d.index), lines);
 }
 /** the line as it was before the action (replace, clear) */
 export function restoreLine(lines: CustomLine[], old: CustomLine): CustomLine[] {

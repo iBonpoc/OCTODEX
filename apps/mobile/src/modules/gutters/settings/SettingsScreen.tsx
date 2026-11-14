@@ -6,17 +6,18 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { GUTTER_MOUNTS } from "@octo/estimating-engine";
-import { component, radius, space } from "@octo/design-tokens";
+import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleHref, moduleState } from "@/modules/registry";
 import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
-import { Press, T } from "@/ui/primitives";
+import { Icon, Press, T } from "@/ui/primitives";
+import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
@@ -102,9 +103,8 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
 }
 
 /**
- * Checkboxes as chips: the look of ChoiceChips (ink frame on the surface, «✓» and bold when checked). The core's
- * MultiChips fills checked chips with the accent — a page of them would be all yellow, and yellow is kept for the one
- * main action (rule 2). TODO(ui): move into src/ui as MultiChips' look (a «Лиды и клиенты» file) — said in the PR.
+ * Checkboxes as chips with an id each (`<testID>-<key>`): the look of the core's MultiChips — «Заливка» and `check` before the word (DS «Выделение
+ * выбранного», #1306), never the accent (yellow is the main action's alone, rule 2).
  */
 function MultiChips<K extends string>({ items, value, onToggle, testID }: { items: { key: K; label: string }[]; value: K[]; onToggle: (k: K) => void; testID: string }) {
   const ro = useReadOnly();
@@ -125,10 +125,10 @@ function MultiChips<K extends string>({ items, value, onToggle, testID }: { item
             accessibilityState={{ checked: sel, disabled: ro }}
             {...({ "aria-checked": sel } as object)}
             accessibilityLabel={it.label}
-            style={{ height: h, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", backgroundColor: c.surf2, borderWidth: sel ? component.selectedBorder : 1, borderColor: sel ? c.ink : c.bd }}
+            style={{ height: h, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }), flexDirection: "row", alignItems: "center", gap: space[1], borderWidth: component.hairline, borderColor: sel ? "transparent" : c.bd }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
-              {sel ? "✓ " : ""}
+            {sel ? <Icon name="check" s={sizes.iconSm} color={c.ink} /> : null}
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>
@@ -184,6 +184,9 @@ export default function GutterSettingsScreen() {
   const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
   const setRule = (key: string, v: unknown) => put(`gset-rule-${key}`, ["rules", key], v);
   /** a number rule as a stepper: its unit, range and step (spec П4) */
+  // the percent the company had before «без запаса»: switching it on again brings it back (in this visit; the stored value is 0 meanwhile)
+  const lastWaste = useRef<number>(RULE_NUMS.wastePct.def);
+  if (rules.wastePct > 0) lastWaste.current = rules.wastePct;
   const num = (key: keyof typeof RULE_NUMS, unit: string, label: string) => {
     const r = RULE_NUMS[key];
     return (
@@ -335,7 +338,16 @@ export default function GutterSettingsScreen() {
             {num("storyFt", t(k("ft")), t(k("r.storyFt")))}
             {num("hangerSpacingIn", t(k("in")), t(k("r.hangerSpacingIn")))}
             <Switch testID="gset-rule-hangerExtra" on={rules.hangerExtra} onChange={(v) => setRule("hangerExtra", v)} label={t(k("r.hangerExtra"))} />
-            {num("wastePct", "%", t(k("r.wastePct")))}
+            {/* waste: a switch («без запаса» = 0 %, #1355) and the percent under it while it is on */}
+            <Switch testID="gset-rule-wasteOn" on={rules.wastePct > 0} onChange={(v) => setRule("wastePct", v ? lastWaste.current : 0)} label={t(k("r.wasteOn"))} />
+            {rules.wastePct > 0 ? (
+              <Step testID="gset-rule-wastePct">
+                <Stepper label={t(k("r.wastePct"))} unit="%" value={rules.wastePct} min={1} max={RULE_NUMS.wastePct.max} step={RULE_NUMS.wastePct.step} onChange={(v) => setRule("wastePct", v)} />
+              </Step>
+            ) : (
+              <T v="caption" tone="mut">{t(k("r.wasteOff"))}</T>
+            )}
+            {num("cutCornerOutIn", t(k("in")), t(k("r.cutCornerOutIn")))}
             {num("cutCornerIn", t(k("in")), t(k("r.cutCornerIn")))}
             <Field label={t(k("r.corner"))} testID="gset-rule-corner">
               <ChoiceChips items={CORNER_METHODS.map((m) => ({ key: m, label: t(a(`cm.${m}`)) }))} value={rules.corner} onChange={(m) => setRule("corner", m)} />

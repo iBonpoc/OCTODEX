@@ -1,4 +1,5 @@
-import { toastArmed } from "./toastArm";
+import type { ComponentProps } from "react";
+import { toastArmed, toastExpires, toastIdFor } from "./toastArm";
 import { toastBottom, useFooterInset } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -213,6 +214,23 @@ export function Menu<K extends string>({
  */
 const SheetHold = createContext<{ current: boolean }>({ current: false });
 export const useSheetHold = () => useContext(SheetHold);
+
+/**
+ * The side insets of the open sheet (its left / right padding). A list inside a sheet scrolls in `SheetScroll`: the scroll view spans
+ * the insets (negative margin) and pads its content back by the same, so the scroll indicator stands in the inset — not over the
+ * arrows «›» at the end of the rows (founder 13.11, #1339; DS Б1).
+ */
+const SheetInset = createContext<{ l: number; r: number }>({ l: 0, r: 0 });
+export function SheetScroll({ style, contentContainerStyle, ...rest }: ComponentProps<typeof ScrollView>) {
+  const g = useContext(SheetInset);
+  return (
+    <ScrollView
+      {...rest}
+      style={[{ marginLeft: -g.l, marginRight: -g.r }, style]}
+      contentContainerStyle={[{ paddingLeft: g.l, paddingRight: g.r }, contentContainerStyle]}
+    />
+  );
+}
 
 /* ---------- Sheet: iOS-style bottom sheet on phone, centered modal on tablet/desktop ----------
  * Phone: grabber; drag the top of the sheet down to close, up to open it full height; tap outside or Android back closes.
@@ -543,6 +561,7 @@ export function Sheet({
             !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, follow]}
           accessibilityViewIsModal
         >
+          <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: wide ? space[4] : Math.max(insets.right, space[4]) }}>
           <Glass
             strong
             style={{
@@ -641,7 +660,7 @@ export function Sheet({
               <GestureDetector gesture={bodyPan}>
               <View style={{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }} testID="sheet-body">
                 <GestureDetector gesture={scrollNative}>
-                <ScrollView
+                <SheetScroll
                   style={{ flexGrow: 0 }}
                   contentContainerStyle={{ gap: space[3] }}
                   keyboardShouldPersistTaps="handled"
@@ -652,7 +671,7 @@ export function Sheet({
                   }}
                 >
                   <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
-                </ScrollView>
+                </SheetScroll>
                 </GestureDetector>
               </View>
               </GestureDetector>
@@ -663,6 +682,7 @@ export function Sheet({
               </View>
             ) : null}
           </Glass>
+          </SheetInset.Provider>
         </Animated.View>
       </KeyboardAvoidingView>
       </GestureHandlerRootView>
@@ -672,14 +692,15 @@ export function Sheet({
 }
 
 /* ---------- "?" help: visible 18, hit 44 ---------- */
-export function HelpButton({ title, text, where }: { title: string; text: string; where?: string }) {
+/** «?» (DS Б7). `onPress` — the screen opens its own sheet (several steps, not one text): the same «?», the same place */
+export function HelpButton({ title, text, where, onPress, testID }: { title: string; text?: string; where?: string; onPress?: () => void; testID?: string }) {
   const [open, setOpen] = useState(false);
   const { c } = useTheme();
   const { t } = useI18n();
   const s = component.help.visible;
   return (
     <>
-      <Press onPress={() => setOpen(true)} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`}>
+      <Press onPress={onPress ?? (() => setOpen(true))} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`} testID={testID}>
         <View
           style={{
             width: s,
@@ -712,27 +733,45 @@ export function HelpButton({ title, text, where }: { title: string; text: string
 /* ---------- Toast with 5-second Undo (DS rule 10) ---------- */
 
 interface ToastItem {
+  /** the toast itself (it slides in once); a toast that grows (`grow`) keeps it */
   id: number;
+  /** when its text last changed: «Вернуть» is armed from it and its ring burns down from it */
+  at: number;
   text: string;
   /** false: nothing could be taken back (it was changed since, #1193 п.6) — the toast then says so */
   undo?: GuardedUndo;
 }
-const ToastCtx = createContext<{ show: (text: string, undo?: GuardedUndo) => void } | null>(null);
+/**
+ * One toast at a time: a new one replaces the old (DS §15.2). `grow` — the id of the toast on screen, which then stays and takes the
+ * new text and «Вернуть» with 5 fresh seconds (a series of deletions is one toast «Удалено позиций: N»); if it is gone, a new one shows.
+ * `show` returns the toast's id; `showing(id)` — is it still on screen.
+ */
+type ToastApi = { show: (text: string, undo?: GuardedUndo, opts?: { grow?: number }) => number; showing: (id: number) => boolean };
+const ToastCtx = createContext<ToastApi | null>(null);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [item, setItem] = useState<ToastItem | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const show = useCallback((text: string, undo?: GuardedUndo) => {
-    if (timer.current) clearTimeout(timer.current);
-    const id = Date.now();
-    setItem({ id, text, undo });
-    timer.current = setTimeout(() => setItem((cur) => (cur?.id === id ? null : cur)), motion.toastUndoMs);
+  const [item, setItemState] = useState<ToastItem | null>(null);
+  const current = useRef<ToastItem | null>(null);
+  const setItem = useCallback((next: ToastItem | null | ((cur: ToastItem | null) => ToastItem | null)) => {
+    const v = typeof next === "function" ? next(current.current) : next;
+    current.current = v;
+    setItemState(v);
   }, []);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const show = useCallback((text: string, undo?: GuardedUndo, opts?: { grow?: number }) => {
+    if (timer.current) clearTimeout(timer.current);
+    const at = Date.now();
+    const id = toastIdFor(current.current?.id, opts?.grow, at);
+    setItem({ id, at, text, undo });
+    timer.current = setTimeout(() => setItem((cur) => (toastExpires(cur, id, at) ? null : cur)), motion.toastUndoMs);
+    return id;
+  }, [setItem]);
+  const showing = useCallback((id: number) => current.current?.id === id, []);
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
   return (
-    <ToastCtx.Provider value={{ show }}>
+    <ToastCtx.Provider value={{ show, showing }}>
       {children}
       <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />
     </ToastCtx.Provider>
@@ -778,9 +817,10 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
         </View>
         {item.undo ? (
           <UndoButton
+            key={item.at}
             onPress={() => {
-              // the second tap of the double tap that made the thing is not «Отменить» (item.id = when it showed)
-              if (!toastArmed(item.id, Date.now())) return;
+              // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
+              if (!toastArmed(item.at, Date.now())) return;
               // #1193 п.6: «Отменить» refused (the thing was changed since): say so instead of a silent nothing
               if (item.undo?.() === false) return onLate(t("common.undoLate"));
               onDone();

@@ -12,6 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { component, spaceHalf, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { fillStyle, fillStyleFlat } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
@@ -44,7 +45,8 @@ export function Button({
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
-  size?: "sm" | "md" | "phone";
+  /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
+  size?: "sm" | "md" | "phone" | "bar";
   icon?: IconKey;
   disabled?: boolean;
   full?: boolean;
@@ -54,7 +56,8 @@ export function Button({
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
-  const h = component.button[size ?? (wide ? "md" : "phone")];
+  const bar = size === "bar";
+  const h = bar ? component.button.hit : component.button[size ?? (wide ? "md" : "phone")];
   const bg =
     variant === "primary" ? c.acc : variant === "secondary" ? c.surf2 : variant === "danger" ? c.status.bad.fill : "transparent";
   const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : c.ink;
@@ -71,6 +74,7 @@ export function Button({
           minHeight: h,
           paddingHorizontal: space[4],
           borderRadius: radius.pill,
+          ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
           borderWidth: variant === "secondary" ? 1 : 0,
           borderColor: c.bd,
@@ -84,7 +88,7 @@ export function Button({
       ]}
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={fg} /> : null}
-      <T v="button" style={{ color: fg }} numberOfLines={1}>
+      <T v="button" style={bar ? { color: fg, flexShrink: 1, textAlign: "center" } : { color: fg }} numberOfLines={bar ? 2 : 1}>
         {label}
       </T>
     </Press>
@@ -216,6 +220,7 @@ export function Segmented<K extends string>({
   testID,
   radio,
   label,
+  equal,
 }: {
   items: { key: K; label: string }[];
   value: K;
@@ -229,6 +234,8 @@ export function Segmented<K extends string>({
   radio?: boolean;
   /** what the group is a choice of — read with the group (the caption above it is not tied to it) */
   label?: string;
+  /** with `full`: every segment the same width — a column under each lines up with it (the totals of the options, DS §8.10) */
+  equal?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -286,7 +293,7 @@ export function Segmented<K extends string>({
       {ready ? (
         <Animated.View
           // selected: ink frame on a raised surface — yellow is kept for the one main action (rule 2, unslop 05.11 №1)
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill }, fillStyleFlat(c), pill]}
         />
       ) : null}
       {items.map((it) => {
@@ -298,6 +305,7 @@ export function Segmented<K extends string>({
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
+            containerStyle={equal ? { flex: 1 } : undefined}
             accessibilityRole={radio ? "radio" : "tab"}
             accessibilityState={radio ? { selected: sel, checked: sel } : { selected: sel }}
             {...(radio ? ({ "aria-checked": sel } as object) : null)}
@@ -309,15 +317,14 @@ export function Segmented<K extends string>({
               minHeight: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
+              ...(equal ? { alignItems: "center" } : null),
               // a choice in a form never grows past its card: the labels give way, they do not push the segment out
               ...(radio ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,
-              backgroundColor: !ready && sel ? c.surf2 : "transparent",
-              borderWidth: !ready && sel ? 1 : 0,
-              borderColor: c.ink,
+              ...(!ready && sel ? fillStyle(c) : { backgroundColor: "transparent" }),
             }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }} numberOfLines={1}>
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
               {it.label}
             </T>
           </Press>
@@ -472,9 +479,13 @@ export function TextField({
   label,
   icon,
   multiline,
+  rows,
   onSubmit,
   autoFocus,
   selectOnFocus,
+  focusNow,
+  chain,
+  onFocus,
   field,
   error,
   testID,
@@ -493,12 +504,20 @@ export function TextField({
   label?: string;
   icon?: IconKey;
   multiline?: boolean;
+  /** a multi-line field: how many lines it shows empty (2 by default); it grows with the text either way */
+  rows?: 1 | 2;
   /** return key on the keyboard */
   onSubmit?: () => void;
   /** focus (and the keyboard) as soon as the field appears — a sheet opened for one value */
   autoFocus?: boolean;
   /** the text is selected when the field gets the focus: a typed digit replaces a prefilled value */
   selectOnFocus?: boolean;
+  /** a counter: each time it grows the field takes the focus AT ONCE (no sheet-opening wait) and selects its text — the next field of a chain; the keyboard stays up (#1316) */
+  focusNow?: number;
+  /** a field of a chain (feet → inches): the keyboard's key says «next» and keeps the focus on submit — no close-and-open of the keyboard (Android, #1316) */
+  chain?: boolean;
+  /** the field took the focus (a tap, or `focusNow`) */
+  onFocus?: () => void;
   /** a required field of a form (`useRequiredForm().field(id)`): its error, its place for the scroll, its focus */
   field?: FieldBinding;
   /** «что вписать» under the field: alert + text, the frame `status.bad` (DS §11 п.2; the form gives it through `field`) */
@@ -520,6 +539,12 @@ export function TextField({
   const f = FIELD[type];
   const multi = multiline ?? f.multiline ?? false;
   const h = wide ? component.field.h : component.field.phone;
+  // a multi-line field grows with its text (the browser's textarea does not by itself)
+  const [textH, setTextH] = useState(0);
+  // one line empty: the text's own line height, the frame padded to the field's height (44 phone / 36 wide)
+  const line = Math.round(font.size.input * font.lineHeight.body);
+  const one = multi && rows === 1;
+  const minH = one ? line : multi ? h * (rows ?? 2) : h;
   const input = useRef<React.ComponentRef<typeof TextInput>>(null);
   const len = useRef(value.length);
   len.current = value.length;
@@ -528,6 +553,13 @@ export function TextField({
   const selectAll = () => input.current?.setSelection?.(0, len.current);
   const shownError = error ?? field?.error;
   const tid = testID ?? field?.testID;
+  useEffect(() => {
+    if (!focusNow) return;
+    input.current?.focus();
+    // all of the text selected AT ONCE (a digit typed right after replaces it): by hand on a phone, `select()` on the web's field
+    input.current?.setSelection?.(0, len.current);
+    (input.current as unknown as { select?: () => void } | null)?.select?.();
+  }, [focusNow]);
   useEffect(() => {
     if (plan.focusAfterMs === null) return;
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
@@ -545,7 +577,8 @@ export function TextField({
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",
         paddingHorizontal: space[3],
-        paddingVertical: multi ? space[2] : 0,
+        // the same frame as a one-line field of this height (e2e 343 compares them)
+        paddingVertical: one ? Math.max(0, (h - line) / 2) : multi ? space[2] : 0,
         gap: space[2],
       }}
     >
@@ -558,18 +591,21 @@ export function TextField({
         }}
         value={value}
         editable={!ro}
-        onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
+        onFocus={plan.selectByHand || onFocus ? () => { onFocus?.(); if (plan.selectByHand) setTimeout(selectAll, 0); } : undefined}
         onBlur={field || onBlurText ? () => { field?.blur(value); onBlurText?.(); } : undefined}
         inputAccessoryViewID={accessoryID}
         aria-disabled={ro || undefined}
         onChangeText={(v) => {
           const nv = f.fmt ? f.fmt(v) : v;
+          // text taken away: measure again from the smallest height (a textarea's scrollHeight never drops below its height)
+          if (multi && nv.length < len.current) setTextH(0);
           field?.edit(nv);
           onChangeText(nv);
         }}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
         multiline={multi}
+        onContentSizeChange={multi && Platform.OS === "web" ? (e) => setTextH(Math.ceil(e.nativeEvent.contentSize.height)) : undefined}
         keyboardType={f.kb ?? "default"}
         inputMode={f.kb === "decimal-pad" ? "decimal" : f.kb === "number-pad" ? "numeric" : f.kb === "phone-pad" ? "tel" : f.kb === "email-address" ? "email" : f.kb === "url" ? "url" : type === "search" ? "search" : "text"}
         autoComplete={f.ac}
@@ -579,19 +615,22 @@ export function TextField({
         spellCheck={f.correct ?? true}
         secureTextEntry={f.secure}
         maxLength={f.max}
-        returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
+        returnKeyType={multi ? "default" : chain ? "next" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
         autoFocus={plan.autoFocus}
         selectTextOnFocus={selectOnFocus}
-        submitBehavior={multi ? "newline" : "blurAndSubmit"}
+        submitBehavior={multi ? "newline" : chain ? "submit" : "blurAndSubmit"}
         accessibilityLabel={a11yLabel ?? label ?? placeholder}
         aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
-          minHeight: multi ? h * 2 : h,
+          minHeight: minH,
+          // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
+          height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
           fontFamily: font.families.regular,
           fontSize: font.size.input,
+          lineHeight: one ? line : undefined,
           textAlignVertical: multi ? "top" : "center",
           fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,
           outlineStyle: "none",
@@ -727,13 +766,13 @@ function ChipsRow<K extends string>({ items, value, onChange, nowrap }: { items:
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              // selected: ink frame on the same surface — yellow is kept for the one main action (rule 2, spec 06 «Аудит» №1)
-              backgroundColor: c.surf2,
-              borderWidth: sel ? component.selectedBorder : 1,
-              borderColor: sel ? c.ink : c.bd,
+              // chosen: «Заливка» (DS «Выделение выбранного»); the unchosen keeps a hairline, no fill; yellow is the main action's alone (rule 2)
+              ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              borderWidth: component.hairline,
+              borderColor: sel ? "transparent" : c.bd,
             }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }}>
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>
@@ -774,13 +813,16 @@ export function MultiChips<K extends string>({
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              backgroundColor: sel ? c.acc : c.surf2,
-              borderWidth: sel ? 0 : 1,
-              borderColor: c.bd,
+              ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space[1],
+              borderWidth: component.hairline,
+              borderColor: sel ? "transparent" : c.bd,
             }}
           >
-            <T v="button" style={{ color: sel ? c.onAcc : c.ink }}>
-              {sel ? "✓ " : ""}
+            {sel ? <Icon name="check" s={sizes.iconSm} color={c.ink} /> : null}
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>

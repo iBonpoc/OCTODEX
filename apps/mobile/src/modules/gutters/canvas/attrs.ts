@@ -16,6 +16,8 @@ export type RunAttrs = DrawnRun["attrs"];
 export type DsAttrs = Omit<DrawnDownspout, "id" | "runId" | "atIn">;
 
 export const PROFILES: readonly GutterProfile[] = ["k", "half_round", "fascia", "box", "euro"];
+/** the profile as an icon (a cross-section; `extraIcons`): the canvas toolbar's «Желоб» shows the chosen one (#1274) */
+export const PROFILE_ICON = { k: "xsK", half_round: "xsHalf", fascia: "xsFascia", box: "xsBox", euro: "xsEuro" } as const satisfies Record<GutterProfile, string>;
 /** nominal sizes, inches, by profile (until M7) */
 export const SIZES_BY_PROFILE: Record<GutterProfile, readonly string[]> = {
   k: ["5", "6", "7"],

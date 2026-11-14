@@ -9,7 +9,7 @@
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -55,8 +55,9 @@ exports.run = async (h) => {
   const openAttrs = async () => {
     if (!wide) {
       // a downspout just put opens its menu by itself (founder 09.11)
-      if (!(await panel().count())) await tid("draw-props").getByRole("button").click();
-    } else h.expect((await tid("draw-props").count()) === 0, "820/1280: no «Свойства» button — the panel is on the side");
+      if (!(await panel().count())) await openProps(p);
+    }
+    h.expect((await tid("draw-props").count()) === 0, "no «Свойства» button on the toolbar — a double tap opens them (#1273), the panel is on the side on 820/1280");
     await panel().waitFor({ timeout: 5000 });
   };
   const closeAttrs = async () => {
@@ -143,7 +144,10 @@ exports.run = async (h) => {
   } else h.expect((await tid("attr-ds-kind").count()) === 1, "820/1280: the kind without «Ещё»");
   await more();
   h.expect((await tid("attr-ds-kind-rectPlain").getAttribute("aria-checked")) === "true", "rectangular, smooth by default");
+  // «Заливка» (DS «Выделение выбранного», #1306): the chosen kind carries the `check` in its corner, the other none
+  h.expect((await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 0, "the chosen kind has the check, the other has none");
   await tid("attr-ds-kind-roundPlain").click(); // the kind: round
+  await waitFor(async () => (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 0, "the check moved to the round kind");
   await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
   await choose("attr-wall", "Кирпич");
   await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + анкеры", "brick: its default wall kit");

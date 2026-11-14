@@ -1,11 +1,12 @@
 import { memo, useEffect, useRef, useState, type ComponentRef } from "react";
 import { Platform, View } from "react-native";
 import Animated, { Easing, useReducedMotion, useSharedValue, useAnimatedStyle, withTiming } from "react-native-reanimated";
-import { motion, size, space } from "@octo/design-tokens";
+import { component, motion, size, space } from "@octo/design-tokens";
+import Svg, { Defs, Line, Pattern, Rect } from "react-native-svg";
 import type { CustomLine, LineGroup } from "@octo/estimating-engine";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Button, IconButton, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Menu, useToast, type MenuItem } from "@/ui/overlays";
 import { ReadOnly } from "@/ui/readOnly";
 import { NumberField } from "@/ui/numberField";
@@ -14,19 +15,23 @@ import type { RequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { RowView } from "@/ui/surfaces";
 import { shownQty, lineMarks } from "@/features/estimateDoc";
-import { canHide, isHidden, rowActions, rowFigures, rowSummary, actOfName, type CatalogRefusal, type RowAct } from "@/features/estimateRows";
+import { canHide, hiddenSpend, isHidden, noPrice, rowActions, rowFigures, rowPriceTimes, actOfName, type CatalogRefusal, type RowAct } from "@/features/estimateRows";
+import type { RowView as RowLook } from "./rowView";
 import { LineMarks } from "@/features/LineMarks";
 import { SwipeRow, type SwipeBtn } from "./SwipeRow";
+import { useRowHandle } from "@/features/SortableList";
 import { swipes } from "./swipeState";
 
 /**
- * A line of the estimate, in place (DS §8.3, spec 2026-11-12-estimate-editor Р1): folded — the name, «120 LF × $8.50», the
- * sum; a tap opens it where it stands (one open); open — the name and description, the kind, the numbers, the sum and the
- * profit (for who sees costs), «Ещё». The screen decides who is open and when a row closes; the row only draws and edits.
+ * A line of the estimate, in place (DS §8.3, spec 2026-11-12-estimate-editor §11.2.2): folded — «Кратко» (the name, the
+ * sum, the trash) or «Подробно» (the name, the description, «$12.00 × 86 LF» and the sum, the marks); a tap opens it where
+ * it stands (one open); open — «˄ Свернуть», the name and description, one row «Кол-во · Ед. · Цена», the kind and the cost,
+ * the sum and the profit (for who sees costs), «Ещё». No profit, margin or cost on a folded row — ever; the one exception is
+ * the «расход» of a hidden line, for who sees costs and not on «Экран для клиента». The screen decides who is open and when a
+ * row closes; the row only draws and edits.
  */
 export const UNITS = ["ea", "ft", "LF", "sq ft", "hr", "day", "lot"] as const;
 const GROUPS: LineGroup[] = ["service", "labor", "material"];
-const KIND_ICON: Record<LineGroup, IconKey> = { service: "wrench", labor: "user", material: "note" };
 /** the id of the choice «Своя…» in the unit list */
 const OWN = "__own__";
 
@@ -44,6 +49,8 @@ export interface RowApi {
   wantCatalog: (id: string, on: boolean) => void;
   /** «Открыть в каталоге ›» */
   openInCatalog: (id: string) => void;
+  /** «›» in «Кол-во» of a line from a template: the next line from it opens, the cursor in its «Кол-во» (DS §8.13) */
+  nextQty?: (id: string) => void;
 }
 
 export interface LineRowProps {
@@ -57,6 +64,8 @@ export interface LineRowProps {
   api: RowApi;
   /** the field that takes the cursor when the row opens */
   autoFocus?: "name" | "qty";
+  /** a line from a template with another after it: «›» (Enter on the web) in «Кол-во» goes to that line's «Кол-во» */
+  qtyNext?: string;
   checkPrice?: boolean;
   /** a signed estimate: the row does not open (DS §8.3) */
   locked?: boolean;
@@ -66,6 +75,40 @@ export interface LineRowProps {
   catalog?: { linked: boolean; want: boolean; offer: "offered" | "later" | "refused"; reason?: CatalogRefusal };
   /** the estimate came from a template / a module with this line hidden and priced: it was shown again */
   unhiddenMark?: boolean;
+  /** «Кратко» / «Подробно» — how a folded row looks (the device's choice) */
+  view?: RowLook;
+  /** «Экран для клиента» (DS §8.3): no cost, no profit, no «расход». The mode itself comes with #1307 part «г»; the row is ready */
+  clientScreen?: boolean;
+  /** a finger went down on the open row: a scroll that starts there does not close it (DS §8.3) */
+  onTouchOpen?: () => void;
+  /** the swipe hint of the first estimates plays on this row (DS §8.11): the screen gives it to the first line only */
+  swipeHint?: boolean;
+  onSwipeHintPlayed?: () => void;
+}
+
+/** the hidden line's hatch (DS §8.3): `track` stripes at 45°, `hairline` × 2 wide, a `space[2]` step — no status colour */
+function Hatch({ color, id }: { color: string; /** one pattern id per row: two equal ids on a web page draw only the first */ id: string }) {
+  return (
+    <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
+      <Svg width="100%" height="100%">
+        <Defs>
+          <Pattern id={`est-hatch-${id}`} patternUnits="userSpaceOnUse" width={space[2]} height={space[2]} patternTransform="rotate(45)">
+            <Line x1={0} y1={0} x2={0} y2={space[2]} stroke={color} strokeWidth={component.hairline * 2} />
+          </Pattern>
+        </Defs>
+        <Rect x={0} y={0} width="100%" height="100%" fill={`url(#est-hatch-${id})`} />
+      </Svg>
+    </View>
+  );
+}
+
+/** the trash on the row (DS §8.3): visible 36, the zone 44; `space[6]` from the handle «≡» that the list draws after it */
+function Trash({ label, onPress, testID, gap = true }: { label: string; onPress: () => void; testID: string; /** the gap to «≡» — false where «⋯» stands between */ gap?: boolean }) {
+  return (
+    <View testID={testID} style={gap ? { marginRight: space[6] } : undefined}>
+      <IconButton icon="trash" label={label} onPress={onPress} />
+    </View>
+  );
 }
 
 export const rowFieldId = (lineId: string, f: "name" | "qty" | "price" | "cost") => `est-${f}-${lineId}`;
@@ -78,6 +121,8 @@ function LineRowView(p: LineRowProps) {
   const toast = useToast();
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const moreRef = useRef<ComponentRef<typeof View>>(null);
+  // the list draws «≡» of this open line over the right end of its header (DS §8.3): the header keeps the place
+  const handleInHeader = useRowHandle();
   const [more, setMore] = useState(false);
   // «Своя…»: the unit is written by hand — chosen so, or not one of the list (a catalog thing, a module, «Отменить»)
   const known = (UNITS as readonly string[]).includes(l.unit);
@@ -111,94 +156,157 @@ function LineRowView(p: LineRowProps) {
 
   if (!open) {
     const web = Platform.OS === "web";
+    const full = p.view === "full";
+    const hidden = isHidden(l);
+    const spend = hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen });
+    // the right side of a folded row: the line's sum ($0 for a hidden line — the client pays nothing for it); the hidden
+    // line's «расход» goes under the name, by its mark, for who sees costs — the name keeps its width
+    const right = hidden ? money(0) : money(p.total);
+    const chips = (
+      <>
+        {hidden ? (
+          <View testID={`est-hidden-${l.id}`}>
+            <RowView gap={space[1]}>
+              <Icon name="eyeOff" s={size.iconSm} color={c.mut} />
+              <T v="caption" tone="mut">
+                {t("est.row.hidden")}
+              </T>
+            </RowView>
+          </View>
+        ) : null}
+        {spend !== null ? (
+          <View testID={`est-spend-${l.id}`}>
+            <T v="caption" tone="mut" tabular>
+              {t("est2.row.spend", { spend: money(spend) })}
+            </T>
+          </View>
+        ) : null}
+        {l.optional ? (
+          <View testID={`est-optional-${l.id}`}>
+            <RowView gap={space[1]}>
+              <Icon name="plus" s={size.iconSm} color={c.mut} />
+              <T v="caption" tone="mut">
+                {t("ue.addon")}
+              </T>
+            </RowView>
+          </View>
+        ) : null}
+        {noPrice(l) ? (
+          <View testID={`est-noprice-${l.id}`}>
+            <StatusChip status="warn" label={t("est2.row.noPrice")} />
+          </View>
+        ) : null}
+        {p.unhiddenMark ? (
+          <View testID={`est-unhidden-${l.id}`}>
+            <StatusChip status="info" label={t("est.row.unhiddenMark")} />
+          </View>
+        ) : null}
+        {p.checkPrice ? (
+          <View testID={`est-checkprice-${l.id}`}>
+            <StatusChip status="warn" label={t("est.tpl.checkLine")} />
+          </View>
+        ) : null}
+      </>
+    );
+    const sum = (
+      <View testID={`est-sum-${l.id}`}>
+        <T v="body" w="semibold" tabular tone={hidden || l.optional ? "mut" : "ink"}>
+          {right}
+        </T>
+      </View>
+    );
     const body = (
       <Press onPress={p.locked ? undefined : () => (swipes.justSwiped(motion.durSlow) || swipes.closeOpen() ? undefined : p.api.open(l.id))} disabled={p.locked} visibleHeight={size.rowMin} accessibilityRole="button" accessibilityLabel={l.name || t("est.row.unnamed")} accessibilityState={{ expanded: false }} accessibilityActions={acts.menu.map((k) => ({ name: k, label: META[k].label }))} onAccessibilityAction={(e) => {
           const a = actOfName(e.nativeEvent.actionName, acts);
           if (a) p.api.action(l.id, a);
-        }} testID={`est-line-${l.id}`} containerStyle={web && acts.menu.length ? { flex: 1 } : undefined}>
-        <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1] }}>
-          <RowView style={{ alignItems: "flex-start" }}>
-            <View style={{ paddingTop: space[1] }}>
-              <Icon name={KIND_ICON[l.group]} s={size.iconSm} color={c.mut} />
-            </View>
-            <View style={{ flex: 1, gap: space[1] }}>
-              <T v="body" w="semibold" numberOfLines={1}>
+        }} testID={`est-line-${l.id}`} containerStyle={{ flex: 1 }}>
+        <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1], justifyContent: "center" }}>
+          {full ? (
+            <>
+              <T v="body" w="semibold" tone={hidden ? "mut" : "ink"} numberOfLines={2}>
                 {l.name || t("est.row.unnamed")}
               </T>
-              <T v="caption" tone="mut" tabular numberOfLines={1}>
-                {rowSummary(l, money, shownQty)}
-              </T>
-            </View>
-            <View style={{ alignItems: "flex-end", gap: space[1] }}>
-              <T v="body" tabular tone={l.optional ? "mut" : "ink"}>
-                {money(p.total)}
-              </T>
-              {l.optional ? <StatusChip status="neutral" label={t("ue.addonChip")} /> : null}
-              {isHidden(l) ? (
-                <View testID={`est-hidden-${l.id}`}>
-                  <StatusChip status="neutral" label={t("est.row.hidden")} />
+              {l.description ? (
+                <View testID={`est-desc-${l.id}`}>
+                  <T v="caption" tone="mut" numberOfLines={2}>
+                    {l.description}
+                  </T>
                 </View>
               ) : null}
-              {p.unhiddenMark ? (
-                <View testID={`est-unhidden-${l.id}`}>
-                  <StatusChip status="info" label={t("est.row.unhiddenMark")} />
+              <RowView style={{ justifyContent: "space-between" }}>
+                <View testID={`est-times-${l.id}`}>
+                  <T v="caption" tone="mut" tabular numberOfLines={1}>
+                    {rowPriceTimes(l, money, shownQty)}
+                  </T>
                 </View>
-              ) : null}
-            </View>
-          </RowView>
+                {sum}
+              </RowView>
+              <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView>
+            </>
+          ) : (
+            <>
+              <RowView gap={space[4]}>
+                <T v="body" w="semibold" tone={hidden ? "mut" : "ink"} numberOfLines={1} style={{ flex: 1 }}>
+                  {l.name || t("est.row.unnamed")}
+                </T>
+                {sum}
+              </RowView>
+              {hidden || l.optional || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView> : null}
+            </>
+          )}
           <LineMarks marks={marks} lineId={l.id} />
-          {p.checkPrice ? (
-            <View testID={`est-checkprice-${l.id}`}>
-              <StatusChip status="warn" label={t("est.tpl.checkLine")} />
-            </View>
-          ) : null}
         </View>
       </Press>
     );
+    const trash = p.locked || !acts.menu.includes("delete") ? null : <Trash label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} testID={`est-trash-${l.id}`} />;
+    const row = (inner: React.ReactNode) => (
+      <View>
+        {hidden ? <Hatch color={c.track} id={l.id} /> : null}
+        <RowView style={{ alignItems: full ? "flex-start" : "center" }}>
+          {inner}
+          {trash}
+        </RowView>
+      </View>
+    );
     if (web) {
       // the web has no swipe: the same actions are in «⋯» (DS Б13), next to the row
-      return acts.menu.length ? (
-        <RowView>
-          {body}
-          <View ref={moreRef} collapsable={false}>
-            <View testID={`est-menu-${l.id}`}>
-              <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
-            </View>
-          </View>
-          <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />
-        </RowView>
-      ) : (
-        body
-      );
+      return acts.menu.length
+        ? row(
+            <>
+              {body}
+              <View ref={moreRef} collapsable={false}>
+                <View testID={`est-menu-${l.id}`}>
+                  <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
+                </View>
+              </View>
+              <Menu visible={!!menu} anchor={menu} items={items} onSelect={(a) => p.api.action(l.id, a)} onClose={() => setMenu(null)} />
+            </>,
+          )
+        : row(body);
     }
     return (
-      <SwipeRow left={acts.swipeRight.map(swipeBtn)} right={acts.swipeLeft.map(swipeBtn)} onAct={(k) => p.api.action(l.id, k as RowAct)}>
-        {body}
+      <SwipeRow left={acts.swipeRight.map(swipeBtn)} right={acts.swipeLeft.map(swipeBtn)} onAct={(k) => p.api.action(l.id, k as RowAct)} hint={p.swipeHint} onHintPlayed={p.onSwipeHintPlayed}>
+        {row(body)}
       </SwipeRow>
     );
   }
   const unitItems = [...UNITS, ...(l.unit && !(UNITS as readonly string[]).includes(l.unit) ? [l.unit] : [])].map((u) => ({ key: u as string, label: u }));
   unitItems.push({ key: OWN, label: t("est.row.unitOwn") });
   return (
-    <Animated.View style={[{ paddingVertical: space[3], gap: space[3] }, fade]} testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }}>
+    <Animated.View style={[{ paddingVertical: space[3], gap: space[3] }, fade]} testID={`est-line-${l.id}`} accessibilityState={{ expanded: true }} onTouchStart={p.onTouchOpen}>
+      {/* the header (DS §8.3): «˄ Свернуть» on the left (the founder's words); on the right the trash, «⋯» and «≡» (the list's handle) */}
       <RowView style={{ justifyContent: "space-between" }}>
-        <Icon name={KIND_ICON[l.group]} s={size.iconSm} color={c.mut} />
+        <View testID={`est-collapse-${l.id}`}>
+          <Button label={t("est.row.collapse")} icon="chevronUp" variant="ghost" size="sm" onPress={p.api.close} />
+        </View>
         <RowView>
-          <View
-            ref={moreRef}
-            collapsable={false}
-          >
+          {p.locked ? null : <Trash gap={false} label={t("est2.row.trash")} onPress={() => p.api.action(l.id, "delete")} testID={`est-trash-${l.id}`} />}
+          <View ref={moreRef} collapsable={false} style={{ marginRight: space[6] }}>
             <View testID={`est-menu-${l.id}`}>
-            <IconButton
-              icon="more"
-              label={t("est.row.actions")}
-              onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))}
-            />
+              <IconButton icon="more" label={t("est.row.actions")} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))} />
             </View>
           </View>
-          <View testID={`est-collapse-${l.id}`}>
-            <Button label={t("est.row.collapse")} icon="chevronDown" variant="ghost" size="sm" onPress={p.api.close} />
-          </View>
+          {handleInHeader ? <View style={{ width: size.hitMin }} /> : null}
         </RowView>
       </RowView>
       {marks.length ? (
@@ -210,14 +318,15 @@ function LineRowView(p: LineRowProps) {
         </View>
       ) : null}
       <TextField type="title" value={l.name} onChangeText={(v) => p.api.change(l.id, { name: v })} placeholder={t("ue.lineName")} label={t("ue.lineName")} field={f("name")} autoFocus={p.autoFocus === "name"} testID={`est-name-${l.id}`} />
-      <TextField type="note" value={l.description ?? ""} onChangeText={(v) => p.api.change(l.id, { description: v || undefined })} placeholder={t("ue.lineDesc")} label={t("ue.lineDesc")} />
-      <Segmented<LineGroup> full radio label={t("ue.type")} value={l.group} onChange={(g) => p.api.change(l.id, { group: g })} items={GROUPS.map((g) => ({ key: g, label: t(`ue.group.${g}` as DictKey) }))} testID={`est-kind-${l.id}`} />
+      <TextField type="note" rows={1} value={l.description ?? ""} onChangeText={(v) => p.api.change(l.id, { description: v || undefined })} placeholder={t("est2.row.descHint")} label={t("ue.lineDesc")} />
+      {/* one row «Кол-во · Ед. · Цена за ед.» (the founder: «в одной строке», narrow fields) */}
       <RowView style={{ alignItems: "flex-start" }}>
-        <View style={{ flex: 1 }}>
-          <NumberField kind="qty" label={t("ue.qty")} qty={String(l.quantity)} onChange={(q) => p.api.change(l.id, { quantity: q })} field={f("qty")} onBad={(b) => p.api.bad(l.id, "qty", b)} autoFocus={p.autoFocus === "qty"} selectOnFocus testID={`est-qty-${l.id}`} />
+        <View style={{ width: component.estRow.qty }}>
+          <NumberField kind="qty" label={t("ue.qty")} qty={String(l.quantity)} onChange={(q) => p.api.change(l.id, { quantity: q })} field={f("qty")} onBad={(b) => p.api.bad(l.id, "qty", b)} autoFocus={p.autoFocus === "qty"} selectOnFocus onNext={p.qtyNext ? () => p.api.nextQty?.(p.qtyNext!) : undefined} testID={`est-qty-${l.id}`} />
         </View>
-        <View style={{ flex: 1 }}>
+        <View style={{ width: component.estRow.unit }}>
           <SelectField<string>
+            labelAbove
             label={t("ue.unit")}
             value={ownUnit ? OWN : l.unit}
             items={unitItems}
@@ -225,13 +334,17 @@ function LineRowView(p: LineRowProps) {
             testID={`est-unit-${l.id}`}
           />
         </View>
-      </RowView>
-      {ownUnit ? <TextField type="unit" value={l.unit} onChangeText={(v) => p.api.change(l.id, { unit: v })} placeholder="ea" label={t("est.row.unitOwn")} testID={`est-unit-own-${l.id}`} /> : null}
-      <RowView style={{ alignItems: "flex-start" }}>
         <View style={{ flex: 1 }}>
           <NumberField kind="money" label={t("est.row.price")} unitWord={t("est.row.dollars")} cents={l.unitPriceCents} onChange={(cents) => p.api.change(l.id, { unitPriceCents: cents })} field={f("price")} onBad={(b) => p.api.bad(l.id, "price", b)} testID={`est-price-${l.id}`} />
         </View>
-        {p.costsVisible ? (
+      </RowView>
+      {ownUnit ? <TextField type="unit" value={l.unit} onChangeText={(v) => p.api.change(l.id, { unit: v })} placeholder="ea" label={t("est.row.unitOwn")} testID={`est-unit-own-${l.id}`} /> : null}
+      {/* «Вид» — a list, not segments (the founder: «это тоже должен быть селектор»); the cost — only for who sees costs */}
+      <RowView style={{ alignItems: "flex-start" }}>
+        <View style={{ flex: 1 }}>
+          <SelectField<LineGroup> labelAbove label={t("est2.row.kind")} value={l.group} items={GROUPS.map((g) => ({ key: g, label: t(`ue.group.${g}` as DictKey) }))} onChange={(g) => p.api.change(l.id, { group: g })} testID={`est-kind-${l.id}`} />
+        </View>
+        {p.costsVisible && !p.clientScreen ? (
           <View style={{ flex: 1 }}>
             <NumberField kind="money" label={t("est.row.cost")} unitWord={t("est.row.dollars")} cents={l.unitCostCents} onChange={(cents) => p.api.change(l.id, { unitCostCents: cents })} onClear={() => p.api.change(l.id, { unitCostCents: undefined })} field={f("cost")} onBad={(b) => p.api.bad(l.id, "cost", b)} placeholder="" testID={`est-cost-${l.id}`} />
           </View>
@@ -240,10 +353,16 @@ function LineRowView(p: LineRowProps) {
       {figures ? (
         <View testID={`est-figures-${l.id}`} style={{ gap: space[1] }}>
           <T v="caption" tabular>
-            {t("est.row.sum", { total: money(figures.total) })}
-            {figures.profit !== null ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${figures.marginPct} %` : ""}` : ""}
+            {(() => {
+              // a hidden line costs the client $0; «ваш расход» only for who sees costs (and a known cost)
+              const spend = isHidden(l) ? hiddenSpend(l, { costsVisible: p.costsVisible, clientScreen: !!p.clientScreen }) : null;
+              if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: money(0), spend: money(spend) }) : t("est.row.sum", { total: money(0) });
+              return t("est.row.sum", { total: money(figures.total) });
+            })()}
+            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${figures.marginPct} %` : ""}` : ""}
+            {l.optional ? ` · ${t("est2.row.optionalNote")}` : ""}
           </T>
-          {figures.profit !== null && figures.profit < 0 ? (
+          {!isHidden(l) && !p.clientScreen && figures.profit !== null && figures.profit < 0 ? (
             <View testID={`est-loss-${l.id}`}>
               <RowView gap={space[1]}>
                 <Icon name="alert" s={size.iconSm} color={c.status.bad.text} />
@@ -298,12 +417,14 @@ function LineRowView(p: LineRowProps) {
         </Press>
         {more ? (
           <>
-            <RowView style={{ minHeight: size.hitMin }}>
-              <T v="body" style={{ flex: 1 }}>
-                {t("ue.addon")}
-              </T>
-              <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
-            </RowView>
+            <View testID={`est-optional-toggle-${l.id}`}>
+              <RowView style={{ minHeight: size.hitMin }}>
+                <T v="body" style={{ flex: 1 }}>
+                  {t("ue.addon")}
+                </T>
+                <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
+              </RowView>
+            </View>
             {p.noHide ? (
               <T v="caption" tone="mut">
                 {t("est.row.hideTpl")}

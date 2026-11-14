@@ -28,6 +28,7 @@ export function SelectField<K extends string>({
   testID,
   disabled,
   field,
+  labelAbove,
 }: {
   label: string;
   value: K | null | undefined;
@@ -41,6 +42,9 @@ export function SelectField<K extends string>({
   disabled?: boolean;
   /** a required field of a form (`useRequiredForm().field(id)`): its error and its place for the scroll */
   field?: FieldBinding;
+  /** the label over the field, as a number field has it (a row of narrow fields, DS §8.3 «Кол-во · Ед. · Цена»); the
+   *  field itself shows only the value */
+  labelAbove?: boolean;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
@@ -69,6 +73,11 @@ export function SelectField<K extends string>({
   const open = () => (long ? openPicker() : ref.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAnchor({ x, y, w, h })));
   return (
     <View ref={field?.anchorRef} collapsable={false} style={{ gap: space[1] }} testID={testID ?? field?.testID}>
+      {labelAbove ? (
+        <T v="micro" tone="mut">
+          {label}
+        </T>
+      ) : null}
       <View ref={ref} collapsable={false}>
         <Press
           testID={testID ? `${testID}-button` : undefined}
@@ -93,10 +102,12 @@ export function SelectField<K extends string>({
             backgroundColor: c.in,
           }}
         >
-          <T v="body" style={{ flex: 1 }} numberOfLines={1}>
-            {label}
-          </T>
-          <T v="body" tone="mut" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {labelAbove ? null : (
+            <T v="body" style={{ flex: 1 }} numberOfLines={1}>
+              {label}
+            </T>
+          )}
+          <T v="body" tone={labelAbove ? "ink" : "mut"} numberOfLines={1} style={labelAbove ? { flex: 1 } : { flexShrink: 1 }}>
             {shown}
           </T>
           <Icon name="chevronDown" s={size.iconSm} color={c.mut} />

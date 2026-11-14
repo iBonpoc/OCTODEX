@@ -8,7 +8,7 @@
  * Finds things by testID; waits on what it checks.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
-const { skipLength, sheetGone } = require("../gutters.cjs");
+const { doubleTap, skipLength, sheetGone } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -30,7 +30,7 @@ exports.run = async (h) => {
   const accuracy = () => p.evaluate((k) => (JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.measurements?.[0]?.accuracy, KEY);
   const openCorner = async () => {
     const k = await p.getByTestId("draw-svg").first().locator('[id^="c:"]').boundingBox();
-    await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+    await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
     await tid("corner-cut").waitFor({ timeout: 5000 });
   };
   // Esc until the sheet is gone (CHECKS §9 №8: not once blindly), then its layer gone too

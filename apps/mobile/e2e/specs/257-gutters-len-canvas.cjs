@@ -4,7 +4,7 @@
  * after «Применить» the label on the canvas is in mm and the picked gutter's panel says its length in mm; there is no unit
  * choice per line any more.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -45,12 +45,12 @@ exports.run = async (h) => {
   await skipLength(p);
 
   // the label on the canvas
-  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /\d+ mm · эт 1$/.test(t.textContent || "")), null, { timeout: 8000 });
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /^\d+ mm$/.test((t.textContent || "").trim())), null, { timeout: 8000 }); // one storey: the length alone (#1275)
   h.expect(!(await p.getByTestId("draw-svg").first().locator("text").evaluateAll((ts) => ts.some((t) => /\d′/.test(t.textContent || "")))), "no feet on the canvas");
 
   // the picked gutter's panel
   await p.mouse.click((a[0] + c[0]) / 2, y);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   h.expect(/\d+ mm/.test(await tid("attr-panel").innerText()), "the panel says the length in mm");
   h.expect((await tid("attr-unit").count()) === 0, "no unit choice per line");

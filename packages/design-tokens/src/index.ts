@@ -69,6 +69,8 @@ export const motion = {
   durSlow: 350,
   /** a press held this long is a long press (iOS 0.5 s): the canvas takes an end or a corner by it (founder 12.11, #818) */
   longPressMs: 500,
+  /** a second tap on the same object within this is a double tap (app-only like longPressMs; = the toast's arm time): the canvas opens properties by it (spec 33, #1273) */
+  doubleTapMs: 300,
   durChart: 900,
   easeOut: [0.2, 0.8, 0.2, 1] as const,
   /** components.css --ease-spring (overrides foundation's .3,1.4,.5,1) */
@@ -104,6 +106,12 @@ export const motion = {
   chartStagger: 40,
   /** DS §14.2 (#brand): the GoRix mark's splash, ms — longer than a chart's growth (durChart), only here */
   durBrand: 1600,
+  /** DS §18.2 (#1156): the short launch on GR (the dot drives in), the dot fading at the ends of the wait's loop,
+   *  the intro's pause and its fold GoRix → GR — only the brand */
+  durBrandQuick: 600,
+  durBrandEdge: 120,
+  durBrandPause: 150,
+  durBrandFold: 450,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
@@ -116,6 +124,10 @@ export const gesture = {
   dragStart: 5,
   /** near the top / bottom edge of the screen this wide the page scrolls while a row is held, px */
   autoScrollEdge: 64,
+  /** the fastest the page scrolls at the very edge while a row is held, px a frame (the speed grows with the depth squared) — DS §14.6 */
+  autoScrollMax: 18,
+  /** a held row's place changes only once its middle is this far past a neighbour's middle (no flicker between two places), px */
+  slotHysteresis: 6,
   /** a finger moves this far and the gesture is «taken» (swipe of a row, sheet body, back swipe), px — DS §14.6, Н-19 */
   slop: 10,
 } as const;
@@ -132,6 +144,8 @@ export const component = {
   tip: { fs: 13, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
   fab: 36,
   dockBtn: 36,
+  /** a module's tape measure: px between two marks, 1/16″ or 1 mm — stretched over a real tape so a finger can hit a mark (founder 13.11.2026, #1315: «чуть растянутая, ничего страшного») */
+  tapeTick: 16,
   sheetRadius: 24,
   modalW: 380,
   /** DS Б3 (Н-04): the confirm dialog's max width */
@@ -178,9 +192,13 @@ export const component = {
   /** selected card / drop target border */
   selectedBorder: 2,
   /** the small shadow of a raised «Заливка» (the chosen segment, tab, chip): DS «Выделение выбранного», foundation.css --shadow-sm */
-  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25 },
+  shadowSm: { offsetY: 2, radius: 8, opacity: 0.25, /** Android has no shadow* props: the same lift as `elevation` (app-only, not in the CSS) */ elevation: 2 },
   /** a button under a swiped row: width (DS Б13, Н-23); `full` — the share of the card for a full swipe (common lists, after 1.0; the estimate has none) */
   swipeAction: { w: 80, full: 0.6 },
+  /** DS §18.2 (#1156): the GoRix mark («Страницы нет», «Новая компания»), the full-screen wait, the «О приложении» logo, the splash, the first-launch intro */
+  brand: { mark: 48, wait: 56, about: 160, splash: 120, intro: 200 },
+  /** DS §8.3 (#1307): the open estimate line's numbers in one row — the quantity and the unit narrow, the price takes the rest */
+  estRow: { qty: 80, unit: 88 },
   /** hairline border */
   hairline: 1,
   /** drag preview handle */
@@ -378,6 +396,10 @@ export const print = {
   pagePadMm: 14,
   fontPt: { title: 18, heading: 11, body: 9.5, small: 8 },
   styles: printStyles,
+  /** #1324 (docs/specs/41): an estimate's PDF is a CA home-improvement contract — no text below minPt, a section heading at
+   *  least headingPt bold, a statutory phrase (the right to cancel, next to the signatures) noticePt bold
+   *  (B&P §7159, docs/legal/legal-research.md §1.2). The document's style keeps its own sizes above the floor. */
+  contract: { minPt: 10, headingPt: 10, noticePt: 12 },
 } as const;
 
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */
@@ -392,6 +414,18 @@ export const drawingPrint = {
   sheetW: 800, pageW: 420, margin: 24, runW: 2.5, thinW: 1, dimOff: 30, dimStep: 18, extGap: 4, tick: 5, numR: 10, dsR: 6, font: 13, fontSm: 11, stampH: 76, scalePx: 120, panelMin: 120, panelGap: 28, insetFrac: 0.1, insetW: 190, insetH: 96, insetSheetFrac: 0.5,
 } as const;
 
+/**
+ * The shop drawings of a module's measurement (#1349): an ANSI B sheet drawn in inches, printed 11 × 17 or reduced whole to
+ * Letter. Text heights are cap heights in inches: the smallest (textSm) is 11 pt on the sheet — 7 pt on Letter;
+ * lineweights are millimetres (by AIA layer); `band` is the one gray — the fill of the run's band.
+ */
+export const shopSheet = {
+  wIn: 11, hIn: 17, letterWIn: 8.5, letterHIn: 11, borderIn: 0.375, minPt: 11, letterMinPt: 7, capEm: 0.716,
+  textSm: 0.11, text: 0.125, textTitle: 0.19, textSheet: 0.42,
+  lwBorder: 0.7, lwRun: 0.6, lwHeavy: 0.5, lwBlock: 0.35, lwMed: 0.25, lwThin: 0.2, lwHair: 0.13,
+  band: "#AFAFAF",
+} as const;
+
 export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close" | "note"> = {
   ok: "check",
   info: "clock",
@@ -404,5 +438,5 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
-export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint } as const;
+export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing, drawingPrint, shopSheet } as const;
 export type Tokens = typeof tokens;

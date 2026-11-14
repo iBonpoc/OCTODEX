@@ -7,6 +7,7 @@
  * Money in $, dates US numeric (11/05/2026) in every language. Colours and sizes only from the `print` tokens;
  * the brand colour is the company's own setting and is used only if it is a plain hex colour.
  */
+import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
 import { contractStatement } from "@octo/estimating-engine";
@@ -54,11 +55,23 @@ export interface DocPageInput {
   company: PortalData["company"];
   body: string;
   opts: DocOpts;
+  /** #1324 (docs/specs/41): the document is a contract (an estimate — CA home improvement): no text below print.contract.minPt,
+   *  section headings at least headingPt bold, `.notice` (a statutory phrase) noticePt bold */
+  contract?: boolean;
 }
 
 /** One page shell for every client document: header (logo, company, licenses), body, repeated footer. */
-export function docPage({ title, meta, footer, company: c, body, opts }: DocPageInput): string {
+export function docPage({ title, meta, footer, company: c, body, opts, contract }: DocPageInput): string {
   const s = P.styles[opts.style ?? "classic"];
+  // the document's own sizes, raised to the contract floor when it is one (the style keeps its look above the floor)
+  const fs = contract
+    ? {
+        title: Math.max(s.fontPt.title, P.contract.minPt),
+        heading: Math.max(s.fontPt.heading, P.contract.headingPt),
+        body: Math.max(s.fontPt.body, P.contract.minPt),
+        small: Math.max(s.fontPt.small, P.contract.minPt),
+      }
+    : s.fontPt;
   const brand = safeColor(c.color);
   const lines = [
     c.address,
@@ -69,15 +82,15 @@ export function docPage({ title, meta, footer, company: c, body, opts }: DocPage
     ...c.licenses.map(licenseLine),
   ].filter(Boolean) as string[];
   const logo = c.logo && c.logo.startsWith("data:image/") ? `<img class="logo" src="${esc(c.logo)}" alt="">` : "";
-  const who = `<div class="who">${logo}<div><h1>${esc(c.name || "OCTODEX")}</h1>${lines.map((l) => `<div class="mut">${esc(l)}</div>`).join("")}</div></div>`;
+  const who = `<div class="who">${logo}<div><h1>${esc(c.name || APP_NAME)}</h1>${lines.map((l) => `<div class="mut">${esc(l)}</div>`).join("")}</div></div>`;
   const what = `<div class="what"><h1>${esc(title)}</h1>${meta.map((m) => `<div class="mut">${esc(m)}</div>`).join("")}</div>`;
   return `<!doctype html><html lang="${opts.lang}"><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>
 @page { margin: ${P.pagePadMm}mm; }
-body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: ${P.ink}; background: ${P.paper}; font-size: ${s.fontPt.body}pt; margin: 0; }
-h1 { font-size: ${s.fontPt.title}pt; margin: 0 0 4pt; }
-h2 { font-size: ${s.fontPt.heading}pt; margin: ${s.sectionGapPt}pt 0 4pt; }
-.mut { color: ${P.mut}; font-size: ${s.fontPt.small}pt; }
+body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: ${P.ink}; background: ${P.paper}; font-size: ${fs.body}pt; margin: 0; }
+h1 { font-size: ${fs.title}pt; margin: 0 0 4pt; }
+h2 { font-size: ${fs.heading}pt; margin: ${s.sectionGapPt}pt 0 4pt; }
+.mut { color: ${P.mut}; font-size: ${fs.small}pt; }
 .head { display: flex; flex-direction: ${s.logoSide === "right" ? "row-reverse" : "row"}; justify-content: space-between; gap: 12pt; padding-bottom: 8pt;${
     s.headRulePx ? ` border-bottom: ${s.headRulePx}px solid ${P.rule};` : ""
   } }
@@ -87,7 +100,7 @@ h2 { font-size: ${s.fontPt.heading}pt; margin: ${s.sectionGapPt}pt 0 4pt; }
 .band { height: ${s.brandBandPt}pt; background: ${brand ?? P.rule}; margin-bottom: 6pt; }
 table { width: 100%; border-collapse: collapse; }
 td, th { padding: ${s.rowPadPt}pt 0; border-bottom: 1px solid ${P.rule}; text-align: left; vertical-align: top; }
-th { color: ${P.mut}; font-weight: 500; font-size: ${s.fontPt.small}pt; }
+th { color: ${P.mut}; font-weight: 500; font-size: ${fs.small}pt; }
 .r { text-align: right; white-space: nowrap; padding-left: 8pt; }
 .grp td { font-weight: 600; padding-top: ${s.rowPadPt * 2}pt; }
 .opt td { color: ${P.mut}; }
@@ -95,15 +108,18 @@ th { color: ${P.mut}; font-weight: 500; font-size: ${s.fontPt.small}pt; }
 .subt td { font-weight: 600; }
 .sums { width: 50%; margin-left: auto; margin-top: 6pt; }
 .sums td { border: 0; padding: 2pt 0; }
-.tot td { font-weight: 700; font-size: ${s.fontPt.heading}pt; }
+.tot td { font-weight: 700; font-size: ${fs.heading}pt; }
 .sums .tot td { border-top: 1px solid ${P.rule}; padding-top: 4pt; }
 .note { margin-top: 10pt; white-space: pre-wrap; }
+${contract ? `h2 { font-weight: 700; }
+.notice { font-size: ${P.contract.noticePt}pt; font-weight: 700; color: ${P.ink}; margin-top: ${s.sectionGapPt}pt; }
+.signoff { break-inside: avoid; page-break-inside: avoid; }` : ""}
 .ok { color: ${P.okText}; font-weight: 600; }
 .sigs { display: flex; gap: 24pt; margin-top: ${s.sectionGapPt}pt; break-inside: avoid; }
 .sig { flex: 1; }
 .sig .line { border-bottom: 1px solid ${P.ink}; min-height: 40pt; display: flex; align-items: flex-end; }
-.record td { font-size: ${s.fontPt.small}pt; }
-.foot { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; color: ${P.mut}; font-size: ${s.fontPt.small}pt; }
+.record td { font-size: ${fs.small}pt; }
+.foot { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; color: ${P.mut}; font-size: ${fs.small}pt; }
 .page { padding-bottom: 18pt; }
 </style></head><body>
 <div class="page">

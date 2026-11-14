@@ -8,7 +8,7 @@
  */
 async function signInScreen(h) {
   await h.go("/auth/sign-in");
-  await h.expectText(/Вход в OCTODEX/, "the sign-in screen");
+  await h.expectText(/Вход в GoRix/, "the sign-in screen");
 }
 async function agreeAndEmail(h, email) {
   const p = h.page;

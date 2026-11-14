@@ -5,7 +5,7 @@
  *   «Назад» brings the corner back.
  * No fixed pauses: it waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { doubleTap, skipLength, canvasAt } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -57,7 +57,7 @@ exports.run = async (h) => {
   await h.shot("corner");
   const k = await svg().locator('[id^="c:"]').first().boundingBox();
   await canvasAt(p, k.x + k.width / 2, k.y + k.height / 2);
-  await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+  await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   await tid("corner-split").getByRole("button").click();
   await tid("corner-sheet").waitFor({ state: "detached", timeout: 5000 });

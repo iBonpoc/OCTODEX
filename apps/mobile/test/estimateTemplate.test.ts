@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("../src/cloud/client", () => ({ supabase: {} }));
-import { computeCustomOption } from "@octo/estimating-engine";
+import { DEFAULT_TAX, computeCustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateDoc } from "@/data/types";
 import { clientSectionsOf } from "@/features/estimateDoc";
 import { cleanEstimateTemplate, fromTemplate, pickableTemplates, splitCosts, templateFromCents, toTemplateDoc, validTemplateDoc } from "@/features/estimateTemplate";
@@ -78,12 +78,17 @@ describe("unit:estimateTemplate — save as template, estimate from template (do
         { id: "d", name: "Guards", group: "material" as const, quantity: "3", unit: "ft", unitPriceCents: 900, optional: true, selected: false },
       ],
     };
-    const want = computeCustomOption(same, estimate.settings);
+    // the template's tax does not come (spec 39 §11.9 п.3, DS §8.7): the same lines, the same discount and deposit, no tax
+    const want = computeCustomOption(same, { ...estimate.settings, tax: DEFAULT_TAX });
     const got = computeCustomOption(doc.options[0]!, doc.settings);
+    expect(estimate.settings.tax.enabled).toBe(true);
+    expect(doc.settings.tax.enabled).toBe(false);
+    expect(got.tax).toBe(0);
     expect(got.total).toBe(want.total);
     expect(got.deposit).toBe(want.deposit);
-    // 15000 + 2625 + 700 = 18325; −5% = 916.25 → 916; tax 9.25% on material 700 (discount spread) — the engine's numbers
+    // 15000 + 2625 + 700 = 18325; −5% = 916.25 → 916; no tax: 18325 − 916 = 17409 — the engine's numbers
     expect(got.subtotal).toBe(18325);
+    expect(got.total).toBe(17409);
     expect(templateFromCents(tpl, catalog)).toBe(want.total);
   });
 });

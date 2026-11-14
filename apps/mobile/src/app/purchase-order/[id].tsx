@@ -3,6 +3,7 @@
  * a change of a sent one is a new revision when sent again), «Отправить» (the PDF in English to share), «Отменить
  * заказ» (asked first). The tech of the job: where to pick it up, the lines without prices, «Отметить получение».
  */
+import { APP_NAME } from "@/config/product";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -24,6 +25,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { localUndo } from "@/data/undo";
+import { StatusNote } from "@/ui/statusNote";
 
 export default function PurchaseOrderScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -99,7 +101,7 @@ export default function PurchaseOrderScreen() {
     const html = poHtml(
       db,
       { ...o, status: "sent", revision: found.revision + 1, sentAt: new Date().toISOString(), supplierName: sup?.name, supplierPhone: sup?.phone, supplierEmail: sup?.email, supplierAddress: sup?.address },
-      companyForPortal(db, store.companyName ?? "OCTODEX"),
+      companyForPortal(db, store.companyName ?? APP_NAME),
       { lang: "en" },
     );
     saveEstimatePdf(html, `PO ${found.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
@@ -141,7 +143,7 @@ export default function PurchaseOrderScreen() {
             <ChoiceChips value={o.fulfillment} onChange={(k) => set({ fulfillment: k })} items={(["delivery", "pickup"] as const).map((k) => ({ key: k, label: t(`po.fulfillment.${k}`) }))} />
             {o.fulfillment === "delivery" ? <TextField type="street" value={o.deliverTo ?? ""} onChangeText={(v) => set({ deliverTo: v })} placeholder={t("po.deliverTo")} /> : null}
             <TextField type="date" value={dateText} onChangeText={(v) => { setDateText(v); set({ neededOn: isoDate(v) }); }} placeholder={t("po.neededOn")} />
-            {dateBad ? <T v="caption" tone="bad">{t("po.neededOn")}</T> : null}
+            {dateBad ? <StatusNote tone="bad">{t("po.neededOn")}</StatusNote> : null}
             <TextField type="note" value={o.note ?? ""} onChangeText={(v) => set({ note: v })} placeholder={t("po.note")} multiline />
             {costs ? <Toggle on={o.printPrices} onChange={(v) => set({ printPrices: v })} label={t("po.printPrices")} /> : null}
           </>

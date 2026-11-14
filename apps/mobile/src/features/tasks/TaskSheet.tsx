@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -15,7 +15,7 @@ import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { minuteIn, getZone } from "@/features/zone";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
 import { SUBJECT_KIND, taskAssignees, taskPlaces, taskSubject } from "./tasks";
 import { goneId } from "@/features/team";
@@ -127,7 +127,7 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
           ) : (
             <View style={{ gap: space[2] }} testID="task-places">
               <TextField type="search" icon="search" value={placeQuery} onChangeText={setPlaceQuery} placeholder={t("w6.task.subjectSearch")} />
-              <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+              <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {places.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
                 ) : (
@@ -138,7 +138,7 @@ function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft
                     </View>
                   ))
                 )}
-              </ScrollView>
+              </SheetScroll>
             </View>
           )}
         </Field>

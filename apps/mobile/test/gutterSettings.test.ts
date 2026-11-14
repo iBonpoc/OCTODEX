@@ -6,7 +6,7 @@ import { setCornerMethod, setDsAttrs, setRunAttrs } from "../src/modules/gutters
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { cornerChoiceOf, findCorners, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
 import {
-  choicesFor, colorName, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, setPath, settingsFit, toggleOffer, toRulesOverride,
+  choicesFor, colorName, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, RULE_NUMS, setPath, settingsFit, toggleOffer, toRulesOverride,
 } from "../src/modules/gutters/settings";
 
 describe("чтение настроек", () => {
@@ -214,14 +214,14 @@ describe("M7c: правила и расходники компании → дв�
   });
   it("чужие и вне диапазона значения — умолчание", () => {
     const r = readRules({ rules: { storyFt: 99, wastePct: -1, hangerSpacingIn: 24.5, dsStickFt: 11, corner: "glue", rainBasis: "x" } });
-    expect(r).toMatchObject({ storyFt: 10, wastePct: 5, hangerSpacingIn: 24, dsStickFt: 10, corner: "cut", rainBasis: "smacna" });
+    expect(r).toMatchObject({ storyFt: 10, wastePct: 10, cutCornerOutIn: 14, cutCornerIn: 6, hangerSpacingIn: 24, dsStickFt: 10, corner: "cut", rainBasis: "smacna" });
     const u = readUse({ use: { joints: { endcap: { rivets: 99 } }, pointsPerTube: 0 } });
     expect(u.joints.endcap).toEqual({ rivets: 2, sealant: 1 });
     expect(u.pointsPerTube).toBe(8);
   });
-  it("запас 10 % и шаг креплений 18″ меняют рулон и крепления", () => {
+  it("запас 20 % и шаг креплений 18″ меняют рулон и крепления", () => {
     const base = parts({});
-    const p = parts({ rules: { wastePct: 10, hangerSpacingIn: 18 } });
+    const p = parts({ rules: { wastePct: 20, hangerSpacingIn: 18 } });
     expect(qty(p, (x) => x.key.startsWith("coil."))).toBeGreaterThan(qty(base, (x) => x.key.startsWith("coil.")));
     expect(qty(p, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 18) + 1));
     expect(qty(base, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 24) + 1));
@@ -322,5 +322,37 @@ describe("M7c: правки по ревью", () => {
     const f = findCorners(redrawn)[0]!;
     expect(cornerChoiceOf(redrawn, f)).toBeUndefined();
     expect(computeGutterParts(toMeasurement(redrawn, { method: "cut" })).parts.some((x) => x.key.startsWith("stripmiter."))).toBe(false);
+  });
+});
+
+describe("#1355: запас на отход и запас на угол по виду", () => {
+  it("по умолчанию запас 10 %, наружный угол 14″, внутренний 6″", () => {
+    const r = readRules({});
+    expect(r).toMatchObject({ wastePct: 10, cutCornerOutIn: 14, cutCornerIn: 6 });
+    const o = toRulesOverride({});
+    expect(o).toMatchObject({ wastePct: "0.10", cutCornerOutAllowanceIn: 14, cutCornerAllowanceIn: 6 });
+  });
+  it("«Без запаса»: 0 % сохраняется как 0 и доходит до движка нулём; запас убран — закупка желоба меньше", () => {
+    expect(readRules({ rules: { wastePct: 0 } }).wastePct).toBe(0);
+    expect(toRulesOverride({ rules: { wastePct: 0 } }).wastePct).toBe("0.00");
+    const one: Drawing = { runs: [{ id: "r1", a: [0, 0], b: [480, 0], lengthIn: 480, attrs: { ...DEFAULT_RUN_ATTRS } }], downspouts: [] };
+    const coil = (raw: unknown) => Number(computeGutterParts(toMeasurement(one), toRulesOverride(raw)).parts.find((p) => p.key.startsWith("coil."))!.qty);
+    expect(coil({ rules: { wastePct: 0 } })).toBeLessThan(coil({}));
+    expect(coil({ rules: { wastePct: 0 } })).toBe(40); // 480 ″ of gutter, no corners: the installed length in whole feet
+  });
+  it("диапазон: наружный (новое поле) 0–24″ — 14″ помещается, 25″ нет; внутренний (старое поле) остаётся 0–12″ (правило 16)", () => {
+    expect(readRules({ rules: { cutCornerOutIn: 14 } }).cutCornerOutIn).toBe(14);
+    expect(readRules({ rules: { cutCornerOutIn: 24 } }).cutCornerOutIn).toBe(24);
+    expect(readRules({ rules: { cutCornerOutIn: 25 } }).cutCornerOutIn).toBe(14);
+    // rule 16: the old field keeps its range 0–12 — a phone with the old app reads more than 12 as «out of range» and takes 6; the two devices must count the same
+    expect(readRules({ rules: { cutCornerIn: 12 } }).cutCornerIn).toBe(12);
+    expect(readRules({ rules: { cutCornerIn: 13 } }).cutCornerIn).toBe(6);
+    expect(RULE_NUMS.cutCornerIn.max).toBe(12);
+    expect(RULE_NUMS.cutCornerOutIn.max).toBe(24);
+    expect(toRulesOverride({ rules: { cutCornerIn: 9 } })).toMatchObject({ cutCornerAllowanceIn: 9, cutCornerOutAllowanceIn: 14 });
+  });
+  it("сохранённые настройки без нового поля (до #1355) читаются: наружный 14″, остальное как было", () => {
+    const old = { v: 2, rules: { storyFt: 11, wastePct: 5, cutCornerIn: 6 } };
+    expect(readRules(old)).toMatchObject({ storyFt: 11, wastePct: 5, cutCornerIn: 6, cutCornerOutIn: 14 });
   });
 });

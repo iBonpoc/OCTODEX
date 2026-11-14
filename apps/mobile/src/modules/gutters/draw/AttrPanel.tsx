@@ -7,7 +7,7 @@
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { useEffect, useRef, useState } from "react";
-import { Keyboard, ScrollView, View } from "react-native";
+import { Keyboard, ScrollView, useWindowDimensions, View } from "react-native";
 import { measureAfterKeyboard } from "./afterKeyboard";
 import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
@@ -16,9 +16,13 @@ import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/u
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
+import { fillStyle } from "@/ui/fill";
+import { SelectedCheck } from "@/ui/selectedCheck";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
+import { FracPicker } from "./FracPicker";
+import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
 import { MM_SCALE, SIXTEENTHS_SCALE, SIXTEENTHS_SCALE_IN, Tape as TapeStrip } from "./Tape";
 import { DENOM, fmtLen, fracLabel, LEN_UNITS, MM_OF, MM_PER_IN, type LenFormat, type LenUnit } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -74,8 +78,11 @@ function FracText({ value, testID }: { value: number; testID: string }) {
  * A tape to pull (founder 09.11: «как рулетка, бегунком проматывать длину»): it shows the length in the fields and sets
  * them — feet, inches and sixteenths — as it is dragged, to 1/16″.
  */
+/** a phone window shorter than this: the strip of the tape is lower and the fraction row's padding goes (the buttons stay above the number keyboard, #1345) */
+const SHORT_WINDOW = 700;
 function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: number; onPull: (x: { ft: number; inch: number; sixteenths: number }) => void; testID: string }) {
   const { t } = useI18n();
+  const short = useWindowDimensions().height < SHORT_WINDOW;
   const typed = tapeIn(ft, inc, e16);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
@@ -87,6 +94,7 @@ function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: 
       readout={fmtLen(last.current, "ftin")}
       onMarks={(m) => onPull(split(m / DENOM))}
       testID={testID}
+      short={short}
       label={t(k("pull"))}
       stepLabels={{ less: t(k("pullLess"), { step: "1/16″" }), more: t(k("pullMore"), { step: "1/16″" }) }}
     />
@@ -95,6 +103,7 @@ function Pull({ ft, inc, e16, onPull, testID }: { ft: string; inc: string; e16: 
 /** the same tape for one number: inches (1/16″ marks) or metric (millimetre marks); it writes the field in its unit */
 function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenUnit, "ftin">; onOne: (v: string) => void; testID: string }) {
   const { t } = useI18n();
+  const short = useWindowDimensions().height < SHORT_WINDOW;
   const typed = oneIn(one, unit);
   const last = useRef(typed ?? 12);
   if (typed !== null) last.current = typed;
@@ -112,6 +121,7 @@ function PullOne({ one, unit, onOne, testID }: { one: string; unit: Exclude<LenU
       readout={metric ? `${Math.round((mm / MM_OF[unit]) * 1000) / 1000} ${unit}` : fmtLen(last.current, "in")}
       onMarks={(m) => onOne(metric ? String(m / MM_OF[unit]) : String(m / DENOM))}
       testID={testID}
+      short={short}
       label={t(k("pull"))}
       stepLabels={{ less: t(k("pullLess"), { step: metric ? "1 mm" : "1/16″" }), more: t(k("pullMore"), { step: metric ? "1 mm" : "1/16″" }) }}
     />
@@ -236,6 +246,15 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
   const [e16, setE16] = useState(f0.e16);
   const [one, setOne] = useState(f0.one);
   const [bad, setBad] = useState(false);
+  // the chain without «Done» (#1316): feet → inches → the fraction by buttons; the stage follows the focus (a tap on the inches is «in» too);
+  // `inFocus` is a counter: «Далее» puts the focus into the inches AT ONCE (digits typed right after it never go into the feet)
+  const [stage, setStage] = useState<EntryStage>("ft");
+  const [inFocus, setInFocus] = useState(0);
+  const goNext = () => {
+    if (stage === "frac") return;
+    if (stage === "ft") setInFocus((n) => n + 1);
+    setStage(nextStage(stage));
+  };
   // the length in hand, exact (#922): what the fields show, until a field is edited; a unit picked shows THIS length
   const canon = useRef(drawn);
   const edited = useRef(false);
@@ -272,15 +291,16 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
         <>
           <RowView style={{ gap: space[2], flexWrap: "wrap", alignItems: "center" }}>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
-              <TextField type="integer" value={ft} onChangeText={edit(setFt)} label={t(k("ft"))} onSubmit={apply} autoFocus selectOnFocus />
+              <TextField type="integer" value={ft} onChangeText={edit(setFt)} label={t(k("ft"))} onSubmit={goNext} onFocus={() => setStage("ft")} chain autoFocus selectOnFocus />
             </View>
             <T v="body" tone="mut">{t(k("ft"))}</T>
             <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
-              <TextField type="number" value={inc} onChangeText={edit(setInc)} label={t(k("in"))} onSubmit={apply} selectOnFocus />
+              <TextField type="number" value={inc} onChangeText={(v) => { edit(setInc)(v); const big = inchesTooBig(v); setBad(big); setStage(inchesComplete(v) && !big ? "frac" : "in"); }} label={t(k("in"))} onSubmit={stage === "frac" ? apply : goNext} onFocus={() => setStage((s0) => (s0 === "frac" ? s0 : "in"))} focusNow={inFocus} chain selectOnFocus />
             </View>
             <FracText value={e16} testID="quick-length-frac" />
             <UnitPick unit={unit} onUnit={pickUnit} testID="quick-length-unit" />
           </RowView>
+          <FracPicker value={e16} onChange={(v) => { edited.current = true; setE16(v); setBad(false); }} active={stage === "frac"} testID="quick-length-fracs" />
           <Pull ft={ft} inc={inc} e16={e16} onPull={(x) => { edited.current = true; setFt(String(x.ft)); setInc(String(x.inch)); setE16(x.sixteenths); setBad(false); }} testID="quick-length-tape" />
         </>
       ) : (
@@ -295,6 +315,7 @@ export function QuickLength({ run, onLength, onDone, onCancel, start, fmt = "fti
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: fmtLen(drawn, fmt) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
+        {unit === "ftin" && stage !== "frac" ? <View testID="quick-length-next"><Button label={t(k("next"))} size="sm" variant="secondary" onPress={goNext} /></View> : null}
         <View testID="quick-length-cancel"><Button label={t(k("quickCancel"))} size="sm" variant="ghost" onPress={onCancel} /></View>
         <View testID="quick-length-apply"><Button label={t(k("apply"))} size="sm" onPress={apply} /></View>
       </RowView>
@@ -491,10 +512,12 @@ function DsKindPick({ ds, onAttrs, ch }: { ds: DrawnDownspout; onAttrs: (p: Part
               {...({ "aria-checked": sel } as object)}
               accessibilityLabel={label.replace("\n", " ")}
               containerStyle={{ flexBasis: "47%", flexGrow: 1 }}
-              style={{ minHeight: sizes.hitMin + space[4], flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.inner, backgroundColor: c.surf2, borderWidth: sel ? component.selectedBorder : 1, borderColor: sel ? c.ink : c.bd }}
+              style={{ minHeight: sizes.hitMin + space[4], flexDirection: "row", alignItems: "center", gap: space[2], paddingHorizontal: space[3], paddingVertical: space[2], borderRadius: radius.inner, ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: sel ? "transparent" : c.bd }}
             >
-              <Icon name={x.icon} s={sizes.iconMd} color={c.ink} />
-              <T v="caption" w={sel ? "bold" : "semibold"} style={{ flex: 1 }}>{label}</T>
+              <Icon name={x.icon} s={sizes.iconMd} color={sel ? c.ink : c.mut} />
+              <T v="caption" w="semibold" style={{ flex: 1, color: sel ? c.ink : c.mut }}>{label}</T>
+              {/* a chosen option: «Заливка» + `check` in the corner (DS «Выделение выбранного», #1306): a card or a row carries the check */}
+              {sel ? <SelectedCheck small /> : null}
             </Press>
           );
         })}
@@ -516,6 +539,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
         <>
       <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
           <Stock a={ds} set={onAttrs} ch={ch} part="color" run={run} />
+          <DsLength ds={ds} onAttrs={onAttrs} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
           <More open0={rareSet(ds)} id={ds.id} label={t(k("moreDs"))}>
@@ -532,6 +556,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
       <DsKindPick ds={ds} onAttrs={onAttrs} ch={ch} />
       <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
       <Stock a={ds} set={onAttrs} ch={ch} run={run} />
+      <DsLength ds={ds} onAttrs={onAttrs} />
       <Elbows ds={ds} onAttrs={onAttrs} />
       <Offsets ds={ds} onAttrs={onAttrs} />
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
@@ -543,6 +568,26 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run }: 
         </>
       )}
     </>
+  );
+}
+
+/** the downspout's length (#1276, founder 12.11: «размер, цвет и длина — выпадающими»): by the storey, or a number of feet — it was a stepper behind «Ещё» */
+const DS_LENGTHS_FT = [6, 8, 9, 10, 12, 14, 16, 18, 20, 24, 28, 30, 35, 40, 50, 60] as const;
+function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
+  const { t } = useI18n();
+  const cur = Math.round((ds.heightIn ?? 0) / 12);
+  const fts: number[] = [...DS_LENGTHS_FT];
+  if (cur && !fts.includes(cur)) fts.push(cur); // a length set before (or by the stepper of old) stays pickable
+  fts.sort((x, y) => x - y);
+  return (
+    <Select
+      fit
+      label={t(k("dsLength"))}
+      testID="attr-ds-length"
+      items={[{ key: "0", label: t(k("heightAuto")) }, ...fts.map((n) => ({ key: String(n), label: `${n}′` }))]}
+      value={String(cur)}
+      onChange={(v) => onAttrs({ heightIn: Number(v) ? Number(v) * 12 : undefined })}
+    />
   );
 }
 
@@ -594,7 +639,7 @@ function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsA
  * The rare fields of a downspout behind «Ещё» (M7c, debt of M5c №9): its own height, offsets, a size change on the way
  * down, what sits on top, a rain-barrel diverter, an outlet screen. «Ещё» opens by itself when one of them is set.
  */
-const rareSet = (ds: DrawnDownspout) => !!(ds.heightIn || ds.offsets?.length || ds.reducers?.length || ds.head || ds.funnel || ds.diverter || ds.outletScreen);
+const rareSet = (ds: DrawnDownspout) => !!(ds.offsets?.length || ds.reducers?.length || ds.head || ds.funnel || ds.diverter || ds.outletScreen);
 
 function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
@@ -602,10 +647,6 @@ function DsRare({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
   const smaller = smallerSizes(ds.shape, ds.size);
   return (
     <View style={{ gap: space[4] }}>
-      <View testID="attr-height">
-        <Stepper label={t(k("height"))} unit={t(k("ft"))} value={Math.round((ds.heightIn ?? 0) / 12)} min={0} max={MAX_DS_HEIGHT_FT} onChange={(ft) => onAttrs({ heightIn: ft ? ft * 12 : undefined })} />
-        <T v="caption" tone="mut">{t(k("heightHint"))}</T>
-      </View>
       <Pick label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")) }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={ds.reducers?.[0]?.to ?? ""} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} />
       <Pick label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
       <Switch testID="attr-diverter" on={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} />

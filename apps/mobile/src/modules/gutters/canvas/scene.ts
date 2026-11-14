@@ -3,7 +3,7 @@
  * The painter (SvgPainter today; Skia only if the device check fails — rule 17) draws exactly this, nothing else,
  * so swapping it changes one file. Plan coordinates are integer inches, x east, y north (geometry.ts).
  */
-import { drawing as DT } from "@octo/design-tokens";
+import { drawing as DT, font } from "@octo/design-tokens";
 import { dsCode } from "./attrs";
 import { capSide, cornerCut, findCorners, houseSides, isOpenEnd, runEnds, splashOff, runLengthIn, type Drawing, type P } from "../geometry";
 import { fmtLen, type LenFormat } from "./format";
@@ -60,7 +60,7 @@ export interface SceneRun {
 /** an end cap (founder 08.11): left or right, looking at the face; a tap swaps both caps of the line */
 export interface SceneCap { id: string; runId: string; end: 0 | 1; at: [number, number]; side: "L" | "R"; story: Story; /** the gutter is picked: its free ends are handles to pull (#504) */ selected: boolean; /** picked up by a hold or being dragged (#1272): the point itself is bigger */ lifted?: boolean; /** something is lifted and this free end of ANOTHER gutter is where it can stick (#1272) */ target?: boolean }
 /** a corner: outside / inside (a tap swaps); an inside one gets a splash guard by itself */
-export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean; /** picked up by a hold or being dragged (#1272) */ lifted?: boolean }
+export interface SceneCorner { id: string; runId: string; at: [number, number]; kind: "out" | "in" | "bay"; splash: boolean; /** the angle between the walls, whole degrees (#933): said on the chip */ angleDeg: number; /** the unit vector (screen) along the bisector of the angle between the two gutters, into the angle: where its degrees are written (#1275) */ bis: [number, number]; /** the dash-dot arc across the angle between the two gutters, as an angle is marked in a drawing (founder 12.11); none when a side is too short on the screen or they are one line */ arc: { from: [number, number]; to: [number, number]; r: number; sweep: 0 | 1 } | null; /** a gutter of this corner is picked: the joint is a handle to drag — the ring (#818) */ handle: boolean; /** picked up by a hold or being dragged (#1272) */ lifted?: boolean }
 export interface SceneDs {
   id: string; at: [number, number]; story: Story; selected: boolean;
   /** «D1» inside the mark (founder 08.11) */
@@ -146,6 +146,13 @@ const ARC_PARALLEL_EPS = 0.02;
 /** the layers of the view (#930): a layer is hidden, never deleted — the drawing itself is as it was; all on when not said */
 export interface SceneLayers { grid?: boolean; labels?: boolean; ds?: boolean }
 
+/** the bisector of the angle between two unit directions out of a joint, a unit vector pointing INTO the angle (straight line: the normal of the first) */
+export function bisector(u: readonly [number, number], v: readonly [number, number]): [number, number] {
+  const x = u[0] + v[0], y = u[1] + v[1];
+  const L = Math.hypot(x, y);
+  return L > 1e-6 ? [x / L, y / L] : [-u[1], u[0]];
+}
+
 export function buildScene(d: Drawing, o: SceneOpts): Scene {
   const L = o.layers;
   if (!L || (L.grid !== false && L.labels !== false && L.ds !== false)) return buildSceneAll(d, o);
@@ -177,7 +184,11 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       if (ends[r.id]?.[e]?.kind !== "cap") return;
       let at = toScreen(o.view, e ? r.b : r.a);
       // a split corner (#933): two caps stand at one point — each is drawn a little along its own gutter, so both are seen (the drawing only, not the data)
-      if (isOpenEnd(r, e) && o.dsPad) {
+      // only while another gutter's end still stands at that point (#1282: a freed end that was set back lies at its own point — drawn where it is, so
+      // the finger that takes the cap takes the end)
+      const point = e ? r.b : r.a;
+      const shared = d.runs.some((x) => x.id !== r.id && [x.a, x.b].some((q) => Math.hypot(q[0] - point[0], q[1] - point[1]) <= 1.5));
+      if (isOpenEnd(r, e) && o.dsPad && shared) {
         const to = toScreen(o.view, e ? r.a : r.b);
         const n = Math.hypot(to[0] - at[0], to[1] - at[1]) || 1;
         const k = Math.min(o.dsPad * 2, n / 2) / n;
@@ -204,6 +215,7 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
       id: f.id, runId: f.runs[0].id, at, kind: f.kind,
       splash: d.corners?.[f.id]?.splashGuard ?? (f.kind === "in" && !splashOff(d, f)),
       angleDeg: Math.round(cornerCut(d, f, found).angleDeg),
+      bis: bisector(us[0]!.u, us[1]!.u),
       arc,
       handle: f.runs.some((x) => x.id === o.selected),
       ...(o.lift?.kind === "corner" && o.lift.cornerId === f.id ? { lifted: true } : {}),
@@ -219,20 +231,28 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
     ds.push({ id: s.id, at: toScreen(o.view, at), story: storyOf(r.attrs.story), selected: s.id === o.selected, text: o.dsText(ds.length + 1), ...(o.dimDs === s.id ? { dim: true } : {}), ...(o.lift?.kind === "ds" && o.lift.id === s.id ? { lifted: true } : {}) });
   }
   const h = Math.ceil(o.fontSize * 1.4);
+  const manyStories = new Set(runs.map((r) => r.story)).size > 1;
   const texts = new Map<string, { text: string; kind: SceneLabel["kind"] }>();
   const want: LabelWant[] = [];
-  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number, must?: boolean) => {
+  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number, must?: boolean, side?: [number, number], first?: (w: number) => [number, number][], sidePad?: number) => {
     texts.set(id, { text, kind });
-    want.push({ id, a, b, w: labelWidth(text, o.fontSize, o.padX), h, priority, pad, ...(must ? { must } : {}) });
+    // a corner's degrees are written small (`font.size.micro`, SvgPainter): its box is as small as its text (#1352 review)
+    const small = kind === "corner";
+    const w = labelWidth(text, small ? font.size.micro : o.fontSize, o.padX);
+    const hh = small ? Math.ceil(font.size.micro * 1.4) : h;
+    want.push({ id, a, b, w, h: hh, priority, pad, ...(must ? { must } : {}), ...(side ? { side } : {}), ...(sidePad ? { sidePad } : {}), ...(first ? { first: first(w) } : {}) });
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
     const len = fmtLen(runLengthIn(r), o.fmt);
-    const text = o.lenWithStory ? `${len} · ${o.storyText(s.story)}` : len;
+    // «· эт N» only when the drawing has more than one storey (founder 12.11: with one it is noise, #1275)
+    const text = o.lenWithStory && manyStories ? `${len} · ${o.storyText(s.story)}` : len;
     // a gutter long enough on the screen (or the picked one) keeps its length even over a line; a tiny one next to others
     // is hidden when no clear place is left (#1185: zoomed out, the small ones lay on each other and on the lines)
     const must = s.selected || Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) >= labelWidth(text, o.fontSize, o.padX);
-    add(`len:${r.id}`, s.a, s.b, text, "len", runLengthIn(r) + (s.selected ? 1e6 : 0), undefined, must);
+    // the length stands OUTSIDE from the house: on the side of the face line (founder 12.11, #1275)
+    const fx = s.face[0][0] - s.a[0], fy = s.face[0][1] - s.a[1], fl = Math.hypot(fx, fy);
+    add(`len:${r.id}`, s.a, s.b, text, "len", runLengthIn(r) + (s.selected ? 1e6 : 0), undefined, must, fl > 0 ? [fx / fl, fy / fl] : undefined, undefined, fl);
   });
   // over the mark: its fittings in one word («AABO⁴», founder 08.11); the number is inside the mark
   const dsById = new Map(d.downspouts.map((x) => [x.id, x]));
@@ -240,14 +260,30 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
     const code = dsCode(dsById.get(s.id)!);
     if (code) add(`ds:${s.id}`, s.at, s.at, code, "ds", s.selected ? 1e6 : -1, o.dsPad, s.selected); // the picked one's word stays, as its length does
   });
-  if (o.cornerText) for (const k of corners) add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", -1, o.dsPad);
+  if (o.cornerText) for (const k of corners) {
+    // the degrees sit on the bisector of the angle, just outside its arc (founder 12.11: «градус возле дуги, с той стороны, где угол», #1275)
+    const rr = k.arc ? k.arc.r : o.dsPad ?? 0;
+    // the degrees are placed BEFORE the lengths (a length slides along its gutter; the angle has one place) and have many places to try: on the
+    // bisector, then turned off it, then farther — a sharp wedge still finds one free of the lines (#1352 review: the angle is not lost)
+    const hc = Math.ceil(font.size.micro * 1.4);
+    add(`corner:${k.id}`, k.at, k.at, o.cornerText(k.kind, k.splash, k.angleDeg), "corner", 1e5, o.dsPad, undefined, undefined, (w) => {
+      const reach = Math.abs(k.bis[0]) * (w / 2) + Math.abs(k.bis[1]) * (hc / 2) + o.gap;
+      const out: [number, number][] = [];
+      for (const far of [1, 1.7]) for (const deg of [0, 20, -20, 40, -40, 65, -65]) {
+        const a = (deg * Math.PI) / 180, c = Math.cos(a), sn = Math.sin(a);
+        const bx = k.bis[0] * c - k.bis[1] * sn, by = k.bis[0] * sn + k.bis[1] * c;
+        out.push([k.at[0] + bx * (rr + reach) * far, k.at[1] + by * (rr + reach) * far]);
+      }
+      return out;
+    });
+  }
   for (const x of o.extra ?? []) {
     const p = toScreen(o.view, x.at);
     add(`x:${x.id}`, p, p, x.text, x.kind, -2);
   }
   const marks = o.dsPad ? [...ds.map((x) => x.at), ...caps.map((x) => x.at), ...corners.map((x) => x.at)].map((at) => ({ at, r: o.dsPad! })) : [];
   // the gutters and their faces are lines no word lies on (#1185)
-  const lines = runs.flatMap((r) => [{ a: r.a, b: r.b }, { a: r.face[0], b: r.face[1] }]);
+  const lines = [...runs.flatMap((r) => [{ a: r.a, b: r.b }, { a: r.face[0], b: r.face[1] }]), ...corners.flatMap((k) => (k.arc ? [{ a: k.arc.from, b: k.arc.to }] : []))];
   const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, marks, lines);
   return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })), ...(o.gridMinPx ? { grid: buildGrid(o.view, o.viewport, o.gridMinPx) } : {}) };
 }

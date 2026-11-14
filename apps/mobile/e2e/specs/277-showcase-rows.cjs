@@ -13,13 +13,22 @@ exports.run = async (h) => {
     const last = await vis("showcase-rows-last").innerText();
     h.expect(last.includes(name), `${id}: the last response is «${name}» (${last.replace(/\n/g, " ")})`);
   }
+  // the estimate line is live (#1307 «а»): «Кратко» by default, the trash, «Подробно» adds «$12 × 86 LF», the hidden line's «расход»
+  await vis("showcase-rows-line").waitFor({ timeout: 3000 });
+  h.expect((await p.getByTestId("showcase-rows-row-soon").count()) === 0 && (await p.getByTestId("showcase-rows-compact-soon").count()) === 0, "line and «Кратко / Подробно»: no stub any more");
+  await vis("est-trash-ds-l1").waitFor({ timeout: 3000 });
+  h.expect(/расход \$280/.test(await vis("est-spend-ds-l2").innerText()), "the hidden sample line: «расход $280»");
+  await vis("showcase-rows-line").getByText("Подробно", { exact: true }).click();
+  await vis("est-times-ds-l1").waitFor({ timeout: 3000 });
   // the swipe is live now (РС-7c2): on the web a hint about «⋯», not a «coming» stub; the rest still wait for their components
   h.expect((await p.getByTestId("showcase-rows-swipe-soon").count()) === 0, "swipe: no stub any more");
   h.expect(/«⋯»/.test(await vis("showcase-rows-swipe").innerText()), "swipe: the web names «⋯»");
-  for (const id of ["row", "compact", "section", "variants", "firstHint", "notes", "required", "profit", "catalog"]) {
+  for (const id of ["section", "variants", "firstHint", "notes", "fromTemplate", "required", "catalog"]) {
     await vis(`showcase-rows-${id}-soon`).waitFor({ timeout: 3000 });
     h.expect((await vis(`showcase-rows-${id}`).innerText()).length > 20, `${id}: named, with its rule`);
   }
+  // «Из шаблона…» (DS 1.6.0) points to its own rule
+  h.expect(/§8\.13/.test(await vis("showcase-rows-fromTemplate").innerText()), "fromTemplate: names §8.13");
   // the list of sections names it
   await h.go("/settings/design-system");
   await vis("showcase-row-rows").waitFor({ timeout: 5000 });

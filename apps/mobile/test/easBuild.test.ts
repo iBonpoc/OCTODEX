@@ -95,6 +95,10 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
     expect(pkg.dependencies["expo-updates"]).toBeTruthy();
     expect(app.ios.bundleIdentifier).toBe("com.octodex.app");
   });
+  // #656 слой 2: the new name's link scheme first, the old one kept — a link made for an older build still opens the app
+  it("link schemes: gorix:// first, octodex:// kept", () => {
+    expect(app.scheme).toEqual(["gorix", "octodex"]);
+  });
   // A JS update reaches a build made before a new native module was added: the update must load such a module lazily
   // (like src/features/pushNative.ts) and a new TestFlight build is needed. Update this list in the same PR.
   it("the native modules are the known ones", () => {
@@ -102,7 +106,7 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
       "@react-native-async-storage/async-storage", "expo", "expo-blur", "expo-clipboard", "expo-constants", "expo-crypto",
       "expo-document-picker", "expo-file-system", "expo-font", "expo-glass-effect", "expo-haptics", "expo-image-manipulator", "expo-image-picker",
       "expo-linking", "expo-localization", "expo-location", "expo-notifications", "expo-print", "expo-router", "expo-sharing",
-      "expo-status-bar", "expo-updates", "react-native", "react-native-gesture-handler", "react-native-reanimated",
+      "expo-splash-screen", "expo-status-bar", "expo-updates", "react-native", "react-native-gesture-handler", "react-native-reanimated",
       "react-native-safe-area-context", "react-native-screens", "react-native-svg", "react-native-worklets",
     ];
     // native = the package ships iOS code (an Expo module, an ios/ folder or a podspec); without node_modules — by name

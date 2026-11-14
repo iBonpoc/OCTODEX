@@ -1,13 +1,13 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CallInput, CallOutcome } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import { CALL_OUTCOME, CALL_OUTCOMES, callPlaces, callPlacesAtClient, callReady, peopleOfSubject } from "./comms";
 
@@ -87,7 +87,7 @@ function CallSheetBody({ preset, onClose, visible, onExited }: { preset: CallPre
               {atClient.length ? null : (
                 <TextField type="search" icon="search" value={query} onChangeText={setQuery} placeholder={t(role === "tech" ? "w6.call.toSearchTech" : "w6.call.toSearch")} />
               )}
-              <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+              <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {places.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
                 ) : (
@@ -98,7 +98,7 @@ function CallSheetBody({ preset, onClose, visible, onExited }: { preset: CallPre
                     </View>
                   ))
                 )}
-              </ScrollView>
+              </SheetScroll>
             </View>
           )}
         </Field>
