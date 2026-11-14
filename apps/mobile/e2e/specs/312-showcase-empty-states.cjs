@@ -1,6 +1,7 @@
 /**
  * e2e 312 — the empty states in the showcase (DS §13, Н-65), every view, by testID: all five are there with their words;
  * «Сбросить фильтр», «Найдено во «Все» · 3 → Показать» and the way back from «not found» each answer; «Страницы нет» leads home.
+ * The state banner (DS Б9, #957): warn — icon, words, its one action answers; info — «Скрыть» hides it, «Показать снова» brings it back.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -23,6 +24,17 @@ exports.run = async (h) => {
   h.expect(/Найдено во «Все» · 3/.test(await last()), `show-in-all answers: ${await last()}`);
   await vis("showcase-state-notfound-back").getByRole("button").click();
   h.expect(/К списку смет/.test(await last()), `way back answers: ${await last()}`);
+  // the state banner (Б9): warn with one action; info closes with «✕» (only info may)
+  await vis("showcase-banner-warn-icon").waitFor({ timeout: 3000 });
+  h.expect(/Модуль не подключён — только просмотр/.test(await vis("showcase-banner-warn").innerText()), "the warn banner says its state");
+  h.expect((await p.getByTestId("showcase-banner-warn").getByRole("button", { name: "Скрыть" }).count()) === 0, "a warn banner has no «✕»");
+  await vis("showcase-banner-warn-action").getByRole("button", { name: "Подключить" }).click();
+  h.expect(/Подключить/.test(await last()), `the banner's action answers: ${await last()}`);
+  await vis("showcase-banner-info").getByRole("button", { name: "Скрыть" }).click();
+  await vis("showcase-banner-closed").waitFor({ timeout: 3000 });
+  await vis("showcase-banner-closed").getByRole("button", { name: "Показать снова" }).click();
+  await vis("showcase-banner-info").waitFor({ timeout: 3000 });
+  await h.shot("banners");
   await vis("showcase-state-page-home").getByRole("button").click();
   await p.waitForURL((u) => /\/today/.test(u.pathname), { timeout: 8000 });
 };

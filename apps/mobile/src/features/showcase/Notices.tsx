@@ -10,6 +10,7 @@ import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
 import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
 import { DemoBadge } from "@/features/DemoBadge";
 import { StatusNote } from "@/ui/statusNote";
+import { Banner } from "@/ui/banner";
 import { SECTIONS } from "./registry";
 import { localUndo, TOO_LATE } from "@/data/undo";
 
@@ -25,6 +26,7 @@ export function NoticesSection() {
   const s = SECTIONS.find((x) => x.id === "notices")!;
   const [undone, setUndone] = useState(0);
   const [pressed, setPressed] = useState<string | null>(null);
+  const [infoShown, setInfoShown] = useState(true);
   // leaving the screen puts the network back — only if this screen changed it (the demo queue must not be reset otherwise)
   useEffect(() => () => { if (was.current !== null) void setOnline(was.current); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
@@ -48,6 +50,22 @@ export function NoticesSection() {
         <View testID="showcase-state-pressed">
           <T v="caption">{pressed ? t("ds.state.pressed", { name: pressed }) : t("ds.hap.none")}</T>
         </View>
+      </View>
+      {/* DS Б9, §15.3 (#957): the screen's state — one banner, the tone's icon + words, one action; «✕» only on info */}
+      <View testID="showcase-banners" style={{ gap: space[3] }}>
+        <T v="heading">{t("ds.banner.title")}</T>
+        <T v="caption" tone="mut">{t("ds.banner.hint")}</T>
+        <Banner tone="warn" testID="showcase-banner-warn" title={t("ds.banner.warnTitle")} hint={t("ds.banner.warnHint")} action={{ label: t("ds.banner.warnBtn"), onPress: () => setPressed(t("ds.banner.warnBtn")) }} />
+        {infoShown ? (
+          <Banner tone="info" testID="showcase-banner-info" title={t("ds.banner.infoTitle")} hint={t("ds.banner.infoHint")} onClose={() => setInfoShown(false)} closeLabel={t("ds.banner.close")} />
+        ) : (
+          <View testID="showcase-banner-closed" style={{ gap: space[2] }}>
+            <T v="caption" tone="mut">{t("ds.banner.closed")}</T>
+            <View style={{ alignSelf: "flex-start" }}>
+              <Button label={t("ds.banner.show")} variant="secondary" size="sm" onPress={() => setInfoShown(true)} />
+            </View>
+          </View>
+        )}
       </View>
       {/* DS §3.1 п.2 (#1386): a text in a status colour — the tone's icon, then the words; never the colour alone */}
       <Card>
