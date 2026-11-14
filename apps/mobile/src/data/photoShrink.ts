@@ -35,27 +35,32 @@ export interface PickedImage {
  */
 export async function shrinkPhoto(img: PickedImage): Promise<string> {
   const ctx = ImageManipulator.ImageManipulator.manipulate(img.uri);
+  // every picture made here is let go, also when a step fails (a native image otherwise stays in memory)
+  const refs: { release(): void }[] = [];
   try {
-    let fit = img.width && img.height ? fitLongSide(img.width, img.height) : null;
-    let ref = fit || (img.width && img.height) ? null : await ctx.renderAsync();
-    if (ref) {
+    const sizeKnown = !!(img.width && img.height);
+    let fit = sizeKnown ? fitLongSide(img.width!, img.height!) : null;
+    let out = null as Awaited<ReturnType<typeof ctx.renderAsync>> | null;
+    if (!sizeKnown) {
       // the picker did not say the size: read it from the picture itself
-      fit = fitLongSide(ref.width, ref.height);
-      if (fit) {
-        ref.release();
-        ref = null;
-      }
+      out = await ctx.renderAsync();
+      refs.push(out);
+      fit = fitLongSide(out.width, out.height);
+      if (fit) out = null;
     }
     if (fit) ctx.resize(fit);
-    const out = ref ?? (await ctx.renderAsync());
+    if (!out) {
+      out = await ctx.renderAsync();
+      refs.push(out);
+    }
     const saved = await out.saveAsync({ compress: PHOTO_QUALITY, format: ImageManipulator.SaveFormat.JPEG });
-    out.release();
     return saved.uri;
   } catch (e) {
     // never lose the photo: the original is kept, and the log says why it is big
     console.warn("[photoShrink] the photo is kept as picked:", (e as Error)?.message ?? e);
     return img.uri;
   } finally {
+    for (const r of refs) r.release();
     ctx.release();
   }
 }

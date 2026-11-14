@@ -51,6 +51,7 @@ function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
     const kind = v.step === "working" || v.step === "signed" ? "after" : "before";
     // made smaller before it is kept and queued (#642)
     const uri = await shrinkPicked(res);
+    if (!uri) return;
     madeHere(uri);
     toast.show(t("toast.photo"), addPhoto(v.id, kind, uri));
   };

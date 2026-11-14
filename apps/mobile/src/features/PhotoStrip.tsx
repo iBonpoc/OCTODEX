@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { liveUri, madeHere } from "./photoUri";
@@ -22,7 +22,18 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
   // and a console error otherwise)
   const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
   const open = opened ? { ...opened, uri: liveUri(opened.uri) } : null;
+  // a second tap while the photo is being made smaller does nothing (no second picker, no photo twice)
+  const busy = useRef(false);
   const pick = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      await pickOne();
+    } finally {
+      busy.current = false;
+    }
+  };
+  const pickOne = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
     const res =
       perm?.granted
@@ -31,6 +42,7 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
     if (!res || res.canceled) return;
     // made smaller once here, before the photo is kept and queued (#642)
     const uri = await shrinkPicked(res);
+    if (!uri) return;
     madeHere(uri);
     onAdd?.(uri);
   };

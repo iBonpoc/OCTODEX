@@ -2,8 +2,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Size = { width: number; height: number };
-const log: { resized: Size[]; saved: { compress?: number; format?: string }[]; renders: number; released: number; fail: boolean; src: Size } = {
-  resized: [], saved: [], renders: 0, released: 0, fail: false, src: { width: 0, height: 0 },
+const log: { resized: Size[]; saved: { compress?: number; format?: string }[]; renders: number; released: number; refsReleased: number; failSave: boolean; fail: boolean; src: Size } = {
+  resized: [], saved: [], renders: 0, released: 0, refsReleased: 0, failSave: false, fail: false, src: { width: 0, height: 0 },
 };
 vi.mock("expo-image-manipulator", () => ({
   SaveFormat: { JPEG: "jpeg", PNG: "png" },
@@ -24,9 +24,12 @@ vi.mock("expo-image-manipulator", () => ({
             ...size,
             async saveAsync(o: { compress?: number; format?: string }) {
               log.saved.push(o);
+              if (log.failSave) throw new Error("disk full");
               return { uri: `file:///out-${size.width}x${size.height}.jpg`, ...size };
             },
-            release() {},
+            release() {
+              log.refsReleased++;
+            },
           };
         },
         release() {
@@ -40,7 +43,7 @@ vi.mock("expo-image-manipulator", () => ({
 const { fitLongSide, shrinkPhoto, shrinkPicked, PHOTO_LONG_SIDE, PHOTO_QUALITY } = await import("../src/data/photoShrink");
 
 beforeEach(() => {
-  Object.assign(log, { resized: [], saved: [], renders: 0, released: 0, fail: false, src: { width: 0, height: 0 } });
+  Object.assign(log, { resized: [], saved: [], renders: 0, released: 0, refsReleased: 0, failSave: false, fail: false, src: { width: 0, height: 0 } });
 });
 
 describe("fitLongSide", () => {
@@ -80,12 +83,25 @@ describe("shrinkPhoto", () => {
     expect(uri).toBe("file:///out-2048x1536.jpg");
     expect(log.renders).toBe(1);
     expect(log.released).toBe(1);
+    expect(log.refsReleased).toBe(1);
   });
   it("the picker did not say the size: it is read from the picture, then made smaller", async () => {
     log.src = { width: 3000, height: 6000 };
     const uri = await shrinkPhoto({ uri: "blob:http://x/1" });
     expect(log.resized).toEqual([{ width: 1024, height: 2048 }]);
     expect(uri).toBe("file:///out-1024x2048.jpg");
+    // the picture read for its size and the smaller one: both let go
+    expect(log.refsReleased).toBe(2);
+  });
+  it("saving fails: the original is kept and every picture is let go", async () => {
+    log.src = { width: 4000, height: 3000 };
+    log.failSave = true;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(await shrinkPhoto({ uri: "file:///big.jpg", width: 4000, height: 3000 })).toBe("file:///big.jpg");
+    expect(log.refsReleased).toBe(1);
+    expect(log.released).toBe(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
   });
   it("a small photo: not made larger, only saved as JPEG 0.7", async () => {
     log.src = { width: 800, height: 600 };
