@@ -55,8 +55,15 @@ export default function EstimateTemplates() {
     const tpl = starterEstimateTemplate(module, starter, {
       id, catalog: store.db.catalog, tApp: t, tDoc: tFor(store.db.company?.docLanguage ?? "en"),
       depositBps: store.db.company?.estimate.depositBps, costsVisible: seeCosts,
+      want: (m) => moduleDef(module)?.starterWant?.(store.db.company?.modules?.[module]?.settings, m) ?? m,
     });
     if (!tpl) return;
+    // #1336: a price list with none of the starter's items: every line would be $0 and unlinked, and the starter would never be offered again
+    // (a later item does not find its line): not added; the way is said — make the price list first
+    if (fromTemplate(tpl.doc, store.db.catalog, {}, false, true).checkPrice.length >= tpl.doc.options.reduce((n, o) => n + o.lines.length, 0)) {
+      toast.show(t("est.tpl.starterNeedPrices"));
+      return;
+    }
     pressed.current.add(id);
     const undo = store.saveEstimateTemplate(tpl, { ifNew: true });
     // lines the catalog lacked: price 0 — said at once (and «проверьте цену» in the builder)

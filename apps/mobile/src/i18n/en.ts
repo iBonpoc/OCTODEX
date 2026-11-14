@@ -3775,6 +3775,7 @@ export const en: Dict = {
   "est.tpl.startersHint": "Ready estimates of your modules. Lines are in the company's document language, prices come from your catalog.",
   "est.tpl.starterAdded": "Template “{name}” added",
   "est.tpl.starterNoPrice": "Template added. Not in the catalog: {n} — price 0, check it",
+  "est.tpl.starterNeedPrices": "Template not added: the price list has none of its items, every line would be $0. Make the price list first in the module's Prices section",
   "est.tpl.copy": "Copy",
   "est.tpl.copyName": "{name} (copy)",
   "est.tpl.copied": "Saved: “{name}”",

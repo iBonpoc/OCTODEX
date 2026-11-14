@@ -281,10 +281,26 @@ export function estimateStartersToAdd(
   return mods.flatMap((m) => (m.estimateTemplates ?? []).filter((s) => !have.has(starterEstimateId(companyId, m.key, s.key))).map((starter) => ({ module: m.key, starter })));
 }
 
-/** the catalog item a starter's line names: its properties and the same unit; a kit never (no price of its own) */
-export function starterItem(catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string): CatalogItem | undefined {
+/**
+ * The catalog item a starter's line names: its properties and the same unit; a kit never (no price of its own). #1336: the item must be ONE —
+ * of several equally close candidates (a company with K5 aluminium and K6 copper) no first-by-name is taken: no link, $0 and «проверьте цену».
+ * `narrowed` — the module's own wish for this company (the company's default stock): tried first, and only when nothing has it the line's
+ * wider `match` is the question (an item priced by hand with fewer properties still serves, if it is the only one).
+ */
+export function starterItem(catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string, narrowed?: Record<string, string>): CatalogItem | undefined {
   if (!match) return undefined;
-  return catalogMatch(catalog.filter((it) => it.kind !== "kit" && it.unit.trim().toLowerCase() === unit.trim().toLowerCase()), match)[0];
+  const pool = catalog.filter((it) => it.kind !== "kit" && it.unit.trim().toLowerCase() === unit.trim().toLowerCase());
+  const only = (hits: CatalogItem[]): CatalogItem | undefined => {
+    const n = (it: CatalogItem) => Object.keys(it.attributes ?? {}).length;
+    const top = hits.filter((h) => n(h) === n(hits[0]!)); // catalogMatch sorts the closest first
+    return top.length === 1 ? top[0] : undefined;
+  };
+  if (narrowed) {
+    const near = catalogMatch(pool, narrowed);
+    if (near.length) return only(near);
+  }
+  const hits = catalogMatch(pool, match);
+  return hits.length ? only(hits) : undefined;
 }
 
 /**
@@ -296,7 +312,7 @@ export function starterItem(catalog: readonly CatalogItem[], match: Record<strin
 export function starterEstimateTemplate(
   moduleKey: string,
   s: StarterEstimate,
-  ctx: { id: string; catalog: readonly CatalogItem[]; tApp: (k: DictKey) => string; tDoc: (k: DictKey) => string; depositBps?: number | null; costsVisible: boolean },
+  ctx: { id: string; catalog: readonly CatalogItem[]; tApp: (k: DictKey) => string; tDoc: (k: DictKey) => string; depositBps?: number | null; costsVisible: boolean; /** #1336: the module's wish for this company (moduleDef.starterWant with its settings) */ want?: (match: Record<string, string>) => Record<string, string> },
 ): EstimateTemplate | null {
   const base = newDoc(ctx.depositBps);
   const costs: Record<string, number> = {};
@@ -306,7 +322,7 @@ export function starterEstimateTemplate(
       name: cut(ctx.tDoc(o.nameKey), 120),
       ...(o.recommended ? { recommended: true } : {}),
       lines: o.lines.map((l) => {
-        const it = starterItem(ctx.catalog, l.match, l.unit);
+        const it = starterItem(ctx.catalog, l.match, l.unit, l.match && ctx.want ? ctx.want(l.match) : undefined);
         const line: CustomLine = {
           id: uid(),
           name: cut(ctx.tDoc(l.nameKey), 300),
