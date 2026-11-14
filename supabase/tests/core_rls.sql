@@ -4020,6 +4020,37 @@ begin
      and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
   perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
 
+  -- authenticated: only the functions on this list (a new RPC is added here by its PR — review of 14.11)
+  select string_agg(distinct p.proname, ', ') into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     and p.proname <> all (array[
+                        'accept_invitation', 'accept_legal', 'accept_on_site', 'advance_apply', 'assign_visit', 'cancel_visit',
+                        'company_location_sharing', 'complete_job', 'countersign_estimate', 'create_job', 'decline_countersign',
+                        'delete_account', 'estimate_link', 'estimate_links', 'forget_push_device', 'import_customers',
+                        'import_customers_finish', 'import_customers_start', 'intake_endpoint_create', 'intake_endpoint_rotate',
+                        'intake_endpoint_set', 'intake_event_decide', 'invite_member', 'legal_status', 'mark_not_duplicate',
+                        'merge_customers', 'module_disable', 'module_enable', 'module_save_settings', 'my_closed_companies', 'po_receive',
+                        'portal_accept', 'portal_estimate', 'portal_pay_simulated', 'record_estimate_deposit', 'record_visit_payment',
+                        'refund_record', 'register_push_device', 'reissue_estimate_link', 'reopen_estimate', 'resend_invitation',
+                        'resend_signed_copy', 'revoke_estimate_link', 'revoke_invitation', 'save_customer_people', 'save_estimate_version',
+                        'save_lead_people', 'send_estimate', 'set_customer_tags', 'set_job_tags', 'set_location_consent', 'set_member_status',
+                        'set_my_prefs', 'set_push_kind', 'set_share_location', 'sign_estimate_on_site', 'stop_member_location',
+                        'transfer_ownership', 'trash_items', 'trash_list', 'trash_restore', 'undo_customer_import', 'uuid_generate_v7']::text[]);
+  perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
+
+  -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
+  perform tst.ok(to_regnamespace('extensions') is not null
+             and not has_schema_privilege('anon', 'extensions', 'CREATE') and not has_schema_privilege('authenticated', 'extensions', 'CREATE')
+             and not has_schema_privilege('anon', 'public', 'CREATE') and not has_schema_privilege('authenticated', 'public', 'CREATE')
+             and not has_schema_privilege('anon', 'app', 'CREATE') and not has_schema_privilege('authenticated', 'app', 'CREATE'),
+             'anon / authenticated create nothing in extensions, public, app');
+  select string_agg(p.oid::regprocedure::text, ', ') into bad
+    from pg_proc p
+   where p.pronamespace = 'extensions'::regnamespace and p.prosecdef
+     and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+  perform tst.ok(bad is null, 'no security definer function in extensions runs for anon / authenticated: ' || coalesce(bad, ''));
+
   -- schemas public and app: no function runs for PUBLIC (a forgotten revoke), but the id helper of column defaults
   select string_agg(n.nspname || '.' || p.proname, ', ') into bad
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -14177,5 +14208,125 @@ select tst.ok(not has_function_privilege('anon', 'app.estimate_terms_by_lang(jso
               and not has_function_privilege('authenticated', 'app.tg_version_terms_on_lock()', 'EXECUTE'),
               'T205 rule 18: the new functions are closed (the triggers and the definer page call them)');
 \echo 'T205 Notes and Terms: the defaults by language, the snapshot in the version ok'
+
+-- ======================================================================================================================
+-- T206–T210 (review of 14.11, migration 20261114100000): rights and limits.
+-- ======================================================================================================================
+-- T206: a rotated form that is switched off — the old link is not taken either
+:as_owner_b
+insert into tst.intake_tok (k, id, token)
+  select 'form206', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('cb000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001') r;
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form206'), p_enabled => true) is not null as t206_on;
+insert into tst.intake_tok (k, token) select 'form206-old', token from tst.intake_tok where k = 'form206';
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'form206';
+:as_super
+select tst.ok(tst.intake('form', 'form206-old', 'old206a', '{"phone":"(310) 555-0206"}', '5.5.206.1') ->> 'status' = 'held',
+              'T206 (fixture: the form is on — its old link is held for a person, as T125)');
+:as_owner_b
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form206'), p_enabled => false) is not null as t206_off;
+:as_super
+select tst.ok(tst.intake('form', 'form206-old', 'old206b', '{"phone":"(310) 555-0207"}', '5.5.206.2') ->> 'status' = 'unknown',
+              'T206 the form switched off: its old link is unknown too (red before 20261114100000)');
+select tst.ok(tst.intake('form', 'form206', 'new206', '{"phone":"(310) 555-0208"}', '5.5.206.3') ->> 'status' = 'unknown',
+              'T206 …and its new link, as before');
+select tst.ok(tst.cnt($q$select 1 from public.intake_events where event_key = 'old206b'$q$) = 0, 'T206 nothing is kept from it');
+\echo 'T206 a switched-off form takes nothing by its old link ok'
+
+-- T207: outside the office a person's own expense moves only to a job they may add it to
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('e2070000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T207 his job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001'),
+  ('e2070000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T207 not his job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('e2070000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e2070000-0000-4000-8000-000000000001', now() + interval '2 days');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'e2070000-0000-4000-8000-0000000000a1', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+insert into public.expenses (id, company_id, vendor, amount_cents, category) values
+  ('e2070000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T207 vendor', 1500, 'materials');
+select tst.fails($q$insert into public.expenses (company_id, vendor, amount_cents, category, job_id) values ('ca000000-0000-0000-0000-000000000000', 'T207 x', 100, 'materials', 'e2070000-0000-4000-8000-000000000002')$q$,
+                 'T207 (fixture: a tech adds no expense to a job not his — insert)');
+select tst.fails($q$update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where id = 'e2070000-0000-4000-8000-0000000000e1'$q$,
+                 'T207 …nor moves his own expense onto it (red before 20261114100000)');
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000001', amount_cents = 1600 where id = 'e2070000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000001' and amount_cents = 1600 from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
+              'T207 his own job: moved and changed as before');
+:as_office_a
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where id = 'e2070000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000002' from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
+              'T207 the office moves any expense, as before');
+\echo 'T207 an expense moves only to a job its author may add it to ok'
+
+-- T208: trash_items locks no row of a company the caller is not in
+begin;
+:as_owner_b
+select tst.ok((select reason = 'noRight' and not ok from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000002'::uuid])),
+              'T208 another company''s client: noRight, as before');
+:as_super
+select tst.ok((select xmax::text from public.customers where id = 'c1a00000-0000-0000-0000-000000000002') <> (txid_current() % 4294967296)::text,
+              'T208 …and its row was not locked (red before 20261114100000)');
+rollback;
+begin;
+:as_owner_a
+select tst.ok((select ok from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000002'::uuid])) is not null,
+              'T208 the company''s own client goes through the rule as before');
+rollback;
+\echo 'T208 the trash locks only the caller''s company rows ok'
+
+-- T209: the client's signature has a size
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e2090000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T209 sign', 'a0000000-0000-0000-0000-000000000001');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e2090000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e2090000-0000-4000-8000-0000000000a1' where id = 'e2090000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('e2090000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000a1', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000b1', 'labor', 'Work', 1, 40000);
+:as_office_a
+select public.send_estimate('e2090000-0000-4000-8000-000000000001', 'T209tokenSentByTheOffice0123456789abcd') is not null as t209_sent;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like(format($q$select public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, %L, 'M0 0 L5 5', true)$q$, repeat('n', 121)),
+                      '%too long%', 'T209 a signer''s name over 120 characters is refused (red before 20261114100000)');
+select tst.fails_like(format($q$select public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, 'T209 Client', %L, true)$q$, 'M0 0 ' || repeat('L1 1 ', 13108)),
+                      '%too long%', 'T209 a signature over 64 KB is refused');
+select tst.ok(public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, repeat('n', 120), 'M0 0 ' || repeat('L1 1 ', 13000), true) ->> 'status' = 'awaiting_countersign',
+              'T209 120 characters and a long ordinary signature still sign');
+:as_super
+select tst.ok((select count(*) = 1 from public.estimate_approvals where estimate_id = 'e2090000-0000-4000-8000-000000000001'), 'T209 one approval, the refused ones left nothing');
+\echo 'T209 the client''s signature has a size ok'
+
+-- T210: a refund key is the company's own
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, tax_mode, sent_at) values
+  ('e2100000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'T210-1', 'c1b00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T210 B', 10000, 0, 10000, 'exempt', now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('e2100000-0000-4000-8000-0000000000c1', 'cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-000000000001', 'c1b00000-0000-0000-0000-000000000001', 'cash', 6000, 'succeeded', 't210-b-1'),
+  ('e2100000-0000-4000-8000-0000000000c2', 'cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-000000000001', 'c1b00000-0000-0000-0000-000000000001', 'cash', 4000, 'succeeded', 't210-b-2');
+-- a row made before 20261114100000 keeps its older key
+insert into public.refunds (company_id, payment_id, amount_cents, status, idempotency_key, created_by, method, tax_cents, net_cents) values
+  ('cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-0000000000c2', 500, 'succeeded', 'octo:k210-older', 'b0000000-0000-0000-0000-000000000001', 'cash', 0, 500);
+:as_owner_b
+select tst.ok(public.refund_record('e2100000-0000-4000-8000-0000000000c1', 1000, 'goodwill', null, 'k133-cash-1') ->> 'status' = 'succeeded',
+              'T210 a key another company used is this company''s own (red before 20261114100000)');
+select tst.ok((select r ->> 'id' from (select public.refund_record('e2100000-0000-4000-8000-0000000000c1', 1000, 'goodwill', null, 'k133-cash-1') r) x)
+              = (select id::text from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1'),
+              'T210 …its retry is the same refund');
+select tst.fails_like($q$select public.refund_record('e2100000-0000-4000-8000-0000000000c2', 1000, 'goodwill', null, 'k133-cash-1')$q$, '%key used%',
+                      'T210 in the company a key of another refund is still not taken');
+select tst.ok((select r ->> 'amount_cents' = '500' from (select public.refund_record('e2100000-0000-4000-8000-0000000000c2', 500, 'goodwill', null, 'k210-older') r) x),
+              'T210 a retry of a refund made before finds it by its older key');
+:as_super
+select tst.ok((select idempotency_key = 'octo:cb000000-0000-0000-0000-000000000000:k133-cash-1' from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1')
+              and (select count(*) = 1 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c2')
+              and (select refunded_cents = 1000 from public.payments where id = 'e2100000-0000-4000-8000-0000000000c1'),
+              'T210 the key is stored with its company; one refund each, the money once');
+select tst.ok(not has_function_privilege('anon', 'app.refund_key(uuid, text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.refund_key(uuid, text)', 'EXECUTE'),
+              'T210 rule 18: the key helper runs for nobody');
+\echo 'T210 a refund key is the company''s own ok'
 
 \echo 'ALL TESTS PASSED'
