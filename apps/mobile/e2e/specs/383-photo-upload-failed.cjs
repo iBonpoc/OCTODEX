@@ -1,5 +1,5 @@
 /**
- * e2e 382 — #1431: a photo the cloud did not take is told, with its reason, and «Повторить» sends it again where it can help.
+ * e2e 383 — #1431: a photo the cloud did not take is told, with its reason, and «Повторить» sends it again where it can help.
  * The phone's data holds a visit on site with three refused photos — refused with the file here, too big with the file
  * here, refused on another phone (no file here) — and a signed visit with one refused photo. The strip says how many and
  * to tap a photo; the viewer says why in plain words and offers «Повторить» only for a plain refusal of a file on this phone
@@ -40,12 +40,12 @@ exports.run = async (h) => {
   Object.assign(v, {
     step: "on_site",
     photos: [
-      { id: "e382-here", kind: "before", uri: PNG, upload: { failed: "refused", at: AT } },
-      { id: "e382-big", kind: "before", uri: PNG, upload: { failed: "tooBig", at: AT } },
-      { id: "e382-far", kind: "before", upload: { failed: "refused", at: AT } },
+      { id: "e383-here", kind: "before", uri: PNG, upload: { failed: "refused", at: AT } },
+      { id: "e383-big", kind: "before", uri: PNG, upload: { failed: "tooBig", at: AT } },
+      { id: "e383-far", kind: "before", upload: { failed: "refused", at: AT } },
     ],
   });
-  Object.assign(w, { step: "signed", signature: "M0 0", photos: [{ id: "e382-done", kind: "after", uri: PNG, upload: { failed: "refused", at: AT } }] });
+  Object.assign(w, { step: "signed", signature: "M0 0", photos: [{ id: "e383-done", kind: "after", uri: PNG, upload: { failed: "refused", at: AT } }] });
   await h.seed("octo.db.v5", raw);
 
   // ---- the visit on site: the strip says how many and what to do, the viewer says why
@@ -54,7 +54,7 @@ exports.run = async (h) => {
   const note = await vis("photo-upload-failed").innerText();
   h.expect(note.includes("Не загрузились в облако: 3") && note.includes("нажмите"), `the strip: how many, and to tap (${note})`);
   h.expect((await vis("photo-upload-failed-icon").count()) === 1, "the status is an icon and words (rule 2)");
-  h.expect(/не загрузилось/.test((await vis("photo-thumb-e382-far").getAttribute("aria-label")) ?? ""), "the thumbnail says it to a screen reader");
+  h.expect(/не загрузилось/.test((await vis("photo-thumb-e383-far").getAttribute("aria-label")) ?? ""), "the thumbnail says it to a screen reader");
   await h.shot("strip");
 
   // the note is the way in (no mark on a thumbnail): it opens the first refused photo; «Следующее» pages through them only
@@ -74,26 +74,26 @@ exports.run = async (h) => {
   await pressEscUntilClosed(p);
 
   // refused on another phone: why, and that the file is there — nothing to send from here
-  const far = await reasonOf("photo-thumb-e382-far");
+  const far = await reasonOf("photo-thumb-e383-far");
   h.expect(far.includes("Облако не приняло фото.") && far.includes("Файл остался на телефоне, с которого снимали."), `another phone's photo: ${far}`);
   h.expect((await h.sheet().getByTestId("photo-upload-retry").count()) === 0, "no «Повторить» without the file");
   // the viewer's backdrop is labelled «Закрыть» too: Esc through the guarded helper
   await pressEscUntilClosed(p);
 
   // too big: the same file would be refused again — what to do instead, no «Повторить»
-  const big = await reasonOf("photo-thumb-e382-big");
+  const big = await reasonOf("photo-thumb-e383-big");
   h.expect(big.includes("Файл больше 25 МБ") && big.includes("снимите заново"), `too big: why and what to do (${big})`);
   h.expect((await h.sheet().getByTestId("photo-upload-retry").count()) === 0, "too big: no «Повторить» that would fail again");
   await pressEscUntilClosed(p);
 
   // refused, the file is here: «Повторить» sends it again
-  h.expect((await reasonOf("photo-thumb-e382-here")).includes("Облако не приняло фото."), "a plain refusal");
+  h.expect((await reasonOf("photo-thumb-e383-here")).includes("Облако не приняло фото."), "a plain refusal");
   await h.shot("viewer");
   await h.sheet().getByTestId("photo-upload-retry").click();
   await sheetGone(p);
-  await waitMark(v.id, "e382-here", null);
+  await waitMark(v.id, "e383-here", null);
   await p.waitForFunction(() => /Не загрузились в облако: 2/.test(document.body.innerText), null, { timeout: 5000 });
-  h.expect((await markOf(v.id, "e382-far")) === "refused" && (await markOf(v.id, "e382-big")) === "tooBig", "the other photos keep their marks");
+  h.expect((await markOf(v.id, "e383-far")) === "refused" && (await markOf(v.id, "e383-big")) === "tooBig", "the other photos keep their marks");
 
   // ---- a signed visit: its refused photo is shown too (no strips on this step otherwise)
   await h.go(`/visit/${w.id}`);
@@ -113,8 +113,8 @@ exports.run = async (h) => {
   const retry = cards.getByRole("button", { name: "Повторить", exact: true });
   h.expect((await retry.count()) === 1, `«Повторить» only on the signed visit's card (${await retry.count()})`);
   await retry.first().click();
-  await waitMark(w.id, "e382-done", null);
+  await waitMark(w.id, "e383-done", null);
   await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
-  await waitMark(w.id, "e382-done", "refused");
+  await waitMark(w.id, "e383-done", "refused");
   await triageCount(1);
 };
