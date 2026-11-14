@@ -12,6 +12,7 @@ import { ClosedCompanies } from "@/features/ClosedCompany";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { BrandMark } from "@/ui/brand";
+import { StatusNote } from "@/ui/statusNote";
 
 /** First run after sign-in: create the company (the creator becomes the owner, lead sources are seeded). */
 export default function CompanySetup() {
@@ -41,9 +42,7 @@ export default function CompanySetup() {
           {t("company.hint")}
         </T>
         {err ? (
-          <T v="caption" tone="bad">
-            {err}
-          </T>
+          <StatusNote tone="bad">{err}</StatusNote>
         ) : null}
         <Button
           label={t("company.create")}
