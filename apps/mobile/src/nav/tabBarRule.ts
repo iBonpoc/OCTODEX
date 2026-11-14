@@ -18,7 +18,8 @@ export const NO_TAB_BAR = [
   "company/[section]", "company/schedule",
   // a checklist template is a form («Сохранить»): a tab would drop what is not saved
   "company/checklist/[id]",
-  "estimate/new", "estimate/signature",
+  // an estimate: its one main button is pinned at the bottom (ActionBar, #1412, DS §8.9 «смета»)
+  "estimate/[id]", "estimate/new", "estimate/signature",
   "expense/new",
   // the request page of a company (docs/specs/34): a homeowner without the app — no app menu
   "f/[token]",
@@ -47,7 +48,7 @@ export const WITH_TAB_BAR = [
   "company/payments",
   "company/modules",
   "company/checklists",
-  "estimate/[id]", "estimate/templates", "estimates", "figures/[metric]", "help",
+  "estimate/templates", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
   "receipt/[id]", "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visit/[id]", "visits",
@@ -59,7 +60,8 @@ const hidden = new Set<string>(NO_TAB_BAR);
  * save): a module's own screens save on their own — the canvas a second after each change, its settings and prices at
  * once, the speed check keeps nothing. A tab over them never asks.
  */
-export const NOT_A_FORM: readonly string[] = ["module/[key]/[screen]"];
+// the estimate's card (#1412): no tab bar for its pinned main button, but nothing typed to lose
+export const NOT_A_FORM: readonly string[] = ["module/[key]/[screen]", "estimate/[id]"];
 const notAForm = new Set<string>(NOT_A_FORM);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */
