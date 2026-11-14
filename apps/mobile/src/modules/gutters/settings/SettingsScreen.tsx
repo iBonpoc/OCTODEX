@@ -15,6 +15,7 @@ import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleHref, moduleState } from "@/modules/registry";
 import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
+import { Banner } from "@/ui/banner";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { fillStyle } from "@/ui/fill";
@@ -222,15 +223,17 @@ export default function GutterSettingsScreen() {
     <Screen title={t(k("title"))} back={back} subtitle={t("mod.gutters.title")}>
       <View style={{ gap: space[4] }} testID="gset-screen">
         <T v="body" tone="mut">{t(k("intro"))}</T>
+        {/* the screen's state — one banner, not a chip (DS Б9, §15.3; #1426): «Подключить» is its one action */}
         {!active ? (
-          <View testID="gset-locked" style={{ gap: space[2] }}>
-            <StatusChip status="warn" label={t(k("locked"))} />
-            {director ? <View testID="gset-connect"><Button label={t("mod.gutters.draw.connect")} variant="secondary" onPress={() => router.push("/company/modules")} /></View> : null}
-          </View>
+          <Banner
+            tone="warn"
+            testID="gset-locked"
+            title={t(k("locked"))}
+            hint={t(k("lockedHint"))}
+            action={director ? { label: t("mod.gutters.draw.connect"), onPress: () => router.push("/company/modules") } : undefined}
+          />
         ) : !director ? (
-          <View testID="gset-ro">
-            <StatusChip status="info" label={t(k("askOwner"))} />
-          </View>
+          <Banner tone="info" testID="gset-ro" title={t(k("askOwner"))} />
         ) : null}
 
         {/* M7d (spec П22.10): prices live in the company's price list — their own page */}
