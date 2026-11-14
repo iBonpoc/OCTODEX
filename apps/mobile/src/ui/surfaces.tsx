@@ -483,6 +483,7 @@ export function Screen({
   tabs,
   tabKey,
   below,
+  tabsMini,
   fab,
   fabCtx,
   fabOn,
@@ -510,6 +511,11 @@ export function Screen({
   tabs?: ReactNode;
   tabKey?: string;
   below?: ReactNode;
+  /**
+   * The mini header over the stuck tabs (DS §9 А1п «Прилипание», #1416): the object's name and quick actions, shown only once the
+   * tabs have stuck to the top (the big header with the same name has scrolled away).
+   */
+  tabsMini?: ReactNode;
   /** the screen's «＋» set (13 v2 §2.4): phone — floating bottom-right; 820/1280 — «＋» in the header */
   fab?: FabSet;
   /** what the new thing is tied to (the screen's client, job, visit…) */
@@ -742,7 +748,13 @@ export function Screen({
     </View>
   );
   const content = (
-    <View testID={testID} style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center", gap: space[3] }}>
+    <View
+      testID={testID}
+      // where the sticky tabs start: right under the content. The sticky wrapper's own layout says 0 on the web (react-native-web
+      // measures it inside its sticky box), so the tabs' place is the content's bottom (#1416)
+      onLayout={tabs ? (e) => (tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height) : undefined}
+      style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center", gap: space[3] }}
+    >
       {header}
       {children}
     </View>
@@ -754,6 +766,9 @@ export function Screen({
   const [under, setUnder] = useState(false);
   const reduce = useReducedMotion();
   const tabsY = useRef(0);
+  const [stuck, setStuck] = useState(false);
+  /** the scroll already moved for this time the mini header appeared */
+  const miniShifted = useRef(false);
   const offset = useRef(0);
   // the forms under the screen scroll it to a field (DS §11 п.3): the view's place in the window, then to `margin` below the top
   // the top of the content lies under the status bar / header (`top`, below): the field stops below it, not at the very top
@@ -856,6 +871,11 @@ export function Screen({
                 if (!jump || Date.now() - jump.at > 250 || Math.abs(y - jump.y) < 1) offset.current = y;
                 const now = y > 0;
                 if (now !== under) setUnder(now);
+                const isStuck = !!tabs && tabsY.current > 0 && y >= tabsY.current - 1;
+                if (isStuck !== stuck) {
+                  if (!isStuck) miniShifted.current = false;
+                  setStuck(isStuck);
+                }
               }}
             >
               <ScrollLockCtx.Provider value={setScrollLocked}>
@@ -863,11 +883,27 @@ export function Screen({
               </ScrollLockCtx.Provider>
               {tabs ? (
                 <View
-                  onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
                   // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
-                  style={{ backgroundColor: c.ov, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+                  // the glass only once the row has stuck (DS А1п «Прилипание»): in its place on the page it is a plain row, no band (#1416)
+                  style={{ backgroundColor: stuck ? c.ov : undefined, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
                 >
-                  <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
+                  {stuck ? <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} /> : null}
+                  {/* the mini header appears at once when the tabs stick (no motion: it is the same name that scrolled away, §14.3) */}
+                  {stuck && tabsMini ? (
+                    <View
+                      testID="tabs-mini"
+                      // the band pushes the content under the tabs down by its height: the page scrolls by the same, so nothing jumps
+                      onLayout={(e) => {
+                        const h = e.nativeEvent.layout.height;
+                        if (miniShifted.current) return;
+                        miniShifted.current = true;
+                        scrollRef.current?.scrollTo({ y: offset.current + h, animated: false });
+                      }}
+                      style={[column, { paddingBottom: space[2] }]}
+                    >
+                      {tabsMini}
+                    </View>
+                  ) : null}
                   <View style={column}>{tabs}</View>
                 </View>
               ) : null}

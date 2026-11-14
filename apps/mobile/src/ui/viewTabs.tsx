@@ -43,6 +43,8 @@ export function ViewTabs<K extends string>({
   const reduce = useReducedMotion();
   const strip = useRef<ScrollViewInstance>(null);
   const [boxes, setBoxes] = useState<Record<string, { x: number; w: number }>>({});
+  /** the tab under the mouse (web, iPad with a mouse): an unselected one shows a light `track` plate — a button, not words (DS А1п) */
+  const [hover, setHover] = useState<string | null>(null);
   const [view, setView] = useState(0);
   const [content, setContent] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -127,6 +129,8 @@ export function ViewTabs<K extends string>({
               // the web does not turn `selected` into aria-selected by itself (a screen reader and the tests read it)
               {...({ "aria-selected": sel } as object)}
               accessibilityLabel={it.count ? `${it.label}, ${it.count}` : it.label}
+              onHoverIn={() => setHover(it.key)}
+              onHoverOut={() => setHover((h) => (h === it.key ? null : h))}
               onLayout={(e: LayoutChangeEvent) => {
                 const { x, width: w } = e.nativeEvent.layout;
                 setBoxes((p) => (p[it.key]?.x === x && p[it.key]?.w === w ? p : { ...p, [it.key]: { x, w } }));
@@ -143,7 +147,8 @@ export function ViewTabs<K extends string>({
                   flexDirection: "row",
                   alignItems: "center",
                   gap: space[1],
-                  ...(sel ? fillStyle(c) : { backgroundColor: c.track }),
+                  // not selected — no plate, `mut` words (DS §9 А1п, «Выделение выбранного»; on `track` the dark theme hid the choice, #1416)
+                  ...(sel ? fillStyle(c) : hover === it.key ? { backgroundColor: c.track } : null),
                 }}
               >
                 <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
