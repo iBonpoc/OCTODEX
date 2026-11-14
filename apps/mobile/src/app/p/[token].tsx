@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import { useEffect, useState } from "react";
 import { Image, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -17,6 +18,7 @@ import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * Client page: opened from the SMS / email link in a phone browser, no app and no sign-in.
@@ -27,7 +29,7 @@ export default function ClientEstimatePage() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const store = useStore();
   const { t } = useI18n();
-  const local = localPortal(store.db, token ?? "", store.companyName ?? "OCTODEX");
+  const local = localPortal(store.db, token ?? "", store.companyName ?? APP_NAME);
   const [remote, setRemote] = useState<PortalData | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
@@ -166,7 +168,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
 
   return (
     <Screen
-      title={data.company.name || "OCTODEX"}
+      title={data.company.name || APP_NAME}
       back={back}
       subtitle={[`${t("portal.estimate")}${data.number ? ` ${data.number}` : ""}`, data.sentAt ? day(data.sentAt) : ""].filter(Boolean).join(" · ")}
     >
@@ -198,13 +200,13 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
               <StatusChip status="ok" label={t("portal.approved")} />
               <T v="body">{t("ue.approvedBy", { name: data.approval!.signerName, date: day(data.approval!.signedAt) })}</T>
               <T v="body" tone="mut">
-                {t("portal.thanks", { company: data.company.name || "OCTODEX" })}
+                {t("portal.thanks", { company: data.company.name || APP_NAME })}
               </T>
               {/* E2b: until the company signs, the client knows where the copy will be */}
               {data.status === "approved" ? (
                 <StatusChip status="ok" label={t("est.portal.both")} />
               ) : (
-                <T v="body">{t("est.portal.awaiting", { company: data.company.name || "OCTODEX" })}</T>
+                <T v="body">{t("est.portal.awaiting", { company: data.company.name || APP_NAME })}</T>
               )}
             </Card>
           ) : null}
@@ -233,9 +235,9 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                         </T>
                         {inv.pendingCents > 0 ? (
                           <View testID={`portal-pending-${inv.id}`}>
-                            <T v="body" tone="info">
+                            <StatusNote tone="info" v="body">
                               {t("pay.online.pending", { amount: money(inv.pendingCents) })}
-                            </T>
+                            </StatusNote>
                           </View>
                         ) : null}
                         {sent ? (
@@ -317,7 +319,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
  *  7а-3: closed by its owner — only the name (no phone: docs/specs/22 §3.3 q.1). */
 function ExpiredPage({ data, back }: { data: PortalData; back?: () => void }) {
   const { t } = useI18n();
-  const company = data.company.name || "OCTODEX";
+  const company = data.company.name || APP_NAME;
   const declined = data.status === "declined";
   const closed = data.status === "closed";
   const status = closed ? "neutral" : declined ? "bad" : "warn";

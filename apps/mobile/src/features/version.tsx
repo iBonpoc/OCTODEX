@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { usePathname } from "expo-router";
@@ -17,7 +18,7 @@ export function useVersionLabel(): string {
   const { day, time } = useI18n();
   const v = Constants.expoConfig?.version ?? "1.0.0";
   const at = publishedAt();
-  return `OCTODEX v${v} · ${BUILD || "dev"}${at ? ` · ${day(at)} ${time(at)}` : ""}`;
+  return `${APP_NAME} v${v} · ${BUILD || "dev"}${at ? ` · ${day(at)} ${time(at)}` : ""}`;
 }
 
 /** Small line at the top of every screen header; hidden on the client page (/p/…) and the request page (/f/…). */

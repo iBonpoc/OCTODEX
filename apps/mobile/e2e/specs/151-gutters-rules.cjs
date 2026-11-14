@@ -70,8 +70,21 @@ exports.run = async (h) => {
   h.expect(/10/.test(await tid("gset-rule-storyFt").innerText()), "story height 10 ft by default");
   await tid("gset-rule-storyFt").getByRole("button", { name: "Высота этажа +1" }).click();
   await waitFor(async () => (await settings()).rules?.storyFt === 11, "story height 11 ft saved");
-  await tid("gset-rule-wastePct").getByRole("button", { name: "Запас на отход +1" }).click();
-  await waitFor(async () => (await settings()).rules?.wastePct === 6, "waste 6 % saved");
+  // waste (#1355, founder 14.11): a fixed 10 ft for every gutter stock by default, the number can be changed; a switch takes it away («без запаса» = 0)
+  h.expect(/10/.test(await tid("gset-rule-wasteFt").innerText()), "waste: 10 ft by default");
+  await tid("gset-rule-wasteFt").getByRole("button", { name: "Запас на отход +1" }).click();
+  await waitFor(async () => (await settings()).rules?.wasteFt === 11, "waste 11 ft saved");
+  await tid("gset-rule-wasteOn").getByRole("switch").click();
+  await waitFor(async () => (await settings()).rules?.wasteFt === 0, "«Считать запас» off: 0 ft saved");
+  await waitFor(async () => (await settings()).rules?.wastePct === 0, "…and the old field too (rule 16: a phone with the old app buys the same)");
+  await waitFor(async () => (await tid("gset-rule-wasteFt").count()) === 0, "…and the number goes away");
+  await tid("gset-rule-wasteOn").getByRole("switch").click();
+  await waitFor(async () => (await settings()).rules?.wasteFt === 11, "on again: the 11 ft the company had, not the default");
+  await waitFor(async () => (await settings()).rules?.wastePct === 10, "…and the old field is back to its default 10 %");
+  // the corner allowance by kind: an outside corner 14″, an inside one 6″
+  h.expect(/14/.test(await tid("gset-rule-cutCornerOutIn").innerText()) && /6/.test(await tid("gset-rule-cutCornerIn").innerText()), "an outside corner 14″, an inside one 6″ by default");
+  await tid("gset-rule-cutCornerOutIn").getByRole("button", { name: /\+1$/ }).click();
+  await waitFor(async () => (await settings()).rules?.cutCornerOutIn === 15, "outside corner 15″ saved");
   await nth("gset-rule-corner", 2).click();
   await waitFor(async () => (await settings()).rules?.corner === "prefab", "corners by default: ready-made");
   await h.shot("rules");

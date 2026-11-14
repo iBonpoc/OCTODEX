@@ -42,4 +42,4 @@ $EAS whoami
 say "iPhone build → TestFlight. Answer: Apple account — yes; Apple ID, password, the code from your iPhone; everything else — Enter"
 $EAS build --platform ios --profile testflight --auto-submit-with-profile=testflight
 
-say "Done. TestFlight sends an e-mail in 20–40 minutes; install OCTODEX from the TestFlight app."
+say "Done. TestFlight sends an e-mail in 20–40 minutes; install GoRix from the TestFlight app."

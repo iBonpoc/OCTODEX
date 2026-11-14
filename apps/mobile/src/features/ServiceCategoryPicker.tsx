@@ -15,6 +15,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { StatusNote } from "@/ui/statusNote";
 
 /** "Direction: Plumbing ›" — hidden while the company has no directions; read-only when the only one is already set */
 export function ServiceCategoryRow({ value, onChange, readOnly }: { value?: ID; onChange: (id: ID | undefined) => void; readOnly?: boolean }) {
@@ -108,9 +109,7 @@ export function ServiceCategoryEditor() {
           />
         </RowView>
         {ownTaken ? (
-          <T v="caption" tone="warn">
-            {`⚠ ${t("dir.taken")}`}
-          </T>
+          <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
         ) : null}
         <T v="caption" tone="mut">
           {t("co.tradesNote")}
@@ -168,9 +167,7 @@ function EditSheet({ c, active, onClose }: { c: ServiceCategory | null; active: 
     <Sheet visible={!!c} onClose={onClose} title={original} dirty={dirty} onSave={save}>
       <TextField type="title" value={name} onChangeText={setName} placeholder={t("dir.ownPlaceholder")} />
       {taken ? (
-        <T v="caption" tone="warn">
-          {`⚠ ${t("dir.taken")}`}
-        </T>
+        <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
       ) : null}
       <T v="caption" tone="mut">
         {t("dir.renameHint")}

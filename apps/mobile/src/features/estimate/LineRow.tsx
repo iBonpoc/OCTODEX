@@ -49,6 +49,8 @@ export interface RowApi {
   wantCatalog: (id: string, on: boolean) => void;
   /** «Открыть в каталоге ›» */
   openInCatalog: (id: string) => void;
+  /** «›» in «Кол-во» of a line from a template: the next line from it opens, the cursor in its «Кол-во» (DS §8.13) */
+  nextQty?: (id: string) => void;
 }
 
 export interface LineRowProps {
@@ -62,6 +64,8 @@ export interface LineRowProps {
   api: RowApi;
   /** the field that takes the cursor when the row opens */
   autoFocus?: "name" | "qty";
+  /** a line from a template with another after it: «›» (Enter on the web) in «Кол-во» goes to that line's «Кол-во» */
+  qtyNext?: string;
   checkPrice?: boolean;
   /** a signed estimate: the row does not open (DS §8.3) */
   locked?: boolean;
@@ -318,7 +322,7 @@ function LineRowView(p: LineRowProps) {
       {/* one row «Кол-во · Ед. · Цена за ед.» (the founder: «в одной строке», narrow fields) */}
       <RowView style={{ alignItems: "flex-start" }}>
         <View style={{ width: component.estRow.qty }}>
-          <NumberField kind="qty" label={t("ue.qty")} qty={String(l.quantity)} onChange={(q) => p.api.change(l.id, { quantity: q })} field={f("qty")} onBad={(b) => p.api.bad(l.id, "qty", b)} autoFocus={p.autoFocus === "qty"} selectOnFocus testID={`est-qty-${l.id}`} />
+          <NumberField kind="qty" label={t("ue.qty")} qty={String(l.quantity)} onChange={(q) => p.api.change(l.id, { quantity: q })} field={f("qty")} onBad={(b) => p.api.bad(l.id, "qty", b)} autoFocus={p.autoFocus === "qty"} selectOnFocus onNext={p.qtyNext ? () => p.api.nextQty?.(p.qtyNext!) : undefined} testID={`est-qty-${l.id}`} />
         </View>
         <View style={{ width: component.estRow.unit }}>
           <SelectField<string>
@@ -413,12 +417,14 @@ function LineRowView(p: LineRowProps) {
         </Press>
         {more ? (
           <>
-            <RowView style={{ minHeight: size.hitMin }}>
-              <T v="body" style={{ flex: 1 }}>
-                {t("ue.addon")}
-              </T>
-              <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
-            </RowView>
+            <View testID={`est-optional-toggle-${l.id}`}>
+              <RowView style={{ minHeight: size.hitMin }}>
+                <T v="body" style={{ flex: 1 }}>
+                  {t("ue.addon")}
+                </T>
+                <Toggle label={t("ue.addon")} on={!!l.optional} onChange={(on) => p.api.change(l.id, { optional: on })} />
+              </RowView>
+            </View>
             {p.noHide ? (
               <T v="caption" tone="mut">
                 {t("est.row.hideTpl")}

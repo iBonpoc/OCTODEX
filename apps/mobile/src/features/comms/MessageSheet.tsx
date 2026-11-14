@@ -16,6 +16,7 @@ import {
   firstEmail, firstPhone, messageJobChoices, messageLanguage, messagePeople, messageSubject, messageTemplates, messageText, ownerName, ownerPeople, TEMPLATE_LABEL,
   type MessageTemplate, type Owner,
 } from "./messages";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * «Новое сообщение» (docs/specs/20 «6-3»; 13 §2.1.1): to whom → SMS or email (what the person has) → a ready text in the
@@ -133,8 +134,8 @@ function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: Mess
             <ChoiceChips<string> value={jobId ?? ""} onChange={setJobId} items={jobs.map((j) => ({ key: j.id, label: j.label }))} />
           </Field>
         ) : null}
-        {to && !subject && jobs.length <= 1 ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.cannot")}`}</T> : null}
-        {to && !phone && !email ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.noAddress")}`}</T> : null}
+        {to && !subject && jobs.length <= 1 ? <StatusNote tone="warn">{t("w6.msg.cannot")}</StatusNote> : null}
+        {to && !phone && !email ? <StatusNote tone="warn">{t("w6.msg.noAddress")}</StatusNote> : null}
         {to && (subject || jobs.length > 1) && (phone || email) ? (
           <>
             {phone && email ? (

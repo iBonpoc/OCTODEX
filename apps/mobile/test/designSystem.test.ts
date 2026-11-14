@@ -241,6 +241,27 @@ describe("design system: tokens only", () => {
     expect(hits, hits.join("\n")).toEqual([]);
   });
 
+  // DS §3.1 п.2, rule 2 (#1386): a status colour is always an icon and a word — a warn / bad / ok / info text is a
+  // <StatusNote> (src/ui/statusNote.tsx), or has its icon right before it (3 lines up), or says ds-allow. All places
+  // are moved (#1386 done): PENDING stays empty — a new one is a mistake, not a debt.
+  it("a status colour on text has its icon (StatusNote), not the colour alone", () => {
+    const PENDING: Record<string, number> = {};
+    const found: Record<string, string[]> = {};
+    for (const f of outsideUi) {
+      const s = readFileSync(f, "utf8");
+      const lines = s.split("\n");
+      for (const m of s.matchAll(/<T\b[^<>]*?\btone="(warn|bad|ok|info)"/g)) {
+        const n = s.slice(0, m.index).split("\n").length;
+        if (/\bIcon\b|statusIcon|ds-allow/.test(lines.slice(Math.max(0, n - 4), n).join("\n"))) continue;
+        (found[relative(ROOT, f)] ??= []).push(`${relative(ROOT, f)}:${n}`);
+      }
+    }
+    const bad = Object.entries(found).filter(([k, v]) => v.length > (PENDING[k] ?? 0)).flatMap(([, v]) => v);
+    expect(bad, `colour without its icon — use <StatusNote tone=…>:\n${bad.join("\n")}`).toEqual([]);
+    const stale = Object.entries(PENDING).filter(([k, n]) => (found[k]?.length ?? 0) < n).map(([k, n]) => `${k}: ${found[k]?.length ?? 0} < ${n}`);
+    expect(stale, `fixed — lower its number in PENDING:\n${stale.join("\n")}`).toEqual([]);
+  });
+
   // 06 «Серия B» (B4): the old one-row ItemCard is gone — a list of objects is ListCard (compact for related objects),
   // a single hint is Card + ListRow. Nothing in src may bring it back (definition, import or use).
   it("no ItemCard anywhere in src (lists → ListCard, single hints → Card + ListRow)", () => {

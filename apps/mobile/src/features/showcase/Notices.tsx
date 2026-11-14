@@ -9,6 +9,7 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, SectionTitle, SyncBadge } from "@/ui/surfaces";
 import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStates";
 import { DemoBadge } from "@/features/DemoBadge";
+import { StatusNote } from "@/ui/statusNote";
 import { SECTIONS } from "./registry";
 import { localUndo, TOO_LATE } from "@/data/undo";
 
@@ -48,6 +49,17 @@ export function NoticesSection() {
           <T v="caption">{pressed ? t("ds.state.pressed", { name: pressed }) : t("ds.hap.none")}</T>
         </View>
       </View>
+      {/* DS §3.1 п.2 (#1386): a text in a status colour — the tone's icon, then the words; never the colour alone */}
+      <Card>
+        <T v="heading">{t("ds.status.title")}</T>
+        <T v="caption" tone="mut">{t("ds.status.hint")}</T>
+        <View testID="showcase-status-notes" style={{ gap: space[2] }}>
+          <StatusNote tone="ok" testID="showcase-status-ok">{t("ds.status.ok")}</StatusNote>
+          <StatusNote tone="info" testID="showcase-status-info">{t("ds.status.info")}</StatusNote>
+          <StatusNote tone="warn" testID="showcase-status-warn">{t("ds.status.warn")}</StatusNote>
+          <StatusNote tone="bad" v="body" testID="showcase-status-bad">{t("ds.status.bad")}</StatusNote>
+        </View>
+      </Card>
       <Card>
         <T v="heading">{t("ds.note.toast")}</T>
         <T v="caption" tone="mut">{t("ds.note.toastHint")}</T>

@@ -5,6 +5,7 @@
  * Only client-visible data goes in (no costs). Text the contractor typed (line names, notes) goes as typed.
  * Layout and the company header are shared with the invoice and the receipt (docPdf.ts).
  */
+import { APP_NAME } from "@/config/product";
 import { Platform } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -79,7 +80,7 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
   const a = p.approval;
   const sigSvg = (path: string) =>
     `<svg viewBox="0 0 ${SIG_BOX.w} ${SIG_BOX.h}" width="200" height="80"><path d="${esc(fitSignature(path))}" stroke="${P.ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-  const company = p.company.name || "OCTODEX";
+  const company = p.company.name || APP_NAME;
   // E2b-2: the employee signs in their own name «for the company», with the title and the HIS number when given
   const cs = p.countersign;
   const companySig = cs

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "OCTODEX",
+    "name": "GoRix",
     "slug": "octodex",
     "version": "1.0.0",
     "orientation": "default",
@@ -80,6 +80,19 @@
       ],
       "expo-status-bar",
       "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 120,
+          "resizeMode": "contain",
+          "backgroundColor": "#EFEBE5",
+          "dark": {
+            "image": "./assets/splash-icon-dark.png",
+            "backgroundColor": "#24272D"
+          }
+        }
+      ],
       "expo-localization",
       [
         "expo-image-picker",
@@ -96,8 +109,8 @@
           "isIosBackgroundLocationEnabled": false,
           "isAndroidBackgroundLocationEnabled": false,
           "isAndroidForegroundServiceEnabled": false,
-          "locationAlwaysAndWhenInUsePermission": "OCTODEX never uses your location in the background: only while the app is open, during your visit and with your consent.",
-          "locationAlwaysPermission": "OCTODEX never uses your location in the background: only while the app is open, during your visit and with your consent.",
+          "locationAlwaysAndWhenInUsePermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
+          "locationAlwaysPermission": "GoRix never uses your location in the background: only while the app is open, during your visit and with your consent.",
           "motionUsagePermission": false,
           "locationFullAccuracyPermission": false
         }
@@ -111,7 +124,7 @@
         }
       ]
     ],
-    "scheme": "octodex",
+    "scheme": ["gorix", "octodex"],
     "owner": "octodex-team",
     "extra": {
       "eas": {

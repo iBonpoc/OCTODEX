@@ -17,6 +17,7 @@ import { Card, RowView, Screen } from "@/ui/surfaces";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { moduleDef } from "@/modules/registry";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * New lead in ~10 seconds, during the call: phone (paste), name, address, source, what they need.
@@ -100,9 +101,9 @@ export default function NewLead() {
 
       {dup.customers.length || dup.leads.length ? (
         <View style={{ gap: space[2] }}>
-          <T v="heading" tone="warn">
-            ⚠ {t("lead.dupTitle")}
-          </T>
+          <StatusNote tone="warn" v="heading">
+            {t("lead.dupTitle")}
+          </StatusNote>
           {/* the clients / leads found — related objects: compact cards (06 «Серия B», B3) */}
           <CardGrid>
             {[

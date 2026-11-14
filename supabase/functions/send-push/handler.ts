@@ -83,9 +83,9 @@ export const MIN_KEY = 16;
 // ---- the words (§4.3): no sums, names or addresses; the phone's interface language ---------------------------------------
 export type Lang = "en" | "es" | "ru";
 const OPEN: Record<Lang, string> = {
-  en: "Open OCTODEX to see it.",
-  es: "Abre OCTODEX para verlo.",
-  ru: "Откройте OCTODEX, чтобы посмотреть.",
+  en: "Open GoRix to see it.",
+  es: "Abre GoRix para verlo.",
+  ru: "Откройте GoRix, чтобы посмотреть.",
 };
 export const TITLES: Record<string, Record<Lang, string>> = {
   "estimate.client_signed": { en: "Estimate signed", es: "Presupuesto firmado", ru: "Смета подписана" },

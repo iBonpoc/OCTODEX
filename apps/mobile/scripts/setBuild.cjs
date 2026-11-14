@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * The build number in the header of every screen («OCTODEX v1.0.0 · 733 · …») is written by the build, not by a PR (#733):
+ * The build number in the header of every screen («GoRix v1.0.0 · 733 · …») is written by the build, not by a PR (#733):
  * every PR bumping BUILD made every open PR conflict after each merge and run its checks again. In the repo
  * src/config/version.ts keeps `BUILD = 0` (a local build, «dev» in the header; test/buildNumber.test.ts guards it);
  * release.yml, preview.yml and eas-build.yml run this right before they build, and it rewrites the file (not committed).

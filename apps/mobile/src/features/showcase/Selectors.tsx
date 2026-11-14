@@ -7,6 +7,7 @@ import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
+import { StatusNote } from "@/ui/statusNote";
 
 const UNITS = ["ft", "in", "yd", "m", "cm", "mm"] as const;
 const TWENTY = Array.from({ length: 20 }, (_, i) => `n${i + 1}`);
@@ -78,7 +79,7 @@ export function SelectorsSection() {
               )
             }
           />
-          {reqDone ? <T v="caption" tone="ok">{t("ds.req.ok")}</T> : null}
+          {reqDone ? <StatusNote tone="ok">{t("ds.req.ok")}</StatusNote> : null}
         </View>
       </Card>
     </View>

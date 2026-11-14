@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { useState } from "react";
 import { View } from "react-native";
@@ -23,6 +24,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { paymentRight } from "@/features/moneyLists";
+import { StatusNote } from "@/ui/statusNote";
 
 const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
 
@@ -52,7 +54,7 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
   // no part, no reference (the server's deposit function takes neither)
   const right = paymentRight(store.role, inv, { fromEstimate: !!job?.estimateId, pendingCents });
   const chip = invoiceChip(inv);
-  const company = companyForPortal(db, store.companyName ?? "OCTODEX");
+  const company = companyForPortal(db, store.companyName ?? APP_NAME);
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
   const lang = docLanguageFor(db, { customerId: inv.customerId });
   const reminder = () => reminderMessage(db, inv, company.name, lang);
@@ -183,9 +185,7 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
             </Labeled>
           )}
           {amount > balance ? (
-            <T v="caption" tone="warn">
-              {t("inv.capped", { max: money(balance) })}
-            </T>
+            <StatusNote tone="warn">{t("inv.capped", { max: money(balance) })}</StatusNote>
           ) : null}
           <ChoiceChips value={method} onChange={setMethod} items={METHODS.map((m) => ({ key: m, label: t(`pay.${m}` as DictKey) }))} />
           {right === "wholeDeposit" ? null : <TextField type="identifier" value={ref} onChangeText={setRef} placeholder={t("inv.reference")} />}
