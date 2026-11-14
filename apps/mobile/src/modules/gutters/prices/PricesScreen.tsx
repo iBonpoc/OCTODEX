@@ -54,7 +54,8 @@ export default function GutterPricesScreen() {
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** rows priced by a test item (rule 9): said once in the banner, each card keeps its own «тестовая цена» */
-  const testN = [...labor, ...parts].filter((r) => findItem(catalog, r.part)?.placeholder).length;
+  // counted as ITEMS of the price list, as the toast «Создано позиций: N» and «Нет в прайсе: N» count them (two rows may share one item)
+  const testN = new Set([...labor, ...parts].map((r) => findItem(catalog, r.part)).filter((it) => it?.placeholder).map((it) => it!.id)).size;
   /** own prices and test prices side by side: then a card marks its test price even under the banner (it tells which are left) */
   const mixed = testN > 0 && [...labor, ...parts].some((r) => { const it = findItem(catalog, r.part); return !!it && !it.placeholder; });
   /** the banner «Тестовые цены: N» is on the screen (the module on, the person writes prices, nothing missing) */
@@ -103,7 +104,6 @@ export default function GutterPricesScreen() {
         />
       );
     }
-    const own = missing.find((m) => findItem([m], row.part));
     return (
       <ListCard
         key={row.key}
@@ -114,7 +114,8 @@ export default function GutterPricesScreen() {
         density={desktop ? "row" : "rich"}
         // «нет в прайсе» is said once, by the banner above with its number (#1426: 24 same chips were a wall); the card shows «—»
         edge={null}
-        action={ro || !own ? undefined : { label: t(k("makeOne")), icon: "plus", onPress: () => make([own]) }}
+        // no «Создать с тестовой ценой» on every row (#1426, the director's look at the shots: the banner's «Создать позиции сразу»
+        // is the same action 24 times over); one row is made from its card: a tap opens the sheet with that action (DS Б9)
         onPress={ro ? undefined : () => setBindFor(row)}
       />
     );

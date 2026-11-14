@@ -48,6 +48,8 @@ exports.run = async (h) => {
   const misses = await p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").count();
   h.expect(misses > 10, `the cards are there (${misses})`);
   h.expect(!/нет в прайсе/.test(await text()), "no card repeats «нет в прайсе» (the banner says it once)"); // i18n-old: ok — the old chip must be gone
+  // the banner's action is not repeated on every row: one row is made from its card (a tap → the sheet with «Создать с тестовой ценой»)
+  h.expect((await p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").getByRole("button", { name: "Создать с тестовой ценой" }).count()) === 0, "no «Создать с тестовой ценой» button on the rows");
   await h.shot("prices-missing");
 
   // one row made with a test price while others are still missing: no «Тестовые цены» banner (the missing one is more urgent) —
@@ -65,6 +67,15 @@ exports.run = async (h) => {
   await tid("gpr-all-found").waitFor({ timeout: 8000 });
   h.expect((await banners()) === 1, `one state banner after «Создать» (${await banners()})`);
   h.expect(/Тестовые цены: \d+/.test(await tid("gpr-all-found").innerText()), "the banner names the state: the test prices left to set");
+  // its number is the price list's test items — the one made from a card before + the ones «Создать позиции сразу» made (its toast)
+  const shown = Number((await tid("gpr-all-found").innerText()).match(/Тестовые цены: (\d+)/)[1]);
+  // the store is written to the phone a moment later: wait for the saved list to have them, then compare
+  const testItems = await p.waitForFunction((n) => {
+    const db = (JSON.parse(localStorage.getItem("octo.db.v5") || "null") || {}).db || {};
+    const c = (db.catalog || []).filter((x) => x.placeholder && x.attributes && Object.keys(x.attributes).length).length;
+    return c >= n ? c : false;
+  }, shown, { timeout: 8000 }).then((r) => r.jsonValue());
+  h.expect(shown === testItems, `«Тестовые цены: ${shown}» = the test items in the price list (${testItems})`);
   // all of them test: the cards do not repeat «тестовая цена» (DS Б9: only while own and test prices are mixed)
   h.expect(!/тестовая цена/.test(await text()), "no card repeats «тестовая цена» while all prices are test ones");
   await h.shot("prices-made");
