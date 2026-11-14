@@ -116,17 +116,19 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
       containerStyle={grow ? { flex: 1 } : undefined}
       style={{ alignItems: "center", minWidth: sizes.hitMin }}
     >
-      {/* DS §19а (#1426): the chosen tool is the ONLY filled circle of the bar — «Заливка» (surf2 + shadow-sm, ink); the other tool —
+      {/* DS §19а (#1426): the chosen tool is the ONLY filled circle of the bar — inverted (ink + shadow-sm, the icon in bg); the other tool —
           no fill, mut; the actions (↶ ↷ 🗑) — the icon alone in ink, as an iOS toolbar; the bin with nothing picked — dimOpacity; the
           storey — its colour ring, no fill. Never acc: yellow is the screen's main action */}
       <View
         style={[
           { minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-          active ? fillStyle(c) : ring ? { borderWidth: dt.runW / 2, borderColor: ring } : null,
+          // the chosen tool: inverted — an ink circle, the icon in the background's colour (DS §19а: the most visible thing of the bar,
+          // in the sun too; surf2 was 1.07:1 to the bar in the light theme and the storey's ring looked chosen instead)
+          active ? [fillStyle(c), { backgroundColor: c.ink }] : ring ? { borderWidth: dt.runW / 2, borderColor: ring } : null,
           disabled ? { opacity: component.dimOpacity } : null,
         ]}
       >
-        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active === false || dim ? c.mut : c.ink} /> : null}
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.bg : active === false || dim ? c.mut : c.ink} /> : null}
       </View>
       {tip ? (
         <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
