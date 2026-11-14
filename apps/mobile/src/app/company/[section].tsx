@@ -16,7 +16,7 @@ import { CompanyTerms } from "@/features/CompanyTerms";
 import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 const ENTITY: EntityType[] = ["llc", "corporation", "sole_proprietor", "partnership", "other"];
@@ -82,7 +82,7 @@ export default function CompanySection() {
       <ReadOnly value={ro}>
 
       {step === "profile" ? (
-        <Card>
+        <FieldGroup testID="co-group-profile">
           <Labeled label={t("co.name")}>
             <TextField type="company" value={draft.name} onChangeText={(v) => set({ name: v })} placeholder="Acme Home Services" />
           </Labeled>
@@ -106,16 +106,16 @@ export default function CompanySection() {
           <Labeled label={t("co.website")}>
             <TextField type="url" value={draft.website ?? ""} onChangeText={(v) => set({ website: v })} placeholder="https://" icon="globe" />
           </Labeled>
-        </Card>
+        </FieldGroup>
       ) : null}
 
       {step === "address" ? (
         <>
-          <Card>
-            <T v="heading">{t("co.address")}</T>
+          {/* DS §11 п.17 (#1455): the fields lie on the screen, a group under its title — no second plate */}
+          <FieldGroup title={t("co.address")} testID="co-group-address">
             <AddressFields value={draft.address} onChange={(a) => set({ address: a })} />
-          </Card>
-          <Card>
+          </FieldGroup>
+          <FieldGroup testID="co-group-mailing">
             <RowView style={{ minHeight: size.hitMin }}>
               <T v="body" style={{ flex: 1 }}>
                 {t("co.mailingDifferent")}
@@ -123,7 +123,7 @@ export default function CompanySection() {
               <Toggle label={t("co.mailingDifferent")} on={!!draft.mailingAddress} onChange={(on) => set({ mailingAddress: on ? { ...emptyAddr } : undefined })} />
             </RowView>
             {draft.mailingAddress ? <AddressFields value={draft.mailingAddress} onChange={(a) => set({ mailingAddress: a })} /> : null}
-          </Card>
+          </FieldGroup>
           {/* the time zone lives in «Расписание» (П4a); here, in the address — a line that leads there */}
           <Card onPress={() => router.push("/company/schedule")} accessibilityLabel={t("schs.title")}>
             <RowView style={{ justifyContent: "space-between" }}>
@@ -139,13 +139,11 @@ export default function CompanySection() {
 
       {step === "insurance" ? (
         <>
-          <Card>
-            <T v="heading">{t("co.cgl")}</T>
+          <FieldGroup title={t("co.cgl")} testID="co-group-cgl">
             <TextField type="company" value={draft.insurance.cglCarrier ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, cglCarrier: v } })} placeholder={t("co.carrier")} />
             <TextField type="identifier" value={draft.insurance.cglPolicy ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, cglPolicy: v } })} placeholder={t("co.policy")} />
-          </Card>
-          <Card>
-            <T v="heading">{t("co.wc")}</T>
+          </FieldGroup>
+          <FieldGroup title={t("co.wc")} testID="co-group-wc">
             <RowView style={{ minHeight: size.hitMin }}>
               <T v="body" style={{ flex: 1 }}>
                 {t("co.wcExempt")}
@@ -158,12 +156,12 @@ export default function CompanySection() {
                 <TextField type="identifier" value={draft.insurance.wcPolicy ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, wcPolicy: v } })} placeholder={t("co.policy")} />
               </>
             ) : null}
-          </Card>
-          <Card>
+          </FieldGroup>
+          <FieldGroup testID="co-group-cancel">
             <Labeled label={t("co.cancelEmail")}>
               <TextField type="email" value={draft.cancelEmail ?? ""} onChangeText={(v) => set({ cancelEmail: v })} placeholder="office@company.com" />
             </Labeled>
-          </Card>
+          </FieldGroup>
         </>
       ) : null}
 
@@ -182,14 +180,13 @@ export default function CompanySection() {
 
       {step === "documents" ? (
         <>
-          <Card>
-            <T v="heading">{t("co.docLanguage")}</T>
+          <FieldGroup title={t("co.docLanguage")} testID="co-group-doclang">
             <T v="caption" tone="mut">
               {t("co.docLanguageHint")}
             </T>
             <ChoiceChips<DocLang> value={draft.docLanguage ?? "en"} onChange={(v) => set({ docLanguage: v })} items={DOC_LANGS.map((k) => ({ key: k, label: DOC_LANG_LABEL[k] }))} />
-          </Card>
-          <Card>
+          </FieldGroup>
+          <FieldGroup testID="co-group-estimate">
             <Stepper label={t("co.validDays")} value={draft.estimate.validDays} min={1} max={180} step={5} onChange={(v) => set({ estimate: { ...draft.estimate, validDays: v } })} />
             <T v="body">{t("co.defaultDeposit")}</T>
             <Segmented
@@ -204,15 +201,14 @@ export default function CompanySection() {
             {draft.estimate.depositBps !== null ? (
               <PctField bps={draft.estimate.depositBps} onChange={(b) => set({ estimate: { ...draft.estimate, depositBps: Math.min(b, 10000) } })} />
             ) : null}
-          </Card>
-          <Card>
+          </FieldGroup>
+          <FieldGroup testID="co-group-terms">
             <CompanyTerms est={draft.estimate} onChange={(estimate) => set({ estimate })} />
-          </Card>
-          <Card>
-            <T v="heading">{t("co.payment")}</T>
+          </FieldGroup>
+          <FieldGroup title={t("co.payment")} testID="co-group-payment">
             <TextField type="email" value={draft.payment.zelle ?? ""} onChangeText={(v) => set({ payment: { ...draft.payment, zelle: v } })} placeholder={t("co.zelle")} />
             <TextField type="company" value={draft.payment.checkPayableTo ?? ""} onChangeText={(v) => set({ payment: { ...draft.payment, checkPayableTo: v } })} placeholder={t("co.checkTo")} />
-          </Card>
+          </FieldGroup>
         </>
       ) : null}
 
@@ -280,7 +276,7 @@ function ContactsEditor() {
         ),
       )}
       {edit ? (
-        <Card>
+        <FieldGroup title={list.find((x) => x.id === edit.id)?.name ?? t("co.addPerson")} testID="co-contact-edit">
           <TextField type="name" value={edit.name} onChangeText={(v) => setEdit({ ...edit, name: v })} placeholder={t("co.personName")} icon="user" />
           <TextField type="jobTitle" value={edit.title ?? ""} onChangeText={(v) => setEdit({ ...edit, title: v })} placeholder={t("co.personTitle")} />
           <TextField type="phone" value={edit.phone ?? ""} onChangeText={(v) => setEdit({ ...edit, phone: v })} placeholder={t("co.phone")} icon="phone" />
@@ -320,7 +316,7 @@ function ContactsEditor() {
               }}
             />}
           </RowView>
-        </Card>
+        </FieldGroup>
       ) : ro ? null : (
         <Button label={t("co.addPerson")} icon="plus" variant="secondary" full onPress={() => setEdit(blank())} />
       )}
@@ -366,7 +362,7 @@ function LicensesEditor() {
         ),
       )}
       {edit ? (
-        <Card>
+        <FieldGroup title={list.some((x) => x.id === edit.id) ? `${t(`co.lic.${edit.kind}` as DictKey)} #${list.find((x) => x.id === edit.id)!.number}` : t("co.addLicense")} testID="co-license-edit">
           <ChoiceChips value={edit.kind} onChange={(k) => setEdit({ ...edit, kind: k })} items={LIC.map((k) => ({ key: k, label: t(`co.lic.${k}` as DictKey) }))} />
           <TextField type="identifier" value={edit.number} onChangeText={(v) => setEdit({ ...edit, number: v })} placeholder={t("co.licNumber")} />
           <TextField type="identifier" value={edit.cls} onChangeText={(v) => setEdit({ ...edit, cls: v })} placeholder={t("co.classesHint")} />
@@ -409,7 +405,7 @@ function LicensesEditor() {
               }}
             />}
           </RowView>
-        </Card>
+        </FieldGroup>
       ) : ro ? null : (
         <Button
           label={t("co.addLicense")}
@@ -447,8 +443,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
   const validHex = /^#[0-9a-fA-F]{6}$/.test(hex);
   return (
     <>
-      <Card>
-        <T v="heading">{t("co.logo")}</T>
+      <FieldGroup title={t("co.logo")} testID="co-group-logo">
         {draft.brand.logo ? (
           <Image source={{ uri: draft.brand.logo }} style={{ width: component.logo, height: component.logo, borderRadius: radius.inner }} accessibilityLabel={t("co.logo")} />
         ) : (
@@ -460,9 +455,8 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
           <Button label={draft.brand.logo ? t("co.changeLogo") : t("co.pickLogo")} icon="camera" variant="secondary" onPress={pick} />
           {draft.brand.logo ? <Button label={t("cat.remove")} variant="ghost" onPress={() => set({ brand: { ...draft.brand, logo: undefined } })} /> : null}
         </RowView>}
-      </Card>
-      <Card>
-        <T v="heading">{t("co.color")}</T>
+      </FieldGroup>
+      <FieldGroup title={t("co.color")} testID="co-group-color">
         <RowView>
           <View style={{ flex: 1 }}>
             <TextField type="color" value={hex} onChangeText={(v) => set({ brand: { ...draft.brand, color: v.trim() || undefined } })} placeholder="#1E6FD9" />
@@ -474,7 +468,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
         <T v="caption" tone="mut">
           {t("co.colorNote")}
         </T>
-      </Card>
+      </FieldGroup>
     </>
   );
 }

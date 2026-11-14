@@ -349,7 +349,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
     "app/auth/sign-in.tsx": { n: 1, why: "вход — особый шаблон (§12.3), #1455" },
     "app/auth/trade.tsx": { n: 1, why: "вход — особый шаблон (§12.3), #1455" },
     "app/f/[token].tsx": { n: 1, why: "публичная форма заявки клиента — особый шаблон (§12.3), #1455" },
-    "app/company/[section].tsx": { n: 8, why: "разделы настроек — шаблон «Настройки», #1455" },
     "app/company/checklist/[id].tsx": { n: 1, why: "пункт чек-листа — объект списка, карточка (правило 12)" },
     "features/client/ClientSheets.tsx": { n: 1, why: "каждый дополнительный человек клиента — объект списка, карточка (правило 12)" },
     "app/purchase-order/[id].tsx": { n: 1, why: "карточка объекта (шаблон «К»), не форма" },
