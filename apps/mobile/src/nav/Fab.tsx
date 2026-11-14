@@ -116,7 +116,9 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   const label = one ? t(one.label) : t("nav.create");
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
-  if (placement === "header")
+  if (placement === "header") {
+    // «Главная»'s quick actions are its main action: yellow, one on the screen (DS §5.3, audit №2 14.11, #1395); a list's «＋» is secondary
+    const acc = p.set === "home";
     return (
       <>
         <Press
@@ -126,16 +128,17 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
           accessibilityRole="button"
           accessibilityLabel={label}
           aria-haspopup={one ? undefined : "dialog"}
-          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
+          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: acc ? c.acc : c.surf2, borderWidth: acc ? 0 : component.hairline, borderColor: c.bd }}
         >
-          <Icon name="plus" s={size.iconSm} color={c.ink} />
-          <T v="button" numberOfLines={1}>
+          <Icon name="plus" s={size.iconSm} color={acc ? c.onAcc : c.ink} />
+          <T v="button" numberOfLines={1} style={acc ? { color: c.onAcc } : undefined}>
             {label}
           </T>
         </Press>
         {sheet}
       </>
     );
+  }
   return (
     <>
       <View pointerEvents="box-none" style={{ position: "absolute", right, bottom, zIndex: z.fab }}>
