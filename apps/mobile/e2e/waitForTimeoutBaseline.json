@@ -178,7 +178,7 @@
  "e2e/specs/70-client-rows.cjs": 7,
  "e2e/specs/71-client-form.cjs": 6,
  "e2e/specs/72-tax-exempt-estimate.cjs": 7,
- "e2e/specs/73-property-rows.cjs": 4,
+ "e2e/specs/73-property-rows.cjs": 3,
  "e2e/specs/74-do-not-service.cjs": 13,
  "e2e/specs/75-client-import.cjs": 14,
  "e2e/specs/78-invoices-owed.cjs": 3,

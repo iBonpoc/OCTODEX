@@ -432,7 +432,6 @@ describe("design system: a record's card has no row of pill buttons (#1412)", ()
   const ALLOWED: Record<string, { n: number; why: string }> = {
     "app/job/[id].tsx": { n: 2, why: "карточка работы — #1474" },
     "app/receipt/[id].tsx": { n: 1, why: "квитанция — #1474" },
-    "app/property/[id].tsx": { n: 1, why: "карточка объекта — #1474" },
     "features/invoice/InvoiceCard.tsx": { n: 1, why: "карточка счёта — #1474" },
     "features/EstimateCard.tsx": { n: 1, why: "шторка «Отправить»: три способа отправки — выбор внутри начатого действия, не действия карточки" },
   };

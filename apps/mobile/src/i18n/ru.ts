@@ -145,6 +145,8 @@ export const ru = {
   "vf.msg.inspection": "Здравствуйте, {name}! {company} приедет на осмотр {date} в {time}. Если время не подходит, ответьте на это сообщение.",
   "vf.msg.job": "Здравствуйте, {name}! {company} приедет на работы {date} в {time}. Если время не подходит, ответьте на это сообщение.",
   "vf.addInspection": "Осмотр",
+  // property card #1474: the tiles
+  "prop.tile.client": "Клиент",
   "vf.inspectionSaved": "Осмотр записан: {date}, {time}",
   "vf.rescheduled": "Перенесено: {date}, {time}",
   "vc.title": "Отменить выезд",
