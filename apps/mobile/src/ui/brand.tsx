@@ -7,8 +7,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { DOT, G_PATH, G_PLACE, GR_VIEW, LOGO_DOT, LOGO_LETTERS, LOGO_LETTERS_DX, LOGO_SHIFT, LOGO_VIEW, R_DX, R_PATH, dotTone, dotWay, gToMark, pointOnWay } from "./brandRules";
 
 /**
- * GoRix in the app (DS §18.2, #1156): the mark GR and the logo «GoRix», and the three moves of its yellow dot —
- * the short launch, the full-screen wait, the first-launch intro. The only place that draws the brand
+ * GoRix in the app (DS §18.2, #1156): the mark GR and the logo «GoRix», and the two moves of its yellow dot —
+ * the full-screen wait and the logo's intro (the showcase only, #1394). The only place that draws the brand
  * (`brandGuard.test.ts`): the brand is to be redrawn after 1.0, then this file and `brandRules.ts` change, nothing else.
  * Letters are `ink`; the dot is `acc` or `ink` by `dotTone` (DS §18.2 «Цвет»). Reduced motion: the dot stands still.
  */
@@ -87,7 +87,7 @@ export function BrandLogo({ width, testID, dot = true }: { width: number; testID
   );
 }
 
-const QUICK_WAY = dotWay(700);
+const INTRO_WAY = dotWay(700);
 const WAIT_WAY = dotWay(600);
 
 /** the dot as a view over the svg (transforms move on every platform, the web included) */
@@ -101,45 +101,25 @@ function MovingDot({ box, d, tone, style }: { box: { w: number; h: number }; d: 
   );
 }
 
-/** the short launch (DS §18.2 п.3): GR at once, the dot drives along the G into its place in `durBrandQuick` */
-export function BrandQuick({ size, testID }: { size: number; testID?: string }) {
-  const { c } = useTheme();
-  const reduce = useReducedMotion();
-  const tone = useTone(size, false);
-  const w = markW(size);
-  const t = useSharedValue(reduce ? 1 : 0);
-  useEffect(() => {
-    if (!reduce) t.value = withTiming(1, { duration: motion.durBrandQuick, easing: Easing.bezier(0.4, 0, 0.2, 1) });
-    return () => cancelAnimation(t);
-  }, [reduce, t]);
-  const style = useAnimatedStyle(() => {
-    const p = gToMark(pointOnWay(QUICK_WAY, t.value));
-    return { transform: [{ translateX: p.x * w }, { translateY: p.y * size }] };
-  });
-  const d = (2 * DOT.r * G_PLACE.k * size) / GR_VIEW.h;
-  return (
-    <View testID={testID} accessibilityRole="image" accessibilityLabel="GoRix" style={{ width: w, height: size }}>
-      <GrSvg h={size} ink={c.ink} tone={tone} dot={false} />
-      <MovingDot box={{ w, h: size }} d={d} tone={tone} style={style} />
-    </View>
-  );
-}
-
-/** the full-screen wait (DS §18.2 п.4): the dot drives along the G in a loop of `durBrand`, fading in and out at the
- *  ends; the word always beside it is the caller's (`BrandWaitScreen` in `brandScreens.tsx`) */
+/** the full-screen wait (DS §18.2 п.4): the dot leaves its place and drives along the G in a loop of `durBrand`,
+ *  fading in and out at the ends; the word always beside it is the caller's (`BrandWaitScreen` in `brandScreens.tsx`) */
 export function BrandWait({ size, testID }: { size: number; testID?: string }) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const tone = useTone(size, false);
   const w = markW(size);
-  const t = useSharedValue(reduce ? 1 : 0);
+  // the dot starts at its place (the end of its way, where the still mark has it): it fades there, then the loop runs
+  const t = useSharedValue(1);
   const o = useSharedValue(1);
   useEffect(() => {
     if (reduce) return;
     const easing = Easing.bezier(0.45, 0, 0.55, 1);
-    t.value = withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motion.durBrand, easing })), -1);
     const edge = motion.durBrandEdge;
-    o.value = withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: edge }), withDelay(motion.durBrand - 2 * edge, withTiming(0, { duration: edge }))), -1);
+    t.value = withDelay(edge, withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motion.durBrand, easing })), -1));
+    o.value = withSequence(
+      withTiming(0, { duration: edge }),
+      withRepeat(withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: edge }), withDelay(motion.durBrand - 2 * edge, withTiming(0, { duration: edge }))), -1),
+    );
     return () => {
       cancelAnimation(t);
       cancelAnimation(o);
@@ -158,7 +138,7 @@ export function BrandWait({ size, testID }: { size: number; testID?: string }) {
   );
 }
 
-/** the first-launch intro (DS §18.2 п.2): the logo; the dot drives along the G (`durBrandQuick`), a pause
+/** the logo's intro (DS §18.2 п.7 — the showcase only since #1394): the logo; the dot drives along the G (`durBrandQuick`), a pause
  *  (`durBrandPause`), then flies up to its place over the «i» (`durBrandFold`); all within `durBrand`. `onDone` — when it stands */
 export function BrandIntro({ width, onDone, testID }: { width: number; onDone?: () => void; testID?: string }) {
   const { c } = useTheme();
@@ -184,7 +164,7 @@ export function BrandIntro({ width, onDone, testID }: { width: number; onDone?: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reduce, way, fly]);
   const style = useAnimatedStyle(() => {
-    const g = pointOnWay(QUICK_WAY, way.value);
+    const g = pointOnWay(INTRO_WAY, way.value);
     // the G's units → the logo's box
     const gx = (g.x * G_PLACE.k + G_PLACE.dx + LOGO_SHIFT.dx - LOGO_VIEW.x) / LOGO_VIEW.w;
     const gy = (g.y * G_PLACE.k + G_PLACE.dy + LOGO_SHIFT.dy - LOGO_VIEW.y) / LOGO_VIEW.h;

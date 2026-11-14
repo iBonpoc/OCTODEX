@@ -1,13 +1,45 @@
-import { useState } from "react";
-import { View } from "react-native";
-import { component, size, space } from "@octo/design-tokens";
+import { useCallback, useEffect, useState } from "react";
+import { StyleSheet, View } from "react-native";
+import Animated from "react-native-reanimated";
+import { component, motion, size, space } from "@octo/design-tokens";
+import { useBootLeave } from "@/features/boot";
 import { useI18n } from "@/i18n";
-import { BrandIntro, BrandLogo, BrandMark, BrandQuick, BrandWait } from "@/ui/brand";
+import { useTheme } from "@/theme/ThemeProvider";
+import { BrandIntro, BrandLogo, BrandMark, BrandWait } from "@/ui/brand";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 
-/** «Бренд GoRix» (DS §18.2, #1156): the mark in its sizes and both dots, the logo, the dot's three moves with «Проиграть» */
+/** the launch as the app does it (DS §18.2 «Запуск» v4.3, #1394): the still mark on the theme's bg, then it grows to
+ *  `brandExitScale` and fades in `durBase` over «the first screen» (the same hook as the boot layer) */
+function LaunchDemo() {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const [leaving, setLeaving] = useState(false);
+  const [gone, setGone] = useState(false);
+  const onGone = useCallback(() => setGone(true), []);
+  const leave = useBootLeave(leaving, onGone);
+  useEffect(() => {
+    const id = setTimeout(() => setLeaving(true), motion.durBrandQuick);
+    return () => clearTimeout(id);
+  }, []);
+  return (
+    <View testID="showcase-brand-launch" style={{ alignSelf: "stretch", height: component.brand.intro, alignItems: "center", justifyContent: "center" }}>
+      <T v="body" tone="mut">
+        {t("ds.brand.firstScreen")}
+      </T>
+      {gone ? null : (
+        <Animated.View testID={leaving ? "showcase-brand-launch-leaving" : "showcase-brand-launch-still"} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: c.bg }, leave.layer]}>
+          <Animated.View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }, leave.mark]}>
+            <BrandMark size={component.brand.wait} />
+          </Animated.View>
+        </Animated.View>
+      )}
+    </View>
+  );
+}
+
+/** «Бренд GoRix» (DS §18.2, #1156, #1394): the mark in its sizes and both dots, the logo, the launch and the dot's moves with «Проиграть» */
 export function BrandSection() {
   const { t } = useI18n();
   // a new key remounts the moves: «Проиграть» plays them again from the start
@@ -47,8 +79,8 @@ export function BrandSection() {
       <SectionTitle title={t("ds.brand.moves")} />
       <Card>
         <View key={run} style={{ gap: space[4], alignItems: "center" }}>
-          <BrandQuick size={component.brand.wait} testID="showcase-brand-quick" />
-          <T v="caption" tone="mut">{t("ds.brand.quick")}</T>
+          <LaunchDemo />
+          <T v="caption" tone="mut">{t("ds.brand.launch")}</T>
           <BrandWait size={component.brand.wait} testID="showcase-brand-wait" />
           <T v="caption" tone="mut">{t("ds.brand.wait")}</T>
           <BrandIntro width={component.brand.intro} testID="showcase-brand-intro" />

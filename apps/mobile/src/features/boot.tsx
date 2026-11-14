@@ -1,26 +1,42 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Platform, StyleSheet, useColorScheme, View } from "react-native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import Constants from "expo-constants";
+import Animated, {
+  Easing,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import type * as SplashModule from "expo-splash-screen";
 import * as Updates from "expo-updates";
 import { getLocales } from "expo-localization";
 import { component, motion, space, themes } from "@octo/design-tokens";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { StaticThemeProvider } from "@/theme/ThemeProvider";
-import { BrandIntro, BrandMark, BrandQuick, BrandWait } from "@/ui/brand";
-import { BRAND_SEEN_KEY, launchKind, waitStage } from "@/ui/brandRules";
+import { BrandMark, BrandWait } from "@/ui/brand";
+import { bootStage } from "@/ui/brandRules";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 
 /**
- * The launch without a white frame (DS §18.2 «Запуск», #654, #1046). The system splash stays until this layer has
- * drawn; the layer lies under the whole app in the theme of the system's scheme (the stored theme is not read yet) and
- * shows the brand while the providers still say «not ready» (fonts, theme, language, the company's cache). When the
- * shell is up it says so (`useBootDone`) and the layer goes — no loop runs behind the app.
- *
- * What it shows: the first launch of a version — the intro on the logo; otherwise the short GR entry; still not ready
- * after it — the wait with its word; after `actionTimeoutMs` — «Не получилось загрузить · Повторить».
+ * The launch without a jump (DS §18.2 «Запуск» v4.3, #1394; before: #654, #1046). The system splash shows the GR mark
+ * 56 high in the system's theme; this layer's first frame is the same mark in the same place, so the splash goes
+ * (a fade of `durBase` on iOS and Android alike) and nothing moves. The mark stands still while the providers say «not
+ * ready» (fonts, theme, language, the company's cache); only a load longer than `durBrandHold` starts the wait — the dot
+ * leaves its place, the word «Загрузка…» comes under the mark in a place kept for it (the mark never shifts); after
+ * `actionTimeoutMs` — «Не получилось загрузить · Повторить». When the shell is up (`useBootDone`) the layer comes over it
+ * and leaves: the mark grows to `brandExitScale` while the layer fades in `durBase` over the drawn first screen, which
+ * takes taps at once. Reduced motion: no growth, a fade of `durFast`.
  */
 
 /**
@@ -40,17 +56,24 @@ function splash(): typeof SplashModule | null {
   }
   return splashMod;
 }
-splash()?.preventAutoHideAsync().catch(() => {});
+splash()
+  ?.preventAutoHideAsync()
+  .catch(() => {});
+// the splash goes the same way on iOS and Android: a fade of durBase (iOS by default cuts at once). Builds made before
+// setOptions existed simply skip it
+try {
+  splash()?.setOptions?.({ fade: true, duration: motion.durBase });
+} catch {
+  // an old native module: the splash goes as it did
+}
 
 const BootCtx = createContext<() => void>(() => {});
 
-/** the shell calls it once it is on screen */
+/** the shell calls it once it is on screen — before the paint, so the layer is over the shell in its very first frame */
 export function useBootDone(): void {
   const done = useContext(BootCtx);
-  useEffect(() => done(), [done]);
+  useLayoutEffect(() => done(), [done]);
 }
-
-const VERSION = Constants.expoConfig?.version ?? "1.0.0";
 
 function deviceDocLang(): DocLang {
   const code = getLocales()[0]?.languageCode ?? "en";
@@ -62,78 +85,140 @@ function reload(): void {
   else Updates.reloadAsync().catch(() => {});
 }
 
-function BootBrand({ words }: { words: boolean }) {
+/** the mark in the centre of the screen, the words under it in their own place: the mark never moves */
+function BootBrand({ words, leaving }: { words: boolean; leaving: boolean }) {
   const t = useMemo(() => tFor(deviceDocLang()), []);
-  const [seen, setSeen] = useState<string | null | undefined>(undefined);
-  const [phase, setPhase] = useState<"entry" | "wait">("entry");
   const [elapsed, setElapsed] = useState(0);
   const started = useRef(Date.now());
   useEffect(() => {
-    AsyncStorage.getItem(BRAND_SEEN_KEY)
-      .then((v) => setSeen(v))
-      .catch(() => setSeen(VERSION)); // storage refuses: no intro, never block the start
-  }, []);
-  useEffect(() => {
-    const tick = setInterval(() => setElapsed(Date.now() - started.current), motion.spinnerDelayMs);
+    if (leaving) return;
+    const tick = setInterval(
+      () => setElapsed(Date.now() - started.current),
+      motion.spinnerDelayMs,
+    );
     return () => clearInterval(tick);
-  }, []);
-  const kind = seen === undefined ? null : launchKind({ seenVersion: seen, version: VERSION });
-  // the intro counts as shown once it starts: a fast start covers it within a frame, and it must not come back each time
-  useEffect(() => {
-    if (kind === "intro") AsyncStorage.setItem(BRAND_SEEN_KEY, VERSION).catch(() => {});
-  }, [kind]);
-  useEffect(() => {
-    if (kind !== "quick") return;
-    const id = setTimeout(() => setPhase("wait"), motion.durBrandQuick);
-    return () => clearTimeout(id);
-  }, [kind]);
-  const introDone = useCallback(() => setPhase("wait"), []);
-  const stage = waitStage(elapsed);
-  // the mark is still while the device's memory is read: the native splash and index.html show the same GR, no gap
-  if (kind === null) return <BrandMark size={component.brand.wait} testID="boot-still" />;
+  }, [leaving]);
+  const stage = bootStage(elapsed);
+  const size = component.brand.wait;
   return (
-    <View testID="boot-brand" style={{ alignItems: "center", gap: space[4] }}>
-      {phase === "entry" && kind === "intro" ? (
-        <BrandIntro width={component.brand.intro} onDone={introDone} testID="boot-intro" />
-      ) : phase === "entry" ? (
-        <BrandQuick size={component.brand.wait} testID="boot-quick" />
-      ) : (
-        <BrandWait size={component.brand.wait} testID="boot-wait" />
-      )}
-      {/* the words wait for the fonts — but «Повторить» never does: fonts that never load must not leave a silent screen */}
-      {(words || stage === "failed") && phase === "wait" && stage !== "silent" ? (
-        stage === "failed" ? (
-          <View testID="boot-failed" style={{ alignItems: "center", gap: space[3] }}>
-            <T v="body" tone="mut">
-              {t("brand.boot.failed")}
-            </T>
-            <Button label={t("brand.boot.retry")} icon="refresh" variant="secondary" onPress={reload} testID="boot-retry" />
-          </View>
+    <View
+      testID="boot-brand"
+      style={StyleSheet.absoluteFill}
+      pointerEvents="box-none"
+    >
+      <View style={{ flex: 1 }} pointerEvents="none" />
+      <View style={{ height: size, alignItems: "center" }} pointerEvents="none">
+        {stage === "still" || leaving ? (
+          <BrandMark size={size} testID="boot-still" />
         ) : (
-          <T v="body" tone="mut">
-            {t("brand.boot.loading")}
-          </T>
-        )
-      ) : null}
+          <BrandWait size={size} testID="boot-wait" />
+        )}
+      </View>
+      {/* the padding is inside: on the flexible half itself it would take its share and lift the mark off the middle */}
+      <View style={{ flex: 1 }} pointerEvents="box-none">
+        <View
+          style={{ alignItems: "center", paddingTop: space[4] }}
+          pointerEvents="box-none"
+        >
+          {/* the words wait for the fonts — but «Повторить» never does: fonts that never load must not leave a silent screen */}
+          {leaving ? null : stage === "failed" ? (
+            <View
+              testID="boot-failed"
+              style={{ alignItems: "center", gap: space[3] }}
+            >
+              <T v="body" tone="mut">
+                {t("brand.boot.failed")}
+              </T>
+              <Button
+                label={t("brand.boot.retry")}
+                icon="refresh"
+                variant="secondary"
+                onPress={reload}
+                testID="boot-retry"
+              />
+            </View>
+          ) : stage === "wait" && words ? (
+            <View testID="boot-loading">
+              <T v="body" tone="mut">
+                {t("brand.boot.loading")}
+              </T>
+            </View>
+          ) : null}
+        </View>
+      </View>
     </View>
   );
 }
 
-/** the app's root: the layer under it, the native splash let go once the layer is drawn. `fontsReady` — words only
- *  after the fonts (a missing font family is an error on the phone) */
-export function BootRoot({ fontsReady, children }: { fontsReady: boolean; children?: ReactNode }) {
+/** the layer goes: over the drawn first screen, it fades in `durBase` while the mark grows to `brandExitScale`
+ *  (reduced motion: a fade of `durFast`, no growth); it takes no taps, the first screen works at once */
+export function useBootLeave(leaving: boolean, onGone: () => void) {
+  const reduce = useReducedMotion();
+  const o = useSharedValue(1);
+  const k = useSharedValue(1);
+  useEffect(() => {
+    if (!leaving) return;
+    const duration = reduce ? motion.durFast : motion.durBase;
+    const easing = Easing.bezier(...motion.easeOut);
+    o.value = withTiming(0, { duration, easing });
+    if (!reduce)
+      k.value = withTiming(motion.brandExitScale, { duration, easing });
+    const id = setTimeout(onGone, duration);
+    return () => clearTimeout(id);
+  }, [leaving, reduce, o, k, onGone]);
+  const layer = useAnimatedStyle(() => ({ opacity: o.value }));
+  const mark = useAnimatedStyle(() => ({ transform: [{ scale: k.value }] }));
+  return { layer, mark };
+}
+
+/** the app's root: the layer under it while it loads, over it while it leaves (zIndex, the same element — nothing
+ *  remounts), the native splash let go once the layer is drawn. `fontsReady` — words only after the fonts (a missing
+ *  font family is an error on the phone) */
+export function BootRoot({
+  fontsReady,
+  children,
+}: {
+  fontsReady: boolean;
+  children?: ReactNode;
+}) {
   const scheme = useColorScheme();
   const name = scheme === "light" ? "light" : "dark";
-  const [booted, setBooted] = useState(false);
-  const done = useCallback(() => setBooted(true), []);
+  const [leaving, setLeaving] = useState(false);
+  const [gone, setGone] = useState(false);
+  const done = useCallback(() => setLeaving(true), []);
+  const onGone = useCallback(() => setGone(true), []);
+  const leave = useBootLeave(leaving, onGone);
   return (
-    <View style={{ flex: 1, backgroundColor: themes[name].bg }} onLayout={() => void splash()?.hideAsync().catch(() => {})}>
-      {booted ? null : (
-        <View style={[StyleSheet.absoluteFill, { alignItems: "center", justifyContent: "center" }]} pointerEvents="box-none">
+    <View
+      style={{ flex: 1, backgroundColor: themes[name].bg }}
+      onLayout={() =>
+        void splash()
+          ?.hideAsync()
+          .catch(() => {})
+      }
+    >
+      {gone ? null : (
+        <Animated.View
+          testID={leaving ? "boot-leaving" : "boot-layer"}
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              zIndex: leaving ? 1 : 0,
+              backgroundColor: leaving ? themes[name].bg : undefined,
+            },
+            leave.layer,
+          ]}
+          pointerEvents={leaving ? "none" : "box-none"}
+        >
           <StaticThemeProvider name={name}>
-            <BootBrand words={fontsReady} />
+            <Animated.View
+              style={[StyleSheet.absoluteFill, leave.mark]}
+              pointerEvents="box-none"
+            >
+              <BootBrand words={fontsReady} leaving={leaving} />
+            </Animated.View>
           </StaticThemeProvider>
-        </View>
+        </Animated.View>
       )}
       <BootCtx.Provider value={done}>{children}</BootCtx.Provider>
     </View>
