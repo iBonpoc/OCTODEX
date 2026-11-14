@@ -89,5 +89,8 @@ export function failedPhotos(db: DB): { visitId: string; photo: Photo & { upload
   return out.sort((a, b) => (a.photo.upload.at < b.photo.upload.at ? 1 : a.photo.upload.at > b.photo.upload.at ? -1 : 0));
 }
 
-/** «Повторить» can send it again: the file is still on this phone (a vanished file — «gone» — cannot be sent) */
-export const canRetry = (p: Photo) => !!p.upload && p.upload.failed !== "gone" && !!p.uri;
+/**
+ * «Повторить» can help: a plain refusal of a file still on this phone. Not a vanished file (nothing to send), and not one
+ * too big or of a type the cloud does not take — the same file would be refused again (design review of #1431 №1).
+ */
+export const canRetry = (p: Photo) => p.upload?.failed === "refused" && !!p.uri;

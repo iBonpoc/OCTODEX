@@ -13,6 +13,10 @@ import type { DictKey } from "@/i18n";
 import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
 import { canReview, missedCount, visitMissed, visitSettings } from "./checklist";
+import { failedPhotos } from "@/data/photoUpload";
+
+/** #1431: photos the cloud did not take are only on one phone — just under a lead waiting for a reply, above the rest */
+export const PHOTO_FAILED_SCORE = 990;
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
   /* E2b-2 (docs/specs/07 «E2b — экраны подписи» §3, §7, §8) */
@@ -26,7 +30,9 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   /* docs/specs/03 §5.2, §13 (S15): the inspection has passed N working days ago and there is no estimate yet */
   | "inspectionNoEstimate"
   /* docs/specs/08 §8 (CH2b): a finished visit left required items or photos undone — until «Просмотрено» or done */
-  | "visitMissed";
+  | "visitMissed"
+  /* #1431: the cloud did not take photos of a visit — they are only on the phone that made them */
+  | "photoFailed";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -63,7 +69,8 @@ export function attentionHref(it: AttentionItem): string {
     case "estimateDeclined": return `/estimate/${it.refId}`;
     case "unassigned":
     case "late":
-    case "visitMissed": return `/visit/${it.refId}`;
+    case "visitMissed":
+    case "photoFailed": return `/visit/${it.refId}`;
     default: return `/lead/${it.refId}`;
   }
 }
@@ -257,6 +264,16 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     if (d < timing.estimateWarnDays) continue;
     const c = db.customers.find((x) => x.id === e.customerId);
     out.push({ id: `est-${e.id}`, kind: "estimate", refId: e.id, name: c?.name ?? "", label: "att.estimate", params: { d, name: c?.name ?? "" }, chip: "att.noReplyDays", status: d >= timing.estimateBadDays ? "bad" : "warn", amountCents: e.totalCents, score: 700 + d });
+  }
+  // #1431: one reason per visit whose photos the cloud did not take (they are only on the phone that made them)
+  const failedBy = new Map<string, number>();
+  for (const f of failedPhotos(db)) failedBy.set(f.visitId, (failedBy.get(f.visitId) ?? 0) + 1);
+  for (const [visitId, n] of failedBy) {
+    const v = db.visits.find((x) => x.id === visitId);
+    const name = v ? visitContext(db, v).customer?.name ?? "" : "";
+    // which visit (a client may have several): its date, as «Не сделано» says it
+    const date = v ? new Date(v.start).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "";
+    out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
   return out.sort((a, b) => b.score - a.score);
 }

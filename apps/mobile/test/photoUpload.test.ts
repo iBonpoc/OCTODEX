@@ -181,8 +181,10 @@ describe("failedPhotos / canRetry", () => {
     expect(failedPhotos(d).map((x) => [x.visitId, x.photo.id])).toEqual([["v2", "c"], ["v1", "a"]]);
     expect(failedPhotos(dbOf(visit("v1", [{ id: "b", kind: "before" }])))).toEqual([]);
   });
-  it("«Повторить» needs the file here; a vanished file cannot be sent", () => {
-    expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "tooBig", at: "x" } })).toBe(true);
+  it("«Повторить» needs the file here and a plain refusal: a vanished file, a too big one or a refused type would fail again", () => {
+    expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "refused", at: "x" } })).toBe(true);
+    expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "tooBig", at: "x" } })).toBe(false);
+    expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "type", at: "x" } })).toBe(false);
     expect(canRetry({ id: "a", kind: "before", upload: { failed: "refused", at: "x" } })).toBe(false);
     expect(canRetry({ id: "a", kind: "before", uri: "file:///a", upload: { failed: "gone", at: "x" } })).toBe(false);
     expect(canRetry({ id: "a", kind: "before", uri: "file:///a" })).toBe(false);

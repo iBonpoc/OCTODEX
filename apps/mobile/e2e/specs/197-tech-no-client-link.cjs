@@ -4,6 +4,7 @@
  * ссылку» inside) and «Открыть как клиент»; a tech sees neither. The tech still sees the on-site signature (he may sign
  * contracts in the demo) — that goes by the estimate's id, no link.
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
 exports.run = async (h) => {
@@ -12,14 +13,14 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/estimate/e6");
   await p.getByTestId("est-send").waitFor();
-  h.expect((await p.getByTestId("est-open-client").count()) === 1, "the director: «Открыть как клиент»");
+  h.expect(await estHas(p, "client"), "the director: «Как видит клиент» in «⋯»");
   await h.shot("director");
 
   await setRole(h, "tech");
   await h.go("/estimate/e6");
-  await p.getByTestId("est-pdf").waitFor();
+  await estMore(p);
   h.expect((await p.getByTestId("est-send").count()) === 0, "a tech: no «Отправить» (its sheet copies the link)");
-  h.expect((await p.getByTestId("est-open-client").count()) === 0, "a tech: no «Открыть как клиент»");
+  h.expect(!(await estHas(p, "client")), "a tech: no «Как видит клиент»");
   await h.expectText(/Подпись клиента на месте|Подписать на месте/, "the on-site signature is still there for him");
   await h.shot("tech");
   await setRole(h, "director");

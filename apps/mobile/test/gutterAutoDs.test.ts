@@ -1,6 +1,6 @@
 /**
  * #1246 (spec 33-gutters-ds-auto А1–А3, founder 12.11: «на каждом водостоке по-любому должен быть даунспот»): a downspout by itself — one
- * per CHAIN (a joined line) per `runPerDsFt`, 12″ from a free end; a corner of two lines has one; joined → one goes, split → it
+ * per CHAIN (a joined line) per `runPerDsFt`, 3 ft from a free end (#1473; was 12″); a corner of two lines has one; joined → one goes, split → it
  * comes back; every touched chain's automatic downspouts stand where they belong again; hand-put ones are never touched; a removed
  * auto one is not put back on its gutter (and does not stop the rest of the chain); a measurement from before the feature gets
  * none by an edit; money: one downspout, one outlet, no doubling.
@@ -26,14 +26,18 @@ const offOf = (d: Drawing, id: string): number => Number(d.runs.find((r) => r.id
 const edgeOf = (d: Drawing, s: DrawnDownspout) => { const r = d.runs.find((x) => x.id === s.runId)!; return Math.min(s.atIn, runLengthIn(r) - s.atIn); };
 
 describe("one line", () => {
-  it("a new line gets a downspout, auto, 12″ from the end it was finished at (b); the gutter is marked as managed", () => {
+  it("a new line gets a downspout, auto, 3 ft from the end it was finished at (b); the gutter is marked as managed", () => {
     const d = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
     expect(d.downspouts).toHaveLength(1);
     expect(d.downspouts[0]).toMatchObject({ auto: true, runId: "a", atIn: 240 - AUTO_DS_EDGE_IN });
     expect(d.runs[0]!.attrs.dsAuto).toBe(true);
   });
-  it("a short line (under 24″): in the middle", () => {
+  it("a short line (under twice the edge): in the middle", () => {
     expect(auto({ runs: [run("a", [0, 0], [20, 0])], downspouts: [] }, none).downspouts[0]!.atIn).toBe(10);
+    // #1473: with 3 ft from the end, a 5 ft gutter (shorter than 2 × 36″) gets its downspout in the middle, not 36″ from one end
+    expect(auto({ runs: [run("a", [0, 0], [60, 0])], downspouts: [] }, none).downspouts[0]!.atIn).toBe(30);
+    // exactly twice the edge: 36″ from the end — the middle too
+    expect(auto({ runs: [run("a", [0, 0], [72, 0])], downspouts: [] }, none).downspouts[0]!.atIn).toBe(36);
   });
   it("nothing changes → the same drawing back (no empty step of «Назад»); a second pass is the same", () => {
     const once = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
@@ -101,9 +105,9 @@ describe("review Б1: the automatic downspouts stand where they belong again aft
     const d1 = auto(setLength(d0, "a", 100), d0);
     expect(d1.downspouts[0]!.atIn).toBe(100 - AUTO_DS_EDGE_IN);
   });
-  it("the end pulled along (moveEndAlong to 400″): the downspout is at 388, not left at 228", () => {
+  it("the end pulled along (moveEndAlong to 400″): the downspout is at 400 − edge, not left at 240 − edge", () => {
     const d0 = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
-    expect(d0.downspouts[0]!.atIn).toBe(228);
+    expect(d0.downspouts[0]!.atIn).toBe(240 - AUTO_DS_EDGE_IN);
     const d1 = auto(moveEndAlong(d0, "a", 1, [400, 0]), d0);
     expect(d1.downspouts[0]!.atIn).toBe(400 - AUTO_DS_EDGE_IN);
   });
@@ -252,16 +256,18 @@ describe("money (К1): one downspout, one outlet, no doubling; the marks never r
   });
 });
 
-describe("review 4: the touch at an end wins over a downspout 12″ from it", () => {
-  it("a downspout stands 12″ from the end; a touch AT the end → end; at the downspout → the downspout", () => {
+describe("review 4: the touch at an end wins over a downspout near it", () => {
+  it("a downspout stands its edge from the end; a touch AT the end → end; at the downspout → the downspout", () => {
     const d = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
     expect(hitTest(d, [240, 0], 22)).toMatchObject({ kind: "end", id: "a", end: 1 });
-    expect(hitTest(d, [228, 0], 22)).toMatchObject({ kind: "ds" });
+    expect(hitTest(d, [240 - AUTO_DS_EDGE_IN, 0], 22)).toMatchObject({ kind: "ds" });
+    // the old 12″ (#1246) is the touch-near-the-end case too: with 36″ a touch 12″ from the end is still the end, not the downspout
+    expect(hitTest(d, [228, 0], 22)).toMatchObject({ kind: "end", id: "a", end: 1 });
   });
 });
 
 describe("edgeOf is the free end", () => {
-  it("the downspout of a lone line is 12″ from its end", () => {
+  it("the downspout of a lone line is 3 ft from its end (#1473)", () => {
     const d = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
     expect(edgeOf(d, d.downspouts[0]!)).toBe(AUTO_DS_EDGE_IN);
   });
@@ -296,5 +302,21 @@ describe("review (director): every put-back sets the drawing as it was — no re
     expect(put.downspouts).toHaveLength(0);
     // (before the fix the put-back went through the recount: the re-join zeroed the count and a downspout came back on B)
     expect(commitAuto(before, split, false, opts).downspouts).toHaveLength(1);
+  });
+});
+
+describe("#1473 (founder 14.11: «не на одном футе от края… а на 3 фута»): the default is 3 ft, a company's own value stays", () => {
+  it("the rule's default is 36″ and 3 ft is not its top (room to set more); the canvas's constant is the same default", async () => {
+    const { RULE_NUMS, readRules } = await import("../src/modules/gutters/settings");
+    expect(RULE_NUMS.dsEdgeIn.def).toBe(36);
+    expect(RULE_NUMS.dsEdgeIn.max).toBeGreaterThan(36);
+    expect(AUTO_DS_EDGE_IN).toBe(RULE_NUMS.dsEdgeIn.def);
+    expect(readRules(undefined).dsEdgeIn).toBe(36);
+    expect(readRules({}).dsEdgeIn).toBe(36);
+  });
+  it("a company that saved 12″ itself keeps 12″; a saved 48″ is read too", async () => {
+    const { readRules } = await import("../src/modules/gutters/settings");
+    expect(readRules({ rules: { dsEdgeIn: 12 } }).dsEdgeIn).toBe(12);
+    expect(readRules({ rules: { dsEdgeIn: 48 } }).dsEdgeIn).toBe(48);
   });
 });

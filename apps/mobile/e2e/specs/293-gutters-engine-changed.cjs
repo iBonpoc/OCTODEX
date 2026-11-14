@@ -5,6 +5,7 @@
  * lines carry the current version, the words are gone. A signed estimate is only told, never offered «Обновить».
  * Finds things by testID; waits on what it checks.
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const { skipLength, openView, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
@@ -51,7 +52,7 @@ exports.run = async (h) => {
   const now = (await versions(eid, mid))[0];
   h.expect(/^\d+(\.\d+)*$/.test(now || ""), "the lines carry the engine's version: " + now);
   await h.go(`/estimate/${eid}`);
-  await tid("est-pdf").waitFor({ timeout: 8000 });
+  await estMore(p);
   h.expect((await tid("module-gutters-engine").count()) === 0, "no word while the engine is the same");
 
   // an older engine computed them
@@ -75,7 +76,7 @@ exports.run = async (h) => {
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");
   await p.waitForFunction(([k, id, v]) => { const e = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.estimates || []).find((x) => x.id === id); const vs = (e?.doc?.options || []).flatMap((o) => o.lines).filter((l) => l.source && l.source.module === "gutters").map((l) => l.source.engineVersion); return vs.length > 0 && vs.every((x) => x === v); }, [DB_KEY, eid, now], { timeout: 8000 });
   await h.go(`/estimate/${eid}`);
-  await tid("est-pdf").waitFor({ timeout: 8000 });
+  await estMore(p);
   h.expect((await tid("module-gutters-engine").count()) === 0, "the word is gone after the update");
 
   // signed: only told (its own chip), nothing offered
@@ -86,7 +87,7 @@ exports.run = async (h) => {
   await tid("view-action-signed").waitFor({ timeout: 8000 });
   h.expect((await tid("view-action-update").count()) === 0, "no «Обновить» for a signed estimate");
   await h.go(`/estimate/${eid}`);
-  await tid("est-pdf").waitFor({ timeout: 8000 });
+  await estMore(p);
   h.expect((await tid("module-gutters-engine").count()) === 0, "no note with a button on a signed estimate's page");
   await h.shot("signed");
 };

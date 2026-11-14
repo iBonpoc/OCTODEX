@@ -44,7 +44,7 @@ exports.run = async (h) => {
   // the estimate: not sent again
   await h.go("/estimate/e6");
   await h.expectText(/Linda Alvarez/, "the estimate opens");
-  h.expect((await p.getByRole("button", { name: "Отправить клиенту" }).count()) === 0, "no «Отправить клиенту» for her estimate");
+  h.expect((await p.getByTestId("est-send").count()) === 0, "no «Отправить» for her estimate");
 
   // a new estimate: she is not in the client picker
   await h.go("/estimate/new");
