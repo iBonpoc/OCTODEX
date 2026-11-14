@@ -28,15 +28,17 @@ export function fitView(pts: readonly P[], vp: { w: number; h: number }, margin:
 }
 
 /**
- * The limits of the scale (founder 12.11, #1281): the farthest — the whole drawing in a QUARTER of the screen (half each way of
- * the view that fits it), the nearest — 1″ as big as a finger's target (`hitPx`, twice the old nearest). Without limits a long pinch
+ * The limits of the scale (founder 12.11, #1281): the farthest — the drawing a QUARTER of the screen each way (#1403: was half;
+ * ZOOM_OUT times the view that fits it), the nearest — 1″ as big as a finger's target (`hitPx`, twice the old nearest). Without limits a long pinch
  * went far away and the grid had millions of lines: the app hung.
  */
 export interface ZoomLimits { kMin: number; kMax: number }
+/** how far past «fits the screen» the pinch may go out (#1403, founder 14.11: «уменьшать ещё меньше»): the drawing takes a quarter of the screen each way */
+export const ZOOM_OUT = 4;
 export function zoomLimits(pts: readonly P[], vp: { w: number; h: number }, margin: number, hitPx: number): ZoomLimits {
   const kMax = hitPx;
   const kFit = fitView(pts, vp, margin).k;
-  return { kMin: Math.min(Math.max(kFit / 2, Number.EPSILON), kMax), kMax };
+  return { kMin: Math.min(Math.max(kFit / ZOOM_OUT, Number.EPSILON), kMax), kMax };
 }
 
 /** the view with its scale inside the limits, the centre of the viewport staying where it is (a defence at the commit; the pinch stops softly before) */
@@ -75,30 +77,33 @@ export interface SceneLabel extends PlacedLabel { text: string; kind: "len" | "d
 export interface SceneGrid { minor: string; major: string; stepIn: number }
 export interface Scene { runs: SceneRun[]; ds: SceneDs[]; caps: SceneCap[]; corners: SceneCorner[]; labels: SceneLabel[]; grid?: SceneGrid }
 
-/** a grid cell, inches: 1 ft, 5 ft, 10 ft, 50 ft, 100 ft, 500 ft — the smallest not finer than `minPx` on the screen */
-export const GRID_STEPS_IN = [12, 60, 120, 600, 1200, 6000] as const;
+/** a grid cell, inches: 1″, 6″, 1 ft, 5 ft, 10 ft, 50 ft, 100 ft, 500 ft — the smallest not finer than `minPx` on the screen (1″ and 6″ for the nearest scale, where 1″ is a finger's target: #1403) */
+export const GRID_STEPS_IN = [1, 6, 12, 60, 120, 600, 1200, 6000] as const;
 export function gridStepIn(k: number, minPx: number): number {
   return GRID_STEPS_IN.find((s) => s * k >= minPx) ?? GRID_STEPS_IN[GRID_STEPS_IN.length - 1]!;
 }
 
 /** the grid lines over the viewport: every 5th is a major one (the next step up) */
 /** the most lines of a grid (both ways): a view so far away that the largest step is still denser than this has no grid (#1281: a pinch far out made millions of lines) */
-export const MAX_GRID_LINES = 240;
+export const MAX_GRID_LINES = 600;
+/** the grid is drawn this many screens beyond the screen on every side (#1403): a pinch or a pan moves the whole layer before the redraw, and the grid must not end where the screen did. Reach r keeps the screen covered by a live zoom out to 1/(1 + r) about ANY point of the screen (r = 3: down to a quarter, the farthest limit from the fitting view) */
+export const GRID_REACH = 3;
 
 export function buildGrid(v: View, vp: { w: number; h: number }, minPx: number): SceneGrid {
   const step = gridStepIn(v.k, minPx);
-  const [x0, y1] = toPlan(v, [0, 0]);
-  const [x1, y0] = toPlan(v, [vp.w, vp.h]);
+  const rx = GRID_REACH * vp.w, ry = GRID_REACH * vp.h;
+  const [x0, y1] = toPlan(v, [-rx, -ry]);
+  const [x1, y0] = toPlan(v, [vp.w + rx, vp.h + ry]);
   if (!(v.k > 0) || !Number.isFinite(v.k) || (x1 - x0) / step + (y1 - y0) / step > MAX_GRID_LINES) return { minor: "", major: "", stepIn: step };
   let minor = "", major = "";
   for (let i = Math.ceil(x0 / step); i * step <= x1; i++) {
     const sx = (i * step * v.k + v.ox).toFixed(1);
-    const seg = `M${sx} 0V${vp.h}`;
+    const seg = `M${sx} ${-ry}V${vp.h + ry}`;
     if (i % 5 === 0) major += seg; else minor += seg;
   }
   for (let j = Math.ceil(y0 / step); j * step <= y1; j++) {
     const sy = (-j * step * v.k + v.oy).toFixed(1);
-    const seg = `M0 ${sy}H${vp.w}`;
+    const seg = `M${-rx} ${sy}H${vp.w + rx}`;
     if (j % 5 === 0) major += seg; else minor += seg;
   }
   return { minor, major, stepIn: step };
