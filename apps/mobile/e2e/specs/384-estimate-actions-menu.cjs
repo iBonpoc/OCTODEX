@@ -1,5 +1,5 @@
 /**
- * e2e 383 — the estimate's card: one main button and «⋯» instead of a row of six pills (founder 14.11, #1412; DS §7.3, §8.9, Б4),
+ * e2e 384 — the estimate's card: one main button and «⋯» instead of a row of six pills (founder 14.11, #1412; DS §7.3, §8.9, Б4),
  * a sent estimate (EST-0006) as the director, every view, by testID:
  * - no action of the card stands on the page: «Изменить», «Как видит клиент», «Сохранить как шаблон», «PDF», «Отозвать ссылку»
  *   are in «⋯» only;
