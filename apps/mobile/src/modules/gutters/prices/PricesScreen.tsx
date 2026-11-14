@@ -21,7 +21,7 @@ import { moduleState } from "@/modules/registry";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Banner } from "@/ui/banner";
 import { Button } from "@/ui/controls";
-import { CardGrid, ListCard } from "@/ui/listCard";
+import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
@@ -55,6 +55,8 @@ export default function GutterPricesScreen() {
 
   /** rows priced by a test item (rule 9): said once in the banner, each card keeps its own «тестовая цена» */
   const testN = [...labor, ...parts].filter((r) => findItem(catalog, r.part)?.placeholder).length;
+  /** own prices and test prices side by side: only then a card marks its test price */
+  const mixed = testN > 0 && [...labor, ...parts].some((r) => { const it = findItem(catalog, r.part); return !!it && !it.placeholder; });
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
    *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */
   const made = useRef(new Set<string>());
@@ -72,9 +74,12 @@ export default function GutterPricesScreen() {
     toast.show(store.online ? t(k("bound")) : t("offline.queued"), undo);
   };
 
+  /** «Монтаж водостока · эт 1»: the storey's number never wraps away from its word (design review #1426, 820) */
+  const keep = (x: string) => x.replace(/ · /g, "\u00a0· ").replace(/ (\d+)$/, "\u00a0$1");
+  const desktop = device === "desktop";
   const card = (row: PriceRow) => {
     const it = findItem(catalog, row.part);
-    const title = it ? it.name : nameOf(row.part);
+    const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {
       return (
@@ -84,7 +89,10 @@ export default function GutterPricesScreen() {
           title={title}
           lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
           value={`${money(catalogUnitPrice(it))} / ${unit}`}
-          status={it.placeholder ? { tone: "warn", label: t(k("testPrice")) } : { tone: "ok", label: t(k("found")) }}
+          // DS Б9 (#1426): the banner says «Тестовые цены: N»; a card marks its test price only while the list mixes test and own
+          // prices (then it tells which are left to set) — all test: no wall of the same chip
+          status={it.placeholder ? (mixed ? { tone: "warn", label: t(k("testPrice")) } : undefined) : { tone: "ok", label: t(k("found")) }}
+          density={desktop ? "row" : "rich"}
           edge={null}
           onPress={ro ? undefined : () => router.push(`/catalog/${it.id}`)}
         />
@@ -98,6 +106,7 @@ export default function GutterPricesScreen() {
         title={title}
         lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
         value={`— / ${unit}`}
+        density={desktop ? "row" : "rich"}
         // «нет в прайсе» is said once, by the banner above with its number (#1426: 24 same chips were a wall); the card shows «—»
         edge={null}
         action={ro || !own ? undefined : { label: t(k("makeOne")), icon: "plus", onPress: () => make([own]) }}
@@ -105,7 +114,18 @@ export default function GutterPricesScreen() {
       />
     );
   };
-  const list = (rows: PriceRow[]) => (device === "phone" ? <CardList>{rows.map(card)}</CardList> : <CardGrid>{rows.map(card)}</CardGrid>);
+  // DS §5.5: from 1280 a list is rows (ListCard «row» under its header), a grid only on the tablet (design review #1426)
+  const list = (rows: PriceRow[]) =>
+    desktop ? (
+      <>
+        <ListCardHeader title={t(k("colItem"))} columns={[]} value={t(k("colPrice"))} />
+        <CardList>{rows.map(card)}</CardList>
+      </>
+    ) : device === "phone" ? (
+      <CardList>{rows.map(card)}</CardList>
+    ) : (
+      <CardGrid>{rows.map(card)}</CardGrid>
+    );
   const binds = bindFor ? bindable(catalog, bindFor.part) : [];
 
   return (
@@ -127,7 +147,8 @@ export default function GutterPricesScreen() {
         ) : missing.length ? (
           <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
         ) : (
-          <Banner tone={testN ? "warn" : "ok"} testID="gpr-all-found" title={t(k("allFound"))} hint={testN ? t(k("testN"), { n: testN }) : undefined} />
+          // the words name the state: test prices left — «Тестовые цены: N» (warn); none — «Всё есть в прайсе» (ok)
+          <Banner tone={testN ? "warn" : "ok"} testID="gpr-all-found" title={testN ? t(k("testN"), { n: testN }) : t(k("allFound"))} hint={testN ? t(k("testHint")) : undefined} />
         )}
 
         <View style={{ gap: space[2] }} testID="gpr-labor">

@@ -5,7 +5,7 @@
  *   with the button apart; «Подключить» leads to «Модули»;
  * - the module on, nothing in the price list: ONE warn banner «Нет в прайсе: N» with «Создать позиции сразу (N)»; the cards say «—»
  *   and never repeat «нет в прайсе» (it was 24 same orange chips);
- * - made: the banner says «Всё есть в прайсе» and how many test prices are left to set.
+ * - made: the banner says «Тестовые цены: N» (the state by its name); the cards do not repeat «тестовая цена» while all are test.
  * Finds things by testID; waits on what it checks.
  */
 exports.run = async (h) => {
@@ -48,10 +48,12 @@ exports.run = async (h) => {
   h.expect(!/нет в прайсе/.test(await text()), "no card repeats «нет в прайсе» (the banner says it once)");
   await h.shot("prices-missing");
 
-  // made: «Всё есть в прайсе» and the test prices still to set — one banner again
+  // made: «Тестовые цены: N» — one banner again
   await tid("gpr-missing-n-action").getByRole("button").click();
   await tid("gpr-all-found").waitFor({ timeout: 8000 });
   h.expect((await banners()) === 1, `one state banner after «Создать» (${await banners()})`);
-  h.expect(/С тестовой ценой: \d+/.test(await tid("gpr-all-found").innerText()), "it says how many test prices are left to set");
+  h.expect(/Тестовые цены: \d+/.test(await tid("gpr-all-found").innerText()), "the banner names the state: the test prices left to set");
+  // all of them test: the cards do not repeat «тестовая цена» (DS Б9: only while own and test prices are mixed)
+  h.expect(!/тестовая цена/.test(await text()), "no card repeats «тестовая цена» while all prices are test ones");
   await h.shot("prices-made");
 };
