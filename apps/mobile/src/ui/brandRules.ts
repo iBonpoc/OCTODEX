@@ -94,3 +94,14 @@ export function bootStage(elapsedMs: number): "still" | "wait" | "failed" {
   if (elapsedMs < motion.durBrandHold) return "still";
   return elapsedMs < motion.actionTimeoutMs ? "wait" : "failed";
 }
+
+/** the device's mark that the app has started here before (DS §18.2 v4.4: the first launch after install shows the
+ *  dot's drive along the G). Any stored value counts — older builds stored the version in it */
+export const BRAND_SEEN_KEY = "octo.brand.seen.v1";
+export type Launch = "first" | "normal";
+export function launchKind(seen: string | null): Launch {
+  return seen === null ? "first" : "normal";
+}
+
+/** the dot's bounce (DS §18.2 п.2а), shares of `durBrandBounce`: up (easeOut), down (easeIn), the squash on landing */
+export const BOUNCE = { up: 0.45, down: 0.35, squash: 0.2 } as const;

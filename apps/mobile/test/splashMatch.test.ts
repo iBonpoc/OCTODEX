@@ -105,7 +105,10 @@ describe("unit:splashMatch — the splash is the launch layer's first frame (#13
     // the layer comes over the shell before its first paint, not after it (a frame of the shell without the layer)
     expect(boot).toMatch(/useLayoutEffect\(\(\) => done\(\), \[done\]\)/);
     // no intro, no short entry at the launch any more (founder 14.11: «скачок»)
-    expect(boot).not.toMatch(/BrandIntro|BrandQuick|BRAND_SEEN_KEY/);
+    // the mark is never swapped for the logo at the launch (a change of form is a jump)
+    expect(boot).not.toMatch(/BrandIntro|BrandLogo|BrandQuick/);
+    // the exit without a blink (v4.4): the growth on easeOut, the fade after its delay on easeIn
+    expect(boot).toMatch(/withDelay\(motion\.brandExitFadeDelay, withTiming\(0, \{ duration: motion\.durFast, easing: Easing\.bezier\(\.\.\.motion\.easeIn\) \}\)\)/);
     expect(motion.brandExitScale).toBeGreaterThan(1);
     expect(motion.brandExitScale).toBeLessThan(1.1);
   });

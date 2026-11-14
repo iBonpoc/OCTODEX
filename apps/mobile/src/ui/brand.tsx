@@ -5,7 +5,7 @@ import Svg, { Circle, G, Path } from "react-native-svg";
 import { motion } from "@octo/design-tokens";
 import { APP_NAME } from "@/config/product";
 import { useTheme } from "@/theme/ThemeProvider";
-import { DOT, G_PATH, G_PLACE, GR_VIEW, LOGO_DOT, LOGO_LETTERS, LOGO_LETTERS_DX, LOGO_SHIFT, LOGO_VIEW, R_DX, R_PATH, dotTone, dotWay, gToMark, pointOnWay } from "./brandRules";
+import { DOT, G_PATH, G_PLACE, GR_VIEW, LOGO_DOT, LOGO_LETTERS, LOGO_LETTERS_DX, LOGO_SHIFT, LOGO_VIEW, R_DX, R_PATH, BOUNCE, dotTone, dotWay, gToMark, pointOnWay } from "./brandRules";
 
 /**
  * GoRix in the app (DS §18.2, #1156): the mark GR and the logo «GoRix», and the two moves of its yellow dot —
@@ -104,7 +104,7 @@ function MovingDot({ box, d, tone, style }: { box: { w: number; h: number }; d: 
 
 /** the full-screen wait (DS §18.2 п.4): the dot leaves its place and drives along the G in a loop of `durBrand`,
  *  fading in and out at the ends; the word always beside it is the caller's (`BrandWaitScreen` in `brandScreens.tsx`) */
-export function BrandWait({ size, testID }: { size: number; testID?: string }) {
+export function BrandWait({ size, home = false, testID }: { size: number; home?: boolean; testID?: string }) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const tone = useTone(size, false);
@@ -126,15 +126,103 @@ export function BrandWait({ size, testID }: { size: number; testID?: string }) {
       cancelAnimation(o);
     };
   }, [reduce, t, o]);
+  // all is ready (DS §18.2 п.4): the dot comes back to its place in `durFast`, wherever it is on its way
+  const h = useSharedValue(0);
+  useEffect(() => {
+    if (home) h.value = withTiming(1, { duration: motion.durFast, easing: Easing.bezier(...motion.easeOut) });
+  }, [home, h]);
   const style = useAnimatedStyle(() => {
     const p = gToMark(pointOnWay(WAIT_WAY, t.value));
-    return { opacity: o.value, transform: [{ translateX: p.x * w }, { translateY: p.y * size }] };
+    const r = gToMark({ x: DOT.cx, y: DOT.cy });
+    const x = p.x + (r.x - p.x) * h.value;
+    const y = p.y + (r.y - p.y) * h.value;
+    return { opacity: o.value + (1 - o.value) * h.value, transform: [{ translateX: x * w }, { translateY: y * size }] };
   });
   const d = (2 * DOT.r * G_PLACE.k * size) / GR_VIEW.h;
   return (
     <View testID={testID} accessibilityRole="progressbar" accessibilityLabel={APP_NAME} style={{ width: w, height: size }}>
       <GrSvg h={size} ink={c.ink} tone={tone} dot={false} />
       <MovingDot box={{ w, h: size }} d={d} tone={tone} style={style} />
+    </View>
+  );
+}
+
+/**
+ * The launch's mark (DS §18.2 «Запуск» v4.4, #1394): GR still, exactly as on the system splash; only the yellow dot
+ * moves. `play`:
+ * - "first" — the first launch after install: the dot shrinks away at its place while a whole one grows at the top end
+ *   of the G (`durBrandEdge`, never half-clear — on light a half-clear yellow is a grey blot), drives along the G on the
+ *   brand's «quick launch» way (v3/quick-calm.svg, `durBrandQuick`) at an even pace — the wait's symmetric curve, so the
+ *   left arc is seen (the svg's .4 0 .2 1 crossed it within a frame, design-reviewer) — lands and bounces once;
+ * - "bounce" — an ordinary launch: one soft bounce on its place (`durBrandBounce`: up, down, a light squash);
+ * - null — still.
+ * `onDone` — when the move is over (at once with reduced motion: nothing moves).
+ */
+export function BrandLaunch({ size, play, onDone, testID }: { size: number; play: "first" | "bounce" | null; onDone?: () => void; testID?: string }) {
+  const { c } = useTheme();
+  const reduce = useReducedMotion();
+  const tone = useTone(size, false);
+  const w = markW(size);
+  const d = (2 * DOT.r * G_PLACE.k * size) / GR_VIEW.h;
+  const way = useSharedValue(1); // 0…1 along the way; 1 — the dot's place
+  const lift = useSharedValue(0); // 0…1 of brandBounceLift
+  const squash = useSharedValue(0); // 0…1 of brandBounceSquash
+  const rest = useSharedValue(0); // the dot left at its place while the drive starts (it fades as the moving one shows)
+  useEffect(() => {
+    if (!play) return;
+    if (reduce) {
+      onDone?.();
+      return;
+    }
+    const D = motion.durBrandBounce;
+    const bounce = (delay: number) => {
+      lift.value = withDelay(
+        delay,
+        withSequence(
+          withTiming(1, { duration: D * BOUNCE.up, easing: Easing.bezier(...motion.easeOut) }),
+          withTiming(0, { duration: D * BOUNCE.down, easing: Easing.bezier(...motion.easeIn) }),
+        ),
+      );
+      squash.value = withDelay(delay + D * (BOUNCE.up + BOUNCE.down), withSequence(withTiming(1, { duration: (D * BOUNCE.squash) / 2 }), withTiming(0, { duration: (D * BOUNCE.squash) / 2 })));
+    };
+    let total = D;
+    if (play === "first") {
+      // a jump to the start is invisible: the moving dot is clear (rest 1) on that frame, the dot at its place shows
+      way.value = withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration: motion.durBrandQuick, easing: Easing.bezier(0.45, 0, 0.55, 1) }));
+      rest.value = withSequence(withTiming(1, { duration: 0 }), withTiming(0, { duration: motion.durBrandEdge }));
+      bounce(motion.durBrandQuick);
+      total = motion.durBrandQuick + D;
+    } else bounce(0);
+    const id = setTimeout(() => onDone?.(), total);
+    return () => {
+      clearTimeout(id);
+      cancelAnimation(way);
+      cancelAnimation(lift);
+      cancelAnimation(squash);
+      cancelAnimation(rest);
+    };
+    // onDone is the caller's: a new callback does not restart the move
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [play, reduce, way, lift, squash, rest]);
+  const moving = useAnimatedStyle(() => {
+    const p = gToMark(pointOnWay(INTRO_WAY, way.value));
+    const s = motion.brandBounceSquash * squash.value;
+    // the squash keeps the dot's bottom on its place: the centre goes down by half of what the height loses
+    const dy = -motion.brandBounceLift * d * lift.value + (d * s) / 2;
+    const k = 1 - rest.value; // grows in at the top end while the one at the dot's place shrinks away
+    return {
+      transform: [{ translateX: p.x * w }, { translateY: p.y * size + dy }, { scaleX: (1 + s) * k }, { scaleY: (1 - s) * k }],
+    };
+  });
+  const atRest = useAnimatedStyle(() => {
+    const p = gToMark({ x: DOT.cx, y: DOT.cy });
+    return { transform: [{ translateX: p.x * w }, { translateY: p.y * size }, { scale: rest.value }] };
+  });
+  return (
+    <View testID={testID} accessibilityRole="image" accessibilityLabel={APP_NAME} style={{ width: w, height: size }}>
+      <GrSvg h={size} ink={c.ink} tone={tone} dot={false} />
+      <MovingDot box={{ w, h: size }} d={d} tone={tone} style={atRest} />
+      <MovingDot box={{ w, h: size }} d={d} tone={tone} style={moving} />
     </View>
   );
 }

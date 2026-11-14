@@ -1,8 +1,23 @@
 import { describe, expect, it } from "vitest";
 import { motion } from "@octo/design-tokens";
-import { DOT, bootStage, dotTone, dotWay, gToMark, pointOnWay } from "../src/ui/brandRules";
+import { BOUNCE, BRAND_SEEN_KEY, DOT, bootStage, dotTone, dotWay, gToMark, launchKind, pointOnWay } from "../src/ui/brandRules";
 
 describe("unit:brandRules — GoRix in the app (DS §18.2, #1156)", () => {
+  it("the launch (v4.4, #1394): the drive along the G only on the first launch after install; any stored mark — ordinary", () => {
+    expect(launchKind(null)).toBe("first");
+    expect(launchKind("1")).toBe("normal");
+    // older builds stored the version under the same key: they have launched before
+    expect(launchKind("1.0.0")).toBe("normal");
+    expect(BRAND_SEEN_KEY).toBe("octo.brand.seen.v1");
+  });
+
+  it("the bounce: up, down, the squash fill its whole time; the first launch fits 1200 with its exit", () => {
+    expect(BOUNCE.up + BOUNCE.down + BOUNCE.squash).toBeCloseTo(1, 10);
+    expect(motion.durBrandQuick + motion.durBrandBounce + motion.durBase).toBeLessThanOrEqual(motion.durBrandFirstMax);
+    // the ordinary launch stays short: the bounce and the exit together under the 1 s of Android's splash
+    expect(motion.durBrandBounce + motion.durBase).toBeLessThan(1000);
+  });
+
   it("the dot: yellow on a big mark; ink at 24 and less on light and on any screen with a yellow main button", () => {
     expect(dotTone({ size: 48, theme: "dark", screenHasPrimary: false })).toEqual({ dot: "acc", ring: false });
     expect(dotTone({ size: 48, theme: "light", screenHasPrimary: false })).toEqual({ dot: "acc", ring: true });
