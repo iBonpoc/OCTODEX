@@ -98,7 +98,7 @@ describe("shop drawings: the sheets of the reference job", () => {
     expect(row(/^Hanger/).qty).toBe(`${qty("hanger.")} ea`);
     expect(row(/^Hanger/).basis).toBe('24" o.c. + ends');
     expect(row(/Seamless coil/).qty).toBe(fi(qty("coil.") * 12));
-    expect(row(/Seamless coil/).basis).toBe("251'-4\" + 5% waste");
+    expect(row(/Seamless coil/).basis).toBe("251'-4\" + 10 ft waste per gutter stock");
     expect(rows.slice(0, 4).map((r) => [r.tag, r.qty, r.basis])).toEqual([["A", "2 ea", "Plan tag A"], ["B", "2 ea", "Plan tag B"], ["C", "2 ea", "45° cut each side"], ["D", "2 ea", "27° cut each side"]]);
     // every material of the estimate is on the list, none twice
     expect(rows.length).toBe(x.parts.filter((p) => p.kind === "material" && Number(p.qty) > 0).length + 2);
@@ -239,4 +239,14 @@ describe("shop drawings: the check before saving", () => {
     expect(textW("Ж", 0.716, true)).toBeGreaterThan(0.8);
     expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План водостоков");
   });
+});
+
+describe("#1355: the coil's basis says the waste the engine counts", () => {
+  const basisOf = (wasteFt: number) => {
+    const c = ctxOf(REF);
+    const x2 = { ...c, rules: { ...c.rules, wasteFt } };
+    return materialRows(x2, shopModel(REF)).find((r) => /Seamless coil/.test(r.item))!.basis;
+  };
+  it("10 ft of waste for every gutter stock", () => expect(basisOf(10)).toBe("251'-4\" + 10 ft waste per gutter stock"));
+  it("no waste: «no waste», not «+ 0 ft»", () => expect(basisOf(0)).toBe("251'-4\", no waste"));
 });

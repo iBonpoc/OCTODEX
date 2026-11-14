@@ -24,7 +24,8 @@ export interface ShopJob {
 export interface ShopRules {
   hangerSpacingIn: number;
   hangerExtra: boolean;
-  wastePct: number;
+  /** the fixed waste of every gutter stock, feet (#1355); 0 — none */
+  wasteFt: number;
   dsStickFt: number;
   storyFt: number;
   /** how a corner is made when the drawing does not say */

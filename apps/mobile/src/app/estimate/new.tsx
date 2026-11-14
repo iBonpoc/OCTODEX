@@ -21,6 +21,9 @@ import { withLooseTarget, type Drop } from "@/features/sortable";
 import { swipes } from "@/features/estimate/swipeState";
 import { SectionHeader, type SectionAction, type SectionApi } from "@/features/estimate/SectionHeader";
 import { OptionsCard } from "@/features/estimate/OptionsCard";
+import { TotalsBreakdown } from "@/features/estimate/TotalsBreakdown";
+import { allOptionalFor, totalsRows } from "@/features/estimate/totalsRows";
+import { CaWarn } from "@/features/estimate/CaWarn";
 import { NotesTerms } from "@/features/estimate/NotesTerms";
 import { isSignedEstimate } from "@/features/estimate/notesTerms";
 import { docLanguageFor } from "@/data/people";
@@ -40,6 +43,7 @@ import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } fr
 import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
 import { localUndo, withAfter } from "@/data/undo";
+import { StatusNote } from "@/ui/statusNote";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -242,6 +246,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const exempt = !!customer?.taxExempt;
   const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
   const totals = useMemo(() => optionTotals(counted, option), [counted, option]);
+  // «Если клиент включит всё на выбор — итог $Y» (#1362): the engine's totals with the add-ons ticked (rule 8)
+  const signedNow = isSignedEstimate(existing);
+  const allOptional = useMemo(() => allOptionalFor(counted, option, signedNow), [counted, option, signedNow]);
   // each option's total under the segments (DS §8.10): the owner compares them without switching
   const optionSums = useMemo(() => Object.fromEntries(counted.options.map((o) => [o.id, optionTotals(counted, o).total])), [counted]);
   const s = counted.settings;
@@ -638,6 +645,9 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const renameOption = (name: string) => setOption((o) => ({ ...o, name }));
   /** «Экран для клиента» (DS §8.3): cost, profit, the spend of hidden lines and «Только для вас» go from the screen */
   const [clientScreen, setClientScreen] = useState(false);
+  /** «Итого ˅» of the phone's panel: open or folded (the screen's own state, not remembered) */
+  const [totalOpen, setTotalOpen] = useState(false);
+  const totalRows = totalsRows({ totals, allOptional, own: seeCosts && !clientScreen, costKnown: costComplete(option) });
   const [estMenu, setEstMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const estMenuRef = useRef<ComponentRef<typeof View>>(null);
   const toggleClientScreen = (on: boolean) => {
@@ -777,7 +787,25 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     )} footer={tplEdit ? undefined : (
       <ActionBar testID="est-actionbar" summary={(
         <View style={{ gap: space[1] }}>
-          <RowView style={{ justifyContent: "space-between" }}><T v="body" tone="mut">{t("ue.total")}</T><T v="body" w="semibold" tabular>{money(totals.total)}</T></RowView>
+          {/* «Итого $… ˅» (DS §8.9, #1362): a press opens what the total is made of, above the buttons */}
+          {totalOpen ? <TotalsBreakdown panel client={totalRows.client.filter((r) => r.key !== "total")} own={totalRows.own} testID="est-bar-breakdown" /> : null}
+          <Press
+            onPress={() => setTotalOpen((o) => !o)}
+            visibleHeight={size.hitMin}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: totalOpen }}
+            {...({ "aria-expanded": totalOpen } as object)}
+            accessibilityLabel={`${t("ue.total")} ${money(totals.total)}. ${t(totalOpen ? "est.tot.close" : "est.tot.open")}`}
+            testID="est-bar-total"
+          >
+            <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
+              <T v="body" tone="mut">{t("ue.total")}</T>
+              <RowView gap={space[1]}>
+                <T v="body" w="semibold" tabular>{money(totals.total)}</T>
+                <Icon name={totalOpen ? "chevronUp" : "chevronDown"} s={size.iconSm} />
+              </RowView>
+            </RowView>
+          </Press>
           {/* the tech saves; the office sends (#1113, DS §8.9) */}
           {canSend ? null : <View testID="est-bar-office"><T v="caption" tone="mut">{t("est2.bar.officeSends")}</T></View>}
         </View>
@@ -790,9 +818,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         </View>
       ) : null}
       {existing && existing.status !== "draft" ? (
-        <T v="caption" tone="warn">
-          {t("ue.editSentNote")}
-        </T>
+        <StatusNote tone="warn">{t("ue.editSentNote")}</StatusNote>
       ) : null}
       {draft ? (
         <View testID="est-draft">
@@ -973,21 +999,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
               </T>
             </RowView>
             <Divider />
-            <SumRow label={t("ue.deposit")} value={depValue} onPress={signed ? undefined : () => setSetting("deposit")} />
-            {totals.depositOverCaLimit ? (
-              <T v="caption" tone="warn">
-                {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
-              </T>
-            ) : null}
-            {totals.cost > 0 && store.role !== "tech" && !clientScreen ? (
-              <T v="caption" tone="mut">
-                {costComplete(option) ? t("ue.margin", { p: totals.marginPct ?? "0", cost: money(totals.cost) }) : t("ue.costPartial", { cost: money(totals.cost) })}
-              </T>
-            ) : null}
-            {option.lines.some((l) => l.optional) ? (
-              <T v="caption" tone="mut">
-                {t("ue.addonsNote")}
-              </T>
+            <SumRow label={t("ue.deposit")} value={depValue} onPress={signed ? undefined : () => setSetting("deposit")} testID="est-deposit-row" />
+            {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn" /> : null}
+            {/* the same as «Итого ˅» of the phone's panel: «если клиент включит всё на выбор» and «Только для вас» (DS §8.9) */}
+            {/* from 820 (no panel): the same «если включит» and «Только для вас» here; a phone has them in the panel's «Итого ˅» */}
+            {wide && (totalRows.client.some((r) => r.key === "ifAll") || totalRows.own.length) ? (
+              <>
+                <Divider />
+                <TotalsBreakdown client={totalRows.client.filter((r) => r.key === "ifAll")} own={totalRows.own} testID="est-card-breakdown" />
+              </>
             ) : null}
           </Card>
           <NotesTerms
@@ -1171,16 +1191,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
                 ]}
               />
               {s.deposit.kind === "pct" ? (
-                <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
+                <View testID="est-deposit-pct">
+                  <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
+                </View>
               ) : s.deposit.kind === "fixed" ? (
                 <MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} />
               ) : null}
               <SumRow label={t("ue.deposit")} value={money(totals.deposit)} />
-              {totals.depositOverCaLimit ? (
-                <T v="caption" tone="warn">
-                  {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
-                </T>
-              ) : null}
+              {totals.depositOverCaLimit ? <CaWarn limitCents={totals.caDepositLimit} testID="est-ca-warn-sheet" /> : null}
             </>
           ) : null}
           <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
@@ -1270,7 +1288,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   );
 }
 
-function SumRow({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
+function SumRow({ label, value, onPress, testID }: { label: string; value: string; onPress?: () => void; testID?: string }) {
   const row = (
     <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
       <T v="body" tone="mut">
@@ -1285,7 +1303,7 @@ function SumRow({ label, value, onPress }: { label: string; value: string; onPre
     </RowView>
   );
   return onPress ? (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} testID={testID}>
       {row}
     </Press>
   ) : (

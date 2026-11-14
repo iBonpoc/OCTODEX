@@ -69,7 +69,7 @@ exports.run = async (h, { browser, BASE, layouts, installClock }) => {
         });
         const missing = shown.match(NOT_THERE);
         if (missing && !NOT_THERE_OK.includes(s)) errs.push(`${s} ${width} ${theme}: the screen says «${missing[0]}»`);
-        if (!/OCTODEX v\d/.test(body) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header with the version label`);
+        if (!/GoRix v\d/.test(body) && !NO_HEADER.includes(s)) errs.push(`${s} ${width} ${theme}: no header with the version label`);
         const over = await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
         if (over) errs.push(`horizontal overflow ${s} ${width} ${theme}`);
         const cards = CARD_SCREENS.find((x) => x.path === s);

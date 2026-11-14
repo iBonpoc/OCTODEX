@@ -25,6 +25,7 @@ import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Card, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /** a tile: label · amount · one line of detail (spec 24 A3: two side by side, the label never wraps) */
 function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; chip?: string; onPress?: () => void }) {
@@ -253,9 +254,9 @@ export default function Today() {
           {/* the count sits next to the title, not at the far edge (unslop 05.11) */}
           <SectionTitle title={attention.length ? `${t("today.attention")} · ${attention.length}` : t("today.attention")} />
           {attention.length === 0 ? (
-            <T v="body" tone="ok">
-              ✓ {t("today.allClear")}
-            </T>
+            <StatusNote tone="ok" v="body">
+              {t("today.allClear")}
+            </StatusNote>
           ) : (
             // people view (spec 06 decision 5): one card per client with all reasons, 3 people + «More» → Triage
             <AttentionPeople items={attention} max={3} />

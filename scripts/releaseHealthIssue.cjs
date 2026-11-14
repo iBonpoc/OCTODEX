@@ -16,7 +16,7 @@ const LABEL_RUNNER = "проверки";
 const RELEASE_STEPS = [
   "Secrets are set", "Link the project", "Show pending", "Apply new migrations", "Deploy edge functions",
   "Expo token is set", "Who publishes", "Build number (the merged PR)", "Publish the Expo Go update (channel preview)",
-  "Check that Expo serves the new update", "Build the web app", "Deploy the web app (octodex.expo.app)", "Mark this commit released (tag `released`)",
+  "Check that Expo serves the new update", "Build the web app", "Deploy the web app (production)", "Mark this commit released (tag `released`)",
 ];
 /** «stop» — a step of the release itself failed; «runner» — anything else (set up, checkout, the CLI, no step) */
 const failureKind = (failedSteps) => (failedSteps.some((n) => RELEASE_STEPS.includes(n)) ? "stop" : "runner");

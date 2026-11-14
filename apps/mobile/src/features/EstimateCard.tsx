@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/config/product";
 import { visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useState } from "react";
@@ -30,6 +31,7 @@ import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } fro
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, canSeeClientLink, canSignDraftOnSite, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
+import { StatusNote } from "@/ui/statusNote";
 
 
 /** under the estimate's title (its screen and the panel on 1280): «client · address, city» */
@@ -74,7 +76,7 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
   const pdf = (checked = false) => {
     if (!checked && pdfIssues && (issueCount(pdfIssues) > 0 || notes.length > 0)) return setPdfOpen(true);
     setPdfOpen(false);
-    const p = portalFromEstimate(db, e, store.companyName ?? "OCTODEX");
+    const p = portalFromEstimate(db, e, store.companyName ?? APP_NAME);
     saveEstimatePdf(estimateHtml(p, { lang: p.lang }), estimateFileName(p)).catch((err) =>
       toast.show(t("portal.error", { msg: String(err?.message ?? err) })),
     );
@@ -347,7 +349,7 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   const { t, money } = useI18n();
   const toast = useToast();
   const customer = store.db.customers.find((c) => c.id === e.customerId);
-  const company = store.companyName ?? "OCTODEX";
+  const company = store.companyName ?? APP_NAME;
   /** to the client in the client's language (rule 7), whatever the app language is */
   const msg = (url: string) => estimateMessage(docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId }), { company, name: customer?.name ?? "", totalCents: e.totalCents, number: e.number, link: url });
   // C5 (spec 33 П23.9): «Всё равно отправить» for a test price / a line not in the measurement; never for «нет цены»
@@ -415,14 +417,10 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
           {t("ue.sendNote")}
         </T>
         {!hasValidCslb(store.db.company) ? (
-          <T v="caption" tone="warn">
-            {t("ue.noCslb")}
-          </T>
+          <StatusNote tone="warn">{t("ue.noCslb")}</StatusNote>
         ) : null}
         {store.mode === "demo" ? (
-          <T v="caption" tone="warn">
-            {t("ue.demoLink")}
-          </T>
+          <StatusNote tone="warn">{t("ue.demoLink")}</StatusNote>
         ) : null}
       </View>
     </Sheet>
@@ -570,9 +568,7 @@ function LegacyBody({ e }: { e: Estimate }) {
             <T v="caption" tone="mut">
               {t("est.esign")}
             </T>
-            <T v="caption" tone="warn">
-              {t("est.rescission")}
-            </T>
+            <StatusNote tone="warn">{t("est.rescission")}</StatusNote>
             <View testID="est-sign-on-site">
               <SignaturePad
                 consent="est.signConsent"
@@ -602,7 +598,7 @@ function CountersignCard({ e }: { e: Estimate }) {
   const [sheet, setSheet] = useState<"reopen" | "decline" | null>(null);
   const me = store.db.members.find((m) => m.id === store.db.me);
   const a = e.approval;
-  const company = store.companyName ?? "OCTODEX";
+  const company = store.companyName ?? APP_NAME;
   const option = a && e.doc ? e.doc.options.find((o) => o.id === a.optionId)?.name ?? "" : "";
   const manage = canManageLink(store.db, store.db.me);
   const mine = mySignature(store.db, store.db.me);
@@ -623,9 +619,7 @@ function CountersignCard({ e }: { e: Estimate }) {
               {a?.channel === "on_site" ? t("est.countersign.onSite", { company }) : t("est.countersign.asYou", { name: me?.name ?? "", company })}
             </T>
             {hisWarning(store.db, store.db.me) ? (
-              <T v="caption" tone="warn">
-                {t("est.countersign.hisWarning")}
-              </T>
+              <StatusNote tone="warn">{t("est.countersign.hisWarning")}</StatusNote>
             ) : null}
             {mine ? (
               <>

@@ -4,6 +4,7 @@
  * native module (runtimeVersion = sdkVersion) only switches pushes off instead of crashing.
  * The token is never logged, sent to analytics or shown.
  */
+import { APP_NAME } from "@/config/product";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
@@ -61,7 +62,7 @@ export function nativePushDeps(): PushDeps | null {
     token: async () => {
       if (Platform.OS === "android") {
         // Android 13+ asks for the permission only after a channel exists
-        await n.setNotificationChannelAsync("default", { name: "OCTODEX", importance: n.AndroidImportance.HIGH });
+        await n.setNotificationChannelAsync("default", { name: APP_NAME, importance: n.AndroidImportance.HIGH });
       }
       return (await n.getExpoPushTokenAsync({ projectId: projectId() })).data;
     },

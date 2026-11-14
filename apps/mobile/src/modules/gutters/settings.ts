@@ -320,8 +320,12 @@ interface NumRule { min: number; max: number; def: number; step: number }
 export const RULE_NUMS = {
   storyFt: { min: 8, max: 20, def: 10, step: 1 },
   hangerSpacingIn: { min: 12, max: 36, def: 24, step: 2 },
-  wastePct: { min: 0, max: 100, def: 5, step: 1 },
+  /** a fixed waste, feet, for EVERY gutter stock (#1355, founder 14.11: «на каждый вид желоба берём 10 фит запас»); 0 — «без запаса» */
+  wasteFt: { min: 0, max: 100, def: 10, step: 1 },
+  /** an INSIDE (and a bay) field-cut corner takes this much gutter, inches. Stays 0–12 until rule 16 step 2: a phone with the old app reads a value above 12 as «out of range» and takes 6 — two devices of one company would buy differently (review of #1381) */
   cutCornerIn: { min: 0, max: 12, def: 6, step: 1 },
+  /** an OUTSIDE field-cut corner (#1355, founder 13.11: «для наружного 14 инчей. Для внутреннего 6 инчей»): 14 does not fit 0–12, hence 0–24 here, in a new field the old app does not read */
+  cutCornerOutIn: { min: 0, max: 24, def: 14, step: 1 },
   runPerDsFt: { min: 30, max: 50, def: 40, step: 1 },
   expansionFt: { min: 40, max: 50, def: 50, step: 1 },
   dsExtensionIn: { min: 0, max: 60, def: 0, step: 6 },
@@ -340,8 +344,9 @@ export interface Rules {
   storyFt: number;
   hangerSpacingIn: number;
   hangerExtra: boolean;
-  wastePct: number;
+  wasteFt: number;
   cutCornerIn: number;
+  cutCornerOutIn: number;
   runPerDsFt: number;
   expansionFt: number;
   expansionPart: boolean;
@@ -385,8 +390,10 @@ export function readRules(raw: unknown): Rules {
     storyFt: num(r.storyFt, RULE_NUMS.storyFt),
     hangerSpacingIn: num(r.hangerSpacingIn, RULE_NUMS.hangerSpacingIn),
     hangerExtra: bool(r.hangerExtra, d.hangerAtEnds),
-    wastePct: num(r.wastePct, RULE_NUMS.wastePct),
+    // a company that chose «без запаса» before (the old `wastePct: 0`) keeps it; any other old percent is not read (rule 16): it gets the default 10 ft
+    wasteFt: r.wasteFt === undefined && r.wastePct === 0 ? 0 : num(r.wasteFt, RULE_NUMS.wasteFt),
     cutCornerIn: num(r.cutCornerIn, RULE_NUMS.cutCornerIn),
+    cutCornerOutIn: num(r.cutCornerOutIn, RULE_NUMS.cutCornerOutIn),
     runPerDsFt: num(r.runPerDsFt, RULE_NUMS.runPerDsFt),
     expansionFt: num(r.expansionFt, RULE_NUMS.expansionFt),
     expansionPart: bool(r.expansionPart, d.expansionJointPart),
@@ -442,8 +449,10 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     storyHeightIn: r.storyFt * 12,
     hangerSpacingIn: Object.fromEntries(Object.keys(DEFAULT_HANGER_KITS).map((id) => [id, r.hangerSpacingIn])),
     hangerAtEnds: r.hangerExtra,
-    wastePct: (r.wastePct / 100).toFixed(2),
+    // a fixed length for every gutter stock; the old percent (`wastePct`) stays in the saved data (rule 16) and is not read: «10 ft, можно менять» is the one rule (founder 14.11)
+    wasteFt: r.wasteFt,
     cutCornerAllowanceIn: r.cutCornerIn,
+    cutCornerOutAllowanceIn: r.cutCornerOutIn,
     maxRunPerDownspoutIn: r.runPerDsFt * 12,
     expansionJointIn: r.expansionFt * 12,
     expansionJointPart: r.expansionPart,

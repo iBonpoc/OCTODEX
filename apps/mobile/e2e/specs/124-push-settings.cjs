@@ -17,7 +17,7 @@ exports.run = async (h) => {
   const iAbout = text.indexOf("О приложении");
   h.expect(iPush >= 0 && iAbout > iPush, `«Уведомления» right before «О приложении» (${iPush}, ${iAbout})`);
   const between = text.slice(iPush, iAbout);
-  h.expect(/Пуши приходят в приложении OCTODEX на телефоне/.test(between), "the web says where pushes come");
+  h.expect(/Пуши приходят в приложении GoRix на телефоне/.test(between), "the web says where pushes come");
   h.expect(/колокольчик/.test(between), "…and that the bell works here");
   h.expect(!/Пуш-уведомления на этом телефоне/.test(text), "no switch on the web");
   h.expect((await p.getByRole("button", { name: "Открыть настройки телефона", exact: true }).count()) === 0, "no phone-settings button on the web");

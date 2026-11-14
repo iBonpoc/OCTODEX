@@ -18,3 +18,12 @@ export function fillStyle(c: ThemeColors): ViewStyle {
     elevation: component.shadowSm.elevation,
   };
 }
+
+/**
+ * «Заливка» without the shadow: for a moving slider only — the tab bar's pill (inside the iOS 26 GlassView) and Segmented's.
+ * Their width and left animate every frame; a shadow (shadow* / elevation) on that layer is the main suspect of the iOS crash
+ * on «Сегодня» (#1354, build 1351), so the slider carries the fill alone. Static chips, days and cards keep `fillStyle`.
+ */
+export function fillStyleFlat(c: ThemeColors): ViewStyle {
+  return { backgroundColor: c.surf2 };
+}
