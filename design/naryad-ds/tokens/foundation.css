@@ -1,7 +1,7 @@
 /* Основы: типографика, отступы, размеры, движение, слои. Темы и цвета: theme.css, status.css */
 :root{
  --font:'Onest',system-ui,sans-serif;
- --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;--fs-micro:10.5px;
+ --fs-display:28px;--fs-title:22px;--fs-heading:17px;--fs-body:15px;--fs-btn:15px;--fs-caption:13px;--fs-micro:11px;--fs-input:17px;
  --lh-tight:1.15;--lh-body:1.45;--lh-snug:1.35;
  --fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
  --space-hair:2px;--space-tight:6px;--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
