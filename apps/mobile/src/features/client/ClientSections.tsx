@@ -27,7 +27,8 @@ import { callPlaceForClient } from "@/features/comms/comms";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { propertyTitle } from "@/features/properties";
 import { mailtoHref } from "@/features/contactLinks";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, ListRow, SectionTitle } from "@/ui/surfaces";
@@ -346,10 +347,11 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       const items = hist === "all" ? history : history.filter((h) => h.kind === hist);
       return (
         <>
-          <ChoiceChips<"all" | HistoryKind>
+          {/* the list's one filter row (31 §6, DS §5.5): one line that scrolls sideways — not a second row of tabs that wraps (#1416) */}
+          <FilterBar<"all" | HistoryKind>
             value={hist}
             onChange={setHist}
-            items={(office ? (["all", "talk", "docs", "money"] as const) : (["all", "talk", "docs"] as const)).map((k) => ({ key: k, label: t(`client.h.f.${k}`) }))}
+            items={(office ? (["all", "talk", "docs", "money"] as const) : (["all", "talk", "docs"] as const)).map((k) => ({ key: k, label: t(`client.h.f.${k}`), count: k === "all" ? history.length : history.filter((h) => h.kind === k).length }))}
           />
           {items.length === 0 ? (
             <Empty icon="clock" title={t("client.empty.history")} hint={t("client.empty.historyHint")} />

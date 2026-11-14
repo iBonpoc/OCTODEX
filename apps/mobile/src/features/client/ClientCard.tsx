@@ -1,5 +1,5 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
 import { router, type Href } from "expo-router";
@@ -23,7 +23,7 @@ import { sourceName } from "@/features/leads";
 import type { Customer, CustomerStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { fabItems } from "@/nav/sections";
-import { Button, StatusChip, TagChip } from "@/ui/controls";
+import { Button, IconButton, StatusChip, TagChip } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ViewTabs } from "@/ui/viewTabs";
@@ -48,7 +48,13 @@ const TAB_LABEL: Record<ClientTab, DictKey> = {
  * The same body on the client's own screen (`/client/<id>`) and in the panel beside the list on 1280
  * (`/clients?open=<id>`, docs/specs/06-list-cards.md «Панель 1280») — so the panel never shows more than the screen.
  */
-export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: ClientTab; onTab?: (t: ClientTab) => void }) {
+/**
+ * Where the card's parts stand (#1416): the client's own screen pins the tabs under a mini header (phone, tablet) or puts the
+ * summary in a side column (desktop); the panel beside the list on 1280 keeps one column (no frame).
+ */
+export type ClientFrame = (parts: { summary: ReactNode; tabs: ReactNode; content: ReactNode; rest: ReactNode; mini: ReactNode }) => ReactElement;
+
+export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; tab?: ClientTab; onTab?: (t: ClientTab) => void; frame?: ClientFrame }) {
   const store = useStore();
   const { db, role } = store;
   const { t, money, moneyWhole, day } = useI18n();
@@ -102,7 +108,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
   // the mark is the director's and the office's (04 §12.8): sales see no «Не обслуживаем» and cannot lift it
   const statusOptions = statusChoices(status, role);
 
-  return (
+  const summary = (
     <>
       {/* the summary (status, actions, «Создать смету», money) is a column no wider than a form: on 1280 it does not stretch
           to the window (#1417 review; the side column of #1416 comes later) */}
@@ -200,6 +206,10 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
         {canSeeClientMoney(role) ? <AdvancesBlock customerId={c.id} /> : null}
       </View>
 
+    </>
+  );
+  const tabsNode = (
+    <>
       {/* the client's sections as view tabs (DS §9 А1п, #1343): all always, the number — what waits for an action */}
       <ViewTabs
         testID="client-tabs"
@@ -208,25 +218,35 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
         onChange={pickTab}
         items={tabs.map((k) => ({ key: k, label: t(TAB_LABEL[k]), count: waiting[k] }))}
       />
+    </>
+  );
+  const content = (
+    <>
       <View testID={`client-tab-${tab}`} style={{ gap: space[3] }}>
         {tab === "overview" ? (
           <>
-            {nextVisit || openTasks.length || (canSeeClientMoney(role) && m.owesCents > 0) ? (
+            {/* the next visit is what comes, not what waits for an action (#1416): its own line above «Ждёт действия» */}
+            {nextVisit ? (
+              <>
+                <SectionTitle title={t("client.nextVisit")} />
+                <View testID="client-next-visit">
+                  <Card style={{ paddingVertical: space[1] }}>
+                    <ListRow
+                      title={day(nextVisit.start)}
+                      subtitle={r.jobs.find((j) => j.id === nextVisit.jobId)?.title}
+                      lines={2}
+                      left={<Icon name="route" />}
+                      onPress={() => router.push(`/visit/${nextVisit.id}`)}
+                    />
+                  </Card>
+                </View>
+              </>
+            ) : null}
+            {openTasks.length || (canSeeClientMoney(role) && m.owesCents > 0) ? (
               <>
                 <SectionTitle title={t("cl6.waiting")} />
                 <CardList>
                   {/* single hints about this client, not lists of objects (06 «10а, остаток» п.6): Card + ListRow */}
-                  {nextVisit ? (
-                    <Card style={{ paddingVertical: space[1] }}>
-                      <ListRow
-                        title={t("client.nextVisit")}
-                        subtitle={[day(nextVisit.start), r.jobs.find((j) => j.id === nextVisit.jobId)?.title].filter(Boolean).join(" · ")}
-                        lines={2}
-                        left={<Icon name="route" />}
-                        onPress={() => router.push(`/visit/${nextVisit.id}`)}
-                      />
-                    </Card>
-                  ) : null}
                   {openTasks.length ? (
                     <Card style={{ paddingVertical: space[1] }}>
                       <ListRow title={t("client.openTasks", { n: openTasks.length })} subtitle={openTasks[0]!.title} left={<Icon name="check" />} onPress={() => pickTab("tasks")} />
@@ -296,6 +316,10 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
         )}
       </View>
 
+    </>
+  );
+  const rest = (
+    <>
       <Menu
         visible={!!menu}
         anchor={menu}
@@ -332,6 +356,30 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
           </Card>
         </View>
       </Sheet>
+    </>
+  );
+  // the mini header over the stuck tabs (DS §9 А1п «Прилипание», prototype v6, #1416): the name and the same quick actions as icons
+  const mini = (
+    <View testID="client-mini" style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
+      <T v="heading" numberOfLines={1} style={{ flex: 1 }}>
+        {c.name}
+      </T>
+      <RowView gap={space[2]}>
+        {tel ? <IconButton icon="phone" label={t("client.call")} onPress={() => dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }))} /> : null}
+        {main && (tel || mail) ? (
+          <IconButton icon="sms" label={t("visit.message")} onPress={() => (tel && mail ? setWriteAsk(true) : tel ? setWriting({ owner: { type: "customer", id: c.id }, person: main }) : Linking.openURL(mail!).catch(() => {}))} />
+        ) : null}
+        {props[0] ? <IconButton icon="navigate" label={t("client.route")} onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${props[0]!.address}, ${props[0]!.city}`)}`)} /> : null}
+      </RowView>
+    </View>
+  );
+  if (frame) return frame({ summary, tabs: tabsNode, content, rest, mini });
+  return (
+    <>
+      {summary}
+      {tabsNode}
+      {content}
+      {rest}
     </>
   );
 }

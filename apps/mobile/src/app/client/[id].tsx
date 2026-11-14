@@ -8,6 +8,9 @@ import { ClientCardBody } from "@/features/client/ClientCard";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { Empty, Screen } from "@/ui/surfaces";
+import { View } from "react-native";
+import { component, space } from "@octo/design-tokens";
+import { useDevice } from "@/theme/ThemeProvider";
 
 /**
  * Client card (docs/specs/13-app-structure.md §3.3; prototype v6 approved by the founder 14.11, #1343). Header: name;
@@ -19,6 +22,7 @@ export default function ClientScreen() {
   const { id, s, tab } = useLocalSearchParams<{ id: string; s?: string; tab?: string }>();
   const { db, role } = useStore();
   const { t } = useI18n();
+  const { device } = useDevice();
   const c = visibleClients(db, role).find((x) => x.id === id);
   const toCard = () => router.replace(`/client/${id}`);
   const back = () => (router.canGoBack() ? router.back() : s ? toCard() : router.replace("/clients"));
@@ -50,15 +54,37 @@ export default function ClientScreen() {
       </Screen>
     );
   const office = role !== "tech";
+  // the open tab is in the address: back from a document returns to it
+  const onTab = (k: string) => router.setParams({ tab: k });
+  const edit = office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined;
+  // no yellow round «＋» on the client card (prototype v6, founder 14.11, #1343): «Создать смету» and «＋ Новая …» in the tabs
   return (
-    <Screen
-      title={c.name}
-      back={back}
-      // no yellow round «＋» on the client card (prototype v6, founder 14.11, #1343): «Создать смету» and «＋ Новая …» in the tabs
-      right={office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined}
-    >
-      {/* the open tab is in the address: back from a document returns to it */}
-      <ClientCardBody c={c} tab={isClientTab(tab) ? tab : undefined} onTab={(k) => router.setParams({ tab: k })} />
-    </Screen>
+    <ClientCardBody
+      c={c}
+      tab={isClientTab(tab) ? tab : undefined}
+      onTab={onTab}
+      frame={({ summary, tabs, content, rest, mini }) =>
+        device === "desktop" ? (
+          // desktop (DS §12.3, #1416): the tabs and their content on the left, the summary in a side column 360 on the right
+          <Screen title={c.name} back={back} right={edit}>
+            <View style={{ flexDirection: "row", alignItems: "flex-start", gap: space[6] }}>
+              <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>
+                {tabs}
+                {content}
+              </View>
+              <View testID="client-side" style={{ width: component.panelW, gap: space[3] }}>
+                {summary}
+              </View>
+            </View>
+            {rest}
+          </Screen>
+        ) : (
+          // phone, tablet: the tabs stick under a mini header (name · call · write · route) while the page scrolls (DS §9 А1п)
+          <Screen title={c.name} back={back} right={edit} tabs={tabs} tabKey={isClientTab(tab) ? tab : undefined} tabsMini={mini} below={<>{content}{rest}</>}>
+            {summary}
+          </Screen>
+        )
+      }
+    />
   );
 }

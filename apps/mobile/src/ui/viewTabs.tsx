@@ -143,7 +143,8 @@ export function ViewTabs<K extends string>({
                   flexDirection: "row",
                   alignItems: "center",
                   gap: space[1],
-                  ...(sel ? fillStyle(c) : { backgroundColor: c.track }),
+                  // not selected — no plate, `mut` words (DS §9 А1п, «Выделение выбранного»; on `track` the dark theme hid the choice, #1416)
+                  ...(sel ? fillStyle(c) : null),
                 }}
               >
                 <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
