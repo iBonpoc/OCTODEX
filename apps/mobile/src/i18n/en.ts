@@ -4225,6 +4225,8 @@ export const en: Dict = {
   "est.var.step5Text": "By the link the client sees the options side by side, picks one and signs. The PDF has every option in turn, each with its own total.",
   "est.var.common": "Shared by all",
   "est.var.commonText": "Client, address, discount, tax, deposit, notes and terms.",
+  "est.view.sendAgain": "Send again",
+  "est.view.saveTemplate": "Save as template…",
   "est.actions": "Estimate actions",
   "est.client.on": "Client screen",
   "est.client.off": "Client screen · exit",
