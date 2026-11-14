@@ -53,7 +53,8 @@ export interface AutoDsOptions {
 }
 
 export const AUTO_DS_SPACING_IN = 40 * 12; // = the rule «runPerDsFt» 40 ft by default (Rules, settings.ts)
-export const AUTO_DS_EDGE_IN = 12;
+/** the default of the rule «dsEdgeIn» (settings.ts RULE_NUMS): 3 ft from a free end (#1473; was 12″) */
+export const AUTO_DS_EDGE_IN = 36;
 
 const sig = (d: Pick<Drawing, "runs">, id: string) => {
   const c = chains(d).find((g) => g.includes(id));

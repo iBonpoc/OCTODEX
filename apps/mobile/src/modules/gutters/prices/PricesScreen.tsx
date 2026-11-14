@@ -19,11 +19,12 @@ import { catalogUnitPrice } from "@/features/estimateDoc";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleState } from "@/modules/registry";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button, StatusChip } from "@/ui/controls";
-import { CardGrid, ListCard } from "@/ui/listCard";
+import { Banner } from "@/ui/banner";
+import { Button } from "@/ui/controls";
+import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, CardList, ListRow, Screen } from "@/ui/surfaces";
+import { CardList, ListRow, Screen } from "@/ui/surfaces";
 import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
 import { withAfter } from "@/data/undo";
 
@@ -52,6 +53,16 @@ export default function GutterPricesScreen() {
   const nameOf = (p: PartQty): string => partName(t, p);
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** rows priced by a test item (rule 9): said once in the banner, each card keeps its own «тестовая цена» */
+  // counted as ITEMS of the price list, as the toast «Создано позиций: N» and «Нет в прайсе: N» count them (two rows may share one item)
+  const testN = new Set([...labor, ...parts].map((r) => findItem(catalog, r.part)).filter((it) => it?.placeholder).map((it) => it!.id)).size;
+  /** own prices and test prices side by side: then a card marks its test price even under the banner (it tells which are left) */
+  const mixed = testN > 0 && [...labor, ...parts].some((r) => { const it = findItem(catalog, r.part); return !!it && !it.placeholder; });
+  /** the banner «Тестовые цены: N» is on the screen (the module on, the person writes prices, nothing missing) */
+  const testBanner = active && staff && !missing.length && testN > 0;
+  /** rule 9: a test price is ALWAYS marked — by the banner or by the card's chip; the chip is left out only under the banner
+   *  and only while every price is a test one (DS Б9: no wall of the same chip). Read only, off, or something still missing: chips */
+  const testChip = !testBanner || mixed;
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
    *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */
   const made = useRef(new Set<string>());
@@ -69,9 +80,12 @@ export default function GutterPricesScreen() {
     toast.show(store.online ? t(k("bound")) : t("offline.queued"), undo);
   };
 
+  /** «Монтаж водостока · эт 1»: the storey's number never wraps away from its word (design review #1426, 820) */
+  const keep = (x: string) => x.replace(/ · /g, "\u00a0· ").replace(/ (\d+)$/, "\u00a0$1");
+  const desktop = device === "desktop";
   const card = (row: PriceRow) => {
     const it = findItem(catalog, row.part);
-    const title = it ? it.name : nameOf(row.part);
+    const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {
       return (
@@ -79,59 +93,69 @@ export default function GutterPricesScreen() {
           key={row.key}
           testID={`gpr-${it.placeholder ? "test" : "found"}-${row.part.key}`}
           title={title}
-          lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
+          lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
           value={`${money(catalogUnitPrice(it))} / ${unit}`}
-          status={it.placeholder ? { tone: "warn", label: t(k("testPrice")) } : { tone: "ok", label: t(k("found")) }}
+          // DS Б9 (#1426): the banner says «Тестовые цены: N»; a card marks its test price only while the list mixes test and own
+          // prices (then it tells which are left to set) — all test: no wall of the same chip
+          status={it.placeholder ? (testChip ? { tone: "warn", label: t(k("testPrice")) } : undefined) : { tone: "ok", label: t(k("found")) }}
+          density={desktop ? "row" : "rich"}
           edge={null}
           onPress={ro ? undefined : () => router.push(`/catalog/${it.id}`)}
         />
       );
     }
-    const own = missing.find((m) => findItem([m], row.part));
     return (
       <ListCard
         key={row.key}
         testID={`gpr-miss-${row.part.key}`}
         title={title}
-        lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
+        lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
         value={`— / ${unit}`}
-        status={{ tone: "warn", label: t(k("missing")) }}
+        density={desktop ? "row" : "rich"}
+        // «нет в прайсе» is said once, by the banner above with its number (#1426: 24 same chips were a wall); the card shows «—»
         edge={null}
-        action={ro || !own ? undefined : { label: t(k("makeOne")), icon: "plus", onPress: () => make([own]) }}
+        // no «Создать с тестовой ценой» on every row (#1426, the director's look at the shots: the banner's «Создать позиции сразу»
+        // is the same action 24 times over); one row is made from its card: a tap opens the sheet with that action (DS Б9)
         onPress={ro ? undefined : () => setBindFor(row)}
       />
     );
   };
-  const list = (rows: PriceRow[]) => (device === "phone" ? <CardList>{rows.map(card)}</CardList> : <CardGrid>{rows.map(card)}</CardGrid>);
+  // DS §5.5: from 1280 a list is rows (ListCard «row» under its header), a grid only on the tablet (design review #1426)
+  const list = (rows: PriceRow[]) =>
+    desktop ? (
+      <>
+        <ListCardHeader title={t(k("colItem"))} columns={[]} value={t(k("colPrice"))} />
+        <CardList>{rows.map(card)}</CardList>
+      </>
+    ) : device === "phone" ? (
+      <CardList>{rows.map(card)}</CardList>
+    ) : (
+      <CardGrid>{rows.map(card)}</CardGrid>
+    );
   const binds = bindFor ? bindable(catalog, bindFor.part) : [];
 
   return (
     <Screen title={t(k("title"))} back={back} subtitle={t("mod.gutters.title")}>
       <View style={{ gap: space[4] }} testID="gpr-screen">
         <T v="body" tone="mut">{t(k("intro"))}</T>
+        {/* the screen's state — ONE banner, the most urgent (DS Б9, §15.3; #1426): off → read only; not staff → ask; missing → the
+            number and «Создать позиции сразу»; all there → said once, with the test prices still to set */}
         {!active ? (
-          <View testID="gpr-locked">
-            <StatusChip status="warn" label={t("mod.gutters.set.locked")} />
-          </View>
+          <Banner
+            tone="warn"
+            testID="gpr-locked"
+            title={t("mod.gutters.set.locked")}
+            hint={t(k("lockedHint"))}
+            action={store.role === "director" ? { label: t("mod.gutters.draw.connect"), onPress: () => router.push("/company/modules") } : undefined}
+          />
         ) : !staff ? (
-          <View testID="gpr-ro">
-            <StatusChip status="info" label={t(k("askOffice"))} />
-          </View>
-        ) : null}
-
-        <View testID="gpr-make-all">
-          <Card>
-            <View testID={missing.length ? "gpr-missing-n" : "gpr-all-found"}>
-              <T v="heading">{missing.length ? t(k("missingN"), { n: missing.length }) : t(k("allFound"))}</T>
-            </View>
-            <T v="caption" tone="mut">{t(k("makeHint"))}</T>
-            {!ro && missing.length ? (
-              <View testID="gpr-make-all-btn">
-                <Button label={t(k("makeAll"), { n: missing.length })} icon="plus" variant="primary" onPress={() => make(missing)} />
-              </View>
-            ) : null}
-          </Card>
-        </View>
+          <Banner tone="info" testID="gpr-ro" title={t(k("askOffice"))} />
+        ) : missing.length ? (
+          <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
+        ) : (
+          // the words name the state: test prices left — «Тестовые цены: N» (warn); none — «Всё есть в прайсе» (ok)
+          <Banner tone={testN ? "warn" : "ok"} testID="gpr-all-found" title={testN ? t(k("testN"), { n: testN }) : t(k("allFound"))} hint={testN ? t(k("testHint")) : undefined} />
+        )}
 
         <View style={{ gap: space[2] }} testID="gpr-labor">
           <T v="heading">{t(k("labor"))}</T>

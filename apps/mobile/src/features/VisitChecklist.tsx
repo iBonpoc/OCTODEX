@@ -97,6 +97,7 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
           title={t("chk.photoItem")}
           onAdd={canAttachPhoto(store.role) ? (uri) => toast.show(t("toast.photo"), store.attachItemPhoto(v.id, item.id, uri)) : undefined}
           onRemove={(id) => toast.show(t("photo.deleted"), store.removePhoto(v.id, id))}
+          onRetry={(id) => toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), store.retryPhoto(v.id, id))}
         />
       </View>
     );
