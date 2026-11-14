@@ -11,10 +11,23 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  // the client card has no «＋» (#1343): what makes something new there is «Создать смету» and «＋» on the «Работы» tab
+  const make = () => p.locator('[data-testid="client-make-estimate"]:visible');
+  const newJob = async () => {
+    const t = p.getByTestId("client-tabs-jobs").locator("visible=true").first();
+    await t.scrollIntoViewIfNeeded();
+    await t.click();
+    await p.getByTestId("client-tab-jobs").locator("visible=true").first().waitFor({ timeout: 4000 });
+    const n = await p.locator('[data-testid="client-new-job"]:visible').count();
+    const o = p.getByTestId("client-tabs-overview").locator("visible=true").first();
+    await o.scrollIntoViewIfNeeded();
+    await o.click();
+    return n;
+  };
 
   // Linda (c3): a sent estimate e6 and her lead l5
   await h.go("/client/c3");
-  h.expect((await plus().count()) === 1, "an ordinary client has «＋»");
+  h.expect((await make().count()) === 1 && (await newJob()) === 1, "an ordinary client: «Создать смету» and a new job");
   await p.getByRole("button", { name: /^Статус клиента:/ }).first().click(); await p.waitForTimeout(300);
   await p.getByText("Не обслуживаем", { exact: true }).last().click(); await p.waitForTimeout(400);
   await h.expectText(/Новые работы, сметы и выезды этому клиенту не назначить/, "the sheet says what the mark does");
@@ -23,7 +36,7 @@ exports.run = async (h) => {
   const db = await h.db();
   h.expect(db.customers.find((c) => c.id === "c3").status === "do_not_service", "Linda is «do not service»");
   await h.expectText(/Причина: Did not pay twice · Новые работы, сметы и выезды не назначаются/, "the client says why and what");
-  h.expect((await plus().count()) === 0, "no «＋» on a «do not service» client");
+  h.expect((await make().count()) === 0 && (await newJob()) === 0, "a «do not service» client: no «Создать смету», no new job");
   await h.shot("client");
   await h.go("/client/c3?s=estimates");
   h.expect((await plus().count()) === 0, "no «＋» on the client's lists either");
@@ -55,12 +68,12 @@ exports.run = async (h) => {
   await h.expectText(/у клиента с пометкой «Не обслуживаем»/, "and says why");
   await h.shot("new-lead");
 
-  // the mark is lifted: «＋» is back
+  // the mark is lifted: «Создать смету» is back
   await h.go("/client/c3");
   await p.getByRole("button", { name: /^Статус клиента:/ }).first().click(); await p.waitForTimeout(300);
   await p.getByText("Клиент", { exact: true }).last().click(); await p.waitForTimeout(600);
   h.expect((await h.db()).customers.find((c) => c.id === "c3").status === "active", "Linda is active again");
-  h.expect((await plus().count()) === 1, "«＋» is back");
+  h.expect((await make().count()) === 1, "«Создать смету» is back");
 
   // only the director and the office set or lift the mark (04 §12.8, db T58): sales get archive only
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));

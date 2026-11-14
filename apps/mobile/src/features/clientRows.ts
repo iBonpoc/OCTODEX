@@ -7,6 +7,7 @@ import type { Customer, CustomerStatus, DB, ID, Job, Role } from "@/data/types";
 import type { Mode } from "@/data/store";
 import { canSeeEstimate } from "@/features/access";
 import { isAssigned } from "@/features/schedule";
+import { invoiceState } from "@/features/invoiceStatus";
 
 /** The rows of the client card, top to bottom (13 §3.3). */
 export const CLIENT_ROWS = ["properties", "billing", "people", "jobs", "leads", "estimates", "invoices", "tasks", "notes", "files", "history"] as const;
@@ -76,4 +77,30 @@ export function clientCounts(r: ReturnType<typeof clientRecords>): Partial<Recor
  */
 export function statusAfterManualWin(status: CustomerStatus | undefined): CustomerStatus {
   return status === "prospect" ? "active" : (status ?? "active");
+}
+
+/**
+ * The client card as view tabs (DS §9 А1п, #1343, prototype v6 approved by the founder 14.11): the same row for every
+ * client of a role — all tabs always, even empty. The tech has no money: no «Счета».
+ */
+export const CLIENT_TABS = ["overview", "estimates", "invoices", "jobs", "tasks", "notes", "files", "history"] as const;
+export type ClientTab = (typeof CLIENT_TABS)[number];
+export const isClientTab = (v: unknown): v is ClientTab => typeof v === "string" && (CLIENT_TABS as readonly string[]).includes(v);
+export function clientTabsFor(role: Role): ClientTab[] {
+  return role === "tech" ? CLIENT_TABS.filter((x) => x !== "invoices") : [...CLIENT_TABS];
+}
+
+/**
+ * The number on a tab — what waits for an action (founder 14.11: «открытые счета, сметы без ответа, работы в работе»;
+ * paid and done do not count): estimates sent and not answered (or waiting for the countersign), invoices not paid in
+ * full, jobs not done, open tasks. Nothing waits — no number (0 is left out). Notes, files and history have none.
+ */
+export function clientWaiting(r: ReturnType<typeof clientRecords>): Partial<Record<ClientTab, number>> {
+  const n = (x: number) => (x > 0 ? x : undefined);
+  return {
+    estimates: n(r.estimates.filter((e) => e.status === "sent" || e.status === "awaiting_countersign").length),
+    invoices: n(r.invoices.filter((i) => i.status !== "void" && invoiceState(i) !== "paid").length),
+    jobs: n(r.jobs.filter((j) => j.status !== "done").length),
+    tasks: n(r.tasks.filter((x) => !x.doneAt).length),
+  };
 }

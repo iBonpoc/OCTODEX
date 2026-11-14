@@ -5,12 +5,9 @@
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/client/c1");
-  // the row «Объекты» counts the client's properties and opens their list (13 §3.3)
-  const rows = p.getByTestId("client-rows");
-  h.expect((await rows.innerText()).replace(/\s+/g, " ").includes("Объекты"), "row «Объекты» on the client");
-  await rows.getByRole("button", { name: "Объекты", exact: true }).click();
-  await p.waitForTimeout(400);
-  h.expect(p.url().includes("/client/c1?s=properties"), `row opens the properties (${p.url()})`);
+  // the client's properties are on its «Обзор» tab, with «Добавить объект» (#1343, DS §9 А1п)
+  await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect(/Объекты/.test(await p.getByTestId("client-tab-overview").locator("visible=true").first().innerText()), "«Объекты» on the client's overview");
 
   // + property
   await h.click("Добавить объект");
@@ -28,10 +25,9 @@ exports.run = async (h) => {
   h.expect(pr.city === "Pasadena, CA 91105", `city line: ${pr.city}`);
   h.expect((await p.getByRole("button", { name: /^77 Maple Dr/ }).count()) >= 1, "the new property is in the list");
   await h.go("/client/c1");
-  const propRow = (await rows.getByRole("button", { name: "Объекты", exact: true }).innerText()).trim();
-  h.expect(/\b3$/.test(propRow), `the row counts three properties (${propRow})`);
-  await rows.getByRole("button", { name: "Объекты", exact: true }).click();
-  await p.waitForTimeout(400);
+  // «Обзор» lists the client's three properties (#1343: no row with a counter any more)
+  await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.getByRole("button", { name: /77 Maple Dr/ }).locator("visible=true").count()) >= 1, "the new property on the client's overview");
 
   // the property card
   await p.getByRole("button", { name: /77 Maple Dr, #3/ }).first().click();

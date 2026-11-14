@@ -7,8 +7,19 @@ const { expectOneAccent } = require("../accent.cjs");
  */
 exports.run = async (h) => {
   const p = h.page;
-  // rows with counters (13 §3.3): each opens its own list at /client/c1?s=<row>
-  const row = async (name) => { await p.getByTestId("client-rows").getByRole("button", { name, exact: true }).click(); await p.waitForTimeout(500); };
+  // the client's sections are view tabs (#1343, DS §9 А1п): a tab shows its list in place; «Люди» is a row on «Обзор»
+  const TAB = { "История": "history", "Счета и квитанции": "invoices", "Задачи": "tasks", "Файлы": "files" };
+  const row = async (name) => {
+    if (name === "Люди") await p.getByTestId("client-people").locator("visible=true").first().getByRole("button").first().click();
+    else {
+      const k = TAB[name];
+      const pill = p.getByTestId(`client-tabs-${k}`).locator("visible=true").first();
+      await pill.scrollIntoViewIfNeeded();
+      await pill.click();
+      await p.getByTestId(`client-tab-${k}`).locator("visible=true").first().waitFor({ timeout: 4000 });
+    }
+    await p.waitForTimeout(300);
+  };
   const save = async () => { await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500); };
 
   await h.go("/client/c1");
@@ -22,7 +33,7 @@ exports.run = async (h) => {
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
   await row("История");
-  h.expect(p.url().includes("/client/c1?s=history"), `history row opens its list (${p.url()})`);
+  h.expect(/[?&]tab=history\b/.test(p.url()), `«История» opens in place, the address keeps it (${p.url()})`);
   await h.expectText(/Смета подписана/, "history: estimate signed");
   await h.expectText(/Оплата/, "history: payment (office)");
   await h.go("/client/c1");
