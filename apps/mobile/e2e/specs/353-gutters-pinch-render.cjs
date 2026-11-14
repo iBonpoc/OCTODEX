@@ -15,11 +15,19 @@ exports.run = async (h) => {
   const len = async () => (await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getBoundingClientRect().width)))[0] ?? 0;
   /** waits until `ok` is true, polling the page (expect.poll-like, without a fixed sleep) */
   const until = async (ok, what) => {
-    for (let i = 0; i < 60; i++) {
+    // up to ~200 double frames: a loaded machine (3 runs at once, as on GitHub) is slow, the wait still ends on what it checks
+    for (let i = 0; i < 200; i++) {
       if (await ok()) return h.expect(true, what);
       await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
     }
     h.expect(false, what);
+  };
+
+  /** waits until the gutter's on-screen length reads the same 3 times in a row (the UI thread has finished moving it) */
+  const still = async (what) => {
+    let last = -1, same = 0, v = 0;
+    await until(async () => { v = await len(); same = Math.abs(v - last) < 0.5 ? same + 1 : 0; last = v; return same >= 2; }, what);
+    return v;
   };
 
   await h.go("/company/modules");
@@ -39,8 +47,7 @@ exports.run = async (h) => {
   await skipLength(p);
   await fitAll(p);
   await until(async () => (await len()) > 0, "the gutter is drawn");
-  let l0 = 0;
-  await until(async () => { const a = await len(); const same = Math.abs(a - l0) < 0.5; l0 = a; return same && a > 0; }, "the drawing stands still after «fit»");
+  const l0 = await still("the drawing stands still after «fit»");
 
   // two fingers pinch in about the middle and STAY down
   const mid = [b.x + b.width / 2, b.y + b.height / 2];
@@ -52,8 +59,7 @@ exports.run = async (h) => {
   for (let d = 115; d >= 70; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
   let l1 = 0;
   await until(async () => (l1 = await len()) < l0 * 0.8, `fingers down: the drawing got smaller (${Math.round(l0)} → ${Math.round(l1)} px)`);
-  let prev = 0;
-  await until(async () => { l1 = await len(); const same = Math.abs(l1 - prev) < 0.5; prev = l1; return same; }, "fingers down: the drawing stands still under them");
+  l1 = await still("fingers down: the drawing stands still under them");
 
   // a render of the screen with the SAME view: the window grows by 4 px, the canvas measures itself again
   const vp = p.viewportSize();
@@ -64,20 +70,17 @@ exports.run = async (h) => {
   // the render itself: the painter's Svg has the new height (setSize → a render of the screen with the SAME view)
   const svgH0 = Number(await svg().getAttribute("height"));
   await until(async () => Number(await svg().getAttribute("height")) > svgH0 + 2 || Number(await svg().getAttribute("height")) >= Math.round(h0) + 4, "the screen re-rendered at the new size (the painter's Svg is taller)");
-  let l2 = 0;
-  await until(async () => { l2 = await len(); return true; }, "read the drawing after the render");
+  const l2 = await still("the drawing after the render");
   h.expect(Math.abs(l2 - l1) <= l1 * 0.05, `fingers still down, a render with the same view: the drawing keeps its pinched size (${Math.round(l1)} → ${Math.round(l2)} px; before the pinch ${Math.round(l0)})`);
 
   // the fingers go on: it still follows them; let go — it stays where they left it
   for (let d = 65; d >= 50; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
   let l3 = 0;
   await until(async () => (l3 = await len()) < l2 * 0.95, `the pinch goes on after the render (${Math.round(l2)} → ${Math.round(l3)} px)`);
-  prev = 0;
-  await until(async () => { l3 = await len(); const same = Math.abs(l3 - prev) < 0.5; prev = l3; return same; }, "the drawing stands still under the fingers again");
+  l3 = await still("the drawing stands still under the fingers again");
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await cdp.detach();
-  let l4 = 0;
-  await until(async () => { const a = await len(); const same = Math.abs(a - l4) < 0.5; l4 = a; return same; }, "the drawing settles after the release");
+  const l4 = await still("the drawing settles after the release");
   h.expect(Math.abs(l4 - l3) <= l3 * 0.05, `let go: it stays at the pinched size (${Math.round(l3)} → ${Math.round(l4)} px), no jump`);
   await p.setViewportSize(vp);
 };
