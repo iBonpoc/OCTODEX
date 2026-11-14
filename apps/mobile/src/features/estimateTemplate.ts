@@ -282,25 +282,45 @@ export function estimateStartersToAdd(
 }
 
 /**
- * The catalog item a starter's line names: its properties and the same unit; a kit never (no price of its own). #1336: the item must be ONE —
- * of several equally close candidates (a company with K5 aluminium and K6 copper) no first-by-name is taken: no link, $0 and «проверьте цену».
- * `narrowed` — the module's own wish for this company (the company's default stock): tried first, and only when nothing has it the line's
- * wider `match` is the question (an item priced by hand with fewer properties still serves, if it is the only one).
+ * What a starter's line finds in the catalog (#1336): its properties and the same unit; a kit never (no price of its own). The item must be ONE —
+ * of several equally close candidates no first-by-name is taken (`several`: no link, $0 and «проверьте цену»).
+ * `narrowed` — the module's own wish for this company: tried first. Only when nothing has it the line's wider `match` is the question (an item
+ * priced by hand with fewer properties still serves, if it is the only one) — and such an item must not CONTRADICT the wish: one that
+ * says another variant than the company's default is another thing, not a hand-priced version of it (`none`).
  */
-export function starterItem(catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string, narrowed?: Record<string, string>): CatalogItem | undefined {
-  if (!match) return undefined;
+export function starterLookup(catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string, narrowed?: Record<string, string>): { item?: CatalogItem; why: "found" | "none" | "several" } {
+  if (!match) return { why: "none" };
   const pool = catalog.filter((it) => it.kind !== "kit" && it.unit.trim().toLowerCase() === unit.trim().toLowerCase());
-  const only = (hits: CatalogItem[]): CatalogItem | undefined => {
+  const only = (hits: CatalogItem[]): { item?: CatalogItem; why: "found" | "none" | "several" } => {
+    if (!hits.length) return { why: "none" };
     const n = (it: CatalogItem) => Object.keys(it.attributes ?? {}).length;
     const top = hits.filter((h) => n(h) === n(hits[0]!)); // catalogMatch sorts the closest first
-    return top.length === 1 ? top[0] : undefined;
+    return top.length === 1 ? { item: top[0]!, why: "found" } : { why: "several" };
   };
   if (narrowed) {
     const near = catalogMatch(pool, narrowed);
     if (near.length) return only(near);
   }
-  const hits = catalogMatch(pool, match);
-  return hits.length ? only(hits) : undefined;
+  const agrees = (it: CatalogItem) => !narrowed || Object.keys(narrowed).every((k) => { const v = it.attributes?.[k]; return v === undefined || v.trim().toLowerCase() === narrowed[k]!.trim().toLowerCase(); });
+  return only(catalogMatch(pool, match).filter(agrees));
+}
+
+export const starterItem = (catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string, narrowed?: Record<string, string>): CatalogItem | undefined => starterLookup(catalog, match, unit, narrowed).item;
+
+/**
+ * Would a starter come out with NO line priced (#1336)? Then it is not added: all lines $0 and unlinked, and a later item does not find its line.
+ * `none` — the catalog has nothing for its lines (an empty price list); `several` — some line has several equally fitting items and none of the
+ * others is found (the company must sort its price list out). Counted the way `starterEstimateTemplate` finds items.
+ */
+export function starterAllUnpriced(s: StarterEstimate, ctx: { catalog: readonly CatalogItem[]; want?: (match: Record<string, string>) => Record<string, string> }): "none" | "several" | null {
+  let total = 0, several = 0;
+  for (const o of s.options) for (const l of o.lines) {
+    total++;
+    const r = starterLookup(ctx.catalog, l.match, l.unit, l.match && ctx.want ? ctx.want(l.match) : undefined);
+    if (r.why === "found") return null;
+    if (r.why === "several") several++;
+  }
+  return total ? (several ? "several" : "none") : null;
 }
 
 /**
@@ -322,7 +342,7 @@ export function starterEstimateTemplate(
       name: cut(ctx.tDoc(o.nameKey), 120),
       ...(o.recommended ? { recommended: true } : {}),
       lines: o.lines.map((l) => {
-        const it = starterItem(ctx.catalog, l.match, l.unit, l.match && ctx.want ? ctx.want(l.match) : undefined);
+        const it = starterLookup(ctx.catalog, l.match, l.unit, l.match && ctx.want ? ctx.want(l.match) : undefined).item;
         const line: CustomLine = {
           id: uid(),
           name: cut(ctx.tDoc(l.nameKey), 300),

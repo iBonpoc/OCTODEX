@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {}, NativeModules: {}, AppState: { addEventListener: () => ({ remove() {} }) } }));
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 import type { CatalogItem, EstimateTemplate } from "@/data/types";
-import { estimateStartersToAdd, fromTemplate, starterEstimateId, starterEstimateTemplate, starterItem } from "@/features/estimateTemplate";
+import { estimateStartersToAdd, fromTemplate, starterAllUnpriced, starterEstimateId, starterEstimateTemplate, starterItem } from "@/features/estimateTemplate";
 import { tFor } from "@/i18n/translate";
 import { registerModule } from "@/modules/registry";
 import gutters from "../src/modules/gutters/module";
@@ -95,12 +95,27 @@ describe("#1336 — the line means the company's own stock; several candidates a
     expect(want.profile).toBeDefined();
     expect(starterItem(c, gutterLine.match, gutterLine.unit, want)?.id).toBe(gutterItem(made()).id);
   });
-  it("the narrowing follows the company's settings: another default size is another wanted stock", () => {
+  it("the narrowing follows the company's settings: another default size takes THAT size's item", () => {
     const c = made();
-    const a = gutterItem(c).attributes!;
-    const settings = { v: 1, run: { size: a.size === "5" ? "6" : "5" } };
-    const want = gutters.starterWant!(settings, gutterLine.match!);
-    expect(want.size).not.toBe(a.size); // another size is wanted: the one item of the sample is not it
+    const a = gutterItem(c);
+    const otherSize = a.attributes!.size === "5" ? "6" : "5";
+    const second: CatalogItem = { ...a, id: "second-size", name: "Z — другой размер", attributes: { ...a.attributes, size: otherSize } };
+    const both = [...c, second];
+    // the default size: the made item (it also sorts first); another default size: the second one, though it sorts last
+    expect(starterItem(both, gutterLine.match, gutterLine.unit, gutters.starterWant!({}, gutterLine.match!))?.id).toBe(a.id);
+    const want = gutters.starterWant!({ v: 1, run: { size: otherSize } }, gutterLine.match!);
+    expect(want.size).toBe(otherSize);
+    expect(starterItem(both, gutterLine.match, gutterLine.unit, want)?.id).toBe("second-size");
+  });
+  it("a hand-priced item that CONTRADICTS the company's stock is not taken: only copper in the price list, the default is aluminium → no link, «проверьте цену»", () => {
+    const a = gutterItem(made());
+    const copper: CatalogItem = { ...a, id: "copper", name: "Медь", attributes: { part: "gutter", material: "copper" } };
+    const want = gutters.starterWant!({}, gutterLine.match!);
+    expect(want.material).not.toBe("copper");
+    expect(starterItem([copper], gutterLine.match, gutterLine.unit, want)).toBeUndefined();
+    // the same item without a property that disagrees is a hand-priced version: it serves
+    const plain: CatalogItem = { ...a, id: "plain", name: "Желоб", attributes: { part: "gutter", color: want.color! } };
+    expect(starterItem([plain], gutterLine.match, gutterLine.unit, want)?.id).toBe("plain");
   });
   it("without any narrowing two equally close items are ambiguous: no link, $0, «проверьте цену» (the first by name is NOT taken)", () => {
     const c = withOther();
@@ -126,5 +141,28 @@ describe("#1336 — the line means the company's own stock; several candidates a
     const ids = tpl.doc.options[0]!.lines.map((l) => l.catalogItemId);
     expect(ids).toContain(gutterItem(made()).id);
     expect(ids).not.toContain("other-gutter");
+  });
+});
+
+describe("#1336 — a starter with no line priced is not added (starterAllUnpriced)", () => {
+  const replace = starters.find((x) => x.key === "replace")!;
+  const want = (m: Record<string, string>) => gutters.starterWant!({}, m);
+  it("an empty price list: «none» (make the price list first)", () => {
+    expect(starterAllUnpriced(replace, { catalog: [], want })).toBe("none");
+    for (const s of starters) expect(starterAllUnpriced(s, { catalog: [], want })).toBe("none");
+  });
+  it("with the test items made: nothing blocks (null); one found line is enough (the rest are «проверьте цену»)", () => {
+    for (const s of starters) expect(starterAllUnpriced(s, { catalog: made(), want })).toBeNull();
+    const onlyLabor = made().filter((it) => it.attributes?.work === "tearoff");
+    expect(starterAllUnpriced(replace, { catalog: onlyLabor, want })).toBeNull();
+  });
+  it("several equally fitting items and no other line found: «several» (a different text: sort the price list out), not «none»", () => {
+    const a = made().find((it) => it.attributes?.part === "gutter" && it.unit === "ft")!;
+    const twin: CatalogItem = { ...a, id: "twin", name: "A — двойник" };
+    const guards = starters.find((x) => x.key === "guards")!;
+    const onlyGutters = [a, twin];
+    const gutterOnly = { ...replace, options: replace.options.map((o) => ({ ...o, lines: o.lines.filter((l) => l.match?.part === "gutter") })) };
+    expect(starterAllUnpriced(gutterOnly, { catalog: onlyGutters })).toBe("several");
+    expect(starterAllUnpriced(guards, { catalog: onlyGutters })).toBe("none");
   });
 });
