@@ -46,6 +46,7 @@ import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type Void
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
+import { canRetry, keepPhotoLocal, markPhoto } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cacheKey";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -269,6 +270,8 @@ interface StoreCtx {
   addPhoto: (visitId: ID, kind: "before" | "after", uri?: string) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
+  /** #1431 «Повторить»: a photo the cloud refused is sent again (its mark goes until the cloud answers); nothing to send — no-op */
+  retryPhoto: (visitId: ID, photoId: ID) => Undo;
   /** extra checklist item added on site by the tech (always optional, docs/specs/08 §11.2 №9) */
   addCheckItem: (visitId: ID, label: string) => Undo;
   /* step 14 (docs/specs/08 §10.1): one row per item — a tick and an office edit never overwrite each other */
@@ -786,7 +789,8 @@ export function StoreProvider({
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
         // spec 36: the history read on open stays (the full read has none)
-        setDb(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current));
+        // #1431: a photo's file on this phone and why the cloud refused it — only the phone knows them
+        setDb(keepPhotoLocal(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current), dbRef.current));
         // the whole company read again: every module's settings are the server's now
         settingsStale.current.clear();
       }
@@ -881,7 +885,7 @@ export function StoreProvider({
         inFlight.current = item.id;
         setSendingId(item.id);
         try {
-          await applyOp(item.op, w.companyId, w.userId);
+          const sent = await applyOp(item.op, w.companyId, w.userId);
           inFlight.current = null;
           setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
@@ -892,6 +896,14 @@ export function StoreProvider({
           answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
+          // #1431: the cloud refused a photo's file — the photo says so (and why); taken — the mark goes
+          if (sent?.photo) {
+            const marked = markPhoto(dbRef.current, sent.photo.id, sent.photo.failed, new Date().toISOString());
+            if (marked !== dbRef.current) {
+              dbRef.current = marked;
+              setDb(marked);
+            }
+          }
           if (!still()) break;
         } catch (e) {
           inFlight.current = null;
@@ -1644,6 +1656,13 @@ export function StoreProvider({
           })),
           { k: "photo.remove", id: photoId },
         ),
+      retryPhoto: (visitId, photoId) => {
+        const p = visitOf(visitId)?.photos.find((x) => x.id === photoId);
+        if (!p || !canRetry(p) || !p.uri) return noop;
+        const uri = p.uri;
+        // the mark goes at once (the photo is being sent); a second refusal puts it back with the reason
+        return mutate("photo.retry", (d) => markPhoto(d, photoId, null, ""), { k: "photo.retry", id: photoId, visitId, uri });
+      },
       addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),
@@ -1862,7 +1881,7 @@ export function StoreProvider({
             get: () => dbRef.current,
             set: put,
             cloud: modeRef.current === "cloud",
-            sendNow: (v) => (cid && auth.userId ? applyOp({ k: "me.location", on: v }, cid, auth.userId) : Promise.reject(new Error("no company"))),
+            sendNow: (v) => (cid && auth.userId ? applyOp({ k: "me.location", on: v }, cid, auth.userId).then(() => undefined) : Promise.reject(new Error("no company"))),
             enqueue: (op) => {
               const oid = uid();
               outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
