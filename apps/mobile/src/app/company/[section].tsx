@@ -17,6 +17,7 @@ import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepp
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 const ENTITY: EntityType[] = ["llc", "corporation", "sole_proprietor", "partnership", "other"];
 const LIC: LicenseKind[] = ["cslb", "city_business", "his", "other"];
@@ -371,9 +372,7 @@ function LicensesEditor() {
           <TextField type="identifier" value={edit.cls} onChangeText={(v) => setEdit({ ...edit, cls: v })} placeholder={t("co.classesHint")} />
           <TextField type="date" value={edit.exp} onChangeText={(v) => setEdit({ ...edit, exp: v })} placeholder={t("co.expiresHint")} />
           {edit.exp && !fromUs(edit.exp) ? (
-            <T v="caption" tone="warn">
-              {t("co.dateFormat")}
-            </T>
+            <StatusNote tone="warn">{t("co.dateFormat")}</StatusNote>
           ) : null}
           <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>

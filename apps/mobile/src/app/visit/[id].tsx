@@ -33,6 +33,7 @@ import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
 import { canTakeVisitPayment } from "@/features/moneyLists";
+import { StatusNote } from "@/ui/statusNote";
 
 const haptic = () => haptics.medium();
 
@@ -237,9 +238,7 @@ export default function VisitScreen() {
           {v.step === "on_site" && v.kind !== "inspection" ? (
             <>
               {gate.missing.photosBefore > 0 ? (
-                <T v="caption" tone="warn">
-                  {t("chk.needBefore", { n: gate.missing.photosBefore })}
-                </T>
+                <StatusNote tone="warn">{t("chk.needBefore", { n: gate.missing.photosBefore })}</StatusNote>
               ) : null}
               <Button label={t("visit.next", { step: t("step.working") })} full onPress={goWork} />
             </>
@@ -254,9 +253,7 @@ export default function VisitScreen() {
             <T v="heading">{t("visit.photosAfter")}</T>
             <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} />
             {gate.missing.photosAfter > 0 ? (
-              <T v="caption" tone="warn">
-                {t("chk.needAfter", { n: gate.missing.photosAfter })}
-              </T>
+              <StatusNote tone="warn">{t("chk.needAfter", { n: gate.missing.photosAfter })}</StatusNote>
             ) : null}
           </Card>
           <SectionTitle title={t("step.sign")} />

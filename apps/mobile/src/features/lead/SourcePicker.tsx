@@ -11,6 +11,7 @@ import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/con
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 export const sourceKindLabel = (k: SourceKind): DictKey => `src.kind.${k}` as DictKey;
 
@@ -109,9 +110,7 @@ function SourceForm({ value, onDone }: { value: Omit<Source, "id"> & { id?: stri
         <TextField type="company" value={d.name} onChangeText={(v) => set({ name: v })} placeholder={t("src.namePh")} />
       </Labeled>
       {taken ? (
-        <T v="caption" tone="warn">
-          {t("src.taken")}
-        </T>
+        <StatusNote tone="warn">{t("src.taken")}</StatusNote>
       ) : null}
       <Labeled label={t("src.kind")}>
         <ChoiceChips<SourceKind> value={d.kind} onChange={(k) => set({ kind: k })} items={SOURCE_KINDS.map((k) => ({ key: k, label: t(sourceKindLabel(k)) }))} />
