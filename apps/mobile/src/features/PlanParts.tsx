@@ -30,6 +30,7 @@ import { CardList, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces
 import { ListCard, type CardLead } from "@/ui/listCard";
 import type { Density, FactKey } from "@/ui/listCardLayout";
 import { SelectedCheck } from "@/ui/selectedCheck";
+import { StatusNote } from "@/ui/statusNote";
 
 /** desktop row columns of the Plan's cards (06 §5 «Визиты»: адрес · работа · кто) */
 const PLAN_COLUMNS: readonly FactKey[] = ["addr", "work", "by"];
@@ -50,9 +51,9 @@ export function WaitingJobs() {
   const shown = all ? list : list.slice(0, 2);
   return (
     <View style={{ gap: space[2] }}>
-      <T v="heading" tone="warn">
+      <StatusNote tone="warn" v="heading">
         {t("plan.waiting", { n: list.length })}
-      </T>
+      </StatusNote>
       <CardList>
         {shown.map(({ job, since }) => {
           const property = db.properties.find((p) => p.id === job.propertyId);
@@ -170,9 +171,9 @@ export function UnassignedSoon() {
   if (!list.length) return null;
   return (
     <View style={{ gap: space[2] }} testID="plan-unassigned-soon">
-      <T v="heading" tone="warn">
+      <StatusNote tone="warn" v="heading">
         {t("plan5.unassigned", { n: list.length })}
-      </T>
+      </StatusNote>
       <CardList>
         {list.map(({ v, dd }) => {
           const { client } = visitWho(db, v);
