@@ -99,7 +99,7 @@ const body = (r: { body: string }) => JSON.parse(r.body);
 describe("stripe-pay: who may call", () => {
   it("only our production site; the CORS answer names it, never «*»", async () => {
     const { d, opened } = deps();
-    for (const origin of [null, "https://evil.example", "https://octodex--pr-12.expo.app", "http://octodex.expo.app"]) {
+    for (const origin of [null, "https://evil.example", "https://octodex.expo.app", "https://octodex--pr-12.expo.app", "http://octodex.expo.app", "https://gorix--pr-12.expo.app", "http://gorix.expo.app", "https://gorix.expo.app.evil.com"]) {
       const r = await handlePay(req({ origin }), d);
       expect(r.status).toBe(403);
       expect(r.headers["Access-Control-Allow-Origin"]).toBeUndefined();
@@ -109,6 +109,20 @@ describe("stripe-pay: who may call", () => {
     expect(pre.status).toBe(204);
     expect(pre.headers["Access-Control-Allow-Origin"]).toBe(SITE);
     expect(pre.headers.Vary).toBe("Origin");
+  });
+  it("#656: gorix.expo.app pays; the released old name octodex is a stranger's site now and is refused", async () => {
+    const { d, opened } = deps();
+    const pre = await handlePay(req({ method: "OPTIONS", origin: "https://gorix.expo.app" }), d);
+    expect(pre.status).toBe(204);
+    expect(pre.headers["Access-Control-Allow-Origin"]).toBe("https://gorix.expo.app");
+    expect((await handlePay(req({ origin: "https://gorix.expo.app" }), d)).status).not.toBe(403);
+    expect(opened).toEqual([[TOKEN, INV]]);
+    const old = deps();
+    const r = await handlePay(req({ origin: "https://octodex.expo.app" }), old.d);
+    expect(r.status).toBe(403);
+    expect(r.headers["Access-Control-Allow-Origin"]).toBeUndefined();
+    expect(old.opened).toEqual([]);
+    expect(ALLOWED_ORIGINS).toEqual(["https://gorix.expo.app"]);
   });
   it("a bad body opens nothing", async () => {
     expect(parseBody(JSON.stringify({ token: TOKEN, invoiceId: INV }))).toEqual({ token: TOKEN, invoiceId: INV });
