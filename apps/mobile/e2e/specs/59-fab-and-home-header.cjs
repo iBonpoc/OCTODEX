@@ -55,6 +55,16 @@ exports.run = async (h) => {
     h.expect(b.x + b.width > w - 40 && b.y + b.height <= tabs.y, `390: bottom-right, above the tabs (${b.x},${b.y} vs tabs ${tabs.y})`);
     h.expect(Math.round(b.height) <= 36, `visible ≤ 36 (${b.height})`);
   }
+  // the «＋» of «Главная» is yellow on every width — the floating one and the header one alike (DS §5.3, audit №2, #1395)
+  const yellow = await plus().evaluate((el) => {
+    const m = getComputedStyle(el.querySelector("div") ?? el).backgroundColor.match(/\d+/g) ?? [];
+    const pick = (e) => getComputedStyle(e).backgroundColor;
+    // the press's own box or its painted child: the one that is not transparent
+    const bg = [el, ...el.querySelectorAll("div")].map(pick).find((x) => x && x !== "rgba(0, 0, 0, 0)" && x !== "transparent") ?? "";
+    const [r, g, bl] = (bg.match(/\d+/g) ?? m).map(Number);
+    return r > 200 && g > 200 && bl < 120;
+  });
+  h.expect(yellow, `${w}: the «＋» of «Главная» is yellow`);
 
   // Главная: only what works
   await plus().click();
