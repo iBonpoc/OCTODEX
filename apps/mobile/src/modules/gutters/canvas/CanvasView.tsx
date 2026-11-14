@@ -30,8 +30,8 @@ export function commitView(v: PlanView, tx: number, ty: number, s: number, fx: n
  * activated (the first finger moved before the second landed — always so on a phone), keeps the touch and the pinch never
  * comes (founder 09.11: «moved, but did not shrink»).
  */
-/** the limits of the scale (#1281): the viewport is for the clamp at the commit. At a limit the pinch gives way as a rubber and goes back on release (#1403); no tick, no vibration */
-export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number } }
+/** the limits of the scale (#1281): the viewport is for the clamp at the commit. At a limit the pinch gives way as a rubber and goes back on release (#1403); `onEdge` is the tick when the pinch reaches a limit (once per reach, with a hysteresis: gestureState.ts EDGE_FREE) */
+export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number }; onEdge?: () => void }
 
 export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard) {
   const { tx, ty, s, fx, fy } = live;
@@ -69,6 +69,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const seg = useSharedValue(false);
   const nPinch = useSharedValue(0);
   const nPan = useSharedValue(0);
+  const edge = useSharedValue<-1 | 0 | 1>(0);
   const fxLast = useSharedValue(0);
   const fyLast = useSharedValue(0);
   // the way back from a limit on release (#1403): a smooth ease about the fingers' point; with «reduce motion» a short plain transition
@@ -84,8 +85,9 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   }, [zoom?.lim.kMin, zoom?.lim.kMax, kMin, kMax]);
   const state = (): LiveState => {
     "worklet";
-    return { S: s.value, Tx: tx.value, Ty: ty.value, seg: seg.value, nPinch: nPinch.value, nPan: nPan.value, fx: fxLast.value, fy: fyLast.value };
+    return { S: s.value, Tx: tx.value, Ty: ty.value, seg: seg.value, nPinch: nPinch.value, nPan: nPan.value, fx: fxLast.value, fy: fyLast.value, edge: edge.value };
   };
+  const edgeTick = () => now.current.zoom?.onEdge?.();
   /** the limits of the live scale, as factors of the view on the screen (undefined: free, as on the speed bench) */
   const limit = () => {
     "worklet";
@@ -102,6 +104,8 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     seg.value = st.seg;
     nPinch.value = st.nPinch;
     nPan.value = st.nPan;
+    if (st.edge !== 0 && st.edge !== edge.value) scheduleOnRN(edgeTick); // a tick on reaching a limit of the scale, once
+    edge.value = st.edge;
     fxLast.value = st.fx;
     fyLast.value = st.fy;
     if (!req) return;

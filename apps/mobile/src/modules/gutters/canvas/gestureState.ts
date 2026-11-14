@@ -28,7 +28,11 @@ export interface LiveState extends Tf {
   /** where the fingers of the last pinch frame were (screen px): the release at a limit goes back about this point, so the picture does not jump (#1403) */
   fx: number;
   fy: number;
+  /** the pinch is past a limit of the scale: −1 the farthest, 1 the nearest, 0 free. It frees only when the scale is back inside by EDGE_FREE (a hysteresis), so a hand shaking at the limit ticks once, not on every frame (#1403, #1406) */
+  edge: -1 | 0 | 1;
 }
+/** how far inside a limit (a share of it) the scale must come back before the next tick may be made */
+export const EDGE_FREE = 0.02;
 
 /** the scale the live transform may reach, as a factor of the view on the screen (kMin / k, kMax / k); beyond it the scale gives way as a rubber does */
 export interface ScaleLimit { lo: number; hi: number }
@@ -55,7 +59,7 @@ export function unrubber(vis: number, lim: ScaleLimit): number {
   return vis;
 }
 
-export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, fx: 0, fy: 0 });
+export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, fx: 0, fy: 0, edge: 0 });
 
 /** a copy of the transform. A WORKLET like its callers: a plain function cannot be called on the UI thread of a phone (the app went down on every pinch, #1390) */
 function tf(st: Tf): Tf {
@@ -68,6 +72,7 @@ function closeSegment(st: LiveState, lim?: ScaleLimit): Tf | null {
   "worklet";
   if (!st.seg) return null;
   st.seg = false;
+  st.edge = 0;
   const moved = st.S !== 1 || st.Tx !== 0 || st.Ty !== 0;
   if (!moved) return null;
   const t = tf(st);
@@ -92,6 +97,14 @@ export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPoin
   let k = e.scaleChange;
   // the rubber at a limit of the scale: the fingers' scale goes on, the screen shows it softened, and the factor applied is the screen's own step
   if (lim) k = rubber(unrubber(st.S, lim) * k, lim) / st.S;
+  const S1 = st.S * k;
+  // the tick when the pinch reaches a limit (founder 14.11: «вибрация на пределах была»): once, then again only after the scale was back inside by EDGE_FREE
+  if (lim) {
+    if (S1 > lim.hi) st.edge = 1;
+    else if (S1 < lim.lo) st.edge = -1;
+    else if (st.edge === 1 && S1 < lim.hi * (1 - EDGE_FREE)) st.edge = 0;
+    else if (st.edge === -1 && S1 > lim.lo * (1 + EDGE_FREE)) st.edge = 0;
+  }
   // scale about the focal point f: p' = f + k·(p − f)
   st.Tx = k * st.Tx + (1 - k) * e.focalX;
   st.Ty = k * st.Ty + (1 - k) * e.focalY;

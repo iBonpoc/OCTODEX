@@ -5,7 +5,7 @@
  * gestures commit at their end, every `scaleChange` multiplies, the render drops the whole live transform) — it fails every one of them.
  */
 import { describe, expect, it } from "vitest";
-import { applyTf, endGesture, idleState, IDENTITY, panFrame, pinchFrame, RUBBER, rubber, settle, sub, unrubber, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
+import { applyTf, endGesture, idleState, EDGE_FREE, IDENTITY, panFrame, pinchFrame, RUBBER, rubber, settle, sub, unrubber, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
 
 type Ev =
   | { t: "pinch"; n: number; k: number; fx?: number; fy?: number }
@@ -193,7 +193,7 @@ describe("the rest", () => {
   });
 });
 
-describe("#1281 / #1403 — the limits of the scale: a rubber without a wall, no tick, the way back about the fingers", () => {
+describe("#1281 / #1403 — the limits of the scale: a rubber without a wall, one tick, the way back about the fingers", () => {
   const lim = { lo: 0.5, hi: 4 };
   const frames = (n: number, k: number) => Array.from({ length: n }, () => ({ scaleChange: k, numberOfPointers: 2, focalX: 100, focalY: 100 }));
   it("zooming in: the screen scale goes on past the limit, the further the slower, never past RUBBER (no wall: every frame still moves it)", () => {
@@ -236,6 +236,34 @@ describe("#1281 / #1403 — the limits of the scale: a rubber without a wall, no
     for (const f of frames(40, 1.2)) pinchFrame(st, { ...f, focalX: 130, focalY: 70 }, lim);
     expect(st.S * 130 + st.Tx).toBeCloseTo(130, 6);
     expect(st.S * 70 + st.Ty).toBeCloseTo(70, 6);
+  });
+  it("a tick at the limit (founder 14.11): flagged once when the pinch reaches it, not on every frame; again only after the scale was back inside by EDGE_FREE", () => {
+    const st = idleState();
+    let ticks = 0, last = 0;
+    const run = (k: number, n: number) => { for (const f of frames(n, k)) { pinchFrame(st, f, lim); if (st.edge !== 0 && last === 0) ticks++; last = st.edge; } };
+    run(1.2, 30); // up to the nearest limit and a long way past it
+    expect(ticks).toBe(1);
+    expect(st.edge).toBe(1);
+    // a shaking hand at the limit: in and out by a hair (inside the hysteresis) — still one tick
+    for (let i = 0; i < 10; i++) { run(0.999, 1); run(1.001, 1); }
+    expect(ticks).toBe(1);
+    // back well inside, then out again: a second tick
+    for (let i = 0; i < 60 && st.edge !== 0; i++) run(0.9, 1);
+    expect(st.edge).toBe(0);
+    expect(st.S).toBeLessThan(lim.hi * (1 - EDGE_FREE) + 1e-9);
+    expect(st.S).toBeGreaterThan(lim.lo);
+    run(1.3, 30);
+    expect(ticks).toBe(2);
+  });
+  it("zooming out reaches the other limit with its own tick; the segment's end clears the edge; no limit: never", () => {
+    const st = idleState();
+    for (const f of frames(40, 0.8)) pinchFrame(st, f, lim);
+    expect(st.edge).toBe(-1);
+    endGesture(st, lim);
+    expect(st.edge).toBe(0);
+    const free = idleState();
+    for (const f of frames(40, 1.2)) pinchFrame(free, f);
+    expect(free.edge).toBe(0);
   });
   it("let go past a limit: the commit is the transform gone back to the limit ABOUT THE FINGERS (no jump about the screen's centre)", () => {
     const st = idleState();
