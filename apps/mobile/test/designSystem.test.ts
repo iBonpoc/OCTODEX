@@ -242,24 +242,10 @@ describe("design system: tokens only", () => {
   });
 
   // DS §3.1 п.2, rule 2 (#1386): a status colour is always an icon and a word — a warn / bad / ok / info text is a
-  // <StatusNote> (src/ui/statusNote.tsx), or has its icon right before it (3 lines up), or says ds-allow. The places not
-  // moved yet are counted here per file; the list only shrinks (a file fixed — its line goes, by number).
+  // <StatusNote> (src/ui/statusNote.tsx), or has its icon right before it (3 lines up), or says ds-allow. All places
+  // are moved (#1386 done): PENDING stays empty — a new one is a mistake, not a debt.
   it("a status colour on text has its icon (StatusNote), not the colour alone", () => {
-    const PENDING: Record<string, number> = {
-      "app/(tabs)/plan.tsx": 1,
-      "app/(tabs)/today.tsx": 1,
-      "app/company/[section].tsx": 1,
-      "app/lead/new.tsx": 1,
-      "app/p/[token].tsx": 1,
-      "app/visit/[id].tsx": 2,
-      "features/EventForm.tsx": 1,
-      "features/PlanParts.tsx": 2,
-      "features/ServiceCategoryPicker.tsx": 2,
-      "features/VisitForm.tsx": 1,
-      "features/comms/MessageSheet.tsx": 2,
-      "features/lead/SourcePicker.tsx": 1,
-      "features/showcase/Selectors.tsx": 1,
-    };
+    const PENDING: Record<string, number> = {};
     const found: Record<string, string[]> = {};
     for (const f of outsideUi) {
       const s = readFileSync(f, "utf8");
