@@ -4,7 +4,7 @@
  * sheet): the menu, then the reason with the button. No «Отменить» — the server never lets a void invoice back
  * (decision of the director 12.11). The store checks the same (voidRefusal) and the server too (tg_invoice_guard, db T197).
  */
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -13,26 +13,41 @@ import { useI18n, type DictKey } from "@/i18n";
 import { VOID_REASON_MAX, voidRefusal } from "@/features/contractInvoice";
 import { Button, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
-import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Menu, Sheet, useToast } from "@/ui/overlays";
+import type { IconKey } from "@/ui/primitives";
+import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { router } from "expo-router";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { findJob } from "@/data/jobs";
 
-export function VoidInvoiceMenu({ inv }: { inv: Invoice }) {
+/** an action of the invoice's «⋯» besides «Аннулировать» (#1474: the card's row of pills moved here) */
+export interface InvoiceMoreItem {
+  key: string;
+  label: string;
+  icon: IconKey;
+  testID: string;
+  onPress: () => void;
+}
+
+/**
+ * The invoice's «⋯» (DS Б4, #1474): its other actions (Напомнить, SMS, email, PDF) and, the director's only, «Аннулировать…» last,
+ * red. A menu at the button; «Аннулировать…» opens the sheet with the reason (В1-5, unchanged). Nothing to offer — no «⋯».
+ */
+export function VoidInvoiceMenu({ inv, items = [] }: { inv: Invoice; items?: InvoiceMoreItem[] }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
   const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<"menu" | "reason">("menu");
+  const [at, setAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
   const [reason, setReason] = useState("");
-  // the menu is the director's only; with a payment the item is there and says why not (П7: no dead ends)
-  if (store.role !== "director") return null;
+  // «Аннулировать» is the director's only; with a payment the item is there and says why not (П7: no dead ends)
+  const director = store.role === "director";
   const blocked = voidRefusal(store.db, inv.id, "x", store.role);
+  if (!director && !items.length) return null;
   const close = () => {
     setOpen(false);
-    setPage("menu");
     setReason("");
   };
   const confirm = () => {
@@ -45,43 +60,47 @@ export function VoidInvoiceMenu({ inv }: { inv: Invoice }) {
     close();
     toast.show(t("inv.void.done"));
   };
+  const label = [t("inv.title"), inv.number].filter(Boolean).join(" ");
   return (
     <>
-      <View testID="invoice-more">
-        <IconButton icon="more" label={t("lead.more")} onPress={() => setOpen(true)} />
+      <View ref={moreRef} collapsable={false} testID="invoice-more">
+        <IconButton icon="more" label={`${t("lead.more")}: ${label}`} onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setAt({ x, y, w, h }))} />
       </View>
+      <Menu
+        visible={!!at}
+        anchor={at}
+        title={label}
+        items={[
+          ...items.map(({ key, label: l, icon, testID }) => ({ key, label: l, icon, testID })),
+          ...(director ? [{ key: "void", label: t("inv.void.menu"), icon: "close" as const, destructive: true, dim: !!blocked, testID: "invoice-void-item" }] : []),
+        ]}
+        onSelect={(k) => {
+          setAt(null);
+          if (k !== "void") return items.find((x) => x.key === k)?.onPress();
+          if (blocked) return toast.show(t(`inv.void.why.${blocked}` as DictKey));
+          setOpen(true);
+        }}
+        onClose={() => setAt(null)}
+      />
       <Sheet
         visible={open}
         onClose={close}
-        title={page === "menu" ? t("inv.title") : t("inv.void.title")}
-        onBack={page === "reason" ? () => setPage("menu") : undefined}
-        dirty={page === "reason" && reason.trim() !== ""}
+        title={t("inv.void.title")}
+        dirty={reason.trim() !== ""}
         footer={
-          page === "reason" ? (
-            <View testID="invoice-void-confirm">
-              <Button label={t("inv.void.confirm")} icon="close" variant="danger" full disabled={!reason.trim()} onPress={confirm} />
-            </View>
-          ) : undefined
+          <View testID="invoice-void-confirm">
+            <Button label={t("inv.void.confirm")} icon="close" variant="danger" full disabled={!reason.trim()} onPress={confirm} />
+          </View>
         }
       >
-        {page === "menu" ? (
-          <View testID="invoice-void-item">
-            <ListRow
-              title={t("inv.void.action")}
-              subtitle={blocked ? t(`inv.void.why.${blocked}` as DictKey) : undefined}
-              onPress={() => (blocked ? toast.show(t(`inv.void.why.${blocked}` as DictKey)) : setPage("reason"))}
-            />
+        <View style={{ gap: space[3] }}>
+          <T v="body" tone="mut">
+            {t("inv.void.body")}
+          </T>
+          <View testID="invoice-void-reason">
+            <TextField type="note" value={reason} onChangeText={(x) => setReason(x.slice(0, VOID_REASON_MAX))} label={t("inv.void.reason")} placeholder={t("inv.void.reasonPh")} autoFocus />
           </View>
-        ) : (
-          <View style={{ gap: space[3] }}>
-            <T v="body" tone="mut">
-              {t("inv.void.body")}
-            </T>
-            <View testID="invoice-void-reason">
-              <TextField type="note" value={reason} onChangeText={(x) => setReason(x.slice(0, VOID_REASON_MAX))} label={t("inv.void.reason")} placeholder={t("inv.void.reasonPh")} autoFocus />
-            </View>
-          </View>
-        )}
+        </View>
       </Sheet>
     </>
   );
