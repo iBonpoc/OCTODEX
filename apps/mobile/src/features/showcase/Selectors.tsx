@@ -5,7 +5,7 @@ import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
 import { T } from "@/ui/primitives";
-import { Card, SectionTitle } from "@/ui/surfaces";
+import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 import { StatusNote } from "@/ui/statusNote";
 import { ViewTabs } from "@/ui/viewTabs";
@@ -81,8 +81,7 @@ export function SelectorsSection() {
           <ChoiceChips label={t("ds.choice.many")} value={many} onChange={setMany} items={items} />
         </View>
       </Card>
-      <Card>
-        <T v="heading">{t("ds.req.title")}</T>
+      <FieldGroup title={t("ds.req.title")}>
         <T v="caption" tone="mut">{t("ds.req.hint")}</T>
         <View testID="showcase-required">
           <TextField type="name" value={reqName} onChangeText={(v) => { setReqName(v); setReqDone(false); }} placeholder={t("ds.req.name")} label={t("ds.req.name")} field={form.field("name")} testID="showcase-required-name" />
@@ -104,7 +103,7 @@ export function SelectorsSection() {
           />
           {reqDone ? <StatusNote tone="ok">{t("ds.req.ok")}</StatusNote> : null}
         </View>
-      </Card>
+      </FieldGroup>
     </View>
   );
 }

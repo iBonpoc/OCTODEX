@@ -9,7 +9,7 @@ import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
 import { StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, FieldGroup, Screen } from "@/ui/surfaces";
 
 /**
  * «Моя подпись» (docs/specs/07 «E2b»): the signature an employee puts on contracts for the company in their own name.
@@ -39,8 +39,7 @@ export default function MySignatureScreen() {
           </T>
         </Card>
       )}
-      <SectionTitle title={current ? t("est.sig.redraw") : t("est.sig.draw")} />
-      <Card>
+      <FieldGroup title={current ? t("est.sig.redraw") : t("est.sig.draw")}>
         <View style={{ gap: space[3] }}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("est.sig.name")} icon="user" />
           {me?.title ? (
@@ -62,7 +61,7 @@ export default function MySignatureScreen() {
             onConfirm={(svg) => toast.show(t("est.sig.done"), store.saveMySignature(svg, name, me?.title || title))}
           />
         </View>
-      </Card>
+      </FieldGroup>
     </Screen>
   );
 }

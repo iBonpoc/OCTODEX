@@ -15,7 +15,7 @@ import { Labeled } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, MultiChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, FieldGroup, RowView, SectionTitle } from "@/ui/surfaces";
 import { type GuardedUndo } from "@/data/undo";
 
 const ROLES: PersonRole[] = ["main", "spouse", "assistant", "tenant", "property_manager", "accountant", "other"];
@@ -161,8 +161,8 @@ export function PeopleEditSheet({
   );
   return (
     <Sheet visible={visible} onClose={onClose} title={t("client.contacts")} dirty={dirty} onSave={save}>
-      <SectionTitle title={t("client.mainContacts")} />
-      {people[0] ? <Card>{fields(people[0], 0)}</Card> : null}
+      {/* the main person's fields straight on the sheet (DS §11 п.17, #1411); each further person stays a card — an object of a list */}
+      <FieldGroup title={t("client.mainContacts")}>{people[0] ? fields(people[0], 0) : null}</FieldGroup>
       <SectionTitle title={t("client.moreContacts")} />
       {people.slice(1).map((p, j) => {
         const i = j + 1;

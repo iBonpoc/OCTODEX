@@ -1,6 +1,6 @@
 import { useRequiredForm } from "@/ui/requiredForm";
 import { useState } from "react";
-import { Image, View } from "react-native";
+import { Image } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { radius, space, component } from "@octo/design-tokens";
@@ -10,7 +10,7 @@ import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Screen } from "@/ui/surfaces";
+import { FieldGroup, Screen } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
 import { expenseVendors } from "@/features/suppliers";
 import { shrinkPicked } from "@/data/photoShrink";
@@ -47,19 +47,18 @@ export default function NewExpense() {
   ];
   return (
     <Screen title={t("exp.title")} back={back}>
-      <Card>
-        <View style={{ gap: space[3] }}>
-          <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} />
-          {photo ? <Image source={{ uri: photo }} style={{ width: "100%", height: component.mediaH, borderRadius: radius.inner }} resizeMode="cover" /> : null}
-          <T v="caption" tone="mut">
-            {t("exp.aiNote")}
-          </T>
-          <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" field={form.field("amount")} />
-          <ChoiceChips label={t("exp.vendor")} testID="expense-vendor" value={vendor} onChange={setVendor} items={VENDORS.map((v) => ({ key: v, label: v }))} />
-          <ChoiceChips<ExpenseCategory> label={t("exp.category")} testID="expense-category" value={category} onChange={setCategory} items={CATS.map((c) => ({ key: c, label: t(`exp.cat.${c}`) }))} />
-          <ChoiceChips label={t("exp.job")} testID="expense-job" value={jobId} onChange={setJobId} items={jobs} />
-        </View>
-      </Card>
+      {/* the fields straight on the background, no card around them (DS §11 п.17, #1411) */}
+      <FieldGroup>
+        <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} />
+        {photo ? <Image source={{ uri: photo }} style={{ width: "100%", height: component.mediaH, borderRadius: radius.inner }} resizeMode="cover" /> : null}
+        <T v="caption" tone="mut">
+          {t("exp.aiNote")}
+        </T>
+        <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" field={form.field("amount")} />
+        <ChoiceChips label={t("exp.vendor")} testID="expense-vendor" value={vendor} onChange={setVendor} items={VENDORS.map((v) => ({ key: v, label: v }))} />
+        <ChoiceChips<ExpenseCategory> label={t("exp.category")} testID="expense-category" value={category} onChange={setCategory} items={CATS.map((c) => ({ key: c, label: t(`exp.cat.${c}`) }))} />
+        <ChoiceChips label={t("exp.job")} testID="expense-job" value={jobId} onChange={setJobId} items={jobs} />
+      </FieldGroup>
       <Button
         label={t("exp.save")}
         icon="check"
