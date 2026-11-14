@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
@@ -8,11 +8,24 @@ import { T } from "@/ui/primitives";
 import { Card, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 import { StatusNote } from "@/ui/statusNote";
+import { ViewTabs } from "@/ui/viewTabs";
 
 const UNITS = ["ft", "in", "yd", "m", "cm", "mm"] as const;
 const TWENTY = Array.from({ length: 20 }, (_, i) => `n${i + 1}`);
 const MANY = ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10", "a11", "a12"] as const;
 type Unit = (typeof UNITS)[number];
+/** a client's eight tabs, with the counts of what waits (DS §9 А1п; the client card, #1343) */
+const VTABS: [string, DictKey, number?][] = [
+  ["overview", "client.tab.overview"],
+  ["estimates", "cl6.tab.estimates", 2],
+  ["invoices", "cl6.tab.invoices", 1],
+  ["jobs", "cl6.tab.jobs", 1],
+  ["tasks", "client.tab.tasks", 1],
+  ["notes", "cl6.tab.notes"],
+  ["files", "client.tab.files"],
+  ["history", "client.tab.history"],
+];
+type VTab = string;
 
 /** Selectors (DS §9): one of 5–12 in a form row — SelectField with the menu at the row. */
 export function SelectorsSection() {
@@ -26,6 +39,7 @@ export function SelectorsSection() {
   const [twenty, setTwenty] = useState<string | null>(null);
   const items = UNITS.map((u) => ({ key: u, label: u }));
   const [few, setFew] = useState<"a" | "b" | "c">("a");
+  const [vtab, setVtab] = useState<VTab>("overview");
   const [many, setMany] = useState<Unit>("ft");
   // a required field (DS §11 п.3–4): the button is always on; pressed with the field empty it shows the error under it
   const form = useRequiredForm();
@@ -35,6 +49,15 @@ export function SelectorsSection() {
   return (
     <View testID="showcase-selectors">
       <SectionTitle title={`${t(s.title)} · ${s.ds}`} />
+      {/* DS §9 А1п (#1343): the row of view tabs of an object's screen — live: a press opens a tab, the row scrolls */}
+      <Card>
+        <T v="heading">{t("ds.vtabs.title")}</T>
+        <T v="caption" tone="mut">{t("ds.vtabs.hint")}</T>
+        <ViewTabs testID="showcase-vtabs" label={t("cl6.tabs")} value={vtab} onChange={setVtab} items={VTABS.map(([k, l, n]) => ({ key: k, label: t(l), count: n }))} />
+        <View testID="showcase-vtabs-picked">
+          <T v="caption">{t("ds.vtabs.picked", { name: t(VTABS.find(([k]) => k === vtab)![1]) })}</T>
+        </View>
+      </Card>
       <Card>
         <T v="heading">{t("ds.select.title")}</T>
         <T v="caption" tone="mut">{t("ds.select.hint")}</T>

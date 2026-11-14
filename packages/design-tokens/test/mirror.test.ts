@@ -58,7 +58,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
     expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
     expect(component.segmented).toEqual({ h: px("seg-h"), pad: px("seg-pad") });
-    expect(component.tab.h).toBe(px("tab-h"));
+    expect(component.tab).toEqual({ h: px("tab-h"), fadeW: px("tab-fade-w") });
     expect(component.switch).toEqual({ w: px("switch-w"), h: px("switch-h"), knob: px("switch-knob") });
     expect(component.help).toEqual({ visible: px("help-visible"), icon: px("help-icon") });
     expect(component.tip).toEqual({ fs: px("tip-fs"), px: px("tip-px"), py: px("tip-py"), radius: px("tip-radius"), max: px("tip-max"), gap: px("tip-gap") });
@@ -102,6 +102,13 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(motion.durBrand).toBe(px("dur-brand"));
     expect([motion.durBrandQuick, motion.durBrandEdge, motion.durBrandPause, motion.durBrandFold]).toEqual([px("dur-brand-quick"), px("dur-brand-edge"), px("dur-brand-pause"), px("dur-brand-fold")]);
     expect([motion.durBrandHold, motion.brandExitScale]).toEqual([px("dur-brand-hold"), px("brand-exit-scale")]);
+    expect([motion.brandExitFadeDelay, motion.durBrandBounce, motion.brandBounceLift, motion.brandBounceSquash, motion.durBrandFirstMax, motion.durBrandWaitMin]).toEqual(
+      [px("brand-exit-fade-delay"), px("dur-brand-bounce"), px("brand-bounce-lift"), px("brand-bounce-squash"), px("dur-brand-first-max"), px("dur-brand-wait-min")],
+    );
+    // the first launch fits its budget: the fade at the dot's place overlaps the drive, then the bounce and the exit
+    expect(motion.durBrandQuick + motion.durBrandBounce + motion.durBase).toBeLessThanOrEqual(motion.durBrandFirstMax);
+    // the exit: the fade starts after its delay and ends with the growth
+    expect(motion.brandExitFadeDelay + motion.durFast).toBe(motion.durBase);
   });
   it("small shadow of the raised «Заливка»", () => {
     const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;
@@ -111,6 +118,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart, motion.longPressMs]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart"), px("long-press-ms")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
     expect([...motion.easeOut]).toEqual(bez("ease-out"));
+    expect([...motion.easeIn]).toEqual(bez("ease-in"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));
     expect([...motion.easeLiquid]).toEqual(bez("ease-liquid"));
     expect([motion.toastInfoMs, motion.toastUndoA11yMs, motion.spinnerDelayMs, motion.actionTimeoutMs]).toEqual([px("toast-info-ms"), px("toast-undo-a11y-ms"), px("spinner-delay-ms"), px("action-timeout-ms")]);
