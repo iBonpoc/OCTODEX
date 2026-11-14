@@ -31,6 +31,7 @@ import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
 import { cancelNotice } from "@/features/cancelNotify";
 import { NO_UNDO } from "@/data/undo";
+import { StatusNote } from "@/ui/statusNote";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string; allDay?: boolean };
 
@@ -186,9 +187,9 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         </Field>
       ) : null}
       {f.warnings.map((w) => (
-        <T key={w.key} v="caption" tone="warn">
-          {`⚠ ${w.key === "busy" ? t("vf.warn.busy", { ranges: w.visits.map(range).join(", ") }) : t(`vf.warn.${w.key}` as DictKey)}`}
-        </T>
+        <StatusNote key={w.key} tone="warn">
+          {w.key === "busy" ? t("vf.warn.busy", { ranges: w.visits.map(range).join(", ") }) : t(`vf.warn.${w.key}` as DictKey)}
+        </StatusNote>
       ))}
       <T v="body" tone="mut">
         {f.allDay ? t("job5.allDaySummary", { date: day(f.value.start), who: f.techIds.length ? f.techIds.map((id) => techs.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns") }) : t("vf.summary", {

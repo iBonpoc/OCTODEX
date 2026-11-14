@@ -14,6 +14,7 @@ import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/contro
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * «Событие» and «Выходной» of the Plan (docs/specs/13-app-structure.md §3.2, §2.4; wave 5 PR-B): a name, the person (a day
@@ -141,9 +142,9 @@ function EventSheetBody({ state, onClose, visible, onExited }: { state: NonNulla
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("plan5.ev.descriptionPh")} />
         </Field>
         {problems.map((p) => (
-          <T key={p} v="caption" tone="warn">
-            {`⚠ ${t(`plan5.ev.problem.${p}` as DictKey)}`}
-          </T>
+          <StatusNote key={p} tone="warn">
+            {t(`plan5.ev.problem.${p}` as DictKey)}
+          </StatusNote>
         ))}
         <Button label={t("plan5.ev.save")} icon="check" variant="primary" full disabled={problems.length > 0} onPress={save} />
         {e ? <Button label={t("plan5.ev.remove")} icon="trash" variant="secondary" full onPress={remove} /> : null}

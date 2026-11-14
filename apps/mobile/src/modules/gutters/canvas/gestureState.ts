@@ -36,7 +36,11 @@ export const OVERSHOOT = 0.05
 
 export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, edge: 0 });
 
-const tf = (st: Tf): Tf => ({ S: st.S, Tx: st.Tx, Ty: st.Ty });
+/** a copy of the transform. A WORKLET like its callers: a plain function cannot be called on the UI thread of a phone (the app went down on every pinch, #1390) */
+function tf(st: Tf): Tf {
+  "worklet";
+  return { S: st.S, Tx: st.Tx, Ty: st.Ty };
+}
 
 /** the segment (two fingers down) ends: the commit to make, if the live transform moved (defined first: a worklet is a const once compiled) */
 function closeSegment(st: LiveState): Tf | null {
