@@ -15,14 +15,13 @@ import { estimateStatusView } from "@/features/estimateStatus";
 import { moduleHref } from "@/modules/registry";
 import { useListPanel } from "@/nav/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button } from "@/ui/controls";
+import { Button, IconButton } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardGrid, ListCard, ListCardHeader, type CardSign, type CardStatus } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { ListPanel } from "@/ui/listPanel";
-import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
-import { T } from "@/ui/primitives";
+import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { asMeasurementFilter, filterMeasurements, MEASUREMENT_FILTERS, measurementList, type MeasurementFilter, type MeasurementItem } from "../measurements";
 import { MeasurementView } from "../view/ViewScreen";
 
@@ -97,13 +96,25 @@ export default function MeasurementsScreen() {
     />
   );
   const pick = (x: MeasurementFilter) => setKept(x);
+  const startNew = () => router.push(draw as Href);
+  // «＋» in the header is secondary (DS §12.2, #1426): an icon of 36 on the phone, the word from 820; yellow is only the
+  // screen's main action — on an empty list that is the empty state's own «Новый замер»
+  const add = (
+    <View testID="measurements-new">
+      {device === "phone" ? (
+        <IconButton icon="plus" label={t("mod.gutters.list.new")} onPress={startNew} />
+      ) : (
+        <Button label={t("mod.gutters.list.new")} icon="plus" size="sm" variant="secondary" onPress={startNew} />
+      )}
+    </View>
+  );
 
   return (
     <Screen
       title={t("mod.gutters.list.title")}
       subtitle={t("mod.gutters.title")}
       back={back}
-      right={<Button label={t("mod.gutters.list.new")} icon="plus" size="sm" onPress={() => router.push(draw as Href)} />}
+      right={add}
       aside={
         openItem ? (
           <ListPanel title={titleOf(openItem)} subtitle={openItem.address ?? undefined} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
@@ -113,9 +124,18 @@ export default function MeasurementsScreen() {
       }
     >
       {items.length === 0 ? (
-        <Card>
-          <T tone="mut">{t("mod.gutters.list.empty")}</T>
-        </Card>
+        // DS §13 «Пусто — данных нет вообще»: the object's icon, the words, why, and the one button to start
+        <Empty
+          icon="note"
+          testID="measurements-empty"
+          title={t("mod.gutters.list.empty")}
+          hint={t("mod.gutters.list.emptyHint")}
+          action={
+            <View testID="measurements-empty-new">
+              <Button label={t("mod.gutters.list.new")} icon="plus" variant="primary" onPress={startNew} />
+            </View>
+          }
+        />
       ) : (
         <>
           <FilterBar<MeasurementFilter>
