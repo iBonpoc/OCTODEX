@@ -1,6 +1,6 @@
 /**
  * Property card (docs/specs/13-app-structure.md §3.3 «Объект», wave 4a-2): lives only inside its client («‹ Client»).
- * Header: address, label and kind, route, the client, «＋ Смета» / «＋ Осмотр»; «now at this property»; access notes and
+ * Header: «Записать на оценку» (the card's step, #1474), address, label and kind, Маршрут · Клиент tiles, «＋ Смета»; «now at this property»; access notes and
  * the gate code (a tech sees it only on the visit day and the day before). Below — rows with counters, each opens its
  * list at /property/<id>?s=<row>: people of the property, leads, jobs, estimates, invoices, visits, tasks, notes, files, history.
  */
@@ -17,11 +17,13 @@ import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
 import { canServe } from "@/features/clients";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
+import { ActionTile } from "@/features/ActionTile";
+import { useDevice } from "@/theme/ThemeProvider";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { estView } from "@/features/boards";
-import { space } from "@octo/design-tokens";
+import { component, space } from "@octo/design-tokens";
 import { useToast } from "@/ui/overlays";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { ModulePlaces } from "@/modules/ModulePlaces";
@@ -48,6 +50,7 @@ export default function PropertyScreen() {
   const [sheet, setSheet] = useState<"edit" | "access" | null>(null);
   const [inspect, setInspect] = useState(false);
   const toast = useToast();
+  const { wide } = useDevice();
   const p = db.properties.find((x) => x.id === id);
   const back = () => (router.canGoBack() ? router.back() : router.replace(p ? (sec ? `/property/${p.id}` : `/client/${p.customerId}`) : "/clients"));
   if (!p)
@@ -95,17 +98,16 @@ export default function PropertyScreen() {
             {p.kind ? <StatusChip status="neutral" label={t(`prop.kind.${p.kind}` as DictKey)} soft /> : null}
           </RowView>
         ) : null}
-        <RowView style={{ flexWrap: "wrap" }}>
-          <Button label={t("jobs.route")} icon="route" variant="secondary" onPress={route} />
-          {c ? <Button label={`${c.name} ›`} icon="user" variant="ghost" onPress={() => router.push(`/client/${c.id}`)} /> : null}
-          {/* «+ Осмотр»: a returning client wants a new estimate (docs/specs/03 §5.1) — an inspection without a lead */}
-          {office && servable ? <Button label={t("vf.addInspection")} icon="plus" variant="ghost" onPress={() => setInspect(true)} /> : null}
-        </RowView>
+        {/* Маршрут · Клиент — round tiles with a word, as on the client's and the job's cards (#1474) */}
+        <View testID="prop-tiles" style={{ flexDirection: "row", gap: space[2], maxWidth: wide ? component.panelW : undefined }}>
+          <ActionTile testID="prop-route" icon="navigate" label={t("client.route")} onPress={route} />
+          {c ? <ActionTile testID="prop-client" icon="user" label={t("prop.tile.client")} onPress={() => router.push(`/client/${c.id}`)} /> : null}
+        </View>
         {office && servable ? (
           <VisitFormSheet
             visible={inspect}
             onClose={() => setInspect(false)}
-            title={t("vf.addInspection")}
+            title={t("lead.next.book")}
             saveLabel={t("lead.next.book")}
             init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId: p.id }}
             onSave={(v) => {
@@ -117,6 +119,14 @@ export default function PropertyScreen() {
           />
         ) : null}
       </Card>
+      {/* #1474: the card's step, under the tiles as on the client's card — a returning client wants a new estimate: an
+          inspection without a lead (docs/specs/03 §5.1); the office only, never for «не обслуживаем». Secondary: the screen's
+          yellow is still its «＋» (it leaves the cards with #1395, then this becomes the main one) */}
+      {office && servable ? (
+        <View testID="prop-main" style={{ alignSelf: wide ? "flex-start" : "stretch" }}>
+          <Button label={t("lead.next.book")} icon="calendar" variant="secondary" full={!wide} onPress={() => setInspect(true)} />
+        </View>
+      ) : null}
 
       <SectionTitle title={t("prop.now")} />
       {now.estimates.length || now.jobs.length || now.nextVisit ? (

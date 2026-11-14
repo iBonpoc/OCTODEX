@@ -50,9 +50,10 @@ exports.run = async (h) => {
   // the client from the property
   await h.go("/property/p1");
   const sarah = db0.customers.find((c) => c.id === "c1");
-  await p.getByRole("button", { name: `${sarah.name} ›` }).first().click();
-  await p.waitForTimeout(600);
-  h.expect(/\/client\/c1$/.test(p.url()), `«${sarah.name} ›» opens the client (${p.url()})`);
+  // the «Клиент» tile (#1474)
+  await p.getByTestId("prop-client").locator("visible=true").first().click();
+  await p.waitForURL(/\/client\/c1$/, { timeout: 5000 });
+  h.expect(/\/client\/c1$/.test(p.url()), `«Клиент» opens ${sarah.name} (${p.url()})`);
 
   // leads at a property (Linda's lead at 2207 Ocean Park)
   await h.go("/property/p3");
