@@ -28,7 +28,7 @@ exports.run = async (h) => {
 
   // the price list: the test items are made (labor «Чистка», «Промывка», guards among them)
   await h.go("/module/gutters/prices");
-  await tid("gpr-make-all-btn").getByRole("button").click();
+  await tid("gpr-missing-n-action").getByRole("button").click();
   await waitDb((d) => d.catalog.some((it) => it.placeholder && it.attributes?.work === "cleaning"), "the test labor item of the cleaning is made");
   const clean = (await db()).catalog.find((it) => it.attributes?.work === "cleaning");
   h.expect(clean.placeholder === true && clean.priceCents > 0, "a test item: marked, with a test price");

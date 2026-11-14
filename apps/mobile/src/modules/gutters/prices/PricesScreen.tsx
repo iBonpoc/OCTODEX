@@ -19,11 +19,12 @@ import { catalogUnitPrice } from "@/features/estimateDoc";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleState } from "@/modules/registry";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button, StatusChip } from "@/ui/controls";
+import { Banner } from "@/ui/banner";
+import { Button } from "@/ui/controls";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, CardList, ListRow, Screen } from "@/ui/surfaces";
+import { CardList, ListRow, Screen } from "@/ui/surfaces";
 import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
 import { withAfter } from "@/data/undo";
 
@@ -52,6 +53,8 @@ export default function GutterPricesScreen() {
   const nameOf = (p: PartQty): string => partName(t, p);
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** rows priced by a test item (rule 9): said once in the banner, each card keeps its own «тестовая цена» */
+  const testN = [...labor, ...parts].filter((r) => findItem(catalog, r.part)?.placeholder).length;
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
    *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */
   const made = useRef(new Set<string>());
@@ -79,7 +82,7 @@ export default function GutterPricesScreen() {
           key={row.key}
           testID={`gpr-${it.placeholder ? "test" : "found"}-${row.part.key}`}
           title={title}
-          lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
+          lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
           value={`${money(catalogUnitPrice(it))} / ${unit}`}
           status={it.placeholder ? { tone: "warn", label: t(k("testPrice")) } : { tone: "ok", label: t(k("found")) }}
           edge={null}
@@ -93,9 +96,9 @@ export default function GutterPricesScreen() {
         key={row.key}
         testID={`gpr-miss-${row.part.key}`}
         title={title}
-        lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
+        lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
         value={`— / ${unit}`}
-        status={{ tone: "warn", label: t(k("missing")) }}
+        // «нет в прайсе» is said once, by the banner above with its number (#1426: 24 same chips were a wall); the card shows «—»
         edge={null}
         action={ro || !own ? undefined : { label: t(k("makeOne")), icon: "plus", onPress: () => make([own]) }}
         onPress={ro ? undefined : () => setBindFor(row)}
@@ -109,29 +112,23 @@ export default function GutterPricesScreen() {
     <Screen title={t(k("title"))} back={back} subtitle={t("mod.gutters.title")}>
       <View style={{ gap: space[4] }} testID="gpr-screen">
         <T v="body" tone="mut">{t(k("intro"))}</T>
+        {/* the screen's state — ONE banner, the most urgent (DS Б9, §15.3; #1426): off → read only; not staff → ask; missing → the
+            number and «Создать позиции сразу»; all there → said once, with the test prices still to set */}
         {!active ? (
-          <View testID="gpr-locked">
-            <StatusChip status="warn" label={t("mod.gutters.set.locked")} />
-          </View>
+          <Banner
+            tone="warn"
+            testID="gpr-locked"
+            title={t("mod.gutters.set.locked")}
+            hint={t(k("lockedHint"))}
+            action={store.role === "director" ? { label: t("mod.gutters.draw.connect"), onPress: () => router.push("/company/modules") } : undefined}
+          />
         ) : !staff ? (
-          <View testID="gpr-ro">
-            <StatusChip status="info" label={t(k("askOffice"))} />
-          </View>
-        ) : null}
-
-        <View testID="gpr-make-all">
-          <Card>
-            <View testID={missing.length ? "gpr-missing-n" : "gpr-all-found"}>
-              <T v="heading">{missing.length ? t(k("missingN"), { n: missing.length }) : t(k("allFound"))}</T>
-            </View>
-            <T v="caption" tone="mut">{t(k("makeHint"))}</T>
-            {!ro && missing.length ? (
-              <View testID="gpr-make-all-btn">
-                <Button label={t(k("makeAll"), { n: missing.length })} icon="plus" variant="primary" onPress={() => make(missing)} />
-              </View>
-            ) : null}
-          </Card>
-        </View>
+          <Banner tone="info" testID="gpr-ro" title={t(k("askOffice"))} />
+        ) : missing.length ? (
+          <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
+        ) : (
+          <Banner tone={testN ? "warn" : "ok"} testID="gpr-all-found" title={t(k("allFound"))} hint={testN ? t(k("testN"), { n: testN }) : undefined} />
+        )}
 
         <View style={{ gap: space[2] }} testID="gpr-labor">
           <T v="heading">{t(k("labor"))}</T>

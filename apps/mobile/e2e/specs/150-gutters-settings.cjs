@@ -128,7 +128,7 @@ exports.run = async (h) => {
   }, KEY);
   await h.go("/module/gutters/settings");
   await tid("gset-locked").waitFor({ timeout: 5000 });
-  await tid("gset-connect").waitFor({ timeout: 3000 });
+  await tid("gset-locked-action").waitFor({ timeout: 3000 });
   h.expect((await tid("gset-color-add").count()) === 0, "the trial over: nothing to add");
   await tid("gset-profiles-k").click({ force: true });
   await p.waitForTimeout(400);
@@ -145,7 +145,7 @@ exports.run = async (h) => {
   }, KEY);
   await h.go("/module/gutters/settings");
   await tid("gset-ro").waitFor({ timeout: 5000 });
-  h.expect((await tid("gset-color-add").count()) === 0 && (await tid("gset-palette-berger").count()) === 0 && (await tid("gset-connect").count()) === 0, "the office adds no colours");
+  h.expect((await tid("gset-color-add").count()) === 0 && (await tid("gset-palette-berger").count()) === 0 && (await tid("gset-locked-action").count()) === 0, "the office adds no colours");
   await tid("gset-profiles-k").click({ force: true });
   await p.waitForTimeout(400);
   h.expect(!(await off("profiles")).includes("k"), "the office cannot uncheck");
