@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import { component, radius, size, space, statusIcon, type StatusName } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { useI18n } from "@/i18n";
 import { Button, IconButton } from "./controls";
 import { Icon, T } from "./primitives";
 
@@ -31,16 +32,23 @@ export function Banner({
 }) {
   const { c } = useTheme();
   const { device } = useDevice();
+  const { t } = useI18n();
   const side = device !== "phone";
+  // the tone is said, not only drawn (rule 2 for the screen reader): «Предупреждение. Модуль не подключён…»
+  const toneWord = t(`ds.banner.tone.${tone}`);
   const btn = action ? (
     <View testID={testID ? `${testID}-action` : undefined} style={side ? undefined : { alignSelf: "flex-start" }}>
-      <Button label={action.label} variant="secondary" size="sm" onPress={action.onPress} />
+      {/* rule 3: 36 on the phone, 28 from 820 */}
+      <Button label={action.label} variant="secondary" size={side ? "sm" : "phone"} onPress={action.onPress} />
     </View>
   ) : null;
   return (
     <View
       testID={testID}
       accessibilityRole="summary"
+      accessibilityLabel={[toneWord, title, hint].filter(Boolean).join(". ")}
+      // a change of the screen's state is said once (Б9)
+      accessibilityLiveRegion="polite"
       style={{
         flexDirection: "row",
         alignItems: "flex-start",
@@ -67,7 +75,11 @@ export function Banner({
         {btn && !side ? <View style={{ paddingTop: space[1] }}>{btn}</View> : null}
       </View>
       {btn && side ? <View style={{ alignSelf: "center" }}>{btn}</View> : null}
-      {tone === "info" && onClose ? <IconButton icon="close" label={closeLabel ?? title} onPress={onClose} /> : null}
+      {tone === "info" && onClose ? (
+        <View style={side ? { alignSelf: "center" } : undefined}>
+          <IconButton icon="close" tone="plain" label={closeLabel ?? title} onPress={onClose} />
+        </View>
+      ) : null}
     </View>
   );
 }
