@@ -34,7 +34,7 @@ export function ctxOf(d: Drawing, lang: "en" | "ru" | "es" = "en", job: Partial<
   return {
     t: tFor(lang),
     job: { company: { name: "Urbantech Builders", lines: ["Woodland Hills, CA", "CSLB Lic. #1115986"] }, date: "11/12/2026", ...job },
-    rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wastePct: r.wastePct, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
+    rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
     parts: computeGutterParts(toMeasurement(d, { method: r.corner }), toRulesOverride({})).parts,
     fmt: "ftin",
   };

@@ -206,7 +206,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const set = shopSheets(drawing, {
       t: tt,
       job: shopJob(company, { client: who, address: addr ? [addr.address, addr.city].filter(Boolean).join(", ") : undefined, date: docDay(new Date().toISOString(), company.timezone) }),
-      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wastePct: r.wastePct, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
+      rules: { hangerSpacingIn: r.hangerSpacingIn, hangerExtra: r.hangerExtra, wasteFt: r.wasteFt, dsStickFt: r.dsStickFt, storyFt: r.storyFt, corner: r.corner },
       parts,
       fmt,
     });
