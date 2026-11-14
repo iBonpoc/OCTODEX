@@ -172,6 +172,11 @@ export interface ModuleDef {
    */
   screens?: Record<string, () => import("react").ComponentType>;
   /**
+   * the screens that take the whole screen (a drawing canvas, its speed check): no bottom tabs on the phone, no side menu from
+   * 820 (DS Б11, §12.10; #1426). The module's other screens (lists, cards, settings) keep the app's bottom tabs and side menu.
+   */
+  fullScreen?: readonly string[];
+  /**
    * reads the module's own tables into DB.moduleData[key] (spec 33 П21.2 №4). Called when the company has the module's
    * row (switched on once — after the trial drafts still open, founder О2). A failed read keeps what the phone had.
    */
@@ -346,6 +351,9 @@ export function keepModuleData<T extends { moduleData?: Record<string, unknown>;
   return { ...next, moduleData: { ...next.moduleData, ...Object.fromEntries(keep.map((k) => [k, had[k]])) } };
 }
 
+/** the module's screen takes the whole screen (ModuleDef.fullScreen): the route hides the bottom tabs and the side menu */
+export const moduleFullScreen = (key: string | undefined, screen: string | undefined): boolean =>
+  !!key && !!screen && !!defs.get(key)?.fullScreen?.includes(screen);
 /** a module's screen by its address parts; unknown module or screen → undefined */
 export const moduleScreen = (key: string | undefined, screen: string | undefined): (() => import("react").ComponentType) | undefined =>
   key && screen ? defs.get(key)?.screens?.[screen] : undefined;

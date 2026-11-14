@@ -25,8 +25,6 @@ export const NO_TAB_BAR = [
   "job/new", "job/schedule",
   "lead/new",
   "legal/[doc]",
-  // a module's own screen (spec 33 П20.3): the drawing canvas and its speed check take the whole screen
-  "module/[key]/[screen]",
   "p/[token]",
   "settings/delete-account",
   // an order is a form («Сохранить», «Отправить», spec 37)
@@ -49,17 +47,19 @@ export const WITH_TAB_BAR = [
   "company/checklists",
   "estimate/[id]", "estimate/templates", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
+  // a module's own screens (spec 33 П20.3): its lists and cards keep the bar (#1426, design audit: «Замеры» had none, the
+  // core's lists have it); the full-screen ones (ModuleDef.fullScreen: the canvas) hide it themselves (useHideTabBar in the route)
+  "module/[key]/[screen]",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
   "receipt/[id]", "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visit/[id]", "visits",
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
 /**
- * Without the bar, but not a form (founder 08.11, build 373: «Выйти без сохранения?» over «Модули» with nothing to
- * save): a module's own screens save on their own — the canvas a second after each change, its settings and prices at
- * once, the speed check keeps nothing. A tab over them never asks.
+ * Without the bar, but not a form: a tab over them never asks «Выйти без сохранения?». (A module's own screens were here —
+ * founder 08.11, build 373 — they now keep the bar, #1426, so they are never «a form above» at all.)
  */
-export const NOT_A_FORM: readonly string[] = ["module/[key]/[screen]"];
+export const NOT_A_FORM: readonly string[] = [];
 const notAForm = new Set<string>(NOT_A_FORM);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */
