@@ -659,8 +659,9 @@ export function Screen({
             ) : null}
             {right || headerFab ? (
               <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-                {right}
+                {/* DS §12.2, Б4: «＋» then «⋯» — «⋯» is always the last on the right (#1474) */}
                 {headerFab}
+                {right}
               </RowView>
             ) : null}
           </RowView>
@@ -711,8 +712,8 @@ export function Screen({
           </RowView>
           {right || headerFab || home ? (
             <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
-              {right}
               {headerFab}
+              {right}
               {home ? <HomeHeader /> : null}
             </RowView>
           ) : null}

@@ -1,9 +1,9 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { visitDueCents } from "@/features/visitDue";
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { component, space } from "@octo/design-tokens";
 import { jobProfit, useStore } from "@/data/store";
 import { findJob } from "@/data/jobs";
 import type { DB, Job } from "@/data/types";
@@ -28,9 +28,11 @@ import { jobChecklistVisit } from "@/features/checklist";
 import { ChecklistEditor } from "@/features/VisitChecklist";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { smsWithBody } from "@/features/sms";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
+import { useDevice } from "@/theme/ThemeProvider";
+import { ActionTile } from "@/features/ActionTile";
 import { visitStatus } from "@/features/visits";
-import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
@@ -49,9 +51,13 @@ export default function JobScreen() {
   const [tab, setTab] = useState<Tab>("details");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
   const [noteText, setNoteText] = useState("");
+  const [focusNote, setFocusNote] = useState(false);
   const [restSent, setRestSent] = useState(false);
   const [calling, setCalling] = useState<CallPreset | null>(null);
   const [writing, setWriting] = useState<MessagePreset | null>(null);
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const { wide } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/jobs"));
   const j = findJob(db, id);
   if (!j)
@@ -139,19 +145,38 @@ export default function JobScreen() {
     toast.show(store.online ? t("job3.done.invoiced") : t("offline.queued"), undo);
   };
 
+  // where «Оплата» leads: the open invoice, else the visit that takes money on site
+  const payTo = openInvoice ? `/invoice/${openInvoice.id}` : next && visitDueCents(db, next) > 0 ? `/visit/${next.id}` : null;
+  const restShown = office && j.status === "done" && rest > 0 && !restSent;
+  // the one yellow button (rule 2): the «выполнена?» card and «Выставить остаток» are the main step themselves when shown
+  const mainStep: { key: "start" | "pay"; label: DictKey; icon: "check" | "dollar"; onPress: () => void } | null =
+    (office && awaiting) || restShown
+      ? null
+      : next
+        ? { key: "start", label: "job3.main.start", icon: "check", onPress: () => router.push(`/visit/${next.id}`) }
+        : payTo
+          ? { key: "pay", label: "job3.main.pay", icon: "dollar", onPress: () => router.push(payTo as never) }
+          : null;
+  // the technician on his way: «В пути» stays in sight beside the main step (Jobber/HCP «On my way»); the office has it in «⋯»
+  const enRouteShown = !!next && !!mainStep && mainStep.key === "start" && !office;
+  const moreItems = [
+    ...(next && !enRouteShown ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
+    ...(payTo && mainStep?.key !== "pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
+    { key: "note", label: t("job3.more.note"), icon: "note" as const, testID: "job-act-note" },
+    ...(next ? [{ key: "file", label: t("job3.more.file"), icon: "camera" as const, testID: "job-act-file" }] : []),
+  ];
+  const more = (
+    <View ref={moreRef} collapsable={false} testID="job-more">
+      <IconButton
+        icon="more"
+        label={`${t("lead.more")}: ${title}`}
+        onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))}
+      />
+    </View>
+  );
+
   const details = (
     <>
-      <RowView style={{ flexWrap: "wrap" }}>
-        {next ? <Button label={t("job3.act.start")} icon="check" size="sm" variant="primary" onPress={() => router.push(`/visit/${next.id}`)} /> : null}
-        {next ? <Button label={t("job3.act.enRoute")} icon="navigate" size="sm" variant="secondary" onPress={enRoute} /> : null}
-        {openInvoice ? (
-          <Button label={t("job3.act.pay")} icon="dollar" size="sm" variant="secondary" onPress={() => router.push(`/invoice/${openInvoice.id}`)} />
-        ) : next && visitDueCents(db, next) > 0 ? (
-          <Button label={t("job3.act.pay")} icon="dollar" size="sm" variant="secondary" onPress={() => router.push(`/visit/${next.id}`)} />
-        ) : null}
-        <Button label={t("job3.act.note")} icon="note" size="sm" variant="secondary" onPress={() => setTab("history")} />
-        {next ? <Button label={t("job3.act.file")} icon="camera" size="sm" variant="secondary" onPress={() => router.push(`/visit/${next.id}`)} /> : null}
-      </RowView>
 
       {office && awaiting ? (
         // S10 (13 §3.4.1): the last visit is over — the office decides; the technician is never asked
@@ -166,7 +191,7 @@ export default function JobScreen() {
           </RowView>
         </Card>
       ) : null}
-      {office && j.status === "done" && rest > 0 && !restSent ? (
+      {restShown ? (
         <Button label={t("job3.done.invoiceRest", { amount: money(rest) })} icon="invoice" variant="primary" full onPress={invoiceRest} />
       ) : null}
 
@@ -186,11 +211,14 @@ export default function JobScreen() {
             {addr}
           </T>
         ) : null}
-        <RowView style={{ flexWrap: "wrap" }}>
-          {tel ? <Button label={t("client.call")} icon="phone" variant="secondary" size="sm" onPress={call} /> : null}
-          {tel ? <Button label={t("visit.message")} icon="sms" variant="secondary" size="sm" onPress={sms} /> : null}
-          {addr ? <Button label={t("jobs.route")} icon="route" variant="secondary" size="sm" onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`)} /> : null}
-        </RowView>
+        {/* Позвонить · Написать · Маршрут — round tiles with a word, as on the client's card (#1343, #1474) */}
+        {tel || addr ? (
+          <View testID="job-contact" style={{ flexDirection: "row", gap: space[2], maxWidth: wide ? component.panelW : undefined }}>
+            {tel ? <ActionTile testID="job-call" icon="phone" label={t("client.call")} onPress={call} /> : null}
+            {tel ? <ActionTile testID="job-write" icon="sms" label={t("visit.message")} onPress={sms} /> : null}
+            {addr ? <ActionTile testID="job-route" icon="route" label={t("jobs.route")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`)} /> : null}
+          </View>
+        ) : null}
       </Card>
 
       {p?.accessNotes || (p?.gateCode && gate) ? (
@@ -391,7 +419,7 @@ export default function JobScreen() {
       {/* the note goes into this history (one list, 17-job §7.1): only the field here, no second list */}
       <RowView>
         <View style={{ flex: 1 }}>
-          <TextField type="note" value={noteText} onChangeText={setNoteText} placeholder={t("notes.placeholder")} />
+          <TextField type="note" autoFocus={focusNote} value={noteText} onChangeText={setNoteText} placeholder={t("notes.placeholder")} />
         </View>
         <Button label={t("notes.add")} icon="send" size="sm" variant="secondary" disabled={!noteText.trim()} onPress={addNote} />
       </RowView>
@@ -399,13 +427,29 @@ export default function JobScreen() {
   );
 
   return (
-    <Screen testID="job-screen" title={title} back={back} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")} fab="job" fabCtx={servable ? { jobId: j.id, customerId: c?.id, propertyId: p?.id } : {}}>
+    <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")} fab="job" fabCtx={servable ? { jobId: j.id, customerId: c?.id, propertyId: p?.id } : {}}>
       <RelatedBlock of={{ type: "job", id: j.id }} />
+      {/* #1474: one next step for the whole card, above the tabs (DS §7.3, §12.3); the rest — in «⋯» */}
+      {mainStep ? (
+        <RowView style={{ alignSelf: wide ? "flex-start" : "stretch" }}>
+          <View testID="job-main" style={{ flex: wide ? undefined : 1 }}>
+            <Button label={t(mainStep.label)} icon={mainStep.icon} variant="primary" full={!wide} onPress={mainStep.onPress} />
+          </View>
+          {enRouteShown ? (
+            <View testID="job-enroute">
+              <Button label={t("job3.more.enRoute")} icon="navigate" variant="secondary" onPress={enRoute} />
+            </View>
+          ) : null}
+        </RowView>
+      ) : null}
       <Segmented
         full
         testID="job-tab"
         value={tab}
-        onChange={setTab}
+        onChange={(k) => {
+          setFocusNote(false);
+          setTab(k);
+        }}
         items={[
           { key: "details", label: t("job3.tab.details") },
           { key: "money", label: t("job3.tab.money") },
@@ -415,6 +459,23 @@ export default function JobScreen() {
       {tab === "details" ? details : tab === "money" ? moneyTab : historyTab}
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={title}
+        items={moreItems}
+        onSelect={(k) => {
+          setMoreAt(null);
+          if (k === "enRoute") enRoute();
+          else if (k === "pay" && payTo) router.push(payTo as never);
+          else if (k === "note") {
+            setFocusNote(true);
+            setTab("history");
+          }
+          else if (k === "file" && next) router.push(`/visit/${next.id}`);
+        }}
+        onClose={() => setMoreAt(null)}
+      />
     </Screen>
   );
 }
