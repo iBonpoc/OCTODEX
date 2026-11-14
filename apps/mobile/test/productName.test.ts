@@ -32,9 +32,11 @@ describe("the visible name — GoRix", () => {
       expect(read(f), f).not.toMatch(/"OCTODEX"|OCTODEX v|Open OCTODEX|Abre OCTODEX|Откройте OCTODEX/);
     }
   });
-  it("the identifiers stay (layers 2–3): the bundle id and the old link scheme", () => {
+  it("layer 2 (#656): the app is com.gorix.app with the gorix:// scheme; layer 3 stays (slug, owner, projectId)", () => {
     const app = JSON.parse(read("app.json")).expo;
-    expect(app.ios.bundleIdentifier).toBe("com.octodex.app");
-    expect(app.scheme).toContain("octodex");
+    expect(app.ios.bundleIdentifier).toBe("com.gorix.app");
+    expect(app.android.package).toBe("com.gorix.app");
+    expect(app.scheme).toBe("gorix");
+    expect(app.slug).toBe("octodex");
   });
 });
