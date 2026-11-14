@@ -8,6 +8,7 @@
  * The cloud side is db T133 and unit stripeRefundFn / refundApp; the demo mutation never runs in the cloud (refundApp).
  * Money reads as the app writes it: whole dollars without cents ($240), else with them.
  */
+const { rcptAct, rcptHas } = require("../receiptMenu.cjs");
 const TEN = /\$10(\.00)?(?!\d)/;
 exports.run = async (h) => {
   const p = h.page;
@@ -19,9 +20,8 @@ exports.run = async (h) => {
   const dollars = (pay.amountCents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 });
 
   await h.go(`/receipt/${pay.id}`);
-  const open = p.getByTestId("rcpt-refund").locator("visible=true").first();
-  await open.waitFor({ timeout: 5000 });
-  await open.getByRole("button").click();
+  // «Вернуть деньги…» is the last item of «⋯» (#1474): the entry only, the sheet below asks and confirms as before
+  await rcptAct(p, "refund");
   const sheet = h.sheet();
   await sheet.getByTestId("refund-form").waitFor({ timeout: 5000 });
   const st = await sheet.innerText();
@@ -72,6 +72,6 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/receipt/${pay.id}`);
   await p.getByTestId("rcpt-refunded").locator("visible=true").first().waitFor({ timeout: 5000 });
-  h.expect((await p.getByTestId("rcpt-refund").count()) === 0, "a tech has no «Вернуть деньги»");
+  h.expect(!(await rcptHas(p, "refund")), "a tech has no «Вернуть деньги»");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };
