@@ -20,6 +20,8 @@ exports.run = async (h) => {
   await tid("module-gutters-bench").getByRole("button").click();
   await p.waitForURL(/\/module\/gutters\/bench$/, { timeout: 5000 });
   await tid("bench-drawing").waitFor({ timeout: 8000 });
+  // the route hides the bar (ModuleDef.fullScreen, #1426) after its first frame: wait for it to be gone, not one look
+  await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="tab-bar"]')].some((el) => el.getBoundingClientRect().width > 0), null, { timeout: 5000 });
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the bench");
 
   const svg = p.getByTestId("bench-drawing").locator("svg").first();
