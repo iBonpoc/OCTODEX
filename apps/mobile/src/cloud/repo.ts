@@ -17,7 +17,7 @@ import { visitPayment } from "@octo/estimating-engine";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
 import { isContractKind } from "@/features/contractInvoice";
 import { posFromRows } from "@/features/purchaseOrderRows";
-import type { CostHistoryEntry, PriceHistoryEntry } from "@/data/types";
+import type { CostHistoryEntry, Photo, PriceHistoryEntry } from "@/data/types";
 import { priceHistoryFromRow } from "@/features/catalogCard";
 
 type Row = Record<string, unknown>;
@@ -147,7 +147,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("payments"),
       // wave П-1: customer_id is new — on a database without the migration read the old columns (preview of a PR)
       // a server before M5d has no measurement_id / element_id; before wave П-1 no customer_id
-      live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at")
+      // upload_status (#1431): a photo the cloud refused is shown so on every phone; a server without it reads as before
+      live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at, upload_status")
+        .catch(() => live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at"))
         .catch(() => live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at"))
         .catch(() => live<Row>("files", "id, visit_id, job_id, stage, storage_key, kind, created_at")),
       live<Row>("expenses"),
@@ -428,7 +430,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         photoMins: photoMinsFromDb(v.checklist_min_photos_before, v.checklist_min_photos_after),
         photos: files
           .filter((f) => f.visit_id === v.id && f.kind === "photo")
-          .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),
+          .map((f): Photo => ({
+            id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined,
+            // the server knows only «failed», not why: the phone that sent it keeps its reason (keepPhotoLocal)
+            ...(f.upload_status === "failed" ? { upload: { failed: "refused" as const, at: s(f.created_at) } } : {}),
+          })),
         // what a payment on this visit takes — the server's rule (record_visit_payment, #757 A-17): the final invoice's
         // balance, or what is not yet billed (a deposit off); not the whole contract. Sent invoices only, as the server and the
         // invoice list read them (a draft is not billed)

@@ -74,7 +74,7 @@ const none = () => [];
  * phone cannot tell — the confirmation says how many changes leave with it). Ids it only changes or refers to — not.
  */
 const CREATES: Creates = {
-  "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "visit.checklist": none, "visit.sign": none,
+  "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "photo.retry": none, "visit.checklist": none, "visit.sign": none,
   "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.item.edit": none, "chk.visit.review": none, "chk.visit.mins": none,
   "chk.template.save": (o) => [o.template.id], "est.template.save": (o) => [o.template.id], "company.visitSettings": none,
   "supplier.save": (o) => [o.supplier.id],
