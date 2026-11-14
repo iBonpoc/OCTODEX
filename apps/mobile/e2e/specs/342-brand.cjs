@@ -3,7 +3,7 @@
  * - an address the app does not have: «Страницы нет» with the GR mark (its dot ink: the screen has a yellow button) and «На главную» — no silent redirect;
  * - Настройки → «О приложении»: the logo and «Версия … · сборка …»;
  * - from 820 the side menu has the mark on top, it opens Настройки; the phone has no side menu, so no mark;
- * - the showcase section «Бренд»: the marks, the logo, the three moves (still: e2e run with reduced motion);
+ * - the showcase section «Бренд»: the marks, the logo, the launch and the dot's moves (still: e2e run with reduced motion);
  * - the page before the JS has the mark and the theme's background, not a white page.
  */
 exports.run = async (h) => {
@@ -44,7 +44,7 @@ exports.run = async (h) => {
 
   // the showcase
   await h.go("/settings/design-system/brand");
-  for (const id of ["showcase-brand-mark-24", "showcase-brand-mark-48", "showcase-brand-logo", "showcase-brand-quick", "showcase-brand-wait", "showcase-brand-intro"]) {
+  for (const id of ["showcase-brand-mark-24", "showcase-brand-mark-48", "showcase-brand-logo", "showcase-brand-launch", "showcase-brand-wait", "showcase-brand-intro"]) {
     await vis(id).waitFor({ timeout: 5000 });
   }
   await vis("showcase-brand-replay").getByRole("button").click();
@@ -53,11 +53,9 @@ exports.run = async (h) => {
   await h.go("/settings/design-system");
   await vis("showcase-row-brand").waitFor({ timeout: 5000 });
 
-  // the boot layer ran and left (#1046): the first launch marked the intro as shown for this version; with the app up
-  // nothing of it stays under the shell (no loop behind the app)
-  const seen = await p.evaluate(() => localStorage.getItem("octo.brand.seen.v1"));
-  h.expect(/^"?\d+\.\d+\.\d+"?$/.test(seen || ""), `the intro is marked as shown for this version (${seen})`);
-  for (const id of ["boot-brand", "boot-still", "boot-intro", "boot-quick", "boot-wait"]) h.expect((await p.getByTestId(id).count()) === 0, `${id}: gone once the app is up`);
+  // the boot layer ran and left (#1046, #1394 — the launch itself: e2e 380): with the app up nothing of it stays
+  // under the shell (no loop behind the app)
+  for (const id of ["boot-brand", "boot-still", "boot-layer", "boot-leaving", "boot-wait"]) h.expect((await p.getByTestId(id).count()) === 0, `${id}: gone once the app is up`);
 
   // before the JS: the HTML already has the mark on the theme's background (#1046 — never a white page)
   const html = await (await p.request.get(new URL("/", p.url()).toString())).text();
