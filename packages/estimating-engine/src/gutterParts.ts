@@ -158,12 +158,8 @@ export interface MeasurementInput {
 /** Company rules (spec П4, П18.10). Every value is a company setting with this default. */
 export interface GutterRules {
   storyHeightIn: number;
-  /** how the waste of the gutter purchase is counted (#1355, founder 13.11: «10% это очень много, на 300 фит мне не надо 30 фит запас. Обычно я беру 10 фит запас на любой объём»): a fixed length (`wasteFt`) or a percent (`wastePct`) */
-  wasteMode: "ft" | "pct";
-  /** a fixed waste, feet, for EVERY gutter stock (each coil or section line is bought with it); 0 — no waste. Only in `wasteMode: "ft"` */
+  /** a fixed waste, feet, for EVERY gutter stock (each coil or section line is bought with it); 0 — no waste (#1355, founder 14.11: «10 фит запас на каждый вид желоба»; a percent is not counted any more) */
   wasteFt: number;
-  /** waste for the purchase of the gutter (only): "0.10" = 10% (0..1); "0" — no waste. Only in `wasteMode: "pct"` */
-  wastePct: DecLike;
   /** extra gutter an INSIDE (and, until the founder says otherwise, a bay) field-cut corner uses, inches (a prefab corner uses none) */
   cutCornerAllowanceIn: number;
   /** extra gutter an OUTSIDE field-cut corner uses, inches (#1355, founder 13.11: «для наружного 14 инчей, для внутреннего 6»); a saved company without it gets the default */
@@ -231,9 +227,7 @@ export interface GutterRules {
 
 export const DEFAULT_GUTTER_RULES: GutterRules = {
   storyHeightIn: 120,
-  wasteMode: "ft",
   wasteFt: 10,
-  wastePct: "0.10",
   cutCornerAllowanceIn: 6,
   cutCornerOutAllowanceIn: 14,
   dsStickIn: 120,
@@ -309,7 +303,6 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   for (const k of POSITIVE) if (!okPos(r[k])) (r as unknown as Record<string, unknown>)[k] = d[k];
   if (typeof r.hangerAtEnds !== "boolean") r.hangerAtEnds = d.hangerAtEnds;
   if (!Number.isInteger(r.dsExtensionIn) || r.dsExtensionIn < 0) r.dsExtensionIn = 0;
-  if (r.wasteMode !== "ft" && r.wasteMode !== "pct") r.wasteMode = d.wasteMode;
   if (!Number.isInteger(r.wasteFt) || r.wasteFt < 0) r.wasteFt = d.wasteFt;
   if (!Number.isInteger(r.cutCornerAllowanceIn) || r.cutCornerAllowanceIn < 0) r.cutCornerAllowanceIn = d.cutCornerAllowanceIn;
   if (!Number.isInteger(r.cutCornerOutAllowanceIn) || r.cutCornerOutAllowanceIn < 0) r.cutCornerOutAllowanceIn = d.cutCornerOutAllowanceIn;
@@ -495,7 +488,6 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   };
   const runs = new Map(input.runs.map((r) => [r.id, r]));
   const corners = new Map(input.corners.map((c) => [c.id, c]));
-  const waste = dec(1).add(dec(rules.wastePct));
 
   /* joints: rivets by metal and color, sealant or solder points, touch-up colors */
   const sealantPts = new Map<string, number>();
@@ -750,9 +742,9 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
 
   // purchase: gutter stock with corner allowance and waste, whole feet (seamless coil) or sections.
   // Waste (#1355, founder 14.11: «на каждый вид желоба берём 10 фит запас»): a FIXED length for every stock (profile, size, material, gauge, colour — each coil or
-  // section line); 0 — none. A percent of every stock is the old way (`wasteMode: "pct"`): the app does not offer it any more, saved settings are not read as one.
+  // section line); 0 — none.
   for (const { stock, inches: base } of purchaseIn.values()) {
-    const inches = rules.wasteMode === "pct" ? base.mul(waste) : base.add(dec(rules.wasteFt).mul(12));
+    const inches = base.add(dec(rules.wasteFt).mul(12));
     const attrs = stockAttrs(stock);
     if (rules.seamless) {
       const blank = rules.coilBlankIn[`${stock.profile}.${stock.size}`];

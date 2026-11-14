@@ -473,7 +473,7 @@ describe("bad input never gives Infinity or negative parts", () => {
     expect(q(one({ lengthIn: 479.6 }).parts, "gutter.k.6.alu_032.white")).toBe("40");
   });
   it("undefined in an override keeps the default", () => {
-    expect(q(one({}, [], { wastePct: undefined, wasteFt: undefined, wasteMode: undefined, dsStickIn: undefined }).parts, "coil.k.6.alu_032.white")).toBe("50");
+    expect(q(one({}, [], { wasteFt: undefined, dsStickIn: undefined }).parts, "coil.k.6.alu_032.white")).toBe("50");
   });
   it("purchaseQty refuses a negative quantity; downspoutSticks a bad stick", () => {
     expect(() => purchaseQty(-1, 10)).toThrow();
@@ -624,9 +624,7 @@ describe("#1355: waste (a fixed length for every stock) and the allowance of a f
   });
   type Over = Parameters<typeof computeGutterParts>[1];
   const coil = (i: MeasurementInput, over?: Over) => q(computeGutterParts(i, over).parts, "coil.k.6.alu_032.white");
-  const PCT: Over = { wasteMode: "pct", wastePct: "0.10" };
   it("defaults: a fixed 10 ft of waste, an outside corner 14″, an inside corner 6″", () => {
-    expect(DEFAULT_GUTTER_RULES.wasteMode).toBe("ft");
     expect(DEFAULT_GUTTER_RULES.wasteFt).toBe(10);
     expect(DEFAULT_GUTTER_RULES.cutCornerOutAllowanceIn).toBe(14);
     expect(DEFAULT_GUTTER_RULES.cutCornerAllowanceIn).toBe(6);
@@ -635,17 +633,11 @@ describe("#1355: waste (a fixed length for every stock) and the allowance of a f
     const len = (n: number): MeasurementInput => ({ runs: [run({ id: "1", lengthIn: n * 12 })], corners: [], downspouts: [] });
     expect(coil(len(40))).toBe("50");
     expect(coil(len(300))).toBe("310");
-    expect(coil(len(300), PCT)).toBe("330"); // a percent is still a choice: 300 ft × 1.10
   });
   it("an outside cut corner takes 14″, an inside one 6″, a bay 6″ (480″ of gutter + 10 ft of waste)", () => {
     expect(coil(corner("out"))).toBe("52"); // (480 + 14 + 120) / 12 = 51.17
     expect(coil(corner("in"))).toBe("51"); // (480 + 6 + 120) / 12 = 50.5
     expect(coil(corner("bay"))).toBe("51");
-  });
-  it("the same with a percent (the old way): 46 / 45 / 45 feet", () => {
-    expect(coil(corner("out"), PCT)).toBe("46"); // (480 + 14) × 1.10 / 12 = 45.28
-    expect(coil(corner("in"), PCT)).toBe("45");
-    expect(coil(corner("bay"), PCT)).toBe("45");
   });
   it("a strip corner takes the same allowance by kind; a ready-made corner takes none, whatever its kind", () => {
     expect(coil(corner("out", "strip"))).toBe("52");
@@ -659,10 +651,9 @@ describe("#1355: waste (a fixed length for every stock) and the allowance of a f
     expect(coil(corner("in"), { cutCornerOutAllowanceIn: 24 })).toBe("51");
     expect(coil(corner("in"), { cutCornerAllowanceIn: 24 })).toBe("52"); // (480 + 24 + 120) / 12 = 52
   });
-  it("«Без запаса»: 0 ft (or 0 %) — the purchase is the installed length plus the corners, whole feet; the client's line never had waste", () => {
+  it("«Без запаса»: 0 ft — the purchase is the installed length plus the corners, whole feet; the client's line never had waste", () => {
     expect(coil(corner("out"), { wasteFt: 0 })).toBe("42"); // (480 + 14) / 12 = 41.17
     expect(coil(corner("out", "prefab"), { wasteFt: 0 })).toBe("40");
-    expect(coil(corner("out"), { wasteMode: "pct", wastePct: "0" })).toBe("42");
     const { parts } = computeGutterParts(corner("out"), { wasteFt: 0 });
     expect(q(parts, "gutter.k.6.alu_032.white")).toBe("40");
     expect(computeGutterParts(corner("out")).parts.find((p) => p.key === "gutter.k.6.alu_032.white")!.qty).toBe("40"); // the estimate line is the same with and without waste
@@ -677,11 +668,9 @@ describe("#1355: waste (a fixed length for every stock) and the allowance of a f
     expect(q(none, "coil.k.6.alu_032.black")).toBe("20");
     expect(q(none, "coil.k.5.alu_032.white")).toBe("20");
   });
-  it("waste is on the gutter only: hangers, caps, screws, rivets and sticks do not change with it, in either mode", () => {
+  it("waste is on the gutter only: hangers, caps, screws, rivets and sticks do not change with it", () => {
     const keysOf = (over?: Over) => computeGutterParts(corner("out"), over).parts.filter((p) => !p.key.startsWith("coil.")).map((p) => `${p.key}=${p.qty}`).sort();
     expect(keysOf({ wasteFt: 0 })).toEqual(keysOf({ wasteFt: 50 }));
-    expect(keysOf(PCT)).toEqual(keysOf({ wasteMode: "pct", wastePct: "0.50" }));
-    expect(keysOf(PCT)).toEqual(keysOf({ wasteFt: 10 }));
   });
   it("sectional gutters take the same waste in sections: (480 + 120) / 120 = 5", () => {
     const sec = (over?: Over) => q(computeGutterParts(corner("out", "prefab"), { seamless: false, ...over }).parts, "section.k.6.alu_032.white");
@@ -692,9 +681,9 @@ describe("#1355: waste (a fixed length for every stock) and the allowance of a f
     const r = resolveGutterRules({ cutCornerAllowanceIn: 9 });
     expect(r.cutCornerOutAllowanceIn).toBe(14);
     expect(r.cutCornerAllowanceIn).toBe(9);
-    expect(r).toMatchObject({ wasteMode: "ft", wasteFt: 10 });
+    expect(r).toMatchObject({ wasteFt: 10 });
     expect(resolveGutterRules({ cutCornerOutAllowanceIn: -1 }).cutCornerOutAllowanceIn).toBe(14); // not a number of inches: the default
     expect(resolveGutterRules({ cutCornerOutAllowanceIn: 20 }).cutCornerOutAllowanceIn).toBe(20);
-    expect(resolveGutterRules({ wasteMode: "yards" as never, wasteFt: -3 })).toMatchObject({ wasteMode: "ft", wasteFt: 10 }); // nonsense is the default
+    expect(resolveGutterRules({ wasteFt: -3 })).toMatchObject({ wasteFt: 10 }); // nonsense is the default
   });
 });

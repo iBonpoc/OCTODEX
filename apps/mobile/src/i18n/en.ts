@@ -3205,7 +3205,7 @@ export const en: Dict = {
   "mod.gutters.set.r.cutCornerOutIn": "An outside corner takes gutter",
   "mod.gutters.set.r.cutCornerIn": "An inside corner (and a bay) takes gutter",
   "mod.gutters.set.r.wasteFtHint": "For every kind of gutter (a coil: profile, size, metal, colour) this many feet are bought on top: 10 ft on 40 ft and on 300 ft alike.",
-  "mod.gutters.set.r.wastePct": "Waste",
+  "mod.gutters.set.r.wasteFt": "Waste",
   "mod.gutters.set.r.corner": "Corners by default",
   "mod.gutters.set.r.seamless": "Gutter",
   "mod.gutters.set.r.seamlessYes": "Seamless (from coil)",

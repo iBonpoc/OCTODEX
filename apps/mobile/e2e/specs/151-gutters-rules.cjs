@@ -76,9 +76,11 @@ exports.run = async (h) => {
   await waitFor(async () => (await settings()).rules?.wasteFt === 11, "waste 11 ft saved");
   await tid("gset-rule-wasteOn").getByRole("switch").click();
   await waitFor(async () => (await settings()).rules?.wasteFt === 0, "«Считать запас» off: 0 ft saved");
+  await waitFor(async () => (await settings()).rules?.wastePct === 0, "…and the old field too (rule 16: a phone with the old app buys the same)");
   await waitFor(async () => (await tid("gset-rule-wasteFt").count()) === 0, "…and the number goes away");
   await tid("gset-rule-wasteOn").getByRole("switch").click();
   await waitFor(async () => (await settings()).rules?.wasteFt === 11, "on again: the 11 ft the company had, not the default");
+  await waitFor(async () => (await settings()).rules?.wastePct === 10, "…and the old field is back to its default 10 %");
   // the corner allowance by kind: an outside corner 14″, an inside one 6″
   h.expect(/14/.test(await tid("gset-rule-cutCornerOutIn").innerText()) && /6/.test(await tid("gset-rule-cutCornerIn").innerText()), "an outside corner 14″, an inside one 6″ by default");
   await tid("gset-rule-cutCornerOutIn").getByRole("button", { name: /\+1$/ }).click();

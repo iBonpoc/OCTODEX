@@ -3205,7 +3205,7 @@ export const es: Dict = {
   "mod.gutters.set.r.cutCornerOutIn": "Una esquina exterior usa canaleta",
   "mod.gutters.set.r.cutCornerIn": "Una esquina interior (y un mirador) usa canaleta",
   "mod.gutters.set.r.wasteFtHint": "Por cada tipo de canaleta (una bobina: perfil, tamaño, metal, color) se compran tantos pies de más: 10 pies en 40 y en 300 pies por igual.",
-  "mod.gutters.set.r.wastePct": "Desperdicio",
+  "mod.gutters.set.r.wasteFt": "Desperdicio",
   "mod.gutters.set.r.corner": "Esquinas por defecto",
   "mod.gutters.set.r.seamless": "Canaleta",
   "mod.gutters.set.r.seamlessYes": "Sin costura (de bobina)",

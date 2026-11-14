@@ -3205,7 +3205,7 @@ export const ru = {
   "mod.gutters.set.r.cutCornerOutIn": "Наружный угол берёт желоба",
   "mod.gutters.set.r.cutCornerIn": "Внутренний угол (и эркер) берёт желоба",
   "mod.gutters.set.r.wasteFtHint": "На каждый вид желоба (рулон: профиль, размер, металл, цвет) докупается столько футов сверху: 10 ft на 40 ft и на 300 ft одинаково.",
-  "mod.gutters.set.r.wastePct": "Запас на отход",
+  "mod.gutters.set.r.wasteFt": "Запас на отход",
   "mod.gutters.set.r.corner": "Углы по умолчанию",
   "mod.gutters.set.r.seamless": "Желоб",
   "mod.gutters.set.r.seamlessYes": "Бесшовный (из рулона)",

@@ -182,9 +182,16 @@ export default function GutterSettingsScreen() {
   // the field's testID: «gset-ds-style» for dsStyle (the others are «gset-ds-<key>»)
   const setDs = (key: string, v: unknown) => put(`gset-ds-${key === "dsStyle" ? "style" : key}`, ["ds", key], v);
   const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
-  const setRule = (key: string, v: unknown) => put(`gset-rule-${key}`, ["rules", key], v);
+  const setRule = (key: string, v: unknown) => {
+    // rule 16, step 1: write the old field too, so a phone with the old app does not buy differently: «без запаса» is the old `wastePct: 0`; on again — the old default 10 %
+    if (key === "wasteFt") {
+      const old = (raw as { rules?: { wastePct?: unknown } } | undefined)?.rules?.wastePct;
+      const next = setPath(raw, ["rules", "wasteFt"], v);
+      return save(v === 0 ? setPath(next, ["rules", "wastePct"], 0) : old === 0 ? setPath(next, ["rules", "wastePct"], 10) : next, "gset-rule-wasteFt");
+    }
+    return put(`gset-rule-${key}`, ["rules", key], v);
+  };
   /** a number rule as a stepper: its unit, range and step (spec П4) */
-  // the percent the company had before «без запаса»: switching it on again brings it back (in this visit; the stored value is 0 meanwhile)
   // the feet the company had before «без запаса»: switching it on again brings them back (in this visit; the stored value is 0 meanwhile)
   const lastWaste = useRef<number>(RULE_NUMS.wasteFt.def);
   if (rules.wasteFt > 0) lastWaste.current = rules.wasteFt;
@@ -344,7 +351,7 @@ export default function GutterSettingsScreen() {
             {rules.wasteFt > 0 ? (
               <>
                 <Step testID="gset-rule-wasteFt">
-                  <Stepper label={t(k("r.wastePct"))} unit={t(k("ft"))} value={rules.wasteFt} min={1} max={RULE_NUMS.wasteFt.max} step={RULE_NUMS.wasteFt.step} onChange={(v) => setRule("wasteFt", v)} />
+                  <Stepper label={t(k("r.wasteFt"))} unit={t(k("ft"))} value={rules.wasteFt} min={1} max={RULE_NUMS.wasteFt.max} step={RULE_NUMS.wasteFt.step} onChange={(v) => setRule("wasteFt", v)} />
                 </Step>
                 <T v="caption" tone="mut">{t(k("r.wasteFtHint"))}</T>
               </>
