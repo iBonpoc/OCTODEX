@@ -66,9 +66,25 @@ describe("unit:gutterBlueprint — the drawing as on paper", () => {
       expect(y).toBeLessThanOrEqual(s.h);
     }
     const all = texts(s.items);
-    expect(all).toEqual(expect.arrayContaining(["Test Gutters LLC", "4512 Ventura Canyon Ave", "11/10/2026", t("mod.gutters.view.rough")]));
+    expect(all).toEqual(expect.arrayContaining(["Test Gutters LLC", "4512 Ventura Canyon Ave", "11/10/2026", t("mod.gutters.sheet.accuracy"), t("mod.gutters.sheet.approx")]));
     expect(all.some((x) => x.startsWith("Масштаб:"))).toBe(true);
-    expect(texts(blueprint(d, t, { ...stamp, rough: false }).items)).toContain(t("mod.gutters.sheet.tape"));
+    const taped = texts(blueprint(d, t, { ...stamp, rough: false }).items);
+    expect(taped).toContain(t("mod.gutters.sheet.accuracy"));
+    expect(taped).not.toContain(t("mod.gutters.sheet.approx"));
+  });
+  it("#768: one accuracy note on every sheet, taped or not, in every language — never «ready to cut»", () => {
+    for (const lang of ["en", "es", "ru"] as const) {
+      const tl = tFor(lang);
+      for (const rough of [true, false]) {
+        const all = texts(blueprint(d, tl, { ...stamp, rough }).items);
+        expect(all).toContain(tl("mod.gutters.sheet.accuracy"));
+        expect(tl("mod.gutters.sheet.accuracy")).toContain("1–3″");
+        // the stamp row fits the narrow estimate page (the same 0.6-em width guess as the sheet's own)
+        expect(Array.from(tl("mod.gutters.sheet.accuracy")).length * DP.fontSm * 0.6).toBeLessThanOrEqual(DP.pageW - 2 * DP.margin);
+      }
+    }
+    expect(tFor("ru")("mod.gutters.sheet.accuracy")).toBe("Чертёж с точностью 1–3″, бригада перемеряет на месте");
+    expect(tFor("en")("mod.gutters.sheet.accuracy")).toBe("Drawing accurate to 1–3″; crew re-measures on site");
   });
 
   it("no prices on the sheet", () => {

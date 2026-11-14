@@ -69,6 +69,12 @@ describe("the drawing as a PDF", () => {
     expect(make("crew", "en", true)).toContain("measure again before cutting");
     expect(make("crew", "en", false)).not.toContain("measure again before cutting");
   });
+  it("#768: both PDFs say the drawing is accurate to 1–3″ and the crew re-measures — taped or not, in the document's language", () => {
+    for (const kind of ["client", "crew"] as const) for (const lang of ["en", "es", "ru"] as const) for (const rough of [true, false]) {
+      expect(make(kind, lang, rough)).toContain(tFor(lang)("mod.gutters.sheet.accuracy"));
+    }
+    expect(make("client", "en", false)).not.toMatch(/ready to cut|can be cut/i);
+  });
   it("a text a person typed is escaped", () => {
     const h = drawingPdfHtml({ kind: "client", drawing: d, spec, t: tFor("en"), opts: { lang: "en" }, company, who: "<b>x</b>", rough: false, date: "11/10/2026" });
     expect(h).not.toContain("<b>x</b>");

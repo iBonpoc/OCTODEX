@@ -461,8 +461,8 @@ export function blueprint(d: Drawing, t: Tr, stamp: SheetStamp, width: number = 
     label(q[0], q[1], s, DP.fontSm);
   }
 
-  // the title block, a row each (a phone is narrow): company, address, how it was measured; the date and the scale bar
-  const rows = [stamp.company && { s: stamp.company, fs: DP.font }, stamp.address && { s: stamp.address, fs: DP.fontSm }, { s: t(stamp.rough ? "mod.gutters.view.rough" : "mod.gutters.sheet.tape"), fs: DP.fontSm }].filter(Boolean) as { s: string; fs: number }[];
+  // the title block, a row each (a phone is narrow): company, address, one accuracy note for every drawing (#768: 1–3″, the crew re-measures), «approximate» when it was not taped; the date and the scale bar
+  const rows = [stamp.company && { s: stamp.company, fs: DP.font }, stamp.address && { s: stamp.address, fs: DP.fontSm }, { s: t("mod.gutters.sheet.accuracy"), fs: DP.fontSm }, stamp.rough && { s: t("mod.gutters.sheet.approx"), fs: DP.fontSm }].filter(Boolean) as { s: string; fs: number }[];
   let y = stampY + DP.font * 1.5;
   for (const r of rows) {
     text(m, y, r.s, r.fs, "start");

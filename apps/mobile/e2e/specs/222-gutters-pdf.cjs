@@ -94,6 +94,7 @@ exports.run = async (h) => {
   h.expect(c.includes("<svg"), "the client's PDF has the drawing");
   h.expect(c.includes("Gutter drawing") && c.includes("Length"), "in the client's language (the company's: en)");
   h.expect(!/\$\s?\d/.test(c), "no prices for the client");
+  h.expect(c.includes("accurate to 1–3″") && c.includes("crew re-measures"), "the accuracy note, in the client's language (#768)");
   h.expect(!c.includes("At the face") && !c.includes("По лицевой"), "no cut for the client");
 
   // for the crew
