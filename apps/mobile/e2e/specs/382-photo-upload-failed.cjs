@@ -52,10 +52,26 @@ exports.run = async (h) => {
   await h.go(`/visit/${v.id}`);
   await vis("photo-upload-failed").waitFor({ timeout: 10000 });
   const note = await vis("photo-upload-failed").innerText();
-  h.expect(note.includes("Не загрузились в облако: 3") && note.includes("нажмите на фото"), `the strip: how many, and to tap a photo (${note})`);
+  h.expect(note.includes("Не загрузились в облако: 3") && note.includes("нажмите"), `the strip: how many, and to tap (${note})`);
   h.expect((await vis("photo-upload-failed-icon").count()) === 1, "the status is an icon and words (rule 2)");
   h.expect(/не загрузилось/.test((await vis("photo-thumb-e382-far").getAttribute("aria-label")) ?? ""), "the thumbnail says it to a screen reader");
   await h.shot("strip");
+
+  // the note is the way in (no mark on a thumbnail): it opens the first refused photo; «Следующее» pages through them only
+  await vis("photo-upload-failed-open").click();
+  const reason = h.sheet().getByTestId("photo-upload-reason");
+  const next = h.sheet().getByTestId("photo-upload-next");
+  await reason.waitFor({ timeout: 5000 });
+  h.expect((await reason.innerText()).includes("Облако не приняло фото.") && (await next.innerText()).includes("1 из 3"), "the note opens the first refused photo");
+  await next.click();
+  await p.waitForFunction(() => /Следующее не загруженное · 2 из 3/.test(document.body.innerText), null, { timeout: 5000 });
+  h.expect((await reason.innerText()).includes("Файл больше 25 МБ"), "next: the too big one");
+  await next.click();
+  await p.waitForFunction(() => /Следующее не загруженное · 3 из 3/.test(document.body.innerText), null, { timeout: 5000 });
+  h.expect((await reason.innerText()).includes("Файл остался на телефоне"), "next: another phone's");
+  await next.click();
+  await p.waitForFunction(() => /Следующее не загруженное · 1 из 3/.test(document.body.innerText), null, { timeout: 5000 });
+  await pressEscUntilClosed(p);
 
   // refused on another phone: why, and that the file is there — nothing to send from here
   const far = await reasonOf("photo-thumb-e382-far");

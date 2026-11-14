@@ -49,6 +49,16 @@ describe("attention — photos the cloud did not take (#1431)", () => {
     const card = attentionPeople(db, all).find((p) => p.items.some((x) => x.kind === "photoFailed"))!;
     expect(card.customerId).toBe(c?.id);
   });
+  it("a lead without a client stays its own card (CLAUDE.md): a refused photo of its inspection is on the lead's card", () => {
+    const db = makeSeed();
+    const lead = db.leads.find((l) => !l.customerId)!;
+    const v = db.visits[0]!;
+    Object.assign(v, { jobId: undefined, propertyId: undefined, leadId: lead.id, kind: "inspection" });
+    v.photos = [{ id: "pl", kind: "before", uri: "file:///l.jpg", upload: { failed: "refused", at } }];
+    const card = attentionPeople(db, buildAttention(db, "director")).find((p) => p.items.some((x) => x.kind === "photoFailed"))!;
+    expect(card.key).toBe(`lead:${lead.id}`);
+    expect(card.customerId).toBeUndefined();
+  });
   it("a tech sees it too (the photos are theirs)", () => {
     const { db } = withFailed(1);
     expect(buildAttention(db, "tech").some((x) => x.kind === "photoFailed")).toBe(true);

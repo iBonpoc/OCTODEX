@@ -25,8 +25,13 @@ export function PhotoStrip({ photos, onAdd, onRemove, onRetry, title }: { photos
   const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
   const open = opened ? { ...opened, uri: liveUri(opened.uri) } : null;
   // #1431: photos the cloud did not take — said under the strip (StatusNote) and, with the reason, in the viewer
-  const failed = photos.filter((p) => p.upload).length;
+  const failedList = shown.filter((p) => p.upload);
+  const failed = failedList.length;
   const openFailed = open ? photos.find((p) => p.id === open.id)?.upload : undefined;
+  // without a mark on the thumbnail the note is the way in: it opens the first refused photo, and the viewer pages through
+  // the refused ones only (director 14.11, #1431 вариант А)
+  const failedAt = open ? failedList.findIndex((p) => p.id === open.id) : -1;
+  const nextFailed = failedAt >= 0 && failed > 1 ? failedList[(failedAt + 1) % failed] : undefined;
   // a second tap while the photo is being made smaller does nothing (no second picker, no photo twice)
   const busy = useRef(false);
   const pick = async () => {
@@ -110,6 +115,16 @@ export function PhotoStrip({ photos, onAdd, onRemove, onRetry, title }: { photos
             {!open.uri && openFailed.failed !== "gone" ? ` ${t("photoUp.otherPhone")}` : ""}
           </StatusNote>
         ) : null}
+        {nextFailed ? (
+          <Button
+            label={t("photoUp.next", { i: failedAt + 1, n: failed })}
+            icon="chevronRight"
+            variant="secondary"
+            full
+            testID="photo-upload-next"
+            onPress={() => setOpen(nextFailed)}
+          />
+        ) : null}
         {open && onRetry && canRetry({ ...open, upload: openFailed }) ? (
           <Button
             label={t("photoUp.retry")}
@@ -137,9 +152,17 @@ export function PhotoStrip({ photos, onAdd, onRemove, onRetry, title }: { photos
       </Sheet>
     </ScrollView>
     {failed ? (
-      <StatusNote tone="bad" testID="photo-upload-failed">
-        {t("photoUp.strip", { n: failed })}
-      </StatusNote>
+      <Press
+        onPress={() => setOpen(failedList[0]!)}
+        accessibilityRole="button"
+        accessibilityLabel={t("photoUp.strip", { n: failed })}
+        visibleHeight={size.iconSm}
+        testID="photo-upload-failed-open"
+      >
+        <StatusNote tone="bad" testID="photo-upload-failed">
+          {t("photoUp.strip", { n: failed })}
+        </StatusNote>
+      </Press>
     ) : null}
     </>
   );
