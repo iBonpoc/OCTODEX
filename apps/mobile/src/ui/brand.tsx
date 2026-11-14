@@ -3,6 +3,7 @@ import { View } from "react-native";
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from "react-native-reanimated";
 import Svg, { Circle, G, Path } from "react-native-svg";
 import { motion } from "@octo/design-tokens";
+import { APP_NAME } from "@/config/product";
 import { useTheme } from "@/theme/ThemeProvider";
 import { DOT, G_PATH, G_PLACE, GR_VIEW, LOGO_DOT, LOGO_LETTERS, LOGO_LETTERS_DX, LOGO_SHIFT, LOGO_VIEW, R_DX, R_PATH, dotTone, dotWay, gToMark, pointOnWay } from "./brandRules";
 
@@ -50,7 +51,7 @@ export function BrandMark({ size, screenHasPrimary = false, testID }: { size: nu
   const { c } = useTheme();
   const tone = useTone(size, screenHasPrimary);
   return (
-    <View testID={testID} accessibilityRole="image" accessibilityLabel="GoRix">
+    <View testID={testID} accessibilityRole="image" accessibilityLabel={APP_NAME}>
       <GrSvg h={size} ink={c.ink} tone={tone} dot />
     </View>
   );
@@ -62,7 +63,7 @@ export function BrandLogo({ width, testID, dot = true }: { width: number; testID
   const h = (width * LOGO_VIEW.h) / LOGO_VIEW.w;
   const tone = useTone(h, false);
   return (
-    <View testID={testID} accessibilityRole="image" accessibilityLabel="GoRix">
+    <View testID={testID} accessibilityRole="image" accessibilityLabel={APP_NAME}>
       <Svg width={width} height={h} viewBox={`${LOGO_VIEW.x} ${LOGO_VIEW.y} ${LOGO_VIEW.w} ${LOGO_VIEW.h}`}>
         <G transform={`translate(${LOGO_SHIFT.dx} ${LOGO_SHIFT.dy})`}>
           <G fill={c.ink}>
@@ -131,7 +132,7 @@ export function BrandWait({ size, testID }: { size: number; testID?: string }) {
   });
   const d = (2 * DOT.r * G_PLACE.k * size) / GR_VIEW.h;
   return (
-    <View testID={testID} accessibilityRole="progressbar" accessibilityLabel="GoRix" style={{ width: w, height: size }}>
+    <View testID={testID} accessibilityRole="progressbar" accessibilityLabel={APP_NAME} style={{ width: w, height: size }}>
       <GrSvg h={size} ink={c.ink} tone={tone} dot={false} />
       <MovingDot box={{ w, h: size }} d={d} tone={tone} style={style} />
     </View>
@@ -179,7 +180,7 @@ export function BrandIntro({ width, onDone, testID }: { width: number; onDone?: 
   });
   const d = (2 * DOT.r * G_PLACE.k * h) / LOGO_VIEW.h;
   return (
-    <View testID={testID} accessibilityRole="image" accessibilityLabel="GoRix" style={{ width, height: h }}>
+    <View testID={testID} accessibilityRole="image" accessibilityLabel={APP_NAME} style={{ width, height: h }}>
       <BrandLogo width={width} dot={false} />
       <MovingDot box={{ w: width, h }} d={d} tone={tone} style={style} />
     </View>

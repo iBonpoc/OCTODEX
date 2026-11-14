@@ -10,6 +10,8 @@ import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
 
+type Move = "launch" | "wait" | "intro" | null;
+
 /** the launch as the app does it (DS §18.2 «Запуск» v4.3, #1394): the still mark on the theme's bg, then it grows to
  *  `brandExitScale` and fades in `durBase` over «the first screen» (the same hook as the boot layer) */
 function LaunchDemo() {
@@ -19,12 +21,13 @@ function LaunchDemo() {
   const [gone, setGone] = useState(false);
   const onGone = useCallback(() => setGone(true), []);
   const leave = useBootLeave(leaving, onGone);
+  // the mark stands as long as the app holds it still before the wait would start
   useEffect(() => {
-    const id = setTimeout(() => setLeaving(true), motion.durBrandQuick);
+    const id = setTimeout(() => setLeaving(true), motion.durBrandHold);
     return () => clearTimeout(id);
   }, []);
   return (
-    <View testID="showcase-brand-launch" style={{ alignSelf: "stretch", height: component.brand.intro, alignItems: "center", justifyContent: "center" }}>
+    <View testID="showcase-brand-launch" style={{ width: component.brand.intro, height: component.brand.intro, alignItems: "center", justifyContent: "center" }}>
       <T v="body" tone="mut">
         {t("ds.brand.firstScreen")}
       </T>
@@ -42,8 +45,17 @@ function LaunchDemo() {
 /** «Бренд GoRix» (DS §18.2, #1156, #1394): the mark in its sizes and both dots, the logo, the launch and the dot's moves with «Проиграть» */
 export function BrandSection() {
   const { t } = useI18n();
-  // a new key remounts the moves: «Проиграть» plays them again from the start
+  // one move of the mark at a time (DS §18.2 п.6): «Проиграть» plays the launch, then the wait, then the logo; the
+  // others stand still meanwhile. A new run remounts the playing one from its start
+  const [play, setPlay] = useState<Move>(null);
   const [run, setRun] = useState(0);
+  useEffect(() => {
+    const next = play === "launch" ? { to: "wait" as const, ms: motion.durBrandHold + motion.durBase } : play === "wait" ? { to: "intro" as const, ms: 2 * motion.durBrand } : null;
+    if (!next) return;
+    const id = setTimeout(() => setPlay(next.to), next.ms);
+    return () => clearTimeout(id);
+  }, [play, run]);
+  const introDone = useCallback(() => setPlay(null), []);
   return (
     <View testID="showcase-brand" style={{ gap: space[3] }}>
       <T v="caption" tone="mut">
@@ -78,16 +90,38 @@ export function BrandSection() {
       </Card>
       <SectionTitle title={t("ds.brand.moves")} />
       <Card>
-        <View key={run} style={{ gap: space[4], alignItems: "center" }}>
-          <LaunchDemo />
+        <View style={{ gap: space[4], alignItems: "center" }}>
+          {play === "launch" ? (
+            <LaunchDemo key={run} />
+          ) : (
+            <View testID="showcase-brand-launch" style={{ width: component.brand.intro, height: component.brand.intro, alignItems: "center", justifyContent: "center" }}>
+              <BrandMark size={component.brand.wait} />
+            </View>
+          )}
           <T v="caption" tone="mut">{t("ds.brand.launch")}</T>
-          <BrandWait size={component.brand.wait} testID="showcase-brand-wait" />
+          {/* the wait as the app shows it: the mark and, always, its word under it */}
+          <View testID="showcase-brand-wait" style={{ alignItems: "center", gap: space[4] }}>
+            {play === "wait" ? <BrandWait key={run} size={component.brand.wait} /> : <BrandMark size={component.brand.wait} />}
+            <T v="body" tone="mut">
+              {t("brand.boot.loading")}
+            </T>
+          </View>
           <T v="caption" tone="mut">{t("ds.brand.wait")}</T>
-          <BrandIntro width={component.brand.intro} testID="showcase-brand-intro" />
+          <View testID="showcase-brand-intro">
+            {play === "intro" ? <BrandIntro key={run} width={component.brand.intro} onDone={introDone} /> : <BrandLogo width={component.brand.intro} />}
+          </View>
           <T v="caption" tone="mut">{t("ds.brand.intro")}</T>
         </View>
         <View testID="showcase-brand-replay">
-          <Button label={t("ds.brand.replay")} icon="refresh" variant="secondary" onPress={() => setRun((n) => n + 1)} />
+          <Button
+            label={t("ds.brand.replay")}
+            icon="refresh"
+            variant="secondary"
+            onPress={() => {
+              setRun((n) => n + 1);
+              setPlay("launch");
+            }}
+          />
         </View>
       </Card>
     </View>

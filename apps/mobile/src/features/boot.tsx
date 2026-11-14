@@ -108,7 +108,7 @@ function BootBrand({ words, leaving }: { words: boolean; leaving: boolean }) {
     >
       <View style={{ flex: 1 }} pointerEvents="none" />
       <View style={{ height: size, alignItems: "center" }} pointerEvents="none">
-        {stage === "still" || leaving ? (
+        {stage === "still" ? (
           <BrandMark size={size} testID="boot-still" />
         ) : (
           <BrandWait size={size} testID="boot-wait" />
@@ -120,8 +120,9 @@ function BootBrand({ words, leaving }: { words: boolean; leaving: boolean }) {
           style={{ alignItems: "center", paddingTop: space[4] }}
           pointerEvents="box-none"
         >
-          {/* the words wait for the fonts — but «Повторить» never does: fonts that never load must not leave a silent screen */}
-          {leaving ? null : stage === "failed" ? (
+          {/* the words wait for the fonts — but «Повторить» never does: fonts that never load must not leave a silent screen.
+              On the way out the mark, its dot and its words fade together with the layer — nothing snaps */}
+          {stage === "failed" ? (
             <View
               testID="boot-failed"
               style={{ alignItems: "center", gap: space[3] }}
