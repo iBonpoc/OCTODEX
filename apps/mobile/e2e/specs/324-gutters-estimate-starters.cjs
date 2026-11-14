@@ -41,6 +41,19 @@ exports.run = async (h) => {
   h.expect(/Замена желобов/.test(await tid("est-starter-gutters-replace").innerText()), "«Замена желобов»");
   await h.shot("starters");
 
+  // «Отменить» on the toast of the add (#1336): the template goes and the starter is offered again. The toast ignores a tap in its first
+  // toastArmMs (src/ui/toastArm.ts: the second tap of a double tap is not «Отменить») — a tap that came too early was lost without a word and
+  // the template stayed (the stop on main 04:26, e2e 324 @390 dark): tap again until the toast has taken it, never a fixed pause
+  await tid("est-starter-gutters-guards").getByRole("button", { name: /Добавить/ }).click();
+  await waitDb((d) => (d.estimateTemplates ?? []).length === 1, "the guards template is saved");
+  const gone = async () => ((await db()).estimateTemplates ?? []).filter((x) => !x.deletedAt).length === 0;
+  for (let i = 0; i < 30 && !(await gone()); i++) {
+    if (await tid("toast-undo").count()) await tid("toast-undo").click({ timeout: 2000 }).catch(() => {});
+    if (!(await gone())) await p.waitForFunction(() => new Promise((r) => setTimeout(() => r(true), 150)));
+  }
+  h.expect(await gone(), "«Отменить»: the guards template is taken back");
+  await tid("est-starter-gutters-guards").waitFor({ timeout: 8000 });
+
   // «Чистка»: the company's own template; the line's price is the price list's item's price
   await tid("est-starter-gutters-clean").getByRole("button", { name: /Добавить/ }).click();
   await waitDb((d) => (d.estimateTemplates ?? []).length === 1, "the template is saved");
@@ -55,11 +68,4 @@ exports.run = async (h) => {
   h.expect((await tid("est-starter-gutters-guards").count()) === 1, "the others still are");
   await h.shot("added");
 
-  // «Отменить» on the toast of the add: the template goes and the starter is offered again
-  await tid("est-starter-gutters-guards").getByRole("button", { name: /Добавить/ }).click();
-  await waitDb((d) => (d.estimateTemplates ?? []).length === 2, "the second template is saved");
-  await tid("toast-undo").click();
-  await waitDb((d) => (d.estimateTemplates ?? []).filter((x) => !x.deletedAt).length === 1, "«Отменить»: the guards template is taken back");
-  await tid("est-starter-gutters-guards").waitFor({ timeout: 8000 });
-  h.expect((await tid("est-starter-gutters-guards").count()) === 1, "…and the starter is offered again");
 };
