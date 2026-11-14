@@ -6,12 +6,12 @@
  */
 import { useLayoutEffect } from "react";
 import { View } from "react-native";
-import Animated, { useAnimatedProps, useDerivedValue, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedProps, useAnimatedReaction, useDerivedValue, useSharedValue } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { drawing } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import type { Live } from "./CanvasView";
-import { gridPaths, liveView } from "./grid";
+import { gridPaths, gridStepHyst, liveView } from "./grid";
 import type { View as PlanView } from "./scene";
 
 const APath = Animated.createAnimatedComponent(Path);
@@ -28,9 +28,19 @@ export function GridLayer({ view, live, size, minPx, testID }: { view: PlanView;
     ox.value = view.ox;
     oy.value = view.oy;
   }, [view, k, ox, oy]);
+  // the step, with a margin at its thresholds (#1477): a shaking hand at a threshold does not flip the fine lines every frame. A
+  // reaction, not the derived value below: the step must remember itself, and a derived value that reads what it writes runs again
+  const step = useSharedValue(0);
+  useAnimatedReaction(
+    () => k.value * s.value,
+    (kNow) => {
+      step.value = gridStepHyst(kNow, minPx, step.value);
+    },
+    [minPx],
+  );
   const paths = useDerivedValue(() => {
     const v = liveView(k.value, ox.value, oy.value, s.value, tx.value, ty.value, fx.value, fy.value);
-    return gridPaths(v.k, v.ox, v.oy, size.w, size.h, minPx);
+    return gridPaths(v.k, v.ox, v.oy, size.w, size.h, minPx, step.value);
   });
   const minor = useAnimatedProps(() => ({ d: paths.value.minor }));
   const major = useAnimatedProps(() => ({ d: paths.value.major }));

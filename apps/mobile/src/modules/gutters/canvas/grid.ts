@@ -18,13 +18,30 @@ export function gridStepIn(k: number, minPx: number): number {
   return GRID_STEPS_IN[GRID_STEPS_IN.length - 1]!;
 }
 
+/**
+ * The margin at a step's threshold (#1477, design-reviewer of #1476): the step follows the live scale on every frame, and a hand
+ * that shakes at the threshold flipped the fine lines on and off. A step stays until its cell is GRID_HYST times finer than `minPx`
+ * (then the next coarser one) or until a finer step is GRID_HYST times coarser than it (then that one). Away from a threshold it is
+ * `gridStepIn` itself.
+ */
+export const GRID_HYST = 1.25;
+
+export function gridStepHyst(k: number, minPx: number, prev: number): number {
+  "worklet";
+  if (!(prev > 0) || !(k > 0)) return gridStepIn(k, minPx);
+  if (prev * k < minPx / GRID_HYST) return gridStepIn(k, minPx); // too fine now: the step the scale wants
+  const finer = gridStepIn(k, minPx * GRID_HYST);
+  return finer < prev ? finer : prev; // a finer one only when it is clearly wide enough
+}
+
 /** the grid's two paths over the screen `w`×`h` for the view on the screen (plan x → x·k + ox, plan y → −y·k + oy); every 5th line is a major one */
 export interface GridPaths { minor: string; major: string; stepIn: number }
 
-export function gridPaths(k: number, ox: number, oy: number, w: number, h: number, minPx: number): GridPaths {
+export function gridPaths(k: number, ox: number, oy: number, w: number, h: number, minPx: number, step0 = 0): GridPaths {
   "worklet";
   if (!(k > 0) || !Number.isFinite(k) || !(w > 0) || !(h > 0)) return { minor: "", major: "", stepIn: 0 };
-  const step = gridStepIn(k, minPx);
+  // the step: `step0` when it is given (the layer's, with the margin at a threshold — gridStepHyst); otherwise the scale's own
+  const step = step0 > 0 ? step0 : gridStepIn(k, minPx);
   const px = step * k; // a cell on the screen
   // the plan's range on the screen: x from (0 − ox)/k to (w − ox)/k; y from (oy − h)/k to oy/k
   const i0 = Math.ceil(-ox / px), i1 = Math.floor((w - ox) / px);

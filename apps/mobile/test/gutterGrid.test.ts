@@ -7,7 +7,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GRID_STEPS_IN, gridPaths, gridStepIn, liveView, MAX_GRID_LINES } from "../src/modules/gutters/canvas/grid";
+import { GRID_HYST, GRID_STEPS_IN, gridPaths, gridStepHyst, gridStepIn, liveView, MAX_GRID_LINES } from "../src/modules/gutters/canvas/grid";
 
 const vp = { w: 390, h: 844 };
 const lines = (g: { minor: string; major: string }) => (g.minor.match(/M/g)?.length ?? 0) + (g.major.match(/M/g)?.length ?? 0);
@@ -90,6 +90,48 @@ describe("the steps: 1 ft at the nearest scale, only coarser outwards (the 1″ 
   });
 });
 
+describe("#1477: a margin at a step's threshold — a hand shaking there does not flip the fine lines", () => {
+  const minPx = 24; // the screen's: space[6]
+  // the threshold of 5 ft (60″): 60·k = 24 → k = 0.4
+  const shake = Array.from({ length: 200 }, (_, i) => 0.4 * (1 + 0.04 * Math.sin(i * 1.7))); // ±4 % about it, as a hand does
+  const flips = (pick: (k: number, prev: number) => number) => {
+    let prev = 0, n = 0;
+    for (const k of shake) {
+      const st = pick(k, prev);
+      if (prev && st !== prev) n++;
+      prev = st;
+    }
+    return n;
+  };
+  it("before: the step of the scale alone flips on almost every frame of the shake", () => {
+    expect(flips((k) => gridStepIn(k, minPx))).toBeGreaterThan(50);
+  });
+  it("now: not once", () => {
+    expect(flips((k, prev) => gridStepHyst(k, minPx, prev))).toBe(0);
+  });
+  it("a real pinch still changes the step: coarser when the cell is GRID_HYST times too fine, finer when the finer one is GRID_HYST times wide enough", () => {
+    let st = gridStepHyst(0.5, minPx, 0);
+    expect(st).toBe(60); // 30 px
+    st = gridStepHyst(0.36, minPx, st);
+    expect(st).toBe(60); // 21.6 px: within the margin
+    st = gridStepHyst(0.3, minPx, st);
+    expect(st).toBe(120); // 18 px < 24 / 1.25: the coarser one
+    st = gridStepHyst(0.45, minPx, st);
+    expect(st).toBe(120); // 60″ would be 27 px: not yet 24 · 1.25
+    st = gridStepHyst(0.5, minPx, st);
+    expect(st).toBe(60); // 30 px = 24 · 1.25: back
+    expect(GRID_HYST).toBe(1.25);
+  });
+  it("away from a threshold it is the step of the scale itself; a jump far out goes straight to its step", () => {
+    for (const k of [10, 2, 1, 0.1, 0.01, 1e-4]) expect(gridStepHyst(k, minPx, gridStepIn(k, minPx))).toBe(gridStepIn(k, minPx));
+    expect(gridStepHyst(0.01, minPx, 12)).toBe(gridStepIn(0.01, minPx)); // «fit» far out from the nearest scale
+  });
+  it("the layer's step is the one gridPaths draws", () => {
+    expect(gridPaths(0.36, 0, 844, 390, 844, minPx, 60).stepIn).toBe(60);
+    expect(gridPaths(0.36, 0, 844, 390, 844, minPx).stepIn).toBe(120);
+  });
+});
+
 describe("speed: the paths are built on the UI thread for every frame of a pinch", () => {
   it("about 100 lines a frame: 1000 frames of a pinch in well under a frame each on this machine", () => {
     let n = 0;
@@ -115,6 +157,8 @@ describe("#1434 guard: nothing on the canvas leans on `overflow: visible` of an 
     expect(layer).toMatch(/id="grid-minor"/);
     expect(layer).toMatch(/id="grid-major"/);
     expect(layer).toMatch(/<Svg width=\{size\.w\} height=\{size\.h\}/);
+    expect(layer).toMatch(/step\.value = gridStepHyst\(/); // #1477: the layer keeps its step with the margin
+    expect(layer).toMatch(/gridPaths\([^)]*step\.value\)/);
     // the canvas draws it in `under` — before the Animated.View that scales — not among the children of the scaled layer
     const canvas = src("canvas/CanvasView.tsx");
     expect(canvas.indexOf("{under}")).toBeGreaterThan(-1);
