@@ -185,8 +185,10 @@ export default function GutterSettingsScreen() {
   const setRule = (key: string, v: unknown) => put(`gset-rule-${key}`, ["rules", key], v);
   /** a number rule as a stepper: its unit, range and step (spec П4) */
   // the percent the company had before «без запаса»: switching it on again brings it back (in this visit; the stored value is 0 meanwhile)
-  const lastWaste = useRef<number>(RULE_NUMS.wastePct.def);
-  if (rules.wastePct > 0) lastWaste.current = rules.wastePct;
+  const lastWaste = useRef<{ ft: number; pct: number }>({ ft: RULE_NUMS.wasteFt.def, pct: RULE_NUMS.wastePct.def });
+  const wasteKey = rules.wasteMode === "ft" ? "wasteFt" : "wastePct";
+  const wasteNow = rules[wasteKey];
+  if (wasteNow > 0) lastWaste.current[rules.wasteMode] = wasteNow;
   const num = (key: keyof typeof RULE_NUMS, unit: string, label: string) => {
     const r = RULE_NUMS[key];
     return (
@@ -338,12 +340,18 @@ export default function GutterSettingsScreen() {
             {num("storyFt", t(k("ft")), t(k("r.storyFt")))}
             {num("hangerSpacingIn", t(k("in")), t(k("r.hangerSpacingIn")))}
             <Switch testID="gset-rule-hangerExtra" on={rules.hangerExtra} onChange={(v) => setRule("hangerExtra", v)} label={t(k("r.hangerExtra"))} />
-            {/* waste: a switch («без запаса» = 0 %, #1355) and the percent under it while it is on */}
-            <Switch testID="gset-rule-wasteOn" on={rules.wastePct > 0} onChange={(v) => setRule("wastePct", v ? lastWaste.current : 0)} label={t(k("r.wasteOn"))} />
-            {rules.wastePct > 0 ? (
-              <Step testID="gset-rule-wastePct">
-                <Stepper label={t(k("r.wastePct"))} unit="%" value={rules.wastePct} min={1} max={RULE_NUMS.wastePct.max} step={RULE_NUMS.wastePct.step} onChange={(v) => setRule("wastePct", v)} />
-              </Step>
+            {/* waste (#1355): a switch («без запаса» = 0), how it is counted — a fixed length once for the whole measurement, or a percent — and the number under it while it is on */}
+            <Switch testID="gset-rule-wasteOn" on={wasteNow > 0} onChange={(v) => setRule(wasteKey, v ? lastWaste.current[rules.wasteMode] : 0)} label={t(k("r.wasteOn"))} />
+            {wasteNow > 0 ? (
+              <>
+                <Field label={t(k("r.wasteMode"))} testID="gset-rule-wasteMode">
+                  <ChoiceChips items={[{ key: "ft", label: t(k("r.wasteModeFt")) }, { key: "pct", label: t(k("r.wasteModePct")) }]} value={rules.wasteMode} onChange={(m) => setRule("wasteMode", m)} />
+                </Field>
+                <Step testID={`gset-rule-${wasteKey}`}>
+                  <Stepper label={t(k("r.wastePct"))} unit={rules.wasteMode === "ft" ? t(k("ft")) : "%"} value={wasteNow} min={1} max={RULE_NUMS[wasteKey].max} step={RULE_NUMS[wasteKey].step} onChange={(v) => setRule(wasteKey, v)} />
+                </Step>
+                {rules.wasteMode === "ft" ? <T v="caption" tone="mut">{t(k("r.wasteFtHint"))}</T> : null}
+              </>
             ) : (
               <T v="caption" tone="mut">{t(k("r.wasteOff"))}</T>
             )}

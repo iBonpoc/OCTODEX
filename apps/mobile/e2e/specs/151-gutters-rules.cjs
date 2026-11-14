@@ -70,15 +70,22 @@ exports.run = async (h) => {
   h.expect(/10/.test(await tid("gset-rule-storyFt").innerText()), "story height 10 ft by default");
   await tid("gset-rule-storyFt").getByRole("button", { name: "Высота этажа +1" }).click();
   await waitFor(async () => (await settings()).rules?.storyFt === 11, "story height 11 ft saved");
-  // waste (#1355): 10 % by default, a switch takes it away («без запаса» = 0), the percent is there only while it is on
-  h.expect(/10/.test(await tid("gset-rule-wastePct").innerText()), "waste 10 % by default");
+  // waste (#1355): a fixed 10 ft for the whole measurement by default; a switch takes it away («без запаса» = 0); «Процентом» is still a choice
+  h.expect(/10/.test(await tid("gset-rule-wasteFt").innerText()), "waste: 10 ft by default");
+  await tid("gset-rule-wasteFt").getByRole("button", { name: "Запас на отход +1" }).click();
+  await waitFor(async () => (await settings()).rules?.wasteFt === 11, "waste 11 ft saved");
+  await tid("gset-rule-wasteOn").getByRole("switch").click();
+  await waitFor(async () => (await settings()).rules?.wasteFt === 0, "«Считать запас» off: 0 ft saved");
+  await waitFor(async () => (await tid("gset-rule-wasteFt").count()) === 0, "…and the number goes away");
+  await tid("gset-rule-wasteOn").getByRole("switch").click();
+  await waitFor(async () => (await settings()).rules?.wasteFt === 11, "on again: the 11 ft the company had, not the default");
+  // in percent: its own number (10 % by default), saved apart; the feet stay as they were
+  await tid("gset-rule-wasteMode").getByRole("radio", { name: "Процентом", exact: true }).click();
+  await waitFor(async () => (await settings()).rules?.wasteMode === "pct", "«Процентом» saved");
   await tid("gset-rule-wastePct").getByRole("button", { name: "Запас на отход +1" }).click();
   await waitFor(async () => (await settings()).rules?.wastePct === 11, "waste 11 % saved");
-  await tid("gset-rule-wasteOn").getByRole("switch").click();
-  await waitFor(async () => (await settings()).rules?.wastePct === 0, "«Считать запас» off: 0 % saved");
-  await waitFor(async () => (await tid("gset-rule-wastePct").count()) === 0, "…and the percent goes away");
-  await tid("gset-rule-wasteOn").getByRole("switch").click();
-  await waitFor(async () => (await settings()).rules?.wastePct === 11, "on again: the percent the company had (11 %), not the default");
+  await tid("gset-rule-wasteMode").getByRole("radio", { name: "Футами", exact: true }).click();
+  await waitFor(async () => (await settings()).rules?.wasteMode === "ft" && (await settings()).rules?.wasteFt === 11, "back to feet: 11 ft");
   // the corner allowance by kind: an outside corner 14″, an inside one 6″
   h.expect(/14/.test(await tid("gset-rule-cutCornerOutIn").innerText()) && /6/.test(await tid("gset-rule-cutCornerIn").innerText()), "an outside corner 14″, an inside one 6″ by default");
   await tid("gset-rule-cutCornerOutIn").getByRole("button", { name: /\+1$/ }).click();

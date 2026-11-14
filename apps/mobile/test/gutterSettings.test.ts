@@ -356,3 +356,30 @@ describe("#1355: запас на отход и запас на угол по в�
     expect(readRules(old)).toMatchObject({ storyFt: 11, wastePct: 5, cutCornerIn: 6, cutCornerOutIn: 14 });
   });
 });
+
+describe("#1355: запас на отход — фиксированной длиной (13.11: «обычно я беру 10 фит запас на любой объём»)", () => {
+  const one: Drawing = { runs: [{ id: "r1", a: [0, 0], b: [3600, 0], lengthIn: 3600, attrs: { ...DEFAULT_RUN_ATTRS } }], downspouts: [] }; // 300 ft
+  const coil = (raw: unknown) => Number(computeGutterParts(toMeasurement(one), toRulesOverride(raw)).parts.find((p) => p.key.startsWith("coil."))!.qty);
+  it("по умолчанию — 10 ft на весь замер (на 300 ft это 310, а не 330)", () => {
+    expect(readRules({})).toMatchObject({ wasteMode: "ft", wasteFt: 10 });
+    expect(toRulesOverride({})).toMatchObject({ wasteMode: "ft", wasteFt: 10 });
+    expect(coil({})).toBe(310);
+  });
+  it("компания, которая раньше сохранила процент, остаётся на проценте со своим числом (правило 16: её числа не меняются молча)", () => {
+    expect(readRules({ rules: { wastePct: 8 } })).toMatchObject({ wasteMode: "pct", wastePct: 8 });
+    expect(coil({ rules: { wastePct: 8 } })).toBe(324); // 300 ft × 1.08
+    expect(readRules({ rules: { wastePct: 0 } })).toMatchObject({ wasteMode: "pct", wastePct: 0 }); // «без запаса», сохранённый раньше, остаётся выключенным
+    expect(coil({ rules: { wastePct: 0 } })).toBe(300);
+  });
+  it("выбранный способ главнее догадки; футы 0–100, 0 — «без запаса»", () => {
+    expect(readRules({ rules: { wasteMode: "ft", wastePct: 8 } }).wasteMode).toBe("ft");
+    expect(readRules({ rules: { wasteMode: "pct" } }).wasteMode).toBe("pct");
+    expect(readRules({ rules: { wasteMode: "yards" } }).wasteMode).toBe("ft");
+    expect(readRules({ rules: { wasteFt: 100 } }).wasteFt).toBe(100);
+    expect(readRules({ rules: { wasteFt: 101 } }).wasteFt).toBe(10);
+    expect(readRules({ rules: { wasteFt: 0 } }).wasteFt).toBe(0);
+    expect(coil({ rules: { wasteFt: 0 } })).toBe(300);
+    expect(coil({ rules: { wasteFt: 25 } })).toBe(325);
+    expect(RULE_NUMS.wasteFt).toMatchObject({ min: 0, max: 100, def: 10 });
+  });
+});

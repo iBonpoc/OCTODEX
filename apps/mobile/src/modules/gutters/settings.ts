@@ -322,6 +322,8 @@ export const RULE_NUMS = {
   hangerSpacingIn: { min: 12, max: 36, def: 24, step: 2 },
   /** 0 = «без запаса» (#1355, founder 13.11: «10 % запас должен настраиваться и убираться»); a whole percent otherwise */
   wastePct: { min: 0, max: 100, def: 10, step: 1 },
+  /** a fixed waste, feet, once for the whole measurement (#1355, founder 13.11: «обычно я беру 10 фит запас на любой объём»); 0 — «без запаса» */
+  wasteFt: { min: 0, max: 100, def: 10, step: 1 },
   /** an INSIDE (and a bay) field-cut corner takes this much gutter, inches. Stays 0–12 until rule 16 step 2: a phone with the old app reads a value above 12 as «out of range» and takes 6 — two devices of one company would buy differently (review of #1381) */
   cutCornerIn: { min: 0, max: 12, def: 6, step: 1 },
   /** an OUTSIDE field-cut corner (#1355, founder 13.11: «для наружного 14 инчей. Для внутреннего 6 инчей»): 14 does not fit 0–12, hence 0–24 here, in a new field the old app does not read */
@@ -344,6 +346,9 @@ export interface Rules {
   storyFt: number;
   hangerSpacingIn: number;
   hangerExtra: boolean;
+  /** how the waste is counted: a fixed length or a percent. A company that saved a percent before the fixed length existed keeps it (rule 16) */
+  wasteMode: "ft" | "pct";
+  wasteFt: number;
   wastePct: number;
   cutCornerIn: number;
   cutCornerOutIn: number;
@@ -390,6 +395,8 @@ export function readRules(raw: unknown): Rules {
     storyFt: num(r.storyFt, RULE_NUMS.storyFt),
     hangerSpacingIn: num(r.hangerSpacingIn, RULE_NUMS.hangerSpacingIn),
     hangerExtra: bool(r.hangerExtra, d.hangerAtEnds),
+    wasteMode: r.wasteMode === "ft" || r.wasteMode === "pct" ? r.wasteMode : typeof r.wastePct === "number" ? "pct" : "ft",
+    wasteFt: num(r.wasteFt, RULE_NUMS.wasteFt),
     wastePct: num(r.wastePct, RULE_NUMS.wastePct),
     cutCornerIn: num(r.cutCornerIn, RULE_NUMS.cutCornerIn),
     cutCornerOutIn: num(r.cutCornerOutIn, RULE_NUMS.cutCornerOutIn),
@@ -448,6 +455,8 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     storyHeightIn: r.storyFt * 12,
     hangerSpacingIn: Object.fromEntries(Object.keys(DEFAULT_HANGER_KITS).map((id) => [id, r.hangerSpacingIn])),
     hangerAtEnds: r.hangerExtra,
+    wasteMode: r.wasteMode,
+    wasteFt: r.wasteFt,
     wastePct: (r.wastePct / 100).toFixed(2),
     cutCornerAllowanceIn: r.cutCornerIn,
     cutCornerOutAllowanceIn: r.cutCornerOutIn,

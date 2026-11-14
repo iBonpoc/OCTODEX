@@ -232,8 +232,8 @@ describe("drawing → engine", () => {
     const m = toMeasurement(d, { method: "cut" });
     expect(m.corners[0]).toMatchObject({ gauge: ".032", finish: "painted" });
     const coils = computeGutterParts(m).parts.filter((p) => p.key.startsWith("coil."));
-    // (480 + 360 + 14) × 1.10 / 12 = 78.28 → 79
-    expect(coils.map((p) => [p.key, p.qty])).toEqual([["coil.k.6.aluminum.032.white", "79"]]);
+    // (480 + 360 + 14 + 120) / 12 = 81.17 → 82 (10 ft of waste, once)
+    expect(coils.map((p) => [p.key, p.qty])).toEqual([["coil.k.6.aluminum.032.white", "82"]]);
   });
   it("a downspout on a deleted run is dropped", () => {
     const m = toMeasurement({ runs: [rect[0]!], downspouts: [{ id: "d", runId: "gone", atIn: 0, shape: "rect", size: "3x4", material: "alu", bottom: { kind: "none" } }] });

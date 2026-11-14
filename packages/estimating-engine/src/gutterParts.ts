@@ -158,7 +158,11 @@ export interface MeasurementInput {
 /** Company rules (spec П4, П18.10). Every value is a company setting with this default. */
 export interface GutterRules {
   storyHeightIn: number;
-  /** waste for the purchase of the gutter (only): "0.10" = 10% (0..1); "0" — no waste (#1355: the company can switch it off) */
+  /** how the waste of the gutter purchase is counted (#1355, founder 13.11: «10% это очень много, на 300 фит мне не надо 30 фит запас. Обычно я беру 10 фит запас на любой объём»): a fixed length (`wasteFt`) or a percent (`wastePct`) */
+  wasteMode: "ft" | "pct";
+  /** a fixed waste, feet, once for the whole measurement (added to the stock with the most gutter); 0 — no waste. Only in `wasteMode: "ft"` */
+  wasteFt: number;
+  /** waste for the purchase of the gutter (only): "0.10" = 10% (0..1); "0" — no waste. Only in `wasteMode: "pct"` */
   wastePct: DecLike;
   /** extra gutter an INSIDE (and, until the founder says otherwise, a bay) field-cut corner uses, inches (a prefab corner uses none) */
   cutCornerAllowanceIn: number;
@@ -227,6 +231,8 @@ export interface GutterRules {
 
 export const DEFAULT_GUTTER_RULES: GutterRules = {
   storyHeightIn: 120,
+  wasteMode: "ft",
+  wasteFt: 10,
   wastePct: "0.10",
   cutCornerAllowanceIn: 6,
   cutCornerOutAllowanceIn: 14,
@@ -303,6 +309,8 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   for (const k of POSITIVE) if (!okPos(r[k])) (r as unknown as Record<string, unknown>)[k] = d[k];
   if (typeof r.hangerAtEnds !== "boolean") r.hangerAtEnds = d.hangerAtEnds;
   if (!Number.isInteger(r.dsExtensionIn) || r.dsExtensionIn < 0) r.dsExtensionIn = 0;
+  if (r.wasteMode !== "ft" && r.wasteMode !== "pct") r.wasteMode = d.wasteMode;
+  if (!Number.isInteger(r.wasteFt) || r.wasteFt < 0) r.wasteFt = d.wasteFt;
   if (!Number.isInteger(r.cutCornerAllowanceIn) || r.cutCornerAllowanceIn < 0) r.cutCornerAllowanceIn = d.cutCornerAllowanceIn;
   if (!Number.isInteger(r.cutCornerOutAllowanceIn) || r.cutCornerOutAllowanceIn < 0) r.cutCornerOutAllowanceIn = d.cutCornerOutAllowanceIn;
   return r;
@@ -459,7 +467,7 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "2"; // 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+export const GUTTER_PARTS_VERSION = "3"; // 3: the waste is a fixed 10 ft by default (a percent stays a choice), #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
 
 export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
   const rules = resolveGutterRules(over);
@@ -740,14 +748,18 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     if (n > 0 && r.lengthIn > n * rules.maxRunPerDownspoutIn) advice.push({ code: "run_long_for_downspouts", runId: r.id, lengthIn: r.lengthIn, downspouts: n });
   }
 
-  // purchase: gutter stock with corner allowance and waste, whole feet (seamless coil) or sections
-  for (const { stock, inches } of purchaseIn.values()) {
+  // purchase: gutter stock with corner allowance and waste, whole feet (seamless coil) or sections.
+  // Waste (#1355): a percent of every stock, or a FIXED length once for the whole measurement — put on the stock with the most gutter (ties: the first),
+  // the one that is cut from the longest coil; 0 — none. Which stock gets it is one line here (the founder was asked: the whole measurement or every colour).
+  const wasteStock = [...purchaseIn.entries()].reduce<string | null>((best, [k, v]) => (best === null || v.inches.gt(purchaseIn.get(best)!.inches) ? k : best), null);
+  for (const [key, { stock, inches: base }] of purchaseIn.entries()) {
+    const inches = rules.wasteMode === "pct" ? base.mul(waste) : key === wasteStock ? base.add(dec(rules.wasteFt).mul(12)) : base;
     const attrs = stockAttrs(stock);
     if (rules.seamless) {
       const blank = rules.coilBlankIn[`${stock.profile}.${stock.size}`];
-      acc.add({ key: `coil.${stockKey(stock)}`, section: "gutter", unit: "ft", use: "purchase", kind: "material", attrs: { ...attrs, buy: "coil", ...(blank ? { blankIn: blank } : {}) } }, ft(inches.mul(waste)).ceil());
+      acc.add({ key: `coil.${stockKey(stock)}`, section: "gutter", unit: "ft", use: "purchase", kind: "material", attrs: { ...attrs, buy: "coil", ...(blank ? { blankIn: blank } : {}) } }, ft(inches).ceil());
     } else {
-      acc.add({ key: `section.${stockKey(stock)}`, section: "gutter", unit: "ea", use: "purchase", kind: "material", attrs: { ...attrs, buy: "section", lengthIn: String(rules.sectionLengthIn) } }, inches.mul(waste).div(rules.sectionLengthIn).ceil());
+      acc.add({ key: `section.${stockKey(stock)}`, section: "gutter", unit: "ea", use: "purchase", kind: "material", attrs: { ...attrs, buy: "section", lengthIn: String(rules.sectionLengthIn) } }, inches.div(rules.sectionLengthIn).ceil());
     }
   }
 
