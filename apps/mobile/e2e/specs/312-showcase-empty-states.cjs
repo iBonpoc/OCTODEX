@@ -30,7 +30,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("showcase-banner-warn-close").count()) === 0, "a warn banner has no «✕»");
   await vis("showcase-banner-info-close").waitFor({ timeout: 3000 });
   await vis("showcase-banner-warn-action").getByRole("button", { name: "Подключить" }).click();
-  h.expect(/Подключить/.test(await last()), `the banner's action answers: ${await last()}`);
+  h.expect((await last()).trim() === "Нажато: Подключить", `the banner's action answers: ${await last()}`);
   await vis("showcase-banner-info-close").getByRole("button", { name: "Скрыть" }).click();
   await vis("showcase-banner-closed").waitFor({ timeout: 3000 });
   await vis("showcase-banner-closed").getByRole("button", { name: "Показать снова" }).click();

@@ -5,7 +5,7 @@
  * gestures commit at their end, every `scaleChange` multiplies, the render drops the whole live transform) — it fails every one of them.
  */
 import { describe, expect, it } from "vitest";
-import { applyTf, endGesture, idleState, IDENTITY, panFrame, pinchFrame, settle, sub, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
+import { applyTf, EDGE_FREE, endGesture, idleState, IDENTITY, panFrame, pinchFrame, settle, sub, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
 
 type Ev =
   | { t: "pinch"; n: number; k: number; fx?: number; fy?: number }
@@ -166,6 +166,33 @@ describe("cause 3: the race with the redraw — a new segment begins before the 
   });
 });
 
+describe("#1403 — another render of the SAME view mid-pinch changes nothing (founder 14.11: «прыгает, то больше, то меньше»)", () => {
+  it("the same view settled again (a blink, a hint, a toast re-rendered the screen) keeps the live transform under the fingers", () => {
+    const st = idleState();
+    for (let i = 0; i < 10; i++) pinchFrame(st, { scaleChange: 0.95, numberOfPointers: 2, focalX: 120, focalY: 300 });
+    const live = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+    const v = { k: 2, ox: 10, oy: 400 };
+    const pending: Pending[] = [];
+    const r = settle(live, pending, v, v);
+    expect(r.live).toEqual(live); // was IDENTITY: the drawing jumped back to its size before the pinch
+    expect(r.pending).toBe(pending);
+  });
+  it("a render of the same view between commits keeps the waiting commits too", () => {
+    const v0 = { k: 1, ox: 0, oy: 0 };
+    const t = { S: 0.5, Tx: 10, Ty: 0 };
+    const v1 = applyTf(v0, t);
+    const pending: Pending[] = [{ view: v1, tf: t }];
+    const r = settle({ S: 0.4, Tx: 12, Ty: 1 }, pending, v0, v0);
+    expect(r.pending).toEqual(pending);
+    expect(r.live).toEqual({ S: 0.4, Tx: 12, Ty: 1 });
+    // the commit's own render then takes away exactly its commit, as before
+    expect(settle(r.live, r.pending, v1, v0).live.S).toBeCloseTo(0.8, 9);
+  });
+  it("a NEW view that is not ours (the «fit» button) still drops the live transform", () => {
+    expect(settle({ S: 2, Tx: 3, Ty: 4 }, [], { k: 5, ox: 0, oy: 0 }, { k: 1, ox: 0, oy: 0 }).live).toEqual(IDENTITY);
+  });
+});
+
 describe("the rest", () => {
   it("a view that is not ours (the «fit» button, a new size): the live transform is dropped, as before", () => {
     const r = settle({ S: 2, Tx: 3, Ty: 4 }, [], { k: 5, ox: 0, oy: 0 });
@@ -231,6 +258,20 @@ describe("#1281 — the limits of the scale: a soft stop, a tick at the limit, t
     for (const f of frames(40, 1.2)) pinchFrame(free, f);
     expect(free.S).toBeGreaterThan(1000);
   });
+  it("one tick at the limit (founder 14.11: «тик нравится»): a hand shaking at the limit does not tick again; back inside by EDGE_FREE and out again — a second tick", () => {
+    const st = idleState();
+    let ticks = 0, last = 0;
+    const run = (k: number, n: number) => { for (const f of frames(n, k)) { pinchFrame(st, f, lim); if (st.edge !== 0 && last === 0) ticks++; last = st.edge; } };
+    run(1.2, 20);
+    expect(ticks).toBe(1);
+    for (let i = 0; i < 10; i++) { run(0.995, 1); run(1.005, 1); }
+    expect(ticks).toBe(1);
+    for (let i = 0; i < 60 && st.edge !== 0; i++) run(0.9, 1);
+    expect(st.edge).toBe(0);
+    expect(st.S).toBeLessThan(lim.hi * (1 - EDGE_FREE) + 1e-9);
+    run(1.3, 20);
+    expect(ticks).toBe(2);
+  });
   it("the segment's end clears the edge", () => {
     const st = idleState();
     for (const f of frames(40, 1.2)) pinchFrame(st, f, lim);
@@ -240,3 +281,70 @@ describe("#1281 — the limits of the scale: a soft stop, a tick at the limit, t
 });
 
 import { OVERSHOOT } from "../src/modules/gutters/canvas/gestureState";
+
+describe("#1403 — the scale's math at once (the director's list: limits, the point under the fingers, a lifted finger, a render of the same view, the release)", () => {
+  const lim = { lo: 0.25, hi: 4 };
+  /** a fixed pseudo-random sequence (no Math.random: the test is the same every run) */
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  it("300 frames of a shaking pinch with moving fingers, a finger lifted and put back, renders of the same view in between", () => {
+    const st = idleState();
+    let view: View = { k: 1, ox: 0, oy: 0 };
+    let pending: Pending[] = [];
+    let n = 2;
+    let lifts = 0;
+    for (let i = 0; i < 300; i++) {
+      // every 40th frame: one finger lifts for a frame, then comes back (the count changes twice)
+      const lift = i % 40 === 20;
+      const back = i % 40 === 21;
+      const fingers = lift ? 1 : 2;
+      const f = { x: 100 + rnd() * 200, y: 200 + rnd() * 400 };
+      const k = 0.85 + rnd() * 0.3;
+      const before = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+      const planUnder = { x: (f.x - st.Tx) / st.S, y: (f.y - st.Ty) / st.S }; // the plan point under the fingers before the frame
+      const req = pinchFrame(st, { scaleChange: k, numberOfPointers: fingers, focalX: f.x, focalY: f.y }, lim);
+      if (lift) {
+        // a lifted finger closes the segment: its commit is exactly the live transform — no jump on the release
+        expect(req).not.toBeNull();
+        if (req) {
+          lifts++;
+          expect(req).toEqual(before);
+          const v = applyTf(view, req);
+          pending.push({ view: v, tf: req });
+          // its render arrives: the live transform loses exactly that commit, the screen shows the same as before
+          const r = settle({ S: st.S, Tx: st.Tx, Ty: st.Ty }, pending, v, view);
+          pending = r.pending;
+          expect(applyTf(v, r.live).k).toBeCloseTo(applyTf(view, before).k, 9);
+          // the screen now shows the commit's view (a NEW object, as React state gives it)
+          view = v;
+          st.S = r.live.S; st.Tx = r.live.Tx; st.Ty = r.live.Ty;
+        }
+        n = 1;
+        continue;
+      }
+      if (back || n !== fingers) {
+        // the first frame after the count changed is the jump itself: nothing moves
+        expect({ S: st.S, Tx: st.Tx, Ty: st.Ty }).toEqual(before);
+        n = fingers;
+        continue;
+      }
+      // within the soft bounds of the limits, always
+      expect(st.S).toBeLessThanOrEqual(lim.hi * (1 + 0.05) + 1e-9);
+      expect(st.S).toBeGreaterThanOrEqual(lim.lo / (1 + 0.05) - 1e-9);
+      // the plan point under the fingers stays under them
+      expect(planUnder.x * st.S + st.Tx).toBeCloseTo(f.x, 6);
+      expect(planUnder.y * st.S + st.Ty).toBeCloseTo(f.y, 6);
+      // a render of the same view in between changes nothing
+      if (i % 7 === 0) {
+        const r = settle({ S: st.S, Tx: st.Tx, Ty: st.Ty }, pending, view, view);
+        expect(r.live).toEqual({ S: st.S, Tx: st.Tx, Ty: st.Ty });
+        expect(r.pending).toBe(pending);
+      }
+    }
+    expect(lifts).toBe(7); // frames 20, 60, …, 260: every lift closed its segment with a commit
+    // the release: the commit is the live transform as it is — the view after it is what was on the screen
+    const live = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+    const t = endGesture(st);
+    if (t) expect(t).toEqual(live);
+  });
+});

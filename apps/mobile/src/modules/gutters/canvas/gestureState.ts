@@ -25,14 +25,17 @@ export interface LiveState extends Tf {
   /** the finger count of the last pinch / pan frame (a change makes the next frame a jump: it is dropped) */
   nPinch: number;
   nPan: number;
-  /** the pinch is at a limit of the scale: −1 the farthest, 1 the nearest, 0 free (the tick is made when it becomes nonzero) */
+  /** the pinch is at a limit of the scale: −1 the farthest, 1 the nearest, 0 free (the tick is made when it becomes nonzero). It frees
+   *  only when the scale is back inside by EDGE_FREE (a hysteresis): a hand shaking at the limit ticks once, not on every frame (#1403) */
   edge: -1 | 0 | 1;
 }
+/** how far inside a limit (a share of it) the scale must come back before the next tick (founder 14.11: «тик нравится» — one) */
+export const EDGE_FREE = 0.02;
 
 /** the scale the live transform may reach, as a factor of the view on the screen (kMin / k, kMax / k); a little beyond it gives way softly */
 export interface ScaleLimit { lo: number; hi: number }
 /** how far past a limit the live scale may go (a soft stop, as in Photos): a share of the limit; the commit goes back to the limit */
-export const OVERSHOOT = 0.05
+export const OVERSHOOT = 0.05;
 
 export const idleState = (): LiveState => ({ S: 1, Tx: 0, Ty: 0, seg: false, nPinch: 0, nPan: 0, edge: 0 });
 
@@ -65,7 +68,10 @@ export function pinchFrame(st: LiveState, e: { scaleChange: number; numberOfPoin
     // a soft stop at the limit of the scale: up to OVERSHOOT past it the scale gives way (the further, the less), no further
     const target = st.S * k;
     const room = target > lim.hi ? Math.min(lim.hi * (1 + OVERSHOOT), lim.hi * (1 + (target / lim.hi - 1) * 0.3)) : target < lim.lo ? Math.max(lim.lo / (1 + OVERSHOOT), lim.lo * (1 - (1 - target / lim.lo) * 0.3)) : target;
-    st.edge = target > lim.hi ? 1 : target < lim.lo ? -1 : 0;
+    if (target > lim.hi) st.edge = 1;
+    else if (target < lim.lo) st.edge = -1;
+    else if (st.edge === 1 && target < lim.hi * (1 - EDGE_FREE)) st.edge = 0;
+    else if (st.edge === -1 && target > lim.lo * (1 + EDGE_FREE)) st.edge = 0;
     k = room / st.S;
   }
   // scale about the focal point f: p' = f + k·(p − f)
@@ -114,8 +120,12 @@ export interface Pending { view: View; tf: Tf }
 /**
  * The render of a view arrived. A commit of ours — the live transform loses exactly that commit (and the later pending ones are
  * re-based on it); a view that is not ours (the «fit» button, a new size) — the live transform is dropped, as before.
+ * `last` — the view settled before: the SAME view again is not a new view but only another render of the screen (a blink, a hint,
+ * a toast, a new size). It changes nothing: before (#1403, founder 14.11: «прыгает, то больше, то меньше»), every render of the
+ * canvas's screen settled again, and «not ours» dropped the live transform to 1 under the fingers in the middle of a pinch.
  */
-export function settle(live: Tf, pending: Pending[], view: View): { live: Tf; pending: Pending[] } {
+export function settle(live: Tf, pending: Pending[], view: View, last?: View): { live: Tf; pending: Pending[] } {
+  if (last && view === last) return { live: tf(live), pending };
   const i = pending.findIndex((p) => p.view === view);
   if (i < 0) return { live: tf(IDENTITY), pending: [] };
   const done = pending[i]!.tf;
