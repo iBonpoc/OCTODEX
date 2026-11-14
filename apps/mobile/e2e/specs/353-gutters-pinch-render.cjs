@@ -60,7 +60,10 @@ exports.run = async (h) => {
   const canvasH = async () => (await p.getByTestId("draw-canvas").boundingBox()).height;
   const h0 = await canvasH();
   await p.setViewportSize({ width: vp.width, height: vp.height + 4 });
-  await until(async () => (await canvasH()) > h0 + 2, "the canvas has measured itself again (a render with the same view)");
+  await until(async () => (await canvasH()) > h0 + 2, "the canvas has measured itself again");
+  // the render itself: the painter's Svg has the new height (setSize → a render of the screen with the SAME view)
+  const svgH0 = Number(await svg().getAttribute("height"));
+  await until(async () => Number(await svg().getAttribute("height")) > svgH0 + 2 || Number(await svg().getAttribute("height")) >= Math.round(h0) + 4, "the screen re-rendered at the new size (the painter's Svg is taller)");
   let l2 = 0;
   await until(async () => { l2 = await len(); return true; }, "read the drawing after the render");
   h.expect(Math.abs(l2 - l1) <= l1 * 0.05, `fingers still down, a render with the same view: the drawing keeps its pinched size (${Math.round(l1)} → ${Math.round(l2)} px; before the pinch ${Math.round(l0)})`);

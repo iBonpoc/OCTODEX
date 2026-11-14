@@ -289,9 +289,10 @@ describe("#1403 — the scale's math at once (the director's list: limits, the p
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   it("300 frames of a shaking pinch with moving fingers, a finger lifted and put back, renders of the same view in between", () => {
     const st = idleState();
-    const view: View = { k: 1, ox: 0, oy: 0 };
+    let view: View = { k: 1, ox: 0, oy: 0 };
     let pending: Pending[] = [];
     let n = 2;
+    let lifts = 0;
     for (let i = 0; i < 300; i++) {
       // every 40th frame: one finger lifts for a frame, then comes back (the count changes twice)
       const lift = i % 40 === 20;
@@ -304,7 +305,9 @@ describe("#1403 — the scale's math at once (the director's list: limits, the p
       const req = pinchFrame(st, { scaleChange: k, numberOfPointers: fingers, focalX: f.x, focalY: f.y }, lim);
       if (lift) {
         // a lifted finger closes the segment: its commit is exactly the live transform — no jump on the release
+        expect(req).not.toBeNull();
         if (req) {
+          lifts++;
           expect(req).toEqual(before);
           const v = applyTf(view, req);
           pending.push({ view: v, tf: req });
@@ -312,7 +315,8 @@ describe("#1403 — the scale's math at once (the director's list: limits, the p
           const r = settle({ S: st.S, Tx: st.Tx, Ty: st.Ty }, pending, v, view);
           pending = r.pending;
           expect(applyTf(v, r.live).k).toBeCloseTo(applyTf(view, before).k, 9);
-          Object.assign(view, v);
+          // the screen now shows the commit's view (a NEW object, as React state gives it)
+          view = v;
           st.S = r.live.S; st.Tx = r.live.Tx; st.Ty = r.live.Ty;
         }
         n = 1;
@@ -337,6 +341,7 @@ describe("#1403 — the scale's math at once (the director's list: limits, the p
         expect(r.pending).toBe(pending);
       }
     }
+    expect(lifts).toBe(7); // frames 20, 60, …, 260: every lift closed its segment with a commit
     // the release: the commit is the live transform as it is — the view after it is what was on the screen
     const live = { S: st.S, Tx: st.Tx, Ty: st.Ty };
     const t = endGesture(st);
