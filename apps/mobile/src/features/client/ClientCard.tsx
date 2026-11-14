@@ -273,7 +273,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
             {/* «＋ Новая …» on its own tab (prototype v6): the same rules as the card's main button — role, «do not service» */}
             {tab === "estimates" && estimateItem && canServe(db, c.id) && r.estimates.length ? (
               <View testID="client-new-estimate" style={{ alignSelf: "flex-start" }}>
-                <Button label={t("path.estimateNew")} icon="plus" variant="secondary" size="sm" onPress={() => router.push(estimateItem.href as Href)} />
+                <Button label={t("est.new")} icon="plus" variant="secondary" size="sm" onPress={() => router.push(estimateItem.href as Href)} />
               </View>
             ) : null}
             {tab === "jobs" && jobItem && canServe(db, c.id) ? (
@@ -311,7 +311,7 @@ export function ClientCardBody({ c, tab: tabNow, onTab }: { c: Customer; tab?: C
               }}
             />
             <ListRow
-              title={t("client.email")}
+              title={t("cl6.writeMail")}
               subtitle={c.email}
               left={<Icon name="mail" />}
               onPress={() => {

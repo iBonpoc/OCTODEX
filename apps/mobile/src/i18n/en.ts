@@ -2463,6 +2463,7 @@ export const en: Dict = {
   "ds.status.bad": "Could not send: no network",
   "cl6.waiting": "Waiting for you",
   "cl6.writeTitle": "Write to {name}",
+  "cl6.writeMail": "Email",
   "cl6.writeSms": "Text message",
   "cl6.tab.estimates": "Estimates",
   "cl6.tab.invoices": "Invoices",

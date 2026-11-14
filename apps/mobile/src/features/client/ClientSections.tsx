@@ -92,7 +92,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
               icon="home2"
               title={t("client.empty.properties")}
               hint={t("client.empty.propertiesHint")}
-              action={office ? <View testID="client-empty-add-property"><Button label={t("prop.add")} icon="plus" onPress={() => setNewProp(newProperty(c.id))} /></View> : undefined}
+              action={office ? <View testID="client-empty-add-property"><Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /></View> : undefined}
             />
           ) : (
             <CardGrid>
@@ -200,6 +200,8 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                   <Button
                     label={r.properties.length ? t("est.new") : t("prop.add")}
                     icon="plus"
+                    // inside the client card the yellow is «Создать смету» above (rule 2: one accent, #1343 review)
+                    variant="secondary"
                     onPress={() => (r.properties.length ? router.push(`/estimate/new?customerId=${c.id}&propertyId=${r.properties[0]!.id}`) : setNewProp(newProperty(c.id)))}
                   />
                 </View>
@@ -285,7 +287,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
               icon="check"
               title={t("client.empty.tasks")}
               hint={office ? t("client.empty.tasksHint") : undefined}
-              action={office ? <View testID="client-empty-add-task"><Button label={t("task.new")} icon="plus" onPress={newTask} /></View> : undefined}
+              action={office ? <View testID="client-empty-add-task"><Button label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} /></View> : undefined}
             />
           ) : null}
           {open.length ? (

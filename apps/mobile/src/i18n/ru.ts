@@ -2462,6 +2462,7 @@ export const ru = {
   "ds.status.bad": "Не получилось отправить: нет сети",
   "cl6.waiting": "Ждёт действия",
   "cl6.writeTitle": "Написать {name}",
+  "cl6.writeMail": "Почта",
   "cl6.writeSms": "SMS",
   "cl6.tab.estimates": "Сметы",
   "cl6.tab.invoices": "Счета",

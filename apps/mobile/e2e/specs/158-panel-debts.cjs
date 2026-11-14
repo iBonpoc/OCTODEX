@@ -75,13 +75,18 @@ exports.run = async (h) => {
   h.expect(lb && lb.y >= 0 && lb.y + lb.height <= 420 + 1, `the last row is scrolled into view (${JSON.stringify(lb)})`);
   await p.setViewportSize({ width: h.layout.width, height: h.layout.height ?? 900 });
 
-  // the client's panel: «Изменить» and «＋», as on the client's screen
+  // the client's panel: «Изменить», no «＋» — as on the client's screen (prototype v6, #1343); one column of cards
   const owes = db.customers.find((c) => db.invoices.some((i) => i.customerId === c.id && !i.void && i.totalCents > i.paidCents));
   const quiet = db.customers.find((c) => c.status !== "archived" && c.status !== "prospect" && c.id !== owes?.id && !db.invoices.some((i) => i.customerId === c.id && !i.void && i.totalCents > i.paidCents));
   h.expect(quiet, "a client who owes nothing");
   await h.go(`/clients?open=${quiet.id}`);
   await panel(h).waitFor();
-  h.expect((await panel(h).getByTestId("fab-header").count()) === 1, "«＋» in the panel's header");
+  h.expect((await panel(h).getByTestId("fab-header").count()) === 0, "no «＋» in the client's panel");
+  h.expect((await panel(h).getByTestId("list-panel-edit").count()) === 1, "«Изменить» in the panel's header");
+  // 360 is one column: a property card is as wide as the panel's content, not split in two (#1343 review)
+  const card = await panel(h).locator('[data-testid^="client-property-"]').locator("visible=true").first().boundingBox().catch(() => null);
+  const box = await panel(h).boundingBox();
+  if (card && box) h.expect(card.width > box.width * 0.7, `one column in the panel (card ${Math.round(card.width)} of ${Math.round(box.width)})`);
   h.expect((await panel(h).getByTestId("list-panel-outside").count()) === 0, "in the list: no «not in the list» mark");
 
   // out of the filter: the panel says so; back to «Все» — the mark is gone

@@ -4,7 +4,7 @@ import { canImportClients } from "@/features/client/importRun";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, canServe, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { Button, IconButton } from "@/ui/controls";
@@ -19,7 +19,6 @@ import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates"
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { ListPanel } from "@/ui/listPanel";
-import { Fab } from "@/nav/Fab";
 import { useListPanel } from "@/nav/listPanel";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
@@ -148,16 +147,15 @@ export default function Clients() {
           <ListPanel
             title={openC.name}
             outside={panel.outside}
-            // as the client's screen: «Изменить» (office) and «＋» with this client
+            // as the client's screen: «Изменить» (office); no «＋» on the client card (prototype v6, #1343)
             actions={
-              office || canServe(db, openC.id) ? (
+              office ? (
                 <>
                   {office ? (
                     <View testID="list-panel-edit">
                       <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} />
                     </View>
                   ) : null}
-                  {canServe(db, openC.id) ? <Fab placement="header" set="client" ctx={{ customerId: openC.id }} /> : null}
                 </>
               ) : undefined
             }
