@@ -1,12 +1,21 @@
 import { describe, expect, it } from "vitest";
 import { motion } from "@octo/design-tokens";
-import { DOT, dotTone, dotWay, gToMark, launchKind, pointOnWay, waitStage } from "../src/ui/brandRules";
+import { BOUNCE, BRAND_SEEN_KEY, DOT, bootStage, dotTone, dotWay, gToMark, launchKind, pointOnWay } from "../src/ui/brandRules";
 
 describe("unit:brandRules — GoRix in the app (DS §18.2, #1156)", () => {
-  it("the launch: the intro once per version (and after an update), then the short GR", () => {
-    expect(launchKind({ seenVersion: null, version: "1.0.0" })).toBe("intro");
-    expect(launchKind({ seenVersion: "0.9.0", version: "1.0.0" })).toBe("intro");
-    expect(launchKind({ seenVersion: "1.0.0", version: "1.0.0" })).toBe("quick");
+  it("the launch (v4.4, #1394): the drive along the G only on the first launch after install; any stored mark — ordinary", () => {
+    expect(launchKind(null)).toBe("first");
+    expect(launchKind("1")).toBe("normal");
+    // older builds stored the version under the same key: they have launched before
+    expect(launchKind("1.0.0")).toBe("normal");
+    expect(BRAND_SEEN_KEY).toBe("octo.brand.seen.v1");
+  });
+
+  it("the bounce: up, down, the squash fill its whole time; the first launch fits 1200 with its exit", () => {
+    expect(BOUNCE.up + BOUNCE.down + BOUNCE.squash).toBeCloseTo(1, 10);
+    expect(motion.durBrandQuick + motion.durBrandBounce + motion.durBase).toBeLessThanOrEqual(motion.durBrandFirstMax);
+    // the ordinary launch stays short: the bounce and the exit together under the 1 s of Android's splash
+    expect(motion.durBrandBounce + motion.durBase).toBeLessThan(1000);
   });
 
   it("the dot: yellow on a big mark; ink at 24 and less on light and on any screen with a yellow main button", () => {
@@ -17,12 +26,15 @@ describe("unit:brandRules — GoRix in the app (DS §18.2, #1156)", () => {
     expect(dotTone({ size: 120, theme: "dark", screenHasPrimary: true })).toEqual({ dot: "ink", ring: false });
   });
 
-  it("the wait: nothing for spinnerDelayMs, then the mark, after actionTimeoutMs «Повторить»", () => {
-    expect(waitStage(0)).toBe("silent");
-    expect(waitStage(motion.spinnerDelayMs - 1)).toBe("silent");
-    expect(waitStage(motion.spinnerDelayMs)).toBe("wait");
-    expect(waitStage(motion.actionTimeoutMs - 1)).toBe("wait");
-    expect(waitStage(motion.actionTimeoutMs)).toBe("failed");
+  it("the launch (#1394): the mark still for durBrandHold, then the wait with its word, after actionTimeoutMs «Повторить»", () => {
+    expect(bootStage(0)).toBe("still");
+    expect(bootStage(motion.durBrandHold - 1)).toBe("still");
+    expect(bootStage(motion.durBrandHold)).toBe("wait");
+    expect(bootStage(motion.actionTimeoutMs - 1)).toBe("wait");
+    expect(bootStage(motion.actionTimeoutMs)).toBe("failed");
+    // a fast start never shows a move: the hold is longer than the old short entry, and within Android's 1000 for a splash icon
+    expect(motion.durBrandHold).toBeGreaterThan(motion.durBrandQuick);
+    expect(motion.durBrandHold).toBeLessThanOrEqual(1000);
   });
 
   it("the dot's way starts at the G's top end and ends at the dot's place, without jumps", () => {

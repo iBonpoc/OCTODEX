@@ -80,14 +80,6 @@ export function gToMark(p: { x: number; y: number }): { x: number; y: number } {
   return { x: (p.x * G_PLACE.k + G_PLACE.dx - GR_VIEW.x) / GR_VIEW.w, y: (p.y * G_PLACE.k + G_PLACE.dy - GR_VIEW.y) / GR_VIEW.h };
 }
 
-/** which launch the brand shows (DS §18.2 «Запуск»): the full intro once per install and version, else the short GR
- *  entry. «Data already on the phone — straight to the first screen» needs no branch: the boot layer lies under the app
- *  and goes the moment the shell is up (`useBootDone`), whatever it was showing */
-export type Launch = "intro" | "quick";
-export function launchKind(o: { seenVersion: string | null; version: string }): Launch {
-  return o.seenVersion !== o.version ? "intro" : "quick";
-}
-
 /** the dot's colour (DS §18.2 «Цвет»): yellow — only on a mark bigger than 24 and on a screen without a yellow main
  *  button; ink otherwise. On a light ground the yellow dot sits in an ink ring */
 export function dotTone(o: { size: number; theme: "dark" | "light"; screenHasPrimary: boolean }): { dot: "acc" | "ink"; ring: boolean } {
@@ -96,11 +88,20 @@ export function dotTone(o: { size: number; theme: "dark" | "light"; screenHasPri
   return { dot: "acc", ring: o.theme === "light" };
 }
 
-/** the full-screen wait (DS §18.2 п.4): nothing first, then the mark with its word, after 10 s «Повторить» */
-export function waitStage(elapsedMs: number): "silent" | "wait" | "failed" {
-  if (elapsedMs < motion.spinnerDelayMs) return "silent";
+/** the launch layer (DS §18.2 «Запуск» v4.3, #1394): the mark stands still for `durBrandHold` (a fast start shows
+ *  nothing moving); a longer load — the wait with its word; after `actionTimeoutMs` «Повторить» */
+export function bootStage(elapsedMs: number): "still" | "wait" | "failed" {
+  if (elapsedMs < motion.durBrandHold) return "still";
   return elapsedMs < motion.actionTimeoutMs ? "wait" : "failed";
 }
 
-/** the device's mark that the intro was shown for this version */
+/** the device's mark that the app has started here before (DS §18.2 v4.4: the first launch after install shows the
+ *  dot's drive along the G). Any stored value counts — older builds stored the version in it */
 export const BRAND_SEEN_KEY = "octo.brand.seen.v1";
+export type Launch = "first" | "normal";
+export function launchKind(seen: string | null): Launch {
+  return seen === null ? "first" : "normal";
+}
+
+/** the dot's bounce (DS §18.2 п.2а), shares of `durBrandBounce`: up (easeOut), down (easeIn), the squash on landing */
+export const BOUNCE = { up: 0.45, down: 0.35, squash: 0.2 } as const;
