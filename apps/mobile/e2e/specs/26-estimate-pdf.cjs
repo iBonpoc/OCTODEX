@@ -3,6 +3,7 @@
  * whatever the app language is. The app runs in Russian here; the client is English (company default), then Spanish.
  * Checks the estimate PDF (the HTML printed on the web), the client page /p/, and that the app itself stays Russian.
  */
+const { estAct } = require("../estimateMenu.cjs");
 const TOKEN = "demo0handyman0estimate0000000001";
 
 /** capture the PDF HTML instead of opening the print dialog */
@@ -16,7 +17,9 @@ async function capturePdf(h, buttonName) {
       return r;
     };
   });
-  await h.page.getByRole("button", { name: buttonName, exact: true }).last().click();
+  // the estimate's own PDF lives in «⋯» (#1412); the client page's PDF is a button
+  if (buttonName === "PDF") await estAct(h.page, "pdf");
+  else await h.page.getByRole("button", { name: buttonName, exact: true }).last().click();
   await h.page.waitForFunction(() => !!window.__pdf, null, { timeout: 5000 });
   return h.page.evaluate(() => window.__pdf);
 }
@@ -32,7 +35,7 @@ async function setCompanyDocLanguage(h, lang) {
 exports.run = async (h) => {
   // English client, Russian app
   await h.go("/estimate/e6");
-  await h.expectText(/Отправить клиенту/, "the app itself is Russian");
+  await h.expectText(/Отправить ещё раз/, "the app itself is Russian");
   let pdf = await capturePdf(h, "PDF");
   h.expect(/<html lang="en"/.test(pdf), "estimate PDF is English");
   h.expect(/>Total</.test(pdf) && /Customer/.test(pdf), "English words in the PDF");
@@ -54,5 +57,5 @@ exports.run = async (h) => {
   pdf = await capturePdf(h, "Descargar PDF");
   h.expect(/<html lang="es"/.test(pdf) && /Cliente/.test(pdf), "PDF in Spanish");
   await h.go("/estimate/e6");
-  await h.expectText(/Отправить клиенту/, "the app is still Russian");
+  await h.expectText(/Отправить ещё раз/, "the app is still Russian");
 };
