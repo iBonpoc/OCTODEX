@@ -317,3 +317,24 @@ describe("repo: an estimate's document is read as it may be counted and shown (n
     expect(lines.map((l) => [l.id, l.clientVisible])).toEqual([["l1", undefined], ["l2", false]]);
   });
 });
+
+describe("loadCompanyDB — a photo the cloud refused (#1431)", () => {
+  it("files.upload_status 'failed' → the photo is marked (the reason only the sending phone knows); others are not", async () => {
+    rows.files = [
+      { id: "f1", kind: "photo", visit_id: "v1", stage: "after", storage_key: "co-1/f1.jpg", created_at: "2026-11-05T10:00:00Z", upload_status: "uploaded" },
+      { id: "f3", kind: "photo", visit_id: "v1", stage: "before", storage_key: null, created_at: "2026-11-05T12:00:00Z", upload_status: "failed" },
+      { id: "f4", kind: "photo", visit_id: "v1", stage: "before", storage_key: null, created_at: "2026-11-05T13:00:00Z", upload_status: "local" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.visits.find((v) => v.id === "v1")!.photos).toEqual([
+      { id: "f1", kind: "after", uri: undefined },
+      { id: "f3", kind: "before", uri: undefined, upload: { failed: "refused", at: "2026-11-05T12:00:00Z" } },
+      { id: "f4", kind: "before", uri: undefined },
+    ]);
+  });
+  it("a server without the column reads the photos as before (rule 16)", async () => {
+    missing.add("files.upload_status");
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.visits.find((v) => v.id === "v1")!.photos).toEqual([{ id: "f1", kind: "after", uri: undefined }]);
+  });
+});

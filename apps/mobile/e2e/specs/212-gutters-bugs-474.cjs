@@ -93,10 +93,8 @@ exports.run = async (h) => {
   await fitAll(p);
   await p.waitForTimeout(300);
   const l0 = (await lines())[0];
-  // the farthest the canvas goes is the whole drawing in a quarter of the screen = half the «fit» size (#1281, П36), so the test
-  // first spreads (zoom in: room to go out), then pinches in twice (each ×⅓, the second ends at the limit), then once more
-  // the farthest the canvas goes is the whole drawing in a quarter of the screen = half the «fit» size (#1281, П36): two GENTLE pinches
-  // (many small steps, about ×0.7 each) stay above it, and the second one must still work; then a hard one ends at the limit
+  // the farthest the canvas goes is a QUARTER of the «fit» size each way (#1403, founder 14.11: «уменьшать ещё меньше»; was half, #1281):
+  // two GENTLE pinches (many small steps, about ×0.7 each) stay above it, and the second one must still work; then hard ones end at the limit
   const mid = [b.x + b.width / 2, b.y + b.height / 2];
   await pinchIn(mid[0], mid[1], 76, 2);
   const l1 = (await lines())[0];
@@ -107,7 +105,7 @@ exports.run = async (h) => {
   await pinchIn(mid[0], mid[1]);
   await pinchIn(mid[0], mid[1]);
   const l3 = (await lines())[0];
-  h.expect(l3 >= l0 * 0.49 && l3 <= l0 * 0.51, `the farthest limit: half of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
+  h.expect(l3 >= l0 * 0.24 && l3 <= l0 * 0.26, `the farthest limit: a quarter of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
   h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, `the pinch drew nothing (the first finger's stroke was dropped): runs ${(await runs()).length}, length sheet ${await tid("quick-length").count()}`);
   await fitAll(p);
   await p.waitForTimeout(300);

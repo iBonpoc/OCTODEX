@@ -70,6 +70,12 @@ describe("the one-time first iPhone build (npm run ios:first)", () => {
     expect(first).toMatch(/unset EXPO_ASC_API_KEY_PATH EXPO_ASC_KEY_ID EXPO_ASC_ISSUER_ID/);
     expect(first).toContain('"expo-notifications"');
   });
+  // #656: a copy pulled after the first install kept the old modules; the build failed in `expo config` with no reason
+  it("installs again when the lockfile is newer than the installed modules, and checks the config before the build", () => {
+    expect(first).toMatch(/package-lock\.json -nt \.\.\/\.\.\/node_modules\/\.package-lock\.json/);
+    expect(first.indexOf("npx expo config --json")).toBeGreaterThan(first.indexOf("npm ci"));
+    expect(first.indexOf("npx expo config --json")).toBeLessThan(first.indexOf("build --platform ios"));
+  });
 });
 
 describe("eas.json", () => {
