@@ -28,15 +28,17 @@ export function fitView(pts: readonly P[], vp: { w: number; h: number }, margin:
 }
 
 /**
- * The limits of the scale (founder 12.11, #1281): the farthest — the whole drawing in a QUARTER of the screen (half each way of
- * the view that fits it), the nearest — 1″ as big as a finger's target (`hitPx`, twice the old nearest). Without limits a long pinch
+ * The limits of the scale (founder 12.11, #1281): the farthest — the drawing a QUARTER of the screen each way (#1403, founder 14.11:
+ * was half; ZOOM_OUT times the view that fits it), the nearest — 1″ as big as a finger's target (`hitPx`, twice the old nearest). Without limits a long pinch
  * went far away and the grid had millions of lines: the app hung.
  */
 export interface ZoomLimits { kMin: number; kMax: number }
+/** how far past «fits the screen» the pinch may go out (#1403, founder 14.11: «уменьшать ещё меньше»): the drawing takes a quarter of the screen each way */
+export const ZOOM_OUT = 4;
 export function zoomLimits(pts: readonly P[], vp: { w: number; h: number }, margin: number, hitPx: number): ZoomLimits {
   const kMax = hitPx;
   const kFit = fitView(pts, vp, margin).k;
-  return { kMin: Math.min(Math.max(kFit / 2, Number.EPSILON), kMax), kMax };
+  return { kMin: Math.min(Math.max(kFit / ZOOM_OUT, Number.EPSILON), kMax), kMax };
 }
 
 /** the view with its scale inside the limits, the centre of the viewport staying where it is (a defence at the commit; the pinch stops softly before) */

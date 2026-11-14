@@ -16,12 +16,12 @@ const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "
 
 describe("zoomLimits", () => {
   const lim = zoomLimits(pts, vp, 32, sizes.hitMin);
-  it("the nearest: 1″ as big as a finger's target (hitMin px); the farthest: half the view that fits the drawing, so it takes a quarter of the screen", () => {
+  it("the nearest: 1″ as big as a finger's target (hitMin px); the farthest: a quarter of the view that fits the drawing (#1403, founder 14.11: «уменьшать ещё меньше»)", () => {
     expect(lim.kMax).toBe(sizes.hitMin);
     const fit = fitView(pts, vp, 32);
-    expect(lim.kMin).toBeCloseTo(fit.k / 2, 9);
-    // at the farthest limit the drawing is half as wide and half as high as when it fits: a quarter of the area
-    expect((1200 * lim.kMin) / (1200 * fit.k)).toBeCloseTo(0.5, 9);
+    expect(lim.kMin).toBeCloseTo(fit.k / 4, 9);
+    // at the farthest limit the drawing is a quarter as wide and a quarter as high as when it fits
+    expect((1200 * lim.kMin) / (1200 * fit.k)).toBeCloseTo(0.25, 9);
   });
   it("a tiny drawing: the farthest limit never goes beyond the nearest", () => {
     const tiny = zoomLimits([[0, 0], [1, 1]], vp, 32, sizes.hitMin);
