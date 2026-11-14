@@ -73,6 +73,8 @@ export const motion = {
   doubleTapMs: 300,
   durChart: 900,
   easeOut: [0.2, 0.8, 0.2, 1] as const,
+  /** DS §18.2 (#1394): a fade-out that starts gently and ends at full speed — the launch layer leaving */
+  easeIn: [0.4, 0, 1, 1] as const,
   /** components.css --ease-spring (overrides foundation's .3,1.4,.5,1) */
   easeSpring: [0.3, 1.25, 0.5, 1] as const,
   easeLiquid: [0.3, 1.35, 0.5, 1] as const,
@@ -116,6 +118,17 @@ export const motion = {
   durBrandHold: 1000,
   /** DS §18.2 (#1394): the launch layer's mark grows to this while it fades into the first screen */
   brandExitScale: 1.06,
+  /** DS §18.2 v4.4 (#1394): the layer's fade waits this long after the mark starts growing — the growth is seen */
+  brandExitFadeDelay: 60,
+  /** DS §18.2 v4.4: the dot's one soft bounce on its place (up, down, a light squash); the lift — a share of the dot's
+   *  diameter, the squash — of its size */
+  durBrandBounce: 380,
+  brandBounceLift: 0.6,
+  brandBounceSquash: 0.15,
+  /** DS §18.2 v4.4: the first launch after install (the dot along the G, the bounce, the exit) takes no longer */
+  durBrandFirstMax: 1200,
+  /** DS §18.2 v4.4: a wait once shown stays at least this long — the word does not flash */
+  durBrandWaitMin: 500,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8, /** DS §14.6 (Н-27): a lifted card — above the neighbours, below the chrome */ lift: 3 } as const;
