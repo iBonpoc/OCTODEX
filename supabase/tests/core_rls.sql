@@ -4020,23 +4020,35 @@ begin
      and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
   perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
 
-  -- authenticated: only the functions on this list (a new RPC is added here by its PR — review of 14.11)
-  select string_agg(distinct p.proname, ', ') into bad
+  -- authenticated: only the functions on this list, by full signature (a new RPC or overload is added here by its PR — review of 14.11)
+  select string_agg(p.oid::regprocedure::text, ' | ' order by p.oid::regprocedure::text) into bad
     from pg_proc p
    where p.pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')
-     and p.proname <> all (array[
-                        'accept_invitation', 'accept_legal', 'accept_on_site', 'advance_apply', 'assign_visit', 'cancel_visit',
-                        'company_location_sharing', 'complete_job', 'countersign_estimate', 'create_job', 'decline_countersign',
-                        'delete_account', 'estimate_link', 'estimate_links', 'forget_push_device', 'import_customers',
-                        'import_customers_finish', 'import_customers_start', 'intake_endpoint_create', 'intake_endpoint_rotate',
-                        'intake_endpoint_set', 'intake_event_decide', 'invite_member', 'legal_status', 'mark_not_duplicate',
-                        'merge_customers', 'module_disable', 'module_enable', 'module_save_settings', 'my_closed_companies', 'po_receive',
-                        'portal_accept', 'portal_estimate', 'portal_pay_simulated', 'record_estimate_deposit', 'record_visit_payment',
-                        'refund_record', 'register_push_device', 'reissue_estimate_link', 'reopen_estimate', 'resend_invitation',
-                        'resend_signed_copy', 'revoke_estimate_link', 'revoke_invitation', 'save_customer_people', 'save_estimate_version',
-                        'save_lead_people', 'send_estimate', 'set_customer_tags', 'set_job_tags', 'set_location_consent', 'set_member_status',
-                        'set_my_prefs', 'set_push_kind', 'set_share_location', 'sign_estimate_on_site', 'stop_member_location',
-                        'transfer_ownership', 'trash_items', 'trash_list', 'trash_restore', 'undo_customer_import', 'uuid_generate_v7']::text[]);
+     and p.oid::regprocedure::text <> all (array[
+                        'accept_invitation(text)', 'accept_legal(jsonb,text,text)',
+                        'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid)',
+                        'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid,bigint)', 'advance_apply(uuid,uuid)',
+                        'assign_visit(uuid,uuid[])', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
+                        'countersign_estimate(uuid,text,uuid,uuid,uuid)', 'create_job(uuid,uuid,uuid,text,text,uuid,uuid)',
+                        'decline_countersign(uuid,text)', 'delete_account(text,uuid[])', 'estimate_link(uuid)', 'estimate_links(uuid)',
+                        'forget_push_device(text)', 'import_customers(uuid,jsonb)', 'import_customers_finish(uuid)',
+                        'import_customers_start(uuid,uuid,text,text,integer,uuid)', 'intake_endpoint_create(uuid,text,uuid)',
+                        'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
+                        'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
+                        'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)',
+                        'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
+                        'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
+                        'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
+                        'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
+                        'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
+                        'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
+                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
+                        'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
+                        'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
+                        'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
+                        'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
+                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
   perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
 
   -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
@@ -14257,6 +14269,21 @@ update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where
 :as_super
 select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000002' from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
               'T207 the office moves any expense, as before');
+-- taken off the job: his expense on it is still his to correct; moving it to null is allowed, back onto the job — no
+:as_super
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000001' where id = 'e2070000-0000-4000-8000-0000000000e1';
+update public.visit_assignees set deleted_at = now() where visit_id = 'e2070000-0000-4000-8000-0000000000a1';
+:as_tech_a
+update public.expenses set amount_cents = 1700, vendor = 'T207 vendor fixed' where id = 'e2070000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select amount_cents = 1700 from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
+              'T207 taken off the job, the author still corrects the amount of his expense on it');
+:as_tech_a
+update public.expenses set job_id = null where id = 'e2070000-0000-4000-8000-0000000000e1';
+select tst.fails_like($q$update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000001' where id = 'e2070000-0000-4000-8000-0000000000e1'$q$,
+                      '%job of your own%', 'T207 …but does not put it back onto that job');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_expense_job_guard()', 'EXECUTE'), 'T207 rule 18: the guard runs for nobody');
 \echo 'T207 an expense moves only to a job its author may add it to ok'
 
 -- T208: trash_items locks no row of a company the caller is not in
@@ -14270,8 +14297,11 @@ select tst.ok((select xmax::text from public.customers where id = 'c1a00000-0000
 rollback;
 begin;
 :as_owner_a
-select tst.ok((select ok from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000002'::uuid])) is not null,
-              'T208 the company''s own client goes through the rule as before');
+select tst.ok((select coalesce(reason, '') <> 'noRight' from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000002'::uuid])),
+              'T208 the owner''s own client is not «noRight» (it goes through the rule as before)');
+:as_super
+select tst.ok((select xmax::text from public.customers where id = 'c1a00000-0000-0000-0000-000000000002') = (txid_current() % 4294967296)::text,
+              'T208 …and its row was locked or written in this transaction');
 rollback;
 \echo 'T208 the trash locks only the caller''s company rows ok'
 
@@ -14297,6 +14327,15 @@ select tst.ok(public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2
               'T209 120 characters and a long ordinary signature still sign');
 :as_super
 select tst.ok((select count(*) = 1 from public.estimate_approvals where estimate_id = 'e2090000-0000-4000-8000-000000000001'), 'T209 one approval, the refused ones left nothing');
+-- every other door is held by the table: a client's name > 120, any signature > 64 KB
+select tst.fails_like($q$insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg, esign_consent, channel)
+                        values ('ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 'e2090000-0000-4000-8000-0000000000a1', 'e2090000-0000-4000-8000-0000000000b1', 'approved', 'x', repeat('L', 65537), true, 'on_site')$q$,
+                      '%estimate_approvals_sizes_check%', 'T209 the table holds a signature over 64 KB (any door, e.g. the older on-site one)');
+select tst.fails_like(format($q$insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg, esign_consent, channel)
+                        values ('ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 'e2090000-0000-4000-8000-0000000000a1', 'e2090000-0000-4000-8000-0000000000b1', 'approved', %L, 'M0 0', true, 'on_site')$q$, repeat('n', 121)),
+                      '%estimate_approvals_sizes_check%', 'T209 …and a client''s name over 120 characters');
+select tst.fails_like($q$insert into public.member_signatures (company_id, user_id, svg, name) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', repeat('L', 65537), 'Office')$q$,
+                      '%member_signatures_svg_check%', 'T209 the company''s saved signature has its own limit (20,000)');
 \echo 'T209 the client''s signature has a size ok'
 
 -- T210: a refund key is the company's own

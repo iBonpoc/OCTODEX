@@ -1,8 +1,10 @@
 -- Rights and limits, review of 14.11 (rule 16: every function keeps its signature; nothing is dropped or renamed).
 -- 1) app.intake_lead: the old link of a rotated form is accepted only while the form is on.
--- 2) expenses_update: outside the office a person's own expense moves only to a job they may add it to (as on insert).
+-- 2) expenses: outside the office a person's own expense moves only to a job they may add it to (as on insert).
 -- 3) trash_items: a row is locked only after its company is the caller's.
--- 4) app.estimate_client_accept: the signer's name ≤ 120 characters, the signature ≤ 64 KB.
+-- 4) the client's name ≤ 120 characters and every signature ≤ 64 KB: in app.estimate_client_accept (its own answer) and as
+--    checks on the tables (NOT VALID: the rows already there are kept; every door that writes a signature is held).
+-- 6) the API roles create nothing in the schemas public, app, extensions.
 -- 5) refunds: the key of a refund is the company's own ('octo:<company>:<key>'); a row with the older 'octo:<key>' is still
 --    found by its retry (the rows made before this migration).
 
@@ -106,12 +108,22 @@ revoke all on function app.intake_lead(text, text, text, text, text, jsonb, json
 grant execute on function app.intake_lead(text, text, text, text, text, jsonb, jsonb) to service_role;
 
 -- ---- 2. Expenses ----------------------------------------------------------------------------------------------------------
-alter policy expenses_update on public.expenses
-  using (app.has_role(company_id, array['owner', 'admin', 'office'])
-         or (created_by = (select auth.uid()) and app.is_member(company_id) and deleted_at is null))
-  with check (app.has_role(company_id, array['owner', 'admin', 'office'])
-              or (created_by = (select auth.uid()) and app.is_member(company_id)
-                  and (job_id is null or app.is_staff(company_id) or app.is_job_assignee(job_id))));
+-- A trigger, not the policy: only a CHANGE of job_id is checked (an expense already on a job keeps its other edits).
+create or replace function app.tg_expense_job_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.job_id is not null and new.job_id is distinct from old.job_id and auth.uid() is not null
+     and not app.has_role(new.company_id, array['owner', 'admin', 'office'])
+     and not app.is_staff(new.company_id) and not app.is_job_assignee(new.job_id) then
+    raise exception 'an expense goes only to a job of your own' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_expense_job_guard() from public, anon, authenticated;
+drop trigger if exists t12_expense_job_guard on public.expenses;
+create trigger t12_expense_job_guard before update of job_id on public.expenses
+  for each row execute function app.tg_expense_job_guard();
 
 -- ---- 3. Trash -------------------------------------------------------------------------------------------------------------
 create or replace function public.trash_items(p_kind text, p_ids uuid[])
@@ -274,6 +286,11 @@ end;
 $$;
 revoke all on function app.estimate_client_accept(uuid, text, uuid, uuid[], text, text, boolean, text, uuid, uuid) from public, anon, authenticated;
 
+alter table public.estimate_approvals drop constraint if exists estimate_approvals_sizes_check;
+alter table public.estimate_approvals add constraint estimate_approvals_sizes_check
+  check ((party <> 'customer' or char_length(signer_name) <= 120) and octet_length(signature_svg) <= 65536) not valid;
+-- (the company's saved signature, member_signatures.svg, has its own limit since 20261105240000: ≤ 20,000)
+
 -- ---- 5. Refund keys -------------------------------------------------------------------------------------------------------
 create or replace function app.refund_key(p_company_id uuid, p_key text)
 returns text language sql immutable set search_path = '' as $$
@@ -427,3 +444,12 @@ end;
 $$;
 revoke all on function public.stripe_refund_inflight(uuid, uuid, text) from public, anon, authenticated;
 grant execute on function public.stripe_refund_inflight(uuid, uuid, text) to service_role;
+
+-- ---- 6. Schemas -----------------------------------------------------------------------------------------------------------
+revoke create on schema public from public, anon, authenticated;
+revoke create on schema app from public, anon, authenticated;
+do $$ begin
+  if to_regnamespace('extensions') is not null then
+    execute 'revoke create on schema extensions from public, anon, authenticated';
+  end if;
+end $$;
