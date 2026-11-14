@@ -116,15 +116,17 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
       containerStyle={grow ? { flex: 1 } : undefined}
       style={{ alignItems: "center", minWidth: sizes.hitMin }}
     >
-      {/* a tool (active is given): the chosen one — «Заливка» (DS «Выделение выбранного»: surf2 + shadow-sm, ink), the other — no
-          fill, mut; never acc — yellow is the screen's main action (#1426, design audit). An action (active not given): surf2 + bd */}
+      {/* DS §19а (#1426): the chosen tool is the ONLY filled circle of the bar — «Заливка» (surf2 + shadow-sm, ink); the other tool —
+          no fill, mut; the actions (↶ ↷ 🗑) — the icon alone in ink, as an iOS toolbar; the bin with nothing picked — dimOpacity; the
+          storey — its colour ring, no fill. Never acc: yellow is the screen's main action */}
       <View
         style={[
           { minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
-          active ? fillStyle(c) : { backgroundColor: active === false ? "transparent" : c.surf2, borderWidth: ring ? dt.runW / 2 : component.hairline, borderColor: ring ?? c.bd },
+          active ? fillStyle(c) : ring ? { borderWidth: dt.runW / 2, borderColor: ring } : null,
+          disabled ? { opacity: component.dimOpacity } : null,
         ]}
       >
-        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.ink : active === false || disabled || dim ? c.mut : c.ink} /> : null}
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active === false || dim ? c.mut : c.ink} /> : null}
       </View>
       {tip ? (
         <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
