@@ -329,8 +329,9 @@ export const RULE_NUMS = {
   runPerDsFt: { min: 30, max: 50, def: 40, step: 1 },
   expansionFt: { min: 40, max: 50, def: 50, step: 1 },
   dsExtensionIn: { min: 0, max: 60, def: 0, step: 6 },
-  /** an automatic downspout stands this far from the end of its chain, inches (#1246) */
-  dsEdgeIn: { min: 6, max: 36, def: 12, step: 6 },
+  /** an automatic downspout stands this far from the end of its chain, inches (#1246); 3 ft by default (#1473, founder 14.11: «не на
+   *  одном футе от края… а на 3 фута»); a company that saved its own value keeps it (read from its settings) */
+  dsEdgeIn: { min: 6, max: 72, def: 36, step: 6 },
 } as const satisfies Record<string, NumRule>;
 export const USE_NUMS = {
   rivets: { min: 0, max: 16, def: 0, step: 1 },
