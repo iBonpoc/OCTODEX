@@ -12,7 +12,7 @@ import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { estimateStatusView } from "@/features/estimateStatus";
-import { moduleHref } from "@/modules/registry";
+import { moduleHref, moduleTabs } from "@/modules/registry";
 import { useListPanel } from "@/nav/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
@@ -42,6 +42,9 @@ export default function MeasurementsScreen() {
   const draw = moduleHref("gutters", "draw");
   const view = moduleHref("gutters", "view");
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  // «Замеры» is a tab of the app for this person (the bottom bar, the side menu): a tab is a root — no «‹ Назад» over it, as the
+  // core's tab lists (#1426, design review); opened where it is not a tab (the role has no such tab) it keeps its «back»
+  const asTab = moduleTabs(store.db.company, store.role).some((m) => m.href === moduleHref("gutters", "list"));
   const [kept, setKept] = usePersistentState<MeasurementFilter>(`${filterStoreKey("gutters.measurements")}.status`, "all");
   const f = asMeasurementFilter(kept);
   const [q, setQ] = useState("");
@@ -113,7 +116,7 @@ export default function MeasurementsScreen() {
     <Screen
       title={t("mod.gutters.list.title")}
       subtitle={t("mod.gutters.title")}
-      back={back}
+      back={asTab ? undefined : back}
       // DS §12.2: «?» first on the right of the header
       help={t("mod.gutters.list.help")}
       right={add}
