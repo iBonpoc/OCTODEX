@@ -15,7 +15,7 @@ import { NotifySheet, useVisitForm, VisitFormFields } from "@/features/VisitForm
 import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { withAfter, type GuardedUndo } from "@/data/undo";
 
 const NEW = "__new";
@@ -148,7 +148,8 @@ export default function NewJob() {
           </RowView>
         </Card>
       ) : newClient ? (
-        <Card>
+        // the fields straight on the background, under the group's title (DS §11 п.17, #1411)
+        <FieldGroup under>
           <Labeled label={t("lead.name")}>
             <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
           </Labeled>
@@ -159,7 +160,7 @@ export default function NewJob() {
             <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
           </Labeled>
           <Button label={t("job3.new.pickInstead")} size="sm" variant="ghost" onPress={() => setPicker(true)} />
-        </Card>
+        </FieldGroup>
       ) : (
         <RowView style={{ flexWrap: "wrap" }}>
           <Button label={t("job3.new.pick")} icon="search" variant="secondary" onPress={() => setPicker(true)} />
@@ -180,20 +181,19 @@ export default function NewJob() {
             />
           ) : null}
           {newAddress ? (
-            <Card>
+            <FieldGroup under>
               <Labeled label={t("co.street")}>
                 <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
               </Labeled>
               <Labeled label={t("co.city")}>
                 <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena, CA 91103" />
               </Labeled>
-            </Card>
+            </FieldGroup>
           ) : null}
         </>
       ) : null}
 
-      <SectionTitle title={t("job3.new.job")} />
-      <Card>
+      <FieldGroup title={t("job3.new.job")}>
         <Labeled label={t("job3.new.title")}>
           <View testID="job-new-title">
             <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("job3.new.titlePh")} />
@@ -211,8 +211,8 @@ export default function NewJob() {
         <Labeled label={t("job3.desc")}>
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("job3.desc")} />
         </Labeled>
-      </Card>
-      <ServiceCategoryRow value={categoryId} onChange={setCategoryId} />
+        <ServiceCategoryRow value={categoryId} onChange={setCategoryId} bare />
+      </FieldGroup>
 
       {dating ? (
         <>
