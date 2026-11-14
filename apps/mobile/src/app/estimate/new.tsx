@@ -43,6 +43,7 @@ import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } fr
 import { draftCtx, draftSnapshot, draftsKey, findDraft, nextDrafts, removeDraft, useEstimateDrafts, type EstimateDraft } from "@/features/estimateDraft";
 import { useAuth } from "@/cloud/auth";
 import { localUndo, withAfter } from "@/data/undo";
+import { StatusNote } from "@/ui/statusNote";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -817,9 +818,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
         </View>
       ) : null}
       {existing && existing.status !== "draft" ? (
-        <T v="caption" tone="warn">
-          {t("ue.editSentNote")}
-        </T>
+        <StatusNote tone="warn">{t("ue.editSentNote")}</StatusNote>
       ) : null}
       {draft ? (
         <View testID="est-draft">

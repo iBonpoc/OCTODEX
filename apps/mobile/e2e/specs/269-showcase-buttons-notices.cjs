@@ -3,7 +3,8 @@
  * - every kind of button is pressable and the counter says so; a disabled one is not; sizes name their live tokens;
  * - «＋» of the header opens its sheet;
  * - a toast shows; a toast with «Отменить» undoes and goes by itself after about 5 seconds;
- * - «нет сети» shows the badge and the network comes back on the next press.
+ * - «нет сети» shows the badge and the network comes back on the next press;
+ * - «Текст в цвете статуса» (DS §3.1 п.2, #1386): each of ok / info / warn / bad has its icon before its words.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
 const { settle } = require("../settle.cjs");
@@ -37,6 +38,10 @@ exports.run = async (h) => {
   // notices
   await h.go("/settings/design-system/notices");
   await vis("showcase-notices").waitFor({ timeout: 5000 });
+  for (const tone of ["ok", "info", "warn", "bad"]) {
+    h.expect((await p.getByTestId(`showcase-status-${tone}-icon`).locator("visible=true").count()) === 1, `«${tone}» text has its icon`);
+    h.expect((await vis(`showcase-status-${tone}`).innerText()).trim().length > 0, `«${tone}» text has its words`);
+  }
   await vis("showcase-note-toast").getByRole("button").first().click();
   await p.getByText("Сохранено", { exact: true }).locator("visible=true").first().waitFor({ timeout: 3000 });
 
