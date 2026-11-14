@@ -87,7 +87,12 @@ export function Button({
         style,
       ]}
     >
-      {icon ? <Icon name={icon} s={sizes.iconSm} color={fg} /> : null}
+      {/* the icon keeps its size: in a narrow button (the left one of a pinned bar) the words wrap, the icon never shrinks to a dot (#1474) */}
+      {icon ? (
+        <View style={{ flexShrink: 0 }}>
+          <Icon name={icon} s={sizes.iconSm} color={fg} />
+        </View>
+      ) : null}
       <T v="button" style={bar ? { color: fg, flexShrink: 1, textAlign: "center" } : { color: fg }} numberOfLines={bar ? 2 : 1}>
         {label}
       </T>
