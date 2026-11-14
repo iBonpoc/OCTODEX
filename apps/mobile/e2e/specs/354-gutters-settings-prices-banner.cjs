@@ -47,7 +47,7 @@ exports.run = async (h) => {
   await tid("gpr-missing-n-action").getByRole("button", { name: /Создать позиции сразу \(\d+\)/ }).waitFor({ timeout: 3000 });
   const misses = await p.locator('[data-testid^="gpr-miss-"]').locator("visible=true").count();
   h.expect(misses > 10, `the cards are there (${misses})`);
-  h.expect(!/нет в прайсе/.test(await text()), "no card repeats «нет в прайсе» (the banner says it once)");
+  h.expect(!/нет в прайсе/.test(await text()), "no card repeats «нет в прайсе» (the banner says it once)"); // i18n-old: ok — the old chip must be gone
   await h.shot("prices-missing");
 
   // one row made with a test price while others are still missing: no «Тестовые цены» banner (the missing one is more urgent) —
@@ -70,12 +70,11 @@ exports.run = async (h) => {
   await h.shot("prices-made");
 
   // a tech reads the prices: the «read only» banner is the one shown — every test price is marked on its card
-  await h.go("/today");
-  await p.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), "tech");
+  await h.seed("octo.role.v1", "tech");
   await h.go("/module/gutters/prices");
   await tid("gpr-ro").waitFor({ timeout: 8000 });
   const tests = await p.locator('[data-testid^="gpr-test-"]').locator("visible=true").count();
   const marked = await p.locator('[data-testid^="gpr-test-"]').locator("visible=true").filter({ hasText: "тестовая цена" }).count();
   h.expect(tests > 10 && marked === tests, `read only: every test price is marked on its card (${marked} of ${tests})`);
-  await p.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), "director");
+  await h.seed("octo.role.v1", "director");
 };
