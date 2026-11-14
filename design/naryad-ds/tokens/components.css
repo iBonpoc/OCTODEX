@@ -5,7 +5,7 @@
  --btn-icon:var(--control-md);--btn-icon-phone:var(--control-lg);--btn-icon-glyph:18px;
  --field-h:var(--field);
  --chip-h:24px;--chip-px:10px;
- --seg-h:var(--control-md);--seg-pad:4px;--tab-h:30px;
+ --seg-h:var(--control-md);--seg-pad:4px;--tab-h:30px;--tab-fade-w:var(--space-8);
  --switch-w:42px;--switch-h:24px;--switch-knob:16px;
  --help-visible:18px;--help-icon:11px;
  --tip-fs:var(--fs-caption);--tip-px:8px;--tip-py:4px;--tip-radius:8px;--tip-max:220px;--tip-gap:6px;

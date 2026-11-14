@@ -138,7 +138,8 @@ export const component = {
   field: { h: 34, phone: 44 },
   chip: { h: 24, px: 10 },
   segmented: { h: 32, pad: 4 },
-  tab: { h: 30 },
+  /** a tab of a screen (pill); `fadeW` — the row of view tabs fades this wide at an edge that has more tabs past it (DS §9 А1п, #1343) */
+  tab: { h: 30, fadeW: 32 },
   switch: { w: 42, h: 24, knob: 16 },
   help: { visible: 18, icon: 11 },
   tip: { fs: 11.5, px: 8, py: 4, radius: 8, max: 220, gap: 6 },
