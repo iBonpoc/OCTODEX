@@ -21,6 +21,16 @@ export function photoFailOf(e: unknown): PhotoFail {
   return "refused";
 }
 
+/**
+ * the storage's answer that is not about the file: an expired sign-in (older storage answers it as HTTP 400 with
+ * statusCode 401/403 and «jwt expired»), a timeout, «too many», its own failure — the op stays and is sent again
+ */
+export function storageNotNow(e: unknown): boolean {
+  const code = Number(field(e, "statusCode")) || 0;
+  const msg = String(field(e, "message") ?? "");
+  return /jwt expired|exp.? claim|invalid jwt/i.test(msg) || code === 401 || code === 408 || code === 429 || code >= 500;
+}
+
 /** a photo is too big before it is sent: refused the same way, without sending 25 MB for nothing */
 export const tooBig = (bytes: number) => bytes > FILES_MAX_BYTES;
 

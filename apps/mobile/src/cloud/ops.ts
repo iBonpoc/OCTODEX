@@ -18,7 +18,7 @@ import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from ".
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
-import { photoFailOf, tooBig } from "@/data/photoUpload";
+import { photoFailOf, storageNotNow, tooBig } from "@/data/photoUpload";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
 import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
@@ -507,7 +507,7 @@ export async function uploadPhoto(companyId: string, fileId: string, uri: string
     return null;
   } catch (e) {
     // only a refusal marks the photo failed
-    if (classify(e) !== "refusal") throw e;
+    if (classify(e) !== "refusal" || storageNotNow(e)) throw e;
     return failed(photoFailOf(e));
   }
 }

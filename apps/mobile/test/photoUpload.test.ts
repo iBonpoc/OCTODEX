@@ -91,6 +91,13 @@ describe("uploadPhoto — what the files row and the phone are told", () => {
     await expect(uploadPhoto("c1", "f1", "file:///p.jpg")).rejects.toThrow();
     expect(statusOf()).toEqual([]);
   });
+  it("an expired sign-in the storage answers as 400 + statusCode 403 «jwt expired»: not the file's fault — throws, nothing marked", async () => {
+    storage.error = storageError(400, "403", "jwt expired");
+    await expect(uploadPhoto("c1", "f1", "file:///p.jpg")).rejects.toThrow();
+    storage.error = storageError(400, "401", "Invalid JWT");
+    await expect(uploadPhoto("c1", "f1", "file:///p.jpg")).rejects.toThrow();
+    expect(statusOf()).toEqual([]);
+  });
   it("the server's «not now» (503): throws, nothing marked", async () => {
     storage.error = storageError(503, "503", "Service Unavailable");
     await expect(uploadPhoto("c1", "f1", "file:///p.jpg")).rejects.toThrow();
