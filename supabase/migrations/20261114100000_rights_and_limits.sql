@@ -2,7 +2,8 @@
 -- 1) app.intake_lead: the old link of a rotated form is accepted only while the form is on.
 -- 2) expenses: outside the office a person's own expense moves only to a job they may add it to (as on insert).
 -- 3) trash_items: a row is locked only after its company is the caller's.
--- 4) the client's name ≤ 120 characters and every signature ≤ 64 KB: in app.estimate_client_accept (its own answer) and as
+-- 4) the client's name ≤ 120 characters and every signature ≤ 64 KB: in app.estimate_client_accept and
+--    sign_estimate_on_site (22023, hint signature_too_long; after the «repeat» answer) and as
 --    checks on the tables (NOT VALID: the rows already there are kept; every door that writes a signature is held).
 -- 6) the API roles create nothing in the schemas public, app, extensions.
 -- 5) refunds: the key of a refund is the company's own ('octo:<company>:<key>'); a row with the older 'octo:<key>' is still
@@ -109,11 +110,11 @@ grant execute on function app.intake_lead(text, text, text, text, text, jsonb, j
 
 -- ---- 2. Expenses ----------------------------------------------------------------------------------------------------------
 -- A trigger, not the policy: only a CHANGE of job_id is checked (an expense already on a job keeps its other edits).
+-- is_staff (owner, admin, office, sales) as on insert: sales see every job and keep their own expenses (docs/specs/13 «Продажи»).
 create or replace function app.tg_expense_job_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   if new.job_id is not null and new.job_id is distinct from old.job_id and auth.uid() is not null
-     and not app.has_role(new.company_id, array['owner', 'admin', 'office'])
      and not app.is_staff(new.company_id) and not app.is_job_assignee(new.job_id) then
     raise exception 'an expense goes only to a job of your own' using errcode = '42501';
   end if;
@@ -215,9 +216,6 @@ begin
   if coalesce(p_consent, false) is not true or coalesce(trim(p_signer), '') = '' or coalesce(p_svg, '') = '' then
     raise exception 'E-SIGN consent, name and signature are required' using errcode = '22023';
   end if;
-  if char_length(trim(p_signer)) > 120 or octet_length(p_svg) > 65536 then
-    raise exception 'signer name or signature is too long' using errcode = '22023';
-  end if;
   select * into e from public.estimates where id = p_estimate_id and deleted_at is null for update;
   if not found or (p_token is not null and not exists (select 1 from app.estimate_tokens k where k.token = p_token and k.estimate_id = e.id)) then
     raise exception 'estimate not found' using errcode = 'P0002';
@@ -233,6 +231,10 @@ begin
   end if;
   if e.status in ('awaiting_countersign', 'approved') then
     return 'repeat';                                     -- repeat (network): no duplicates
+  end if;
+  -- after the repeat: a signature already made, sent again from the queue, still answers «repeat»
+  if char_length(trim(p_signer)) > 120 or octet_length(p_svg) > 65536 then
+    raise exception 'signer name or signature is too long' using errcode = '22023', hint = 'signature_too_long';
   end if;
   if e.status not in ('sent', 'viewed') then
     raise exception 'estimate is not open for approval (status %)', e.status using errcode = '22023';
@@ -286,6 +288,56 @@ end;
 $$;
 revoke all on function app.estimate_client_accept(uuid, text, uuid, uuid[], text, text, boolean, text, uuid, uuid) from public, anon, authenticated;
 
+-- the quick estimate's on-site signature (its version with the total calls this one): the same size, its own answer
+create or replace function public.sign_estimate_on_site(p_estimate_id uuid, p_signer text, p_svg text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare e public.estimates; v public.estimate_versions; o public.estimate_options; t record;
+begin
+  if coalesce(trim(p_signer), '') = '' or coalesce(p_svg, '') = '' then
+    raise exception 'name and signature are required' using errcode = '22023';
+  end if;
+  select * into e from public.estimates where id = p_estimate_id and deleted_at is null for update;
+  if not found or not app.is_staff(e.company_id) and not app.can_read_estimate(e.id) then
+    raise exception 'estimate not found' using errcode = 'P0002';
+  end if;
+  if not app.can_sign_contracts(e.company_id) then
+    -- the client signs on an employee's device: only someone who may sign contracts (security-check 05.11)
+    raise exception 'on-site signature requires an employee who may sign contracts' using errcode = '42501';
+  end if;
+  if e.status in ('awaiting_countersign', 'approved') then
+    return e.status;                                      -- repeat: nothing doubles
+  end if;
+  -- after the repeat (a queued repeat answers as before), before the insert (no bare check_violation of the table)
+  if char_length(trim(p_signer)) > 120 or octet_length(p_svg) > 65536 then
+    raise exception 'signer name or signature is too long' using errcode = '22023', hint = 'signature_too_long';
+  end if;
+  if e.status not in ('sent', 'viewed') then
+    raise exception 'estimate is not open for approval (status %)', e.status using errcode = '22023';
+  end if;
+  if e.link_revoked_at is not null then
+    raise exception 'the estimate link was revoked' using errcode = '22023';
+  end if;
+  select * into v from public.estimate_versions where id = e.sent_version_id;
+  if not found or v.locked_at is null then
+    raise exception 'the estimate was not sent (no locked version)' using errcode = '22023';
+  end if;
+  select * into o from public.estimate_options where version_id = v.id and deleted_at is null order by position, created_at limit 1;
+  select * into t from app.estimate_option_totals(v.id, o.id, '{}');
+  insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg,
+                                         esign_consent, channel, selection, party, document_hash, signer_user_id)
+  values (e.company_id, e.id, v.id, o.id, 'approved', trim(p_signer), p_svg, true, 'on_site',
+          jsonb_build_object('addon_ids', '[]'::jsonb, 'subtotal', t.subtotal, 'discount', t.discount, 'tax', t.tax, 'total', t.total, 'deposit', t.deposit),
+          'customer', encode(sha256(convert_to(coalesce(v.calc_inputs::text, '') || coalesce(v.id::text, ''), 'UTF8')), 'hex'),
+          auth.uid());                                    -- whose device the client signed on
+  perform set_config('app.signing_estimate', e.id::text, true);
+  update public.estimates set status = 'awaiting_countersign' where id = e.id;
+  perform set_config('app.signing_estimate', '', true);
+  return 'awaiting_countersign';
+end;
+$$;
+revoke all on function public.sign_estimate_on_site(uuid, text, text) from public, anon;
+grant execute on function public.sign_estimate_on_site(uuid, text, text) to authenticated;
+
 alter table public.estimate_approvals drop constraint if exists estimate_approvals_sizes_check;
 alter table public.estimate_approvals add constraint estimate_approvals_sizes_check
   check ((party <> 'customer' or char_length(signer_name) <= 120) and octet_length(signature_svg) <= 65536) not valid;
@@ -305,7 +357,8 @@ declare r public.refunds;
 begin
   select x.* into r from public.refunds x
    where x.company_id = (select p.company_id from public.payments p where p.id = p_payment_id)
-     and x.idempotency_key in (app.refund_key(x.company_id, p_key), 'octo:' || p_key)
+     and (x.idempotency_key = app.refund_key(x.company_id, p_key)
+          or (strpos(p_key, ':') = 0 and x.idempotency_key = 'octo:' || p_key))   -- the older form: a key had no ':'
    order by (x.idempotency_key = 'octo:' || p_key)
    limit 1;
   if r.id is not null and (r.payment_id <> p_payment_id or r.created_by is distinct from p_user) then
@@ -439,7 +492,8 @@ begin
   return app.refund_json(r) || jsonb_build_object('account_id', (select s.account_id from public.stripe_accounts s where s.company_id = p.company_id),
                                                   'payment_intent', p.stripe_payment_intent_id,
                                                   -- the asker's own try (its key): resumed, never freed under it
-                                                  'own', r.idempotency_key in (app.refund_key(p.company_id, p_key), 'octo:' || p_key));
+                                                  'own', r.idempotency_key = app.refund_key(p.company_id, p_key)
+                                                         or (strpos(p_key, ':') = 0 and r.idempotency_key = 'octo:' || p_key));
 end;
 $$;
 revoke all on function public.stripe_refund_inflight(uuid, uuid, text) from public, anon, authenticated;

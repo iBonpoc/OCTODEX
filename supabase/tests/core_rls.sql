@@ -14284,6 +14284,14 @@ select tst.fails_like($q$update public.expenses set job_id = 'e2070000-0000-4000
                       '%job of your own%', 'T207 …but does not put it back onto that job');
 :as_super
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_expense_job_guard()', 'EXECUTE'), 'T207 rule 18: the guard runs for nobody');
+-- sales: every job is theirs to see (docs/specs/13 «Продажи»), their own expense moves onto any job, as on insert
+:as_sales_a
+insert into public.expenses (id, company_id, vendor, amount_cents, category) values
+  ('e2070000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T207 sales vendor', 900, 'materials');
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where id = 'e2070000-0000-4000-8000-0000000000e2';
+:as_super
+select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000002' from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e2'),
+              'T207 sales put their own expense on any job, as on insert');
 \echo 'T207 an expense moves only to a job its author may add it to ok'
 
 -- T208: trash_items locks no row of a company the caller is not in
@@ -14327,7 +14335,51 @@ select tst.ok(public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2
               'T209 120 characters and a long ordinary signature still sign');
 :as_super
 select tst.ok((select count(*) = 1 from public.estimate_approvals where estimate_id = 'e2090000-0000-4000-8000-000000000001'), 'T209 one approval, the refused ones left nothing');
+-- a repeat from the queue with the long name: «repeat» as before, not an error (director's review of #1409)
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, repeat('n', 121), 'M0 0 L5 5', true) ->> 'status' = 'awaiting_countersign',
+              'T209 a repeat of a signed estimate answers as a repeat, whatever the size');
+-- on site: the own answer (22023, hint signature_too_long), not the table's check_violation
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e2090000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T209 on site', 'a0000000-0000-0000-0000-000000000001');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e2090000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000002', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e2090000-0000-4000-8000-0000000000a2' where id = 'e2090000-0000-4000-8000-000000000002';
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('e2090000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000a2', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000b2', 'labor', 'Work', 1, 40000);
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select public.send_estimate('e2090000-0000-4000-8000-000000000002', 'T209tokenOnSiteByTheOffice0123456789ab') is not null as t209_sent2;
+:as_owner_a
+do $$
+declare v_state text; v_hint text;
+begin
+  begin
+    perform public.sign_estimate_on_site('e2090000-0000-4000-8000-000000000002', repeat('n', 121), 'M0 0 L5 5', 40000);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  end;
+  perform tst.ok(v_state = '22023' and v_hint = 'signature_too_long',
+                 format('T209 on site a name over 120: 22023 / signature_too_long (got %s / %s)', v_state, v_hint));
+  v_state := null; v_hint := null;
+  begin
+    perform public.accept_on_site('e2090000-0000-4000-8000-000000000002', 'e2090000-0000-4000-8000-0000000000b2', '{}', 'T209 Client',
+                                  'M0 0 ' || repeat('L1 1 ', 13108), true, null, null, 40000);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  end;
+  perform tst.ok(v_state = '22023' and v_hint = 'signature_too_long',
+                 format('T209 on site (universal) a signature over 64 KB: 22023 / signature_too_long (got %s / %s)', v_state, v_hint));
+end $$;
+select tst.ok(public.sign_estimate_on_site('e2090000-0000-4000-8000-000000000002', 'T209 Client', 'M0 0 L5 5', 40000) = 'awaiting_countersign',
+              'T209 on site an ordinary signature signs');
+select tst.ok(public.sign_estimate_on_site('e2090000-0000-4000-8000-000000000002', repeat('n', 121), 'M0 0 L5 5', 40000) = 'awaiting_countersign',
+              'T209 …and its repeat with a long name answers as a repeat');
 -- every other door is held by the table: a client's name > 120, any signature > 64 KB
+:as_super
 select tst.fails_like($q$insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg, esign_consent, channel)
                         values ('ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 'e2090000-0000-4000-8000-0000000000a1', 'e2090000-0000-4000-8000-0000000000b1', 'approved', 'x', repeat('L', 65537), true, 'on_site')$q$,
                       '%estimate_approvals_sizes_check%', 'T209 the table holds a signature over 64 KB (any door, e.g. the older on-site one)');
@@ -14345,9 +14397,10 @@ insert into public.invoices (id, company_id, number, customer_id, kind, status, 
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('e2100000-0000-4000-8000-0000000000c1', 'cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-000000000001', 'c1b00000-0000-0000-0000-000000000001', 'cash', 6000, 'succeeded', 't210-b-1'),
   ('e2100000-0000-4000-8000-0000000000c2', 'cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-000000000001', 'c1b00000-0000-0000-0000-000000000001', 'cash', 4000, 'succeeded', 't210-b-2');
--- a row made before 20261114100000 keeps its older key
+-- rows made before 20261114100000 keep their older key
 insert into public.refunds (company_id, payment_id, amount_cents, status, idempotency_key, created_by, method, tax_cents, net_cents) values
-  ('cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-0000000000c2', 500, 'succeeded', 'octo:k210-older', 'b0000000-0000-0000-0000-000000000001', 'cash', 0, 500);
+  ('cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-0000000000c2', 500, 'succeeded', 'octo:k210-older', 'b0000000-0000-0000-0000-000000000001', 'cash', 0, 500),
+  ('cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-0000000000c2', 100, 'succeeded', 'octo:k210:colon', 'b0000000-0000-0000-0000-000000000001', 'cash', 0, 100);
 :as_owner_b
 select tst.ok(public.refund_record('e2100000-0000-4000-8000-0000000000c1', 1000, 'goodwill', null, 'k133-cash-1') ->> 'status' = 'succeeded',
               'T210 a key another company used is this company''s own (red before 20261114100000)');
@@ -14358,10 +14411,13 @@ select tst.fails_like($q$select public.refund_record('e2100000-0000-4000-8000-00
                       'T210 in the company a key of another refund is still not taken');
 select tst.ok((select r ->> 'amount_cents' = '500' from (select public.refund_record('e2100000-0000-4000-8000-0000000000c2', 500, 'goodwill', null, 'k210-older') r) x),
               'T210 a retry of a refund made before finds it by its older key');
+select tst.ok(public.refund_record('e2100000-0000-4000-8000-0000000000c1', 200, 'goodwill', null, 'k210:colon') ->> 'amount_cents' = '200',
+              'T210 a key with '':'' is never read in the older form (a new refund, not another payment''s row)');
 :as_super
-select tst.ok((select idempotency_key = 'octo:cb000000-0000-0000-0000-000000000000:k133-cash-1' from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1')
-              and (select count(*) = 1 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c2')
-              and (select refunded_cents = 1000 from public.payments where id = 'e2100000-0000-4000-8000-0000000000c1'),
+select tst.ok((select count(*) = 1 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1' and idempotency_key = 'octo:cb000000-0000-0000-0000-000000000000:k133-cash-1')
+              and (select count(*) = 1 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1' and idempotency_key = 'octo:cb000000-0000-0000-0000-000000000000:k210:colon')
+              and (select count(*) = 2 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c2')
+              and (select refunded_cents = 1200 from public.payments where id = 'e2100000-0000-4000-8000-0000000000c1'),
               'T210 the key is stored with its company; one refund each, the money once');
 select tst.ok(not has_function_privilege('anon', 'app.refund_key(uuid, text)', 'EXECUTE')
               and not has_function_privilege('authenticated', 'app.refund_key(uuid, text)', 'EXECUTE'),
