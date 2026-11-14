@@ -132,7 +132,7 @@ export default function EditClient() {
         </Labeled>
         {!creating ? <Button label={t("client.f.addPhone")} icon="plus" variant="ghost" size="sm" onPress={() => setPhones((x) => [...x, blank])} /> : null}
         <Labeled label={t("co.email")}>
-          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="mail" />
         </Labeled>
       </FieldGroup>
 

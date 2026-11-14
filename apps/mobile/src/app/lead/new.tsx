@@ -99,7 +99,7 @@ export default function NewLead() {
           <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena" />
         </Labeled>
         <SourceField value={sourceId} onChange={setSourceId} field={form.field("source")} />
-        <Labeled label={t("lead.need")}>
+        <Labeled label={t("lead.message")}>
           <TextField type="note" value={message} onChangeText={setMessage} placeholder={t("lead.messagePh")} />
         </Labeled>
       </FieldGroup>

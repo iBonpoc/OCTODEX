@@ -45,7 +45,7 @@ export function FieldsSection() {
             action={{ icon: "copy", label: t("field.pastePhone"), onPress: paste, testID: "showcase-phone-paste" }}
           />
         </Labeled>
-        <Labeled label={t("lead.need")}>
+        <Labeled label={t("lead.message")}>
           <TextField
             type="note"
             value={note}

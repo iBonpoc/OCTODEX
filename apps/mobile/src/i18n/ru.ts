@@ -459,7 +459,6 @@ export const ru = {
   "lead.message": "Что нужно клиенту",
   "lead.save": "Сохранить лид",
   "lead.saved": "Лид добавлен: {name}",
-  "lead.need": "Нужны имя и телефон",
   "toast.bookedTomorrow": "Выезд на оценку завтра в 10:00, назначьте мастера: {name}",
   "est.send": "Отправить клиенту",
   "est.sentToast": "Смета отправлена: {name}",

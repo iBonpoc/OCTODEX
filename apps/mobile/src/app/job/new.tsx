@@ -157,7 +157,7 @@ export default function NewJob() {
             <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" icon="phone" />
           </Labeled>
           <Labeled label={t("co.email")}>
-            <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
+            <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="mail" />
           </Labeled>
           <Button label={t("job3.new.pickInstead")} size="sm" variant="ghost" onPress={() => setPicker(true)} />
         </FieldGroup>

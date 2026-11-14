@@ -460,7 +460,6 @@ export const es: Dict = {
   "lead.message": "Qué necesita el cliente",
   "lead.save": "Guardar",
   "lead.saved": "Agregado: {name}",
-  "lead.need": "Nombre y teléfono son obligatorios",
   "toast.bookedTomorrow": "Visita mañana 10:00, asigne técnico: {name}",
   "est.send": "Enviar al cliente",
   "est.sentToast": "Presupuesto enviado: {name}",
