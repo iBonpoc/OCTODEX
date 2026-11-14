@@ -1,6 +1,6 @@
 /**
  * Wave 3a: the job screen (docs/specs/13 §3.4, 17-job §7.1) — «Работа JOB-0001», «Связано», Детали · Деньги · История.
- * - Детали: the action row goes by the next open visit (Начать → the visit);
+ * - Детали: the main step goes by the next open visit (Начать выезд → the visit; the rest in «⋯», #1474);
  * - Деньги: the office sees «Прибыль»; the technician sees «К оплате» and no profit;
  * - История: a note added at the bottom shows under «Заметки», not under «Звонки».
  */
@@ -43,7 +43,7 @@ exports.run = async (h) => {
   h.expect(!/Ключ у соседа/.test(await h.text()), "«Звонки» does not show notes");
   await h.shot("history");
 
-  // the technician: «К оплате», no profit; «Начать» opens his visit
+  // the technician: «К оплате», no profit; «Начать выезд» opens his visit
   await setRole(h, "tech");
   await h.go(`/job/${job.id}`);
   await p.getByRole("tab", { name: "Деньги", exact: true }).locator("visible=true").click();
@@ -61,7 +61,7 @@ exports.run = async (h) => {
     if (due !== inv.totalCents) h.expect(!txt.includes(usd(inv.totalCents)), `tech: no invoice total (${usd(inv.totalCents)})`);
   }
   await p.getByRole("tab", { name: "Детали", exact: true }).locator("visible=true").click();
-  await h.click("Начать");
+  await h.click("Начать выезд");
   await p.waitForTimeout(600);
   h.expect(path(h) === "/visit/e2e63", `«Начать» → the next visit (${p.url()})`);
 };

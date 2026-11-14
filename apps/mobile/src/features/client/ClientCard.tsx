@@ -3,8 +3,7 @@ import { useRef, useState, type ReactElement, type ReactNode } from "react";
 import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
 import { router, type Href } from "expo-router";
-import { component, radius, size, space } from "@octo/design-tokens";
-import { useTheme } from "@/theme/ThemeProvider";
+import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
 import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf } from "@/features/clients";
@@ -19,12 +18,13 @@ import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { billingLine } from "@/features/clientForm";
 import { propertyTitle } from "@/features/properties";
 import { ClientDupCards } from "@/features/client/ClientDuplicates";
+import { ActionTile } from "@/features/ActionTile";
 import { sourceName } from "@/features/leads";
 import type { Customer, CustomerStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { fabItems } from "@/nav/sections";
 import { Button, IconButton, StatusChip, TagChip } from "@/ui/controls";
-import { Icon, Press, T, type IconKey } from "@/ui/primitives";
+import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ViewTabs } from "@/ui/viewTabs";
 import { Card, CardList, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
@@ -399,17 +399,3 @@ function MoneyCell({ label, value, tone = "ink", testID }: { label: string; valu
   );
 }
 
-/** a quick action of the card: a round button with its word under it (prototype v6: Позвонить · Написать · Маршрут) */
-function ActionTile({ icon, label, onPress, testID }: { icon: IconKey; label: string; onPress: () => void; testID: string }) {
-  const { c } = useTheme();
-  return (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} testID={testID} containerStyle={{ flex: 1 }} style={{ alignItems: "center", gap: space[1], minHeight: size.hitMin }}>
-      <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
-        <Icon name={icon} />
-      </View>
-      <T v="caption" tone="mut" center>
-        {label}
-      </T>
-    </Press>
-  );
-}
