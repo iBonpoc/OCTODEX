@@ -56,6 +56,7 @@ import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
+import { GridLayer } from "../canvas/GridLayer";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
@@ -719,7 +720,6 @@ export default function DrawScreen() {
             cornerText: (_kind, _splash, angleDeg) => `${angleDeg}°`,
             faceOff: dt.runW * 2,
             dimDs: dim ? fresh : null,
-            gridMinPx: space[6],
             layers,
           })
         : null,
@@ -1044,7 +1044,17 @@ export default function DrawScreen() {
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
-        <CanvasView view={viewNow} onView={setView} live={live} size={size} onSize={setSize} gestures={canvas} testID="draw-canvas">
+        <CanvasView
+          view={viewNow}
+          onView={setView}
+          live={live}
+          size={size}
+          onSize={setSize}
+          gestures={canvas}
+          testID="draw-canvas"
+          // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
+          under={layers.grid && view && size.w > 0 ? <GridLayer view={viewNow} live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+        >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
               {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}
