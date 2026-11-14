@@ -1,7 +1,7 @@
 /**
  * The site's address in one piece (#656 слой 2): the app builds its links (/p/, /f/, invites, sign-in) on WEB_APP_URL,
  * Stripe's onboarding comes back to APP_URL — both must be a site the functions accept, or a client's payment, a request
- * form or a sign-in breaks. The old name stays accepted: links already sent lead there for good.
+ * form or a sign-in breaks. The old name octodex was released when the subdomain changed: it is refused everywhere.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -23,8 +23,9 @@ describe("unit:siteAddress — the app's links lead to a site the functions acce
   it("Stripe's onboarding comes back to the same site", () => {
     expect(/const APP_URL = "([^"]+)"/.exec(connect)?.[1]).toBe(WEB_APP_URL);
   });
-  it("the old address is never dropped: links already sent to clients and snippets on contractors' sites lead there", () => {
-    expect(ALLOWED_ORIGINS).toContain("https://octodex.expo.app");
-    expect(SITE_ORIGIN.test("https://octodex.expo.app")).toBe(true);
+  it("the released old name octodex is refused everywhere: anyone may take it now (#656)", () => {
+    expect(ALLOWED_ORIGINS).not.toContain("https://octodex.expo.app");
+    for (const o of ["https://octodex.expo.app", "https://octodex--pr-1.expo.app"]) expect(SITE_ORIGIN.test(o), o).toBe(false);
+    expect(connect).not.toMatch(/octodex\.expo\.app/);
   });
 });

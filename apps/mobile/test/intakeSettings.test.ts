@@ -23,9 +23,9 @@ describe("intake settings", () => {
     expect(READINESS_TONE.on).toBe("ok");
   });
   it("the form link and the site code: a plain link in a new tab, escaped", () => {
-    const link = formLink("https://octodex.expo.app/", "fabc");
-    expect(link).toBe("https://octodex.expo.app/f/fabc");
-    expect(siteSnippet(link, "Request a quote")).toBe('<a href="https://octodex.expo.app/f/fabc" target="_blank" rel="noopener">Request a quote</a>');
+    const link = formLink("https://gorix.expo.app/", "fabc");
+    expect(link).toBe("https://gorix.expo.app/f/fabc");
+    expect(siteSnippet(link, "Request a quote")).toBe('<a href="https://gorix.expo.app/f/fabc" target="_blank" rel="noopener">Request a quote</a>');
     expect(siteSnippet('x" onclick="evil', "<b>")).toBe('<a href="x&quot; onclick=&quot;evil" target="_blank" rel="noopener">&lt;b&gt;</a>');
     expect(siteSnippet(link, "x")).not.toMatch(/iframe|script/);
   });

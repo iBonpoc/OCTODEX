@@ -82,10 +82,10 @@ export interface Res {
   headers: Record<string, string>;
 }
 
-/** the sites that may call it from a browser: the production site only (a PR preview pays nothing). Both names while the
- *  site moves to gorix.expo.app (#656 слой 2, шаг 1): a client's old link /p/… on octodex keeps paying. The old one is not
- *  dropped — links already sent to clients lead there for good */
-export const ALLOWED_ORIGINS: readonly string[] = ["https://octodex.expo.app", "https://gorix.expo.app"];
+/** the sites that may call it from a browser: the production site only (a PR preview pays nothing). gorix.expo.app only
+ *  (#656 слой 2): the old name octodex was released when the Hosting subdomain changed — anyone may take it now, so a page
+ *  there is a stranger's and must not pay (no client links were ever sent to it) */
+export const ALLOWED_ORIGINS: readonly string[] = ["https://gorix.expo.app"];
 /** from this balance ACH comes first (spec 35 §2 п.3) */
 export const ACH_FIRST_CENTS = 100000;
 /** the states in which the client can still pay an existing PaymentIntent */

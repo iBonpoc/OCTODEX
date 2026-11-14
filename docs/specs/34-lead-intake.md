@@ -14,7 +14,7 @@
 ## 2. Каналы: что первым
 | # | Канал | Решение | Почему |
 |---|---|---|---|
-| 1 | **Своя страница заявки** `octodex.expo.app/f/<token>` + код вставки (iframe той же страницы) + QR | **первым** | У многих подрядчиков сайта нет — ссылку ставят в Google Business Profile, Facebook, Nextdoor, QR на машине. Одна страница = один код для «ссылки» и «на сайт», без JS-виджета в чужом DOM (CSP, конфликты стилей). Jobber делает так же (Request forms, `market/jobber.md:163`). |
+| 1 | **Своя страница заявки** `gorix.expo.app/f/<token>` + код вставки (iframe той же страницы) + QR | **первым** | У многих подрядчиков сайта нет — ссылку ставят в Google Business Profile, Facebook, Nextdoor, QR на машине. Одна страница = один код для «ссылки» и «на сайт», без JS-виджета в чужом DOM (CSP, конфликты стилей). Jobber делает так же (Request forms, `market/jobber.md:163`). |
 | 2 | **Вебхук с ключом компании** (Zapier / Make) | вторым, тем же конвейером | Покрывает Google LSA, Facebook Lead Ads, Angi, Thumbtack (через их выгрузки в Zapier) без интеграций с каждой площадкой. Дёшево: тот же конвейер, другой вход. Цена/провайдер — из полей. |
 | 3 | Пересылка писем площадок | после домена и Г3 | заблокировано (§1) |
 | 4 | Прямые API Thumbtack / LSA | «Запуск» | партнёрский допуск Thumbtack, developer token Google Ads, OAuth; вне MVP |
@@ -73,7 +73,7 @@ Zapier ──POST Bearer key──►      │ размер ≤ 16 КБ, пол�
 - В PR 2 обязательно: наружу одинаковый ответ для accepted/merged/held/rejected (иначе по ответу видно, есть ли открытый лид у телефона), HMAC IP с секретом функции (простой sha256 перебирается).
 
 ## 3в. PR 2: функция и страница (как сделано)
-- `supabase/functions/lead-intake` (verify_jwt = false). GET `?t=` — что показать странице; POST от страницы — только с `https://(octodex|gorix)(--…)?.expo.app` (`SITE_ORIGIN` в `handler.ts`; оба имени — сайт переезжает на gorix, #656 слой 2; старое не убираем: на нём страницы заявок и сниппеты на сайтах подрядчиков), ответ всегда `{ok:true}` не раньше чем через 800 мс; POST с `Authorization: Bearer gxk_…` — вебхук: без CORS, из браузера (с Origin) — 403. Обёртки в базе: `public.intake_submit`, `public.intake_form` (только service_role, T120).
+- `supabase/functions/lead-intake` (verify_jwt = false). GET `?t=` — что показать странице; POST от страницы — только с `https://gorix(--…)?.expo.app` (`SITE_ORIGIN` в `handler.ts`; старое имя `octodex` освобождено при смене поддомена, #656 слой 2 — отказ), ответ всегда `{ok:true}` не раньше чем через 800 мс; POST с `Authorization: Bearer gxk_…` — вебхук: без CORS, из браузера (с Origin) — 403. Обёртки в базе: `public.intake_submit`, `public.intake_form` (только service_role, T120).
 - Ключ события строит функция: `f:` + sha256(хэш полей | nonce страницы). Повтор той же отправки (тот же nonce) — одна заявка; поле `event_key` из тела не читается. Вебхук: `e:<event_id>` или `h:<хэш полей>`.
 - IP: `cf-connecting-ip`, иначе последний адрес `x-forwarded-for` (первый подделывается); хранится только HMAC с секретом `INTAKE_IP_SECRET`. Без секрета IP нет — база отклоняет заявки формы (`no_ip`): секрет нужен до включения формы.
 - Бот: скрытое поле заполнено, или от открытия до отправки < 3 с, или нет времени открытия. Капча: siteverify (success, hostname, action = lead); виджет на странице — после ответа основателя В3 (сейчас переключатель выкл, капча `none`).
