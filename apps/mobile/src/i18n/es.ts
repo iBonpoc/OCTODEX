@@ -3775,6 +3775,8 @@ export const es: Dict = {
   "est.tpl.startersHint": "Presupuestos listos de sus módulos. Las líneas van en el idioma de documentos de la empresa; los precios, de su catálogo.",
   "est.tpl.starterAdded": "Plantilla «{name}» añadida",
   "est.tpl.starterNoPrice": "Plantilla añadida. No está en el catálogo: {n} — precio 0, revíselo",
+  "est.tpl.starterNeedPrices": "Plantilla no añadida: la lista de precios no tiene ninguno de sus artículos, todas las líneas serían de $0. Cree primero la lista de precios en la sección «Precios y lista de precios» del módulo",
+  "est.tpl.starterSeveral": "Plantilla no añadida: la lista de precios tiene varios artículos igual de adecuados para sus líneas y no está claro cuál usar. Ordene la lista de precios en la sección «Precios y lista de precios» del módulo",
   "est.tpl.copy": "Copiar",
   "est.tpl.copyName": "{name} (copia)",
   "est.tpl.copied": "Guardado: «{name}»",

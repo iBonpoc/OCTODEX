@@ -115,6 +115,17 @@ export function sampleJob(raw: unknown): MeasurementInput {
   };
 }
 
+/**
+ * #1336: which item a starter estimate's line means for THIS company: the line's `match` ({part: "gutter"}) with the company's own default stock
+ * (profile, size, metal, colour… of a new run) — the very properties a drawing's estimate line asks for, so the starter and the drawing take
+ * the same item. A line with no part (labor: work, storey) or a part the sample job has no row for stays as it is.
+ */
+export function starterWant(settings: unknown, match: Record<string, string>): Record<string, string> {
+  if (!match.part) return match;
+  const row = materialRows(settings).find((r) => matchAttrs(r.part).part === match.part);
+  return row ? { ...matchAttrs(row.part), ...match } : match;
+}
+
 /** the material parts of the sample job, one row per item (labor is LABOR_PARTS) */
 export function materialRows(raw: unknown): PriceRow[] {
   const { parts } = computeGutterParts(sampleJob(raw), toRulesOverride(raw));
