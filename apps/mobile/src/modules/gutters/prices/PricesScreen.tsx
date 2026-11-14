@@ -55,8 +55,13 @@ export default function GutterPricesScreen() {
 
   /** rows priced by a test item (rule 9): said once in the banner, each card keeps its own «тестовая цена» */
   const testN = [...labor, ...parts].filter((r) => findItem(catalog, r.part)?.placeholder).length;
-  /** own prices and test prices side by side: only then a card marks its test price */
+  /** own prices and test prices side by side: then a card marks its test price even under the banner (it tells which are left) */
   const mixed = testN > 0 && [...labor, ...parts].some((r) => { const it = findItem(catalog, r.part); return !!it && !it.placeholder; });
+  /** the banner «Тестовые цены: N» is on the screen (the module on, the person writes prices, nothing missing) */
+  const testBanner = active && staff && !missing.length && testN > 0;
+  /** rule 9: a test price is ALWAYS marked — by the banner or by the card's chip; the chip is left out only under the banner
+   *  and only while every price is a test one (DS Б9: no wall of the same chip). Read only, off, or something still missing: chips */
+  const testChip = !testBanner || mixed;
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
    *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */
   const made = useRef(new Set<string>());
@@ -91,7 +96,7 @@ export default function GutterPricesScreen() {
           value={`${money(catalogUnitPrice(it))} / ${unit}`}
           // DS Б9 (#1426): the banner says «Тестовые цены: N»; a card marks its test price only while the list mixes test and own
           // prices (then it tells which are left to set) — all test: no wall of the same chip
-          status={it.placeholder ? (mixed ? { tone: "warn", label: t(k("testPrice")) } : undefined) : { tone: "ok", label: t(k("found")) }}
+          status={it.placeholder ? (testChip ? { tone: "warn", label: t(k("testPrice")) } : undefined) : { tone: "ok", label: t(k("found")) }}
           density={desktop ? "row" : "rich"}
           edge={null}
           onPress={ro ? undefined : () => router.push(`/catalog/${it.id}`)}
