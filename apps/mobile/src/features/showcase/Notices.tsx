@@ -58,7 +58,7 @@ export function NoticesSection() {
           <T v="caption" tone="mut">{t("ds.banner.hint")}</T>
           <Banner tone="warn" testID="showcase-banner-warn" title={t("ds.banner.warnTitle")} hint={t("ds.banner.warnHint")} action={{ label: t("ds.banner.warnBtn"), onPress: () => setPressed(t("ds.banner.warnBtn")) }} />
           {infoShown ? (
-            <Banner tone="info" testID="showcase-banner-info" title={t("ds.banner.infoTitle")} hint={t("ds.banner.infoHint")} onClose={() => setInfoShown(false)} closeLabel={t("ds.banner.close")} />
+            <Banner tone="info" testID="showcase-banner-info" title={t("ds.banner.infoTitle")} hint={t("ds.banner.infoHint")} onClose={() => setInfoShown(false)} />
           ) : (
             <View testID="showcase-banner-closed" style={{ gap: space[2] }}>
               <T v="caption" tone="mut">{t("ds.banner.closed")}</T>

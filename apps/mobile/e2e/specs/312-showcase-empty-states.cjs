@@ -27,10 +27,11 @@ exports.run = async (h) => {
   // the state banner (Б9): warn with one action; info closes with «✕» (only info may)
   await vis("showcase-banner-warn-icon").waitFor({ timeout: 3000 });
   h.expect(/Модуль не подключён — только просмотр/.test(await vis("showcase-banner-warn").innerText()), "the warn banner says its state");
-  h.expect((await p.getByTestId("showcase-banner-warn").getByRole("button", { name: "Скрыть" }).count()) === 0, "a warn banner has no «✕»");
+  h.expect((await p.getByTestId("showcase-banner-warn-close").count()) === 0, "a warn banner has no «✕»");
+  await vis("showcase-banner-info-close").waitFor({ timeout: 3000 });
   await vis("showcase-banner-warn-action").getByRole("button", { name: "Подключить" }).click();
   h.expect(/Подключить/.test(await last()), `the banner's action answers: ${await last()}`);
-  await vis("showcase-banner-info").getByRole("button", { name: "Скрыть" }).click();
+  await vis("showcase-banner-info-close").getByRole("button", { name: "Скрыть" }).click();
   await vis("showcase-banner-closed").waitFor({ timeout: 3000 });
   await vis("showcase-banner-closed").getByRole("button", { name: "Показать снова" }).click();
   await vis("showcase-banner-info").waitFor({ timeout: 3000 });
