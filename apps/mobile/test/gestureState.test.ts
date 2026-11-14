@@ -5,7 +5,7 @@
  * gestures commit at their end, every `scaleChange` multiplies, the render drops the whole live transform) — it fails every one of them.
  */
 import { describe, expect, it } from "vitest";
-import { applyTf, endGesture, idleState, IDENTITY, panFrame, pinchFrame, settle, sub, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
+import { applyTf, endGesture, idleState, IDENTITY, panFrame, pinchFrame, RUBBER, rubber, settle, sub, unrubber, type LiveState, type Pending, type Tf, type View } from "../src/modules/gutters/canvas/gestureState";
 
 type Ev =
   | { t: "pinch"; n: number; k: number; fx?: number; fy?: number }
@@ -193,50 +193,80 @@ describe("the rest", () => {
   });
 });
 
-describe("#1281 — the limits of the scale: a soft stop, a tick at the limit, the commit inside the limits", () => {
+describe("#1281 / #1403 — the limits of the scale: a rubber without a wall, no tick, the way back about the fingers", () => {
   const lim = { lo: 0.5, hi: 4 };
   const frames = (n: number, k: number) => Array.from({ length: n }, () => ({ scaleChange: k, numberOfPointers: 2, focalX: 100, focalY: 100 }));
-  it("zooming in: the live scale stops softly at the nearest limit (at most OVERSHOOT past it), the edge is flagged once it is reached", () => {
+  it("zooming in: the screen scale goes on past the limit, the further the slower, never past RUBBER (no wall: every frame still moves it)", () => {
     const st = idleState();
-    let edges = 0, last = 0;
-    for (const f of frames(40, 1.2)) {
+    const seen: number[] = [];
+    for (const f of frames(60, 1.1)) {
       pinchFrame(st, f, lim);
-      if (st.edge !== 0 && last === 0) edges++;
-      last = st.edge;
+      seen.push(st.S);
     }
-    expect(st.S).toBeLessThanOrEqual(lim.hi * (1 + OVERSHOOT) + 1e-9);
-    expect(st.S).toBeGreaterThan(lim.hi * 0.99);
-    expect(st.edge).toBe(1);
-    expect(edges).toBe(1); // one tick, not one per frame
+    expect(Math.max(...seen)).toBeLessThanOrEqual(lim.hi * (1 + RUBBER) + 1e-9);
+    // the fingers' scale 1.1^60 is huge, the screen's is at most RUBBER past the limit
+    expect(st.S).toBeGreaterThan(lim.hi * (1 + RUBBER * 0.9));
+    // strictly growing while the fingers spread by a visible step: the screen never stops dead under the fingers
+    const past = seen.filter((v) => v > lim.hi);
+    for (let i = 1; i < Math.min(past.length, 10); i++) expect(past[i]!).toBeGreaterThan(past[i - 1]!);
   });
   it("zooming out: the same at the farthest limit", () => {
     const st = idleState();
-    for (const f of frames(40, 0.8)) pinchFrame(st, f, lim);
-    expect(st.S).toBeGreaterThanOrEqual(lim.lo / (1 + OVERSHOOT) - 1e-9);
-    expect(st.S).toBeLessThan(lim.lo * 1.01);
-    expect(st.edge).toBe(-1);
+    for (const f of frames(60, 0.9)) pinchFrame(st, f, lim);
+    expect(st.S).toBeGreaterThanOrEqual(lim.lo / (1 + RUBBER) - 1e-9);
+    expect(st.S).toBeLessThan(lim.lo / (1 + RUBBER * 0.9));
   });
-  it("the focal point stays under the fingers also at the limit (the map is scaled about it by the factor that was allowed)", () => {
+  it("the rubber is continuous at the limit: slope 1 (the first step past it is the finger's own step), the inverse is exact", () => {
+    for (const x of [0.5, 1, 3.99, 4, 4.01, 4.5, 5, 6]) expect(unrubber(rubber(x, lim), lim)).toBeCloseTo(x, 6);
+    for (const x of [0.5, 0.49, 0.45, 0.4, 0.3]) expect(unrubber(rubber(x, lim), lim)).toBeCloseTo(x, 6);
+    expect((rubber(lim.hi * 1.001, lim) - lim.hi) / (lim.hi * 0.001)).toBeGreaterThan(0.99);
+    expect((lim.lo - rubber(lim.lo * 0.999, lim)) / (lim.lo * 0.001)).toBeGreaterThan(0.95);
+  });
+  it("a pinch back from the rubber follows the fingers at once (the fingers' scale is kept, not the screen's)", () => {
+    const st = idleState();
+    for (const f of frames(30, 1.2)) pinchFrame(st, f, lim);
+    const deep = st.S;
+    pinchFrame(st, { scaleChange: 0.8, numberOfPointers: 2, focalX: 100, focalY: 100 }, lim);
+    expect(st.S).toBeLessThan(deep); // the first frame back already shrinks it
+    for (const f of frames(40, 0.8)) pinchFrame(st, f, lim);
+    expect(st.S).toBeLessThan(lim.hi); // and it is inside the limits again, nowhere stuck
+  });
+  it("the focal point stays under the fingers also past the limit (the map is scaled about it by the factor that was shown)", () => {
     const st = idleState();
     for (const f of frames(40, 1.2)) pinchFrame(st, { ...f, focalX: 130, focalY: 70 }, lim);
     expect(st.S * 130 + st.Tx).toBeCloseTo(130, 6);
     expect(st.S * 70 + st.Ty).toBeCloseTo(70, 6);
   });
-  it("back from the limit the edge is free again; no limit given (the bench): the scale is free", () => {
+  it("let go past a limit: the commit is the transform gone back to the limit ABOUT THE FINGERS (no jump about the screen's centre)", () => {
+    const st = idleState();
+    for (const f of frames(40, 1.2)) pinchFrame(st, { ...f, focalX: 130, focalY: 70 }, lim);
+    const live = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+    const t = endGesture(st, lim)!;
+    expect(t.S).toBeCloseTo(lim.hi, 9);
+    // the plan point under the fingers is the same on the rubber and at the limit
+    expect((130 - live.Tx) / live.S).toBeCloseTo((130 - t.Tx) / t.S, 6);
+    expect((70 - live.Ty) / live.S).toBeCloseTo((70 - t.Ty) / t.S, 6);
+    // the far side: back up to the farthest limit
+    const far = idleState();
+    for (const f of frames(40, 0.8)) pinchFrame(far, { ...f, focalX: 50, focalY: 200 }, lim);
+    expect(endGesture(far, lim)!.S).toBeCloseTo(lim.lo, 9);
+  });
+  it("a pan that ends first (the first finger up) closes the segment the same way: past the limit it goes back too", () => {
     const st = idleState();
     for (const f of frames(40, 1.2)) pinchFrame(st, f, lim);
-    pinchFrame(st, { scaleChange: 0.5, numberOfPointers: 2, focalX: 0, focalY: 0 }, lim);
-    expect(st.edge).toBe(0);
+    panFrame(st, { changeX: 0, changeY: 0, numberOfPointers: 2 }, 2, lim);
+    const t = panFrame(st, { changeX: 0, changeY: 0, numberOfPointers: 1 }, 2, lim)!;
+    expect(t.S).toBeCloseTo(lim.hi, 9);
+  });
+  it("inside the limits the commit is the live transform as it was; no limit given (the bench): the scale is free", () => {
+    const st = idleState();
+    for (const f of frames(5, 1.1)) pinchFrame(st, f, lim);
+    const live = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+    expect(endGesture(st, lim)).toEqual(live);
     const free = idleState();
     for (const f of frames(40, 1.2)) pinchFrame(free, f);
     expect(free.S).toBeGreaterThan(1000);
   });
-  it("the segment's end clears the edge", () => {
-    const st = idleState();
-    for (const f of frames(40, 1.2)) pinchFrame(st, f, lim);
-    endGesture(st);
-    expect(st.edge).toBe(0);
-  });
 });
 
-import { OVERSHOOT } from "../src/modules/gutters/canvas/gestureState";
+
