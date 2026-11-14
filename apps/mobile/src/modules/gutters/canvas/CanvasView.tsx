@@ -156,6 +156,8 @@ export function CanvasView(props: {
   panPointers?: number;
   /** made by the screen with useCanvasGestures when it has gestures of its own inside */
   gestures?: CanvasGestures;
+  /** drawn under the scaled layer and never scaled: the grid (#1434), which follows the live view by itself */
+  under?: ReactNode;
   children: ReactNode;
   testID?: string;
 }) {
@@ -167,7 +169,7 @@ function OwnGestures(props: Parameters<typeof CanvasView>[0]) {
   return <Canvas {...props} gestures={g} />;
 }
 
-function Canvas({ view, live, size, onSize, gestures, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
+function Canvas({ view, live, size, onSize, gestures, under, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
   const { tx, ty, s, fx, fy } = live;
   // the painter has redrawn at the committed view: drop the live transform in the same frame
   useLayoutEffect(() => {
@@ -186,6 +188,7 @@ function Canvas({ view, live, size, onSize, gestures, children, testID }: Parame
   return (
     <GestureDetector gesture={gestures.both}>
       <View style={{ flex: 1, overflow: "hidden" }} onLayout={layout} testID={testID}>
+        {under}
         <Animated.View style={[{ width: size.w, height: size.h }, st]}>{children}</Animated.View>
       </View>
     </GestureDetector>

@@ -14,13 +14,13 @@ const d: Drawing = {
   downspouts: [{ id: "d1", runId: "a", atIn: 300, shape: "rect", size: "2x3", material: "aluminum", elbows: [{ style: "A", qty: 1 }] } as never],
 };
 const vp = { w: 390, h: 600 };
-const base = { view: fitView(d.runs.flatMap((r) => [r.a, r.b]), vp, 40), viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}`, gridMinPx: 24, cornerText: () => "наруж. 90°", lenWithStory: true };
+const base = { view: fitView(d.runs.flatMap((r) => [r.a, r.b]), vp, 40), viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}`, cornerText: () => "наруж. 90°", lenWithStory: true };
 
 describe("layers", () => {
-  it("all on (or not said): the grid, the labels and the downspout are there", () => {
+  // the grid is its own layer since #1434 (GridLayer, test/gutterGrid.test.ts): the scene has no grid, «grid off» changes nothing in it
+  it("all on (or not said): the labels and the downspout are there", () => {
     for (const layers of [undefined, { grid: true, labels: true, ds: true }]) {
       const s = buildScene(d, { ...base, layers });
-      expect(s.grid).toBeTruthy();
       expect(s.labels.length).toBeGreaterThan(0);
       expect(s.ds).toHaveLength(1);
       expect(s.runs).toHaveLength(2);
@@ -28,12 +28,11 @@ describe("layers", () => {
   });
   it("each layer off hides only itself; the gutters stay", () => {
     const grid = buildScene(d, { ...base, layers: { grid: false } });
-    expect(grid.grid).toBeUndefined();
+    expect(grid).toEqual(buildScene(d, base));
     expect(grid.labels.length).toBeGreaterThan(0);
     expect(grid.ds).toHaveLength(1);
     const labels = buildScene(d, { ...base, layers: { labels: false } });
     expect(labels.labels).toEqual([]);
-    expect(labels.grid).toBeTruthy();
     expect(labels.runs).toHaveLength(2);
     const ds = buildScene(d, { ...base, layers: { ds: false } });
     expect(ds.ds).toEqual([]);

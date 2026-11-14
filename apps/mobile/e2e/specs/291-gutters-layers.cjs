@@ -58,11 +58,11 @@ exports.run = async (h) => {
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-svg"] text')].some((t) => /′|″/.test(t.textContent || "")), null, { timeout: 5000 });
   h.expect(true, "the labels are back");
   // the grid: its paths go and come back
-  h.expect((await svg().locator("#grid-minor").count()) === 1, "the grid is drawn");
+  h.expect((await p.getByTestId("draw-grid").locator("#grid-minor").count()) === 1, "the grid is drawn (its own layer, #1434)");
   await tid("draw-layer-grid").getByRole("switch").click();
-  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-svg"] #grid-minor'), null, { timeout: 5000 });
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-grid"] #grid-minor'), null, { timeout: 5000 });
   await tid("draw-layer-grid").getByRole("switch").click();
-  await p.waitForFunction(() => !!document.querySelector('[data-testid="draw-svg"] #grid-minor'), null, { timeout: 5000 });
+  await p.waitForFunction(() => !!document.querySelector('[data-testid="draw-grid"] #grid-minor'), null, { timeout: 5000 });
   // the downspouts: the mark goes, the downspout stays in the store; a touch on its place picks the gutter, not the hidden one
   await tid("draw-layer-ds").getByRole("switch").click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] circle').length === 0, null, { timeout: 5000 });
