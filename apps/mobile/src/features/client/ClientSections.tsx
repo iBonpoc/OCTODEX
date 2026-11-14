@@ -347,11 +347,11 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       const items = hist === "all" ? history : history.filter((h) => h.kind === hist);
       return (
         <>
-          {/* the list's one filter row (31 §6, DS §5.5): one line that scrolls sideways — not a second row of tabs that wraps (#1416) */}
+          {/* the list's one filter row (31 §6, DS §5.5: «Все» last): one line that scrolls sideways — not a second row of tabs that wraps (#1416) */}
           <FilterBar<"all" | HistoryKind>
             value={hist}
             onChange={setHist}
-            items={(office ? (["all", "talk", "docs", "money"] as const) : (["all", "talk", "docs"] as const)).map((k) => ({ key: k, label: t(`client.h.f.${k}`), count: k === "all" ? history.length : history.filter((h) => h.kind === k).length }))}
+            items={(office ? (["talk", "docs", "money", "all"] as const) : (["talk", "docs", "all"] as const)).map((k) => ({ key: k, label: t(`client.h.f.${k}`), count: k === "all" ? history.length : history.filter((h) => h.kind === k).length }))}
           />
           {items.length === 0 ? (
             <Empty icon="clock" title={t("client.empty.history")} hint={t("client.empty.historyHint")} />

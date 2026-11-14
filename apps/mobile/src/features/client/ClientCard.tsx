@@ -110,9 +110,9 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
 
   const summary = (
     <>
-      {/* the summary (status, actions, «Создать смету», money) is a column no wider than a form: on 1280 it does not stretch
-          to the window (#1417 review; the side column of #1416 comes later) */}
-      <View testID="client-summary" style={{ width: "100%", maxWidth: component.sheetFormMax, alignSelf: "flex-start", gap: space[3] }}>
+      {/* the summary (status, actions, «Создать смету», money): above the tabs on a phone and a tablet (as wide as they are), in the
+          side column 360 on a desktop (DS §12.3, #1416) */}
+      <View testID="client-summary" style={{ width: "100%", gap: space[3] }}>
         {/* one line: number · status · tags */}
         <RowView style={{ flexWrap: "wrap", marginTop: -space[2] }}>
           {c.number ? (

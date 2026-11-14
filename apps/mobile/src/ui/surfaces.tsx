@@ -871,7 +871,7 @@ export function Screen({
                 if (!jump || Date.now() - jump.at > 250 || Math.abs(y - jump.y) < 1) offset.current = y;
                 const now = y > 0;
                 if (now !== under) setUnder(now);
-                const isStuck = !!tabsMini && tabsY.current > 0 && y >= tabsY.current - 1;
+                const isStuck = !!tabs && tabsY.current > 0 && y >= tabsY.current - 1;
                 if (isStuck !== stuck) {
                   if (!isStuck) miniShifted.current = false;
                   setStuck(isStuck);
@@ -884,9 +884,10 @@ export function Screen({
               {tabs ? (
                 <View
                   // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
-                  style={{ backgroundColor: c.ov, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+                  // the glass only once the row has stuck (DS А1п «Прилипание»): in its place on the page it is a plain row, no band (#1416)
+                  style={{ backgroundColor: stuck ? c.ov : undefined, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
                 >
-                  <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
+                  {stuck ? <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} /> : null}
                   {/* the mini header appears at once when the tabs stick (no motion: it is the same name that scrolled away, §14.3) */}
                   {stuck && tabsMini ? (
                     <View
