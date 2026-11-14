@@ -14424,4 +14424,12 @@ select tst.ok(not has_function_privilege('anon', 'app.refund_key(uuid, text)', '
               'T210 rule 18: the key helper runs for nobody');
 \echo 'T210 a refund key is the company''s own ok'
 
+-- T211 (#1430, docs/specs/19 F4): the bucket «files» takes a file of at most 25 MB; it stays private; no type list (a photo
+-- comes with any type on Android and the web — refusing it would lose it)
+:as_super
+select tst.ok((select file_size_limit = 26214400 and not public and allowed_mime_types is null from storage.buckets where id = 'files'),
+              format('T211 the bucket files: 25 MB, private, no type list (red before 20261114200000): %s',
+                     (select row(file_size_limit, public, allowed_mime_types) from storage.buckets where id = 'files')));
+\echo 'T211 the bucket files has a size limit ok'
+
 \echo 'ALL TESTS PASSED'

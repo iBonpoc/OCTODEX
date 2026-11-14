@@ -5,7 +5,8 @@ import type { DictKey } from "@/i18n";
 
 export const jobStatusView: Record<JobStatus, { status: StatusName; label: DictKey }> = {
   unscheduled: { status: "warn", label: "st.toSchedule" },
-  scheduled: { status: "neutral", label: "st.scheduled" },
+  // a job (работа) is feminine in Russian — its own key; a visit (выезд) keeps «Запланирован» (#1417 review)
+  scheduled: { status: "neutral", label: "st.jobScheduled" },
   in_progress: { status: "info", label: "st.working" },
   done: { status: "ok", label: "jobs.done" },
 };

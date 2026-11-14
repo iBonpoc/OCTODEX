@@ -109,7 +109,8 @@ export function FilterBar<K extends string>({
       accessibilityRole="radiogroup"
       testID="filter-lane"
     >
-      {visibleFilters(items, value).map((it) => pill(it.key, filterLabel(it), it.key === value, () => onChange(it.key), { role: "radio", label: filterLabel(it) }))}
+      {/* each chip by its key (tests find a filter by it, not by its words — CHECKS §9 п.2) */}
+      {visibleFilters(items, value).map((it) => pill(it.key, filterLabel(it), it.key === value, () => onChange(it.key), { role: "radio", label: filterLabel(it) }, undefined, `filter-lane-${it.key}`))}
     </ScrollView>
   );
 

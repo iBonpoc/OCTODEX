@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 import { size as sizes } from "@octo/design-tokens";
-import { buildGrid, buildScene, clampView, fitView, GRID_REACH, GRID_STEPS_IN, gridStepIn, MAX_GRID_LINES, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
+import { buildGrid, buildScene, clampView, fitView, MAX_GRID_LINES, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
 import { applyTf } from "../src/modules/gutters/canvas/gestureState";
 import type { Drawing, P } from "../src/modules/gutters/geometry";
 
@@ -16,11 +16,12 @@ const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "
 
 describe("zoomLimits", () => {
   const lim = zoomLimits(pts, vp, 32, sizes.hitMin);
-  it("the nearest: 1″ as big as a finger's target (hitMin px); the farthest: a quarter of the view that fits the drawing (#1403: was half), so it takes a quarter of the screen each way", () => {
+  it("the nearest: 1″ as big as a finger's target (hitMin px); the farthest: half the view that fits the drawing, so it takes a quarter of the screen", () => {
     expect(lim.kMax).toBe(sizes.hitMin);
     const fit = fitView(pts, vp, 32);
-    expect(lim.kMin).toBeCloseTo(fit.k / 4, 9);
-    expect((1200 * lim.kMin) / (1200 * fit.k)).toBeCloseTo(0.25, 9);
+    expect(lim.kMin).toBeCloseTo(fit.k / 2, 9);
+    // at the farthest limit the drawing is half as wide and half as high as when it fits: a quarter of the area
+    expect((1200 * lim.kMin) / (1200 * fit.k)).toBeCloseTo(0.5, 9);
   });
   it("a tiny drawing: the farthest limit never goes beyond the nearest", () => {
     const tiny = zoomLimits([[0, 0], [1, 1]], vp, 32, sizes.hitMin);
@@ -66,46 +67,8 @@ describe("buildGrid: a ceiling of the lines, whatever the scale (k → 0 made mi
     expect(performance.now() - t0).toBeLessThan(500);
   });
   it("a normal scale still has its grid (the ceiling does not eat it)", () => {
-    const g = buildGrid({ k: 1, ox: 0, oy: vp.h }, vp, 24);
+    const g = buildGrid({ k: 1, ox: 0, oy: vp.h }, vp, 8);
     expect(lines(g)).toBeGreaterThan(5);
-  });
-});
-
-describe("#1403 — the grid covers the screen at any live pan or zoom, and has a fine step at the nearest scale", () => {
-  const nums = (d: string, re: RegExp) => [...d.matchAll(re)].map((m) => Number(m[1]));
-  it("the lines run GRID_REACH screens past the screen on every side, and there are lines out there", () => {
-    const g = buildGrid({ k: 1, ox: 100, oy: 500 }, vp, 24);
-    const all = g.minor + g.major;
-    const xs = nums(all, /M(-?[\d.]+) -/g); // vertical lines: «M<x> <-ry>V…»
-    expect(Math.min(...xs)).toBeLessThan(0); // a line left of the screen
-    expect(Math.max(...xs)).toBeGreaterThan(vp.w); // and right of it
-    expect(all).toContain(`M${-GRID_REACH * vp.w} `); // horizontal lines start GRID_REACH screens to the left…
-    expect(all).toContain(`H${(1 + GRID_REACH) * vp.w}`); // …and end that far to the right
-    expect(all).toContain(`V${(1 + GRID_REACH) * vp.h}`); // vertical lines end that far below
-  });
-  it("a live zoom out to a quarter about ANY point of the screen (the farthest limit from the fitting view), and a pan by a screen: the grid still covers the screen", () => {
-    const covers = (S: number, fx: number, fy: number, dx = 0, dy = 0) => {
-      const Tx = (1 - S) * fx + dx, Ty = (1 - S) * fy + dy; // the live transform p' = S·p + T: scale about the fingers' point, then shifted
-      const x0 = S * -GRID_REACH * vp.w + Tx, x1 = S * (1 + GRID_REACH) * vp.w + Tx;
-      const y0 = S * -GRID_REACH * vp.h + Ty, y1 = S * (1 + GRID_REACH) * vp.h + Ty;
-      return x0 <= 0 && x1 >= vp.w && y0 <= 0 && y1 >= vp.h;
-    };
-    for (const S of [1, 0.5, 0.3, 0.25]) for (const [fx, fy] of [[0, 0], [vp.w, vp.h], [vp.w / 2, vp.h / 2], [0, vp.h], [vp.w, 0]] as const) expect(covers(S, fx, fy)).toBe(true);
-    expect(covers(1, 0, 0, vp.w, vp.h)).toBe(true);
-    expect(covers(1, 0, 0, -vp.w, -vp.h)).toBe(true);
-    expect(covers(0.2, 0, 0)).toBe(false); // the reach is finite: farther than the farthest limit is not promised
-  });
-  it("at the nearest scale (1″ = a finger's target) the cell is 1″ or 6″, not one huge 1 ft cell; the steps only get coarser outwards", () => {
-    expect(GRID_STEPS_IN.slice(0, 2)).toEqual([1, 6]);
-    expect(gridStepIn(sizes.hitMin, 24)).toBe(1);
-    expect(gridStepIn(sizes.hitMin / 4, 24)).toBe(6); // 6″ = 66 px
-    for (let i = 1; i < GRID_STEPS_IN.length; i++) expect(GRID_STEPS_IN[i]!).toBeGreaterThan(GRID_STEPS_IN[i - 1]!);
-  });
-  it("lines at the nearest scale: more than 2 on the screen (it was one cell) and still under the ceiling", () => {
-    const g = buildGrid({ k: sizes.hitMin, ox: 0, oy: vp.h }, vp, 24);
-    const lines = (g.minor.match(/M/g)?.length ?? 0) + (g.major.match(/M/g)?.length ?? 0);
-    expect(lines).toBeGreaterThan(10);
-    expect(lines).toBeLessThanOrEqual(MAX_GRID_LINES);
   });
 });
 

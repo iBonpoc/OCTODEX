@@ -5,10 +5,9 @@
  */
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN } from "react-native-worklets";
-import { motion } from "@octo/design-tokens";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
 import { applyTf, endGesture, panFrame, pinchFrame, settle, type LiveState, type Pending, type Tf } from "./gestureState";
 
@@ -30,7 +29,7 @@ export function commitView(v: PlanView, tx: number, ty: number, s: number, fx: n
  * activated (the first finger moved before the second landed — always so on a phone), keeps the touch and the pinch never
  * comes (founder 09.11: «moved, but did not shrink»).
  */
-/** the limits of the scale (#1281): the viewport is for the clamp at the commit. At a limit the pinch gives way as a rubber and goes back on release (#1403); `onEdge` is the tick when the pinch reaches a limit (once per reach, with a hysteresis: gestureState.ts EDGE_FREE) */
+/** the limits of the scale and what to do at one (#1281): the viewport is for the clamp at the commit; `onEdge` is the tick when the pinch reaches a limit */
 export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number }; onEdge?: () => void }
 
 export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard) {
@@ -70,11 +69,6 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const nPinch = useSharedValue(0);
   const nPan = useSharedValue(0);
   const edge = useSharedValue<-1 | 0 | 1>(0);
-  const fxLast = useSharedValue(0);
-  const fyLast = useSharedValue(0);
-  // the way back from a limit on release (#1403): a smooth ease about the fingers' point; with «reduce motion» a short plain transition
-  const reduce = useReducedMotion();
-  const back = { duration: reduce ? motion.durFast : motion.durBase, easing: reduce ? Easing.linear : Easing.out(Easing.cubic) };
   /** the scale limits as factors of the view on the screen are kMin / baseK and kMax / baseK (the live scale is against that view) */
   const baseK = useSharedValue(view.k);
   const kMin = useSharedValue(zoom ? zoom.lim.kMin : 0);
@@ -83,15 +77,10 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     kMin.value = zoom ? zoom.lim.kMin : 0;
     kMax.value = zoom ? zoom.lim.kMax : 0;
   }, [zoom?.lim.kMin, zoom?.lim.kMax, kMin, kMax]);
+  const edgeTick = () => now.current.zoom?.onEdge?.();
   const state = (): LiveState => {
     "worklet";
-    return { S: s.value, Tx: tx.value, Ty: ty.value, seg: seg.value, nPinch: nPinch.value, nPan: nPan.value, fx: fxLast.value, fy: fyLast.value, edge: edge.value };
-  };
-  const edgeTick = () => now.current.zoom?.onEdge?.();
-  /** the limits of the live scale, as factors of the view on the screen (undefined: free, as on the speed bench) */
-  const limit = () => {
-    "worklet";
-    return kMax.value > 0 && baseK.value > 0 ? { lo: kMin.value / baseK.value, hi: kMax.value / baseK.value } : undefined;
+    return { S: s.value, Tx: tx.value, Ty: ty.value, seg: seg.value, nPinch: nPinch.value, nPan: nPan.value, edge: edge.value };
   };
   const put = (st: LiveState, req: Tf | null) => {
     "worklet";
@@ -106,29 +95,19 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     nPan.value = st.nPan;
     if (st.edge !== 0 && st.edge !== edge.value) scheduleOnRN(edgeTick); // a tick on reaching a limit of the scale, once
     edge.value = st.edge;
-    fxLast.value = st.fx;
-    fyLast.value = st.fy;
-    if (!req) return;
-    if (req.S === st.S) return void scheduleOnRN(commit, req.S, req.Tx, req.Ty);
-    // let go past a limit: the picture goes back to the limit about the fingers' point, then it is committed (a new touch cancels the way back; the next commit has it all)
-    tx.value = withTiming(req.Tx, back);
-    ty.value = withTiming(req.Ty, back);
-    s.value = withTiming(req.S, back, (done) => {
-      "worklet";
-      if (done) scheduleOnRN(commit, req.S, req.Tx, req.Ty);
-    });
+    if (req) scheduleOnRN(commit, req.S, req.Tx, req.Ty);
   };
   const end = () => {
     "worklet";
     const st = state();
-    put(st, endGesture(st, limit()));
+    put(st, endGesture(st));
   };
   const pan = usePanGesture({
     minPointers: panPointers,
     onUpdate: (e) => {
       "worklet";
       const st = state();
-      put(st, panFrame(st, e, panPointers, limit()));
+      put(st, panFrame(st, e, panPointers));
     },
     onDeactivate: end,
   });
@@ -136,7 +115,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     onUpdate: (e) => {
       "worklet";
       const st = state();
-      put(st, pinchFrame(st, e, limit()));
+      put(st, pinchFrame(st, e, kMax.value > 0 && baseK.value > 0 ? { lo: kMin.value / baseK.value, hi: kMax.value / baseK.value } : undefined));
     },
     onDeactivate: end,
   });

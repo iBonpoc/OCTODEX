@@ -25,6 +25,9 @@ exports.run = async (h) => {
   await tid("showcase-vtabs").waitFor({ timeout: 8000 });
   for (const k of keys) h.expect((await p.getByTestId(`showcase-vtabs-${k}`).locator("visible=true").count()) === 1, `tab «${k}» is there`);
   h.expect((await selected("overview")) === "true", "«Обзор» is open");
+  // the zone of a tab is 44 high (DS rule 3), the visible pill 30 inside it — not a hit slop the web does not have
+  const zone = await tid("showcase-vtabs-estimates").boundingBox();
+  h.expect(zone && zone.height >= 44, `a tab's zone is 44 high (${zone && zone.height})`);
   for (const k of ["estimates", "invoices", "jobs", "tasks"]) h.expect((await p.getByTestId(`showcase-vtabs-${k}-count`).locator("visible=true").count()) === 1, `«${k}» shows what waits`);
   for (const k of ["overview", "notes", "files", "history"]) h.expect((await p.getByTestId(`showcase-vtabs-${k}-count`).count()) === 0, `«${k}» has no number`);
   await h.shot("first");
