@@ -146,6 +146,8 @@ export const es: Dict = {
   "vf.msg.inspection": "¡Hola, {name}! {company} irá a hacer la evaluación el {date} a las {time}. Si la hora no le conviene, responda a este mensaje.",
   "vf.msg.job": "¡Hola, {name}! {company} irá a hacer el trabajo el {date} a las {time}. Si la hora no le conviene, responda a este mensaje.",
   "vf.addInspection": "Evaluación",
+  // property card #1474: the tiles
+  "prop.tile.client": "Cliente",
   "vf.inspectionSaved": "Evaluación agendada: {date}, {time}",
   "vf.rescheduled": "Movida: {date}, {time}",
   "vc.title": "Cancelar la visita",

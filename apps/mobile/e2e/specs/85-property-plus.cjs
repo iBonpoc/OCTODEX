@@ -1,7 +1,7 @@
 /**
  * Wave 6-4 (docs/specs/20 §6-4; S17, S5, S4, Customer §5): the property screen has the client's «＋» — Новая работа and
  * Смета already tied to this client and this property; the card's own «Смета» button is gone (it repeated «＋»).
- * A «do not service» client: no «＋» and no «Осмотр» on the property (its card and a row's list). The technician: no «＋».
+ * A «do not service» client: no «＋» and no «Записать на оценку» on the property (its card and a row's list). The technician: no «＋».
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -12,7 +12,7 @@ exports.run = async (h) => {
   const prop = db0.properties.find((x) => x.id === "p1");
   h.expect((await plus().count()) === 1, "the property has «＋»");
   h.expect((await p.getByRole("button", { name: "Новая смета", exact: true }).count()) === 0, "no own «Новая смета» button (it is in «＋»)");
-  h.expect((await p.getByRole("button", { name: "Осмотр", exact: true }).count()) === 1, "«Осмотр» stays on the card");
+  h.expect((await p.getByRole("button", { name: "Записать на оценку", exact: true }).count()) === 1, "«Записать на оценку» stays on the card (its next step, #1474)");
   await plus().click(); await p.waitForTimeout(400);
   await h.shot("plus");
   await p.getByText("Работа без сметы", { exact: true }).last().click(); await p.waitForTimeout(600);
@@ -32,7 +32,7 @@ exports.run = async (h) => {
   await h.go("/property/p1");
   await h.expectText(new RegExp(prop.address.split(",")[0]), "the property opens");
   h.expect((await plus().count()) === 0, "no «＋» for a «do not service» client");
-  h.expect((await p.getByRole("button", { name: "Осмотр", exact: true }).count()) === 0, "no «Осмотр» either");
+  h.expect((await p.getByRole("button", { name: "Записать на оценку", exact: true }).count()) === 0, "no «Записать на оценку» either");
   await h.shot("no-service");
   await h.go("/property/p1?s=jobs");
   h.expect((await plus().count()) === 0, "no «＋» on the property's lists either");
