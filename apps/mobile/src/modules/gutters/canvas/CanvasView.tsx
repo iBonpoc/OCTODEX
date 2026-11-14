@@ -9,7 +9,7 @@ import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "re
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
-import { applyTf, endGesture, panFrame, pinchFrame, settleDone, settleLive, type LiveState, type Pending, type Tf } from "./gestureState";
+import { applyTf, endGesture, IDENTITY, panFrame, pinchFrame, rebase, type LiveState, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
 export interface Live {
@@ -42,40 +42,47 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   // the gesture's callbacks may be the ones made at an earlier render: they read the view of now from a ref
   const now = useRef({ view, onView, zoom });
   now.current = { view, onView, zoom };
-  // commits made and not rendered yet (gestureState.ts: the render takes away exactly its commit from the live transform)
-  const pending = useRef<Pending[]>([]);
+  // commits made and not rendered yet: the view set (clamped) and the commit's own view (`ref`, before the clamp)
+  const pending = useRef<{ view: PlanView; ref: PlanView }[]>([]);
   /** when a two-finger segment last began or ended (ms): a tap right after it is the fingers lifting, not a tap (a pinch that ends over a length label opened its sheet) */
   const multiAt = useRef(0);
   const markMulti = () => {
     multiAt.current = Date.now();
   };
-  const commit = (S: number, Tx: number, Ty: number) => {
+  /**
+   * A commit from the UI thread: the live transform `S, Tx, Ty` and the view it is against THERE (`bk, box, boy`; k 0 — none settled yet).
+   * Not against the view the JS thread renders now: the two differ while a settle is on its way to the UI thread, and a commit taken
+   * there before it would take that view twice (#1403, review: a finger lifts twice in one pinch → the drawing jumps).
+   */
+  const commit = (S: number, Tx: number, Ty: number, bk: number, box: number, boy: number) => {
     markMulti();
     const t = { S, Tx, Ty };
     const z = now.current.zoom;
-    const raw = applyTf(now.current.view, t);
+    const raw = applyTf(bk > 0 ? { k: bk, ox: box, oy: boy } : now.current.view, t);
     const v = z ? clampView(raw, z.lim, z.viewport) : raw;
-    pending.current.push({ view: v, tf: t });
+    pending.current.push({ view: v, ref: raw });
     now.current.onView(v);
   };
   /** the view last settled: the same view again is only another render of the screen, never a reason to touch the live transform (#1403) */
   const settled = useRef<PlanView | null>(null);
-  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it — on the UI thread (#1403) */
+  /** the render of `v` arrived (Canvas' layout effect): the UI thread re-bases the live transform on it (#1403) */
   const settleView = (v: PlanView) => {
     if (settled.current === v) return;
-    const r = settleDone(pending.current, v);
     settled.current = v;
-    pending.current = r.pending;
-    scheduleOnUI(applySettle, v.k, v.ox, v.oy, r.done);
+    const i = pending.current.findIndex((p) => p.view === v);
+    const ref = i < 0 ? null : pending.current[i]!.ref; // a view not ours (the «fit» button, a new size): the live transform goes whole
+    pending.current = i < 0 ? [] : pending.current.slice(i + 1);
+    scheduleOnUI(applySettle, v.k, v.ox, v.oy, ref);
   };
   /**
-   * The settle on the UI thread, between two frames of the fingers (#1403): the live transform is read and written there in one step, so no
-   * frame of a pinch that goes on is lost (on the JS thread it was read, then written back a moment later — the frames between were dropped:
-   * a jump). The committed view is written in the same step: the grid never draws a new view under an old transform, or the other way round.
+   * The settle on the UI thread, between two frames of the fingers (#1403): the live transform is re-based from the view it is against
+   * there onto the rendered one (`rebase`: the picture does not move), read and written in one step — on the JS thread it was read, then
+   * written back a moment later, and the frames between were lost (a jump). The view is written in the same step: the grid never draws a
+   * new view under an old transform.
    */
-  const applySettle = (k: number, ox: number, oy: number, done: Tf | null) => {
+  const applySettle = (k: number, ox: number, oy: number, ref: PlanView | null) => {
     "worklet";
-    const next = settleLive({ S: s.value, Tx: tx.value, Ty: ty.value }, done);
+    const next = ref && vk.value > 0 ? rebase({ k: vk.value, ox: vox.value, oy: voy.value }, { S: s.value, Tx: tx.value, Ty: ty.value }, ref) : IDENTITY;
     vk.value = k;
     vox.value = ox;
     voy.value = oy;
@@ -115,7 +122,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     nPan.value = st.nPan;
     if (st.edge !== 0 && st.edge !== edge.value) scheduleOnRN(edgeTick); // a tick on reaching a limit of the scale, once
     edge.value = st.edge;
-    if (req) scheduleOnRN(commit, req.S, req.Tx, req.Ty);
+    if (req) scheduleOnRN(commit, req.S, req.Tx, req.Ty, vk.value, vox.value, voy.value); // with the view it is against here
   };
   const end = () => {
     "worklet";

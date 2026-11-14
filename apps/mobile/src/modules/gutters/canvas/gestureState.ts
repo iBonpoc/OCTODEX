@@ -126,25 +126,21 @@ export interface Pending { view: View; tf: Tf }
  */
 export function settle(live: Tf, pending: Pending[], view: View, last?: View): { live: Tf; pending: Pending[] } {
   if (last && view === last) return { live: tf(live), pending };
-  const r = settleDone(pending, view);
-  return { live: settleLive(live, r.done), pending: r.pending };
+  const i = pending.findIndex((p) => p.view === view);
+  if (i < 0) return { live: tf(IDENTITY), pending: [] };
+  const done = pending[i]!.tf;
+  return { live: sub(live, done), pending: pending.slice(i + 1).map((p) => ({ view: p.view, tf: sub(p.tf, done) })) };
 }
 
 /**
- * `settle` in its two halves (#1403): the JS thread knows the commits (`settleDone`: which commit of ours the render took — null, the view is
- * not ours — and the pending ones re-based on it); the UI thread owns the live transform (`settleLive`). The fingers change the live
- * transform between frames there: read on the JS thread and written back, the frames in between were lost (a jump when a pinch had gone on
- * before the render of its last commit). So the screen hands `done` to the UI thread, and the subtraction is made there, in one step.
+ * The settle on the UI thread (#1403): the live transform `live` is against the view `base` (what the screen had committed when the fingers
+ * moved it); the render of `ref` has arrived. The live transform that shows the SAME picture against `ref` — the screen does not move by a
+ * pixel, whatever happened between the threads: a commit taken on the UI thread before or after an earlier settle ran there, a commit React
+ * skipped, frames of a pinch that went on while the JS thread rendered. `ref` is the commit's own view before the limits' clamp; the
+ * screen's view is set to the clamped one, so a clamp shows as the step it always was (#1281).
  */
-export function settleDone(pending: Pending[], view: View): { done: Tf | null; pending: Pending[] } {
-  const i = pending.findIndex((p) => p.view === view);
-  if (i < 0) return { done: null, pending: [] };
-  const done = pending[i]!.tf;
-  return { done, pending: pending.slice(i + 1).map((p) => ({ view: p.view, tf: sub(p.tf, done) })) };
-}
-
-/** the live transform after the render of the commit `done` (null — a view not ours: the live transform goes whole) */
-export function settleLive(live: Tf, done: Tf | null): Tf {
+export function rebase(base: View, live: Tf, ref: View): Tf {
   "worklet";
-  return done ? sub(live, done) : { S: IDENTITY.S, Tx: IDENTITY.Tx, Ty: IDENTITY.Ty };
+  const S = (base.k * live.S) / ref.k;
+  return { S, Tx: live.S * base.ox + live.Tx - S * ref.ox, Ty: live.S * base.oy + live.Ty - S * ref.oy };
 }
