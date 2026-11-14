@@ -3,7 +3,7 @@
  * offered in Expo Go (the founder's way to run it, spec 33) and in a development build — never in the store app or on the web.
  */
 import { describe, expect, it } from "vitest";
-import { benchOffered } from "../src/modules/gutters/bench/visible";
+import { benchOffered, benchOfferedHere } from "../src/modules/gutters/bench/visible";
 
 describe("«Проверка скорости» — where it is offered", () => {
   it("Expo Go (storeClient) and a dev build: yes", () => {
@@ -15,5 +15,8 @@ describe("«Проверка скорости» — where it is offered", () => 
     expect(benchOffered("standalone", false)).toBe(false);
     expect(benchOffered("bare", false)).toBe(false);
     expect(benchOffered(undefined, false)).toBe(false);
+  });
+  it("this app where it cannot tell (tests, no expo-constants, not __DEV__): not offered", () => {
+    expect(benchOfferedHere()).toBe(false);
   });
 });

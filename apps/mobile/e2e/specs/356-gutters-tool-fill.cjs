@@ -24,6 +24,8 @@ exports.run = async (h) => {
         return {
           yellow: all.some((el) => getComputedStyle(el).backgroundColor === acc),
           filled: !!bg && bg !== "rgba(0, 0, 0, 0)" && bg !== "transparent",
+          // «Заливка» is the fill AND the small shadow (DS: surf2 + shadow-sm)
+          shadow: !!circle && getComputedStyle(circle).boxShadow !== "none",
           selected: btn?.getAttribute("aria-pressed") === "true",
         };
       },
@@ -39,7 +41,7 @@ exports.run = async (h) => {
 
   // «Желоб» is the tool at the start: chosen, filled, not yellow; «Водосток»: not chosen, no fill
   let line = await look("draw-tool-line"), ds = await look("draw-tool-ds");
-  h.expect(line.selected && line.filled && !line.yellow, `the chosen tool: selected, a fill, no yellow (${JSON.stringify(line)})`);
+  h.expect(line.selected && line.filled && line.shadow && !line.yellow, `the chosen tool: selected, a fill with its shadow, no yellow (${JSON.stringify(line)})`);
   h.expect(!ds.selected && !ds.filled && !ds.yellow, `the other tool: no fill (${JSON.stringify(ds)})`);
   for (const id of ["draw-story", "draw-undo", "draw-redo", "draw-delete"]) h.expect(!(await look(id)).yellow, `${id}: no yellow`);
   await h.shot("line");
