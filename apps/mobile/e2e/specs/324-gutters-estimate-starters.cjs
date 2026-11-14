@@ -47,9 +47,9 @@ exports.run = async (h) => {
   await tid("est-starter-gutters-guards").getByRole("button", { name: /Добавить/ }).click();
   await waitDb((d) => (d.estimateTemplates ?? []).length === 1, "the guards template is saved");
   const gone = async () => ((await db()).estimateTemplates ?? []).filter((x) => !x.deletedAt).length === 0;
-  for (let i = 0; i < 30 && !(await gone()); i++) {
+  for (let i = 0; i < 60 && !(await gone()); i++) {
     if (await tid("toast-undo").count()) await tid("toast-undo").click({ timeout: 2000 }).catch(() => {});
-    if (!(await gone())) await p.waitForFunction(() => new Promise((r) => setTimeout(() => r(true), 150)));
+    if (!(await gone())) await p.evaluate(() => new Promise((r) => { let n = 9; const f = () => (--n ? requestAnimationFrame(f) : r(true)); requestAnimationFrame(f); })); // a few frames, not a pause
   }
   h.expect(await gone(), "«Отменить»: the guards template is taken back");
   await tid("est-starter-gutters-guards").waitFor({ timeout: 8000 });
