@@ -9,7 +9,10 @@
 | Сборки iPhone/Android (Expo) | https://expo.dev/accounts/octodex-team/projects/octodex |
 | Хостинг (Cloudflare) | https://dash.cloudflare.com |
 
-## 0. Приложение на iPhone через Expo Go (работает)
+## 0. Приложение на iPhone через Expo Go (устарело с 14.11.2026)
+
+> **Не использовать.** Expo Go в App Store отстаёт от нашего SDK и показывает старую версию (сборка 284). Приложение — только из TestFlight (§5.6), туда же приходят обновления по воздуху.
+
 - Каждое изменение в `main` само публикуется в Expo Go (EAS Workflow «Publish to Expo Go», канал `preview`).
 - Открыть: вставить в Safari `exp://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba?runtime-version=exposdk%3A58.0.0&channel-name=preview`, или войти в Expo Go под аккаунтом Expo — проект будет в списке.
 - Новая версия: закрыть и снова открыть OCTODEX в Expo Go.
@@ -95,7 +98,7 @@
 - В GitHub для этого нужен только секрет `EXPO_TOKEN`, он уже есть. Ключи Apple в GitHub **не нужны и не кладутся**: они хранятся в Expo.
 
 ### 5.5. Что знать
-- **Expo Go остаётся** и работает как раньше: он получает те же изменения. Основное приложение теперь OCTODEX из TestFlight. Пуши приходят только в него.
+- **Expo Go больше не получает изменения** (его SDK старее нашего, 14.11.2026). Основное приложение теперь OCTODEX из TestFlight. Пуши приходят только в него.
 - Сборка в TestFlight живёт 90 дней. Обновлять её — кнопкой (5.4).
 - Ключ пушей Apple один на аккаунт, всего их можно 2. **Не отзывать** его на developer.apple.com, иначе пуши перестанут приходить всем.
 - Проверка пушей: OCTODEX → «Ещё» → «Настройки приложения» → «Уведомления» (в сборке 1.0.0 (2) — «Мои настройки») → переключатель → **Разрешить**. Если вместо переключателя написано про Expo Go, напишите руководителю.
@@ -134,7 +137,7 @@
 - `claimed=1 … failed=1` или `retry=1` — ошибка на стороне Expo или ключа `EXPO_ACCESS_TOKEN`;
 - `claimed=0` — телефон не записан: выключите и снова включите переключатель из шага 1.
 ### 5.6. Если нет ключа пушей (Push Key)
-Проверка: https://expo.dev/accounts/octodex-team/projects/octodex/credentials → **iOS** → `com.octodex.app` → строка **Push Key**. Если там пусто — один раз на Mac:
+Проверка: https://expo.dev/accounts/octodex-team/projects/octodex/credentials → **iOS** → `com.gorix.app` → строка **Push Key** (bundle id с 14.11, #656; у старого `com.octodex.app` свой ключ, он больше не нужен). Если там пусто — один раз на Mac:
 1. Терминал → `cd ~/OCTODEX/apps/mobile`
 2. `npx eas-cli@27.4.1 credentials -p ios`
 3. **Which build profile?** — стрелками ↓ выбрать `testflight` → `Return`.
@@ -143,3 +146,22 @@
 6. **Generate a new Apple Push Notifications service key?** → `Return` (Yes).
 7. Появится «Push Key assigned» — готово. Выйти: стрелками **Exit** → `Return`.
 Новая сборка для этого не нужна: ключ используется сервером при отправке пуша.
+
+## 7. Адреса GoRix: что настроено руками 14.11.2026 (#656)
+Сделано основателем в своих аккаунтах (через чат на Mac), в репозитории этого не видно:
+
+| Где | Что стоит | Зачем |
+|---|---|---|
+| Expo → проект → Hosting | поддомен `gorix` → сайт `https://gorix.expo.app` | адрес сайта приложения. **Expo даёт сменить поддомен всего 3 раза, одна смена израсходована; старое имя `octodex` вернуть нельзя.** Без отдельной причины не менять |
+| Cloudflare → зона `gorix.app` → DNS | `AAAA @ → 100::` и `AAAA www → 100::`, прокси включён | записи-заглушки: сами никуда не ведут, нужны только для правила переадресации |
+| Cloudflare → зона `gorix.app` → Rules → Redirect Rules | правило «gorix.app to app»: `gorix.app` и `www.gorix.app` → `https://gorix.expo.app` + тот же путь, код 302, параметры запроса сохраняются | человек набирает `gorix.app` — открывается приложение. 302 (временная): после 1.0 сайт переедет на сам `gorix.app` (#641), правило снимается |
+| Cloudflare → зона `gorix.app` → DNS | 3 записи MX, TXT DKIM (`cf2024-1._domainkey`), TXT SPF | почта `hello@gorix.app` (Email Routing). **Не трогать** |
+| Supabase → Authentication → URL Configuration | Site URL `https://gorix.expo.app`; Redirect URLs: `https://gorix.expo.app/**` (один адрес) | куда ведут ссылки из писем входа. До 14.11 Site URL был `http://localhost:3000`, список был пуст |
+| Apple Developer → Identifiers | `com.gorix.app` (Explicit, Push Notifications) | идентификатор приложения GoRix |
+| App Store Connect | запись «GoRix: Contractor CRM», Apple ID `6834689554`, SKU `gorix-ios` | новая запись приложения; старая «OCTODEX (ea2bef)» не удалена — убрать после того, как сборка GoRix встанет на iPhone |
+
+Не настроено (нужно до запуска соответствующей функции):
+- **Cloudflare Turnstile** — в аккаунте нет ни одного виджета; капча формы заявок `/f/` не работает (#1445). При создании виджета hostname — `gorix.expo.app`.
+- **Stripe** — рабочий режим не настроен, список Payment method domains пуст (оплата — версия 1.1).
+
+Адреса для записи App Store (политика, условия) — существующие страницы приложения `https://gorix.expo.app/legal/…`; отдельные короткие маршруты `/privacy`, `/support` не заводим (решение аудита 14.11).

@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { canImportClients } from "@/features/client/importRun";
+import { isClientTab } from "@/features/clientRows";
 import { View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, canServe, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { Button, IconButton } from "@/ui/controls";
@@ -19,7 +20,6 @@ import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates"
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { ListPanel } from "@/ui/listPanel";
-import { Fab } from "@/nav/Fab";
 import { useListPanel } from "@/nav/listPanel";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
@@ -71,7 +71,9 @@ export default function Clients() {
     .sort((a, b) => a.name.localeCompare(b.name));
   const { device } = useDevice();
   // 1280: the open card beside the list, `/clients?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts)
-  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
+  const { tab: cardTab } = useLocalSearchParams<{ tab?: string }>();
+  // «Открыть» takes the open tab to the card's own screen
+  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}${isClientTab(cardTab) ? `?tab=${cardTab}` : ""}`, (id) => clients.some((c) => c.id === id));
   const { desktop, openId } = panel;
   const openC = openId ? clients.find((c) => c.id === openId) : undefined;
   const toast = useToast();
@@ -148,23 +150,23 @@ export default function Clients() {
           <ListPanel
             title={openC.name}
             outside={panel.outside}
-            // as the client's screen: «Изменить» (office) and «＋» with this client
+            // as the client's screen: «Изменить» (office); no «＋» on the client card (prototype v6, #1343)
             actions={
-              office || canServe(db, openC.id) ? (
+              office ? (
                 <>
                   {office ? (
                     <View testID="list-panel-edit">
                       <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} />
                     </View>
                   ) : null}
-                  {canServe(db, openC.id) ? <Fab placement="header" set="client" ctx={{ customerId: openC.id }} /> : null}
                 </>
               ) : undefined
             }
             onOpen={panel.full}
             onClose={panel.close}
           >
-            <ClientCardBody key={openC.id} c={openC} />
+            {/* the open tab lives in the address beside ?open= (as on the client's screen): «Назад» from a document returns to it */}
+            <ClientCardBody key={openC.id} c={openC} tab={isClientTab(cardTab) ? cardTab : undefined} onTab={(k) => router.setParams({ tab: k })} />
           </ListPanel>
         ) : undefined
       }

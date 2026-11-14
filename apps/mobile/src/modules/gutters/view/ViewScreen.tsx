@@ -23,6 +23,7 @@ import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
 import { DocSheet } from "@/features/DocPagesView";
 import { fmtLen } from "../canvas/format";
@@ -59,7 +60,7 @@ export default function ViewScreen() {
   const addr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const back = () => (router.canGoBack() ? router.back() : router.replace(moduleHref("gutters", "list") as Href));
   return (
-    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
+    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back} help={t("mod.gutters.view.help")}>
       <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} onGone={back} />
     </Screen>
   );
@@ -166,7 +167,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
   };
   const kindWord = (k: string) => t(k === "in" ? "mod.gutters.draw.cornerIn" : k === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay");
 
-  if (!m) return <View testID="view-not-found"><T tone="mut">{t("mod.gutters.view.notFound")}</T></View>;
+  // DS §13 «Не найдено» (#1426): the one screen for every object — the words and the way back to the list (the panel: closes)
+  if (!m) {
+    const toList = () => (panel ? onGone() : router.replace(moduleHref("gutters", "list") as Href));
+    return (
+      <View testID="view-not-found">
+        <NotFound title={t("mod.gutters.view.notFound")} listLabel={t("mod.gutters.view.toList")} onList={toList} />
+      </View>
+    );
+  }
   const lead = m.leadId ? store.db.leads.find((l) => l.id === m.leadId) : undefined;
   const addr = m.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const rough = m.accuracy !== "tape";

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Platform, ScrollView, View, type LayoutChangeEvent, type ScrollViewInstance } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useReducedMotion } from "react-native-reanimated";
-import { component, motion, radius, space } from "@octo/design-tokens";
+import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { fillStyle } from "./fill";
 import { Press, T } from "./primitives";
@@ -12,7 +12,8 @@ import { centerOffset, fadedEdges, nudgeDistance } from "./viewTabsLogic";
 const nudged = new Set<string>();
 
 /**
- * Вкладки вида, листаются (DS §9 А1п, #1343): a screen of an object with 5+ sections. Pills `tab.h` 30 (zone 44), no track;
+ * Вкладки вида, листаются (DS §9 А1п, #1343): a screen of an object with 5+ sections. Pills `tab.h` 30 in a zone of 44 (a real
+ * box, not a hit slop), no track;
  * the selected one is «Заливка» (§9). All tabs are always there; a number in a pill is what waits for an action (none when
  * nothing waits). The row scrolls sideways: the selected pill comes to the middle, an edge with more tabs past it fades
  * (`tab.fadeW`), and on the first open the row nudges once to show it scrolls (none with reduced motion).
@@ -121,7 +122,6 @@ export function ViewTabs<K extends string>({
               key={it.key}
               testID={testID ? `${testID}-${it.key}` : undefined}
               onPress={() => onChange(it.key)}
-              visibleHeight={component.tab.h}
               accessibilityRole="tab"
               accessibilityState={{ selected: sel }}
               // the web does not turn `selected` into aria-selected by itself (a screen reader and the tests read it)
@@ -131,26 +131,32 @@ export function ViewTabs<K extends string>({
                 const { x, width: w } = e.nativeEvent.layout;
                 setBoxes((p) => (p[it.key]?.x === x && p[it.key]?.w === w ? p : { ...p, [it.key]: { x, w } }));
               }}
-              style={{
-                minHeight: component.tab.h,
-                paddingHorizontal: space[3],
-                borderRadius: radius.pill,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: space[1],
-                ...(sel ? fillStyle(c) : { backgroundColor: c.track }),
-              }}
+              // the zone is the whole 44 (a real box, not a hit slop: a slop is cut at the strip's edge and the web has none;
+              // nor do two neighbours' zones overlap) — the visible pill of 30 sits in its middle (#1343 review)
+              style={{ minHeight: size.hitMin, justifyContent: "center" }}
             >
-              <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
-                {it.label}
-              </T>
-              {it.count ? (
-                <View testID={testID ? `${testID}-${it.key}-count` : undefined}>
-                  <T v="caption" tone="mut" tabular>
-                    {String(it.count)}
-                  </T>
-                </View>
-              ) : null}
+              <View
+                style={{
+                  minHeight: component.tab.h,
+                  paddingHorizontal: space[3],
+                  borderRadius: radius.pill,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: space[1],
+                  ...(sel ? fillStyle(c) : { backgroundColor: c.track }),
+                }}
+              >
+                <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
+                  {it.label}
+                </T>
+                {it.count ? (
+                  <View testID={testID ? `${testID}-${it.key}-count` : undefined}>
+                    <T v="caption" tone="mut" tabular>
+                      {String(it.count)}
+                    </T>
+                  </View>
+                ) : null}
+              </View>
             </Press>
           );
         })}

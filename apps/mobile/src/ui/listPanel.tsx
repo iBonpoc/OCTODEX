@@ -11,6 +11,7 @@ import { useI18n } from "@/i18n";
 import { Button, IconButton, StatusChip } from "./controls";
 import { RowView } from "./surfaces";
 import { T } from "./primitives";
+import { OneColumn } from "./listCard";
 
 export function ListPanel({ title, subtitle, outside, actions, onOpen, onClose, children }: {
   title: string;
@@ -59,7 +60,8 @@ export function ListPanel({ title, subtitle, outside, actions, onOpen, onClose, 
             <StatusChip status="neutral" label={t("card.panel.outside")} />
           </View>
         ) : null}
-        {children}
+        {/* 360 is one column: a grid of cards inside never splits a line into letters (#1343 review) */}
+        <OneColumn.Provider value={true}>{children}</OneColumn.Provider>
       </ScrollView>
     </View>
   );

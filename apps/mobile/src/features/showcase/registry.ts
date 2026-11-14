@@ -55,7 +55,7 @@ export const SECTIONS: ShowcaseSection[] = [
   { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar"] },
-  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
+  { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "Banner", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
   { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: ["SelectedCheck"] },
   { id: "haptics", screen: "haptics", ds: "§15.6", title: "ds.scr.haptics", tokenGroups: [], components: [] },
   { id: "brand", screen: "brand", ds: "§18.2", title: "ds.brand.title", tokenGroups: [], components: ["BrandMark", "BrandLogo", "BrandLaunch", "BrandWait", "BrandIntro"] },
@@ -79,6 +79,7 @@ export const UI_PENDING: readonly string[] = [
 
 /** components that are plumbing, not something a person sees — each with the reason */
 export const UI_NOT_SHOWN: Record<string, string> = {
+  "OneColumn": "a context, not a component: the 360 panel makes every CardGrid inside it one column (#1343) — seen as the client's panel at 1280, e2e 158",
   "Background": "the screen background under everything; seen on every sample",
   "ScreenScrollCtx": "context that lets a form scroll its screen to a wrong field; nothing to see",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",

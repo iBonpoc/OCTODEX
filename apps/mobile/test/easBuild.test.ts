@@ -93,11 +93,17 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
     expect(app.runtimeVersion).toEqual({ policy: "sdkVersion" });
     expect(app.updates.url).toBe(`https://u.expo.dev/${app.extra.eas.projectId}`);
     expect(pkg.dependencies["expo-updates"]).toBeTruthy();
-    expect(app.ios.bundleIdentifier).toBe("com.octodex.app");
+    expect(app.ios.bundleIdentifier).toBe("com.gorix.app");
+    expect(app.android.package).toBe("com.gorix.app");
   });
-  // #656 слой 2: the new name's link scheme first, the old one kept — a link made for an older build still opens the app
-  it("link schemes: gorix:// first, octodex:// kept", () => {
-    expect(app.scheme).toEqual(["gorix", "octodex"]);
+  // #656 слой 2: the app is GoRix — its own scheme only (nothing ever linked to octodex://; sign-in goes over https)
+  it("the link scheme is gorix:// only", () => {
+    expect(app.scheme).toBe("gorix");
+  });
+  it("#656: the new App Store record; Android stops at once until Firebase has com.gorix.app (#1444)", () => {
+    expect(eas.submit.testflight.ios.ascAppId).toBe("6834689554");
+    expect(wf).toMatch(/Android paused[\s\S]*?inputs\.platform == 'android'[\s\S]*?exit 1/);
+    for (const f of [JSON.stringify(app), JSON.stringify(eas)]) expect(f).not.toMatch(/com\.octodex\.app|6831904411/);
   });
   // A JS update reaches a build made before a new native module was added: the update must load such a module lazily
   // (like src/features/pushNative.ts) and a new TestFlight build is needed. Update this list in the same PR.

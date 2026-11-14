@@ -3,7 +3,7 @@
  * - «Ещё» → «Счета» opens the one invoices list /invoice on «Не оплачен · Просрочен»; «Оплаты» → /payments (group «Деньги»);
  * - «Главная» → «Ждёт оплаты» opens the same list /invoice?f=owed (failed before: it opened /figures/awaiting);
  * - «Отчёты» → /reports and «Расходы» → /money in the same group;
- * - «＋» → «Новая работа» on a client opens /job/new?customerId= and back goes to that client (S17);
+ * - «Работа без сметы» on a client's «Работы» tab opens /job/new?customerId= and back goes to that client (S17, #1343);
  * - the office opens /payments too (the chain «Счета › Счёт» is a unit test: test/hierarchy.test.ts);
  * - sales: «Счета» yes, «Оплаты» no (the tile is missing and /payments is closed); the technician: neither.
  */
@@ -46,15 +46,15 @@ exports.run = async (h) => {
     h.expect(path(h) === to, `«${name}» → ${to} (${p.url()})`);
   }
 
-  // «＋» → «Новая работа» on a client: tied to that client, back returns to it
+  // «Работа без сметы» on a client (its «Работы» tab — no «＋» on the client card, #1343): tied to it, back returns to it
   const db = await h.db();
   const cust = db.customers.find((c) => c.status === "active") ?? db.customers[0];
   await h.go(`/client/${cust.id}`);
-  await p.getByTestId(h.layout.width >= 820 ? "fab-header" : "fab").locator("visible=true").click();
-  const job = p.locator('[aria-modal="true"]').last().getByTestId("fab-job");
-  await job.waitFor({ timeout: 3000 });
-  await job.click();
-  await p.waitForTimeout(800);
+  const jobsTab = p.getByTestId("client-tabs-jobs").locator("visible=true").first();
+  await jobsTab.scrollIntoViewIfNeeded();
+  await jobsTab.click();
+  await p.getByTestId("client-new-job").locator("visible=true").first().getByRole("button").click();
+  await p.waitForURL(/\/job\/new/, { timeout: 5000 });
   h.expect(path(h) === "/job/new" && p.url().includes(`customerId=${cust.id}`), `«Новая работа» → /job/new?customerId= (${p.url()})`);
   await h.expectText(/Новая работа/, "the form is open");
   h.expect((await p.getByRole("button", { name: new RegExp(`^Назад: ${cust.name}`) }).locator("visible=true").count()) >= 1, "back goes to the client");

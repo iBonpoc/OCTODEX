@@ -13,6 +13,7 @@ import { useToast } from "@/ui/overlays";
 import { Card, Screen } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
 import { expenseVendors } from "@/features/suppliers";
+import { shrinkPicked } from "@/data/photoShrink";
 
 const CATS: ExpenseCategory[] = ["materials", "fuel", "dump", "tools", "other"];
 /** the usual vendors after the company's own suppliers (spec 36 §7) */
@@ -35,8 +36,10 @@ export default function NewExpense() {
   const form = useRequiredForm();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const pick = async () => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.6 }).catch(() => null);
-    if (res && !res.canceled) setPhoto(res.assets[0]?.uri);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
+    // the receipt made smaller before it is kept (#642)
+    const uri = await shrinkPicked(res);
+    if (uri) setPhoto(uri);
   };
   const jobs = [
     { key: "none", label: t("exp.noJob") },
