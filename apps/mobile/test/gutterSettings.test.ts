@@ -214,18 +214,17 @@ describe("M7c: правила и расходники компании → дв�
   });
   it("чужие и вне диапазона значения — умолчание", () => {
     const r = readRules({ rules: { storyFt: 99, wastePct: -1, hangerSpacingIn: 24.5, dsStickFt: 11, corner: "glue", rainBasis: "x" } });
-    expect(r).toMatchObject({ storyFt: 10, wastePct: 10, cutCornerOutIn: 14, cutCornerIn: 6, hangerSpacingIn: 24, dsStickFt: 10, corner: "cut", rainBasis: "smacna" });
+    expect(r).toMatchObject({ storyFt: 10, wasteFt: 10, cutCornerOutIn: 14, cutCornerIn: 6, hangerSpacingIn: 24, dsStickFt: 10, corner: "cut", rainBasis: "smacna" });
     const u = readUse({ use: { joints: { endcap: { rivets: 99 } }, pointsPerTube: 0 } });
     expect(u.joints.endcap).toEqual({ rivets: 2, sealant: 1 });
     expect(u.pointsPerTube).toBe(8);
   });
-  it("запас 20 % и шаг креплений 18″ меняют рулон и крепления", () => {
+  it("запас 30 ft и шаг креплений 18″ меняют рулон и крепления", () => {
     const base = parts({});
-    const p = parts({ rules: { wastePct: 20, hangerSpacingIn: 18 } });
+    const p = parts({ rules: { wasteFt: 30, hangerSpacingIn: 18 } });
     expect(qty(p, (x) => x.key.startsWith("coil."))).toBeGreaterThan(qty(base, (x) => x.key.startsWith("coil.")));
     expect(qty(p, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 18) + 1));
     expect(qty(base, (x) => x.attrs.part === "hanger")).toBe(2 * (Math.floor(480 / 24) + 1));
-    expect(toRulesOverride({ rules: { wastePct: 7 } }).wastePct).toBe("0.07");
   });
   it("высота этажа 12 ft — даунспот 12 ft; крюк по краям по умолчанию, выключается", () => {
     expect(qty(parts({ rules: { storyFt: 12 } }), (x) => x.section === "downspouts" && x.unit === "ft")).toBe(12);
@@ -325,20 +324,10 @@ describe("M7c: правки по ревью", () => {
   });
 });
 
-describe("#1355: запас на отход и запас на угол по виду", () => {
-  it("по умолчанию запас 10 %, наружный угол 14″, внутренний 6″", () => {
-    const r = readRules({});
-    expect(r).toMatchObject({ wastePct: 10, cutCornerOutIn: 14, cutCornerIn: 6 });
-    const o = toRulesOverride({});
-    expect(o).toMatchObject({ wastePct: "0.10", cutCornerOutAllowanceIn: 14, cutCornerAllowanceIn: 6 });
-  });
-  it("«Без запаса»: 0 % сохраняется как 0 и доходит до движка нулём; запас убран — закупка желоба меньше", () => {
-    expect(readRules({ rules: { wastePct: 0 } }).wastePct).toBe(0);
-    expect(toRulesOverride({ rules: { wastePct: 0 } }).wastePct).toBe("0.00");
-    const one: Drawing = { runs: [{ id: "r1", a: [0, 0], b: [480, 0], lengthIn: 480, attrs: { ...DEFAULT_RUN_ATTRS } }], downspouts: [] };
-    const coil = (raw: unknown) => Number(computeGutterParts(toMeasurement(one), toRulesOverride(raw)).parts.find((p) => p.key.startsWith("coil."))!.qty);
-    expect(coil({ rules: { wastePct: 0 } })).toBeLessThan(coil({}));
-    expect(coil({ rules: { wastePct: 0 } })).toBe(40); // 480 ″ of gutter, no corners: the installed length in whole feet
+describe("#1355: запас на угол по виду", () => {
+  it("по умолчанию наружный угол 14″, внутренний 6″", () => {
+    expect(readRules({})).toMatchObject({ cutCornerOutIn: 14, cutCornerIn: 6 });
+    expect(toRulesOverride({})).toMatchObject({ cutCornerOutAllowanceIn: 14, cutCornerAllowanceIn: 6 });
   });
   it("диапазон: наружный (новое поле) 0–24″ — 14″ помещается, 25″ нет; внутренний (старое поле) остаётся 0–12″ (правило 16)", () => {
     expect(readRules({ rules: { cutCornerOutIn: 14 } }).cutCornerOutIn).toBe(14);
@@ -353,33 +342,35 @@ describe("#1355: запас на отход и запас на угол по в�
   });
   it("сохранённые настройки без нового поля (до #1355) читаются: наружный 14″, остальное как было", () => {
     const old = { v: 2, rules: { storyFt: 11, wastePct: 5, cutCornerIn: 6 } };
-    expect(readRules(old)).toMatchObject({ storyFt: 11, wastePct: 5, cutCornerIn: 6, cutCornerOutIn: 14 });
+    expect(readRules(old)).toMatchObject({ storyFt: 11, cutCornerIn: 6, cutCornerOutIn: 14 }); // the old percent stays in the data, it is not read (#1355)
   });
 });
 
-describe("#1355: запас на отход — фиксированной длиной (13.11: «обычно я беру 10 фит запас на любой объём»)", () => {
+
+describe("#1355: запас на отход — 10 ft на каждый вид желоба (14.11: «на каждый вид желоба берём 10 фит запас, значение можно менять»)", () => {
   const one: Drawing = { runs: [{ id: "r1", a: [0, 0], b: [3600, 0], lengthIn: 3600, attrs: { ...DEFAULT_RUN_ATTRS } }], downspouts: [] }; // 300 ft
   const coil = (raw: unknown) => Number(computeGutterParts(toMeasurement(one), toRulesOverride(raw)).parts.find((p) => p.key.startsWith("coil."))!.qty);
-  it("по умолчанию — 10 ft на весь замер (на 300 ft это 310, а не 330)", () => {
-    expect(readRules({})).toMatchObject({ wasteMode: "ft", wasteFt: 10 });
+  it("по умолчанию — 10 ft (на 300 ft это 310, а не 330)", () => {
+    expect(readRules({})).toMatchObject({ wasteFt: 10 });
     expect(toRulesOverride({})).toMatchObject({ wasteMode: "ft", wasteFt: 10 });
     expect(coil({})).toBe(310);
   });
-  it("компания, которая раньше сохранила процент, остаётся на проценте со своим числом (правило 16: её числа не меняются молча)", () => {
-    expect(readRules({ rules: { wastePct: 8 } })).toMatchObject({ wasteMode: "pct", wastePct: 8 });
-    expect(coil({ rules: { wastePct: 8 } })).toBe(324); // 300 ft × 1.08
-    expect(readRules({ rules: { wastePct: 0 } })).toMatchObject({ wasteMode: "pct", wastePct: 0 }); // «без запаса», сохранённый раньше, остаётся выключенным
-    expect(coil({ rules: { wastePct: 0 } })).toBe(300);
-  });
-  it("выбранный способ главнее догадки; футы 0–100, 0 — «без запаса»", () => {
-    expect(readRules({ rules: { wasteMode: "ft", wastePct: 8 } }).wasteMode).toBe("ft");
-    expect(readRules({ rules: { wasteMode: "pct" } }).wasteMode).toBe("pct");
-    expect(readRules({ rules: { wasteMode: "yards" } }).wasteMode).toBe("ft");
+  it("футы 0–100, меняется; 0 — «без запаса»", () => {
     expect(readRules({ rules: { wasteFt: 100 } }).wasteFt).toBe(100);
     expect(readRules({ rules: { wasteFt: 101 } }).wasteFt).toBe(10);
     expect(readRules({ rules: { wasteFt: 0 } }).wasteFt).toBe(0);
     expect(coil({ rules: { wasteFt: 0 } })).toBe(300);
     expect(coil({ rules: { wasteFt: 25 } })).toBe(325);
     expect(RULE_NUMS.wasteFt).toMatchObject({ min: 0, max: 100, def: 10 });
+  });
+  it("процент прежних настроек (`wastePct`) остаётся в данных (правило 16), но не считается: компания, сохранившая 8 %, получает 10 ft, как все", () => {
+    const saved = { v: 2, rules: { storyFt: 11, wastePct: 8 } };
+    expect(readRules(saved)).toMatchObject({ storyFt: 11, wasteFt: 10 });
+    expect(toRulesOverride(saved)).toMatchObject({ wasteMode: "ft", wasteFt: 10 });
+    expect(coil(saved)).toBe(310);
+    // …and the saved data itself is not touched by reading
+    expect(JSON.stringify(saved)).toContain('"wastePct":8');
+    // «без запаса», сохранённый старым способом (0 %), тоже не читается как «без запаса»: теперь он выключается только в футах
+    expect(coil({ rules: { wastePct: 0 } })).toBe(310);
   });
 });

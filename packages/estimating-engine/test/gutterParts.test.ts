@@ -252,9 +252,9 @@ describe("П18: stock — material, gauge, finish; coil blank", () => {
       corners: [],
       downspouts: [],
     });
-    // 20 ft each; the fixed 10 ft of waste is for the whole measurement: once, on the first of two equal stocks
+    // 20 ft each; the fixed 10 ft of waste is for EVERY gutter stock (founder 14.11): each coil line gets it
     expect(q(parts, "coil.k.6.aluminum.027.white")).toBe("30");
-    expect(q(parts, "coil.k.6.aluminum.032.white")).toBe("20");
+    expect(q(parts, "coil.k.6.aluminum.032.white")).toBe("30");
   });
   it("5 in K coil is 11 7/8 wide; half round has no blank by default", () => {
     expect(one({ size: "5" }).parts.find((p) => p.key.startsWith("coil."))!.attrs.blankIn).toBe("11.875");
@@ -613,7 +613,7 @@ describe("elbows by default follow the shape (#871, X-07)", () => {
   });
 });
 
-describe("#1355: waste and the allowance of a field-cut corner", () => {
+describe("#1355: waste (a fixed length for every stock) and the allowance of a field-cut corner", () => {
   const corner = (kind: "out" | "in" | "bay", method: "cut" | "strip" | "prefab" = "cut"): MeasurementInput => ({
     runs: [
       run({ id: "1", lengthIn: 240, ends: [{ kind: "cap" }, { kind: "corner", cornerId: "c" }] }),
@@ -667,13 +667,15 @@ describe("#1355: waste and the allowance of a field-cut corner", () => {
     expect(q(parts, "gutter.k.6.alu_032.white")).toBe("40");
     expect(computeGutterParts(corner("out")).parts.find((p) => p.key === "gutter.k.6.alu_032.white")!.qty).toBe("40"); // the estimate line is the same with and without waste
   });
-  it("the fixed waste is once for the whole measurement: on the stock with the most gutter, the other stocks have none (until the founder says «per colour»)", () => {
-    const two: MeasurementInput = { runs: [run({ id: "1", lengthIn: 600, color: "white" }), run({ id: "2", lengthIn: 240, color: "black" })], corners: [], downspouts: [] };
+  it("the fixed waste is for EVERY gutter stock («на каждый вид желоба берём 10 фит запас»): each colour, profile and size is bought with it", () => {
+    const two: MeasurementInput = { runs: [run({ id: "1", lengthIn: 600, color: "white" }), run({ id: "2", lengthIn: 240, color: "black" }), run({ id: "3", lengthIn: 240, size: "5" })], corners: [], downspouts: [] };
     const r = computeGutterParts(two).parts;
     expect(q(r, "coil.k.6.alu_032.white")).toBe("60"); // 50 ft + 10 ft
-    expect(q(r, "coil.k.6.alu_032.black")).toBe("20"); // 20 ft, no waste
-    const total = (ps: PartQty[]) => ps.filter((p) => p.key.startsWith("coil.")).reduce((n, p) => n + Number(p.qty), 0);
-    expect(total(r)).toBe(80);
+    expect(q(r, "coil.k.6.alu_032.black")).toBe("30"); // 20 ft + 10 ft
+    expect(q(r, "coil.k.5.alu_032.white")).toBe("30"); // another size is another stock
+    const none = computeGutterParts(two, { wasteFt: 0 }).parts;
+    expect(q(none, "coil.k.6.alu_032.black")).toBe("20");
+    expect(q(none, "coil.k.5.alu_032.white")).toBe("20");
   });
   it("waste is on the gutter only: hangers, caps, screws, rivets and sticks do not change with it, in either mode", () => {
     const keysOf = (over?: Over) => computeGutterParts(corner("out"), over).parts.filter((p) => !p.key.startsWith("coil.")).map((p) => `${p.key}=${p.qty}`).sort();
