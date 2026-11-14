@@ -18,6 +18,7 @@ import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * Client page: opened from the SMS / email link in a phone browser, no app and no sign-in.
@@ -234,9 +235,9 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                         </T>
                         {inv.pendingCents > 0 ? (
                           <View testID={`portal-pending-${inv.id}`}>
-                            <T v="body" tone="info">
+                            <StatusNote tone="info" v="body">
                               {t("pay.online.pending", { amount: money(inv.pendingCents) })}
-                            </T>
+                            </StatusNote>
                           </View>
                         ) : null}
                         {sent ? (
