@@ -38,6 +38,8 @@
         }
       }
       body {
+        /* no browser margin: the mark before the JS sits in the very middle, where the boot layer draws it (#1394) */
+        margin: 0;
         overflow: hidden;
         overscroll-behavior: none;
       }
