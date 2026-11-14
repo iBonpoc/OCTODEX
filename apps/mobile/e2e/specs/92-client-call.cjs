@@ -2,11 +2,13 @@
  * Wave 6-2 (docs/specs/20 §5, §8): «Позвонить» on a client asks «Чем кончился?» and writes the call on the client with
  * its person; it shows in «Звонки». The technician cannot write on a client (RLS): his «Записать звонок» offers only
  * his jobs and leads.
+ * «Написать» on the client card (#1343, prototype v6): a client with a phone and an email — a small sheet «SMS / Почта»;
+ * with a phone only — straight to the message.
  */
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/client/c1");
-  await p.getByRole("button", { name: "Позвонить", exact: true }).first().click(); await p.waitForTimeout(500);
+  await p.getByTestId("client-call").locator("visible=true").first().click(); await p.waitForTimeout(500);
   const sheet = h.sheet();
   await h.expectText(/Записать звонок/, "after «Позвонить» — the call sheet");
   await h.expectText(/Кому.*Sarah Mitchell/, "the call goes to the client");
@@ -49,4 +51,19 @@ exports.run = async (h) => {
   h.expect((await places.getByText("Работа", { exact: true }).count()) > 0, "his jobs are there");
   await h.shot("tech");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+
+  // «Написать»: Linda (c3) has a phone and an email — the sheet asks how; David (c2) has a phone only — straight to the message
+  await h.seed("octo.role.v1", "director"); // from a page without the app (CHECKS §9 №12)
+  const { sheetGone, pressEscUntilClosed } = require("../sheet.cjs");
+  await h.go("/client/c3");
+  await p.getByTestId("client-write").locator("visible=true").first().click();
+  await p.getByTestId("client-write-sheet").locator("visible=true").first().waitFor({ timeout: 4000 });
+  h.expect((await p.getByTestId("msg-sheet").locator("visible=true").count()) === 0, "phone and email: the choice first, not the message");
+  await h.shot("write-choice");
+  await pressEscUntilClosed(p);
+  await sheetGone(p);
+  await h.go("/client/c2");
+  await p.getByTestId("client-write").locator("visible=true").first().click();
+  await p.getByTestId("msg-sheet").locator("visible=true").first().waitFor({ timeout: 4000 });
+  h.expect((await p.getByTestId("client-write-sheet").locator("visible=true").count()) === 0, "phone only: straight to the message, no choice");
 };

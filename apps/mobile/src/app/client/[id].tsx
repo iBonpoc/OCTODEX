@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { canServe, visibleClients } from "@/features/clients";
 import { mergedTarget } from "@/features/clientDuplicates";
-import { clientRowsFor, isClientSection } from "@/features/clientRows";
+import { clientRowsFor, isClientSection, isClientTab } from "@/features/clientRows";
 import { ClientSection } from "@/features/client/ClientSections";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { useI18n, type DictKey } from "@/i18n";
@@ -10,12 +10,13 @@ import { Button } from "@/ui/controls";
 import { Empty, Screen } from "@/ui/surfaces";
 
 /**
- * Client card (docs/specs/13-app-structure.md §3.3, wave 4). Header: name; one line "CLT-0001 · status · tags";
- * call / SMS / email / route; money (office). Below — not tabs but rows with counters, each opens its own list
- * (`/client/<id>?s=jobs`): properties, billing address, people, jobs, leads, estimates, invoices, tasks, notes, files, history.
+ * Client card (docs/specs/13-app-structure.md §3.3; prototype v6 approved by the founder 14.11, #1343). Header: name;
+ * one line "CLT-0001 · status · tags"; Позвонить · Написать · Маршрут; «Создать смету»; money (office). Below — view tabs
+ * (DS §9 А1п): Обзор · Сметы · Счета · Работы · Задачи · Заметки · Файлы · История, the number — what waits. An old link
+ * `/client/<id>?s=<row>` still opens that row's own list.
  */
 export default function ClientScreen() {
-  const { id, s } = useLocalSearchParams<{ id: string; s?: string }>();
+  const { id, s, tab } = useLocalSearchParams<{ id: string; s?: string; tab?: string }>();
   const { db, role } = useStore();
   const { t } = useI18n();
   const c = visibleClients(db, role).find((x) => x.id === id);
@@ -53,12 +54,11 @@ export default function ClientScreen() {
     <Screen
       title={c.name}
       back={back}
-      // «do not service»: no «＋» (nothing new for the client, docs/specs/04 §12; the server refuses too)
-      fab={canServe(db, c.id) ? "client" : undefined}
-      fabCtx={{ customerId: c.id }}
+      // no yellow round «＋» on the client card (prototype v6, founder 14.11, #1343): «Создать смету» and «＋ Новая …» in the tabs
       right={office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined}
     >
-      <ClientCardBody c={c} />
+      {/* the open tab is in the address: back from a document returns to it */}
+      <ClientCardBody c={c} tab={isClientTab(tab) ? tab : undefined} onTab={(k) => router.setParams({ tab: k })} />
     </Screen>
   );
 }

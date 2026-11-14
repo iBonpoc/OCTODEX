@@ -3,7 +3,7 @@
  * - «＋» by screen and role: phone — a floating button bottom-right above the tabs; 820/1280 — «＋» in the header, no floating one;
  * - only what works: Главная — Лид · Клиент · Смета · Расход (tech: Лид · Расход); one item = straight to its screen;
  * - Plan: planners — Работа · Лид · Записать в план · Событие · Выходной; the technician has no «＋» on Plan;
- * - Client: «Создать смету» (a visible button on the card, #1094) and the «＋» with the estimate first, then «Работа без сметы» (each with a line), both tied to the client; Job: «Выезд» to this job; tech visit: Фото · Лид · Расход;
+ * - Client: «Создать смету» (a visible button on the card, #1094); no «＋» on the card (#1343) — «Работа без сметы» is on the «Работы» tab, tied to the client; Job: «Выезд» to this job; tech visit: Фото · Лид · Расход;
  * - «Главная»: the bell with the unread count → /notifications → a card opens its estimate; the profile → My settings.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
@@ -106,18 +106,16 @@ exports.run = async (h) => {
   await mainBtn.first().click();
   await p.waitForURL(/\/estimate\/new/, { timeout: 5000 });
   h.expect(path(h) === "/estimate/new" && new URL(p.url()).searchParams.get("customerId") === "c1", `client card «Создать смету» → estimate for c1 (${p.url()})`);
+  // no «＋» on the client card (prototype v6, founder 14.11, #1343): «Работа без сметы» is «＋» on the «Работы» tab
   await h.go("/client/c1");
-  await plus().click();
-  body = await sheetText();
-  h.expect(await has("estimate", "job"), "client «＋»: estimate and job");
-  h.expect((await topOf("estimate")) < (await topOf("job")), "client «＋»: the estimate comes before the job, the job is last");
-  for (const id of ["estimate", "job"]) {
-    const lines = (await sheet().getByTestId(`fab-${id}`).innerText()).split("\n").filter(Boolean);
-    h.expect(lines.length >= 2, `client «＋»: fab-${id} has a label and a line saying what it makes (${lines.join(" | ")})`);
-  }
-  await sheet().getByTestId("fab-estimate").click();
-  await p.waitForTimeout(700);
-  h.expect(path(h) === "/estimate/new" && new URL(p.url()).searchParams.get("customerId") === "c1", `client «＋» → estimate for c1 (${p.url()})`);
+  await p.getByTestId("client-tabs").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').count()) === 0, "client card: no «＋»");
+  const jobsTab = p.getByTestId("client-tabs-jobs").locator("visible=true").first();
+  await jobsTab.scrollIntoViewIfNeeded();
+  await jobsTab.click();
+  await p.getByTestId("client-new-job").locator("visible=true").first().getByRole("button").click();
+  await p.waitForURL(/\/job\/new/, { timeout: 5000 });
+  h.expect(new URL(p.url()).searchParams.get("customerId") === "c1", `«Работы» → «Работа без сметы» for c1 (${p.url()})`);
 
   // Job: «Запланировать работу» for this job and «Смета»
   await h.go("/job/j1");

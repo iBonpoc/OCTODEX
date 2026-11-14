@@ -6,7 +6,7 @@
  * Touch targets: 44 pt on iOS/web (App Store), 48 dp on Android (Google Play). Tokens only.
  * Layout rules are pure functions in ./listCardLayout (unit-tested); this file only draws them.
  */
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { Linking, Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native"; // ds-allow: src/ui primitive
 import { useReducedMotion } from "react-native-reanimated";
 import { component, font, layout, radius, size, space, spaceHalf, statusIcon, motion, type StatusName } from "@octo/design-tokens";
@@ -471,9 +471,13 @@ function ListCardRow(p: ListCardProps) {
 /* ---------- grid of cards: rows of equal height, equal gaps, edges on one line ----------
  * Phone 1 column, tablet 2, desktop 3 (layout.gridCols). Every card in a row stretches to the tallest one, so tops,
  * bottoms and the button lines match; an unfinished last row keeps the column width (empty cells). */
+/** a narrow column (the 360 panel beside a list, DS §12.3): every CardGrid inside it is one column, whatever the window's width */
+export const OneColumn = createContext(false);
+
 export function CardGrid({ children, cols }: { children: ReactNode[]; cols?: number }) {
   const { device } = useDevice();
-  const n = cols ?? layout.gridCols[device];
+  const narrow = useContext(OneColumn);
+  const n = narrow ? 1 : (cols ?? layout.gridCols[device]);
   const items = children.filter(Boolean);
   if (n <= 1) return <View style={{ gap: space[2] }}>{items}</View>;
   const rows: ReactNode[][] = [];

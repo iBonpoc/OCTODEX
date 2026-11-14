@@ -7,30 +7,41 @@ const { expectOneAccent } = require("../accent.cjs");
  */
 exports.run = async (h) => {
   const p = h.page;
-  // rows with counters (13 §3.3): each opens its own list at /client/c1?s=<row>
-  const row = async (name) => { await p.getByTestId("client-rows").getByRole("button", { name, exact: true }).click(); await p.waitForTimeout(500); };
+  // the client's sections are view tabs (#1343, DS §9 А1п): a tab shows its list in place; «Люди» is a row on «Обзор»
+  // by the tabs' keys (CHECKS §9: a test finds by testID, not by words)
+  const row = async (name) => {
+    if (name === "people") await p.getByTestId("client-people").locator("visible=true").first().getByRole("button").first().click();
+    else {
+      const k = name;
+      const pill = p.getByTestId(`client-tabs-${k}`).locator("visible=true").first();
+      await pill.scrollIntoViewIfNeeded();
+      await pill.click();
+      await p.getByTestId(`client-tab-${k}`).locator("visible=true").first().waitFor({ timeout: 4000 });
+    }
+    await p.waitForTimeout(300);
+  };
   const save = async () => { await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500); };
 
   await h.go("/client/c1");
   await expectOneAccent(h, "client card");
   await h.expectText(/CLT-0001/, "client number in the header");
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
-  await h.expectText(/Должен[\s\S]*\$0[\s\S]*Оплатил всего[\s\S]*\$582\b/, "owes / paid total");
+  await h.expectText(/Долг[\s\S]*\$0[\s\S]*Оплачено[\s\S]*\$582\b/, "owes / paid (one word each, #1417)");
   await h.expectText(/Контакты[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
   await h.expectText(/Люди[\s\S]*Tom Mitchell/, "the spouse in the row «Люди»");
-  await h.expectText(/Выставлено всего/, "invoiced total");
+  await h.expectText(/Выставлено/, "invoiced");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
-  await row("История");
-  h.expect(p.url().includes("/client/c1?s=history"), `history row opens its list (${p.url()})`);
+  await row("history");
+  h.expect(/[?&]tab=history\b/.test(p.url()), `«История» opens in place, the address keeps it (${p.url()})`);
   await h.expectText(/Смета подписана/, "history: estimate signed");
   await h.expectText(/Оплата/, "history: payment (office)");
   await h.go("/client/c1");
-  await row("Счета и квитанции");
+  await row("invoices");
   await h.expectText(/INV-0105/, "invoices: invoice");
   await h.expectText(/RCT-0102/, "invoices: receipt");
   await h.go("/client/c1");
-  await row("Задачи");
+  await row("tasks");
   await h.expectText(/Задач нет/, "tasks: empty state");
   // wave 6: the one task form (TaskSheet) — the client is already «к чему»
   await h.click("Новая задача");
@@ -61,12 +72,12 @@ exports.run = async (h) => {
   await h.expectText(/Задача снова открыта/, "the toast says reopened");
   h.expect((await savedOpen()) && (await doneCard.count()) === 0, "task reopened");
   await h.go("/client/c1");
-  await row("Файлы");
+  await row("files");
   await h.expectText(/Фото с выездов|Файлов нет/, "files list renders");
 
   // People: + Phone is a button; the new phone of the spouse is saved and shown
   await h.go("/client/c1");
-  await row("Люди");
+  await row("people");
   await p.getByRole("button", { name: "Люди", exact: true }).last().click();
   await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Телефон", exact: true }).last().click();
@@ -117,7 +128,7 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/client/c2");
   const txt = await h.text();
-  h.expect(/David Kim/.test(txt) && !/Должен/.test(txt) && !/Оплатил всего/.test(txt), "tech sees own client without money");
+  h.expect(/David Kim/.test(txt) && !/Долг/.test(txt) && !/Оплачено/.test(txt), "tech sees own client without money");
   // the client's jobs: the cards are there, the sums are not (value only for the office)
   await h.go("/client/c2?s=jobs");
   await p.locator('[data-testid^="client-job-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
