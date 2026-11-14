@@ -28,8 +28,8 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
 
   // the grid
-  await waitFor(async () => ((await svg().locator("#grid-minor").getAttribute("d")) || "").length > 0, "a grid: minor lines");
-  h.expect(((await svg().locator("#grid-major").getAttribute("d")) || "").length > 0, "a grid: major lines");
+  await waitFor(async () => ((await p.getByTestId("draw-grid").locator("#grid-minor").getAttribute("d")) || "").length > 0, "a grid: minor lines");
+  h.expect(((await p.getByTestId("draw-grid").locator("#grid-major").getAttribute("d")) || "").length > 0, "a grid: major lines");
 
   // a gutter, its length typed twice the drawn one → the line is twice as long on the canvas
   const b = await p.getByTestId("draw-surface").boundingBox();

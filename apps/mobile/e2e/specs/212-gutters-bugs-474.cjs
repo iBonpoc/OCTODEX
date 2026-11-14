@@ -108,9 +108,9 @@ exports.run = async (h) => {
   const l3 = (await lines())[0];
   h.expect(l3 >= l0 * 0.24 && l3 <= l0 * 0.26, `the farthest limit: a quarter of the fit size; a hard pinch goes no further, it is back at the limit after the release (${Math.round(l0)} → ${Math.round(l3)} px)`);
   // #1403: the grid covers the whole screen at the farthest scale — and beyond it (the live layer moves before the redraw)
-  const gridXs = (await svg().locator("#grid-minor").getAttribute("d")).match(/M(-?[\d.]+) -?[\d.]+V/g).map((m) => parseFloat(m.slice(1)));
+  const gridXs = (await p.getByTestId("draw-grid").locator("#grid-minor").getAttribute("d")).match(/M(-?[\d.]+) 0V/g).map((m) => parseFloat(m.slice(1)));
   const vw = (await svg().boundingBox()).width;
-  h.expect(Math.min(...gridXs) < 0 && Math.max(...gridXs) > vw, `the grid reaches past both sides of the screen (${Math.min(...gridXs)} … ${Math.max(...gridXs)}, screen ${Math.round(vw)})`);
+  h.expect(Math.min(...gridXs) < 120 && Math.max(...gridXs) > vw - 120, `the grid reaches both sides of the screen (${Math.min(...gridXs)} … ${Math.max(...gridXs)}, screen ${Math.round(vw)})`);
   // #1403: fingers STILL DOWN at the farthest scale and beyond: the live layer is smaller than the screen, the grid must still cover all of it
   {
     const cdp = await p.context().newCDPSession(p);
@@ -120,9 +120,16 @@ exports.run = async (h) => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(120) });
     for (let d = 115; d >= 30; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
     // the layer follows the fingers on the UI thread: wait until the drawing has shrunk (the live scale is on), then look at the grid
-    let g = await svg().locator("#grid-minor").boundingBox();
-    const covers = (r) => r.x <= b.x + 1 && r.x + r.width >= b.x + b.width - 1 && r.y <= b.y + 1 && r.y + r.height >= b.y + b.height - 1;
-    await waitFor(async () => covers((g = await svg().locator("#grid-minor").boundingBox())), `fingers down, zoomed far out: the grid covers the whole canvas (grid ${Math.round(g.x)},${Math.round(g.y)} ${Math.round(g.width)}×${Math.round(g.height)}; canvas ${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}×${Math.round(b.height)})`, 20);
+    // the grid is a layer of its own, drawn from the live view every frame: its lines reach both sides and both ends of the canvas (a cell at most from each edge)
+    const reach = async () => {
+      const d = (await p.getByTestId("draw-grid").locator("#grid-minor").getAttribute("d")) + (await p.getByTestId("draw-grid").locator("#grid-major").getAttribute("d"));
+      const xs = [...d.matchAll(/M(-?[\d.]+) 0V/g)].map((m) => parseFloat(m[1]));
+      const ys = [...d.matchAll(/M0 (-?[\d.]+)H/g)].map((m) => parseFloat(m[1]));
+      return { xs, ys };
+    };
+    let g = await reach();
+    const covers = (r) => r.xs.length > 1 && r.ys.length > 1 && Math.min(...r.xs) < 120 && Math.max(...r.xs) > b.width - 120 && Math.min(...r.ys) < 120 && Math.max(...r.ys) > b.height - 120;
+    await waitFor(async () => covers((g = await reach())), `fingers down, zoomed far out: the grid reaches every edge of the canvas (x ${Math.min(...g.xs)}…${Math.max(...g.xs)}, y ${Math.min(...g.ys)}…${Math.max(...g.ys)}; canvas ${Math.round(b.width)}×${Math.round(b.height)})`, 20);
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await cdp.detach();
     let l4 = 0;
