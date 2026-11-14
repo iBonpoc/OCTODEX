@@ -7,6 +7,7 @@
  * - «Отменить» on the toast takes the second reminder back (rule 5);
  * - the technician has no «Напомнить».
  */
+const { invAct, invHas } = require("../invoiceMenu.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/invoice");
@@ -27,7 +28,7 @@ exports.run = async (h) => {
   await p.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
   const reminders = async () => (await h.db()).activities.filter((a) => a.meta?.reminder === "1" && a.meta?.invoiceId === inv.id);
 
-  await h.click("Напомнить");
+  await invAct(p, "remind");
   const sheet = p.locator('[aria-modal="true"]').filter({ hasText: "Напомнить клиенту" }).last();
   const st = await sheet.innerText();
   h.expect(st.includes("Язык клиента: Español"), "the sheet names the client's language");
@@ -46,7 +47,7 @@ exports.run = async (h) => {
 
   // a second reminder, taken back with «Отменить»
   await p.evaluate(() => { window.open = () => null; });
-  await h.click("Напомнить");
+  await invAct(p, "remind");
   await p.locator('[aria-modal="true"]').filter({ hasText: "Напомнить клиенту" }).last().getByRole("button", { name: "Напомнить по SMS" }).click();
   await p.waitForTimeout(300);
   await h.click("Отменить");
@@ -56,5 +57,5 @@ exports.run = async (h) => {
   // technician: no «Напомнить»
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/invoice/${inv.id}`);
-  h.expect((await p.getByRole("button", { name: "Напомнить", exact: true }).count()) === 0, "tech: no «Напомнить»");
+  h.expect(!(await invHas(p, "remind")), "tech: no «Напомнить»");
 };

@@ -90,9 +90,17 @@ export default function Invoices() {
       back={back}
       aside={
         openInv ? (
-          <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
-            <InvoiceCardBody key={openInv.id} inv={openInv} />
-          </ListPanel>
+          // #1474: as the invoice's screen — «⋯» in the panel's header row, «Принять оплату» at the top of the card
+          <InvoiceCardBody
+            key={openInv.id}
+            inv={openInv}
+            frame={({ more, main, body }) => (
+              <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} outside={panel.outside} actions={more} onOpen={panel.full} onClose={panel.close}>
+                {main}
+                {body}
+              </ListPanel>
+            )}
+          />
         ) : undefined
       }
       subtitle={`${t("mny.owedTotal")} ${money(v.owedCents)}`}

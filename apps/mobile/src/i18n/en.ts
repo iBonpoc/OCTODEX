@@ -4029,7 +4029,7 @@ export const en: Dict = {
   "inv.rej.overContract": "The invoice was not issued: with the other invoices it is more than the contract. Another invoice was issued on this job while the phone was offline. Open the job to see what is left to bill.",
   "inv.overContract.screen": "The invoice was not issued: with the other invoices it is more than the contract. What is left to bill is in the contract statement.",
   // В1-5 «Данные и деньги»: voiding an invoice (#1107)
-  "inv.void.action": "Void",
+  "inv.void.menu": "Void…",
   "inv.void.title": "Void invoice",
   "inv.void.body": "The invoice stays in the history marked «Void» and leaves every total. It cannot be brought back — issue a new one if needed.",
   "inv.void.reason": "Reason",

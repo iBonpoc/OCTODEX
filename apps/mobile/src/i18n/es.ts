@@ -4029,7 +4029,7 @@ export const es: Dict = {
   "inv.rej.overContract": "La factura no se emitió: junto con las demás supera el contrato. Se emitió otra factura de este trabajo mientras el teléfono estaba sin conexión. Abra el trabajo para ver lo que queda por facturar.",
   "inv.overContract.screen": "La factura no se emitió: junto con las demás supera el contrato. Lo que queda por facturar está en el estado del contrato.",
   // В1-5 «Данные и деньги»: voiding an invoice (#1107)
-  "inv.void.action": "Anular",
+  "inv.void.menu": "Anular…",
   "inv.void.title": "Anular factura",
   "inv.void.body": "La factura queda en el historial marcada «Anulada» y sale de todos los totales. No se puede recuperar; emita una nueva si hace falta.",
   "inv.void.reason": "Motivo",

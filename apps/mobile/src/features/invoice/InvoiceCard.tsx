@@ -1,6 +1,6 @@
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
-import { useState } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -18,6 +18,7 @@ import { invoiceBalance } from "@/features/invoiceStatus";
 import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
 import { DOC_LANG_LABEL } from "@/i18n/translate";
 import { RelatedBlock } from "@/features/RelatedBlock";
+import { VoidInvoiceMenu, type InvoiceMoreItem } from "@/features/invoice/VoidInvoice";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -33,7 +34,13 @@ const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
  * The same body on the invoice's own screen (`/invoice/<id>`) and in the panel beside the list on 1280
  * (`/invoice?open=<id>`, docs/specs/06-list-cards.md «Панель 1280»).
  */
-export function InvoiceCardBody({ inv }: { inv: Invoice }) {
+/**
+ * Where the card's actions stand (#1474, DS §7.3, §8.9, Б4; as the estimate, #1412): `more` — «⋯» with the other actions, `main` —
+ * «Принять оплату» at the top of the content (from 820, the panel), `mainBar` — the same for the pinned bar on a phone, `body` — the rest.
+ */
+export type InvoiceFrame = (parts: { more: ReactNode; main: ReactNode | null; mainBar: ReactNode | null; body: ReactNode }) => ReactElement;
+
+export function InvoiceCardBody({ inv, frame }: { inv: Invoice; frame?: InvoiceFrame }) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -70,7 +77,28 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
   const pdf = () =>
     saveEstimatePdf(invoiceHtml(db, inv, company, { lang: docLanguageFor(db, { customerId: inv.customerId }) }), `Invoice ${inv.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
 
-  return (
+  // #1412/#1474: one main button — take the payment — and «⋯» with the rest; no row of pills under the card
+  const takePay = () => {
+    // ACH on its way: the rest, not the whole balance (review 20в №7); sales — the whole deposit
+    setAmount(right === "wholeDeposit" ? balance : Math.max(0, balance - pendingCents));
+    setPay(true);
+  };
+  const payButton = (bar: boolean) =>
+    balance > 0 && right !== "none" ? (
+      <View testID="invoice-take-payment" style={bar ? undefined : { alignSelf: "flex-start" }}>
+        <Button label={t("inv.takePayment")} icon="dollar" size={bar ? "bar" : undefined} full={bar} onPress={takePay} />
+      </View>
+    ) : null;
+  const items: InvoiceMoreItem[] = [
+    // Б4: PDF first, then the ways to send it; «Аннулировать…» last (VoidInvoiceMenu)
+    { key: "pdf", label: t("ue.pdf"), icon: "invoice" as const, testID: "invoice-act-pdf", onPress: pdf },
+    // reminders are the office's (S20); the tech takes the payment on site and does not chase debts
+    ...(balance > 0 && store.role !== "tech" && (cust?.phone || cust?.email) ? [{ key: "remind", label: t("mny.remind"), icon: "bell" as const, testID: "invoice-act-remind", onPress: () => setRemind(true) }] : []),
+    ...(balance > 0 && cust?.phone ? [{ key: "sms", label: t("ue.sendSms"), icon: "message" as const, testID: "invoice-act-sms", onPress: () => void openSms(cust.phone, msg().text).catch(() => {}) }] : []),
+    ...(balance > 0 && cust?.email ? [{ key: "email", label: t("ue.sendEmail"), icon: "send" as const, testID: "invoice-act-email", onPress: () => void openEmail(cust.email!, msg().subject, msg().text).catch(() => {}) }] : []),
+  ];
+  const more = <VoidInvoiceMenu inv={inv} items={items} />;
+  const body = (
     <>
       {/* «Связано» (13 §2.7, 15-flows §2): job, estimate, client — the parents of the invoice */}
       <RelatedBlock of={{ type: "invoice", id: inv.id }} />
@@ -121,26 +149,6 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
         </T>
       </Card>
 
-      <RowView style={{ flexWrap: "wrap" }}>
-        {balance > 0 && right !== "none" ? (
-          <Button
-            label={t("inv.takePayment")}
-            icon="dollar"
-            onPress={() => {
-              // ACH on its way: the rest, not the whole balance (review 20в №7); sales — the whole deposit
-              setAmount(right === "wholeDeposit" ? balance : Math.max(0, balance - pendingCents));
-              setPay(true);
-            }}
-          />
-        ) : null}
-        {/* reminders are the office's (S20); the tech takes the payment on site and does not chase debts */}
-        {balance > 0 && store.role !== "tech" && (cust?.phone || cust?.email) ? <Button label={t("mny.remind")} icon="bell" variant="secondary" onPress={() => setRemind(true)} /> : null}
-        {balance > 0 && cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, msg().text).catch(() => {})} /> : null}
-        {balance > 0 && cust?.email ? (
-          <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, msg().subject, msg().text).catch(() => {})} />
-        ) : null}
-        <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
-      </RowView>
 
       <SectionTitle title={t("rcpt.list")} right={pays.length ? <T v="caption" tone="mut">{pays.length}</T> : undefined} />
       {pays.length ? (
@@ -203,6 +211,20 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
           />
         </View>
       </Sheet>
+    </>
+  );
+  const main = payButton(false);
+  const mainBar = payButton(true);
+  if (frame) return frame({ more, main, mainBar, body });
+  return (
+    <>
+      {more || main ? (
+        <RowView style={{ justifyContent: "space-between" }}>
+          <View style={{ flex: 1 }}>{main}</View>
+          {more}
+        </RowView>
+      ) : null}
+      {body}
     </>
   );
 }
