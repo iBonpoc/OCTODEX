@@ -114,6 +114,8 @@ export default function MeasurementsScreen() {
       title={t("mod.gutters.list.title")}
       subtitle={t("mod.gutters.title")}
       back={back}
+      // DS §12.2: «?» first on the right of the header
+      help={t("mod.gutters.list.help")}
       right={add}
       aside={
         openItem ? (

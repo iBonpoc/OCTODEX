@@ -60,7 +60,7 @@ export default function ViewScreen() {
   const addr = m?.propertyId ? store.db.properties.find((p) => p.id === m.propertyId) : undefined;
   const back = () => (router.canGoBack() ? router.back() : router.replace(moduleHref("gutters", "list") as Href));
   return (
-    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back}>
+    <Screen title={t("mod.gutters.view.title")} subtitle={lead?.name ?? addr?.address} back={back} help={t("mod.gutters.view.help")}>
       <MeasurementView key={mid} mid={mid} estimate={params.estimate === "1"} from={params.from} onGone={back} />
     </Screen>
   );

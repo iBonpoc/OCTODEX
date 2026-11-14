@@ -3,6 +3,7 @@
  * Every view.
  * - an empty «Замеры» is the `Empty` state (icon, words, why, the one main button «Новый замер»), not a grey paragraph;
  * - «＋ Новый замер» in the header is secondary: nothing yellow in it (yellow is the screen's main action only);
+ * - both screens have «?» in the header (DS §12.2: first on the right);
  * - «Просмотр замера» of a measurement that is not there is the `NotFound` state with «К списку замеров», which goes to the list.
  * Finds things by testID; waits on what it checks.
  */
@@ -35,12 +36,14 @@ exports.run = async (h) => {
   // the header's «＋» is there and is not yellow (DS §12.2: creating is secondary in the header)
   await tid("measurements-new").getByRole("button", { name: "Новый замер" }).waitFor({ timeout: 5000 });
   h.expect((await yellowIn("measurements-new")) === false, "the header's «Новый замер» is secondary, not acc");
+  await p.getByRole("button", { name: "Справка: Замеры" }).locator("visible=true").first().waitFor({ timeout: 5000 });
   await h.shot("empty");
 
   // a measurement that is not there: NotFound, and its button goes back to the list
   await h.go("/module/gutters/view?m=nope");
   await tid("not-found").waitFor({ timeout: 8000 });
   h.expect(/Замер не найден/.test(await p.locator("body").innerText()), "it says «Замер не найден»");
+  await p.getByRole("button", { name: "Справка: Просмотр замера" }).locator("visible=true").first().waitFor({ timeout: 5000 });
   await h.shot("not-found");
   await tid("not-found-back").getByRole("button", { name: "К списку замеров" }).click();
   await p.waitForURL(/\/module\/gutters\/list/, { timeout: 8000 });
