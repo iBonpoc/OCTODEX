@@ -96,10 +96,8 @@ export function SvgPainter({ scene, w, h, testID }: { scene: Scene; w: number; h
   const { c } = useTheme();
   const story = c.drawing.story;
   return (
+    // the grid is not here (#1434): its own screen-sized layer under this one (GridLayer), so the drawing needs no overflow
     <Svg width={w} height={h} testID={testID}>
-      {/* the grid (founder 08.11): paths, not lines — e2e counts lines; the major lines a little bolder */}
-      {scene.grid ? <Path id="grid-minor" d={scene.grid.minor} stroke={c.bd} strokeWidth={drawing.runW / 4} fill="none" /> : null}
-      {scene.grid ? <Path id="grid-major" d={scene.grid.major} stroke={c.bd} strokeWidth={drawing.runW / 2} fill="none" /> : null}
       {scene.runs.map((r) => (
         <RunLine key={r.id} r={r} color={story[r.story - 1]!} halo={c.drawing.node} />
       ))}

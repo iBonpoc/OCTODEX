@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 import { size as sizes } from "@octo/design-tokens";
-import { buildGrid, buildScene, clampView, fitView, MAX_GRID_LINES, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
+import { buildScene, clampView, fitView, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
 import { applyTf } from "../src/modules/gutters/canvas/gestureState";
 import type { Drawing, P } from "../src/modules/gutters/geometry";
 
@@ -56,27 +56,13 @@ describe("commitView / clampView: the committed view is inside the limits", () =
   });
 });
 
-describe("buildGrid: a ceiling of the lines, whatever the scale (k → 0 made millions)", () => {
-  const lines = (g: { minor: string; major: string }) => (g.minor.match(/M/g)?.length ?? 0) + (g.major.match(/M/g)?.length ?? 0);
-  it("k from 44 down to 1e-9 and 0, NaN: never more than MAX_GRID_LINES lines, and fast", () => {
-    const t0 = performance.now();
-    for (const k of [44, 10, 1, 0.1, 0.01, 1e-3, 1e-4, 1e-6, 1e-9, 0, NaN]) {
-      const g = buildGrid({ k, ox: vp.w / 2, oy: vp.h / 2 }, vp, 8);
-      expect(lines(g)).toBeLessThanOrEqual(MAX_GRID_LINES);
-    }
-    expect(performance.now() - t0).toBeLessThan(500);
-  });
-  it("a normal scale still has its grid (the ceiling does not eat it)", () => {
-    const g = buildGrid({ k: 1, ox: 0, oy: vp.h }, vp, 8);
-    expect(lines(g)).toBeGreaterThan(5);
-  });
-});
+// the grid (its ceiling of lines, its cover of the screen at any live view, its steps): test/gutterGrid.test.ts (#1434)
 
 describe("the time of a scene at the extreme scales (the speed bench's idea, in units: a big drawing, the farthest and the nearest)", () => {
   const big: Drawing = { runs: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, a: [i * 100, 0] as P, b: [i * 100 + 90, 400] as P, attrs })), downspouts: [] };
   const lim = zoomLimits(big.runs.flatMap((r) => [r.a, r.b]), vp, 32, sizes.hitMin);
-  const opts = (view: View) => ({ view, viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}`, gridMinPx: 8 });
-  it("a scene (runs, labels, the grid) at kMin and at kMax is built in well under a frame's budget × 10 on this machine", () => {
+  const opts = (view: View) => ({ view, viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}` });
+  it("a scene (runs, labels) at kMin and at kMax is built in well under a frame's budget × 10 on this machine", () => {
     for (const k of [lim.kMin, lim.kMax]) {
       const t0 = performance.now();
       buildScene(big, opts({ k, ox: vp.w / 2, oy: vp.h / 2 }));

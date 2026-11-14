@@ -9,7 +9,7 @@ import { DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
 import type { Drawing, DrawnRun, P } from "../src/modules/gutters/geometry";
 
 const run = (id: string, a: P, b: P, o: Partial<DrawnRun> = {}): DrawnRun => ({ id, a, b, attrs: { ...DEFAULT_RUN_ATTRS }, ...o });
-const opts = (view: { k: number; ox: number; oy: number }): SceneOpts => ({ view, viewport: { w: 390, h: 700 }, fontSize: 11, padX: 4, gap: 4, dsText: (n) => `DS ${n}`, storyText: (n) => `эт ${n}`, dsPad: 10, faceOff: 8, cornerText: (_k, _s, d) => `${d}°`, lenWithStory: true, gridMinPx: 24 });
+const opts = (view: { k: number; ox: number; oy: number }): SceneOpts => ({ view, viewport: { w: 390, h: 700 }, fontSize: 11, padX: 4, gap: 4, dsText: (n) => `DS ${n}`, storyText: (n) => `эт ${n}`, dsPad: 10, faceOff: 8, cornerText: (_k, _s, d) => `${d}°`, lenWithStory: true });
 
 /** every number found anywhere in a value that is not finite (a path) */
 function bad(v: unknown, path = "scene", out: string[] = []): string[] {
