@@ -281,3 +281,65 @@ describe("#1281 — the limits of the scale: a soft stop, a tick at the limit, t
 });
 
 import { OVERSHOOT } from "../src/modules/gutters/canvas/gestureState";
+
+describe("#1403 — the scale's math at once (the director's list: limits, the point under the fingers, a lifted finger, a render of the same view, the release)", () => {
+  const lim = { lo: 0.25, hi: 4 };
+  /** a fixed pseudo-random sequence (no Math.random: the test is the same every run) */
+  let seed = 7;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  it("300 frames of a shaking pinch with moving fingers, a finger lifted and put back, renders of the same view in between", () => {
+    const st = idleState();
+    const view: View = { k: 1, ox: 0, oy: 0 };
+    let pending: Pending[] = [];
+    let n = 2;
+    for (let i = 0; i < 300; i++) {
+      // every 40th frame: one finger lifts for a frame, then comes back (the count changes twice)
+      const lift = i % 40 === 20;
+      const back = i % 40 === 21;
+      const fingers = lift ? 1 : 2;
+      const f = { x: 100 + rnd() * 200, y: 200 + rnd() * 400 };
+      const k = 0.85 + rnd() * 0.3;
+      const before = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+      const planUnder = { x: (f.x - st.Tx) / st.S, y: (f.y - st.Ty) / st.S }; // the plan point under the fingers before the frame
+      const req = pinchFrame(st, { scaleChange: k, numberOfPointers: fingers, focalX: f.x, focalY: f.y }, lim);
+      if (lift) {
+        // a lifted finger closes the segment: its commit is exactly the live transform — no jump on the release
+        if (req) {
+          expect(req).toEqual(before);
+          const v = applyTf(view, req);
+          pending.push({ view: v, tf: req });
+          // its render arrives: the live transform loses exactly that commit, the screen shows the same as before
+          const r = settle({ S: st.S, Tx: st.Tx, Ty: st.Ty }, pending, v, view);
+          pending = r.pending;
+          expect(applyTf(v, r.live).k).toBeCloseTo(applyTf(view, before).k, 9);
+          Object.assign(view, v);
+          st.S = r.live.S; st.Tx = r.live.Tx; st.Ty = r.live.Ty;
+        }
+        n = 1;
+        continue;
+      }
+      if (back || n !== fingers) {
+        // the first frame after the count changed is the jump itself: nothing moves
+        expect({ S: st.S, Tx: st.Tx, Ty: st.Ty }).toEqual(before);
+        n = fingers;
+        continue;
+      }
+      // within the soft bounds of the limits, always
+      expect(st.S).toBeLessThanOrEqual(lim.hi * (1 + 0.05) + 1e-9);
+      expect(st.S).toBeGreaterThanOrEqual(lim.lo / (1 + 0.05) - 1e-9);
+      // the plan point under the fingers stays under them
+      expect(planUnder.x * st.S + st.Tx).toBeCloseTo(f.x, 6);
+      expect(planUnder.y * st.S + st.Ty).toBeCloseTo(f.y, 6);
+      // a render of the same view in between changes nothing
+      if (i % 7 === 0) {
+        const r = settle({ S: st.S, Tx: st.Tx, Ty: st.Ty }, pending, view, view);
+        expect(r.live).toEqual({ S: st.S, Tx: st.Tx, Ty: st.Ty });
+        expect(r.pending).toBe(pending);
+      }
+    }
+    // the release: the commit is the live transform as it is — the view after it is what was on the screen
+    const live = { S: st.S, Tx: st.Tx, Ty: st.Ty };
+    const t = endGesture(st);
+    if (t) expect(t).toEqual(live);
+  });
+});
