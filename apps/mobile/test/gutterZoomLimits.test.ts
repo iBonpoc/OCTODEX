@@ -6,7 +6,8 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 import { size as sizes } from "@octo/design-tokens";
-import { buildGrid, buildScene, clampView, fitView, GRID_REACH, GRID_STEPS_IN, gridStepIn, MAX_GRID_LINES, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
+import { gridPaths, GRID_STEPS_IN, gridStepIn, MAX_GRID_LINES } from "../src/modules/gutters/canvas/grid";
+import { buildScene, clampView, fitView, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
 import { applyTf } from "../src/modules/gutters/canvas/gestureState";
 import type { Drawing, P } from "../src/modules/gutters/geometry";
 
@@ -55,45 +56,33 @@ describe("commitView / clampView: the committed view is inside the limits", () =
   });
 });
 
-describe("buildGrid: a ceiling of the lines, whatever the scale (k → 0 made millions)", () => {
+describe("#1403 — the grid: the whole screen at any view, the fine steps at the nearest scale, a ceiling of the lines", () => {
   const lines = (g: { minor: string; major: string }) => (g.minor.match(/M/g)?.length ?? 0) + (g.major.match(/M/g)?.length ?? 0);
-  it("k from 44 down to 1e-9 and 0, NaN: never more than MAX_GRID_LINES lines, and fast", () => {
-    const t0 = performance.now();
-    for (const k of [44, 10, 1, 0.1, 0.01, 1e-3, 1e-4, 1e-6, 1e-9, 0, NaN]) {
-      const g = buildGrid({ k, ox: vp.w / 2, oy: vp.h / 2 }, vp, 8);
-      expect(lines(g)).toBeLessThanOrEqual(MAX_GRID_LINES);
+  const xsOf = (g: { minor: string; major: string }) => [...(g.minor + g.major).matchAll(/M(-?[\d.]+) 0V/g)].map((m) => Number(m[1]));
+  const ysOf = (g: { minor: string; major: string }) => [...(g.minor + g.major).matchAll(/M0 (-?[\d.]+)H/g)].map((m) => Number(m[1]));
+  it("the lines cover EXACTLY the screen: the first and the last of each direction are less than a cell from its edges, none outside", () => {
+    for (const [k, ox, oy] of [[1, 100, 500], [0.3, -40, 900], [5, 0, 844], [44, -1000, 3000], [0.02, 200, 400]] as const) {
+      const g = gridPaths(k, ox, oy, vp.w, vp.h, 24);
+      const cell = g.stepIn * k;
+      const xs = xsOf(g), ys = ysOf(g);
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(-0.05);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(vp.w + 0.05);
+      expect(Math.min(...xs)).toBeLessThan(cell + 0.1);
+      expect(Math.max(...xs)).toBeGreaterThan(vp.w - cell - 0.1);
+      expect(Math.min(...ys)).toBeGreaterThanOrEqual(-0.05);
+      expect(Math.max(...ys)).toBeLessThanOrEqual(vp.h + 0.05);
+      expect(Math.min(...ys)).toBeLessThan(cell + 0.1);
+      expect(Math.max(...ys)).toBeGreaterThan(vp.h - cell - 0.1);
     }
-    expect(performance.now() - t0).toBeLessThan(500);
   });
-  it("a normal scale still has its grid (the ceiling does not eat it)", () => {
-    const g = buildGrid({ k: 1, ox: 0, oy: vp.h }, vp, 24);
-    expect(lines(g)).toBeGreaterThan(5);
-  });
-});
-
-describe("#1403 — the grid covers the screen at any live pan or zoom, and has a fine step at the nearest scale", () => {
-  const nums = (d: string, re: RegExp) => [...d.matchAll(re)].map((m) => Number(m[1]));
-  it("the lines run GRID_REACH screens past the screen on every side, and there are lines out there", () => {
-    const g = buildGrid({ k: 1, ox: 100, oy: 500 }, vp, 24);
-    const all = g.minor + g.major;
-    const xs = nums(all, /M(-?[\d.]+) -/g); // vertical lines: «M<x> <-ry>V…»
-    expect(Math.min(...xs)).toBeLessThan(0); // a line left of the screen
-    expect(Math.max(...xs)).toBeGreaterThan(vp.w); // and right of it
-    expect(all).toContain(`M${-GRID_REACH * vp.w} `); // horizontal lines start GRID_REACH screens to the left…
-    expect(all).toContain(`H${(1 + GRID_REACH) * vp.w}`); // …and end that far to the right
-    expect(all).toContain(`V${(1 + GRID_REACH) * vp.h}`); // vertical lines end that far below
-  });
-  it("a live zoom out to a quarter about ANY point of the screen (the farthest limit from the fitting view), and a pan by a screen: the grid still covers the screen", () => {
-    const covers = (S: number, fx: number, fy: number, dx = 0, dy = 0) => {
-      const Tx = (1 - S) * fx + dx, Ty = (1 - S) * fy + dy; // the live transform p' = S·p + T: scale about the fingers' point, then shifted
-      const x0 = S * -GRID_REACH * vp.w + Tx, x1 = S * (1 + GRID_REACH) * vp.w + Tx;
-      const y0 = S * -GRID_REACH * vp.h + Ty, y1 = S * (1 + GRID_REACH) * vp.h + Ty;
-      return x0 <= 0 && x1 >= vp.w && y0 <= 0 && y1 >= vp.h;
-    };
-    for (const S of [1, 0.5, 0.3, 0.25]) for (const [fx, fy] of [[0, 0], [vp.w, vp.h], [vp.w / 2, vp.h / 2], [0, vp.h], [vp.w, 0]] as const) expect(covers(S, fx, fy)).toBe(true);
-    expect(covers(1, 0, 0, vp.w, vp.h)).toBe(true);
-    expect(covers(1, 0, 0, -vp.w, -vp.h)).toBe(true);
-    expect(covers(0.2, 0, 0)).toBe(false); // the reach is finite: farther than the farthest limit is not promised
+  it("it follows the live transform of the fingers: the view the screen shows now is the committed view under p' = S·p + T, and it is covered whatever S and T are", () => {
+    const base = { k: 2, ox: 100, oy: 600 };
+    for (const [S, Tx, Ty] of [[1, 390, -300], [0.25, 20, 700], [3, -500, -900], [0.5, 150, 150]] as const) {
+      const g = gridPaths(base.k * S, S * base.ox + Tx, S * base.oy + Ty, vp.w, vp.h, 24);
+      expect(lines(g)).toBeGreaterThan(4);
+      expect(Math.min(...xsOf(g))).toBeLessThan(g.stepIn * base.k * S + 0.1);
+      expect(Math.max(...xsOf(g))).toBeGreaterThan(vp.w - g.stepIn * base.k * S - 0.1);
+    }
   });
   it("at the nearest scale (1″ = a finger's target) the cell is 1″ or 6″, not one huge 1 ft cell; the steps only get coarser outwards", () => {
     expect(GRID_STEPS_IN.slice(0, 2)).toEqual([1, 6]);
@@ -101,18 +90,33 @@ describe("#1403 — the grid covers the screen at any live pan or zoom, and has 
     expect(gridStepIn(sizes.hitMin / 4, 24)).toBe(6); // 6″ = 66 px
     for (let i = 1; i < GRID_STEPS_IN.length; i++) expect(GRID_STEPS_IN[i]!).toBeGreaterThan(GRID_STEPS_IN[i - 1]!);
   });
-  it("lines at the nearest scale: more than 2 on the screen (it was one cell) and still under the ceiling", () => {
-    const g = buildGrid({ k: sizes.hitMin, ox: 0, oy: vp.h }, vp, 24);
-    const lines = (g.minor.match(/M/g)?.length ?? 0) + (g.major.match(/M/g)?.length ?? 0);
-    expect(lines).toBeGreaterThan(10);
-    expect(lines).toBeLessThanOrEqual(MAX_GRID_LINES);
+  it("a ceiling of the lines whatever the scale (k → 0 made millions): never more than MAX_GRID_LINES, none for a broken view, and fast", () => {
+    const t0 = performance.now();
+    for (const k of [44, 10, 1, 0.1, 0.01, 1e-3, 1e-4, 1e-6, 1e-9, 0, NaN, Infinity]) {
+      const g = gridPaths(k, vp.w / 2, vp.h / 2, vp.w, vp.h, 24);
+      expect(lines(g)).toBeLessThanOrEqual(MAX_GRID_LINES);
+    }
+    expect(gridPaths(NaN, 0, 0, vp.w, vp.h, 24)).toMatchObject({ minor: "", major: "" });
+    expect(gridPaths(1, NaN, 0, vp.w, vp.h, 24)).toMatchObject({ minor: "", major: "" });
+    expect(performance.now() - t0).toBeLessThan(500);
+  });
+  it("a normal scale has its grid (the ceiling does not eat it), at the nearest scale there are more than 10 lines (it was one cell)", () => {
+    expect(lines(gridPaths(1, 0, vp.h, vp.w, vp.h, 24))).toBeGreaterThan(5);
+    const g = gridPaths(sizes.hitMin, 0, vp.h, vp.w, vp.h, 24);
+    expect(lines(g)).toBeGreaterThan(10);
+    expect(lines(g)).toBeLessThanOrEqual(MAX_GRID_LINES);
+  });
+  it("every 5th line is a major one", () => {
+    const g = gridPaths(1, 0, vp.h, vp.w, vp.h, 24);
+    expect(g.major).toContain("M0.0 0V");
+    expect(g.minor).not.toContain("M0.0 0V");
   });
 });
 
 describe("the time of a scene at the extreme scales (the speed bench's idea, in units: a big drawing, the farthest and the nearest)", () => {
   const big: Drawing = { runs: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, a: [i * 100, 0] as P, b: [i * 100 + 90, 400] as P, attrs })), downspouts: [] };
   const lim = zoomLimits(big.runs.flatMap((r) => [r.a, r.b]), vp, 32, sizes.hitMin);
-  const opts = (view: View) => ({ view, viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}`, gridMinPx: 8 });
+  const opts = (view: View) => ({ view, viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}` });
   it("a scene (runs, labels, the grid) at kMin and at kMax is built in well under a frame's budget × 10 on this machine", () => {
     for (const k of [lim.kMin, lim.kMax]) {
       const t0 = performance.now();

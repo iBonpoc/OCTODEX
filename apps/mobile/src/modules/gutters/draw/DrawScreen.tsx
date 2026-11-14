@@ -719,7 +719,6 @@ export default function DrawScreen() {
             cornerText: (_kind, _splash, angleDeg) => `${angleDeg}°`,
             faceOff: dt.runW * 2,
             dimDs: dim ? fresh : null,
-            gridMinPx: space[6],
             layers,
           })
         : null,
@@ -1044,7 +1043,7 @@ export default function DrawScreen() {
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
-        <CanvasView view={viewNow} onView={setView} live={live} size={size} onSize={setSize} gestures={canvas} testID="draw-canvas">
+        <CanvasView view={viewNow} onView={setView} live={live} size={size} onSize={setSize} gestures={canvas} grid={layers.grid ? { minPx: space[6] } : null} testID="draw-canvas">
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
               {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}

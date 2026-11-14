@@ -17,23 +17,17 @@ const vp = { w: 390, h: 600 };
 const base = { view: fitView(d.runs.flatMap((r) => [r.a, r.b]), vp, 40), viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}`, gridMinPx: 24, cornerText: () => "наруж. 90°", lenWithStory: true };
 
 describe("layers", () => {
-  it("all on (or not said): the grid, the labels and the downspout are there", () => {
-    for (const layers of [undefined, { grid: true, labels: true, ds: true }]) {
+  it("all on (or not said): the labels and the downspout are there (the grid is the screen's own layer, #1403)", () => {
+    for (const layers of [undefined, { labels: true, ds: true }]) {
       const s = buildScene(d, { ...base, layers });
-      expect(s.grid).toBeTruthy();
       expect(s.labels.length).toBeGreaterThan(0);
       expect(s.ds).toHaveLength(1);
       expect(s.runs).toHaveLength(2);
     }
   });
-  it("each layer off hides only itself; the gutters stay", () => {
-    const grid = buildScene(d, { ...base, layers: { grid: false } });
-    expect(grid.grid).toBeUndefined();
-    expect(grid.labels.length).toBeGreaterThan(0);
-    expect(grid.ds).toHaveLength(1);
+  it("each scene layer off hides only itself; the gutters stay", () => {
     const labels = buildScene(d, { ...base, layers: { labels: false } });
     expect(labels.labels).toEqual([]);
-    expect(labels.grid).toBeTruthy();
     expect(labels.runs).toHaveLength(2);
     const ds = buildScene(d, { ...base, layers: { ds: false } });
     expect(ds.ds).toEqual([]);
@@ -43,7 +37,7 @@ describe("layers", () => {
   });
   it("hidden, not deleted: the drawing is as it was, the layer comes back", () => {
     const before = JSON.stringify(d);
-    buildScene(d, { ...base, layers: { grid: false, labels: false, ds: false } });
+    buildScene(d, { ...base, layers: { labels: false, ds: false } });
     expect(JSON.stringify(d)).toBe(before);
     expect(buildScene(d, { ...base, layers: { ds: true } }).ds).toHaveLength(1);
   });

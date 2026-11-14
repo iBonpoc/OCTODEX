@@ -3,20 +3,25 @@
  * drawing is not redrawn during the gesture; when the fingers lift, the new view is committed and the painter redraws
  * crisp at the new scale. `live` lets the speed bench drive the same transform without fingers.
  */
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
 import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { motion } from "@octo/design-tokens";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
+import { GridLayer } from "./GridLayer";
 import { applyTf, endGesture, IDENTITY, panFrame, pinchFrame, settleDone, sub, type LiveState, type Pending, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
-export interface Live { tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number> }
+export interface Live {
+  tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number>;
+  /** the committed view the live transform is against (k, ox, oy), written together with it on the UI thread by the settle (#1403): the grid layer draws the view the screen shows now from both */
+  baseK: SharedValue<number>; baseOx: SharedValue<number>; baseOy: SharedValue<number>;
+}
 
 export function useLive(): Live {
-  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0) };
+  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0), baseK: useSharedValue(0), baseOx: useSharedValue(0), baseOy: useSharedValue(0) };
 }
 
 /** the committed view after a live transform: p' = f + s·(p − f) + t */
@@ -34,7 +39,7 @@ export function commitView(v: PlanView, tx: number, ty: number, s: number, fx: n
 export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number }; onEdge?: () => void }
 
 export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard) {
-  const { tx, ty, s, fx, fy } = live;
+  const { tx, ty, s, fx, fy, baseK, baseOx, baseOy } = live;
   // the gesture's callbacks may be the ones made at an earlier render: they read the view of now from a ref
   const now = useRef({ view, onView, zoom });
   now.current = { view, onView, zoom };
@@ -58,7 +63,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const settleView = (v: PlanView) => {
     const r = settleDone(pending.current, v);
     pending.current = r.pending;
-    scheduleOnUI(applySettle, v.k, r.done);
+    scheduleOnUI(applySettle, v.k, v.ox, v.oy, r.done);
   };
   // the live transform is kept in the origin form (fx = fy = 0): p' = S·p + T
   const seg = useSharedValue(false);
@@ -71,7 +76,6 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const reduce = useReducedMotion();
   const back = { duration: reduce ? motion.durFast : motion.durBase, easing: reduce ? Easing.linear : Easing.out(Easing.cubic) };
   /** the scale limits as factors of the view on the screen are kMin / baseK and kMax / baseK (the live scale is against that view) */
-  const baseK = useSharedValue(view.k);
   const kMin = useSharedValue(zoom ? zoom.lim.kMin : 0);
   const kMax = useSharedValue(zoom ? zoom.lim.kMax : 0);
   useLayoutEffect(() => {
@@ -79,10 +83,12 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     kMax.value = zoom ? zoom.lim.kMax : 0;
   }, [zoom?.lim.kMin, zoom?.lim.kMax, kMin, kMax]);
   /** the settle, on the UI thread: between two frames of the fingers, so none of their changes is lost; `done` null — a view that is not ours, the live transform goes whole */
-  const applySettle = (k: number, done: Tf | null) => {
+  const applySettle = (k: number, ox: number, oy: number, done: Tf | null) => {
     "worklet";
     const next = done ? sub({ S: s.value, Tx: tx.value, Ty: ty.value }, done) : IDENTITY;
     baseK.value = k;
+    baseOx.value = ox;
+    baseOy.value = oy;
     tx.value = next.Tx;
     ty.value = next.Ty;
     s.value = next.S;
@@ -129,25 +135,42 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     const st = state();
     put(st, endGesture(st, limit()));
   };
-  const pan = usePanGesture({
-    minPointers: panPointers,
-    onUpdate: (e) => {
-      "worklet";
-      const st = state();
-      put(st, panFrame(st, e, panPointers, limit()));
-    },
-    onDeactivate: end,
-  });
-  const pinch = usePinchGesture({
-    onUpdate: (e) => {
-      "worklet";
-      const st = state();
-      put(st, pinchFrame(st, e, limit()));
-    },
-    onDeactivate: end,
-  });
+  // The gestures' configs are made ONCE (and again only when what they hold changes): a config that is a new object on every render of the screen
+  // makes the library register the handlers again on every render — in the middle of a pinch too, where it can lose the fingers (#1403: «пальцы
+  // отлипают»). What the callbacks hold is stable: shared values, refs, and functions that read the refs (commit, markMulti, edgeTick)
+  const panConfig = useMemo(
+    () => ({
+      minPointers: panPointers,
+      onUpdate: (e: { changeX: number; changeY: number; numberOfPointers: number }) => {
+        "worklet";
+        const st = state();
+        put(st, panFrame(st, e, panPointers, limit()));
+      },
+      onDeactivate: end,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panPointers, reduce],
+  );
+  const pinchConfig = useMemo(
+    () => ({
+      onUpdate: (e: { scaleChange: number; numberOfPointers: number; focalX: number; focalY: number }) => {
+        "worklet";
+        const st = state();
+        put(st, pinchFrame(st, e, limit()));
+      },
+      onDeactivate: end,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [reduce],
+  );
+  const pan = usePanGesture(panConfig);
+  const pinch = usePinchGesture(pinchConfig);
   const both = useSimultaneousGestures(pan, pinch);
-  return { pan, pinch, both, settleView, multiAt };
+  // the screen's effect and its gestures hold this object: the same one while nothing in it changes
+  const settleRef = useRef(settleView);
+  settleRef.current = settleView;
+  const settleStable = useCallback((v: PlanView) => settleRef.current(v), []);
+  return useMemo(() => ({ pan, pinch, both, settleView: settleStable, multiAt }), [pan, pinch, both, settleStable, multiAt]);
 }
 
 export type CanvasGestures = ReturnType<typeof useCanvasGestures>;
@@ -162,6 +185,8 @@ export function CanvasView(props: {
   panPointers?: number;
   /** made by the screen with useCanvasGestures when it has gestures of its own inside */
   gestures?: CanvasGestures;
+  /** the grid under the drawing (its smallest cell on the screen, px): a layer of its own that does not move with the drawing; none — no grid (#1403) */
+  grid?: { minPx: number } | null;
   children: ReactNode;
   testID?: string;
 }) {
@@ -173,7 +198,7 @@ function OwnGestures(props: Parameters<typeof CanvasView>[0]) {
   return <Canvas {...props} gestures={g} />;
 }
 
-function Canvas({ view, live, size, onSize, gestures, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
+function Canvas({ view, live, size, onSize, gestures, grid, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
   const { tx, ty, s, fx, fy } = live;
   // the painter has redrawn at the committed view: drop the live transform in the same frame. ONLY when the view is a new one (#1403, founder
   // 14.11, iPhone: «то больше, то меньше, прыгнуло»): `gestures` is a new object on every render of the screen, and an effect that lists it
@@ -197,6 +222,7 @@ function Canvas({ view, live, size, onSize, gestures, children, testID }: Parame
   return (
     <GestureDetector gesture={gestures.both}>
       <View style={{ flex: 1, overflow: "hidden" }} onLayout={layout} testID={testID}>
+        {grid && size.w > 0 && size.h > 0 ? <GridLayer live={live} size={size} minPx={grid.minPx} /> : null}
         <Animated.View style={[{ width: size.w, height: size.h }, st]}>{children}</Animated.View>
       </View>
     </GestureDetector>
