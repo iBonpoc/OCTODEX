@@ -248,13 +248,7 @@ describe("design system: tokens only", () => {
     const PENDING: Record<string, number> = {
       "app/(tabs)/plan.tsx": 1,
       "app/(tabs)/today.tsx": 1,
-      "app/auth/company.tsx": 1,
-      "app/auth/invite.tsx": 2,
-      "app/auth/sign-in.tsx": 2,
-      "app/auth/terms.tsx": 1,
-      "app/auth/trade.tsx": 1,
       "app/company/[section].tsx": 1,
-      "app/help.tsx": 1,
       "app/lead/new.tsx": 1,
       "app/p/[token].tsx": 1,
       "app/visit/[id].tsx": 2,

@@ -14,6 +14,7 @@ import { legalErrorKey } from "@/features/legal";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Screen } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * The invitation link (wave 7-2, S21; 13 §3.13): sign in or create an account with the invited email →
@@ -90,15 +91,13 @@ export default function AcceptInvite() {
               <T v="body">{t("invite.legal")}</T>
               <LegalAgree on={agreed} onChange={setAgreed} testID="invite-agree" />
               {err ? (
-                <T v="caption" tone="bad">
-                  {err}
-                </T>
+                <StatusNote tone="bad">{err}</StatusNote>
               ) : null}
               <Button label={t("legal.gate.accept")} icon="check" full disabled={!agreed || busy} onPress={agreeAndJoin} />
             </View>
           ) : state === "error" ? (
             <>
-              <T v="body" tone="bad">{`${t("invite.failed")} ${err}`}</T>
+              <StatusNote tone="bad" v="body">{`${t("invite.failed")} ${err}`}</StatusNote>
               <T v="caption" tone="mut">
                 {t("invite.askAgain")}
               </T>
