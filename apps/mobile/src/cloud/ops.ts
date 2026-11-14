@@ -13,11 +13,12 @@ import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
 import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION, bpsFromPpm, jobLineQty, taxRatePpm } from "@octo/estimating-engine";
-import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
+import type { PhotoFail, PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
+import { photoFailOf, storageNotNow, tooBig } from "@/data/photoUpload";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
 import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
@@ -28,6 +29,8 @@ export type Op =
   | { k: "visit.step"; visitId: string; to: VisitStep; at?: string }
   | { k: "photo.add"; id: string; visitId: string; jobId?: string; stage: "before" | "after"; uri?: string }
   | { k: "photo.remove"; id: string }
+  /** #1431 «Повторить»: the file of a photo the cloud refused, sent again (its files row is already there) */
+  | { k: "photo.retry"; id: string; visitId: string; uri: string }
   /** the whole list at once — what the app sent before step 14; kept for ops still in old queues (the server's
    *  legacy trigger moves only ticks and new optional items of it into the rows, migration 20261108140000) */
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
@@ -477,25 +480,35 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
   return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }
 
-/** a photo's bytes to Storage and its files row marked; shared with modules (a measurement's photo, spec 33 П21.10) */
-export async function uploadPhoto(companyId: string, fileId: string, uri: string) {
+/**
+ * a photo's bytes to Storage and its files row marked; shared with modules (a measurement's photo, spec 33 П21.10).
+ * The storage's «no» marks the photo failed and says why (#1431): null — taken. No network or the server's «not now»
+ * throws: the op stays in the queue and the upload is tried again (upsert: true).
+ */
+export async function uploadPhoto(companyId: string, fileId: string, uri: string): Promise<PhotoFail | null> {
+  const failed = async (why: PhotoFail) => {
+    await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+    return why;
+  };
   let blob: Blob;
   try {
     blob = await (await fetch(uri)).blob();
   } catch {
     // the photo is gone from the phone: nothing to send again
-    return run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+    return failed("gone");
   }
+  // over the bucket's limit: the storage would refuse it — not 25 MB sent for nothing (#1430)
+  if (tooBig(blob.size)) return failed("tooBig");
   try {
     const key = `${companyId}/${fileId}.jpg`;
     const { error } = await supabase.storage.from("files").upload(key, blob, { contentType: blob.type || "image/jpeg", upsert: true });
     if (error) throw error;
     await run(supabase.from("files").update({ storage_key: key, upload_status: "uploaded", mime: blob.type || "image/jpeg", size: blob.size }).eq("id", fileId));
+    return null;
   } catch (e) {
-    // no network or the server's «not now»: the op stays in the queue and the upload is tried again (upsert: true);
     // only a refusal marks the photo failed
-    if (classify(e) !== "refusal") throw e;
-    await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+    if (classify(e) !== "refusal" || storageNotNow(e)) throw e;
+    return failed(photoFailOf(e));
   }
 }
 
@@ -540,7 +553,10 @@ export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<
   return cols;
 }
 
-export async function applyOp(op: Op, companyId: string, userId: string): Promise<void> {
+/** what a sent op tells the phone back: a photo's file refused by the cloud, or taken (#1431) */
+export type OpResult = { photo: { id: string; failed: PhotoFail | null } };
+
+export async function applyOp(op: Op, companyId: string, userId: string): Promise<OpResult | void> {
   const c = companyId;
   switch (op.k) {
     case "visit.step": {
@@ -556,9 +572,11 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await run(
         ins("files", { id: op.id, company_id: c, kind: "photo", visit_id: op.visitId, job_id: realJob(op.jobId), stage: op.stage, taken_at: new Date().toISOString() }),
       );
-      if (op.uri) await uploadPhoto(c, op.id, op.uri);
+      if (op.uri) return { photo: { id: op.id, failed: await uploadPhoto(c, op.id, op.uri) } };
       return;
     }
+    case "photo.retry":
+      return { photo: { id: op.id, failed: await uploadPhoto(c, op.id, op.uri) } };
     case "photo.remove":
       return run(supabase.from("files").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "visit.checklist":

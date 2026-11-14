@@ -342,10 +342,18 @@ export interface VisitSettings {
   minPhotosAfter: number;
 }
 
+/**
+ * why the cloud did not take a photo's file (#1431): tooBig — over the bucket's 25 MB (#1430); type — a type it does not
+ * keep; gone — the file is no longer on this phone (nothing to send again); refused — any other «no» of the storage
+ */
+export type PhotoFail = "tooBig" | "type" | "gone" | "refused";
+
 export interface Photo {
   id: ID;
   kind: "before" | "after";
   uri?: string;
+  /** the cloud refused the file (#1431): shown on the photo with «Повторить»; none — sent, waiting, or never asked */
+  upload?: { failed: PhotoFail; at: string };
 }
 
 /** ach — a bank payment online (Stripe, step 20; docs/specs/35); people record only card / cash / check / zelle by hand */
