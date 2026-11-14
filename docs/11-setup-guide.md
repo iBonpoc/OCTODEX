@@ -143,3 +143,22 @@
 6. **Generate a new Apple Push Notifications service key?** → `Return` (Yes).
 7. Появится «Push Key assigned» — готово. Выйти: стрелками **Exit** → `Return`.
 Новая сборка для этого не нужна: ключ используется сервером при отправке пуша.
+
+## 7. Адреса GoRix: что настроено руками 14.11.2026 (#656)
+Сделано основателем в своих аккаунтах (через чат на Mac), в репозитории этого не видно:
+
+| Где | Что стоит | Зачем |
+|---|---|---|
+| Expo → проект → Hosting | поддомен `gorix` → сайт `https://gorix.expo.app` | адрес сайта приложения. **Expo даёт сменить поддомен всего 3 раза, одна смена израсходована; старое имя `octodex` вернуть нельзя.** Без отдельной причины не менять |
+| Cloudflare → зона `gorix.app` → DNS | `AAAA @ → 100::` и `AAAA www → 100::`, прокси включён | записи-заглушки: сами никуда не ведут, нужны только для правила переадресации |
+| Cloudflare → зона `gorix.app` → Rules → Redirect Rules | правило «gorix.app to app»: `gorix.app` и `www.gorix.app` → `https://gorix.expo.app` + тот же путь, код 302, параметры запроса сохраняются | человек набирает `gorix.app` — открывается приложение. 302 (временная): после 1.0 сайт переедет на сам `gorix.app` (#641), правило снимается |
+| Cloudflare → зона `gorix.app` → DNS | 3 записи MX, TXT DKIM (`cf2024-1._domainkey`), TXT SPF | почта `hello@gorix.app` (Email Routing). **Не трогать** |
+| Supabase → Authentication → URL Configuration | Site URL `https://gorix.expo.app`; Redirect URLs: `https://gorix.expo.app/**` (один адрес) | куда ведут ссылки из писем входа. До 14.11 Site URL был `http://localhost:3000`, список был пуст |
+| Apple Developer → Identifiers | `com.gorix.app` (Explicit, Push Notifications) | идентификатор приложения GoRix |
+| App Store Connect | запись «GoRix: Contractor CRM», Apple ID `6834689554`, SKU `gorix-ios` | новая запись приложения; старая «OCTODEX (ea2bef)» не удалена — убрать после того, как сборка GoRix встанет на iPhone |
+
+Не настроено (нужно до запуска соответствующей функции):
+- **Cloudflare Turnstile** — в аккаунте нет ни одного виджета; капча формы заявок `/f/` не работает (#1445). При создании виджета hostname — `gorix.expo.app`.
+- **Stripe** — рабочий режим не настроен, список Payment method domains пуст (оплата — версия 1.1).
+
+Адреса для записи App Store (политика, условия) — существующие страницы приложения `https://gorix.expo.app/legal/…`; отдельные короткие маршруты `/privacy`, `/support` не заводим (решение аудита 14.11).
