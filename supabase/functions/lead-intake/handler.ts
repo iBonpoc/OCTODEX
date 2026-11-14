@@ -13,6 +13,11 @@
  * one trusted header and kept only as an HMAC with the function's secret. Nothing of the request is logged.
  */
 
+/** the app's own sites that may post a request and pass the captcha's hostname: the site and its PR previews
+ *  (https://<name>--<id>.expo.app), under both names while the site moves octodex → gorix (#656 слой 2, шаг 1). The old
+ *  name stays: request pages and snippets already on contractors' sites lead there */
+export const SITE_ORIGIN = /^https:\/\/(octodex|gorix)(--[a-z0-9-]+)?\.expo\.app$/;
+
 export interface Req {
   method: string;
   url: string;

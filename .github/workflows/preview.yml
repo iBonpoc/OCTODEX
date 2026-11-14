@@ -50,7 +50,7 @@ jobs:
         run: |
           set -o pipefail
           npx eas-cli@27.4.1 deploy --non-interactive | tee deploy.log
-          # the unique deployment URL looks like https://<project>--<id>.expo.app (never the production octodex.expo.app)
+          # the unique deployment URL looks like https://<project>--<id>.expo.app (never the production site)
           url="$(grep -oE 'https://[a-z0-9-]+--[a-z0-9-]+\.expo\.app' deploy.log | head -1)"
           # a preview without a working link is a failed preview — never a green step with a dead link
           [ -n "$url" ] || { echo "::error::eas deploy printed no deployment URL"; exit 1; }
