@@ -121,16 +121,16 @@ describe("unit:photoUploadStore — a refused photo on the phone (#1431)", () =>
     expect(photo.upload).toBeUndefined();
     const add = await sent(1);
     expect(add.op).toMatchObject({ k: "photo.add", id: photo.id, uri: "file:///big.jpg" });
-    add.d.resolve({ photo: { id: photo.id, failed: "tooBig" } });
+    add.d.resolve({ photo: { id: photo.id, failed: "refused" } });
     await settle();
-    expect(photoOf(r, visitId, photo.id).upload?.failed).toBe("tooBig");
+    expect(photoOf(r, visitId, photo.id).upload?.failed).toBe("refused");
 
-    // the reload after the send: the server has «failed» without a reason and no file — the phone keeps both
+    // the reload after the send: the server has «failed» and no file — the phone keeps the file and its mark
     await answerReload(r, new Set([photo.id]));
-    expect(photoOf(r, visitId, photo.id)).toMatchObject({ uri: "file:///big.jpg", upload: { failed: "tooBig" } });
+    expect(photoOf(r, visitId, photo.id)).toMatchObject({ uri: "file:///big.jpg", upload: { failed: "refused" } });
     // kept on the device too (the next start reads the same)
-    for (let i = 0; i < 30 && !(storage.get("octo.cloud.v1.c1.u1") ?? "").includes("tooBig"); i++) await wait(100);
-    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("tooBig");
+    for (let i = 0; i < 30 && !(storage.get("octo.cloud.v1.c1.u1") ?? "").includes("\"refused\""); i++) await wait(100);
+    expect(storage.get("octo.cloud.v1.c1.u1") ?? "").toContain("\"refused\"");
 
     // «Повторить»: the mark goes at once, photo.retry with the file is queued
     valueOf(r).retryPhoto(visitId, photo.id);
@@ -156,7 +156,7 @@ describe("unit:photoUploadStore — a refused photo on the phone (#1431)", () =>
     expect(photoOf(r, visitId, photo.id)).toEqual({ id: photo.id, kind: "before", uri: "file:///big.jpg" });
   });
 
-  it("nothing to send again: a photo without a mark, or with no file here — no op", async () => {
+  it("nothing to send again: no mark, no file here, or a file the cloud would refuse again — no op", async () => {
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
     const seed = makeSeed();
@@ -165,10 +165,12 @@ describe("unit:photoUploadStore — a refused photo on the phone (#1431)", () =>
       { id: "p-ok", kind: "before", uri: "file:///ok.jpg" },
       { id: "p-other-phone", kind: "before", upload: { failed: "refused", at: "2026-11-14T00:00:00Z" } },
       { id: "p-gone", kind: "before", uri: "blob:http://x/dead", upload: { failed: "gone", at: "2026-11-14T00:00:00Z" } },
+      // too big: the same file would be refused again — no «Повторить»
+      { id: "p-big", kind: "before", uri: "file:///big.jpg", upload: { failed: "tooBig", at: "2026-11-14T00:00:00Z" } },
     ];
     server.loads[0]!.resolve(seed);
     await settle();
-    for (const id of ["p-ok", "p-other-phone", "p-gone", "nope"]) valueOf(r).retryPhoto(v.id, id);
+    for (const id of ["p-ok", "p-other-phone", "p-gone", "p-big", "nope"]) valueOf(r).retryPhoto(v.id, id);
     await settle();
     expect(valueOf(r).queue.filter((q) => q.label === "photo.retry")).toEqual([]);
     expect(photoOf(r, v.id, "p-gone").upload?.failed).toBe("gone");

@@ -4256,6 +4256,20 @@ export const ru = {
   "co.tl.hint": "Новая смета берёт условия на языке клиента; если на его языке нет — уйдут английские.",
   "co.tl.field": "Условия — {lang}",
   "co.tl.add": "Добавить: {lang}",
+  // #1431 «Данные»: a photo the cloud did not take
+  "photoUp.att": "{name} · выезд {date}: фото не загрузились: {n}",
+  "photoUp.title": "Фото, которых нет в облаке",
+  "photoUp.chip": "Не загружено",
+  "photoUp.strip": "Не загрузились в облако: {n} — нажмите, чтобы узнать причину",
+  "photoUp.next": "Следующее не загруженное · {i} из {n}",
+  "photoUp.reason.tooBig": "Файл больше 25 МБ — облако его не принимает. Удалите фото и снимите заново.",
+  "photoUp.reason.type": "Облако не принимает такой тип файла. Удалите фото и снимите заново камерой.",
+  "photoUp.reason.gone": "Файла больше нет на этом телефоне — отправить нечего.",
+  "photoUp.reason.refused": "Облако не приняло фото.",
+  "photoUp.otherPhone": "Файл остался на телефоне, с которого снимали.",
+  "photoUp.retry": "Повторить",
+  "photoUp.retried": "Отправляем фото ещё раз",
+  "photoUp.a11y": "не загрузилось",
 } as const;
 
 export type DictKey = keyof typeof ru;

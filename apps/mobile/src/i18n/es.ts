@@ -4256,4 +4256,18 @@ export const es: Dict = {
   "co.tl.hint": "Un presupuesto nuevo toma los términos en el idioma del cliente; si no los hay, van los de inglés.",
   "co.tl.field": "Términos — {lang}",
   "co.tl.add": "Añadir: {lang}",
+  // #1431 «Данные»: a photo the cloud did not take
+  "photoUp.att": "{name} · visita {date}: fotos sin subir: {n}",
+  "photoUp.title": "Fotos que no están en la nube",
+  "photoUp.chip": "Sin subir",
+  "photoUp.strip": "Sin subir a la nube: {n} — toque para ver por qué",
+  "photoUp.next": "Siguiente sin subir · {i} de {n}",
+  "photoUp.reason.tooBig": "El archivo pasa de 25 MB — la nube no lo acepta. Borre la foto y tómela de nuevo.",
+  "photoUp.reason.type": "La nube no acepta este tipo de archivo. Borre la foto y tómela de nuevo con la cámara.",
+  "photoUp.reason.gone": "El archivo ya no está en este teléfono — no hay nada que enviar.",
+  "photoUp.reason.refused": "La nube no aceptó la foto.",
+  "photoUp.otherPhone": "El archivo está en el teléfono con el que se tomó la foto.",
+  "photoUp.retry": "Reintentar",
+  "photoUp.retried": "Enviando la foto otra vez",
+  "photoUp.a11y": "sin subir",
 };
