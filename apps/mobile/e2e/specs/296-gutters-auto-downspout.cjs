@@ -1,6 +1,6 @@
 /**
  * e2e 296 — #1246 (spec 33-gutters-ds-auto А1–А3, founder 12.11: «на каждом водостоке по-любому должен быть даунспот»): a downspout
- * stands on a new gutter by itself, 12″ from the end it was finished at; a gutter that goes on from its end (a corner) is the same
+ * stands on a new gutter by itself, 3 ft (#1473; was 12″) from the end it was finished at; a gutter that goes on from its end (a corner) is the same
  * chain — still one; a separate gutter has its own; one taken off by hand is not put back. Every view. Finds things by testID /
  * stored elements; waits on what it checks (no pauses).
  */
@@ -32,7 +32,7 @@ exports.run = async (h) => {
   await tid("draw-surface").waitFor({ timeout: 8000 });
   const b = await p.getByTestId("draw-surface").boundingBox();
 
-  // one gutter → one downspout by itself, 12″ from the end the line was finished at (b), marked "auto"
+  // one gutter → one downspout by itself, 3 ft (36″) from the end the line was finished at (b), marked "auto"
   const y = b.y + b.height * 0.3;
   await stroke([b.x + b.width * 0.1, y], [b.x + b.width * 0.5, y]);
   await waitDs(1, "a new gutter has a downspout by itself");
@@ -40,7 +40,7 @@ exports.run = async (h) => {
   const L1 = Math.round(Math.hypot(r1.geom.b[0] - r1.geom.a[0], r1.geom.b[1] - r1.geom.a[1]));
   const d1 = (await dsOf())[0];
   h.expect(d1.attrs.auto === true, "it is marked auto");
-  h.expect(d1.geom.runId === r1.id && Math.abs(d1.geom.atIn - (L1 - 12)) <= 2, `12″ from the end it was finished at (${d1.geom.atIn} of ${L1})`);
+  h.expect(d1.geom.runId === r1.id && Math.abs(d1.geom.atIn - (L1 - 36)) <= 2, `3 ft (36″) from the end it was finished at (${d1.geom.atIn} of ${L1})`);
   h.expect((await svg().locator("circle").count()) >= 1, "the downspout is on the drawing");
 
   // a gutter that goes on from its end (a corner) is the same chain: still one downspout
@@ -49,10 +49,10 @@ exports.run = async (h) => {
   await stroke(right, [right[0], right[1] + 120]);
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 2, KEY, { timeout: 8000 });
   await waitDs(1, "a corner of two gutters has ONE downspout");
-  // …and it is put again where it belongs: 12″ from a FREE end — on the gutter drawn last, not left at the corner (review Б1)
+  // …and it is put again where it belongs: 36″ from a FREE end — on the gutter drawn last, not left at the corner (review Б1)
   const r2 = (await runsOf()).find((r) => r.id !== r1.id);
   const L2 = Math.round(Math.hypot(r2.geom.b[0] - r2.geom.a[0], r2.geom.b[1] - r2.geom.a[1]));
-  await p.waitForFunction(([k, id, want]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => !e.deletedAt && e.kind === "downspout" && e.geom.runId === id && Math.abs(e.geom.atIn - want) <= 2), [KEY, r2.id, L2 - 12], { timeout: 8000 });
+  await p.waitForFunction(([k, id, want]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => !e.deletedAt && e.kind === "downspout" && e.geom.runId === id && Math.abs(e.geom.atIn - want) <= 2), [KEY, r2.id, L2 - 36], { timeout: 8000 });
 
   // a separate gutter has its own
   const y3 = b.y + b.height * 0.78;

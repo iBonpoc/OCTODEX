@@ -83,6 +83,10 @@ export default function VisitScreen() {
   const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");
+  // #1431 «Повторить»: a photo the cloud did not take is sent again from this phone
+  const retryPhoto = (id: string) => toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), store.retryPhoto(v.id, id));
+  // the photos the cloud did not take, on a step where the strips are not shown (before the work, after the signature)
+  const failedHere = v.photos.filter((p) => p.upload);
   const gate = checklistGate(v, visitSettings(db), db.checklistTemplates ?? []);
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
   // «Перенести / Отменить»: the office only (owner / admin / office ↔ director / dispatcher), like cancel_visit on the server
@@ -230,6 +234,7 @@ export default function VisitScreen() {
             photos={before}
             onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
             onRemove={removePhoto}
+            onRetry={retryPhoto}
           />
           {v.step === "on_site" && v.kind === "inspection" ? (
             // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
@@ -246,12 +251,19 @@ export default function VisitScreen() {
         </Card>
       ) : null}
 
+      {v.step !== "on_site" && v.step !== "working" && failedHere.length ? (
+        <Card>
+          <T v="heading">{t("photoUp.title")}</T>
+          <PhotoStrip photos={failedHere} onRetry={retryPhoto} />
+        </Card>
+      ) : null}
+
       {v.step === "working" ? (
         <>
           {v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
           <Card>
             <T v="heading">{t("visit.photosAfter")}</T>
-            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} />
+            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} onRetry={retryPhoto} />
             {gate.missing.photosAfter > 0 ? (
               <StatusNote tone="warn">{t("chk.needAfter", { n: gate.missing.photosAfter })}</StatusNote>
             ) : null}

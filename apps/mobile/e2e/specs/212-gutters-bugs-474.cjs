@@ -106,6 +106,32 @@ exports.run = async (h) => {
   await pinchIn(mid[0], mid[1]);
   const l3 = (await lines())[0];
   h.expect(l3 >= l0 * 0.24 && l3 <= l0 * 0.26, `the farthest limit: a quarter of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
+  // #1403, #1434: the grid is its own screen-sized layer (draw-grid), out of the scaled one: at the farthest scale its lines span the whole screen
+  const grid = () => p.getByTestId("draw-grid").first();
+  const gridXs = ((await grid().locator("#grid-minor").getAttribute("d")) + (await grid().locator("#grid-major").getAttribute("d"))).match(/M(-?[\d.]+) 0V/g).map((m) => parseFloat(m.slice(1))).sort((a, b) => a - b);
+  const vw = (await svg().boundingBox()).width;
+  const cellPx = Math.min(...gridXs.slice(1).map((x, i) => Math.abs(x - gridXs[i])).filter((d) => d > 0));
+  h.expect(Math.min(...gridXs) <= cellPx + 1 && Math.max(...gridXs) >= vw - cellPx - 1, `the grid's lines span the whole screen (${Math.min(...gridXs)} … ${Math.max(...gridXs)}, cell ${cellPx}, screen ${Math.round(vw)})`);
+  // #1403: fingers STILL DOWN at the farthest scale and beyond: the live layer is smaller than the screen, the grid must still cover all of it
+  {
+    const before = await grid().locator("#grid-minor").getAttribute("d");
+    const cdp = await p.context().newCDPSession(p);
+    const pts = (d) => [{ x: mid[0] - d, y: mid[1], id: 1 }, { x: mid[0] + d, y: mid[1], id: 2 }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: mid[0] - 150, y: mid[1], id: 1 }] });
+    for (let d = 145; d >= 120; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: mid[0] - d, y: mid[1], id: 1 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(120) });
+    for (let d = 115; d >= 30; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
+    // #1434: the grid follows the live view of the fingers (its paths change before any release), not the committed one
+    await waitFor(async () => (await grid().locator("#grid-minor").getAttribute("d")) !== before, "fingers down: the grid's lines move with the fingers (the live view), before the release", 20);
+    // the layer follows the fingers on the UI thread: wait until the drawing has shrunk (the live scale is on), then look at the grid
+    let g = await grid().locator("#grid-minor").boundingBox();
+    const covers = (r) => r.x <= b.x + 1 && r.x + r.width >= b.x + b.width - 1 && r.y <= b.y + 1 && r.y + r.height >= b.y + b.height - 1;
+    await waitFor(async () => covers((g = await grid().locator("#grid-minor").boundingBox())), `fingers down, zoomed far out: the grid covers the whole canvas (grid ${Math.round(g.x)},${Math.round(g.y)} ${Math.round(g.width)}×${Math.round(g.height)}; canvas ${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}×${Math.round(b.height)})`, 20);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.detach();
+    let l4 = 0;
+    await waitFor(async () => Math.abs((l4 = (await lines())[0]) - l3) <= l3 * 0.02, `let go at the limit: the scale stays at the limit (${Math.round(l3)} → ${Math.round(l4)} px)`, 30);
+  }
   h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, `the pinch drew nothing (the first finger's stroke was dropped): runs ${(await runs()).length}, length sheet ${await tid("quick-length").count()}`);
   await fitAll(p);
   await p.waitForTimeout(300);

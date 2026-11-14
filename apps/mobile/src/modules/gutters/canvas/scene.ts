@@ -73,38 +73,8 @@ export interface SceneDs {
   lifted?: boolean;
 }
 export interface SceneLabel extends PlacedLabel { text: string; kind: "len" | "ds" | "story" | "corner" }
-/** the grid under the drawing (founder 08.11, as in CAD): minor and major lines as two paths; `stepIn` — a minor cell */
-export interface SceneGrid { minor: string; major: string; stepIn: number }
-export interface Scene { runs: SceneRun[]; ds: SceneDs[]; caps: SceneCap[]; corners: SceneCorner[]; labels: SceneLabel[]; grid?: SceneGrid }
-
-/** a grid cell, inches: 1 ft, 5 ft, 10 ft, 50 ft, 100 ft, 500 ft — the smallest not finer than `minPx` on the screen */
-export const GRID_STEPS_IN = [12, 60, 120, 600, 1200, 6000] as const;
-export function gridStepIn(k: number, minPx: number): number {
-  return GRID_STEPS_IN.find((s) => s * k >= minPx) ?? GRID_STEPS_IN[GRID_STEPS_IN.length - 1]!;
-}
-
-/** the grid lines over the viewport: every 5th is a major one (the next step up) */
-/** the most lines of a grid (both ways): a view so far away that the largest step is still denser than this has no grid (#1281: a pinch far out made millions of lines) */
-export const MAX_GRID_LINES = 240;
-
-export function buildGrid(v: View, vp: { w: number; h: number }, minPx: number): SceneGrid {
-  const step = gridStepIn(v.k, minPx);
-  const [x0, y1] = toPlan(v, [0, 0]);
-  const [x1, y0] = toPlan(v, [vp.w, vp.h]);
-  if (!(v.k > 0) || !Number.isFinite(v.k) || (x1 - x0) / step + (y1 - y0) / step > MAX_GRID_LINES) return { minor: "", major: "", stepIn: step };
-  let minor = "", major = "";
-  for (let i = Math.ceil(x0 / step); i * step <= x1; i++) {
-    const sx = (i * step * v.k + v.ox).toFixed(1);
-    const seg = `M${sx} 0V${vp.h}`;
-    if (i % 5 === 0) major += seg; else minor += seg;
-  }
-  for (let j = Math.ceil(y0 / step); j * step <= y1; j++) {
-    const sy = (-j * step * v.k + v.oy).toFixed(1);
-    const seg = `M0 ${sy}H${vp.w}`;
-    if (j % 5 === 0) major += seg; else minor += seg;
-  }
-  return { minor, major, stepIn: step };
-}
+export interface Scene { runs: SceneRun[]; ds: SceneDs[]; caps: SceneCap[]; corners: SceneCorner[]; labels: SceneLabel[] }
+/** the grid is not part of the scene (#1434): it is a screen-sized layer of its own that follows the live view — canvas/grid.ts, GridLayer */
 
 export interface SceneOpts {
   view: View;
@@ -132,11 +102,9 @@ export interface SceneOpts {
   lenWithStory?: boolean;
   /** a downspout just put, on its off beat: drawn dim (the blink) */
   dimDs?: string | null;
-  /** the grid (founder 08.11): its smallest cell on the screen, px; none — no grid (the speed bench) */
-  gridMinPx?: number;
   /** the speed bench: draw every label even where it would overlap (the worst load) */
   keepAll?: boolean;
-  /** what is shown (#930): the grid, the labels (lengths, corner words), the downspouts; hidden ones are only not drawn */
+  /** what is shown (#930): the labels (lengths, corner words), the downspouts; hidden ones are only not drawn (the grid layer — GridLayer, #1434) */
   layers?: SceneLayers;
 }
 
@@ -157,11 +125,11 @@ export function bisector(u: readonly [number, number], v: readonly [number, numb
 
 export function buildScene(d: Drawing, o: SceneOpts): Scene {
   const L = o.layers;
-  if (!L || (L.grid !== false && L.labels !== false && L.ds !== false)) return buildSceneAll(d, o);
+  if (!L || (L.labels !== false && L.ds !== false)) return buildSceneAll(d, o);
   // the downspouts layer off: the scene of the drawing without them (and nothing of theirs picked)
   const hideDs = L.ds === false && d.downspouts.length > 0;
   const s = buildSceneAll(hideDs ? { ...d, downspouts: [] } : d, hideDs && d.downspouts.some((x) => x.id === o.selected) ? { ...o, selected: null } : o);
-  return { ...s, ...(L.labels === false ? { labels: [] } : {}), ...(L.grid === false ? { grid: undefined } : {}) };
+  return { ...s, ...(L.labels === false ? { labels: [] } : {}) };
 }
 
 function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
@@ -287,5 +255,5 @@ function buildSceneAll(d: Drawing, o: SceneOpts): Scene {
   // the gutters and their faces are lines no word lies on (#1185)
   const lines = [...runs.flatMap((r) => [{ a: r.a, b: r.b }, { a: r.face[0], b: r.face[1] }]), ...corners.flatMap((k) => (k.arc ? [{ a: k.arc.from, b: k.arc.to }] : []))];
   const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, marks, lines);
-  return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })), ...(o.gridMinPx ? { grid: buildGrid(o.view, o.viewport, o.gridMinPx) } : {}) };
+  return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })) };
 }
