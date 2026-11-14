@@ -58,7 +58,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
     expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
     expect(component.segmented).toEqual({ h: px("seg-h"), pad: px("seg-pad") });
-    expect(component.tab.h).toBe(px("tab-h"));
+    expect(component.tab).toEqual({ h: px("tab-h"), fadeW: px("tab-fade-w") });
     expect(component.switch).toEqual({ w: px("switch-w"), h: px("switch-h"), knob: px("switch-knob") });
     expect(component.help).toEqual({ visible: px("help-visible"), icon: px("help-icon") });
     expect(component.tip).toEqual({ fs: px("tip-fs"), px: px("tip-px"), py: px("tip-py"), radius: px("tip-radius"), max: px("tip-max"), gap: px("tip-gap") });
@@ -101,6 +101,7 @@ describe("app tokens mirror the founder's DS css", () => {
     expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
     expect(motion.durBrand).toBe(px("dur-brand"));
     expect([motion.durBrandQuick, motion.durBrandEdge, motion.durBrandPause, motion.durBrandFold]).toEqual([px("dur-brand-quick"), px("dur-brand-edge"), px("dur-brand-pause"), px("dur-brand-fold")]);
+    expect([motion.durBrandHold, motion.brandExitScale]).toEqual([px("dur-brand-hold"), px("brand-exit-scale")]);
   });
   it("small shadow of the raised «Заливка»", () => {
     const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;
