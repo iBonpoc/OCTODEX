@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 import { toastArmed, toastExpires, toastIdFor } from "./toastArm";
 import { toastBottom, useFooterInset } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
 import { KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance } from "react-native";
 import { avoidBehavior } from "./keyboard";
@@ -179,9 +179,13 @@ export function Menu<K extends string>({
               scrollToChosen();
             }}
           >
-          {items.map((it) => (
+          {items.map((it, i) => (
+            <Fragment key={it.key}>
+            {/* the dangerous ones are the last group, after a line (DS Б4): drawn before the first of them when others come before */}
+            {it.destructive && i > 0 && !items[i - 1]!.destructive ? (
+              <View testID="menu-divider" style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[1], marginHorizontal: space[4] }} />
+            ) : null}
             <Press
-              key={it.key}
               testID={it.testID}
               onLayout={(e) => {
                 rowAt.current[it.key as string] = { y: e.nativeEvent.layout.y, h: e.nativeEvent.layout.height };
@@ -200,6 +204,7 @@ export function Menu<K extends string>({
               </T>
               {it.icon ? <Icon name={it.icon} /> : null}
             </Press>
+            </Fragment>
           ))}
           </ScrollView>
         </Glass>

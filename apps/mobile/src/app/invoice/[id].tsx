@@ -5,7 +5,6 @@ import { InvoiceCardBody } from "@/features/invoice/InvoiceCard";
 import { Empty, Screen } from "@/ui/surfaces";
 import { canSeeInvoice } from "@/features/access";
 import { VoidInvoiceBody } from "@/features/invoice/VoidInvoice";
-import { ActionBar } from "@/ui/actionBar";
 import { useDevice } from "@/theme/ThemeProvider";
 
 /** Invoice: amount, paid, balance; take a payment (any part); receipts; send / PDF (body — features/invoice/InvoiceCard). */
@@ -43,9 +42,9 @@ export default function InvoiceScreen() {
   return (
     <InvoiceCardBody
       inv={live}
-      frame={({ more, main, mainBar, body }) => (
-        <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more} footer={mainBar ? <ActionBar testID="invoice-actionbar" main={mainBar} /> : undefined}>
-          {wide ? main : null}
+      inline={wide}
+      frame={({ more, bar, body }) => (
+        <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more} footer={bar ?? undefined}>
           {body}
         </Screen>
       )}

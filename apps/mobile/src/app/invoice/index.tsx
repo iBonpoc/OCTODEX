@@ -94,9 +94,8 @@ export default function Invoices() {
           <InvoiceCardBody
             key={openInv.id}
             inv={openInv}
-            frame={({ more, main, body }) => (
+            frame={({ more, body }) => (
               <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} outside={panel.outside} actions={more} onOpen={panel.full} onClose={panel.close}>
-                {main}
                 {body}
               </ListPanel>
             )}

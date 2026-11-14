@@ -1,7 +1,7 @@
 /**
- * The invoice card's «⋯» (#1474, DS Б4): PDF, «Напомнить», SMS, email and the director's «Аннулировать…» live in the menu, not on the
- * page. `invAct(p, key)` opens «⋯» and presses the item (`pdf` | `remind` | `sms` | `email` | `void`); `invHas(p, key)` — the item is
- * in the menu (it opens and closes «⋯»). The main button «Принять оплату» stays on the page (`invoice-take-payment`).
+ * The invoice card's «⋯» (#1474, DS Б4): PDF, SMS, email and the director's «Аннулировать…» live in the menu, not on the page.
+ * `invAct(p, key)` opens «⋯» and presses the item (`pdf` | `sms` | `email` | `void`); `invHas(p, key)` — the item is
+ * in the menu (it opens and closes «⋯»). «Принять оплату» and «Напомнить» stay on the page (`invoice-take-payment`, `invoice-remind`).
  */
 const { pressEscUntilClosed } = require("./sheet.cjs");
 

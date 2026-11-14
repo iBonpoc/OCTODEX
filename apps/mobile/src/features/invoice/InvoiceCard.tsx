@@ -18,6 +18,7 @@ import { invoiceBalance } from "@/features/invoiceStatus";
 import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
 import { DOC_LANG_LABEL } from "@/i18n/translate";
 import { RelatedBlock } from "@/features/RelatedBlock";
+import { ActionBar } from "@/ui/actionBar";
 import { VoidInvoiceMenu, type InvoiceMoreItem } from "@/features/invoice/VoidInvoice";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -38,9 +39,13 @@ const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
  * Where the card's actions stand (#1474, DS §7.3, §8.9, Б4; as the estimate, #1412): `more` — «⋯» with the other actions, `main` —
  * «Принять оплату» at the top of the content (from 820, the panel), `mainBar` — the same for the pinned bar on a phone, `body` — the rest.
  */
-export type InvoiceFrame = (parts: { more: ReactNode; main: ReactNode | null; mainBar: ReactNode | null; body: ReactNode }) => ReactElement;
+export type InvoiceFrame = (parts: { more: ReactNode; bar: ReactNode | null; body: ReactNode }) => ReactElement;
 
-export function InvoiceCardBody({ inv, frame }: { inv: Invoice; frame?: InvoiceFrame }) {
+/**
+ * `inline` — the buttons stand in the content, right after the money (from 820, the panel; the default); off — they go to the pinned
+ * bar the frame gets as `bar` (a phone). One place on every width: after the money (#1474 review).
+ */
+export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; frame?: InvoiceFrame; inline?: boolean }) {
   const store = useStore();
   const { db } = store;
   const { t, money, day } = useI18n();
@@ -85,15 +90,22 @@ export function InvoiceCardBody({ inv, frame }: { inv: Invoice; frame?: InvoiceF
   };
   const payButton = (bar: boolean) =>
     balance > 0 && right !== "none" ? (
-      <View testID="invoice-take-payment" style={bar ? undefined : { alignSelf: "flex-start" }}>
+      <View testID="invoice-take-payment">
         <Button label={t("inv.takePayment")} icon="dollar" size={bar ? "bar" : undefined} full={bar} onPress={takePay} />
+      </View>
+    ) : null;
+  // the second button (§12.3: «Принять оплату», the second — send / remind): reminders are the office's (S20); the tech takes the
+  // payment on site and does not chase debts
+  const canRemind = balance > 0 && store.role !== "tech" && !!(cust?.phone || cust?.email);
+  const remindButton = (bar: boolean) =>
+    canRemind ? (
+      <View testID="invoice-remind">
+        <Button label={t("mny.remind")} icon="bell" variant="secondary" size={bar ? "bar" : undefined} full={bar} onPress={() => setRemind(true)} />
       </View>
     ) : null;
   const items: InvoiceMoreItem[] = [
     // Б4: PDF first, then the ways to send it; «Аннулировать…» last (VoidInvoiceMenu)
     { key: "pdf", label: t("ue.pdf"), icon: "invoice" as const, testID: "invoice-act-pdf", onPress: pdf },
-    // reminders are the office's (S20); the tech takes the payment on site and does not chase debts
-    ...(balance > 0 && store.role !== "tech" && (cust?.phone || cust?.email) ? [{ key: "remind", label: t("mny.remind"), icon: "bell" as const, testID: "invoice-act-remind", onPress: () => setRemind(true) }] : []),
     ...(balance > 0 && cust?.phone ? [{ key: "sms", label: t("ue.sendSms"), icon: "message" as const, testID: "invoice-act-sms", onPress: () => void openSms(cust.phone, msg().text).catch(() => {}) }] : []),
     ...(balance > 0 && cust?.email ? [{ key: "email", label: t("ue.sendEmail"), icon: "send" as const, testID: "invoice-act-email", onPress: () => void openEmail(cust.email!, msg().subject, msg().text).catch(() => {}) }] : []),
   ];
@@ -148,6 +160,13 @@ export function InvoiceCardBody({ inv, frame }: { inv: Invoice; frame?: InvoiceF
           {lastReminder ? ` · ${t("mny.remind.last", { date: day(lastReminder.at) })}` : ""}
         </T>
       </Card>
+
+      {inline && (payButton(false) || remindButton(false)) ? (
+        <RowView style={{ flexWrap: "wrap" }}>
+          {payButton(false)}
+          {remindButton(false)}
+        </RowView>
+      ) : null}
 
 
       <SectionTitle title={t("rcpt.list")} right={pays.length ? <T v="caption" tone="mut">{pays.length}</T> : undefined} />
@@ -213,17 +232,12 @@ export function InvoiceCardBody({ inv, frame }: { inv: Invoice; frame?: InvoiceF
       </Sheet>
     </>
   );
-  const main = payButton(false);
-  const mainBar = payButton(true);
-  if (frame) return frame({ more, main, mainBar, body });
+  const barMain = inline ? null : payButton(true);
+  const bar = barMain || (!inline && canRemind) ? <ActionBar testID="invoice-actionbar" main={barMain ?? remindButton(true)} second={barMain ? remindButton(true) : undefined} /> : null;
+  if (frame) return frame({ more, bar, body });
   return (
     <>
-      {more || main ? (
-        <RowView style={{ justifyContent: "space-between" }}>
-          <View style={{ flex: 1 }}>{main}</View>
-          {more}
-        </RowView>
-      ) : null}
+      <RowView style={{ justifyContent: "flex-end" }}>{more}</RowView>
       {body}
     </>
   );
