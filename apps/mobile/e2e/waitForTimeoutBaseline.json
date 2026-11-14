@@ -189,7 +189,7 @@
  "e2e/specs/83-receipt-related.cjs": 3,
  "e2e/specs/84-tech-call-job.cjs": 3,
  "e2e/specs/85-property-plus.cjs": 4,
- "e2e/specs/86-nav-money.cjs": 8,
+ "e2e/specs/86-nav-money.cjs": 7,
  "e2e/specs/87-team-sales-role.cjs": 1,
  "e2e/specs/88-first-run.cjs": 7,
  "e2e/specs/89-team-invite.cjs": 6,
