@@ -20,5 +20,7 @@ exports.run = async (h) => {
   await h.expectText(/Просрочено · \d+ · \$[\d,]+/, "overdue invoices group");
   await h.expectText(/Просрочен \d+ дн/, "overdue sign on the invoice card");
   await h.go("/jobs");
-  await h.expectText(/Запланирован · \d+/, "job filters");
+  // the job filters, by key (the words follow the status: a job is «Запланирована», #1417)
+  await h.page.getByTestId("filter-lane-scheduled").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(/· \d+/.test(await h.page.getByTestId("filter-lane-scheduled").locator("visible=true").first().innerText()), "job filters: «scheduled» with its count");
 };
