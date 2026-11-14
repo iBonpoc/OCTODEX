@@ -8,6 +8,8 @@ export const SUPABASE_PUBLISHABLE_KEY =
 
 /**
  * Public web app: Expo Hosting, deployed by the EAS workflow on every push to main.
- * Used for client links (/p/<token>) and email links. (Cloudflare octodex.uoboxx.workers.dev stopped rebuilding on 03.11.)
+ * Used for client links (/p/<token>) and email links. GoRix since #656 слой 2 (the founder, 14.11): the Hosting subdomain is
+ * gorix; octodex.expo.app stays allowed by the functions (links already sent lead there). (Cloudflare's old worker stopped
+ * rebuilding on 03.11.)
  */
-export const WEB_APP_URL = "https://octodex.expo.app";
+export const WEB_APP_URL = "https://gorix.expo.app";

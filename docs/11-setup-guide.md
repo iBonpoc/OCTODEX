@@ -3,7 +3,7 @@
 ## Ссылки
 | Что | Ссылка |
 |---|---|
-| Сайт приложения (Expo Hosting, обновляется сам) | https://octodex.expo.app |
+| Сайт приложения (Expo Hosting, обновляется сам) | https://gorix.expo.app (старый https://octodex.expo.app остаётся разрешённым для уже отправленных ссылок, #656) |
 | Код (GitHub) | https://github.com/iBonpoc/OCTODEX |
 | База данных (Supabase) | https://supabase.com/dashboard/project/kgiaxygsjkyiquhjbxdg |
 | Сборки iPhone/Android (Expo) | https://expo.dev/accounts/octodex-team/projects/octodex |
