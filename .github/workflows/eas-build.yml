@@ -22,7 +22,8 @@ on:
         description: "Which phone"
         type: choice
         options: [android, ios]
-        default: android
+        # ios while Android is paused (#1444); back to android when it is not
+        default: ios
       ios_submit:
         description: "ios only: send to TestFlight (only after the app exists in App Store Connect and its id is in eas.json)"
         type: boolean
