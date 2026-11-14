@@ -5,6 +5,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Button, IconButton } from "./controls";
 import { Icon, T } from "./primitives";
+import { closable, sayChangeBy, spoken, titleChanged, type BannerTone } from "./bannerRules";
 
 /**
  * A screen's state (DS Б9, §15.3; #957, #1426): «Модуль не подключён — только просмотр», «Нет в прайсе: 24». Not the result
@@ -12,38 +13,33 @@ import { Icon, T } from "./primitives";
  * The tone's icon + the words (rule 2), a title, an optional hint, at most one action (secondary); «✕» only on `info`.
  * The order of urgency across banners (Н-62) is not here yet: a screen shows the one it needs.
  */
-export function Banner({
-  tone,
-  title,
-  hint,
-  action,
-  onClose,
-  closeLabel,
-  testID,
-}: {
-  tone: Exclude<StatusName, "neutral">;
+type BannerBase = {
   title: string;
   hint?: string;
   /** the one thing to do about it */
   action?: { label: string; onPress: () => void };
-  /** only an info banner may be closed (§15.3) */
-  onClose?: () => void;
-  /** the «✕»'s name for the screen reader; «Скрыть» by default */
-  closeLabel?: string;
   testID?: string;
-}) {
+};
+/** only an info banner may be closed (§15.3): the type says it — `onClose` on a warn banner does not compile */
+export type BannerProps = BannerBase &
+  (
+    | { tone: "info"; onClose?: () => void; /** the «✕»'s name for the screen reader; «Скрыть» by default */ closeLabel?: string }
+    | { tone: Exclude<BannerTone, "info">; onClose?: never; closeLabel?: never }
+  );
+
+export function Banner({ tone, title, hint, action, onClose, closeLabel, testID }: BannerProps) {
   const { c } = useTheme();
   const { device } = useDevice();
   const { t } = useI18n();
   const side = device !== "phone";
   // the tone is said, not only drawn (rule 2 for the screen reader): «Предупреждение. Модуль не подключён…»
   const toneWord = t(`ui.banner.tone.${tone}`);
-  // a change of the screen's state is said once (Б9): VoiceOver / TalkBack hear it; the web reads the live region
+  // a change of the screen's state is said once (Б9): iOS by an announcement; Android and the web read the live region (bannerRules)
   const said = useRef(title);
   useEffect(() => {
-    if (said.current === title) return;
+    if (!titleChanged(said.current, title)) return;
     said.current = title;
-    if (Platform.OS !== "web") AccessibilityInfo.announceForAccessibility(`${toneWord}. ${title}`);
+    if (sayChangeBy(Platform.OS) === "announce") AccessibilityInfo.announceForAccessibility(spoken(toneWord, title));
   }, [title, toneWord]);
   const btn = action ? (
     <View testID={testID ? `${testID}-action` : undefined} style={side ? undefined : { alignSelf: "flex-start" }}>
@@ -86,7 +82,7 @@ export function Banner({
         {btn && !side ? <View style={{ paddingTop: space[1] }}>{btn}</View> : null}
       </View>
       {btn && side ? <View style={{ alignSelf: "center" }}>{btn}</View> : null}
-      {tone === "info" && onClose ? (
+      {closable(tone, onClose) ? (
         <View testID={testID ? `${testID}-close` : undefined} style={side ? { alignSelf: "center" } : undefined}>
           <IconButton icon="close" tone="plain" label={closeLabel ?? t("ui.banner.close")} onPress={onClose} />
         </View>

@@ -115,8 +115,20 @@ export function Card({
 
 /* ---------- Layout helpers ---------- */
 export function RowView({ children, style, gap = space[2] }: { children: ReactNode; style?: StyleProp<ViewStyle>; gap?: number }) {
-  return <View style={[{ flexDirection: "row", alignItems: "center", gap }, style]}>{children}</View>;
+  return (
+    <FieldColumnCtx.Provider value={false}>
+      <View style={[{ flexDirection: "row", alignItems: "center", gap }, style]}>{children}</View>
+    </FieldColumnCtx.Provider>
+  );
 }
+
+/**
+ * True inside a `FieldGroup` (a column of fields), false again inside a `RowView`. A labelled field shares a row's width (`flex: 1`),
+ * but in a column it takes its own height: on the web a column of `flex: 1` items makes them all one height, and a tall
+ * field (a note) was cut (#1411).
+ */
+const FieldColumnCtx = createContext(false);
+export const useFieldColumn = () => useContext(FieldColumnCtx);
 
 export function Grid({ children, raise }: { children: ReactNode[] | ReactNode; /** index of the item to draw above siblings (drag) */ raise?: number }) {
   const { device } = useDevice();
@@ -154,6 +166,36 @@ export function SectionTitle({ title, right }: { title: string; right?: ReactNod
       <T v="heading">{title}</T>
       {right}
     </RowView>
+  );
+}
+
+/**
+ * A group of a form's fields, straight on the screen's background — no card around them (DS §11 п.17, #1411): the field has its own
+ * frame and fill, a second plate only eats the width. The group's title is a `SectionTitle` (a group without one keeps the same room above it); fields inside are `space[3]` apart.
+ */
+export function FieldGroup({
+  title,
+  right,
+  children,
+  testID,
+  under,
+}: {
+  title?: string;
+  right?: ReactNode;
+  children: ReactNode;
+  testID?: string;
+  /** the group stands right under a title the screen already shows: no room of its own above it */
+  under?: boolean;
+}) {
+  // a group without a title keeps the same room above it as a title would (`SectionTitle` stands `space[3]` lower): groups stay apart;
+  // flexShrink 0: the screen's column never squeezes the group
+  return (
+    <FieldColumnCtx.Provider value>
+      <View testID={testID} style={{ gap: space[3], marginTop: title || under ? 0 : space[3], flexShrink: 0 }}>
+        {title ? <SectionTitle title={title} right={right} /> : null}
+        {children}
+      </View>
+    </FieldColumnCtx.Provider>
   );
 }
 

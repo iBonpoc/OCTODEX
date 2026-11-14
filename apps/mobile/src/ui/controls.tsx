@@ -494,6 +494,7 @@ export function TextField({
   accessoryID,
   onBlurText,
   a11yLabel,
+  action,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -532,6 +533,11 @@ export function TextField({
   onBlurText?: () => void;
   /** screen-reader name with the unit («Цена, долларов») */
   a11yLabel?: string;
+  /**
+   * the field's helper action («Вставить», «Очистить», «Показать»): an icon inside the field on the right, no words, no plate;
+   * a real 44 × 44 touch box (the web has no hitSlop), `label` for the screen reader and the web's hover hint (DS §11 п.18, #1411)
+   */
+  action?: { icon: IconKey; label: string; onPress: () => void; testID?: string };
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -637,6 +643,22 @@ export function TextField({
         } as object}
       />
       {suffix ? <T tone="mut">{suffix}</T> : null}
+      {action ? (
+        <Press
+          onPress={action.onPress}
+          disabled={ro}
+          visibleHeight={sizes.hitMin}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          testID={action.testID}
+          {...({ title: action.label } as object)}
+          // the touch box is 44 × 44 even in a 34 field (it overhangs the frame), the icon sits `space[3]` from the frame's edge
+          containerStyle={{ marginVertical: (Math.min(h, sizes.hitMin) - sizes.hitMin) / 2, marginRight: -space[3], alignSelf: multi ? "flex-start" : "center" }}
+          style={{ width: sizes.hitMin, height: sizes.hitMin, alignItems: "center", justifyContent: "center" }}
+        >
+          <Icon name={action.icon} s={sizes.iconMd} color={c.mut} />
+        </Press>
+      ) : null}
     </View>
     {shownError ? (
       <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={tid ? `${tid}-error` : undefined}>

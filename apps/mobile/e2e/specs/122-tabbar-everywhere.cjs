@@ -59,13 +59,11 @@ exports.run = async (h) => {
   if (!wide) {
     // the client signs on site: the bar stays until a signature is drawn, then it is away until cleared / left.
     // A visit at «Работа» signs with the same pad (the estimate's card has no bar since #1412: its main button is pinned instead)
-    await p.evaluate(() => {
-      const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
-      const v = raw.db.visits.find((x) => x.id === "v1");
-      v.step = "working";
-      v.checklist = [];
-      localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-    });
+    const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+    const v = raw.db.visits.find((x) => x.id === "v1");
+    v.step = "working";
+    v.checklist = [];
+    await h.seed("octo.db.v5", raw);
     await h.go("/visit/v1");
     await p.waitForTimeout(600);
     const pad = p.getByTestId("signature-pad").locator("visible=true").first();

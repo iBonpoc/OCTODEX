@@ -121,7 +121,7 @@ function SourceForm({ value, onDone }: { value: Omit<Source, "id"> & { id?: stri
             <TextField type="phone" value={d.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder="(555) 555-0100" label={t("co.phone")} icon="phone" />
           </Labeled>
           <Labeled label={t("co.email")}>
-            <TextField type="email" value={d.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder="name@example.com" label={t("co.email")} icon="message" />
+            <TextField type="email" value={d.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder="name@example.com" label={t("co.email")} icon="mail" />
           </Labeled>
         </>
       ) : null}

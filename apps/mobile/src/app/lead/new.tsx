@@ -13,7 +13,7 @@ import { Button, TextField } from "@/ui/controls";
 import { formatPhoneUS } from "@/ui/inputFormat";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, RowView, Screen } from "@/ui/surfaces";
+import { FieldGroup, Screen } from "@/ui/surfaces";
 import { useRequiredForm } from "@/ui/requiredForm";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { moduleDef } from "@/modules/registry";
@@ -75,14 +75,19 @@ export default function NewLead() {
   };
   return (
     <Screen title={t("lead.title")}>
-      <Card>
+      {/* the fields straight on the background, no card around them; «Вставить» an icon inside the phone field (DS §11 п.17–18, #1411) */}
+      <FieldGroup testID="new-lead-fields">
         <Labeled label={t("lead.phone")}>
-          <RowView>
-            <View style={{ flex: 1 }}>
-              <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" label={t("lead.phone")} icon="phone" field={form.field("phone")} />
-            </View>
-            <Button label={t("lead.paste")} icon="copy" size="sm" variant="secondary" onPress={paste} />
-          </RowView>
+          <TextField
+            type="phone"
+            value={phone}
+            onChangeText={setPhone}
+            placeholder="(555) 555-0100"
+            label={t("lead.phone")}
+            icon="phone"
+            field={form.field("phone")}
+            action={{ icon: "copy", label: t("field.pastePhone"), onPress: paste, testID: "new-lead-paste" }}
+          />
         </Labeled>
         <Labeled label={t("lead.name")}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" field={form.field("name")} />
@@ -94,10 +99,10 @@ export default function NewLead() {
           <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena" />
         </Labeled>
         <SourceField value={sourceId} onChange={setSourceId} field={form.field("source")} />
-        <Labeled label={t("lead.need")}>
+        <Labeled label={t("lead.message")}>
           <TextField type="note" value={message} onChangeText={setMessage} placeholder={t("lead.messagePh")} />
         </Labeled>
-      </Card>
+      </FieldGroup>
 
       {dup.customers.length || dup.leads.length ? (
         <View style={{ gap: space[2] }}>

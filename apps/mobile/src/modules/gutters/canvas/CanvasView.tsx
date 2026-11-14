@@ -3,7 +3,7 @@
  * drawing is not redrawn during the gesture; when the fingers lift, the new view is committed and the painter redraws
  * crisp at the new scale. `live` lets the speed bench drive the same transform without fingers.
  */
-import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
@@ -53,9 +53,13 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     pending.current.push({ view: v, tf: t });
     now.current.onView(v);
   };
+  /** the view last settled: the same view again is only another render of the screen, never a reason to touch the live transform (#1403) */
+  const settled = useRef<PlanView | null>(null);
   /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it */
   const settleView = (v: PlanView) => {
-    const r = settle({ S: s.value, Tx: tx.value, Ty: ty.value }, pending.current, v);
+    if (settled.current === v) return;
+    const r = settle({ S: s.value, Tx: tx.value, Ty: ty.value }, pending.current, v, settled.current ?? undefined);
+    settled.current = v;
     pending.current = r.pending;
     baseK.value = v.k;
     tx.value = r.live.Tx;
@@ -120,7 +124,12 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     onDeactivate: end,
   });
   const both = useSimultaneousGestures(pan, pinch);
-  return { pan, pinch, both, settleView, multiAt };
+  // one object for the screen's whole life (the gestures themselves are kept by the library): a new object every render made the
+  // canvas settle again after every render (#1403); `settleView` reads what it needs from refs and shared values
+  const settleRef = useRef(settleView);
+  settleRef.current = settleView;
+  const stableSettle = useMemo(() => (v: PlanView) => settleRef.current(v), []);
+  return useMemo(() => ({ pan, pinch, both, settleView: stableSettle, multiAt }), [pan, pinch, both, stableSettle]);
 }
 
 export type CanvasGestures = ReturnType<typeof useCanvasGestures>;
@@ -148,10 +157,13 @@ function OwnGestures(props: Parameters<typeof CanvasView>[0]) {
 
 function Canvas({ view, live, size, onSize, gestures, children, testID }: Parameters<typeof CanvasView>[0] & { gestures: CanvasGestures }) {
   const { tx, ty, s, fx, fy } = live;
-  // the painter has redrawn at the committed view: drop the live transform in the same frame
+  // the painter has redrawn at the committed view: drop the live transform in the same frame — only when the VIEW changed, never on
+  // another render of the screen (#1403: a blink or a hint re-rendered mid-pinch and the drawing jumped back under the fingers)
+  const settleNow = useRef(gestures.settleView);
+  settleNow.current = gestures.settleView;
   useLayoutEffect(() => {
-    gestures.settleView(view);
-  }, [view, gestures]);
+    settleNow.current(view);
+  }, [view]);
 
   const st = useAnimatedStyle(() => {
     const cx = size.w / 2;

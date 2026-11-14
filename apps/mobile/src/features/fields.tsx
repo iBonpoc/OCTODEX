@@ -6,10 +6,13 @@ import { parseMoneyToCents, parsePctToBps, parsePctToPpm, parseQty, ppmToPctText
 import { useI18n } from "@/i18n";
 import { TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
+import { useFieldColumn } from "@/ui/surfaces";
 
 export function Labeled({ label, children, flex = 1 }: { label: string; children: ReactNode; flex?: number }) {
+  // in a column of fields (`FieldGroup`) the field takes its own height; in a row it shares the width (#1411)
+  const column = useFieldColumn();
   return (
-    <View style={{ flex, gap: space[1] }}>
+    <View style={{ flex: column ? undefined : flex, gap: space[1] }}>
       <T v="caption" tone="mut">
         {label}
       </T>

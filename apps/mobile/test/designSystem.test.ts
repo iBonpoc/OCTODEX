@@ -320,6 +320,92 @@ describe("design system: a text under a centred icon is centred", () => {
 });
 
 /**
+ * DS §11 п.17–18 (founder 14.11, #1411): a form's fields lie straight on the background — no card around them; the field's helper
+ * action («Вставить», «Очистить», «Показать») is an icon inside the field (`TextField action`), not a worded button beside it.
+ */
+describe("design system: a form's fields have no plate (#1411)", () => {
+  /** <Card> blocks that hold a <TextField> (lexically), by the line the card opens on */
+  const cardsWithFields = (src: string): number[] => {
+    const re = /<Card\b|<\/Card>|<TextField\b/g;
+    const stack: number[] = [];
+    const hits = new Set<number>();
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(src))) {
+      if (m[0] === "<Card") {
+        const close = src.indexOf(">", m.index);
+        if (src[close - 1] === "/") continue;
+        stack.push(src.slice(0, m.index).split("\n").length);
+      } else if (m[0] === "</Card>") stack.pop();
+      else if (stack.length) hits.add(stack[stack.length - 1]);
+    }
+    return [...hits];
+  };
+  /**
+   * Where a card still holds a field, and why. The count is exact: a new card with a field fails, and so does one taken away
+   * without its line here (the list only shrinks).
+   */
+  const ALLOWED: Record<string, { n: number; why: string }> = {
+    "app/auth/company.tsx": { n: 1, why: "вход — особый шаблон (§12.3), #1455" },
+    "app/auth/sign-in.tsx": { n: 1, why: "вход — особый шаблон (§12.3), #1455" },
+    "app/auth/trade.tsx": { n: 1, why: "вход — особый шаблон (§12.3), #1455" },
+    "app/f/[token].tsx": { n: 1, why: "публичная форма заявки клиента — особый шаблон (§12.3), #1455" },
+    "app/company/[section].tsx": { n: 8, why: "разделы настроек — шаблон «Настройки», #1455" },
+    "app/company/checklist/[id].tsx": { n: 1, why: "пункт чек-листа — объект списка, карточка (правило 12)" },
+    "features/client/ClientSheets.tsx": { n: 1, why: "каждый дополнительный человек клиента — объект списка, карточка (правило 12)" },
+    "app/purchase-order/[id].tsx": { n: 1, why: "карточка объекта (шаблон «К»), не форма" },
+    "features/JobLinesBlock.tsx": { n: 1, why: "блок карточки работы (налог), не форма" },
+    "features/NotesBlock.tsx": { n: 1, why: "блок заметок карточки объекта, не форма" },
+    "features/VisitChecklist.tsx": { n: 2, why: "чек-лист выезда — блок карточки, не форма" },
+  };
+  it("no <TextField> inside a <Card> (outside the written exceptions)", () => {
+    const bad: string[] = [];
+    for (const f of code.filter((x) => x.endsWith(".tsx") && !x.includes(join("src", "ui")) && !x.includes(join("src", "modules")))) {
+      const rel = relative(ROOT, f).split("\\").join("/");
+      const n = cardsWithFields(readFileSync(f, "utf8")).length;
+      const allowed = ALLOWED[rel]?.n ?? 0;
+      if (n !== allowed) bad.push(`${rel}: ${n} card(s) with a field, the list says ${allowed}`);
+    }
+    expect(bad, "DS §11 п.17: a form's fields lie straight on the background (`FieldGroup`), no `Card` around them").toEqual([]);
+  });
+  /**
+   * Rows of a field and a worded button that SENDS what is typed («Добавить», «Сохранить») — not a helper of the field, so they stay;
+   * exact counts by file (a new row with a button beside a field fails: a helper goes into the field as an icon).
+   */
+  const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
+    "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
+    "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
+    "features/ServiceCategoryPicker.tsx": { n: 1, why: "«Добавить» свою категорию" },
+    "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
+    "features/client/ClientSheets.tsx": { n: 2, why: "«Удалить» человека; «Добавить» метку" },
+  };
+  it("a field's helper action is an icon inside it: no worded button in one row with a field", () => {
+    const bad: string[] = [];
+    for (const f of code.filter((x) => x.endsWith(".tsx") && !x.includes(join("src", "ui")) && !x.includes(join("src", "modules")))) {
+      const src = readFileSync(f, "utf8");
+      const rel = relative(ROOT, f).split("\\").join("/");
+      const rows: string[] = [];
+      // each <RowView> block (to its own closing tag) that holds a <TextField> and a <Button label=…>
+      const re = /<RowView\b|<\/RowView>/g;
+      const open: number[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(src))) {
+        if (m[0] === "<RowView") {
+          const close = src.indexOf(">", m.index);
+          if (src[close - 1] !== "/") open.push(m.index);
+          continue;
+        }
+        const start = open.pop();
+        if (start === undefined) continue;
+        const block = src.slice(start, m.index);
+        if (/<TextField\b/.test(block) && /<Button\b[^>]*\blabel=/.test(block)) rows.push(`${rel}:${src.slice(0, start).split("\n").length}`);
+      }
+      if (rows.length !== (SUBMIT_ROWS[rel]?.n ?? 0)) bad.push(...rows, `${rel}: ${rows.length} row(s), the list says ${SUBMIT_ROWS[rel]?.n ?? 0}`);
+    }
+    expect(bad, "DS §11 п.18: `TextField action={{ icon, label, onPress }}`, not a button with words beside the field").toEqual([]);
+  });
+});
+
+/**
  * #1412 (founder 14.11 on the estimate: «Что это вообще за уродливая вёрстка?… чтобы такого не было больше»; DS §7.3, §8.9, Б4):
  * a record's card has one main button (its next step) and «⋯» with the rest — no row of three and more pill buttons.
  */

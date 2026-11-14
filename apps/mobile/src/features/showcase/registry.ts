@@ -53,7 +53,7 @@ export const SCREENS: ShowcaseScreen[] = [
 export const SECTIONS: ShowcaseSection[] = [
   { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll"] },
   { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored"] },
-  { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField"] },
+  { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar"] },
   { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "Banner", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
   { id: "rows", screen: "rows", ds: "§8.3", title: "ds.scr.rows", tokenGroups: [], components: ["SelectedCheck"] },
@@ -72,7 +72,7 @@ export const SECTIONS: ShowcaseSection[] = [
  */
 export const UI_PENDING: readonly string[] = [
   "Columns", "Meter", "ReadOnly", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
-  "TextField", "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
+  "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
   "ListPanel", "Glass", "Menu", "HelpButton", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
   "Divider", "Empty", "Screen",
 ];
