@@ -80,7 +80,7 @@ function partRow(x: ShopCtx, m: ShopModel, p: PartQty): MatRow {
   const total = m.chains.reduce((n, c) => n + c.totalIn, 0);
   const basis =
     part === "end_cap" && tag ? sw(t, "b.planTag", { tag })
-    : part === "coil" ? sw(t, "b.coil", { len: lenText(total, x.fmt), pct: r.wastePct })
+    : part === "coil" ? sw(t, r.wasteFt > 0 ? "b.coil" : "b.coilNone", { len: lenText(total, x.fmt), ft: r.wasteFt })
     : part === "gutter" ? sw(t, "b.sum")
     : part === "hanger" ? sw(t, r.hangerExtra ? "b.hangerEnds" : "b.hanger", { n: r.hangerSpacingIn })
     : part === "outlet" ? sw(t, "b.perDs")
