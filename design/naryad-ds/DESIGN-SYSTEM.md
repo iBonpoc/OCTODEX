@@ -1524,7 +1524,7 @@ iOS «Уменьшение движения», Android «Убрать анима
 
 | Правило | Где | Источник | Вывод |
 |---|---|---|---|
-| Создание нового в списке — кнопка «＋» в шапке, справа (как «＋» в «Напоминаниях», «Контактах») | §12.2 | [Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars), [Navigation bars](https://developer.apple.com/design/human-interface-guidelines/navigation-and-search) | ✅ совпадает; у нас со словом («＋ Смета», В-02) — своё решение OCTODEX: значок без слова в нашей шапке не узнавали |
+| Создание нового в списке — кнопка «＋» в шапке, справа (как «＋» в «Напоминаниях», «Контактах») | §12.2 | [Toolbars](https://developer.apple.com/design/human-interface-guidelines/toolbars), [Navigation bars](https://developer.apple.com/design/human-interface-guidelines/navigation-and-search) | ✅ совпадает; у нас со словом («＋ Смета», В-02) — своё решение OCTODEX: так выбрал основатель (#1395), слово говорит, что именно создаётся |
 | Плавающая круглая кнопка «＋» — только на «Главной» | §5.3 | — | своё решение OCTODEX (отступление от iOS, где плавающих кнопок нет): «Главная» — пульт быстрых действий подрядчика с телефона (лид во время звонка, смета, расход), их держат под большим пальцем; на остальных экранах плавающая закрывала содержимое (#1395) |
 | Шторка: ручка, высоты `medium` ≈ ½ и `large`, нажатие на ручку перебирает высоты | Б1 | [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets) | ✅ совпадает |
 | Одна шторка за раз; вложенные запрещены, вложенный шаг — страница внутри | Б1 | [Sheets](https://developer.apple.com/design/human-interface-guidelines/sheets), [Modality](https://developer.apple.com/design/human-interface-guidelines/modality) | ✅ |
