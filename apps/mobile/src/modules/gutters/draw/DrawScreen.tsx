@@ -57,6 +57,7 @@ import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from 
 import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
+import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
@@ -415,7 +416,8 @@ export default function DrawScreen() {
     setSelected(target.id);
     setLifted(target);
   };
-  const pan = usePanGesture({
+  // made once (#1403): a new config on every render registered the gesture again, in the middle of a pinch too
+  const pan = usePanGesture(useJsGestureConfig<NonNullable<Parameters<typeof usePanGesture>[0]>>({
     runOnJS: true,
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
@@ -601,9 +603,9 @@ export default function DrawScreen() {
         quickGrew.current = !!grown && got === grown;
       }
     },
-  });
+  }, [canvas.pinch, canvas.pan]));
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
-  const tap = useTapGesture({
+  const tap = useTapGesture(useJsGestureConfig<NonNullable<Parameters<typeof useTapGesture>[0]>>({
     runOnJS: true,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: () => {
@@ -696,7 +698,7 @@ export default function DrawScreen() {
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
-  });
+  }, [canvas.pinch, canvas.pan]));
   const fingers = useSimultaneousGestures(pan, tap);
 
   const scene = useMemo(
@@ -1053,7 +1055,7 @@ export default function DrawScreen() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer view={viewNow} live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">

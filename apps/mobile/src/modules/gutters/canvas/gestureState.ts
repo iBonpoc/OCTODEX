@@ -131,3 +131,45 @@ export function settle(live: Tf, pending: Pending[], view: View, last?: View): {
   const done = pending[i]!.tf;
   return { live: sub(live, done), pending: pending.slice(i + 1).map((p) => ({ view: p.view, tf: sub(p.tf, done) })) };
 }
+
+/**
+ * The settle on the UI thread (#1403): the live transform `live` is against the view `base` (what the screen had committed when the fingers
+ * moved it); the render of `ref` has arrived. The live transform that shows the SAME picture against `ref` — the screen does not move by a
+ * pixel, whatever happened between the threads: a commit taken on the UI thread before or after an earlier settle ran there, a commit React
+ * skipped, frames of a pinch that went on while the JS thread rendered. `ref` is the commit's own view before the limits' clamp; the
+ * screen's view is set to the clamped one, so a clamp shows as the step it always was (#1281).
+ */
+export function rebase(base: View, live: Tf, ref: View): Tf {
+  "worklet";
+  const S = (base.k * live.S) / ref.k;
+  return { S, Tx: live.S * base.ox + live.Tx - S * ref.ox, Ty: live.S * base.oy + live.Ty - S * ref.oy };
+}
+
+/** the step a settle makes on the screen (UI thread): the picture of `ref` becomes the picture of `view` (the limits' clamp; identity without one) */
+export function stepOf(ref: View, view: View): Tf {
+  const S = view.k / ref.k;
+  return { S, Tx: view.ox - S * ref.ox, Ty: view.oy - S * ref.oy };
+}
+
+/** a settle the JS thread has sent to the UI thread: its view, and the step it makes there (null — a view not ours: the live transform went whole) */
+export interface SentSettle { view: View; step: Tf | null }
+
+const sameView = (a: View, b: View) => a.k === b.k && a.ox === b.ox && a.oy === b.oy;
+
+/**
+ * The view a commit made, before the clamp (#1403, code-reviewer, 2nd round): the live transform `t` was taken on the UI thread against
+ * `base`. The settles sent after `base`'s own run there before this commit's settle, and each makes its step (a clamp to a limit): the
+ * picture `t` showed gets them too. Without this, a commit taken before an earlier clamp had run on the UI thread clamped it twice.
+ */
+export function commitRef(base: View, t: Tf, sent: readonly SentSettle[]): View {
+  let v = applyTf(base, t);
+  let j = -1;
+  for (let i = sent.length - 1; i >= 0; i--) if (sameView(sent[i]!.view, base)) { j = i; break; }
+  if (j < 0) return v;
+  for (let i = j + 1; i < sent.length; i++) {
+    const st = sent[i]!.step;
+    if (!st) return applyTf(base, t); // a view not ours ran after it: nothing to carry over
+    v = applyTf(v, st);
+  }
+  return v;
+}
