@@ -4219,6 +4219,8 @@ export const es: Dict = {
   "est.var.step5Text": "Por el enlace ve las opciones lado a lado, elige una y firma. En el PDF van todas las opciones, cada una con su total.",
   "est.var.common": "Común a todas",
   "est.var.commonText": "Cliente, dirección, descuento, impuesto, anticipo, notas y condiciones.",
+  "est.view.sendAgain": "Enviar de nuevo",
+  "est.view.saveTemplate": "Guardar como plantilla…",
   "est.actions": "Acciones del presupuesto",
   "est.client.on": "Pantalla para el cliente",
   "est.client.off": "Pantalla para el cliente · salir",

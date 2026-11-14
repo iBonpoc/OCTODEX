@@ -91,7 +91,8 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
     );
   };
 
-  // #1412: one main button (the next step) and «⋯» with the rest in Б4's order, the dangerous last — no row of pills under the card
+  // #1412: one main button (the next step) and «⋯» with the rest in Б4's order (Изменить, PDF, the rest; the dangerous last; «…» where a
+  // sheet asks for more) — no row of pills under the card
   // a client-signed estimate changes only through «don't sign — change it» (with a reason)
   const canEdit = universal && isEstimateEditable(e.status) && e.status !== "awaiting_countersign";
   // sending (and its «Copy link») is the office side's: a tech with the link could sign as the client (spec 35 §4д п.10)
@@ -100,11 +101,11 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   const canRevoke = universal && !!e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me);
   const actions: { key: EstAction; label: string; icon: "pencil" | "user" | "copy" | "invoice" | "close"; destructive?: boolean; testID: string }[] = [
     ...(canEdit ? [{ key: "edit" as const, label: t("ue.edit"), icon: "pencil" as const, testID: "est-act-edit" }] : []),
+    ...(universal ? [{ key: "pdf" as const, label: t("ue.pdf"), icon: "invoice" as const, testID: "est-act-pdf" }] : []),
     // the client's page only for the office side (spec 35 §4д п.10)
     ...(universal && e.token && canSeeClientLink(store.role) ? [{ key: "client" as const, label: t("ue.openClient"), icon: "user" as const, testID: "est-act-client" }] : []),
     // E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued)
-    ...(universal && e.doc && canEditEstimateTemplates(store.role) && !store.db.estimateTemplatesMissing ? [{ key: "template" as const, label: t("est.tpl.saveAs"), icon: "copy" as const, testID: "est-act-template" }] : []),
-    ...(universal ? [{ key: "pdf" as const, label: t("ue.pdf"), icon: "invoice" as const, testID: "est-act-pdf" }] : []),
+    ...(universal && e.doc && canEditEstimateTemplates(store.role) && !store.db.estimateTemplatesMissing ? [{ key: "template" as const, label: t("est.view.saveTemplate"), icon: "copy" as const, testID: "est-act-template" }] : []),
     // undone by the toast's «Отменить» (rule 5): no dialog (Б4 — a dialog only for what cannot be undone)
     ...(canRevoke ? [{ key: "revoke" as const, label: t("est.revoke.button"), icon: "close" as const, destructive: true, testID: "est-act-revoke" }] : []),
   ];
@@ -129,8 +130,9 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   ) : null;
   const sendButton = (bar: boolean) =>
     canSend ? (
-      <View testID="est-send">
-        <Button label={t("ue.send")} icon="send" size={bar ? "bar" : undefined} full onPress={() => setSendOpen(true)} />
+      <View testID="est-send" style={bar ? undefined : { alignSelf: "flex-start" }}>
+        {/* a sent estimate is sent again (not «Отправить клиенту» — it reads as not sent yet); from 820 as wide as its words */}
+        <Button label={t(e.status === "sent" ? "est.view.sendAgain" : "ue.send")} icon="send" size={bar ? "bar" : undefined} full={bar} onPress={() => setSendOpen(true)} />
       </View>
     ) : null;
 

@@ -51,17 +51,25 @@ exports.run = async (h) => {
   }
   // forms and the signature: none
   const item = db.catalog?.[0]?.id ?? db.catalogItems?.[0]?.id;
-  for (const url of ["/lead/new", "/estimate/signature", "/client/edit", ...(item ? [`/catalog/${item}`] : [])]) {
+  for (const url of ["/lead/new", "/estimate/signature", "/estimate/e6", "/client/edit", ...(item ? [`/catalog/${item}`] : [])]) {
     await h.go(url);
     await p.waitForTimeout(400);
     h.expect((await bars()) === 0, `${url}: no bottom bar`);
   }
   if (!wide) {
-    // the client signs on site: the bar stays until a signature is drawn, then it is away until cleared / left
-    await h.go("/estimate/e6");
+    // the client signs on site: the bar stays until a signature is drawn, then it is away until cleared / left.
+    // A visit at «Работа» signs with the same pad (the estimate's card has no bar since #1412: its main button is pinned instead)
+    await p.evaluate(() => {
+      const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+      const v = raw.db.visits.find((x) => x.id === "v1");
+      v.step = "working";
+      v.checklist = [];
+      localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+    });
+    await h.go("/visit/v1");
     await p.waitForTimeout(600);
     const pad = p.getByTestId("signature-pad").locator("visible=true").first();
-    h.expect((await pad.count()) === 1, "the estimate e6 shows the signature pad on site");
+    h.expect((await pad.count()) === 1, "the visit v1 at «Работа» shows the signature pad");
     h.expect((await bars()) === 1, "the pad is there, nothing drawn yet: the bar stays (review #274)");
     await pad.scrollIntoViewIfNeeded();
     const b = await pad.boundingBox();
@@ -79,10 +87,10 @@ exports.run = async (h) => {
     h.expect((await bars()) === 1, "cleared: the bar is back");
     await draw();
     h.expect((await bars()) === 0, "drawn again: away");
-    // leaving the estimate inside the app (no reload): the bar is back on the next screen
+    // leaving the visit inside the app (no reload): the bar is back on the next screen
     await p.getByRole("button", { name: /^Назад/ }).locator("visible=true").first().click();
     await p.waitForTimeout(700);
-    h.expect(!/^\/estimate\//.test(new URL(p.url()).pathname), `left the estimate in the app (${p.url()})`);
+    h.expect(!/^\/visit\//.test(new URL(p.url()).pathname), `left the visit in the app (${p.url()})`);
     h.expect((await bars()) === 1, "the bar is back on the next screen");
 
     // a tab over an unsaved form (a new lead → «this number is already there» → its card): asked first, «Остаться» keeps the form

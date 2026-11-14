@@ -3,9 +3,9 @@
  * a sent estimate (EST-0006) as the director, every view, by testID:
  * - no action of the card stands on the page: «Изменить», «Как видит клиент», «Сохранить как шаблон», «PDF», «Отозвать ссылку»
  *   are in «⋯» only;
- * - the main button «Отправить клиенту»: on a phone pinned at the bottom (ActionBar, no tab bar under it), from 820 at the top of
+ * - the main button «Отправить ещё раз» (the estimate is sent already): on a phone pinned at the bottom (ActionBar, no tab bar under it), from 820 at the top of
  *   the content (no bar);
- * - «⋯» opens the menu in Б4's order: Изменить · Как видит клиент · Сохранить как шаблон · PDF · Отозвать ссылку — the dangerous one last;
+ * - «⋯» opens the menu in Б4's order: Изменить · PDF · Как видит клиент · Сохранить как шаблон… · Отозвать ссылку — the dangerous one last;
  * - «Отозвать ссылку» runs at once with the toast «Отменить» (it can be undone — rule 5, no dialog).
  */
 exports.run = async (h) => {
@@ -22,6 +22,11 @@ exports.run = async (h) => {
 
   // the main button: pinned on a phone, at the top of the content from 820
   await tid("est-send").waitFor({ timeout: 3000 });
+  h.expect(/Отправить ещё раз/.test((await tid("est-send").textContent()) || ""), "a sent estimate: «Отправить ещё раз», not «Отправить клиенту»");
+  if (!phone) {
+    const btn = await tid("est-send").boundingBox();
+    h.expect(btn && btn.width < 400, `from 820 the button is as wide as its words (${btn && btn.width})`);
+  }
   h.expect((await visible("est-view-actionbar")) === phone, phone ? "the main button is in the pinned bar" : "no pinned bar from 820");
   if (phone) {
     const bar = await tid("est-view-actionbar").boundingBox();
@@ -37,7 +42,7 @@ exports.run = async (h) => {
   const order = await p.evaluate(() =>
     [...document.querySelectorAll('[data-testid^="est-act-"]')].filter((e) => e.offsetParent !== null).map((e) => ({ id: e.getAttribute("data-testid"), y: e.getBoundingClientRect().y })).sort((a, b) => a.y - b.y).map((x) => x.id),
   );
-  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-edit", "est-act-client", "est-act-template", "est-act-pdf", "est-act-revoke"]), `the menu in Б4's order: ${order.join(", ")}`);
+  h.expect(JSON.stringify(order) === JSON.stringify(["est-act-edit", "est-act-pdf", "est-act-client", "est-act-template", "est-act-revoke"]), `the menu in Б4's order: ${order.join(", ")}`);
   await h.shot("menu");
 
   // «Отозвать ссылку»: at once, with «Отменить»
