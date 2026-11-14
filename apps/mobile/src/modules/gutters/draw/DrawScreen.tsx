@@ -1053,7 +1053,7 @@ export default function DrawScreen() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer view={viewNow} live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">

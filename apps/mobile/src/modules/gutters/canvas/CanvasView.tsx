@@ -7,15 +7,20 @@ import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
-import { applyTf, endGesture, panFrame, pinchFrame, settle, type LiveState, type Pending, type Tf } from "./gestureState";
+import { applyTf, endGesture, panFrame, pinchFrame, settleDone, settleLive, type LiveState, type Pending, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
-export interface Live { tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number> }
+export interface Live {
+  tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number>;
+  /** the committed view the live transform is against (k, ox, oy; k 0 — none yet), written by the settle on the UI thread in ONE step with
+   * the live transform (#1403): the grid layer (#1434) draws the view on the screen from both, and never sees a new view with an old transform */
+  vk: SharedValue<number>; vox: SharedValue<number>; voy: SharedValue<number>;
+}
 
 export function useLive(): Live {
-  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0) };
+  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0), vk: useSharedValue(0), vox: useSharedValue(0), voy: useSharedValue(0) };
 }
 
 /** the committed view after a live transform: p' = f + s·(p − f) + t */
@@ -33,7 +38,7 @@ export function commitView(v: PlanView, tx: number, ty: number, s: number, fx: n
 export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number }; onEdge?: () => void }
 
 export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard) {
-  const { tx, ty, s, fx, fy } = live;
+  const { tx, ty, s, fx, fy, vk, vox, voy } = live;
   // the gesture's callbacks may be the ones made at an earlier render: they read the view of now from a ref
   const now = useRef({ view, onView, zoom });
   now.current = { view, onView, zoom };
@@ -55,16 +60,28 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   };
   /** the view last settled: the same view again is only another render of the screen, never a reason to touch the live transform (#1403) */
   const settled = useRef<PlanView | null>(null);
-  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it */
+  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it — on the UI thread (#1403) */
   const settleView = (v: PlanView) => {
     if (settled.current === v) return;
-    const r = settle({ S: s.value, Tx: tx.value, Ty: ty.value }, pending.current, v, settled.current ?? undefined);
+    const r = settleDone(pending.current, v);
     settled.current = v;
     pending.current = r.pending;
-    baseK.value = v.k;
-    tx.value = r.live.Tx;
-    ty.value = r.live.Ty;
-    s.value = r.live.S;
+    scheduleOnUI(applySettle, v.k, v.ox, v.oy, r.done);
+  };
+  /**
+   * The settle on the UI thread, between two frames of the fingers (#1403): the live transform is read and written there in one step, so no
+   * frame of a pinch that goes on is lost (on the JS thread it was read, then written back a moment later — the frames between were dropped:
+   * a jump). The committed view is written in the same step: the grid never draws a new view under an old transform, or the other way round.
+   */
+  const applySettle = (k: number, ox: number, oy: number, done: Tf | null) => {
+    "worklet";
+    const next = settleLive({ S: s.value, Tx: tx.value, Ty: ty.value }, done);
+    vk.value = k;
+    vox.value = ox;
+    voy.value = oy;
+    tx.value = next.Tx;
+    ty.value = next.Ty;
+    s.value = next.S;
     fx.value = 0;
     fy.value = 0;
   };
@@ -73,8 +90,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const nPinch = useSharedValue(0);
   const nPan = useSharedValue(0);
   const edge = useSharedValue<-1 | 0 | 1>(0);
-  /** the scale limits as factors of the view on the screen are kMin / baseK and kMax / baseK (the live scale is against that view) */
-  const baseK = useSharedValue(view.k);
+  /** the scale limits as factors of the view on the screen are kMin / vk and kMax / vk (the live scale is against that view) */
   const kMin = useSharedValue(zoom ? zoom.lim.kMin : 0);
   const kMax = useSharedValue(zoom ? zoom.lim.kMax : 0);
   useLayoutEffect(() => {
@@ -106,23 +122,37 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     const st = state();
     put(st, endGesture(st));
   };
-  const pan = usePanGesture({
-    minPointers: panPointers,
-    onUpdate: (e) => {
-      "worklet";
-      const st = state();
-      put(st, panFrame(st, e, panPointers));
-    },
-    onDeactivate: end,
-  });
-  const pinch = usePinchGesture({
-    onUpdate: (e) => {
-      "worklet";
-      const st = state();
-      put(st, pinchFrame(st, e, kMax.value > 0 && baseK.value > 0 ? { lo: kMin.value / baseK.value, hi: kMax.value / baseK.value } : undefined));
-    },
-    onDeactivate: end,
-  });
+  // The configs are made ONCE (again only if `panPointers` changes): RNGH 3 keys its handler on the config object
+  // (useClonedAndRemappedConfig → useGesture's effect), and a new object on every render of the screen sent the config to the native
+  // handler and registered it again on every render — in the middle of a pinch too (#1403: «пальцы отлипают»). What the callbacks hold is
+  // stable: shared values, refs, and `commit` / `markMulti` / `edgeTick`, which read the refs.
+  const panConfig = useMemo(
+    () => ({
+      minPointers: panPointers,
+      onUpdate: (e: Parameters<typeof panFrame>[1]) => {
+        "worklet";
+        const st = state();
+        put(st, panFrame(st, e, panPointers));
+      },
+      onDeactivate: end,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panPointers],
+  );
+  const pinchConfig = useMemo(
+    () => ({
+      onUpdate: (e: Parameters<typeof pinchFrame>[1]) => {
+        "worklet";
+        const st = state();
+        put(st, pinchFrame(st, e, kMax.value > 0 && vk.value > 0 ? { lo: kMin.value / vk.value, hi: kMax.value / vk.value } : undefined));
+      },
+      onDeactivate: end,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const pan = usePanGesture(panConfig);
+  const pinch = usePinchGesture(pinchConfig);
   const both = useSimultaneousGestures(pan, pinch);
   // one object for the screen's whole life (the gestures themselves are kept by the library): a new object every render made the
   // canvas settle again after every render (#1403); `settleView` reads what it needs from refs and shared values
