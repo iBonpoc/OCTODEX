@@ -17,7 +17,7 @@ describe("unit:team — the invitation", () => {
     expect(dbRoleFor("director", "sub")).toBe("subcontractor");
   });
   it("the link carries the token once, on our site", () => {
-    expect(inviteLink("https://octodex.expo.app/", "abc_DEF-123")).toBe("https://octodex.expo.app/auth/invite?token=abc_DEF-123");
+    expect(inviteLink("https://gorix.expo.app/", "abc_DEF-123")).toBe("https://gorix.expo.app/auth/invite?token=abc_DEF-123");
     expect(isInviteToken("a".repeat(48))).toBe(true);
     expect(isInviteToken("short")).toBe(false);
     expect(isInviteToken("x".repeat(30) + "<script>")).toBe(false);

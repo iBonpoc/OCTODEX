@@ -4,7 +4,7 @@
 // INTAKE_IP_SECRET (HMAC of the IP; without it no IP is kept and the page's requests are refused) and TURNSTILE_SECRET
 // (Cloudflare Turnstile; without it the captcha is «none» and a form that requires it refuses everything).
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
-import { handleIntake, type IntakeCall } from "./handler.ts";
+import { SITE_ORIGIN, handleIntake, type IntakeCall } from "./handler.ts";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -23,8 +23,6 @@ const hex = (b: ArrayBuffer) => [...new Uint8Array(b)].map((x) => x.toString(16)
 const hmacKey = IP_SECRET
   ? crypto.subtle.importKey("raw", enc.encode(IP_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"])
   : null;
-// the app's own site and the PR previews (https://octodex--<id>.expo.app); nothing else posts a request
-const ORIGIN = /^https:\/\/octodex(--[a-z0-9-]+)?\.expo\.app$/;
 
 Deno.serve(async (req: Request) => {
   try {
@@ -58,7 +56,8 @@ async function serve(req: Request): Promise<Response> {
         : null,
       sha256: async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s))),
       hmac: hmacKey ? async (s) => hex(await crypto.subtle.sign("HMAC", await hmacKey, enc.encode(s))) : null,
-      allowedOrigin: (o) => ORIGIN.test(o),
+      // the app's own sites and their PR previews (handler.ts SITE_ORIGIN); nothing else posts a request
+      allowedOrigin: (o) => SITE_ORIGIN.test(o),
       // only Cloudflare's header: x-forwarded-for may carry what the client wrote (director's check of #421)
       ipHeaders: ["cf-connecting-ip"],
       now: () => Date.now(),
