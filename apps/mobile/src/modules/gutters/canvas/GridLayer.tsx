@@ -4,32 +4,22 @@
  * a pan shows the grid over the whole screen at every frame — on an iPhone too, where a scaled Svg is clipped to its own box
  * (#1405 relied on `overflow: visible`: build 1405 showed the grid as a small rectangle). ids «grid-minor» / «grid-major» kept.
  */
-import { useLayoutEffect } from "react";
 import { View } from "react-native";
-import Animated, { useAnimatedProps, useDerivedValue, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedProps, useDerivedValue } from "react-native-reanimated";
 import Svg, { Path } from "react-native-svg";
 import { drawing } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import type { Live } from "./CanvasView";
 import { gridPaths, liveView } from "./grid";
-import type { View as PlanView } from "./scene";
 
 const APath = Animated.createAnimatedComponent(Path);
 
-export function GridLayer({ view, live, size, minPx, testID }: { view: PlanView; live: Live; size: { w: number; h: number }; /** a minor cell is never finer than this on the screen, px */ minPx: number; testID?: string }) {
+export function GridLayer({ live, size, minPx, testID }: { live: Live; size: { w: number; h: number }; /** a minor cell is never finer than this on the screen, px */ minPx: number; testID?: string }) {
   const { c } = useTheme();
-  const { tx, ty, s, fx, fy } = live;
-  // the committed view, as the UI thread sees it: written in the same commit in which the canvas drops its live transform
-  const k = useSharedValue(view.k);
-  const ox = useSharedValue(view.ox);
-  const oy = useSharedValue(view.oy);
-  useLayoutEffect(() => {
-    k.value = view.k;
-    ox.value = view.ox;
-    oy.value = view.oy;
-  }, [view, k, ox, oy]);
+  // the committed view (vk, vox, voy) and the live transform: both written by the canvas's settle in one step on the UI thread (#1403)
+  const { tx, ty, s, fx, fy, vk, vox, voy } = live;
   const paths = useDerivedValue(() => {
-    const v = liveView(k.value, ox.value, oy.value, s.value, tx.value, ty.value, fx.value, fy.value);
+    const v = liveView(vk.value, vox.value, voy.value, s.value, tx.value, ty.value, fx.value, fy.value);
     return gridPaths(v.k, v.ox, v.oy, size.w, size.h, minPx);
   });
   const minor = useAnimatedProps(() => ({ d: paths.value.minor }));
