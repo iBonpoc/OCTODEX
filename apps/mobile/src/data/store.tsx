@@ -126,6 +126,7 @@ import {
   type Photo,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
+import { cleanName } from "@/features/nameAsk";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, templatesOfActiveModules, visitSettingsOf } from "@/features/checklist";
 
 /** every action's «Отменить» is a GuardedUndo (#1261): true — back, false — too late, undefined — nothing to take back */
@@ -1984,7 +1985,7 @@ export function StoreProvider({
       setMyName: (name) => {
         const me = dbRef.current.me;
         // an empty name is never written: it stays as it is
-        const clean = name.trim().replace(/\s+/g, " ") || (dbRef.current.members.find((m) => m.id === me)?.name ?? "");
+        const clean = cleanName(name) || (dbRef.current.members.find((m) => m.id === me)?.name ?? "");
         const init = clean.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
         return mutate("me.name", (d) => ({ ...d, members: d.members.map((m) => (m.id === me ? { ...m, name: clean, initials: init } : m)) }), { k: "me.name", name: clean });
       },
