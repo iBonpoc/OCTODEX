@@ -2,8 +2,10 @@
  * #1633: a sign-out leaves no copy of the person's company on the phone. What goes: the person's cloud caches
  * (`octo.cloud.v1.<company>.<me>`, the older person-less `octo.cloud.v1.<company>` whose «me» is theirs) and their kept
  * copies (`octo.broken.<key>.<time>`, #1189) — the server has the company, the next sign-in loads it again.
+ * The person's estimate drafts of the company go too (`octo.drafts.v1.<company>.<me>`, #1662: the client's data is in
+ * them); the sign-out asks first when one is not saved (countUnsentDrafts — the screen's «Не отправлено: N»).
  * What stays (rule 6, nothing only the phone has is lost): the outbox and the refused changes (only their owner sends
- * them, outboxOwner.ts), estimate drafts (#1658), the demo — and a cache that still holds what only the phone knows: a
+ * them, outboxOwner.ts), the demo (and its drafts) — and a cache that still holds what only the phone knows: a
  * photo or a receipt the cloud refused (its file here and why, photoUpload.ts keepPhotoLocal / keepReceiptLocal: «Повторить»
  * needs them; #1659). Account deletion wipes more (deleteAccount.ts).
  * The mark goes first (before the sign-out): an app killed anywhere after it wipes on the next start — never the
@@ -13,17 +15,50 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CLOUD_CACHE_PREFIX } from "@/data/cacheKey";
 import { REJECTED_KEY } from "@/data/outboxOwner";
 import { BROKEN_PREFIX, forgetPendingWrites } from "@/data/persist";
+import { DRAFT_DAYS, DRAFTS_PREFIX, draftWorthKeeping, type EstimateDraft } from "@/features/estimateDraft";
 
 /** the mark of a sign-out wipe not finished: the person's id */
 export const SIGNOUT_WIPE_KEY = "octo.signoutWipe.v1";
 
 /** a cache key of `me` (this version's) — or an older person-less one (`legacy`: whose is read from the record) */
 function cacheOf(k: string, me: string, gone: (companyId: string) => boolean): "mine" | "legacy" | null {
+  // #1662: my drafts of the company (`<company>.<me>`); the demo's list (`demo`) is not a company's
+  if (k.startsWith(DRAFTS_PREFIX)) return draftsCompany(k, me) !== null && gone(draftsCompany(k, me)!) ? "mine" : null;
   if (!k.startsWith(CLOUD_CACHE_PREFIX) || k === REJECTED_KEY) return null;
   const rest = k.slice(CLOUD_CACHE_PREFIX.length);
   const dot = rest.indexOf(".");
   if (dot < 0) return rest && gone(rest) ? "legacy" : null;
   return rest.slice(dot + 1) === me && gone(rest.slice(0, dot)) ? "mine" : null;
+}
+
+/** the company of `me`'s drafts key (`octo.drafts.v1.<company>.<me>`); null — not mine, or the demo's */
+function draftsCompany(k: string, me: string): string | null {
+  const rest = k.slice(DRAFTS_PREFIX.length);
+  const dot = rest.indexOf(".");
+  return dot > 0 && rest.slice(dot + 1) === me ? rest.slice(0, dot) : null;
+}
+
+/**
+ * #1662: how many of `me`'s estimate drafts are not saved (in every company — the sign-out takes them all): a fresh one
+ * with a line or a title (estimateDraft.ts findDraft: a saved estimate takes its draft out). Never throws: a draft list
+ * that cannot be read counts as one (asked rather than wiped silently).
+ */
+export async function countUnsentDrafts(me: string, s: WipeStore = deviceStore, now = Date.now()): Promise<number> {
+  let n = 0;
+  try {
+    for (const k of await s.getAllKeys()) {
+      if (!k.startsWith(DRAFTS_PREFIX) || draftsCompany(k, me) === null) continue;
+      try {
+        const list = JSON.parse((await s.getItem(k)) ?? "[]") as EstimateDraft[];
+        n += Array.isArray(list) ? list.filter((d) => now - Date.parse(d.at) < DRAFT_DAYS * 86_400_000 && draftWorthKeeping(d)).length : 1;
+      } catch {
+        n += 1;
+      }
+    }
+  } catch {
+    return n;
+  }
+  return n;
 }
 
 /**
