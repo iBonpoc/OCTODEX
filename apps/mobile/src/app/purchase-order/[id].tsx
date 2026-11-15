@@ -104,7 +104,7 @@ export default function PurchaseOrderScreen() {
       companyForPortal(db, store.companyName ?? APP_NAME),
       { lang: "en" },
     );
-    saveEstimatePdf(html, `PO ${found.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(html, `PO ${found.number ?? ""}`.trim()).catch(() => toast.show(t("err.pdfSave")));
     back();
   };
   const cancel = () => {
