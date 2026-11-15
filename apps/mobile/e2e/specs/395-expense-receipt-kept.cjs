@@ -1,5 +1,5 @@
 /**
- * e2e 393 — a receipt of an expense is kept (#1538, G-photo-path Ф-5). The receipt goes with the expense as its own file
+ * e2e 395 — a receipt of an expense is kept (#1538, G-photo-path Ф-5). The receipt goes with the expense as its own file
  * (receiptFileId); after a reload the card still says «чек есть»; a phone that has only the cloud's copy (no local
  * file — another phone, or the company read again) shows it too, not «Без чека». Every view. Waits on what it checks.
  */
