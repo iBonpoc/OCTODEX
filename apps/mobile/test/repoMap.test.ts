@@ -123,6 +123,28 @@ describe("loadCompanyDB — other fields (wave П-1)", () => {
     ]);
     expect(db.visits[0]!.photos).toEqual([{ id: "f1", kind: "after", uri: undefined }]);
   });
+  it("#1538: an expense's receipt — taken / refused / on its way; receipts are not the client's files", async () => {
+    rows.files = [
+      ...(rows.files ?? []),
+      { id: "r1", company_id: CO, kind: "receipt", job_id: "j1", storage_key: "co-1/r1.jpg", upload_status: "uploaded", created_at: "2026-11-05T12:00:00Z" },
+      { id: "r2", company_id: CO, kind: "receipt", job_id: null, storage_key: null, upload_status: "failed", created_at: "2026-11-05T12:00:00Z" },
+      { id: "r3", company_id: CO, kind: "receipt", job_id: null, storage_key: null, upload_status: "local", created_at: "2026-11-05T12:00:00Z" },
+    ];
+    rows.expenses = [
+      { id: "x1", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: "r1", created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
+      { id: "x2", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: "r2", created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
+      { id: "x3", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: "r3", created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
+      { id: "x4", company_id: CO, vendor: "Depot", category: "materials", amount_cents: 100, receipt_file_id: null, created_at: "2026-11-05T12:00:00Z", created_by: "u1" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    const x = (id: string) => db.expenses!.find((e) => e.id === id)!;
+    expect(x("x1").receiptFileId).toBe("r1");
+    expect(x("x1").receiptFailed).toBeUndefined();
+    expect(x("x2")).toMatchObject({ receiptFileId: "r2", receiptFailed: "refused" });
+    expect(x("x3").receiptFileId).toBeUndefined();
+    expect(x("x4").receiptFileId).toBeUndefined();
+    expect((db.files ?? []).some((f) => f.kind === "receipt")).toBe(false);
+  });
   it("activity: the person and the direction", async () => {
     const db = await loadCompanyDB(CO, "u1");
     expect(db.activities[0]).toMatchObject({ contactId: "k1", direction: "in" });

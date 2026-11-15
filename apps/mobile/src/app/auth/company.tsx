@@ -7,7 +7,7 @@ import { legalErrorKey } from "@/features/legal";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Card, Screen } from "@/ui/surfaces";
+import { FieldGroup, Screen } from "@/ui/surfaces";
 import { ClosedCompanies } from "@/features/ClosedCompany";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
@@ -36,7 +36,7 @@ export default function CompanySetup() {
       <View testID="company-brand" style={{ alignItems: "center", paddingVertical: space[4] }}>
         <BrandMark size={component.brand.mark} screenHasPrimary />
       </View>
-      <Card>
+      <FieldGroup under testID="company-fields">
         <TextField type="company" value={name} onChangeText={setName} placeholder={t("company.name")} icon="home2" />
         <T v="caption" tone="mut">
           {t("company.hint")}
@@ -61,7 +61,7 @@ export default function CompanySetup() {
             else router.replace("/auth/trade");
           }}
         />
-      </Card>
+      </FieldGroup>
     </Screen>
   );
 }
