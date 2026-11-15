@@ -14857,4 +14857,56 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_users_avatar_o
               and not has_function_privilege('authenticated', 'app.tg_files_avatar_gone()', 'EXECUTE'), 'T244 rule 18: the trigger functions for nobody');
 \echo 'T244 a profile picture is a photo of one''s own ok'
 
+-- T246 (#1646): a subcontractor adds photos of a visit of theirs that counts, tied at most to its job, or a photo
+-- of their own; nothing of a client, a job alone, another kind, an old or a cancelled visit (red before 20261115170000)
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f2460000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now() - interval '20 days', now() - interval '20 days' + interval '1 hour'),
+  ('f2460000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now() + interval '2 days', null);
+update public.visits set status = 'cancelled' where id = 'f2460000-0000-4000-8000-000000000002';
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002'),
+  ('ca000000-0000-0000-0000-000000000000', 'f2460000-0000-4000-8000-000000000001', 'a5600000-0000-4000-8000-000000000002'),
+  ('ca000000-0000-0000-0000-000000000000', 'f2460000-0000-4000-8000-000000000002', 'a5600000-0000-4000-8000-000000000002')
+  on conflict do nothing;
+:as_sub56
+-- as the app sends a visit photo (cloud/ops.ts photo.add)
+insert into public.files (id, company_id, kind, visit_id, job_id) values
+  ('f2460000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000001');
+insert into public.files (id, company_id, kind) values ('f2460000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f2460000-0000-4000-8000-0000000000a%'$q$) = 2,
+              'T246 the subcontractor adds a photo of his visit and a photo of his own');
+select tst.fails($q$insert into public.files (company_id, kind, visit_id, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001')$q$,
+                 'T246 not a photo of the client');
+select tst.fails($q$insert into public.files (company_id, kind, job_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001')$q$,
+                 'T246 not a photo of the job without his visit');
+select tst.fails($q$insert into public.files (company_id, kind, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'document', 'f1a00000-0000-0000-0000-000000000001')$q$,
+                 'T246 not a document');
+select tst.fails($q$insert into public.files (company_id, kind, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'f2460000-0000-4000-8000-000000000001')$q$,
+                 'T246 not a visit older than 14 days');
+select tst.fails($q$insert into public.files (company_id, kind, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'f2460000-0000-4000-8000-000000000002')$q$,
+                 'T246 not a cancelled visit');
+select tst.fails($q$update public.files set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'f2460000-0000-4000-8000-0000000000a1'$q$,
+                 'T246 his photo is not moved onto the client');
+select tst.fails($q$update public.files set job_id = 'e1a00000-0000-0000-0000-000000000001' where id = 'f2460000-0000-4000-8000-0000000000a2'$q$,
+                 'T246 his own photo is not put on the job');
+:as_tech_a
+-- a tech as before: a photo of the job of his visit
+insert into public.files (id, company_id, kind, job_id) values ('f2460000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2460000-0000-4000-8000-0000000000b1'$q$) = 1, 'T246 a tech still adds a job photo');
+:as_super
+-- the visit falls out of the window while the photo waits in the queue: the upload is still recorded
+update public.visits set starts_at = now() - interval '20 days', ends_at = now() - interval '20 days' + interval '3 hours' where id = 'f1a00000-0000-0000-0000-000000000001';
+:as_sub56
+update public.files set upload_status = 'uploaded', storage_key = 'ca000000-0000-0000-0000-000000000000/f2460000-0000-4000-8000-0000000000a1.jpg'
+  where id = 'f2460000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select upload_status = 'uploaded' from public.files where id = 'f2460000-0000-4000-8000-0000000000a1'),
+              'T246 a queued photo of a visit just out of the window is still marked uploaded');
+update public.visits set starts_at = now(), ends_at = now() + interval '3 hours' where id = 'f1a00000-0000-0000-0000-000000000001';
+delete from public.visit_assignees where user_id = 'a5600000-0000-4000-8000-000000000002'
+  and visit_id in ('f1a00000-0000-0000-0000-000000000001', 'f2460000-0000-4000-8000-000000000001', 'f2460000-0000-4000-8000-000000000002');
+select tst.ok(not has_function_privilege('anon', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE'), 'T246 rule 18: not for anon');
+\echo 'T246 a subcontractor adds only photos of his own visits ok'
+
 \echo 'ALL TESTS PASSED'
