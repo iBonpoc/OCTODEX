@@ -14,6 +14,7 @@ import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { StuckOps } from "@/features/StuckOps";
+import { useSignOutAsk } from "@/features/SignOutAsk";
 
 /**
  * «Профиль и аккаунт» (spec 26, founder 07.11: the profile card and «Мои настройки» led to the same screen).
@@ -25,6 +26,7 @@ export default function Profile() {
   const { role, setRole, mode, companyName, availableRoles, queue, syncError, refresh, loading, db, setMyName } = useStore();
   const auth = useAuth();
   const toast = useToast();
+  const signOutAsk = useSignOutAsk();
   // my name (#1606): what colleagues see and what the company's signature carries; saved at once, offline through the queue
   const myName = db.members.find((m) => m.id === db.me)?.name ?? "";
   const [name, setName] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function Profile() {
             />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
-              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
           </>
         ) : auth.session ? (
@@ -82,7 +84,7 @@ export default function Profile() {
             <ClosedCompanies />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("company.create")} icon="plus" onPress={() => router.push("/auth/company")} />
-              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
           </>
         ) : (
@@ -121,6 +123,7 @@ export default function Profile() {
           <ListRow title={t("acct.title")} subtitle={t("acct.row")} onPress={() => router.push("/settings/delete-account")} />
         </View>
       </Card>
+      {signOutAsk.sheet}
     </Screen>
   );
 }
