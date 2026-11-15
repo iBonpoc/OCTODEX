@@ -79,7 +79,7 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
           // as the estimate's screen: the client and the address under the title
           subtitle={estimateSubtitle(db, openE)}
           outside={panel.outside}
-          actions={more}
+          more={more}
           onOpen={panel.full}
           onClose={panel.close}
         >
