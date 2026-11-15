@@ -3,7 +3,8 @@
  * decoder is switched off (window.__e2ePhotoDecodeFail): the photo picked with «＋ → Фото» stays on the visit with
  * «Готовится» (an info note, not «не загрузились»), no «Повторить», its reason says it goes on its own. The phone
  * tries again by itself (the page's clock moved on); 5 rounds and a day — «не открывается» with «Подготовить снова»;
- * the decoder back — that tap makes the file anew and the mark goes (a new file, not the picked one).
+ * the decoder back — that tap makes the file anew and the mark goes (a new file, not the picked one). A receipt that
+ * cannot be made anew is not lost: the expense is saved with it «preparing» and its card says «Готовится».
  * Every view. Waits on what it checks; ids by testID.
  */
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
@@ -29,6 +30,29 @@ exports.run = async (h) => {
       )
       .catch(() => h.expect(false, what));
 
+  // ---- a receipt: not made anew — the expense keeps it «preparing», not lost
+  await h.go("/expense/new");
+  const rcpt = vis("expense-photo");
+  await rcpt.waitFor({ timeout: 8000 });
+  await p.evaluate(() => (window.__e2ePhotoDecodeFail = true));
+  const [ch2] = await Promise.all([p.waitForEvent("filechooser"), rcpt.click()]);
+  await ch2.setFiles({ name: "receipt.png", mimeType: "image/png", buffer: PNG });
+  await p.locator('img[src^="blob:"]').first().waitFor({ timeout: 8000 });
+  await p.getByTestId("field-amount").locator("input").locator("visible=true").first().fill("39.91");
+  await vis("expense-save").click();
+  await p
+    .waitForFunction(
+      () => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.expenses ?? []).some((y) => y.amountCents === 3991 && y.receiptFailed === "preparing" && y.receiptUri && y.receiptFileId),
+      null,
+      { timeout: 8000 },
+    )
+    .catch(() => h.expect(false, "the expense is saved with its receipt «preparing» (kept here, its row for the cloud)"));
+  await h.go("/money");
+  const card = p.locator('[data-testid="list-card"]').locator("visible=true").filter({ hasText: "$39.91" }).first();
+  await card.waitFor({ timeout: 8000 });
+  h.expect(/Готовится/.test(await card.innerText()) && !/Без чека/.test(await card.innerText()), "the card: «Готовится», not «Без чека»");
+
+  // ---- a visit's photo
   await h.go("/today");
   await h.seed("octo.role.v1", "tech");
   const db = await h.db();

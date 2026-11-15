@@ -13,7 +13,7 @@ import { useToast } from "@/ui/overlays";
 import { FieldGroup, Screen } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
 import { expenseVendors } from "@/features/suppliers";
-import { shrinkPicked } from "@/data/photoShrink";
+import { prepPicked, type PickedPhoto } from "@/data/photoShrink";
 
 const CATS: ExpenseCategory[] = ["materials", "fuel", "dump", "tools", "other"];
 /** the usual vendors after the company's own suppliers (spec 36 §7) */
@@ -30,7 +30,9 @@ export default function NewExpense() {
   const [category, setCategory] = useState<ExpenseCategory>("materials");
   const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
   const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
-  const [photo, setPhoto] = useState<string | undefined>();
+  // #1558: the receipt made anew, or (not made yet) its original kept on this phone only — «preparing»
+  const [picked, setPicked] = useState<PickedPhoto | undefined>();
+  const photo = picked ? ("uri" in picked ? picked.uri : picked.preparing.uri) : undefined;
   const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100);
   const ok = Number.isFinite(cents) && cents > 0;
   const form = useRequiredForm();
@@ -38,8 +40,8 @@ export default function NewExpense() {
   const pick = async () => {
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
     // the receipt made smaller before it is kept (#642)
-    const uri = await shrinkPicked(res);
-    if (uri) setPhoto(uri);
+    const got = await prepPicked(res);
+    if (got) setPicked(got);
   };
   const jobs = [
     { key: "none", label: t("exp.noJob") },
@@ -66,7 +68,7 @@ export default function NewExpense() {
         testID="expense-save"
         onPress={() =>
           form.submit(ok ? [] : [{ id: "amount", text: t("form.req.amount") }], () => {
-          const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor, category, amountCents: cents, receiptUri: photo });
+          const undo = addExpense({ jobId: jobId === "none" ? null : jobId, vendor, category, amountCents: cents }, picked);
           toast.show(online ? t("exp.saved", { amount: money(cents) }) : t("offline.queued"), undo);
           back();
           })
