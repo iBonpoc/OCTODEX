@@ -214,6 +214,7 @@ export const ru = {
   "visit.call": "Позвонить",
   "visit.navigate": "Маршрут",
   "visit.message": "Написать",
+  "visit.bar.expense": "Расход",
   "visit.photosBefore": "Фото до",
   "visit.photosAfter": "Фото после",
   "visit.checklist": "Чек-лист",

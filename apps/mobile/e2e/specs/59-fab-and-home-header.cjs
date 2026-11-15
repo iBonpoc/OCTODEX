@@ -196,11 +196,11 @@ exports.run = async (h) => {
   const mine = tdb.visits.find((v) => v.kind !== "inspection" && ((v.assigneeIds ?? []).includes(tdb.me) || v.techId === tdb.me));
   if (mine) {
     await h.go(`/visit/${mine.id}`);
-    await plus().click();
-    body = await sheetText();
-    h.expect(await has("photo", "lead", "expense"), "tech visit «＋»: Фото · Лид · Расход");
-    await h.shot("visit-sheet");
-    await closeSheet();
+    await vis("visit-screen").first().waitFor({ timeout: 8000 });
+    // the visit has no «＋» (#1395 group 3): «Расход» and «Фото» are its pinned panel (e2e 409)
+    h.expect((await vis("fab").count()) + (await vis("fab-header").count()) === 0, "tech visit: no «＋»");
+    h.expect((await vis(wide ? "visit-actions-wide" : "visit-actionbar").count()) === 1, "tech visit: the panel with «Расход» and «Фото»");
+    await h.shot("visit-panel");
   }
 
   // no horizontal scroll with the «＋»

@@ -1,10 +1,11 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, size } from "@octo/design-tokens";
+import { useDevice } from "@/theme/ThemeProvider";
 import { jobProfit, useStore, visitContext } from "@/data/store";
 import { canSeeProfit } from "@/nav/roles";
 import { haptics } from "@/ui/haptics";
@@ -29,7 +30,10 @@ import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitCh
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
 import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
+import { ActionBar } from "@/ui/actionBar";
+import { fabItems } from "@/nav/sections";
+import { useVisitPhoto } from "@/features/useVisitPhoto";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
 import { canTakeVisitPayment } from "@/features/moneyLists";
@@ -45,6 +49,10 @@ export default function VisitScreen() {
   const { t, time, money } = useI18n();
   const { c } = useTheme();
   const toast = useToast();
+  const { wide } = useDevice();
+  const pickPhoto = useVisitPhoto();
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const [method, setMethod] = useState<PaymentMethod>("card");
   // the «Не заполнено» sheet before the next step (docs/specs/08 §4): which step asks, and the signature it holds
   const [ask, setAsk] = useState<null | { step: "work" } | { step: "done" } | { step: "sign"; path: string }>(null);
@@ -140,10 +148,38 @@ export default function VisitScreen() {
     if (customer && main) return setWriting({ owner: { type: "customer", id: customer.id }, person: main });
     if (tel) Linking.openURL(smsWithBody(tel, "")).catch(() => {});
   };
+  // «Расход» and «Фото» of the technician stay pinned at the bottom (DS §8.9, #1395 group 3); the estimate and the lead are in «⋯»
+  const items = fabItems("visit", store.role, { visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" });
+  const panel = items.some((i) => i.id === "photo" || i.id === "expense");
+  const moreItems = items
+    .filter((i) => i.id === "estimate" || i.id === "lead")
+    .map((i) => ({ key: i.id, label: t(i.id === "estimate" ? "path.estimateNew" : "path.leadNew"), icon: (i.id === "estimate" ? "invoice" : "user") as "invoice" | "user", testID: `visit-act-${i.id}` }));
+  const more = (
+    <View ref={moreRef} collapsable={false} testID="visit-more">
+      <IconButton
+        icon="more"
+        label={`${t("lead.more")}: ${customer?.name ?? t("visit.title")}`}
+        onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))}
+      />
+    </View>
+  );
+  const expenseBtn = (bar: boolean) => (
+    <Button label={t("visit.bar.expense")} icon="dollar" variant="secondary" size={bar ? "bar" : "md"} full={bar} testID="visit-bar-expense" onPress={() => router.push("/expense/new")} />
+  );
+  const photoBtn = (bar: boolean) => (
+    <Button label={t("photo.addShort")} icon="camera" variant="secondary" size={bar ? "bar" : "md"} full={bar} testID="visit-bar-photo" onPress={() => void pickPhoto(v.id)} />
+  );
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
-    <Screen testID="visit-screen" title={customer?.name ?? t("visit.title")} back={back} subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
+    <Screen
+      testID="visit-screen"
+      title={customer?.name ?? t("visit.title")}
+      back={back}
+      subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`}
+      right={moreItems.length ? more : undefined}
+      footer={panel && !wide ? <ActionBar testID="visit-actionbar" main={photoBtn(true)} second={expenseBtn(true)} /> : undefined}
+    >
       <RelatedBlock of={{ type: "visit", id: v.id }} />
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -167,6 +203,16 @@ export default function VisitScreen() {
           <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${addr}`)} />
         </RowView>
       </Card>
+
+      {/* from 820 the same two buttons stand in the page's column (DS §8.9) */}
+      {panel && wide ? (
+        <View testID="visit-actions-wide">
+          <RowView style={{ flexWrap: "wrap" }}>
+            {expenseBtn(false)}
+            {photoBtn(false)}
+          </RowView>
+        </View>
+      ) : null}
 
       {office ? <WhenWho visitId={v.id} onCancelled={setCancelled} /> : null}
       {office ? <OfficeLocation v={v} geo={property?.geo} /> : null}
@@ -358,6 +404,18 @@ export default function VisitScreen() {
       <MissingSheet v={v} missing={gate.missing} open={!!ask} step={ask?.step ?? "sign"} onFill={() => setAsk(null)} onSkip={skipAndGo} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={customer?.name ?? t("visit.title")}
+        items={moreItems}
+        onSelect={(k) => {
+          setMoreAt(null);
+          if (k === "estimate") makeEstimate();
+          else if (k === "lead") router.push("/lead/new");
+        }}
+        onClose={() => setMoreAt(null)}
+      />
     </Screen>
   );
 }

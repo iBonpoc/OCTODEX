@@ -215,6 +215,7 @@ export const es: Dict = {
   "visit.call": "Llamar",
   "visit.navigate": "Ruta",
   "visit.message": "Mensaje",
+  "visit.bar.expense": "Gasto",
   "visit.photosBefore": "Fotos antes",
   "visit.photosAfter": "Fotos después",
   "visit.checklist": "Lista de control",

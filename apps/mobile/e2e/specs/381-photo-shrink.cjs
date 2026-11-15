@@ -1,6 +1,6 @@
 /**
  * e2e 381 — #642 (Ф1 of #1083): a photo is made smaller before the app keeps it. A 4000×3000 picture picked on a visit
- * («Добавить фото»), by «Создать» → «Фото» and as an expense receipt is kept with the long side ≤ 2048 px, as a JPEG, and
+ * («Добавить фото»), by «Фото» on the visit panel and as an expense receipt is kept with the long side ≤ 2048 px, as a JPEG, and
  * much lighter than the picked file; a small picture is not made larger. Every view. Waits on what it checks.
  */
 exports.run = async (h) => {
@@ -78,9 +78,8 @@ exports.run = async (h) => {
   h.expect(k2.w === 640 && k2.h === 480, `a small photo keeps its size (${k2.w}×${k2.h})`);
   h.expect(k2.type === "image/jpeg", `a PNG is kept as a JPEG (${k2.type})`);
 
-  // 3) «Создать» → «Фото»: the same
-  await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").last().click();
-  const [ch3] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("fab-photo").locator("visible=true").last().click()]);
+  // 3) «Фото» on the visit panel: the same
+  const [ch3] = await Promise.all([p.waitForEvent("filechooser"), p.getByTestId("visit-bar-photo").locator("visible=true").last().click()]);
   await ch3.setFiles({ name: "big2.jpg", mimeType: "image/jpeg", buffer: big });
   await photosSaved(v0.id, 3);
   const k3 = await kept((await photos())[2].uri);
