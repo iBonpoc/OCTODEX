@@ -37,6 +37,7 @@
    - Save
 2. Вход по коду из письма (по желанию): https://supabase.com/dashboard/project/kgiaxygsjkyiquhjbxdg/auth/templates → **Magic Link** → добавить в текст `Код: {{ .Token }}` → Save.
 3. Название проекта: https://supabase.com/dashboard/project/kgiaxygsjkyiquhjbxdg/settings/general → Project name: `OCTODEX` → Save.
+4. **Восстановление базы из резервной копии** (спека 50 §6 С20): копия возвращает стёртые компании и людей. Порядок: (1) до открытия доступа запустить `app.purge_after_restore()` (только `service_role`) — она повторно стирает всё из журнала стирания; (2) проверить счётчики; (3) открыть доступ. Функции пока нет — появится с волной спеки 50.
 
 ## 3. Вход в приложение на iPhone
 1. Откройте сайт в Safari.
