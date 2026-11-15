@@ -18,21 +18,24 @@ import { BROKEN_PREFIX, forgetPendingWrites } from "@/data/persist";
 export const SIGNOUT_WIPE_KEY = "octo.signoutWipe.v1";
 
 /** a cache key of `me` (this version's) — or an older person-less one (`legacy`: whose is read from the record) */
-function cacheOf(k: string, me: string): "mine" | "legacy" | null {
+function cacheOf(k: string, me: string, gone: (companyId: string) => boolean): "mine" | "legacy" | null {
   if (!k.startsWith(CLOUD_CACHE_PREFIX) || k === REJECTED_KEY) return null;
   const rest = k.slice(CLOUD_CACHE_PREFIX.length);
   const dot = rest.indexOf(".");
-  if (dot < 0) return rest ? "legacy" : null;
-  return rest.slice(dot + 1) === me ? "mine" : null;
+  if (dot < 0) return rest && gone(rest) ? "legacy" : null;
+  return rest.slice(dot + 1) === me && gone(rest.slice(0, dot)) ? "mine" : null;
 }
 
-/** the keys of `me`'s caches and their copies; `legacy` — older person-less ones (and their copies): whose is read (pure) */
-export function signOutKeys(keys: readonly string[], me: string): { mine: string[]; legacy: string[] } {
+/**
+ * the keys of `me`'s caches and their copies; `legacy` — older person-less ones (and their copies): whose is read (pure).
+ * `gone` — which companies (A2: only those the person is no longer in; the sign-out: every one)
+ */
+export function signOutKeys(keys: readonly string[], me: string, gone: (companyId: string) => boolean = () => true): { mine: string[]; legacy: string[] } {
   const mine: string[] = [];
   const legacy: string[] = [];
   for (const k of keys) {
     const src = k.startsWith(BROKEN_PREFIX) ? k.slice(BROKEN_PREFIX.length, k.lastIndexOf(".")) : k;
-    const c = cacheOf(src, me);
+    const c = cacheOf(src, me, gone);
     if (c === "mine") mine.push(k);
     else if (c === "legacy") legacy.push(k);
   }
@@ -62,9 +65,9 @@ export interface WipeStore {
 const deviceStore = AsyncStorage as unknown as WipeStore;
 
 /** one pass: what waits to be written is dropped, then the keys go. Returns how many of `me`'s keys were found */
-async function pass(s: WipeStore, me: string): Promise<number> {
+async function pass(s: WipeStore, me: string, companies?: (companyId: string) => boolean): Promise<number> {
   const keys = await s.getAllKeys();
-  const { mine, legacy } = signOutKeys(keys, me);
+  const { mine, legacy } = signOutKeys(keys, me, companies);
   const gone: string[] = [];
   for (const k of [...mine, ...legacy]) {
     let rec: CacheRecord | null = null;
@@ -129,6 +132,39 @@ export async function forgetSignOutMark(uid: string, s: WipeStore = deviceStore)
     if ((await s.getItem(SIGNOUT_WIPE_KEY)) === uid) await s.removeItem(SIGNOUT_WIPE_KEY);
   } catch {
     // kept: the next start sees this person signed in and only takes the mark away
+  }
+}
+
+export interface LeftOpts {
+  /** who is signed in now (the app's own state): the wipe stops if it is not `me` any more */
+  signedIn: () => string | null;
+  /** the companies `me` is in now (the newest confirmed answer): never wiped — read on every pass (back in meanwhile) */
+  active: () => ReadonlySet<string>;
+  s?: WipeStore;
+  pauseMs?: number;
+}
+/**
+ * #1633 A2: a confirmed answer of the memberships — `me`'s caches (and their copies, the person-less one whose «me» is
+ * theirs) of every company they are no longer in leave the phone; what only the phone has stays (holdsLocalOnly). Read
+ * from the device, not from what the app knew before: a removal while the app was closed is wiped on the next start too.
+ * The company the person just left may still be written once by the store switching away (persist.ts keyChanged): passes
+ * repeat until one finds nothing (≤ 4). The open company is always active, so its cache is never touched. Never throws:
+ * anything left goes with the next confirmed answer.
+ */
+export async function wipeLeftCompanies(me: string, o: LeftOpts): Promise<void> {
+  const s = o.s ?? deviceStore;
+  const pause = o.pauseMs ?? 1000;
+  const gone = (c: string) => !o.active().has(c);
+  try {
+    for (let i = 0; i < 4; i++) {
+      if (o.signedIn() !== me) return;
+      const found = await pass(s, me, gone);
+      // the second pass at least: the store's last write of a company just left lands after the first
+      if (i > 0 && found === 0) return;
+      await new Promise((r) => setTimeout(r, pause));
+    }
+  } catch {
+    // the next confirmed answer tries again
   }
 }
 

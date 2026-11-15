@@ -121,7 +121,7 @@
  "e2e/specs/222-gutters-pdf.cjs": 2,
  "e2e/specs/223-gutters-estimate-page.cjs": 1,
  "e2e/specs/224-gutters-sheet.cjs": 1,
- "e2e/specs/225-gutters-menu-sheet-swipe.cjs": 5,
+ "e2e/specs/225-gutters-menu-sheet-swipe.cjs": 3,
  "e2e/specs/227-gutters-home.cjs": 3,
  "e2e/specs/228-gutters-documents.cjs": 2,
  "e2e/specs/23-today-figures.cjs": 5,
