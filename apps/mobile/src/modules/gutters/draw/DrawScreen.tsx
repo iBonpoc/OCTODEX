@@ -58,6 +58,7 @@ import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from 
 import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
+import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
@@ -361,12 +362,14 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (made: Drawing, prev = cur.current.drawing, placed = false) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false, quiet = false) => {
       // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
       const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
       // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
-      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+      // not when the gutter only went to another story by the story button (#1569, founder 14.11: «переключал этажи 1 → 4 → 1 — высветило
+      // „водостоков стало пять“, не понял почему»): the corner split on story 2 and joined again on 1 — the count is what it was
+      if (!quiet && next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
         announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
       }
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
@@ -428,7 +431,8 @@ export default function DrawScreen() {
     setSelected(target.id);
     setLifted(target);
   };
-  const pan = usePanGesture({
+  // made once (#1403): a new config on every render registered the gesture again, in the middle of a pinch too
+  const pan = usePanGesture(useJsGestureConfig<NonNullable<Parameters<typeof usePanGesture>[0]>>({
     runOnJS: true,
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
@@ -614,9 +618,9 @@ export default function DrawScreen() {
         quickGrew.current = !!grown && got === grown;
       }
     },
-  });
+  }, [canvas.pinch, canvas.pan]));
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
-  const tap = useTapGesture({
+  const tap = useTapGesture(useJsGestureConfig<NonNullable<Parameters<typeof useTapGesture>[0]>>({
     runOnJS: true,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: () => {
@@ -709,7 +713,7 @@ export default function DrawScreen() {
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
-  });
+  }, [canvas.pinch, canvas.pan]));
   const fingers = useSimultaneousGestures(pan, tap);
 
   const scene = useMemo(
@@ -853,7 +857,7 @@ export default function DrawScreen() {
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
     setStoryN(n);
-    if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n));
+    if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n), drawing, false, true); // quiet: #1569
   };
   /** how far the toolbar is dragged by its grip, px */
   const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
@@ -1066,7 +1070,7 @@ export default function DrawScreen() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer view={viewNow} live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">

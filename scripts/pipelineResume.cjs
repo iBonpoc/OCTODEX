@@ -12,7 +12,15 @@ function pickRuns({ prs, prHeads }) {
   }
   return ids;
 }
-module.exports = { pickRuns };
+const WAIT_ROUNDS = 40; // 40 × 15 s = 10 min at most
+
+/** is the newest run still going (queued / in progress)? then the answer is not known yet */
+function waitFor(runs) {
+  const latest = [...runs].sort((a, b) => b.id - a.id)[0];
+  return !!latest && latest.status !== "completed";
+}
+
+module.exports = { pickRuns, waitFor };
 
 if (require.main === module) {
   const { execFileSync } = require("node:child_process");
@@ -27,7 +35,13 @@ if (require.main === module) {
   for (const p of prsApi) {
     prHeads[p.number] = p.head.sha;
     if (stops.length && !p.labels.some((l) => l.name === "починка")) continue; // still paused: re-running would just pause again
-    const runs = api(`repos/${repo}/actions/workflows/checks.yml/runs`, ["-f", `head_sha=${p.head.sha}`, "-f", "event=pull_request", "-f", "per_page=5"]).workflow_runs ?? [];
+    // a run still queued / in progress may be about to fail on the pause (the label came while it waited for a runner): wait for it
+    let runs = [];
+    for (let i = 0; i < WAIT_ROUNDS; i++) {
+      runs = api(`repos/${repo}/actions/workflows/checks.yml/runs`, ["-f", `head_sha=${p.head.sha}`, "-f", "event=pull_request", "-f", "per_page=5"]).workflow_runs ?? [];
+      if (!waitFor(runs)) break;
+      execFileSync("sleep", ["15"]);
+    }
     const rows = [];
     for (const r of runs) {
       const jobs = api(`repos/${repo}/actions/runs/${r.id}/jobs`, ["-f", "per_page=100"]).jobs ?? [];

@@ -4260,8 +4260,10 @@ insert into storage.objects (bucket_id, name) values
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 1, 'a tech lists only the files he sees (his own photo), not the office document');
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg'$q$) = 1, 'a tech reads his own photo');
--- pointing storage_key of his own row at the office document opens nothing (the object name decides)
-update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002';
+-- pointing storage_key of his own row at the office document opens nothing (the object name decides); since
+-- 20261115110000 (#1572) the key itself is refused — a row points only at its own object
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002'$q$,
+                 '%its own object%', 'a tech does not point his row at the office document');
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$) = 0, 'storage_key does not open someone else''s object');
 -- upload: the app inserts the row, then the object; a repeat upload (upsert) updates it
 insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
@@ -5293,6 +5295,8 @@ select tst.fails_like($q$update public.notifications set company_id = 'cb000000-
   '%company_id is immutable (notifications %', 'notifications keep their company (even for a server function)');
 -- (5) Storage: an object is not renamed into another company (failed before: USING saw A, WITH CHECK saw B)
 :as_owner_b
+-- (since 20261115110000, #1572: an object only for a live files row — the office too)
+insert into public.files (id, company_id, kind) values ('f5900000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'photo');
 insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg');
 select tst.blocked($q$update storage.objects set name = 'c5900000-0000-4000-8000-000000000000/f5900000-0000-4000-8000-000000000001.jpg' where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'$q$,
   'a staff member of two companies does not move a file between them');
@@ -14431,5 +14435,136 @@ select tst.ok((select file_size_limit = 26214400 and not public and allowed_mime
               format('T211 the bucket files: 25 MB, private, no type list (red before 20261114200000): %s',
                      (select row(file_size_limit, public, allowed_mime_types) from storage.buckets where id = 'files')));
 \echo 'T211 the bucket files has a size limit ok'
+
+-- T212 (#1557): a file object, once its files row records the upload, is written by nobody again — the office included
+-- (red before 20261115100000: the office could overwrite it). Before the mark the author repeats the upload (upsert).
+-- An old build's late «failed» after the mark leaves the row «uploaded» (the trigger t08_upload_kept).
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now();
+-- (the statement itself is the check: a refusal raises)
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'$q$) = 1,
+              'T212 the author repeats the upload (upsert) before the row records it');
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg', upload_status = 'uploaded'
+ where id = 'f2120000-0000-4000-8000-000000000001';
+-- an old build's repeat after a lost answer: refused for the author too
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
+                 'T212 the author does not re-upload over his recorded photo (an old build''s repeat)');
+:as_owner_a
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'), 'T212 the owner may not write a recorded file');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
+                 'T212 the owner does not re-upload over a recorded photo (upsert)');
+select tst.blocked($q$update storage.objects set name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg' where name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'$q$,
+                   'T212 the owner does not update a recorded photo');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.png')$q$,
+                 'T212 the owner does not put a second object of a recorded file');
+:as_office_a
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
+                 'T212 the office does not re-upload over a recorded photo (upsert)');
+select tst.blocked($q$update storage.objects set name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg' where name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'$q$,
+                   'T212 the office does not update a recorded photo');
+-- the office's own photo: uploaded and repeated before the mark, never after
+:as_owner_a
+insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000002.jpg');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000002.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now();
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000002.jpg', upload_status = 'uploaded'
+ where id = 'f2120000-0000-4000-8000-000000000002';
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000002.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
+                 'T212 the author-owner does not re-upload over his own recorded photo');
+-- an old build: the repeat after a lost answer is refused, then it marks the row failed — the row stays recorded
+:as_tech_a
+update public.files set upload_status = 'failed' where id = 'f2120000-0000-4000-8000-000000000001';
+update public.files set storage_key = null where id = 'f2120000-0000-4000-8000-000000000001';
+select tst.ok((select upload_status = 'uploaded' and storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'
+                 from public.files where id = 'f2120000-0000-4000-8000-000000000001'),
+              'T212 a late «failed» (or a cleared key) does not undo a recorded upload');
+-- a half-made mark (only the key, by hand): clearing it does not open the object again
+insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000004.jpg' where id = 'f2120000-0000-4000-8000-000000000004';
+update public.files set storage_key = null where id = 'f2120000-0000-4000-8000-000000000004';
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000004.jpg'),
+              'T212 a mark once set is not cleared to write the object again');
+-- the server still fixes a row (a moved or restored object)
+:as_super
+update public.files set upload_status = 'failed', storage_key = null where id = 'f2120000-0000-4000-8000-000000000004';
+select tst.ok((select upload_status = 'failed' and storage_key is null from public.files where id = 'f2120000-0000-4000-8000-000000000004'),
+              'T212 the server''s own fix of a row is not ignored');
+:as_tech_a
+-- a failed upload before the mark is still repeated
+insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.files set upload_status = 'failed' where id = 'f2120000-0000-4000-8000-000000000003';
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000003.jpg');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000003.jpg'$q$) = 1,
+              'T212 a failed upload (not recorded) is repeated by the author');
+:as_owner_b
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000003.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
+                 'T212 another company does not write our file');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'app.can_write_file_object(text)', 'EXECUTE')
+              and has_function_privilege('authenticated', 'app.can_write_file_object(text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_files_upload_kept()', 'EXECUTE'),
+              'T212 rule 18: the write check for the app only; the trigger function for nobody');
+\echo 'T212 a recorded file is written by nobody ok'
+
+-- T213 (#1572): a files row points only at its own object; the office too keeps «one row, one object» and writes only
+-- for a live files row (red before 20261115110000)
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
+                 'T213 the author does not point his row at another file of the company');
+select tst.fails_like($q$update public.files set storage_key = 'cb000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
+                 'T213 nor at an object of another company');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/x/../f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
+                 'T213 nor at an odd path');
+select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')$q$, '%set after the upload%',
+                 'T213 a new row does not point at another file either');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg');
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001';
+select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000007.jpg')$q$, '%set after the upload%',
+                      'T213 a new row comes without a key, even its own');
+select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' and upload_status = 'uploaded' from public.files where id = 'f2130000-0000-4000-8000-000000000001'),
+              'T213 the row records its own object (what the app writes)');
+-- a recorded row does not move to another id (it would leave a clean row on the old id to write over)
+select tst.fails_like($q$update public.files set id = 'f2130000-0000-4000-8000-000000000008' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%id is set once%',
+                      'T213 the author does not move his recorded row to another id');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg'), 'T213 the recorded object stays closed');
+-- rename, then a new clean row on the old id: the object stays closed (the rename is refused above)
+select tst.fails($q$insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, 'T213 no second row on a recorded id');
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000005.html' where id = 'f2130000-0000-4000-8000-000000000005'$q$, '%its own object%',
+                      'T213 a key with an extension the bucket does not take is refused');
+select tst.fails_like($q$update public.files set storage_key = upper('ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000005.jpg') where id = 'f2130000-0000-4000-8000-000000000005'$q$, '%its own object%',
+                      'T213 an upper-case key is refused (objects are lower case)');
+:as_owner_a
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000002'$q$, '%its own object%',
+                 'T213 the office does not point a row at another file either');
+-- the office before the mark: one object per row
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000002.jpg');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000002.png')$q$,
+                 'T213 the office does not put a second object of a file (another extension)');
+-- the office: no object without a live row
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-00000000000a.jpg')$q$,
+                 'T213 the office does not write an object without its files row');
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.files set deleted_at = now() where id = 'f2130000-0000-4000-8000-000000000003';
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000003.jpg')$q$,
+                 'T213 nor for a removed row');
+-- the server sets any key (a moved object)
+:as_super
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/moved/f2130000-0000-4000-8000-000000000002.jpg' where id = 'f2130000-0000-4000-8000-000000000002';
+select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/moved/f2130000-0000-4000-8000-000000000002.jpg' from public.files where id = 'f2130000-0000-4000-8000-000000000002'), 'T213 the server''s own key is not refused');
+-- an old build's late «uploaded» with its own key over a server-moved one: ignored (t08), not refused (t09)
+:as_owner_a
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000002.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000002';
+select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/moved/f2130000-0000-4000-8000-000000000002.jpg' from public.files where id = 'f2130000-0000-4000-8000-000000000002'), 'T213 a late key over a moved one is ignored, not refused');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own()', 'EXECUTE'),
+              'T213 rule 18: the trigger function for nobody');
+\echo 'T213 a file row points at its own object ok'
 
 \echo 'ALL TESTS PASSED'

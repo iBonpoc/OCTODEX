@@ -7,15 +7,20 @@ import { useLayoutEffect, useMemo, useRef, type ReactNode } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { GestureDetector, usePanGesture, usePinchGesture, useSimultaneousGestures } from "react-native-gesture-handler";
-import { scheduleOnRN } from "react-native-worklets";
+import { scheduleOnRN, scheduleOnUI } from "react-native-worklets";
 import { clampView, type View as PlanView, type ZoomLimits } from "./scene";
-import { applyTf, endGesture, panFrame, pinchFrame, settle, type LiveState, type Pending, type Tf } from "./gestureState";
+import { commitRef, endGesture, IDENTITY, panFrame, pinchFrame, rebase, stepOf, type LiveState, type SentSettle, type Tf } from "./gestureState";
 
 /** the live part of the transform: shift, scale about a focal point (screen px of the canvas) */
-export interface Live { tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number> }
+export interface Live {
+  tx: SharedValue<number>; ty: SharedValue<number>; s: SharedValue<number>; fx: SharedValue<number>; fy: SharedValue<number>;
+  /** the committed view the live transform is against (k, ox, oy; k 0 — none yet), written by the settle on the UI thread in ONE step with
+   * the live transform (#1403): the grid layer (#1434) draws the view on the screen from both, and never sees a new view with an old transform */
+  vk: SharedValue<number>; vox: SharedValue<number>; voy: SharedValue<number>;
+}
 
 export function useLive(): Live {
-  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0) };
+  return { tx: useSharedValue(0), ty: useSharedValue(0), s: useSharedValue(1), fx: useSharedValue(0), fy: useSharedValue(0), vk: useSharedValue(0), vox: useSharedValue(0), voy: useSharedValue(0) };
 }
 
 /** the committed view after a live transform: p' = f + s·(p − f) + t */
@@ -33,38 +38,60 @@ export function commitView(v: PlanView, tx: number, ty: number, s: number, fx: n
 export interface ZoomGuard { lim: ZoomLimits; viewport: { w: number; h: number }; onEdge?: () => void }
 
 export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void, live: Live, panPointers = 1, zoom?: ZoomGuard) {
-  const { tx, ty, s, fx, fy } = live;
+  const { tx, ty, s, fx, fy, vk, vox, voy } = live;
   // the gesture's callbacks may be the ones made at an earlier render: they read the view of now from a ref
   const now = useRef({ view, onView, zoom });
   now.current = { view, onView, zoom };
-  // commits made and not rendered yet (gestureState.ts: the render takes away exactly its commit from the live transform)
-  const pending = useRef<Pending[]>([]);
+  // commits made and not rendered yet: the view set (clamped) and the commit's own view (`ref`, before the clamp)
+  const pending = useRef<{ view: PlanView; ref: PlanView }[]>([]);
+  /** the settles sent to the UI thread, the latest few: a commit taken there before some of them ran gets their steps (commitRef) */
+  const sent = useRef<SentSettle[]>([]);
   /** when a two-finger segment last began or ended (ms): a tap right after it is the fingers lifting, not a tap (a pinch that ends over a length label opened its sheet) */
   const multiAt = useRef(0);
   const markMulti = () => {
     multiAt.current = Date.now();
   };
-  const commit = (S: number, Tx: number, Ty: number) => {
+  /**
+   * A commit from the UI thread: the live transform `S, Tx, Ty` and the view it is against THERE (`bk, box, boy`; k 0 — none settled yet).
+   * Not against the view the JS thread renders now: the two differ while a settle is on its way to the UI thread, and a commit taken
+   * there before it would take that view twice (#1403, review: a finger lifts twice in one pinch → the drawing jumps).
+   */
+  const commit = (S: number, Tx: number, Ty: number, bk: number, box: number, boy: number) => {
     markMulti();
     const t = { S, Tx, Ty };
     const z = now.current.zoom;
-    const raw = applyTf(now.current.view, t);
+    const raw = bk > 0 ? commitRef({ k: bk, ox: box, oy: boy }, t, sent.current) : commitRef(now.current.view, t, []);
     const v = z ? clampView(raw, z.lim, z.viewport) : raw;
-    pending.current.push({ view: v, tf: t });
+    pending.current.push({ view: v, ref: raw });
     now.current.onView(v);
   };
   /** the view last settled: the same view again is only another render of the screen, never a reason to touch the live transform (#1403) */
   const settled = useRef<PlanView | null>(null);
-  /** the render of `v` arrived (Canvas' layout effect): the live transform loses the commit that made it */
+  /** the render of `v` arrived (Canvas' layout effect): the UI thread re-bases the live transform on it (#1403) */
   const settleView = (v: PlanView) => {
     if (settled.current === v) return;
-    const r = settle({ S: s.value, Tx: tx.value, Ty: ty.value }, pending.current, v, settled.current ?? undefined);
     settled.current = v;
-    pending.current = r.pending;
-    baseK.value = v.k;
-    tx.value = r.live.Tx;
-    ty.value = r.live.Ty;
-    s.value = r.live.S;
+    const i = pending.current.findIndex((p) => p.view === v);
+    const ref = i < 0 ? null : pending.current[i]!.ref; // a view not ours (the «fit» button, a new size): the live transform goes whole
+    pending.current = i < 0 ? [] : pending.current.slice(i + 1);
+    sent.current = [...sent.current.slice(-15), { view: { k: v.k, ox: v.ox, oy: v.oy }, step: ref ? stepOf(ref, v) : null }];
+    scheduleOnUI(applySettle, v.k, v.ox, v.oy, ref);
+  };
+  /**
+   * The settle on the UI thread, between two frames of the fingers (#1403): the live transform is re-based from the view it is against
+   * there onto the rendered one (`rebase`: the picture does not move), read and written in one step — on the JS thread it was read, then
+   * written back a moment later, and the frames between were lost (a jump). The view is written in the same step: the grid never draws a
+   * new view under an old transform.
+   */
+  const applySettle = (k: number, ox: number, oy: number, ref: PlanView | null) => {
+    "worklet";
+    const next = ref && vk.value > 0 ? rebase({ k: vk.value, ox: vox.value, oy: voy.value }, { S: s.value, Tx: tx.value, Ty: ty.value }, ref) : IDENTITY;
+    vk.value = k;
+    vox.value = ox;
+    voy.value = oy;
+    tx.value = next.Tx;
+    ty.value = next.Ty;
+    s.value = next.S;
     fx.value = 0;
     fy.value = 0;
   };
@@ -73,8 +100,7 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
   const nPinch = useSharedValue(0);
   const nPan = useSharedValue(0);
   const edge = useSharedValue<-1 | 0 | 1>(0);
-  /** the scale limits as factors of the view on the screen are kMin / baseK and kMax / baseK (the live scale is against that view) */
-  const baseK = useSharedValue(view.k);
+  /** the scale limits as factors of the view on the screen are kMin / vk and kMax / vk (the live scale is against that view) */
   const kMin = useSharedValue(zoom ? zoom.lim.kMin : 0);
   const kMax = useSharedValue(zoom ? zoom.lim.kMax : 0);
   useLayoutEffect(() => {
@@ -99,30 +125,44 @@ export function useCanvasGestures(view: PlanView, onView: (v: PlanView) => void,
     nPan.value = st.nPan;
     if (st.edge !== 0 && st.edge !== edge.value) scheduleOnRN(edgeTick); // a tick on reaching a limit of the scale, once
     edge.value = st.edge;
-    if (req) scheduleOnRN(commit, req.S, req.Tx, req.Ty);
+    if (req) scheduleOnRN(commit, req.S, req.Tx, req.Ty, vk.value, vox.value, voy.value); // with the view it is against here
   };
   const end = () => {
     "worklet";
     const st = state();
     put(st, endGesture(st));
   };
-  const pan = usePanGesture({
-    minPointers: panPointers,
-    onUpdate: (e) => {
-      "worklet";
-      const st = state();
-      put(st, panFrame(st, e, panPointers));
-    },
-    onDeactivate: end,
-  });
-  const pinch = usePinchGesture({
-    onUpdate: (e) => {
-      "worklet";
-      const st = state();
-      put(st, pinchFrame(st, e, kMax.value > 0 && baseK.value > 0 ? { lo: kMin.value / baseK.value, hi: kMax.value / baseK.value } : undefined));
-    },
-    onDeactivate: end,
-  });
+  // The configs are made ONCE (again only if `panPointers` changes): RNGH 3 keys its handler on the config object
+  // (useClonedAndRemappedConfig → useGesture's effect), and a new object on every render of the screen sent the config to the native
+  // handler and registered it again on every render — in the middle of a pinch too (#1403: «пальцы отлипают»). What the callbacks hold is
+  // stable: shared values, refs, and `commit` / `markMulti` / `edgeTick`, which read the refs.
+  const panConfig = useMemo(
+    () => ({
+      minPointers: panPointers,
+      onUpdate: (e: Parameters<typeof panFrame>[1]) => {
+        "worklet";
+        const st = state();
+        put(st, panFrame(st, e, panPointers));
+      },
+      onDeactivate: end,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panPointers],
+  );
+  const pinchConfig = useMemo(
+    () => ({
+      onUpdate: (e: Parameters<typeof pinchFrame>[1]) => {
+        "worklet";
+        const st = state();
+        put(st, pinchFrame(st, e, kMax.value > 0 && vk.value > 0 ? { lo: kMin.value / vk.value, hi: kMax.value / vk.value } : undefined));
+      },
+      onDeactivate: end,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+  const pan = usePanGesture(panConfig);
+  const pinch = usePinchGesture(pinchConfig);
   const both = useSimultaneousGestures(pan, pinch);
   // one object for the screen's whole life (the gestures themselves are kept by the library): a new object every render made the
   // canvas settle again after every render (#1403); `settleView` reads what it needs from refs and shared values
