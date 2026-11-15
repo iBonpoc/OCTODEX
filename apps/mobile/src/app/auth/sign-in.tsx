@@ -79,7 +79,9 @@ export default function SignIn() {
                   {t("auth.codeSent", { email: email.trim() })}
                 </T>
                 <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} />
+                <FormMain>
                 <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} />
+                </FormMain>
               </>
             )}
           </>
@@ -89,7 +91,9 @@ export default function SignIn() {
             {mode === "signup" ? <TextField type="name" value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
             <TextField type={mode === "signup" ? "newPassword" : "password"} value={password} onChangeText={setPassword} placeholder={t("auth.password")} />
             {mode === "password" ? (
+              <FormMain>
               <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} />
+              </FormMain>
             ) : (
               <FormMain>
               <Button
