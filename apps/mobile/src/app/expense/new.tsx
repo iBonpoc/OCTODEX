@@ -49,7 +49,7 @@ export default function NewExpense() {
     <Screen title={t("exp.title")} back={back}>
       {/* the fields straight on the background, no card around them (DS §11 п.17, #1411) */}
       <FieldGroup>
-        <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} />
+        <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} testID="expense-photo" />
         {photo ? <Image source={{ uri: photo }} style={{ width: "100%", height: component.mediaH, borderRadius: radius.inner }} resizeMode="cover" /> : null}
         <T v="caption" tone="mut">
           {t("exp.aiNote")}

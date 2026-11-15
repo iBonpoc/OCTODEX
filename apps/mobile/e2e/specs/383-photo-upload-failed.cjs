@@ -114,7 +114,15 @@ exports.run = async (h) => {
   h.expect((await retry.count()) === 1, `«Повторить» only on the signed visit's card (${await retry.count()})`);
   await retry.first().click();
   await waitMark(w.id, "e383-done", null);
-  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  // «Отменить»: the toast ignores a tap in its first toastArmMs (src/ui/toastArm.ts — the second tap of a double tap is
+  // not «Отменить»), a tap that came too early is lost (CHECKS §9 №31, the red run of #1587 @390 dark): tap again until
+  // the mark is back, a few frames between the taps, never a fixed pause
+  const back = async () => (await markOf(w.id, "e383-done")) === "refused";
+  const undo = vis("toast-undo");
+  for (let i = 0; i < 60 && !(await back()); i++) {
+    if (await undo.count()) await undo.click({ timeout: 2000 }).catch(() => {});
+    if (!(await back())) await p.evaluate(() => new Promise((r) => { let n = 9; const f = () => (--n ? requestAnimationFrame(f) : r(true)); requestAnimationFrame(f); }));
+  }
   await waitMark(w.id, "e383-done", "refused");
   await triageCount(1);
 };

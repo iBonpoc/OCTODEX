@@ -14566,5 +14566,63 @@ select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/moved/
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own()', 'EXECUTE'),
               'T213 rule 18: the trigger function for nobody');
 \echo 'T213 a file row points at its own object ok'
+-- T214 (#1538): an expense's receipt goes to the cloud — a files row of kind 'receipt' tied to the expense; it is read
+-- as its expense is (owner, admin, office, the author; not sales, not another tech); the expense takes only a receipt
+-- of its own (red before 20261115120000)
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
+  values ('e2140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T214 Depot', 4200, 'materials', 'f2140000-0000-4000-8000-000000000001', 'e2140000-0000-4000-8000-000000000001');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000001.jpg');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where receipt_file_id = 'f2140000-0000-4000-8000-000000000001'$q$) = 1
+              and tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000001.jpg'$q$) = 1,
+              'T214 a tech sends his receipt and ties it to his expense');
+-- not a visit's photo, not someone else's receipt, not a file of another company
+insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category, receipt_file_id) values ('ca000000-0000-0000-0000-000000000000', 'T214 x', 100, 'other', 'f2140000-0000-4000-8000-000000000002')$q$,
+                      '%receipt of its own%', 'T214 an expense does not take a photo as its receipt');
+:as_sales_a
+-- (another member who is not the office; sales read expenses only their own, 20261111140000)
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2140000-0000-4000-8000-000000000001'$q$) = 0
+              and not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000001.jpg'), 'T214 sales (another member) do not read the receipt (as the expense)');
+insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2140000-0000-4000-8000-000000000004'$q$) = 1, 'T214 sales read their own receipt');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2140000-0000-4000-8000-000000000002'$q$) = 1, 'T214 sales still read the company''s photos');
+select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount_cents, category, receipt_file_id) values ('ca000000-0000-0000-0000-000000000000', 'T214 y', 100, 'other', 'f2140000-0000-4000-8000-000000000001')$q$,
+                      '%receipt of its own%', 'T214 nobody ties someone else''s receipt to his own expense');
+:as_tech_a
+select tst.fails_like($q$update public.expenses set receipt_file_id = 'f2140000-0000-4000-8000-000000000004' where id = 'e2140000-0000-4000-8000-000000000001'$q$, '%receipt of its own%',
+                      'T214 the tech does not tie a receipt of another to his expense');
+:as_sales_a
+-- sales change no receipt of another: not its kind (to read it as a photo), not «removed» — even without a WHERE
+update public.files set deleted_at = now() where kind = 'receipt' and created_by <> auth.uid();
+select tst.fails($q$update public.files set kind = 'photo' where id = 'f2140000-0000-4000-8000-000000000004'$q$, 'T214 sales do not turn their own receipt into a photo either');
+-- an object of another's receipt not uploaded yet: sales do not write it; an object without a row: sales do not read it
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+:as_sales_a
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000005.jpg'), 'T214 sales do not write the bytes of another''s receipt');
+:as_super
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-00000000000f.jpg');
+:as_sales_a
+select tst.ok(not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-00000000000f.jpg'), 'T214 sales do not read an object without a files row');
+:as_super
+select tst.ok((select kind = 'receipt' and deleted_at is null from public.files where id = 'f2140000-0000-4000-8000-000000000001'),
+              'T214 the tech''s receipt is untouched by sales (kind, removal)');
+:as_tech_a
+select tst.fails_like($q$update public.files set kind = 'photo' where id = 'f2140000-0000-4000-8000-000000000001'$q$, '%kind and author are set once%',
+                      'T214 the author does not turn his receipt into a photo (others would read it)');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000005.jpg'), 'T214 the author writes the bytes of his own receipt');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2140000-0000-4000-8000-000000000001'$q$) = 1
+              and app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000001.jpg'), 'T214 the office reads the receipt');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2140000-0000-4000-8000-000000000001'$q$) = 0
+              and not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000001.jpg'), 'T214 another company does not');
+:as_super
+select tst.ok((select convalidated from pg_constraint where conname = 'expenses_receipt_file_fk')
+              and not has_function_privilege('authenticated', 'app.tg_expenses_receipt_own()', 'EXECUTE'),
+              'T214 the receipt is a file of the same company (foreign key); rule 18: the trigger function for nobody');
+\echo 'T214 an expense''s receipt in the cloud ok'
 
 \echo 'ALL TESTS PASSED'
