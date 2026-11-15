@@ -13,6 +13,7 @@ import { forgetDeviceState } from "@/data/persist";
 import { forgetSharedOps, OUTBOX_KEY, othersOf, REJECTED_KEY, wipedOnDelete, type OwnedItem } from "@/data/outboxOwner";
 import { rejectedOthers, type RejectedOp } from "@/data/outboxRejected";
 import { supabase } from "./client";
+import { sessionStore } from "./sessionStore";
 
 /** a hung request (the line dropped; OkHttp on Android waits for ever) becomes «no answer» */
 export const CALL_TIMEOUT_MS = 20_000;
@@ -131,6 +132,8 @@ export async function finishOnDevice(userId?: string | null): Promise<void> {
   await oneAtATime(() => wipeKeepingOthers(userId));
   // the session is closed on the server already: only forget it here
   await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+  // #1634: the session leaves the protected store too, whatever the sign-out did (the iOS Keychain outlives the app)
+  await forgetSession();
 }
 /** a wipe failed last time: once more (AuthProvider, on start) */
 export function wipeIfPending(): Promise<void> {
@@ -333,4 +336,10 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
 export async function finishDeletion(userId?: string): Promise<void> {
   await deleteWithRepeat(() => callDelete("DELETE", []), () => myAccountState());
   await finishOnDevice(userId);
+}
+
+/** #1634: the session keys of this client (auth-js: «<storageKey>», «-user», «-code-verifier») leave both stores */
+export async function forgetSession(): Promise<void> {
+  const key = (supabase.auth as unknown as { storageKey?: string }).storageKey;
+  if (key) await sessionStore.forget([key, `${key}-user`, `${key}-code-verifier`]).catch(() => {});
 }
