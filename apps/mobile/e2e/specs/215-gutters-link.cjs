@@ -1,7 +1,7 @@
 /**
- * e2e 215 — «Сделать заявкой» → «Привязать замер» (основатель 09.11, версия 475; docs/specs/33-gutters-canvas.md П20.23).
+ * e2e 215 — «Привязать» → «Привязать замер» (основатель 09.11, версия 475; docs/specs/33-gutters-canvas.md П20.23).
  * Every view.
- * - a draft without a client → «Сделать заявкой» → the sheet: «Новая заявка», a search, open leads and clients;
+ * - a draft without a client → «Привязать» → the sheet: «Новая заявка», a search, open leads and clients;
  * - a lead found by name → linked: the canvas shows the lead, the store has it, «Отменить» in the toast is there;
  * - a second draft → «Клиенты» (founder 09.11, #688: leads and clients apart) → a client with one address → linked to
  *   that address: the canvas shows the address; the store has the property, no lead;
@@ -73,7 +73,7 @@ exports.run = async (h) => {
   await tid(`link-client-${client.id}`).getByRole("button").click();
   await waitFor(async () => (await tid("draw-place").count()) === 1 && (await tid("draw-place").innerText()).includes(place.address), "the canvas shows the client's address");
   await waitFor(async () => { const m = await mOf(m2); return m?.propertyId === place.id && !m.leadId; }, "the store: the client's property, no lead");
-  h.expect((await tid("draw-to-lead").count()) === 0, "no «Сделать заявкой» any more");
+  h.expect((await tid("draw-to-lead").count()) === 0, "no «Привязать» any more");
 
   // «⋯» → «Привязать к другому» (#692): the lead instead of the address
   const who = async (name) => {
@@ -91,7 +91,7 @@ exports.run = async (h) => {
   // «Отвязать» → a draft again
   await who("Отвязать (в черновики)");
   await waitFor(async () => { const m = await mOf(m2); return !!m && !m.leadId && !m.propertyId; }, "unlinked: a draft");
-  await waitFor(async () => (await tid("draw-to-lead").count()) === 1, "«Сделать заявкой» again");
+  await waitFor(async () => (await tid("draw-to-lead").count()) === 1, "«Привязать» again");
   // «Удалить замер» (#690): off the canvas, gone; «Отменить» brings it back
   await who("Удалить замер");
   await waitFor(async () => !(await mOf(m2)), "deleted: not in the store");

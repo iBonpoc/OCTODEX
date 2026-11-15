@@ -8,8 +8,8 @@ import { describe, expect, it } from "vitest";
  * handed to `t(…)` as a parameter.
  */
 const ROOT = join(__dirname, "..", "src");
-// the Gutters module is zone (в): its two PDF toasts go with its own PR (#1642, Gutters)
-const PENDING = new Set(["modules/gutters/view/ViewScreen.tsx"]);
+// files still waiting for their own PR (none now: the Gutters PDF toasts went in #1642, Gutters)
+const PENDING = new Set<string>([]);
 
 const files = (dir: string): string[] =>
   readdirSync(dir).flatMap((n) => {
