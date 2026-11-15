@@ -14567,7 +14567,7 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own(
               'T213 rule 18: the trigger function for nobody');
 \echo 'T213 a file row points at its own object ok'
 
--- T243 (#1604): a company's creator sees it before any membership only while it is open (red before 20261115140000)
+-- T243 (#1604): a company's creator sees it before any membership only while it is open (red before 20261115160000)
 :as_super
 insert into public.companies (id, name, created_by) values ('c2430000-0000-4000-8000-000000000001', 'T243 Fresh', 'a0000000-0000-0000-0000-000000000003');
 :as_tech_a
@@ -14583,7 +14583,7 @@ select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'c2430000-000
               'T243 a closed company is not seen by its creator, even with no memberships left');
 \echo 'T243 a closed company stays closed to its creator ok'
 
--- T244 (#1603): a profile picture is a live photo of the person's own (red before 20261115140000)
+-- T244 (#1603): a profile picture is a live photo of the person's own (red before 20261115160000)
 :as_tech_a
 insert into public.files (id, company_id, kind) values
   ('f2440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo'),
