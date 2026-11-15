@@ -5,7 +5,7 @@
  * copy, and what a reload keeps (the server's photos carry no local address; without it «Повторить» has nothing to send).
  * Pure: test/photoUpload.test.ts.
  */
-import type { DB, Photo, PhotoFail, Visit } from "./types";
+import type { DB, Expense, Photo, PhotoFail, Visit } from "./types";
 
 /** the cloud bucket's limit (migration 20261114200000_files_size_limit, #1430): a bigger file is refused with 413 */
 export const FILES_MAX_BYTES = 25 * 1024 * 1024;
@@ -81,6 +81,45 @@ export function keepPhotoLocal(next: DB, prev: DB): DB {
   });
   return changed ? { ...next, visits } : next;
 }
+
+/**
+ * #1538: the company read again — an expense's receipt keeps its file on this phone and why the cloud refused it (the
+ * server knows only the files row and «failed»). An expense the phone did not have, or without a receipt here, is as
+ * the server says.
+ */
+export function keepReceiptLocal(next: DB, prev: DB): DB {
+  const local = new Map<string, Expense>();
+  for (const x of prev.expenses ?? []) if (x.receiptUri || x.receiptFailed) local.set(x.id, x);
+  if (!local.size || !next.expenses?.length) return next;
+  let changed = false;
+  const expenses = next.expenses.map((x) => {
+    const old = local.get(x.id);
+    if (!old) return x;
+    const receiptUri = x.receiptUri ?? old.receiptUri;
+    // the server's «failed» carries no reason: the phone's own reason wins; the server took it — no mark
+    const receiptFailed = x.receiptFailed ? (old.receiptFailed ?? x.receiptFailed) : x.receiptFileId ? undefined : old.receiptFailed;
+    if (receiptUri === x.receiptUri && receiptFailed === x.receiptFailed) return x;
+    changed = true;
+    const out: Expense = { ...x, ...(receiptUri ? { receiptUri } : {}), ...(old.receiptFileId && !x.receiptFileId ? { receiptFileId: old.receiptFileId } : {}) };
+    if (receiptFailed) out.receiptFailed = receiptFailed;
+    else delete out.receiptFailed;
+    return out;
+  });
+  return changed ? { ...next, expenses } : next;
+}
+
+/** #1538: the queue's answer for an expense's receipt — refused (with why) or taken (the mark goes) */
+export function markReceipt(db: DB, expenseId: string, failed: PhotoFail | null): DB {
+  const x = (db.expenses ?? []).find((e) => e.id === expenseId);
+  if (!x || (failed ? x.receiptFailed === failed : !x.receiptFailed)) return db;
+  const next: Expense = { ...x };
+  if (failed) next.receiptFailed = failed;
+  else delete next.receiptFailed;
+  return { ...db, expenses: (db.expenses ?? []).map((e) => (e.id === expenseId ? next : e)) };
+}
+
+/** a receipt to show as «есть чек»: on this phone, or taken by the cloud; not one the cloud refused */
+export const hasReceipt = (x: Expense) => !x.receiptFailed && !!(x.receiptUri || x.receiptFileId);
 
 /** every photo the cloud did not take, with its visit (newest refusal first) */
 export function failedPhotos(db: DB): { visitId: string; photo: Photo & { upload: NonNullable<Photo["upload"]> } }[] {
