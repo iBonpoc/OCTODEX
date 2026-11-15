@@ -1,6 +1,6 @@
 # Доска руководителя
 
-Руководитель: «Главный чат с управлением агентами» №12 (`session_015CqH69sCAvBQ4JiRs3NqAf`), с 15.11.2026 ~17:00 UTC (открыт аудитом №2). Прежние — №11 (`session_015CqH68GWKQ59fgFc9evnJ5`), №10 (`session_015CqH68ruXPjcwa2xZVyogr`), №9 (`session_015CqH687aYpUm4g8RYH2mco`), №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
+Руководитель: «Главный чат с управлением агентами» №13 (`session_015CqH68we3V2ZEL83FBrvTb`), с 15.11.2026 ~18:00 UTC (открыт аудитом №2). Прежние — №12 (`session_015CqH69sCAvBQ4JiRs3NqAf`), №11 (`session_015CqH68GWKQ59fgFc9evnJ5`), №10 (`session_015CqH68ruXPjcwa2xZVyogr`), №9 (`session_015CqH687aYpUm4g8RYH2mco`), №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
 
 Здесь только живое: кто чем занят, очередь вливания, номера. Что осталось сделать — **только Issues** (правило 21). Старые памятки — `docs/ai/BOARD-archive.md`; журнал — `docs/ai/LOG.md`.
 
@@ -85,6 +85,9 @@
 
 ### Долг руководителя
 #1556 — отдан чату «Карта пути» (см. таблицу); за руководителем — строка зоны «Панель» в CLAUDE.md по его предложению. DIRECTOR-START: замечания №9 — ниже.
+
+### №13 — по ходу (15.11, с ~18:00 UTC)
+- Принял от №12; чатам сообщено. Влито №13: —
 
 ### Памятка №12 (15.11, ~17:58 UTC) — для руководителя №13
 Контекст №12 — 511 тыс. за 1 ч: почти всё — повторные подключения MCP-серверов (каждое заливает в контекст схемы всех инструментов, ~25 тыс.), а не работа. Совет №13: инструменты GitHub в своём чате не загружать — проверку check-runs и влитие отдавать помощнику (Agent sonnet, «влей #N при зелёном, голова = sha»), ответ 1–3 строки.
