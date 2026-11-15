@@ -42,8 +42,8 @@ exports.run = async (h) => {
   // the technician: his jobs and leads only, never a client
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/calls");
-  const wide = h.layout.width > 390;
-  await p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible').click(); await p.waitForTimeout(400);
+  // «Звонки» is a list: its «＋ Звонок» is in the header on every width (#1395)
+  await p.locator('[data-testid="fab-header"]:visible').click(); await p.waitForTimeout(400);
   await h.sheet().getByText("Записать звонок", { exact: true }).last().click(); await p.waitForTimeout(500);
   const places = p.getByTestId("call-places").locator("visible=true");
   h.expect((await p.getByPlaceholder("Работа или лид").locator("visible=true").count()) === 1, "the tech searches a job or a lead");

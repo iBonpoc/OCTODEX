@@ -8,7 +8,7 @@ exports.run = async (h) => {
   await h.expectText(new RegExp(`Все · ${active}`), "All filter count");
 
   // Create is disabled until name + phone + address.
-  await h.click("Создать клиента");
+  await p.getByTestId("fab-header").locator("visible=true").click(); // the list header «＋ Клиент» (#1395)
   const create = p.getByRole("button", { name: "Создать клиента" }).last();
   h.expect(await create.isDisabled(), "create disabled when empty");
   await p.getByPlaceholder("Имя", { exact: true }).last().fill("Tom Becker");

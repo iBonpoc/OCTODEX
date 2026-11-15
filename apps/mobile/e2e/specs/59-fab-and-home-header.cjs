@@ -17,6 +17,8 @@ exports.run = async (h) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true");
   /** the «＋» of the open screen: floating on the phone, in the header on 820/1280 */
   const plus = () => vis(wide ? "fab-header" : "fab");
+  /** a list's «＋ <object>»: a secondary button in the header on every width — nothing floats on a list (#1395, DS §5.3) */
+  const listPlus = () => vis("fab-header");
   const sheet = () => p.locator('[aria-modal="true"]').filter({ hasText: "Быстрые действия" }).last();
   /** the «＋» sheet once its items are in (the sheet slides in) */
   const sheetText = async () => {
@@ -113,8 +115,17 @@ exports.run = async (h) => {
 
   // Clients: one item — straight to the new client form
   await h.go("/clients");
-  h.expect((await plus().count()) === 1, "Clients: one «＋» (its only item goes straight to the form)");
-  await plus().click();
+  h.expect((await listPlus().count()) === 1 && (await vis("fab").count()) === 0, "Clients: one «＋» in the header, none floating (its only item goes straight to the form)");
+  const lb = await box(listPlus());
+  h.expect(Math.round(lb.height) <= 36, `Clients: the header «＋» is ≤ 36 (${lb.height})`);
+  const isYellow = (l) =>
+    l.evaluate((el) => {
+      const bg = [el, ...el.querySelectorAll("div")].map((e) => getComputedStyle(e).backgroundColor).find((x) => x && x !== "rgba(0, 0, 0, 0)" && x !== "transparent") ?? "";
+      const [r, g, bl] = (bg.match(/\d+/g) ?? []).map(Number);
+      return r > 200 && g > 200 && bl < 120;
+    });
+  h.expect(!(await isYellow(listPlus())), "Clients: the header «＋» is not yellow");
+  await listPlus().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/client/edit", `Clients «＋» → /client/edit (${p.url()})`);
 
@@ -148,7 +159,7 @@ exports.run = async (h) => {
 
   // Plan: planners — Лид · Записать в план (the Plan's own sheet)
   await h.go("/plan");
-  await plus().click();
+  await listPlus().click();
   body = await sheetText();
   h.expect(await has("lead", "planAdd"), "Plan «＋»: lead and «Записать в план»");
   h.expect(await has("job", "planEvent", "planTimeOff"), "Plan «＋»: job, event, day off");
@@ -158,7 +169,7 @@ exports.run = async (h) => {
   await closeSheet();
   // «Событие» and «Выходной» open the Plan's event sheet straight away (wave 5, #187/#188)
   for (const [id, text] of [["fab-planEvent", /Целый день|Весь день/], ["fab-planTimeOff", /Целый день|Весь день/]]) {
-    await plus().click();
+    await listPlus().click();
     await sheetText();
     await sheet().getByTestId(id).click();
     await p.waitForTimeout(600);
