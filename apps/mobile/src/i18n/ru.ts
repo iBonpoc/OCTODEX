@@ -63,6 +63,12 @@ export const ru = {
   "nav.mySettings": "Настройки приложения",
   "nav.menu": "Меню",
   "nav.create": "Создать",
+  // #1395: the short object in a list's header «＋ <object>» (DS §12.2)
+  "fab.list.clients": "Клиент",
+  "fab.list.tasks": "Задача",
+  "fab.list.plan": "В план",
+  "fab.list.calls": "Звонок",
+  "fab.list.messages": "Сообщение",
   "nav.group.work": "Работа",
   "nav.group.docs": "Документы",
   "nav.group.money": "Деньги",

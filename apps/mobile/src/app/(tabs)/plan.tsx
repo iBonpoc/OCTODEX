@@ -102,9 +102,9 @@ export default function Plan() {
       hintKey="plan"
       fab="plan"
       fabOn={planner ? { planAdd: () => setAdding(true), planEvent: () => setEv({ kind: "event", day: date }), planTimeOff: () => setEv({ kind: "time_off", day: date }) } : undefined}
-      right={
-        <RowView>
-        <Segmented
+    >
+      {/* the views are a row of their own, under the title: the header keeps only «＋» (#1395) */}
+      <Segmented
           value={mode}
           onChange={setMode}
           items={[
@@ -114,9 +114,6 @@ export default function Plan() {
             { key: "month", label: t("plan.month") },
           ]}
         />
-        </RowView>
-      }
-    >
       {/* spec 31, one rule: the magnifier, «Фильтры» (Мастер, Выполненные); what is on is a chip under the row */}
       <FilterBar<string>
         items={[]}
