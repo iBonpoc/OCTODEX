@@ -155,6 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!s.session) {
       if (ticket === memTicket.current) {
         setMems([]);
+        activeRef.current = new Set();
+        setMembershipsFor(null);
         clearClosed();
       }
       return [];
@@ -269,6 +271,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       alive = false;
       sub.subscription.unsubscribe();
       if (rereadTimer.current) clearTimeout(rereadTimer.current);
+      rereadTimer.current = null;
     };
   }, [afterSession, gone]);
 

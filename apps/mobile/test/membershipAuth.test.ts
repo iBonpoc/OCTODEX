@@ -59,7 +59,7 @@ import { render, settle, type Root } from "./support/miniReact";
 import { AuthProvider } from "../src/cloud/auth";
 import { lastCompanyKey } from "../src/cloud/membershipSync";
 
-type V = { memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: () => Promise<unknown> };
+type V = { accessDenied: () => void; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: () => Promise<unknown> };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: V } }).props.value;
 const row = (c: string, role = "tech") => ({ company_id: c, role, status: "active", companies: { name: c } });
@@ -79,6 +79,30 @@ beforeEach(() => {
   srv.uid = "u1";
   srv.reads.length = 0;
   srv.filters.length = 0;
+});
+
+describe("unit:membershipAuth — «read again» on a refusal (#1633 A2)", () => {
+  it("inside the 5-minute window: one wait to its end (not dropped, not more often); after it — one read", async () => {
+    const r = await start({ data: [row("c1")], error: null });
+    const spy = vi.spyOn(globalThis, "setTimeout");
+    const reads = srv.reads.length;
+    valueOf(r).accessDenied();
+    valueOf(r).accessDenied();
+    valueOf(r).accessDenied();
+    const waits = spy.mock.calls.filter(([, ms]) => (ms ?? 0) > 1000);
+    spy.mockRestore();
+    expect(waits).toHaveLength(1);
+    expect(waits[0]![1]).toBeGreaterThan(4 * 60_000);
+    expect(waits[0]![1]).toBeLessThanOrEqual(5 * 60_000);
+    await settle();
+    expect(srv.reads.length).toBe(reads);
+    (waits[0]![0] as () => void)(); // the window is over
+    await settle();
+    expect(srv.reads.length).toBe(reads + 1);
+    srv.reads[srv.reads.length - 1]!.resolve({ data: [row("c1")], error: null });
+    await settle();
+    expect(srv.reads.length).toBe(reads + 1); // no loop
+  });
 });
 
 describe("unit:membershipAuth — only a confirmed answer counts (#1633 A2)", () => {

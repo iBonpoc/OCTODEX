@@ -149,13 +149,28 @@ describe("unit:membershipStore — the role the cache was read with (#1633 A2)",
     expect(record().role).toBe("tech");
   });
 
-  it("the company's own read shows me gone or with another role: the memberships are read again", async () => {
+  it("the company's own read shows me gone or with another role: the memberships are read again; the answer is not taken until then", async () => {
+    storage.set(KEY, JSON.stringify({ day: "cloud", db: { ...companyFor("owner"), costHistory: OLD }, role: "owner" }));
     signIn("owner");
-    root = render(StoreProvider as (p: P) => unknown, { children: null });
+    auth.membershipStamp = 1;
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
-    server.loads[0]!.resolve({ ...companyFor("owner"), members: [] });
+    server.loads[0]!.resolve({ ...companyFor("owner"), members: [], customers: [] });
     await settle();
+    await wait(400);
     expect(auth.accessDenied).toHaveBeenCalledTimes(1);
+    expect(record().db?.costHistory).toEqual(OLD); // no empty company written over the cache
+    expect(valueOf(r).db.costHistory).toEqual(OLD);
+    // read again and still here with that role (the server's company read is what it is): taken now
+    auth.membershipStamp = 2;
+    r.rerender({ children: null });
+    void valueOf(r).refresh();
+    await settle();
+    server.loads[server.loads.length - 1]!.resolve({ ...companyFor("owner"), members: [] });
+    await settle();
+    await wait(400);
+    expect(valueOf(r).db.costHistory).toEqual(OLD); // same role: what the phone read is kept, the answer is taken
+    expect(server.loads.length).toBeGreaterThan(1);
   });
 });
 
@@ -195,6 +210,13 @@ describe("unit:membershipStore — «no rights» (42501) and a removed company's
     await settle();
     await wait(300);
     expect(outbox()[0]?.tries).toBe(1);
+    // the next refusal is a try too — no new wait for another answer (code-reviewer №1)
+    await wait(1700);
+    await settle();
+    server.sends[server.sends.length - 1]!.d.reject(denied());
+    await settle();
+    await wait(300);
+    expect(outbox()[0]?.tries).toBe(2);
   });
 
   it("the ops of a company the server confirmed I left do not count for the deletion (they stay on the phone); unconfirmed — all count", async () => {

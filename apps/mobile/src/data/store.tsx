@@ -698,8 +698,12 @@ export function StoreProvider({
   accessDeniedRef.current = auth.accessDenied;
   const stampRef = useRef(auth.membershipStamp);
   stampRef.current = auth.membershipStamp;
-  /** an op refused for lack of rights (42501) → the confirmed answer it waits for (the stamp at the refusal) */
+  /** an op refused for lack of rights (42501) → the confirmed answer it waits for (the stamp at the refusal; -Infinity —
+   *  confirmed since, its refusals are tries) */
   const deniedAt = useRef(new Map<string, number>());
+  /** the company's own read did not show me as the memberships say: the stamp then — its answers are not taken until a
+   *  newer confirmed answer of the memberships (a removed person never gets an empty company written over the cache) */
+  const mismatchAt = useRef<number | null>(null);
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
   // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
   const rejectedReadyRef = useRef(rejectedReady);
@@ -813,7 +817,14 @@ export function StoreProvider({
       // #1633 A2: read with the role before (it changed meanwhile) — not this role's truth
       if (roleRef.current !== askedRole) return;
       // the company's own read says who I am there: gone, switched off or another role → the memberships are read again
-      if (!memberMatches(next.members?.find((m) => m.id === auth.userId), askedRole)) accessDeniedRef.current?.();
+      if (!memberMatches(next.members?.find((m) => m.id === auth.userId), askedRole)) {
+        accessDeniedRef.current?.();
+        if (stampRef.current !== undefined) {
+          if (mismatchAt.current === null) mismatchAt.current = stampRef.current;
+          // not read again since: this answer is not taken (the memberships decide: removed — the store leaves the company)
+          if (mismatchAt.current >= stampRef.current) return;
+        }
+      } else mismatchAt.current = null;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
         // #1633 A2: the role changed — nothing kept from the role before
@@ -998,7 +1009,8 @@ export function StoreProvider({
               failedNow.add(item.id);
               continue;
             }
-            deniedAt.current.delete(item.id);
+            // confirmed since: every later refusal of it is a try (not another 5-minute wait each, code-reviewer №1)
+            deniedAt.current.set(item.id, -Infinity);
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
           clearFails(item.id);
