@@ -1003,6 +1003,10 @@ export default function DrawScreen() {
   // not fit the height); the grip puts the toolbar left or right of the card
   const at = place;
   const side = !flat && (at === "left" || at === "right");
+  /** the toolbar beside the chip, not under it: on a side, or the phone on its side (#1630) */
+  const row = side || flat;
+  /** in that row the toolbar is at the left edge (the left side; lying, unless put on the right) */
+  const toolsFirst = at === "left" || (flat && at !== "right");
   // the grip (founder 08.11): drag the toolbar, let go — it sticks to the nearest edge
   const grip = (
     <GestureDetector gesture={gripPan}>
@@ -1225,6 +1229,11 @@ export default function DrawScreen() {
         />
       ) : null}
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+        {/* the toolbar keeps its place (#1630): below the chip and the hints when at the bottom; beside them, at its own edge, when on a side
+            or when the phone lies on its side — the chip coming and going never moves it under the finger */}
+        <View pointerEvents="box-none" style={row ? { flexDirection: "row", alignItems: "flex-end", gap: space[2] } : { gap: space[2] }}>
+        {row && toolsFirst ? tools : null}
+        <View pointerEvents="box-none" style={row ? { flex: 1, alignItems: toolsFirst ? "flex-end" : "flex-start", gap: space[2] } : { gap: space[2] }}>
         {gripping ? (
           <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
@@ -1235,7 +1244,6 @@ export default function DrawScreen() {
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
         ) : null}
-        <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         {/* the summary chip (#1274, founder 12.11: «строки выбора нет — маленькая полупрозрачная плашка-сводка в нижнем углу», over the drawing, no row of its own):
             what is picked, else «Дальше: водостоки», else the totals; a tap opens the measurement's «Просмотр» (the materials and the sum) */}
         {summary && !gripping && (!flat || summary.kind === "selected") ? (
@@ -1277,11 +1285,12 @@ export default function DrawScreen() {
             ) : null}
           </View>
         ) : null}
-        {flat ? tools : null}
         </View>
-        {/* the toolbar is the lowest, at the very edge (#1630): the summary chip and the hints above it come and go without moving
+        {row && !toolsFirst ? tools : null}
+        </View>
+        {/* at the bottom the toolbar is the lowest, at the very edge (#1630): the chip and the hints above it come and go without moving
             it — a toolbar that jumps under the finger sends the next tap to the canvas (a downspout put by a double tap on «Водосток») */}
-        {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
+        {row || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View>}
       </View>
 
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
