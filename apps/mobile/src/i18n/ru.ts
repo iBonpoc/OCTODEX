@@ -69,6 +69,9 @@ export const ru = {
   "fab.list.plan": "В план",
   "fab.list.calls": "Звонок",
   "fab.list.messages": "Сообщение",
+  // #1395: the short object on the card of an address, two buttons in a row on the phone («＋ Смета», not the long path.*New)
+  "fab.obj.estimate": "Смета",
+  "fab.obj.job": "Работа",
   "nav.group.work": "Работа",
   "nav.group.docs": "Документы",
   "nav.group.money": "Деньги",

@@ -70,6 +70,9 @@ export const es: Dict = {
   "fab.list.plan": "Agendar",
   "fab.list.calls": "Llamada",
   "fab.list.messages": "Mensaje",
+  // #1395: the short object on the card of an address, two buttons in a row on the phone («＋ Смета», not the long path.*New)
+  "fab.obj.estimate": "Presupuesto",
+  "fab.obj.job": "Trabajo",
   "nav.group.work": "Trabajo",
   "nav.group.docs": "Documentos",
   "nav.group.money": "Dinero",
