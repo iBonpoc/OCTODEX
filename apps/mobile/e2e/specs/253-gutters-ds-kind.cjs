@@ -8,7 +8,7 @@
  * - «Назад» takes the last pick back.
  * No fixed pauses: it waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, openDsMenu } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -56,6 +56,7 @@ exports.run = async (h) => {
   const surf = await p.getByTestId("draw-surface").boundingBox();
   await p.mouse.click(surf.x + surf.width * 0.24, surf.y + surf.height * 0.42 + 3);
   await p.getByTestId("draw-svg").first().locator("circle").first().waitFor({ timeout: 5000 }); // the downspout mark
+  await openDsMenu(p, [surf.x + surf.width * 0.24, surf.y + surf.height * 0.42 + 3]); // two taps on its mark (#1563)
   await tid("attr-panel").waitFor({ timeout: 5000 });
   if (!wide && (await tid("attr-more").count())) {
     await tid("attr-more").getByRole("button").click();

@@ -9,7 +9,7 @@
  *   820/1280: the side panel keeps its own scroll.
  * Finds things by testID / role; waits on what it checks.
  */
-const { openProps, skipLength, sheetGone, pressWhenStill, canvasAt } = require("../gutters.cjs");
+const { openProps, skipLength, sheetGone, pressWhenStill, canvasAt, openDsMenu } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -107,6 +107,7 @@ exports.run = async (h) => {
   // the downspout's sheet (it opens by itself when the downspout is put)
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click((x0 + x1) / 2, y);
+  await openDsMenu(p, [(x0 + x1) / 2, y]); // two taps on its mark (#1563)
   await panel().waitFor({ timeout: 5000 });
   await p.waitForTimeout(400);
   { const n = await scrollers(); h.expect(n === 1, `the downspout's sheet: only the sheet's own scroll (${n})`); }

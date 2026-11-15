@@ -8,7 +8,7 @@
  *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
  * Finds things by id / testID; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { skipLength, canvasAt, openDsMenu } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -56,8 +56,8 @@ exports.run = async (h) => {
   await waitFor(async () => (await texts()).includes("AAA"), "the default fittings over it: «AAA»");
 
   // elbows by style
-  // the menu opened by itself when it was put (founder 09.11)
-  if (!wide) await tid("attr-panel").waitFor({ timeout: 5000 });
+  // its menu: two taps on its mark (#1563 — it no longer opens by itself when put)
+  await openDsMenu(p, [x0 + (x1 - x0) * 0.3, y + 2]);
   await tid("attr-elbow-qty").waitFor({ timeout: 5000 });
   await step("B", 1);
   await waitFor(async () => (await texts()).includes("AAAB"), "B +1 → «AAAB»");

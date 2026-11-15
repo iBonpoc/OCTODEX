@@ -655,14 +655,12 @@ export default function DrawScreen() {
       // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
       // in a tap on the web)
       const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
-      if (tl === "ds" && onDs?.kind === "ds" && !liftTap.current) {
-        setSelected(onDs.id);
-        setSheet(true); // its menu (founder 09.11)
-        return;
-      }
+      // …and it is the same as with any tool (#1563, founder 14.11: «если выбран даунспот — меню сразу, если жёлоб — надо два раза»): one tap
+      // picks, two open its properties — the common code below
+      const onAnyDs = tl === "ds" && onDs?.kind === "ds";
       // …nor a tap that puts a downspout (the downspout tool drags ends and corners now)
-      if (tl === "ds" && liftTap.current) return;
-      if (tl === "ds") {
+      if (tl === "ds" && !onAnyDs && liftTap.current) return;
+      if (tl === "ds" && !onAnyDs) {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch), cur.current.ch);
         if (next !== d) {
@@ -670,8 +668,7 @@ export default function DrawScreen() {
           haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
-          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open
-          setSheet(true);
+          // no menu by itself any more (#1563, founder 14.11): two taps on it open it, as on anything else
         }
         return;
       }
