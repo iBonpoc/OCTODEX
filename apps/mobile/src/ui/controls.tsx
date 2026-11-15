@@ -589,7 +589,7 @@ export function TextField({
         minHeight: h,
         borderRadius: radius.field,
         borderWidth: 1,
-        borderColor: shownError ? c.status.bad.fill : c.bd,
+        borderColor: shownError ? c.status.bad.fill : c.bdField,
         backgroundColor: c.in,
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",

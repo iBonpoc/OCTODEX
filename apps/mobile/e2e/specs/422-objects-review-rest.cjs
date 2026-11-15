@@ -50,4 +50,22 @@ exports.run = async (h) => {
     await h.expectText(/Работы|Сметы/, `${path}: the list is open`);
     h.expect((await vis(id).count()) === 0, `${path}: the technician has no «＋» in a list`);
   }
+
+  // 4) «не обслуживаем» (Linda, c3: job j3 with no estimate, address p3): neither the chip nor the list buttons (any role of the office)
+  await h.seed("octo.role.v1", "director");
+  await h.go("/job/j3");
+  await tid("job-rel-new-estimate").waitFor({ timeout: 8000 });
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    raw.db.customers.find((c) => c.id === "c3").status = "do_not_service";
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  });
+  await h.go("/job/j3");
+  await tid("job-screen").waitFor({ timeout: 8000 });
+  h.expect((await vis("job-rel-new-estimate").count()) === 0, "«не обслуживаем»: no «Создать смету» in «Связано»");
+  for (const [path, id] of [["/client/c3?s=jobs", "client-section-new-job"], ["/property/p3?s=jobs", "property-section-new-job"]]) {
+    await h.go(path);
+    await h.expectText(/Работы/, `${path}: the list is open`);
+    h.expect((await vis(id).count()) === 0, `${path}: «не обслуживаем» has no «＋» in a list`);
+  }
 };

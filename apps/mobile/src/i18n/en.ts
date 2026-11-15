@@ -2607,6 +2607,8 @@ export const en: Dict = {
   "ds.where.fields": "Estimate, catalog, invoice, discount, tax, deposit",
   "ds.fields.form": "Form",
   "ds.fields.formHint": "Fields sit right on the background, no gray plate. A field’s helper action is an icon inside it on the right: Paste in the phone, Clear in the note once it has text.",
+  "ds.fields.formMain": "The field frame is the `bdField` token, at least 3:1 to the screen. The group’s main button stands apart: 16 more above it. A form column is at most 560 wide (`layout.formMax`).",
+  "ds.fields.formMainBtn": "Continue",
   "field.pastePhone": "Paste number",
   "ds.fields.title": "Number field",
   "ds.fields.hint": "Type freely: «-100», «abc», «1e5», «12,50» — an error under the field, not a quiet zero. Leave the field — US format «1,234.50». On iPhone a «‹ ›  Done» bar sits above the keyboard.",
