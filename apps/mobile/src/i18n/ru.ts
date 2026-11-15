@@ -222,6 +222,8 @@ export const ru = {
   "profile.name.label": "Как вас зовут",
   "profile.name.hint": "Имя видят коллеги, оно стоит в подписи компании.",
   "profile.name.save": "Сохранить",
+  "profile.name.ask": "Как вас зовут?",
+  "profile.name.later": "Позже",
   "signout.title": "Перед выходом",
   "signout.queue": "Не отправлено: {n} — уйдёт, когда появится сеть.",
   "signout.drafts": "Черновики: {n} — есть только на этом устройстве, после выхода сотрутся.",

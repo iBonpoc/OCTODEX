@@ -223,6 +223,8 @@ export const es: Dict = {
   "profile.name.label": "Su nombre",
   "profile.name.hint": "Sus compañeros lo ven y la firma de la empresa lo lleva.",
   "profile.name.save": "Guardar",
+  "profile.name.ask": "¿Cómo se llama?",
+  "profile.name.later": "Después",
   "signout.title": "Antes de salir",
   "signout.queue": "Sin enviar: {n} — se enviará cuando haya red.",
   "signout.drafts": "Borradores: {n} — solo en este dispositivo, se borran al salir.",
