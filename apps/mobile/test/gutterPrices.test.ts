@@ -1,11 +1,13 @@
 /** Цены модуля Gutters в прайсе компании (docs/specs/33-gutters-settings.md П22.10, M7d): поиск позиции, тестовые позиции без дублей, $ под рисунком. */
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "../src/data/types";
 import { TEST_RATES } from "../src/modules/gutters/canvas/testRates";
 import {
   bindable, bindItem, findItem, LABOR_PARTS, laborRows, listPreview, matchAttrs, matchKey, materialRows, missingItems, sampleJob, stableItemId, testPriceCents,
-  PART_WORDS, WORK_WORDS,
+  PART_WORDS, WORK_WORDS, dsLine,
 } from "../src/modules/gutters/prices";
 import { notSavedKey } from "../src/modules/gutters/settings";
 import { uuidV5 } from "../src/modules/gutters/uuid5";
@@ -171,5 +173,23 @@ describe("цена материала — как в ядре (ревью M8a №
     const r = listPreview([g], [it]);
     // $10.00 + 10.25 % + 10 % = $12.1275 → $12.13 a foot
     expect(r.totalCents).toBe(Math.round(Number(g.qty) * 1213));
+  });
+});
+
+// #814 (audit Q-04): «Детали» speaks words, not codes, and shows no zero rows
+describe("#814 the details in words", () => {
+  const t = (k: string, p?: Record<string, string | number>) => `${k}${p ? JSON.stringify(p) : ""}`;
+  it("every part code the engine can put out has a word (PART_WORDS) — a source guard, so a new part can not reach a person as a code", () => {
+    const dir = join(__dirname, "../../../packages/estimating-engine/src");
+    const codes = new Set<string>();
+    for (const f of readdirSync(dir).filter((n) => /\.ts$/.test(n))) for (const m of readFileSync(join(dir, f), "utf8").matchAll(/\bpart: "([a-z_]+)"/g)) codes.add(m[1]!);
+    expect(codes.size).toBeGreaterThan(20);
+    expect([...codes].filter((c) => !PART_WORDS.has(c)), "add the part to PART_WORDS and mod.gutters.pr.p.<code> in ru/en/es").toEqual([]);
+  });
+  it("a downspout's line: only what it has — no «колен 0 · офсетов 0»", () => {
+    expect(dsLine(t as never, 3, 0)).toBe('mod.gutters.view.dsElbows{"n":3}');
+    expect(dsLine(t as never, 0, 2)).toBe('mod.gutters.view.dsOffsets{"n":2}');
+    expect(dsLine(t as never, 2, 1)).toBe('mod.gutters.view.dsElbows{"n":2} · mod.gutters.view.dsOffsets{"n":1}');
+    expect(dsLine(t as never, 0, 0)).toBe("");
   });
 });

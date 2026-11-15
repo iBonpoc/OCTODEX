@@ -212,6 +212,14 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
  * A part's name when the price list has no item for it (PricesScreen «создать», the estimate's line with «нет цены»):
  * `t` — the app's translator on the page, the CLIENT's language for an estimate line (rule 7). Pure.
  */
+/**
+ * A downspout's elbows and offsets in words (#814, audit Q-04): only what it has — «колен 3», «колен 3 · офсетов 1»; none of
+ * either — "" (no «колен 0 · офсетов 0» beside the downspout).
+ */
+export function dsLine(t: (key: DictKey, params?: Record<string, string | number>) => string, elbows: number, offsets: number): string {
+  return [elbows > 0 ? t("mod.gutters.view.dsElbows", { n: elbows }) : "", offsets > 0 ? t("mod.gutters.view.dsOffsets", { n: offsets }) : ""].filter(Boolean).join(" · ");
+}
+
 export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty, fmt: LenFormat = "ftin"): string {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
