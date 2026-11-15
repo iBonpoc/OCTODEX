@@ -47,19 +47,19 @@ exports.run = async (h) => {
 
   // a list's editor: «Добавить человека» opens a group without a plate; it saves the person
   await h.go("/company/contacts");
-  await p.getByRole("button", { name: "Добавить человека" }).locator("visible=true").first().click();
+  await tid("co-contact-add").click();
   await tid("co-contact-edit").waitFor({ timeout: 3000 });
   // the editor itself and what holds it paint no background (a card would)
   const bgs = await tid("co-contact-edit").evaluate((e) => [e, e.parentElement].map((x) => getComputedStyle(x).backgroundColor));
   h.expect(bgs.every((bg) => bg === "transparent" || bg === "rgba(0, 0, 0, 0)"), `the person's editor has no plate (${bgs.join(", ")})`);
   await tid("co-contact-edit").locator("input").first().fill("E2E Person 390");
-  await tid("co-contact-edit").getByRole("button", { name: "Сохранить" }).click();
+  await tid("co-contact-save").click();
   await tid("co-contact-edit").waitFor({ state: "hidden", timeout: 3000 });
   // saved: the person is a card of the list now
   await p.getByRole("button", { name: "E2E Person 390" }).locator("visible=true").first().waitFor({ timeout: 4000 });
 
   await h.go("/company/licenses");
-  await p.getByRole("button", { name: "Добавить лицензию" }).locator("visible=true").first().click();
+  await tid("co-license-add").click();
   await tid("co-license-edit").waitFor({ timeout: 3000 });
   await h.shot("license-editor");
 };

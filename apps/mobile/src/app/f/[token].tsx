@@ -127,31 +127,31 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
           <T v="body" tone="mut">{t("intake.intro", { company: form.company })}</T>
         </Card>
         <FieldGroup testID="intake-fields">
-            <View testID="intake-name"><TextField type="name" value={f.name} onChangeText={set("name")} placeholder={t("intake.name")} label={t("intake.name")} /></View>
-            <View testID="intake-phone"><TextField type="phone" value={f.phone} onChangeText={set("phone")} placeholder={t("intake.phone")} label={t("intake.phone")} /></View>
-            <View testID="intake-email"><TextField type="email" value={f.email} onChangeText={set("email")} placeholder={t("intake.email")} label={t("intake.email")} /></View>
-            <View testID="intake-address"><TextField type="street" value={f.address} onChangeText={set("address")} placeholder={t("intake.address")} label={t("intake.address")} /></View>
-            <RowView>
-              <View style={{ flex: 2 }}><TextField type="city" value={f.city} onChangeText={set("city")} placeholder={t("intake.city")} label={t("intake.city")} /></View>
-              <View style={{ flex: 1 }}><TextField type="state" value={f.state} onChangeText={set("state")} placeholder={t("intake.state")} label={t("intake.state")} /></View>
-              <View style={{ flex: 1 }}><TextField type="zip" value={f.zip} onChangeText={set("zip")} placeholder={t("intake.zip")} label={t("intake.zip")} /></View>
-            </RowView>
-            {form.categories.length > 1 ? (
-              <View testID="intake-category" style={{ gap: space[2] }}>
-                <T v="caption" tone="mut">{t("intake.service")}</T>
-                <ChoiceChips
-                  items={form.categories.map((c) => ({ key: c.id, label: categoryLabel({ id: c.id, seedKey: c.key, name: c.name, position: 0 }, t as never) }))}
-                  value={categoryId}
-                  onChange={setCategoryId}
-                />
-              </View>
-            ) : null}
-            <View testID="intake-message"><TextField type="note" value={f.message} onChangeText={set("message")} placeholder={t("intake.message")} label={t("intake.message")} /></View>
-            {/* people never see this field; a bot fills every field it finds */}
-            {/* display none: no Tab stop and no autofill for a person; a bot that posts every field still fills it */}
-            <View style={{ display: "none" }} aria-hidden importantForAccessibility="no-hide-descendants">
-              <View testID="intake-website"><TextField type="text" value={f.website} onChangeText={set("website")} label={t("intake.hp")} /></View>
+          <View testID="intake-name"><TextField type="name" value={f.name} onChangeText={set("name")} placeholder={t("intake.name")} label={t("intake.name")} /></View>
+          <View testID="intake-phone"><TextField type="phone" value={f.phone} onChangeText={set("phone")} placeholder={t("intake.phone")} label={t("intake.phone")} /></View>
+          <View testID="intake-email"><TextField type="email" value={f.email} onChangeText={set("email")} placeholder={t("intake.email")} label={t("intake.email")} /></View>
+          <View testID="intake-address"><TextField type="street" value={f.address} onChangeText={set("address")} placeholder={t("intake.address")} label={t("intake.address")} /></View>
+          <RowView>
+            <View style={{ flex: 2 }}><TextField type="city" value={f.city} onChangeText={set("city")} placeholder={t("intake.city")} label={t("intake.city")} /></View>
+            <View style={{ flex: 1 }}><TextField type="state" value={f.state} onChangeText={set("state")} placeholder={t("intake.state")} label={t("intake.state")} /></View>
+            <View style={{ flex: 1 }}><TextField type="zip" value={f.zip} onChangeText={set("zip")} placeholder={t("intake.zip")} label={t("intake.zip")} /></View>
+          </RowView>
+          {form.categories.length > 1 ? (
+            <View testID="intake-category" style={{ gap: space[2] }}>
+              <T v="caption" tone="mut">{t("intake.service")}</T>
+              <ChoiceChips
+                items={form.categories.map((c) => ({ key: c.id, label: categoryLabel({ id: c.id, seedKey: c.key, name: c.name, position: 0 }, t as never) }))}
+                value={categoryId}
+                onChange={setCategoryId}
+              />
             </View>
+          ) : null}
+          <View testID="intake-message"><TextField type="note" value={f.message} onChangeText={set("message")} placeholder={t("intake.message")} label={t("intake.message")} /></View>
+          {/* people never see this field; a bot fills every field it finds */}
+          {/* display none: no Tab stop and no autofill for a person; a bot that posts every field still fills it */}
+          <View style={{ display: "none" }} aria-hidden importantForAccessibility="no-hide-descendants">
+            <View testID="intake-website"><TextField type="text" value={f.website} onChangeText={set("website")} label={t("intake.hp")} /></View>
+          </View>
         </FieldGroup>
         {form.smsConsent ? (
           <Card>

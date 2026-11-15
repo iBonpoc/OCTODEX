@@ -9,7 +9,9 @@ const TOKEN = "f0123456789abcdef0123456789abcdef";
 
 exports.run = async (h) => {
   const p = h.page;
+  const posts = [];
   await p.route("**/functions/v1/lead-intake*", async (route) => {
+    if (route.request().method() === "POST") posts.push(JSON.parse(route.request().postData() || "{}"));
     if (route.request().method() === "GET")
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, form: { company: "Sunset Gutters", language: "en", captcha: false, sms_consent: false, categories: [] } }) });
     return route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
@@ -29,6 +31,8 @@ exports.run = async (h) => {
   const check = async (path, group) => {
     await h.go(path);
     await tid(group).waitFor({ timeout: 8000 });
+    // a signed-in person reaches the screen without a redirect
+    h.expect(new URL(p.url()).pathname === path.split("?")[0], `${path}: no redirect (${p.url()})`);
     h.expect((await plateOver(group)) === null, `${path}: no plate under «${group}» (${await plateOver(group)})`);
     // the group spans the column of the screen: its parent is not narrower than it, and no padding of a card sits between
     const gap = await tid(group).evaluate((e) => {
@@ -47,6 +51,14 @@ exports.run = async (h) => {
   await h.shot("trade");
   await check(`/f/${TOKEN}`, "intake-fields");
   await h.shot("intake");
+  // the honeypot is hidden, takes no room and no focus; the form still sends, and sends the trap empty
+  h.expect((await p.locator('[data-testid="intake-website"]').locator("visible=true").count()) === 0, "the honeypot field is not visible");
+  await p.locator('[data-testid="intake-name"] input').fill("E2E Person 394");
+  await p.locator('[data-testid="intake-phone"] input').fill("6265550113");
+  await p.locator('[data-testid="intake-message"] textarea, [data-testid="intake-message"] input').first().fill("Gutters 394");
+  await tid("intake-send").locator('[role="button"], button').first().click();
+  await h.expectText(/Request sent/, "the form sent (the same as in 178)");
+  h.expect(posts.length === 1 && posts[0].name === "E2E Person 394" && !posts[0].website, `one request with the name and an empty trap (${JSON.stringify(posts[0] || {}).slice(0, 120)})`);
 
   // the fields still work: typing a name enables «Создать» on the company screen
   await h.go("/auth/company");

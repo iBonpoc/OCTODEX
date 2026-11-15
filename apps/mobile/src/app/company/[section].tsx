@@ -307,6 +307,7 @@ function ContactsEditor() {
               <Button label={t("common.close")} variant="ghost" size="sm" onPress={() => setEdit(null)} />
             )}
             {ro ? null : <Button
+              testID="co-contact-save"
               label={t("ue.save")}
               icon="check"
               disabled={!edit.name.trim()}
@@ -318,7 +319,7 @@ function ContactsEditor() {
           </RowView>
         </FieldGroup>
       ) : ro ? null : (
-        <Button label={t("co.addPerson")} icon="plus" variant="secondary" full onPress={() => setEdit(blank())} />
+        <Button testID="co-contact-add" label={t("co.addPerson")} icon="plus" variant="secondary" full onPress={() => setEdit(blank())} />
       )}
     </>
   );
@@ -390,6 +391,7 @@ function LicensesEditor() {
               <Button label={t("common.close")} variant="ghost" size="sm" onPress={() => setEdit(null)} />
             )}
             {ro ? null : <Button
+              testID="co-license-save"
               label={t("ue.save")}
               icon="check"
               disabled={!edit.number.trim() || (!!edit.exp && !fromUs(edit.exp))}
@@ -408,6 +410,7 @@ function LicensesEditor() {
         </FieldGroup>
       ) : ro ? null : (
         <Button
+          testID="co-license-add"
           label={t("co.addLicense")}
           icon="plus"
           variant="secondary"
