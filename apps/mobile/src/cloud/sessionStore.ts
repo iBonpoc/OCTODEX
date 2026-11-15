@@ -10,8 +10,9 @@
  * - One operation at a time per key (auth-js reads the session around its own write when it refreshes the token).
  * - The move: a copy in AsyncStorage (an older version's, or a write the protected store refused) is newer — read first,
  *   written to the protected store, then removed (tried again on every write until it goes).
- * - A read the iOS store refuses (before the first unlock after a restart) throws — auth-js keeps the session then; an
- *   Android entry that cannot be decrypted (a broken Keystore key) is removed and reads as none.
+ * - A read the iOS store refuses (before the first unlock after a restart) throws — auth-js keeps the session then; on
+ *   Android the module itself removes an entry it can never decrypt (a lost key) — what reaches us is a passing Keystore
+ *   error: it reads as none, nothing is removed (the next write replaces it; review №1).
  * - A reinstall on iOS: the Keychain outlives the app, AsyncStorage does not — no install mark and no old copy → the
  *   session left in the Keychain is removed (the next person on the phone never finds it).
  * Rollback by air to a JS before this change: it reads AsyncStorage only — one sign-in again, no data lost (№11, 15.11).
@@ -63,7 +64,7 @@ export interface StoreOpts {
   /** null — no native module (web, an older build): AsyncStorage as before */
   secure: SecureKV | null;
   plain: SessionStorage;
-  /** Android: an entry that cannot be decrypted is removed (iOS: a refused read throws — the Keychain is locked) */
+  /** Android: a read that fails reads as none, nothing removed (iOS: a refused read throws — the Keychain is locked) */
   dropUnreadable: boolean;
   newGen?: () => string;
   part?: number;
@@ -93,7 +94,6 @@ export function makeSessionStore(o: StoreOpts): SessionStorage & { forget: (keys
       return await secure.get(k);
     } catch (e) {
       if (!o.dropUnreadable) throw e;
-      await secure.del(k).catch(() => {});
       return null;
     }
   };
@@ -121,8 +121,14 @@ export function makeSessionStore(o: StoreOpts): SessionStorage & { forget: (keys
     } else {
       const gen = newGen();
       const parts = cut(value, size);
-      for (let i = 0; i < parts.length; i++) await secure.set(partKey(key, gen, i), parts[i]);
-      await secure.set(key, `${POINTER}${gen}:${parts.length}`);
+      try {
+        for (let i = 0; i < parts.length; i++) await secure.set(partKey(key, gen, i), parts[i]);
+        await secure.set(key, `${POINTER}${gen}:${parts.length}`);
+      } catch (e) {
+        // the new parts without a pointer would stay in the Keychain for ever (nothing finds them): taken away now
+        for (let i = 0; i < parts.length; i++) await secure.del(partKey(key, gen, i)).catch(() => {});
+        throw e;
+      }
     }
     await dropGen(key, head);
   };
@@ -147,6 +153,11 @@ export function makeSessionStore(o: StoreOpts): SessionStorage & { forget: (keys
       }
     })().catch(() => {}));
 
+  /** the copy in AsyncStorage goes once the protected store has the value; if it cannot go, it is made that value (it
+   *  is read first: an older one there would bring back a refresh token the server has already replaced — review №2) */
+  const dropCopy = async (key: string, value: string) => {
+    await plain.removeItem(key).catch(() => plain.setItem(key, value).catch(() => {}));
+  };
   const removeBoth = async (key: string) => {
     const head = await rawGet(key).catch(() => null);
     await secure.del(key).catch(() => {});
@@ -163,7 +174,7 @@ export function makeSessionStore(o: StoreOpts): SessionStorage & { forget: (keys
           // newer than the protected store's: moved there now (left for the next try if refused)
           try {
             await writeSecure(key, copy);
-            await plain.removeItem(key).catch(() => {});
+            await dropCopy(key, copy);
           } catch {
             // stays in AsyncStorage: read from there
           }
@@ -181,7 +192,7 @@ export function makeSessionStore(o: StoreOpts): SessionStorage & { forget: (keys
           await plain.setItem(key, value);
           return;
         }
-        await plain.removeItem(key).catch(() => {});
+        await dropCopy(key, value);
       }),
     removeItem: (key) => serial(key, () => removeBoth(key)),
     /** the account is deleted: these keys leave both stores (the Keychain outlives the app on iOS) */

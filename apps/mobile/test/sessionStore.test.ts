@@ -122,14 +122,16 @@ describe("unit:sessionStore — the move, refusals, a reinstall (#1634)", () => 
     expect(s.plain.has(KEY)).toBe(false);
     expect(await st.getItem(KEY)).toBe("newer");
   });
-  it("iOS: a refused read (before the first unlock) throws — never «no session»; Android: a broken entry goes", async () => {
+  it("iOS: a refused read (before the first unlock) throws — never «no session»; Android: reads as none, nothing removed", async () => {
     const s = stores();
     await makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: false }).setItem(KEY, "v");
     s.fail.get = () => true;
     await expect(makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: false }).getItem(KEY)).rejects.toThrow();
     expect(s.sec.get(KEY)).toBe("v");
     expect(await makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: true }).getItem(KEY)).toBeNull();
-    expect(s.sec.has(KEY)).toBe(false);
+    expect(s.sec.get(KEY)).toBe("v"); // a passing Keystore error never signs the person out for good
+    s.fail.get = null;
+    expect(await makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: true }).getItem(KEY)).toBe("v");
   });
   it("a reinstall on iOS (no mark, no copy): the session the Keychain kept is removed; with the mark it stays", async () => {
     const s = stores({});
@@ -140,6 +142,33 @@ describe("unit:sessionStore — the move, refusals, a reinstall (#1634)", () => 
     expect(s.plain.get(INSTALL_MARK)).toBe("1");
     s.sec.set(KEY, "mine");
     expect(await makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: false }).getItem(KEY)).toBe("mine");
+  });
+  it("the copy in AsyncStorage cannot be removed: it is made the newest value (never an older refresh token read first)", async () => {
+    const s = stores();
+    const st = makeSessionStore({ secure: s.secure, plain: { ...s.p, removeItem: async () => Promise.reject(new Error("busy")) }, dropUnreadable: false, newGen: gen });
+    s.plain.set(KEY, "old");
+    await st.setItem(KEY, "new");
+    expect(s.plain.get(KEY)).toBe("new");
+    expect(await st.getItem(KEY)).toBe("new");
+  });
+  it("a long write the store refuses half way: its parts leave the Keychain (no orphans), the value goes to AsyncStorage", async () => {
+    const s = stores();
+    const st = makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: false, newGen: gen });
+    await st.setItem(KEY, "short");
+    let n = 0;
+    s.fail.set = () => ++n > 2;
+    await st.setItem(KEY, session(3000));
+    s.fail.set = null;
+    expect([...s.sec.keys()]).toEqual([KEY]);
+    expect(s.sec.get(KEY)).toBe("short");
+    expect(await st.getItem(KEY)).toBe(session(3000)); // the copy is newer: read first, moved now
+    expect(s.plain.has(KEY)).toBe(false);
+  });
+  it("the mark cannot be read: nothing is wiped", async () => {
+    const s = stores({});
+    s.sec.set(KEY, "mine");
+    const st = makeSessionStore({ secure: s.secure, plain: { ...s.p, getItem: async (k) => (k === INSTALL_MARK ? Promise.reject(new Error("busy")) : s.p.getItem(k)) }, dropUnreadable: false });
+    expect(await st.getItem(KEY)).toBe("mine");
   });
   it("the mark cannot be written: nothing is wiped (a later start would wipe a live session)", async () => {
     const s = stores({});
