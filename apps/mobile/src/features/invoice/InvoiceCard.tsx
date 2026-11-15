@@ -9,6 +9,8 @@ import type { Invoice, PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { companyForPortal } from "@/cloud/portal";
 import { invoiceChip } from "@/features/ContractStatement";
+import { invoiceNext } from "@/features/invoice/invoiceNext";
+import { daysOverdue } from "@/data/selectors";
 import { invoiceHtml, invoiceMessage } from "@/features/docPdf";
 import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
@@ -23,7 +25,7 @@ import { VoidInvoiceMenu, type InvoiceMoreItem } from "@/features/invoice/VoidIn
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { paymentRight } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
@@ -66,6 +68,10 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
   // no part, no reference (the server's deposit function takes neither)
   const right = paymentRight(store.role, inv, { fromEstimate: !!job?.estimateId, pendingCents });
   const chip = invoiceChip(inv);
+  // one word of status in the list and on the card (#1495): an overdue invoice says «Просрочен N дн» here as in the list
+  // the one source of truth is `invoiceChip` (colour, word and the line «what next» agree)
+  const overdueNow = chip.l === "st.overdue" && !!inv.dueDate;
+  const chipLabel = overdueNow ? t("card.sign.overdueDays", { d: daysOverdue(inv.dueDate!) }) : t(chip.l);
   const company = companyForPortal(db, store.companyName ?? APP_NAME);
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
   const lang = docLanguageFor(db, { customerId: inv.customerId });
@@ -112,6 +118,15 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
   const more = <VoidInvoiceMenu inv={inv} items={items} />;
   const body = (
     <>
+      {/* #1495 (DS §12.3 п.2): what is now and what next, one line under the title */}
+      <View testID="invoice-next">
+        <T v="body">
+          {(() => {
+            const n = invoiceNext(inv, lastReminder ? day(lastReminder.at) : undefined, day(inv.dueDate));
+            return t(n.key, n.params);
+          })()}
+        </T>
+      </View>
       {/* «Связано» (13 §2.7, 15-flows §2): job, estimate, client — the parents of the invoice */}
       <RelatedBlock of={{ type: "invoice", id: inv.id }} />
       <Card status={chip.s}>
@@ -119,7 +134,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
           <T v="heading" style={{ flex: 1 }}>
             {inv.title || t(`inv.kind.${inv.kind ?? "final"}` as DictKey)}
           </T>
-          <StatusChip status={chip.s} label={t(chip.l)} />
+          <StatusChip status={chip.s} label={chipLabel} />
         </RowView>
         {job ? (
           <T v="caption" tone="mut">
@@ -188,9 +203,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
           ))}
         </CardGrid>
       ) : (
-        <T v="caption" tone="mut">
-          {t("rcpt.none")}
-        </T>
+        <View testID="invoice-no-receipts"><Empty icon="dollar" title={t("rcpt.none")} hint={balance > 0 && right !== "none" ? t("rcpt.noneHint") : undefined} /></View>
       )}
 
       <Sheet visible={remind} onClose={() => setRemind(false)} title={t("mny.remind.title")}>
