@@ -26,6 +26,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { fillStyle } from "@/ui/fill";
@@ -33,7 +34,7 @@ import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
-import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
+import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
 import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, PROFILE_ICON, type DsAttrs, type RunAttrs } from "../canvas/attrs";
@@ -1050,6 +1051,17 @@ export default function DrawScreen() {
     setHint("move");
   }, [selected, canSave, drawing.runs]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
+  // a chain short of downspouts (#1570, founder 14.11: «удалил водосток — пусть пишет, что не хватает»): a warning while it lasts, with «Поставить водосток»
+  const short = useMemo(() => (canSave && autoDs ? shortChains(drawing, autoDs.spacingIn) : []), [canSave, autoDs, drawing]);
+  const shortRun = short[0] ? drawing.runs.filter((r) => short[0]!.runIds.includes(r.id)).sort((u, v) => runLengthIn(v) - runLengthIn(u))[0] : undefined;
+  const refill = () => {
+    const o = cur.current.autoDs;
+    const s0 = short[0];
+    if (!o || !s0) return;
+    // put back as the rule wants: one step of «Назад», no second pass of the automatic downspouts (`placed`)
+    // every short chain at once (code-reviewer #1576: with two short the button fixed only the first, the warning stayed)
+    commit(refillChain(cur.current.drawing, short.flatMap((c) => c.runIds), { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }), cur.current.drawing, true);
+  };
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
   const gA = ghost && view ? toScreen(view, ghost.a) : null;
@@ -1151,6 +1163,23 @@ export default function DrawScreen() {
             </RowView>
           </View>
         )}
+        {/* a chain short of downspouts (#1570): under the header, as a banner stands (DS) — not at the bottom, where the hand draws */}
+        {short.length && shortRun && !gripping ? (
+          <Banner
+            tone="warn"
+            testID="draw-ds-short"
+            title={short.length > 1 ? t("mod.gutters.draw.dsShort.titleMany", { n: short.length }) : t("mod.gutters.draw.dsShort.title")}
+            // «водостоков 0 из 1», not «стоит 0» (read as a price); the story only when there is more than one, in full (design-reviewer #1570)
+            hint={t("mod.gutters.draw.dsShort.hint", {
+              run: new Set(drawing.runs.map((r) => storyOf(r.attrs.story))).size > 1
+                ? t("mod.gutters.draw.dsShort.runStory", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat), n: storyOf(shortRun.attrs.story) })
+                : t("mod.gutters.draw.dsShort.run", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat) }),
+              need: short[0]!.need,
+              have: short[0]!.have,
+            })}
+            action={{ label: short.length > 1 ? t("mod.gutters.draw.dsShort.actionMany") : t("mod.gutters.draw.dsShort.action"), onPress: refill }}
+          />
+        ) : null}
         {/* the toolbar stuck to the top (founder 09.11): under the header */}
         {at === "top" && !flat ? <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View> : null}
       </View>
