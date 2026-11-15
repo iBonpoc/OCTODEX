@@ -14,7 +14,7 @@ exports.run = async (h) => {
     return (await tid("invoice-next").innerText()).replace(/\s+/g, " ");
   };
 
-  h.expect(/Просрочен на 9 дн\. · напоминание не отправлялось/.test(await nextOf("/invoice/i1")), "i1: overdue by 9 days, no reminder sent");
+  h.expect(/Просрочен 9 дн · напоминание не отправлялось/.test(await nextOf("/invoice/i1")), "i1: overdue by 9 days, no reminder sent");
   await h.expectText(/Просрочен 9 дн/, "i1: the card's chip says «Просрочен 9 дн», as the list does");
   await h.shot("overdue");
   h.expect(/Ждёт оплаты до /.test(await nextOf("/invoice/i2")), "i2: waiting until the due day");
