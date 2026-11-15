@@ -55,11 +55,9 @@ exports.run = async (h) => {
   await h.seed("octo.role.v1", "director");
   await h.go("/job/j3");
   await tid("job-rel-new-estimate").waitFor({ timeout: 8000 });
-  await p.evaluate(() => {
-    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
-    raw.db.customers.find((c) => c.id === "c3").status = "do_not_service";
-    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-  });
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.customers.find((c) => c.id === "c3").status = "do_not_service";
+  await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
   await tid("job-screen").waitFor({ timeout: 8000 });
   h.expect((await vis("job-rel-new-estimate").count()) === 0, "«не обслуживаем»: no «Создать смету» in «Связано»");
