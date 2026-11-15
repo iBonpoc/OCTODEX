@@ -32,6 +32,7 @@ on:
 permissions:
   contents: read
   pull-requests: read   # which PR main's last commit came from (our BUILD, #733)
+  actions: read         # the store-build gate reads the Checks runs of this commit (#1004)
 
 concurrency:
   group: eas-build-${{ inputs.platform }}
@@ -51,6 +52,18 @@ jobs:
         run: |
           echo "::error::Android is paused: google-services.json is for com.octodex.app, the app is com.gorix.app now (#656). Add the Android app com.gorix.app in Firebase and its file in expo.dev → GOOGLE_SERVICES_JSON (#1444), then remove this step."
           exit 1
+      # #1004: a store build (iOS: TestFlight) only from a commit with a green FULL Checks run (nightly or a manual run, all 6
+      # views). A push to main runs only 390-dark and a PR three views (audit condition for #906 п.6); every platform except Android «preview»
+      # (an APK for our own phones, not a store build) is gated — a new store platform is gated by default. Only from main, and only main's
+      # full runs count. scripts/fullRunGate.cjs, test/fullRunGate.test.ts.
+      - name: Full Checks run is green on this commit (store builds)
+        id: gate
+        if: inputs.platform != 'android'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
+        run: node scripts/fullRunGate.cjs
       - name: Secrets are set
         run: |
           if [ -z "$EXPO_TOKEN" ]; then echo "::error::Add EXPO_TOKEN in Settings → Secrets and variables → Actions"; exit 1; fi
@@ -96,5 +109,5 @@ jobs:
             npx eas-cli@27.4.1 build --platform ios --profile testflight --non-interactive --no-wait
           fi
       - name: If the iOS build could not start
-        if: failure() && inputs.platform == 'ios'
+        if: failure() && inputs.platform == 'ios' && steps.gate.outcome != 'failure'
         run: echo "::error::Credentials missing? The first iPhone build is made once on the Mac with npm run ios:first (docs/11-setup-guide.md §5)."
