@@ -33,11 +33,18 @@ exports.run = async (h) => {
     h.expect((await vis("visit-actionbar").count()) === 1, "390: the panel is pinned");
     const bar = await vis("visit-actionbar").first().boundingBox();
     h.expect(bar.y + bar.height >= p.viewportSize().height - 2, `390: the panel is at the bottom (${bar.y + bar.height} of ${p.viewportSize().height})`);
-    h.expect(be.width < bp.width, `390: widths 2 : 3 (${Math.round(be.width)} / ${Math.round(bp.width)})`);
+    h.expect(Math.abs(be.width - bp.width) < 3, `390: the pair is 1 : 1 (${Math.round(be.width)} / ${Math.round(bp.width)})`);
+    // the step of the visit is the panel's main button, a full-width row above the pair (DS §8.9, #1677)
+    const step = vis("visit-actionbar").first().getByRole("button", { name: "Я в пути", exact: true });
+    h.expect((await step.count()) === 1, "390: «Я в пути» is the panel's main button");
+    const bs = await step.boundingBox();
+    h.expect(bs.y + bs.height <= be.y + 1 && bs.width > be.width * 1.8, `390: the step is a full-width row above the pair (${Math.round(bs.width)} wide)`);
+    h.expect((await p.getByRole("button", { name: "Я в пути", exact: true }).locator("visible=true").count()) === 1, "390: and only there (not again in the page)");
     h.expect(be.height >= 43 && bp.height >= 43, "390: the panel buttons are 44 high");
     h.expect((await vis("tab-bar").count()) === 0, "390: no tab bar under the panel");
   } else {
     h.expect((await vis("visit-actionbar").count()) === 0, "820/1280: no pinned bar, the buttons stand in the column");
+    h.expect((await p.getByRole("button", { name: "Я в пути", exact: true }).locator("visible=true").count()) === 1, "820/1280: the step stays a button of the page");
   }
   await h.shot("visit-panel");
 
