@@ -69,6 +69,14 @@ describe.each(names)("%s theme contrast (DS rule: text ≥ 4.5:1)", (name) => {
   });
 });
 
+describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WCAG 1.4.11)", (name) => {
+  const c = themes[name];
+  it("the field frame stands out from the screen and from the field's own fill", () => {
+    expect(ratio(over(c.bdField, c.bg), parse(c.bg))).toBeGreaterThanOrEqual(3);
+    expect(ratio(over(c.bdField, c.bg), over(c.in, c.bg))).toBeGreaterThanOrEqual(2.5);
+  });
+});
+
 describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт N», ≥ 3:1 to the canvas)", (name) => {
   const c = themes[name];
   const canvas = { bg: parse(c.bg), card: over(c.surf, c.bg) };

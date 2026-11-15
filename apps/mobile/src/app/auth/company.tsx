@@ -7,7 +7,7 @@ import { legalErrorKey } from "@/features/legal";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { FieldGroup, Screen } from "@/ui/surfaces";
+import { FieldGroup, FormMain, Screen } from "@/ui/surfaces";
 import { ClosedCompanies } from "@/features/ClosedCompany";
 import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
@@ -29,7 +29,7 @@ export default function CompanySetup() {
     AsyncStorage.getItem(peekInviteKey).then((v) => v && router.replace("/auth/invite")).catch(() => {});
   }, []);
   return (
-    <Screen title={t("company.title")} back={() => router.replace("/")}>
+    <Screen form title={t("company.title")} back={() => router.replace("/")}>
       {/* 7а-3 «в»: why there is no company any more (docs/specs/22 §3.6) */}
       <ClosedCompanies />
       {/* the app speaks for itself (DS §18.2): the GoRix mark over the form; «Создать» is yellow — the dot is ink */}
@@ -44,6 +44,7 @@ export default function CompanySetup() {
         {err ? (
           <StatusNote tone="bad">{err}</StatusNote>
         ) : null}
+        <FormMain>
         <Button
           label={t("company.create")}
           icon="check"
@@ -61,6 +62,7 @@ export default function CompanySetup() {
             else router.replace("/auth/trade");
           }}
         />
+        </FormMain>
       </FieldGroup>
     </Screen>
   );
