@@ -480,6 +480,12 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
   return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }
 
+/** the files row already records its upload (#1557); a read that fails throws — the op waits, nothing marked on a guess */
+async function uploadRecorded(fileId: string): Promise<boolean> {
+  const { data } = await read(supabase.from("files").select("upload_status, storage_key").eq("id", fileId).maybeSingle());
+  return data?.upload_status === "uploaded" && !!data?.storage_key;
+}
+
 /**
  * a photo's bytes to Storage and its files row marked; shared with modules (a measurement's photo, spec 33 П21.10).
  * The storage's «no» marks the photo failed and says why (#1431): null — taken. No network or the server's «not now»
@@ -487,6 +493,9 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
  */
 export async function uploadPhoto(companyId: string, fileId: string, uri: string): Promise<PhotoFail | null> {
   const failed = async (why: PhotoFail) => {
+    // #1557: a repeat after a lost answer (the file then gone, too big or refused) — the row already records the upload:
+    // taken, not «not uploaded» (a stored file is written by nobody again)
+    if (await uploadRecorded(fileId)) return null;
     await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
     return why;
   };

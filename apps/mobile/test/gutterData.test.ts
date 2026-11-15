@@ -371,8 +371,9 @@ describe("unit:gutterData — M5d: photos of a measurement and its element (spec
   });
   it("photo.add with a photo on the phone: the core's upload runs (a photo gone from the phone → marked failed, not retried)", async () => {
     await guttersOps({ kind: K.pAdd, payload: { f: { id: "f3", measurementId: "m1", uri: "nope://gone.jpg" } } }, ctx);
-    expect(calls.map((c) => [c.table, c.verb])).toEqual([["files", "upsert"], ["files", "update"]]);
-    expect(calls[1]!.row).toEqual({ upload_status: "failed" });
+    // the row is read first (#1557: a recorded upload is not marked failed), then marked
+    expect(calls.map((c) => [c.table, c.verb])).toEqual([["files", "upsert"], ["files", "select"], ["files", "update"]]);
+    expect(calls[2]!.row).toEqual({ upload_status: "failed" });
   });
   it("a broken photo change: PermanentError, nothing sent", async () => {
     for (const payload of [{}, { f: { id: "x" } }, { f: { measurementId: "m1" } }]) await expect(guttersOps({ kind: K.pAdd, payload }, ctx)).rejects.toMatchObject({ name: "PermanentError" });
