@@ -60,6 +60,12 @@ const parseGen = (v: string): { gen: string; n: number } | null => {
 };
 const partKey = (key: string, gen: string, i: number) => `${key}.${gen}.${i}`;
 
+/** auth-js's keys of one session: «<storageKey>», «-user», «-code-verifier» — from any of them (pure) */
+export function sessionKeys(key: string): string[] {
+  const base = key.replace(/-(user|code-verifier)$/, "");
+  return [base, `${base}-user`, `${base}-code-verifier`];
+}
+
 export interface StoreOpts {
   /** null — no native module (web, an older build): AsyncStorage as before */
   secure: SecureKV | null;
@@ -139,14 +145,17 @@ export function makeSessionStore(o: StoreOpts): SessionStorage & { forget: (keys
     (installed ??= (async () => {
       const mark = await plain.getItem(INSTALL_MARK).catch(() => "?");
       if (mark != null) return;
-      const old = await plain.getItem(key).catch(() => "?");
+      // the session's three keys whichever of them is asked first (security-check of #1682)
+      const keys = sessionKeys(key);
+      let old = false;
+      for (const k of keys) if ((await plain.getItem(k).catch(() => "?")) != null) old = true;
       // the mark first: one that cannot be written never wipes (a later start would wipe a live session)
       const ok = await plain.setItem(INSTALL_MARK, "1").then(
         () => true,
         () => false,
       );
-      if (!ok || old != null) return;
-      for (const k of [key, `${key}-user`, `${key}-code-verifier`]) {
+      if (!ok || old) return;
+      for (const k of keys) {
         const head = await rawGet(k).catch(() => null);
         await secure.del(k).catch(() => {});
         await dropGen(k, head);

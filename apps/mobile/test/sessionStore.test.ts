@@ -9,7 +9,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 vi.mock("react-native", () => ({ Platform: { OS: "web" } }));
 
-import { cut, INSTALL_MARK, KEY_OK, makeSessionStore, nativeSecure, type SecureKV, type SessionStorage } from "../src/cloud/sessionStore";
+import { cut, INSTALL_MARK, KEY_OK, makeSessionStore, nativeSecure, sessionKeys, type SecureKV, type SessionStorage } from "../src/cloud/sessionStore";
 
 const KEY = "sb-abcdefgh-auth-token";
 function stores(plainInit: Record<string, string> = { [INSTALL_MARK]: "1" }) {
@@ -163,6 +163,19 @@ describe("unit:sessionStore — the move, refusals, a reinstall (#1634)", () => 
     expect(s.sec.get(KEY)).toBe("short");
     expect(await st.getItem(KEY)).toBe(session(3000)); // the copy is newer: read first, moved now
     expect(s.plain.has(KEY)).toBe(false);
+  });
+  it("a reinstall: all three keys of the session go whichever is asked first; an old copy of any of them keeps them", async () => {
+    expect(sessionKeys(`${KEY}-code-verifier`)).toEqual([KEY, `${KEY}-user`, `${KEY}-code-verifier`]);
+    expect(sessionKeys(`${KEY}-user`)).toEqual(sessionKeys(KEY));
+    for (const first of [`${KEY}-user`, `${KEY}-code-verifier`]) {
+      const s = stores({});
+      for (const k of sessionKeys(KEY)) s.sec.set(k, "of the person before");
+      await makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: false }).getItem(first);
+      expect(s.sec.size, first).toBe(0);
+    }
+    const s = stores({ [`${KEY}-user`]: "old copy" });
+    s.sec.set(KEY, "mine");
+    expect(await makeSessionStore({ secure: s.secure, plain: s.p, dropUnreadable: false }).getItem(KEY)).toBe("mine");
   });
   it("the mark cannot be read: nothing is wiped", async () => {
     const s = stores({});
