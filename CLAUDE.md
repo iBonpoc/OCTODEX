@@ -33,6 +33,7 @@ CRM/FSM для подрядчиков США **любых направлений
 | (б) База | `supabase/**` |
 | (в) Gutters | `src/modules/gutters/**`, gutter-часть `packages/estimating-engine`, `docs/specs/33-*` |
 | (г) Экраны | экраны `src/app/**`, `src/features/**`, `src/ui/**` |
+| (д) Панель | сайт панели поддержки вне `apps/mobile` (папка — по спеке 45 волна 1), `docs/specs/45-*`; функции `platform.*` — через зону (б) |
 | Проверки (вне потолка, пока не трогает `src/**`, `supabase/**`) | `e2e/**`, `.github/**`, сторожа в `apps/mobile/test/**` |
 | Руководитель | `CLAUDE.md`, `docs/ai/*`, `docs/10-build-plan.md` §0, `docs/15-story-map.md` |
 
