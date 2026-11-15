@@ -27,7 +27,7 @@ exports.run = async (h, { seed, admin }) => {
     await sheet.waitFor({ timeout: 20000 });
     await h.shot("ask");
     await p.getByTestId("name-ask-field").locator("visible=true").first().locator("input, textarea").first().fill(typed);
-    await p.getByTestId("name-ask-save").locator("visible=true").first().locator('[role="button"]').first().click();
+    await p.getByTestId("name-ask-save").locator("visible=true").first().click();
     const [row] = await waitRows(admin, `users?select=full_name&id=eq.${a1.userId}`, (r) => r.length === 1 && r[0].full_name === typed, "the typed name");
     h.expect(row.full_name === typed, `the name is on the server (${row.full_name})`);
     // asked once: not again
