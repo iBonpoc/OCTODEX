@@ -1,7 +1,7 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useRef, useState, type ComponentRef } from "react";
+import { useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, size } from "@octo/design-tokens";
@@ -169,6 +169,36 @@ export default function VisitScreen() {
   const photoBtn = (bar: boolean) => (
     <Button label={t("photo.addShort")} icon="camera" variant="secondary" size={bar ? "bar" : "md"} full={bar} testID="visit-bar-photo" onPress={() => void pickPhoto(v.id)} />
   );
+  // the step of the visit: ONE main button (DS §8.9) — «В пути» → «На месте» → «Дальше: Работа» («Готово» of an inspection),
+  // «Принять оплату», «Создать смету» after an inspection; none while the signature is drawn and when it is all over
+  const stepBtn = (bar: boolean): ReactNode => {
+    const size = bar ? ("bar" as const) : undefined;
+    // the bar's own row is full width; inline the buttons are full width too
+    if (v.step === "scheduled") return <Button label={t("step.en_route")} icon="navigate" full size={size} onPress={() => consent.ask(() => advance(t("toast.step", { step: t("step.en_route") })))} />;
+    if (v.step === "en_route") return <Button label={t("step.on_site")} icon="pin" full size={size} onPress={() => advance(t("toast.step", { step: t("step.on_site") }))} />;
+    if (v.step === "on_site" && v.kind === "inspection") return <Button label={t("st.done")} icon="check" full size={size} onPress={goDone} />;
+    if (v.step === "on_site") return <Button label={t("visit.next", { step: t("step.working") })} full size={size} onPress={goWork} />;
+    if (v.step === "signed" && canTakeVisitPayment(store.role))
+      return (
+        <View testID="visit-record-payment">
+          <Button
+            label={t("visit.recordPayment")}
+            icon="dollar"
+            full
+            size={size}
+            onPress={() => {
+              haptic();
+              const undo = store.payVisit(v.id, method);
+              toast.show(queuedHint() ?? t("toast.paid", { amount: money(visitDueCents(db, v)) }), undo);
+            }}
+          />
+        </View>
+      );
+    if (v.step === "done" && isInspection && servable) return <Button label={t("job3.makeEstimate")} icon="invoice" variant="primary" full size={size} onPress={makeEstimate} />;
+    return null;
+  };
+  const stepInBar = panel && !wide ? stepBtn(true) : null;
+  const stepInline = !(panel && !wide);
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
@@ -178,7 +208,7 @@ export default function VisitScreen() {
       back={back}
       subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`}
       right={moreItems.length ? more : undefined}
-      footer={panel && !wide ? <ActionBar testID="visit-actionbar" main={photoBtn(true)} second={expenseBtn(true)} /> : undefined}
+      footer={panel && !wide ? <ActionBar testID="visit-actionbar" even summary={stepInBar} main={photoBtn(true)} second={expenseBtn(true)} /> : undefined}
     >
       <RelatedBlock of={{ type: "visit", id: v.id }} />
       <Card>
@@ -263,12 +293,8 @@ export default function VisitScreen() {
       {consent.sheet}
 
       {/* Step actions */}
-      {v.step === "scheduled" ? (
-        <Button label={t("step.en_route")} icon="navigate" full onPress={() => consent.ask(() => advance(t("visit.etaSent")))} />
-      ) : null}
-      {v.step === "en_route" ? (
-        <Button label={t("step.on_site")} icon="pin" full onPress={() => advance(t("toast.step", { step: t("step.on_site") }))} />
-      ) : null}
+      {/* on the phone the technician's step is the main button of the pinned panel (DS §8.9); elsewhere it stands here */}
+      {stepInline && (v.step === "scheduled" || v.step === "en_route") ? stepBtn(false) : null}
 
       {/* an inspection with a checklist (В6): ticked on site, checked before «Готово» */}
       {v.step === "on_site" && isInspection && v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
@@ -282,18 +308,10 @@ export default function VisitScreen() {
             onRemove={removePhoto}
             onRetry={retryPhoto}
           />
-          {v.step === "on_site" && v.kind === "inspection" ? (
-            // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
-            <Button label={t("st.done")} icon="check" full onPress={goDone} />
+          {v.step === "on_site" && v.kind !== "inspection" && gate.missing.photosBefore > 0 ? (
+            <StatusNote tone="warn">{t("chk.needBefore", { n: gate.missing.photosBefore })}</StatusNote>
           ) : null}
-          {v.step === "on_site" && v.kind !== "inspection" ? (
-            <>
-              {gate.missing.photosBefore > 0 ? (
-                <StatusNote tone="warn">{t("chk.needBefore", { n: gate.missing.photosBefore })}</StatusNote>
-              ) : null}
-              <Button label={t("visit.next", { step: t("step.working") })} full onPress={goWork} />
-            </>
-          ) : null}
+          {stepInline && v.step === "on_site" ? stepBtn(false) : null}
         </Card>
       ) : null}
 
@@ -346,25 +364,12 @@ export default function VisitScreen() {
               { key: "zelle", label: t("visit.payZelle") },
             ]}
           />
-          <View testID="visit-record-payment">
-            <Button
-              label={t("visit.recordPayment")}
-              icon="dollar"
-              full
-              onPress={() => {
-                haptic();
-                const undo = store.payVisit(v.id, method);
-                toast.show(queuedHint() ?? t("toast.paid", { amount: money(visitDueCents(db, v)) }), undo);
-              }}
-            />
-          </View>
+          {stepInline ? stepBtn(false) : null}
         </Card>
       ) : null}
 
-      {v.step === "done" && isInspection && servable ? (
-        // after an inspection the main action is the estimate, lead and property filled in (13 §3.9, 17-job §7.2)
-        <Button label={t("job3.makeEstimate")} icon="invoice" variant="primary" full onPress={makeEstimate} />
-      ) : null}
+      {/* after an inspection the main action is the estimate, lead and property filled in (13 §3.9, 17-job §7.2) */}
+      {stepInline && v.step === "done" ? stepBtn(false) : null}
 
       {v.step === "paid" || v.step === "done" ? (
         <Card status="ok">

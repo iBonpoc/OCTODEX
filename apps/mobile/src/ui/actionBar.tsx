@@ -9,15 +9,16 @@ import { Glass } from "./overlays";
  * a wide screen the same buttons stand in the page's own column. The buttons are always active (DS §11 п.3): a press with something missing
  * says what (the required-fields rule), a disabled main button says nothing. Not tied to any object: a form, an estimate, a job.
  * The buttons stand IN ONE ROW (the founder's «внизу делаем в ряд», О14): `second` on the left, `main` on the right, widths 2 : 3,
- * 44 high (`Button size="bar"`); with one button it takes the whole width.
+ * 44 high (`Button size="bar"`); with one button it takes the whole width. `even` — a pair of equals (1 : 1; the visit's «Расход» ·
+ * «Фото», DS §8.9), `summary` — a row above (the visit's main button of the step).
  */
-export function ActionBar({ main, second, summary, testID }: { main: ReactNode; second?: ReactNode; summary?: ReactNode; testID?: string }) {
+export function ActionBar({ main, second, summary, testID, even }: { main: ReactNode; second?: ReactNode; summary?: ReactNode; testID?: string; even?: boolean }) {
   return (
     <Glass strong testID={testID} style={{ borderTopLeftRadius: radius.card, borderTopRightRadius: radius.card, borderBottomWidth: 0, paddingHorizontal: space[4], paddingTop: space[3], paddingBottom: space[3], gap: space[2] }}>
       {summary}
       <View style={{ flexDirection: "row", alignItems: "stretch", gap: space[2] }}>
-        {second ? <View style={{ flex: 2, minWidth: 0 }}>{second}</View> : null}
-        <View style={{ flex: 3, minWidth: 0 }}>{main}</View>
+        {second ? <View style={{ flex: even ? 1 : 2, minWidth: 0 }}>{second}</View> : null}
+        <View style={{ flex: even ? 1 : 3, minWidth: 0 }}>{main}</View>
       </View>
     </Glass>
   );
