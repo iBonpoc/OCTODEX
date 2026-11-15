@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
 import { computeGutterParts } from "@octo/estimating-engine";
-import { autoDownspouts, autoManaged, commitAuto, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN, chains } from "../src/modules/gutters/canvas/autoDs";
+import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains, AUTO_DS_EDGE_IN, AUTO_DS_SPACING_IN, chains } from "../src/modules/gutters/canvas/autoDs";
 import { hitTest, moveDs, moveEndAlong, removeElement, restoreRemoved, setDsAttrs, setLength } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_DS_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { runLengthIn, toMeasurement, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../src/modules/gutters/geometry";
@@ -318,5 +318,44 @@ describe("#1473 (founder 14.11: «не на одном футе от края…
     const { readRules } = await import("../src/modules/gutters/settings");
     expect(readRules({ rules: { dsEdgeIn: 12 } }).dsEdgeIn).toBe(12);
     expect(readRules({ rules: { dsEdgeIn: 48 } }).dsEdgeIn).toBe(48);
+  });
+});
+
+describe("#1570 — a chain short of downspouts (founder 14.11: «удалил водосток — пусть пишет, что не хватает»)", () => {
+  const two = () => auto({ runs: [run("a", [0, 0], [240, 0]), run("c", [0, 600], [240, 600])], downspouts: [] }, none);
+  it("all in place: nothing short", () => {
+    expect(shortChains(two(), AUTO_DS_SPACING_IN)).toEqual([]);
+  });
+  it("one taken off by hand: that chain is short (need 1, have 0); the other is not", () => {
+    const d = two();
+    const gone = d.downspouts.find((s) => s.runId === "a")!;
+    const after = commitAuto(removeElement(d, gone.id), d, false, O);
+    expect(after.downspouts.some((s) => s.runId === "a")).toBe(false); // the program does not put it back by itself
+    expect(shortChains(after, AUTO_DS_SPACING_IN)).toEqual([{ runIds: ["a"], need: 1, have: 0 }]);
+  });
+  it("one by hand counts: a downspout put by hand on the short chain ends the shortage", () => {
+    const d = two();
+    const after = commitAuto(removeElement(d, d.downspouts.find((s) => s.runId === "a")!.id), d, false, O);
+    const withHand = { ...after, downspouts: [...after.downspouts, ds("h", "a", 120)] };
+    expect(shortChains(withHand, AUTO_DS_SPACING_IN)).toEqual([]);
+  });
+  it("«Вернуть»: the chain gets its downspout again, auto; the counter of removed is gone; the other chain is untouched", () => {
+    const d = two();
+    const after = commitAuto(removeElement(d, d.downspouts.find((s) => s.runId === "a")!.id), d, false, O);
+    const back = refillChain(after, ["a"], O);
+    expect(shortChains(back, AUTO_DS_SPACING_IN)).toEqual([]);
+    expect(back.downspouts.filter((s) => s.runId === "a")).toHaveLength(1);
+    expect(back.downspouts.find((s) => s.runId === "a")!.auto).toBe(true);
+    expect(offOf(back, "a")).toBe(0);
+    expect(back.downspouts.find((s) => s.runId === "c")).toBe(after.downspouts.find((s) => s.runId === "c")); // the same object
+    expect(refillChain(back, ["a"], O)).toBe(back); // nothing to give back: the same drawing (no empty step of «Назад»)
+  });
+  it("a drawing without automatic downspouts says nothing (the person puts them)", () => {
+    expect(shortChains({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, AUTO_DS_SPACING_IN)).toEqual([]);
+  });
+  it("a long chain: 130 ft needs 4 — with 3 it is short by one", () => {
+    const d = auto({ runs: [run("a", [0, 0], [1560, 0])], downspouts: [] }, none);
+    const after = commitAuto(removeElement(d, d.downspouts[1]!.id), d, false, O);
+    expect(shortChains(after, AUTO_DS_SPACING_IN)).toEqual([{ runIds: ["a"], need: 4, have: 3 }]);
   });
 });

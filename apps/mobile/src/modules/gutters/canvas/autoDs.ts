@@ -216,3 +216,37 @@ export function autoDownspouts(d: Drawing, o: AutoDsOptions, before?: Drawing, f
 export function commitAuto(made: Drawing, prev: Drawing, placed: boolean, o: AutoDsOptions | null): Drawing {
   return placed || !o ? made : autoDownspouts(made, o, prev);
 }
+
+/** a chain short of downspouts (#1570): its gutters, how many it needs by the company's spacing, how many stand on it */
+export interface ShortChain { runIds: string[]; need: number; have: number }
+
+/**
+ * The chains with fewer downspouts than ⌈length ÷ spacing⌉ (#1570, founder 14.11: «если я удалил водосток откуда-то, чтобы писало, что не
+ * хватает водостока»). Every downspout counts, by hand or automatic. Only the chains the program manages (`dsAuto` on a gutter): there a
+ * shortage comes only from a downspout taken off by hand; a drawing without automatic downspouts says nothing (the person puts them).
+ */
+export function shortChains(d: Drawing, spacingIn: number): ShortChain[] {
+  if (!(spacingIn > 0)) return [];
+  const out: ShortChain[] = [];
+  for (const ids of chains(d)) {
+    const set = new Set(ids);
+    const runs = d.runs.filter((r) => set.has(r.id));
+    if (!runs.some((r) => r.attrs.dsAuto)) continue;
+    const total = runs.reduce((n, r) => n + runLengthIn(r), 0);
+    if (total <= 0) continue;
+    const need = Math.ceil(total / spacingIn);
+    const have = d.downspouts.filter((s) => set.has(s.runId)).length;
+    if (have < need) out.push({ runIds: ids, need, have });
+  }
+  return out;
+}
+
+/** «Вернуть» (#1570): the chain forgets the downspouts taken off by hand and gets its automatic ones again, the rest of the drawing as it is */
+export function refillChain(d: Drawing, runIds: readonly string[], o: AutoDsOptions): Drawing {
+  const set = new Set(runIds);
+  if (!d.runs.some((r) => set.has(r.id) && offOf(r))) return d;
+  const cleared: Drawing = { ...d, runs: d.runs.map((r) => { if (!set.has(r.id) || !offOf(r)) return r; const { dsAutoOff: _o, ...rest } = r.attrs; return { ...r, attrs: rest }; }) };
+  // every chain as the rule wants it (`force`): the other chains keep theirs — their counts of the removed ones still stand, and the
+  // downspouts that stand where they belong are not moved
+  return autoDownspouts(cleared, o, undefined, true);
+}
