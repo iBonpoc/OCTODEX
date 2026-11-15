@@ -14581,8 +14581,10 @@ insert into public.notes (id, company_id, subject_type, subject_id, body, visibi
 select tst.ok(tst.cnt($q$select 1 from public.notes where id::text like 'a2450000-%'$q$) = 3, 'T245 the tech on the visit reads the client, house and job notes');
 insert into public.notes (company_id, subject_type, subject_id, body, visibility)
   values ('ca000000-0000-0000-0000-000000000000', 'job', 'e1a00000-0000-0000-0000-000000000001', 'T245 tech adds', 'team');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T245 tech adds'$q$) = 1, 'T245 the tech adds a job note');
 :as_sub56
-select tst.ok(app.is_visit_assignee('f1a00000-0000-0000-0000-000000000001'), 'T245 the subcontractor is on the visit');
+select tst.ok(app.is_visit_assignee('f1a00000-0000-0000-0000-000000000001') and app.tech_visit_counts('f1a00000-0000-0000-0000-000000000001'),
+              'T245 the subcontractor is on the visit, inside its window (the old rule let him in)');
 select tst.ok(tst.cnt($q$select 1 from public.notes where subject_id in ('c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000001')$q$) = 0,
               'T245 the subcontractor reads none of the team''s notes');
 select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body, visibility) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'x', 'team')$q$,
