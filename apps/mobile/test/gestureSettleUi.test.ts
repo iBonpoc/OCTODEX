@@ -214,6 +214,8 @@ describe("#1403 guard: the wiring in CanvasView, the drawing screen and the grid
   it("the grid draws the view from the canvas's live (written with the transform), not from a copy of its own", () => {
     const grid = src("canvas/GridLayer.tsx");
     expect(grid).toMatch(/liveView\(vk\.value, vox\.value, voy\.value,/);
-    expect(grid).not.toMatch(/useSharedValue|useLayoutEffect/);
+    // no copy of the view of its own (the only shared value of the layer is its step, #1477), nothing written from the JS thread
+    expect(grid).not.toMatch(/useLayoutEffect|\bview\.(k|ox|oy)\b/);
+    expect([...grid.matchAll(/const (\w+) = useSharedValue\(/g)].map((m) => m[1])).toEqual(["step"]);
   });
 });
