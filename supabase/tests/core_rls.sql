@@ -14603,10 +14603,20 @@ insert into public.files (id, company_id, kind) values ('f2440000-0000-4000-8000
 :as_tech_a
 select tst.fails_like($q$update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000004' where id = 'a0000000-0000-0000-0000-000000000003'$q$, '%photo of your own%',
                       'T244 not someone else''s photo');
+-- not a photo of a job (a client's house)
+insert into public.files (id, company_id, kind, job_id) values ('f2440000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
+select tst.fails_like($q$update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000005' where id = 'a0000000-0000-0000-0000-000000000003'$q$, '%photo of your own%',
+                      'T244 not a photo of a job');
+-- the picture's photo removed: it is nobody's picture any more
+update public.files set deleted_at = now() where id = 'f2440000-0000-4000-8000-000000000001';
+select tst.ok((select avatar_file_id is null from public.users where id = 'a0000000-0000-0000-0000-000000000003'), 'T244 a removed photo stops being the picture');
+insert into public.files (id, company_id, kind) values ('f2440000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000006' where id = 'a0000000-0000-0000-0000-000000000003';
 update public.users set avatar_file_id = null where id = 'a0000000-0000-0000-0000-000000000003';
 select tst.ok((select avatar_file_id is null from public.users where id = 'a0000000-0000-0000-0000-000000000003'), 'T244 the picture is taken off');
 :as_super
-select tst.ok(not has_function_privilege('authenticated', 'app.tg_users_avatar_own()', 'EXECUTE'), 'T244 rule 18: the trigger function for nobody');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_users_avatar_own()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_files_avatar_gone()', 'EXECUTE'), 'T244 rule 18: the trigger functions for nobody');
 \echo 'T244 a profile picture is a photo of one''s own ok'
 
 \echo 'ALL TESTS PASSED'

@@ -22,6 +22,7 @@ describe("edge functions: CORS only for our sites (#1605)", () => {
     it(`${name}: our production site and a PR preview are named, never «*»`, async () => {
       for (const o of ["https://gorix.expo.app", "https://gorix--abc123.expo.app", "http://localhost:8081"]) {
         const r = await call(f, "OPTIONS", o);
+        expect(r.status).toBe(204);
         expect(r.headers["Access-Control-Allow-Origin"], o).toBe(o);
         expect(r.headers.Vary).toBe("Origin");
       }
@@ -31,6 +32,7 @@ describe("edge functions: CORS only for our sites (#1605)", () => {
         const pre = await call(f, "OPTIONS", o);
         expect(pre.headers["Access-Control-Allow-Origin"], String(o)).toBeUndefined();
         const post = await call(f, "GET", o); // 405, any answer: never «*»
+        expect(post.status).toBe(405);
         expect(post.headers["Access-Control-Allow-Origin"], String(o)).toBeUndefined();
       }
     });
