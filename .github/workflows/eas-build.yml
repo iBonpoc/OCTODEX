@@ -54,13 +54,15 @@ jobs:
           exit 1
       # #1004: a store build (iOS: TestFlight) only from a commit with a green FULL Checks run (nightly or a manual run, all 6
       # views). A push to main runs only 390-dark and a PR three views (audit condition for #906 п.6); every platform except Android «preview»
-      # (an APK for our own phones, not a store build) is gated — a new store platform is gated by default. scripts/fullRunGate.cjs, test/fullRunGate.test.ts.
+      # (an APK for our own phones, not a store build) is gated — a new store platform is gated by default. Only from main, and only main's
+      # full runs count. scripts/fullRunGate.cjs, test/fullRunGate.test.ts.
       - name: Full Checks run is green on this commit (store builds)
         id: gate
         if: inputs.platform != 'android'
         env:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
+          REF: ${{ github.ref }}
         run: node scripts/fullRunGate.cjs
       - name: Secrets are set
         run: |
