@@ -30,7 +30,8 @@ interface AuthCtx {
   signInPassword: (email: string, password: string) => Promise<string | null>;
   signUpPassword: (email: string, password: string, name: string) => Promise<string | null>;
   createCompany: (name: string) => Promise<string | null>;
-  signOut: () => Promise<void>;
+  /** #1662: `wipeDrafts` — «Выйти и стереть» in the sign-out window (the person's estimate drafts go too); otherwise kept */
+  signOut: (o?: { wipeDrafts?: boolean }) => Promise<void>;
   reloadMemberships: () => Promise<unknown>;
   /**
    * #1633 A2: whose memberships the server has confirmed in this run (null — none yet: no answer, signed out) and a
@@ -346,15 +347,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!error) await reloadMemberships();
         return error?.message ?? null;
       },
-      signOut: async () => {
+      signOut: async (o) => {
         await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
         // while still signed in: this phone stops getting the person's pushes (never throws, ≤ 8 s; docs/specs/27-push.md)
         await forgetThisPhone();
         // #1633: offline too; the «signed out» event then wipes the person's company from the phone
-        await signOutAndMark(supabase.auth, signedUid.current, () => {
-          forgetMems();
-          clearClosed();
-        });
+        await signOutAndMark(
+          supabase.auth,
+          signedUid.current,
+          () => {
+            forgetMems();
+            clearClosed();
+          },
+          undefined,
+          { wipeDrafts: o?.wipeDrafts === true }, // onPress={auth.signOut} passes the press event: never «wipe»
+        );
       },
       reloadMemberships,
       membershipsFor,
