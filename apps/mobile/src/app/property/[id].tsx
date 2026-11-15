@@ -131,8 +131,8 @@ export default function PropertyScreen() {
       {office && servable ? (
         <View testID="prop-add" style={{ flexDirection: "row", gap: space[2], alignSelf: wide ? "flex-start" : "stretch" }}>
           {/* two equal halves on the phone, one row (the review of #1395) */}
-          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" full={!wide} /></View>
-          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" full={!wide} /></View>
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" full={!wide} short /></View>
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" full={!wide} short /></View>
         </View>
       ) : null}
 
