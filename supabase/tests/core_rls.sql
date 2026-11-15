@@ -14805,4 +14805,56 @@ select tst.fails($q$insert into public.notes (company_id, subject_type, subject_
 delete from public.visit_assignees where visit_id = 'f1a00000-0000-0000-0000-000000000001' and user_id = 'a5600000-0000-4000-8000-000000000002';
 \echo 'T245 the team''s notes are not a subcontractor''s ok'
 
+-- T243 (#1604): a company's creator sees it before any membership only while it is open (red before 20261115160000)
+:as_super
+insert into public.companies (id, name, created_by) values ('c2430000-0000-4000-8000-000000000001', 'T243 Fresh', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'c2430000-0000-4000-8000-000000000001'$q$) = 1,
+              'T243 the creator sees his new company before any membership');
+:as_super
+-- as delete_account closes it (the guard lets only that path through)
+select set_config('app.accepting_invite', 'on', false);
+update public.companies set closed_at = now() where id = 'c2430000-0000-4000-8000-000000000001';
+select set_config('app.accepting_invite', '', false);
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'c2430000-0000-4000-8000-000000000001'$q$) = 0,
+              'T243 a closed company is not seen by its creator, even with no memberships left');
+\echo 'T243 a closed company stays closed to its creator ok'
+
+-- T244 (#1603): a profile picture is a live photo of the person's own (red before 20261115160000)
+:as_tech_a
+insert into public.files (id, company_id, kind) values
+  ('f2440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo'),
+  ('f2440000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'receipt'),
+  ('f2440000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.files set deleted_at = now() where id = 'f2440000-0000-4000-8000-000000000003';
+update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000001' where id = 'a0000000-0000-0000-0000-000000000003';
+select tst.ok((select avatar_file_id = 'f2440000-0000-4000-8000-000000000001' from public.users where id = 'a0000000-0000-0000-0000-000000000003'),
+              'T244 his own photo is his picture');
+select tst.fails_like($q$update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000002' where id = 'a0000000-0000-0000-0000-000000000003'$q$, '%photo of your own%',
+                      'T244 not a receipt');
+select tst.fails_like($q$update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000003' where id = 'a0000000-0000-0000-0000-000000000003'$q$, '%photo of your own%',
+                      'T244 not a removed photo');
+select tst.fails($q$update public.users set avatar_file_id = gen_random_uuid() where id = 'a0000000-0000-0000-0000-000000000003'$q$, 'T244 not a file that does not exist');
+:as_owner_a
+insert into public.files (id, company_id, kind) values ('f2440000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'photo');
+:as_tech_a
+select tst.fails_like($q$update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000004' where id = 'a0000000-0000-0000-0000-000000000003'$q$, '%photo of your own%',
+                      'T244 not someone else''s photo');
+-- not a photo of a job (a client's house)
+insert into public.files (id, company_id, kind, job_id) values ('f2440000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
+select tst.fails_like($q$update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000005' where id = 'a0000000-0000-0000-0000-000000000003'$q$, '%photo of your own%',
+                      'T244 not a photo of a job');
+-- the picture's photo removed: it is nobody's picture any more
+update public.files set deleted_at = now() where id = 'f2440000-0000-4000-8000-000000000001';
+select tst.ok((select avatar_file_id is null from public.users where id = 'a0000000-0000-0000-0000-000000000003'), 'T244 a removed photo stops being the picture');
+insert into public.files (id, company_id, kind) values ('f2440000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.users set avatar_file_id = 'f2440000-0000-4000-8000-000000000006' where id = 'a0000000-0000-0000-0000-000000000003';
+update public.users set avatar_file_id = null where id = 'a0000000-0000-0000-0000-000000000003';
+select tst.ok((select avatar_file_id is null from public.users where id = 'a0000000-0000-0000-0000-000000000003'), 'T244 the picture is taken off');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_users_avatar_own()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_files_avatar_gone()', 'EXECUTE'), 'T244 rule 18: the trigger functions for nobody');
+\echo 'T244 a profile picture is a photo of one''s own ok'
+
 \echo 'ALL TESTS PASSED'
