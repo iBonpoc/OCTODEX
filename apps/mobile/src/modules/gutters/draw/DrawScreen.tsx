@@ -1049,7 +1049,7 @@ export default function DrawScreen() {
     setHint("move");
   }, [selected, canSave, drawing.runs]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
-  // a chain short of downspouts (#1570, founder 14.11: «удалил водосток — пусть пишет, что не хватает»): a warning while it lasts, with «Вернуть»
+  // a chain short of downspouts (#1570, founder 14.11: «удалил водосток — пусть пишет, что не хватает»): a warning while it lasts, with «Поставить водосток»
   const short = useMemo(() => (canSave && autoDs ? shortChains(drawing, autoDs.spacingIn) : []), [canSave, autoDs, drawing]);
   const shortRun = short[0] ? drawing.runs.filter((r) => short[0]!.runIds.includes(r.id)).sort((u, v) => runLengthIn(v) - runLengthIn(u))[0] : undefined;
   const refill = () => {
@@ -1166,7 +1166,14 @@ export default function DrawScreen() {
             tone="warn"
             testID="draw-ds-short"
             title={short.length > 1 ? t("mod.gutters.draw.dsShort.titleMany", { n: short.length }) : t("mod.gutters.draw.dsShort.title")}
-            hint={t("mod.gutters.draw.dsShort.hint", { run: t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat), n: storyOf(shortRun.attrs.story) }), need: short[0]!.need, have: short[0]!.have })}
+            // «водостоков 0 из 1», not «стоит 0» (read as a price); the story only when there is more than one, in full (design-reviewer #1570)
+            hint={t("mod.gutters.draw.dsShort.hint", {
+              run: new Set(drawing.runs.map((r) => storyOf(r.attrs.story))).size > 1
+                ? t("mod.gutters.draw.dsShort.runStory", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat), n: storyOf(shortRun.attrs.story) })
+                : t("mod.gutters.draw.dsShort.run", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat) }),
+              need: short[0]!.need,
+              have: short[0]!.have,
+            })}
             action={{ label: t("mod.gutters.draw.dsShort.action"), onPress: refill }}
           />
         ) : null}

@@ -241,7 +241,7 @@ export function shortChains(d: Drawing, spacingIn: number): ShortChain[] {
   return out;
 }
 
-/** «Вернуть» (#1570): the chain forgets the downspouts taken off by hand and gets its automatic ones again, the rest of the drawing as it is */
+/** «Поставить водосток» (#1570): the chain forgets the downspouts taken off by hand and gets its automatic ones again, the rest of the drawing as it is */
 export function refillChain(d: Drawing, runIds: readonly string[], o: AutoDsOptions): Drawing {
   const set = new Set(runIds);
   if (!d.runs.some((r) => set.has(r.id) && offOf(r))) return d;

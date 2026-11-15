@@ -339,7 +339,7 @@ describe("#1570 — a chain short of downspouts (founder 14.11: «удалил �
     const withHand = { ...after, downspouts: [...after.downspouts, ds("h", "a", 120)] };
     expect(shortChains(withHand, AUTO_DS_SPACING_IN)).toEqual([]);
   });
-  it("«Вернуть»: the chain gets its downspout again, auto; the counter of removed is gone; the other chain is untouched", () => {
+  it("«Поставить водосток»: the chain gets its downspout again, auto; the counter of removed is gone; the other chain is untouched", () => {
     const d = two();
     const after = commitAuto(removeElement(d, d.downspouts.find((s) => s.runId === "a")!.id), d, false, O);
     const back = refillChain(after, ["a"], O);

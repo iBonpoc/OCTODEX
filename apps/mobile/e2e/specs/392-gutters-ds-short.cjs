@@ -1,7 +1,7 @@
 /**
  * e2e 392 — #1570 (founder 14.11: «если я удалил водосток откуда-то, чтобы оно мне писало уведомление, что не хватает водостока»).
  * A gutter gets its downspout by itself; the person takes it off — a warning stays on the canvas («Не хватает водостока», which gutter,
- * how many it needs) until it is put back; «Вернуть» puts it back (automatic, the same rule) and the warning goes. Every view.
+ * how many it needs) until it is put back; «Поставить водосток» puts it back (automatic, the same rule) and the warning goes. Every view.
  * Finds things by testID / stored elements; waits on what it checks (no pauses).
  */
 const { skipLength } = require("../gutters.cjs");
@@ -47,12 +47,12 @@ exports.run = async (h) => {
   const warn = tid("draw-ds-short");
   await warn.waitFor({ timeout: 5000 });
   const text = await warn.innerText();
-  h.expect(/1/.test(text) && /0/.test(text), `the warning says how many it needs and has (${JSON.stringify(text)})`);
+  h.expect(/0\D+1/.test(text), `the warning says how many stand of how many it needs («0 из 1») (${JSON.stringify(text)})`);
   await h.shot("ds-short");
 
-  // «Вернуть»: the downspout is back (automatic), the warning is gone
+  // «Поставить водосток»: the downspout is back (automatic), the warning is gone
   await tid("draw-ds-short-action").getByRole("button").click();
-  await dsCount(1, "«Вернуть» puts the downspout back");
+  await dsCount(1, "«Поставить водосток» puts the downspout back");
   await p.getByTestId("draw-ds-short").first().waitFor({ state: "detached", timeout: 5000 });
   const back = (await els()).find((e) => e.kind === "downspout");
   h.expect(back.attrs.auto === true, "the downspout put back is automatic (the same rule)");
