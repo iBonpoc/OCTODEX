@@ -14867,7 +14867,8 @@ update public.visits set status = 'cancelled' where id = 'f2630000-0000-4000-800
 insert into public.visit_assignees (company_id, visit_id, user_id) values
   ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002'),
   ('ca000000-0000-0000-0000-000000000000', 'f2630000-0000-4000-8000-000000000001', 'a5600000-0000-4000-8000-000000000002'),
-  ('ca000000-0000-0000-0000-000000000000', 'f2630000-0000-4000-8000-000000000002', 'a5600000-0000-4000-8000-000000000002')
+  ('ca000000-0000-0000-0000-000000000000', 'f2630000-0000-4000-8000-000000000002', 'a5600000-0000-4000-8000-000000000002'),
+  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000002', 'a5600000-0000-4000-8000-000000000002')
   on conflict do nothing;
 :as_sub56
 -- as the app sends a visit photo (cloud/ops.ts photo.add)
@@ -14880,6 +14881,8 @@ select tst.fails($q$insert into public.files (company_id, kind, visit_id, custom
                  'T263 not a photo of the client');
 select tst.fails($q$insert into public.files (company_id, kind, job_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001')$q$,
                  'T263 not a photo of the job without his visit');
+select tst.fails($q$insert into public.files (company_id, kind, visit_id, job_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000002')$q$,
+                 'T263 not his visit''s photo on another job of his');
 select tst.fails($q$insert into public.files (company_id, kind, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'document', 'f1a00000-0000-0000-0000-000000000001')$q$,
                  'T263 not a document');
 select tst.fails($q$insert into public.files (company_id, kind, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'f2630000-0000-4000-8000-000000000001')$q$,
@@ -14890,10 +14893,31 @@ select tst.fails($q$update public.files set customer_id = 'c1a00000-0000-0000-00
                  'T263 his photo is not moved onto the client');
 select tst.fails($q$update public.files set job_id = 'e1a00000-0000-0000-0000-000000000001' where id = 'f2630000-0000-4000-8000-0000000000a2'$q$,
                  'T263 his own photo is not put on the job');
+select tst.fails($q$update public.files set visit_id = 'f2630000-0000-4000-8000-000000000001', job_id = 'e1a00000-0000-0000-0000-000000000001' where id = 'f2630000-0000-4000-8000-0000000000a2'$q$,
+                 'T263 his own photo is not put on an old visit afterwards');
+select tst.fails($q$update public.files set visit_id = 'f2630000-0000-4000-8000-000000000002' where id = 'f2630000-0000-4000-8000-0000000000a2'$q$,
+                 'T263 nor on a cancelled one');
+select tst.fails($q$update public.files set visit_id = 'f2630000-0000-4000-8000-000000000001', job_id = 'e1a00000-0000-0000-0000-000000000001' where id = 'f2630000-0000-4000-8000-0000000000a1'$q$,
+                 'T263 a visit''s photo is not carried to another visit');
+:as_super
+delete from public.visit_assignees where visit_id = 'f1a00000-0000-0000-0000-000000000002' and user_id = 'a5600000-0000-4000-8000-000000000002';
+:as_sub56
+-- a receipt of his own expense, as the app sends it (cloud/ops.ts expense.add): with the job of his visit, or none
+insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e1a00000-0000-0000-0000-000000000001');
+insert into public.files (id, company_id, kind) values ('f2630000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+select tst.ok(tst.cnt($q$select 1 from public.files where id in ('f2630000-0000-4000-8000-0000000000a3', 'f2630000-0000-4000-8000-0000000000a4')$q$) = 2,
+              'T263 the subcontractor adds a receipt of his expense');
+select tst.fails($q$insert into public.files (company_id, kind, job_id) values ('ca000000-0000-0000-0000-000000000000', 'receipt', 'e1a00000-0000-0000-0000-000000000002')$q$,
+                 'T263 not a receipt on a job he is not on');
+select tst.fails($q$insert into public.files (company_id, kind, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'receipt', 'f1a00000-0000-0000-0000-000000000001')$q$,
+                 'T263 not a receipt on a visit');
 :as_tech_a
 -- a tech as before: a photo of the job of his visit
 insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
 select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2630000-0000-4000-8000-0000000000b1'$q$) = 1, 'T263 a tech still adds a job photo');
+insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'document', 'e1a00000-0000-0000-0000-000000000001');
+update public.files set job_id = null where id = 'f2630000-0000-4000-8000-0000000000b2';
+select tst.ok((select job_id is null from public.files where id = 'f2630000-0000-4000-8000-0000000000b2'), 'T263 a tech still adds and moves a document as before');
 :as_super
 -- the visit falls out of the window while the photo waits in the queue: the upload is still recorded
 update public.visits set starts_at = now() - interval '20 days', ends_at = now() - interval '20 days' + interval '3 hours' where id = 'f1a00000-0000-0000-0000-000000000001';
@@ -14904,9 +14928,26 @@ update public.files set upload_status = 'uploaded', storage_key = 'ca000000-0000
 select tst.ok((select upload_status = 'uploaded' from public.files where id = 'f2630000-0000-4000-8000-0000000000a1'),
               'T263 a queued photo of a visit just out of the window is still marked uploaded');
 update public.visits set starts_at = now(), ends_at = now() + interval '3 hours' where id = 'f1a00000-0000-0000-0000-000000000001';
+-- the office closes the job the same day: a photo taken on the visit and sent later is not lost
+create temp table t263_job on commit preserve rows as select status from public.jobs where id = 'e1a00000-0000-0000-0000-000000000001';
+set session_replication_role = replica;  -- the fixture skips the status flow (t14)
+update public.jobs set status = 'closed' where id = 'e1a00000-0000-0000-0000-000000000001';
+set session_replication_role = origin;
+:as_sub56
+insert into public.files (id, company_id, kind, visit_id, job_id) values
+  ('f2630000-0000-4000-8000-0000000000a5', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000001');
+:as_super
+select tst.ok(exists (select 1 from public.files where id = 'f2630000-0000-4000-8000-0000000000a5'), 'T263 a late photo of a visit whose job was closed is kept');
+set session_replication_role = replica;
+update public.jobs set status = (select status from t263_job) where id = 'e1a00000-0000-0000-0000-000000000001';
+set session_replication_role = origin;
+drop table t263_job;
 delete from public.visit_assignees where user_id = 'a5600000-0000-4000-8000-000000000002'
-  and visit_id in ('f1a00000-0000-0000-0000-000000000001', 'f2630000-0000-4000-8000-000000000001', 'f2630000-0000-4000-8000-000000000002');
-select tst.ok(not has_function_privilege('anon', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE'), 'T263 rule 18: not for anon');
-\echo 'T263 a subcontractor adds only photos of his own visits ok'
+  and visit_id in ('f1a00000-0000-0000-0000-000000000001', 'f1a00000-0000-0000-0000-000000000002', 'f2630000-0000-4000-8000-000000000001', 'f2630000-0000-4000-8000-000000000002');
+select tst.ok(has_function_privilege('authenticated', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE')
+              and not has_function_privilege('public', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE'), 'T263 rule 18: the policy''s helper for the app only');
+select tst.ok(not has_function_privilege('anon', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_files_sub_attach_fixed()', 'EXECUTE'), 'T263 rule 18');
+\echo 'T263 a subcontractor adds only his visits' photos and his own files ok'
 
 \echo 'ALL TESTS PASSED'
