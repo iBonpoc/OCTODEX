@@ -2601,6 +2601,8 @@ export const es: Dict = {
   "ds.where.fields": "Presupuesto, catálogo, factura, descuento, impuesto, depósito",
   "ds.fields.form": "Formulario",
   "ds.fields.formHint": "Los campos van directo sobre el fondo, sin placa gris. La acción del campo es un icono dentro, a la derecha: Pegar en el teléfono, Borrar en la nota cuando tiene texto.",
+  "ds.fields.formMain": "El borde del campo es el token `bdField`, al menos 3:1 con la pantalla. El botón principal del grupo va aparte: 16 más arriba. La columna del formulario mide como máximo 560 (`layout.formMax`).",
+  "ds.fields.formMainBtn": "Continuar",
   "field.pastePhone": "Pegar número",
   "ds.fields.title": "Campo numérico",
   "ds.fields.hint": "Escriba como quiera: «-100», «abc», «1e5», «12,50» — un error bajo el campo, no un cero silencioso. Al salir — formato «1,234.50». En iPhone, una barra «‹ ›  Listo» sobre el teclado.",

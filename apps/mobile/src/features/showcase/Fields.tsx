@@ -3,12 +3,12 @@ import { View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { useI18n } from "@/i18n";
 import { Labeled } from "@/features/fields";
-import { TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
 import { formatPhoneUS } from "@/ui/inputFormat";
 import { NumberField } from "@/ui/numberField";
 import { formatBps, formatCents } from "@/ui/numberInput";
 import { T } from "@/ui/primitives";
-import { FieldGroup, SectionTitle } from "@/ui/surfaces";
+import { FieldGroup, FormMain, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 /**
@@ -55,6 +55,10 @@ export function FieldsSection() {
             action={note ? { icon: "close", label: t("common.clear"), onPress: () => setNote(""), testID: "showcase-note-clear" } : undefined}
           />
         </Labeled>
+        <T v="caption" tone="mut">{t("ds.fields.formMain")}</T>
+        <FormMain testID="showcase-form-main">
+          <Button label={t("ds.fields.formMainBtn")} full onPress={() => {}} />
+        </FormMain>
       </FieldGroup>
       <FieldGroup title={t("ds.fields.title")}>
         <T v="caption" tone="mut">{t("ds.fields.hint")}</T>

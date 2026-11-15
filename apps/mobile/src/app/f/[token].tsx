@@ -11,7 +11,7 @@ import {
 import { Button, ChoiceChips, TextField, Toggle } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Card, CardList, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
+import { Card, CardList, Empty, FieldGroup, FormMain, RowView, Screen } from "@/ui/surfaces";
 
 /**
  * The request page of a company (step 16, docs/specs/34-lead-intake.md §3): opened from the contractor's site, Google
@@ -117,9 +117,9 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
   };
   const langs: { key: DocLang; label: string }[] = [{ key: "en", label: "English" }, { key: "es", label: "Español" }, { key: "ru", label: "Русский" }];
   return (
-    <Screen title={t("intake.title")} back={back}>
+    <Screen form title={t("intake.title")} back={back}>
       <CardList>
-        <View testID="intake-lang">
+        <View testID="intake-lang" style={{ marginBottom: space[2] }}>
           <ChoiceChips items={langs} value={lang} onChange={setLang} />
         </View>
         <Card>
@@ -169,9 +169,9 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
             <View style={{ flex: 1 }}><T v="caption" tone="bad">{error}</T></View>
           </View>
         ) : null}
-        <View testID="intake-send">
+        <FormMain testID="intake-send">
           <Button label={busy ? t("intake.sending") : t("intake.send")} onPress={send} disabled={!ready || busy} full />
-        </View>
+        </FormMain>
         <T v="caption" tone="mut">{t("intake.privacy", { company: form.company })}</T>
       </CardList>
     </Screen>

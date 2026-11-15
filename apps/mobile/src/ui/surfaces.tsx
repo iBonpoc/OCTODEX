@@ -199,6 +199,18 @@ export function FieldGroup({
   );
 }
 
+/**
+ * The main button of a form group: it stands apart from the fields — `space[4]` more than the usual gap, so it reads as the
+ * step after them, not as one more field (DS §11 п.17, #1594). A second button of the group (the quiet one) goes after it, not inside.
+ */
+export function FormMain({ children, testID }: { children: ReactNode; testID?: string }) {
+  return (
+    <View testID={testID} style={{ marginTop: space[4] }}>
+      {children}
+    </View>
+  );
+}
+
 /** List row: 44–52 tall (rows are not buttons). */
 export function ListRow({
   title,
@@ -491,6 +503,7 @@ export function Screen({
   footer,
   aside,
   testID,
+  form,
 }: {
   title: string;
   help?: string;
@@ -529,6 +542,8 @@ export function Screen({
    *  buttons in its own column. */
   footer?: ReactNode;
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
+  /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594) */
+  form?: boolean;
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
   testID?: string;
@@ -750,17 +765,23 @@ export function Screen({
       ) : null}
     </View>
   );
-  const content = (
+  const formColumn = (
     <View
       testID={testID}
       // where the sticky tabs start: right under the content. The sticky wrapper's own layout says 0 on the web (react-native-web
       // measures it inside its sticky box), so the tabs' place is the content's bottom (#1416)
       onLayout={tabs ? (e) => (tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height) : undefined}
-      style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center", gap: space[3] }}
+      style={{ width: "100%", maxWidth: form ? layout.formMax : layout.contentMax, alignSelf: form ? "flex-start" : "center", gap: space[3] }}
     >
       {header}
       {children}
     </View>
+  );
+  // a form column stands on the left line of the 1200 column the other screens' titles stand on, not at the page's edge (DS §12.3)
+  const content = form ? (
+    <View style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center" }}>{formColumn}</View>
+  ) : (
+    formColumn
   );
   const { height: winH } = useWindowDimensions();
   const scrollRef = useRef<ScrollViewInstance>(null);
