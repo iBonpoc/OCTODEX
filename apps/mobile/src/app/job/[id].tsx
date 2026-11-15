@@ -431,7 +431,14 @@ export default function JobScreen() {
 
   return (
     <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")}>
-      <RelatedBlock of={{ type: "job", id: j.id }} />
+      <RelatedBlock
+        of={{ type: "job", id: j.id }}
+        action={
+          office && servable && c && !j.estimateId && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate")
+            ? { label: t("path.estimateNew"), testID: "job-rel-new-estimate", onPress: () => router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`) }
+            : undefined
+        }
+      />
       {/* #1474: one next step for the whole card, above the tabs (DS §7.3, §12.3); the rest — in «⋯» */}
       {mainStep ? (
         <RowView style={{ alignSelf: wide ? "flex-start" : "stretch" }}>

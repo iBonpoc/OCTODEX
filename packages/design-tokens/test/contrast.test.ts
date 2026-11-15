@@ -77,6 +77,15 @@ describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WC
   });
 });
 
+describe.each(names)("%s solid glass (DS §6.4, #1467: the tab bar's fallback panel hides the content)", (name) => {
+  const c = themes[name];
+  it("ovSolid is opaque; ink and mut on it ≥ 4.5:1", () => {
+    expect(parse(c.ovSolid)[3]).toBe(1);
+    expect(ratio(parse(c.ink), parse(c.ovSolid))).toBeGreaterThanOrEqual(4.5);
+    expect(ratio(parse(c.mut), parse(c.ovSolid))).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
 describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт N», ≥ 3:1 to the canvas)", (name) => {
   const c = themes[name];
   const canvas = { bg: parse(c.bg), card: over(c.surf, c.bg) };
