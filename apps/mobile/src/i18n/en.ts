@@ -3172,6 +3172,8 @@ export const en: Dict = {
   "mod.gutters.draw.toLead": "Link",
   "mod.gutters.draw.selRun": "Gutter · {len} · st {n}",
   "mod.gutters.draw.selDsKind": "Downspout · {kind} · {size} · st {n}",
+  "mod.gutters.draw.selRunOne": "Gutter · {len}",
+  "mod.gutters.draw.selDsKindOne": "Downspout · {kind} · {size}",
   "mod.gutters.draw.selDs": "Downspout · st {n}",
   "mod.gutters.attr.props": "Details",
   "mod.gutters.attr.run": "Gutter",
