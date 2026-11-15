@@ -221,6 +221,8 @@ export const ru = {
   "profile.name.label": "Как вас зовут",
   "profile.name.hint": "Имя видят коллеги, оно стоит в подписи компании.",
   "profile.name.save": "Сохранить",
+  "profile.name.ask": "Как вас зовут?",
+  "profile.name.later": "Позже",
   "profile.name.saved": "Имя сохранено",
   "visit.photosBefore": "Фото до",
   "visit.photosAfter": "Фото после",

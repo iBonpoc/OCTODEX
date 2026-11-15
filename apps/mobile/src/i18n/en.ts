@@ -222,6 +222,8 @@ export const en: Dict = {
   "profile.name.label": "Your name",
   "profile.name.hint": "Colleagues see it, and the company's signature carries it.",
   "profile.name.save": "Save",
+  "profile.name.ask": "What is your name?",
+  "profile.name.later": "Later",
   "profile.name.saved": "Name saved",
   "visit.photosBefore": "Before photos",
   "visit.photosAfter": "After photos",

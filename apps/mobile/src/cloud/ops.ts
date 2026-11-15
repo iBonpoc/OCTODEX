@@ -7,6 +7,7 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
+import { cleanName } from "@/features/nameAsk";
 import { supplierToRow } from "@/features/suppliers";
 import { normalizeBarcode, normalizeProductUrl } from "@/features/catalogCard";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
@@ -787,7 +788,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "me.location":
       return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
     case "me.name":
-      return run(supabase.from("users").update({ full_name: cleanText(op.name) }).eq("id", userId));
+      return run(supabase.from("users").update({ full_name: cleanName(op.name) }).eq("id", userId));
     case "me.pushKind":
       return run(supabase.rpc("set_push_kind", { p_company_id: c, p_kind: op.kind, p_enabled: op.enabled }));
     case "module.enable":
