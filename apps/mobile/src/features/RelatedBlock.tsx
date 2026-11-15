@@ -26,7 +26,8 @@ export function RelatedBlock({ of, action }: { of: RelatedOf; action?: { label: 
     <RowView style={{ flexWrap: "wrap" }}>
       {links.map((l) => {
         const label = [t(WORD[l.kind]), l.text].filter(Boolean).join(" ");
-        return <Button key={l.kind} label={label} icon={ICON[l.kind]} size="sm" variant="ghost" accessibilityLabel={`${t("job3.rel.title")}: ${label}`} onPress={() => router.push(l.href as never)} />;
+        // a parent is a chip with a plate and «›» — it reads as a thing to press (DS §12.3 п.6, #1495)
+        return <Button key={l.kind} testID={`related-${l.kind}`} label={`${label} ›`} icon={ICON[l.kind]} size="sm" variant="secondary" accessibilityLabel={`${t("job3.rel.title")}: ${label}`} onPress={() => router.push(l.href as never)} />;
       })}
       {/* what is missing here, named in reach of the thumb (#1664): «Создать смету» of a job with no estimate */}
       {action ? <Button testID={action.testID} label={`${action.label} ›`} icon="plus" size="sm" variant="ghost" onPress={action.onPress} /> : null}
