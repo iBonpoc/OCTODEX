@@ -5,12 +5,14 @@
  * - release.yml, preview.yml and eas-build.yml write the number (scripts/setBuild.cjs) before every build in a job;
  * - the number of a commit of main is its PR's: a merge commit or the last «(#N)» of a squash subject.
  */
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { buildFromMessage, pickBuild } = require("../scripts/setBuild.cjs") as {
+const { buildFromMessage, pickBuild, writeBuild } = require("../scripts/setBuild.cjs") as {
+  writeBuild: (n: number, file?: string, at?: string) => void;
   buildFromMessage: (s: string) => number | null;
   pickBuild: (given: string | undefined, subject: string | null) => number | null;
 };
@@ -36,6 +38,20 @@ describe("the build number (#733)", () => {
   it("version.ts keeps BUILD = 0 — the number is the build's, never a PR's", () => {
     const src = readFileSync(join(app, "src/config/version.ts"), "utf8");
     expect(src.match(/^export const BUILD = (\d+);$/m)?.[1], "set BUILD back to 0: release.yml writes the merged PR's number").toBe("0");
+  });
+
+  it("version.ts keeps BUILT_AT = \"\" — the moment is the build's too (#1506)", () => {
+    const src = readFileSync(join(app, "src/config/version.ts"), "utf8");
+    expect(src.match(/^export const BUILT_AT = "([^"]*)";$/m)?.[1], "set BUILT_AT back to \"\": the build writes it").toBe("");
+  });
+  it("the script writes the number and the moment of the build, and nothing else changes", () => {
+    const dir = mkdtempSync(join(tmpdir(), "setbuild-"));
+    const f = join(dir, "version.ts");
+    writeFileSync(f, readFileSync(join(app, "src/config/version.ts"), "utf8"));
+    writeBuild(1448, f, "2026-11-15T07:20:00.000Z");
+    const out = readFileSync(f, "utf8");
+    expect(out).toMatch(/^export const BUILD = 1448;$/m);
+    expect(out).toMatch(/^export const BUILT_AT = "2026-11-15T07:20:00.000Z";$/m);
   });
 
   it.each(["release.yml", "preview.yml", "eas-build.yml"])("%s writes the number before it builds", (f) => {

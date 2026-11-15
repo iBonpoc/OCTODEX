@@ -36,6 +36,13 @@ begin
   return n;
 end $$;
 
+-- A fixture step the server's own functions do (send_estimate locks the version and sets «sent», #1600): run as the
+-- database owner, like those definer functions. Only for setting up a test; never a check of a right.
+create function tst.server(p_sql text) returns void language plpgsql security definer set search_path = '' as $$
+begin
+  execute p_sql;
+end $$;
+
 -- Оператор должен упасть с ошибкой
 create function tst.fails(p_sql text, p_msg text) returns void language plpgsql as $$
 begin
@@ -532,7 +539,7 @@ end $$;
 -- =============================================================================
 -- the fixture version has lines and no document: locked as setup (no JWT — the lock check of T107 guards a member's send)
 :as_super
-update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001'$q$);
 :as_owner_a
 do $$ begin
   perform tst.fails($q$insert into public.estimate_line_items (company_id, option_id, name, unit_price_cents, client_visible)
@@ -542,7 +549,8 @@ do $$ begin
   perform tst.fails($q$delete from public.estimate_line_items where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'delete line of locked version');
   perform tst.fails($q$insert into public.estimate_line_items (company_id, option_id, name, unit_price_cents)
                        values ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000001', 'Extra', 100)$q$, 'add line to locked version');
-  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000001' where id = '0e1a0000-0000-0000-0000-000000000001';
+  -- #1600: «sent» is set by send_estimate only (the fixture does it as the server, below)
+  perform tst.fails($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000001' where id = '0e1a0000-0000-0000-0000-000000000001'$q$, 'a direct «sent» from the app');
   -- approved only when an employee signs for the company (docs/specs/07 §4, S8b): a direct update is refused
   perform tst.fails($q$update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001'$q$, 'direct approve without the company signature');
   -- admin/owner: роль owner может выдать только owner; свою роль менять нельзя
@@ -552,6 +560,7 @@ do $$ begin
 end $$;
 :as_super
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
+select tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000001' where id = '0e1a0000-0000-0000-0000-000000000001'$q$);
 :as_owner_a
 :as_super
 -- fixture for the tests below (as a signing function would: definer role + this estimate marked)
@@ -619,8 +628,8 @@ do $$ begin
     ('0e4a0000-0000-0000-0000-000000000011', 'ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000010', 'labor', 'Install railing', 1, 25000, false, false),
     ('0e4a0000-0000-0000-0000-000000000012', 'ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000010', 'material', 'Bracket', 12, 1213, true, false),
     ('0e4a0000-0000-0000-0000-000000000013', 'ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000010', 'service', 'Deep clean', 1, 9000, false, true);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000010';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000010'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010'$q$);
   -- сотрудник открывает ссылку — статус не меняется
   perform tst.ok((public.portal_estimate('tok_test_0123456789abcdef') ->> 'status') = 'sent', 'member preview keeps status sent');
 end $$;
@@ -738,8 +747,8 @@ begin
     ('0e3a0000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000077', 'Standard');
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
     ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000077', 'labor', 'Fix door', 1, 15000, false);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000077';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000077' where id = '0e1a0000-0000-0000-0000-000000000077';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000077'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000077' where id = '0e1a0000-0000-0000-0000-000000000077'$q$);
   -- manual conversion from an open status is allowed now
   insert into public.leads (company_id, source_id, contact_name, phone, status) values
     ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Paper contract', '+13235550178', 'contacted') returning id into v_lead;
@@ -780,8 +789,8 @@ begin
     ('0e3a0000-0000-0000-0000-000000000088', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000088', 'Standard');
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
     ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000088', 'labor', 'Remodel', 1, 340000, false);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000088';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000088'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088'$q$);
 end $$;
 set role anon;
 select public.portal_accept('tok_inv_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000088', null, 'Client', 'M0 0 L5 5', true) is not null as signed;
@@ -1311,7 +1320,7 @@ begin
   insert into public.estimates (company_id, customer_id, property_id, title)
   values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 status')
   returning id into e;
-  update public.estimates set status = 'sent' where id = e;
+  perform tst.server(format($q$update public.estimates set status = 'sent' where id = %L$q$, e));
   perform tst.fails(format($q$update public.estimates set status = 'awaiting_countersign' where id = %L$q$, e), 'sent -> awaiting only through a client signature');
   perform tst.fails(format($q$select set_config('app.signing_estimate', %L, true); update public.estimates set status = 'awaiting_countersign' where id = %L$q$, e, e),
                     'the session flag alone does not open it');
@@ -1667,7 +1676,7 @@ begin
   insert into public.estimates (company_id, customer_id, property_id, title)
   values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 viewed') returning id into v_e;
   perform tst.set_token(v_e, 'tok_lang_viewed_0123456789');
-  update public.estimates set status = 'sent' where id = v_e;
+  perform tst.server(format($q$update public.estimates set status = 'sent' where id = %L$q$, v_e));
 end $$;
 :as_super
 do $$ begin
@@ -1712,8 +1721,8 @@ begin
     ('0e3a0000-0000-0000-0000-000000000023', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000023', 'Standard');
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
     ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000023', 'labor', 'Porch', 1, 200000, false);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000023';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000023' where id = '0e1a0000-0000-0000-0000-000000000023';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000023'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000023' where id = '0e1a0000-0000-0000-0000-000000000023'$q$);
 end $$;
 
 -- ---------------------------------------------------------------- T25: the client signs → awaiting the company (S8)
@@ -1843,7 +1852,7 @@ begin
   values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24')
   returning id into e;
   perform tst.set_token(e, 'tok_exp_0123456789abcdef');
-  update public.estimates set status = 'sent' where id = e;
+  perform tst.server(format($q$update public.estimates set status = 'sent' where id = %L$q$, e));
   select (now() at time zone timezone)::date into v_today from public.companies where id = 'ca000000-0000-0000-0000-000000000000';
   select expires_at into v_exp from public.estimates where id = e;
   perform tst.ok(v_exp = v_today + 3, 'sent: valid until = today + the company''s days');
@@ -1854,7 +1863,7 @@ end $$;
 insert into public.estimates (company_id, customer_id, property_id, title, status)
 values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24 client signed', 'draft');
 select tst.set_token((select id from public.estimates where title = 'T24 client signed'), 'tok_await_0123456789abcd');
-update public.estimates set status = 'sent' where id = tst.est_of('tok_await_0123456789abcd');
+select tst.server($q$update public.estimates set status = 'sent' where id = tst.est_of('tok_await_0123456789abcd')$q$);
 select set_config('app.signing_estimate', (select id::text from public.estimates where id = tst.est_of('tok_await_0123456789abcd')), false);
 update public.estimates set status = 'awaiting_countersign', expires_at = tst.today() - 2 where id = tst.est_of('tok_await_0123456789abcd');
 select set_config('app.signing_estimate', '', false);
@@ -1928,8 +1937,8 @@ begin
   update public.estimates set current_version_id = v where id = e;
   insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Fix', 1, 15000);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
-  update public.estimates set status = 'sent', sent_version_id = v, expires_at = tst.today() - 3 where id = e;
+  perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, v));
+  perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L, expires_at = %L where id = %L$q$, v, tst.today() - 3, e));
   perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'on site: the client signs a quick estimate even past the date');
   perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'repeat: nothing doubles');
   perform tst.fails(format($q$update public.estimates set status = 'sent' where id = %L$q$, e), 'awaiting_countersign -> sent is not allowed (T18)');
@@ -1963,7 +1972,7 @@ declare e uuid;
 begin
   insert into public.estimates (company_id, customer_id, property_id, title) values
     ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'No client') returning id into e;
-  update public.estimates set status = 'sent' where id = e;
+  perform tst.server(format($q$update public.estimates set status = 'sent' where id = %L$q$, e));
   perform set_config('app.signing_estimate', e::text, true);
   update public.estimates set status = 'awaiting_countersign' where id = e;
   perform set_config('app.signing_estimate', '', true);
@@ -1988,7 +1997,7 @@ begin
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents)
   values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Small fix', 1, 10000) returning id into li;
   -- "sent" without locking the version (the old app path): the client must not be able to sign it
-  update public.estimates set status = 'sent' where id = e;
+  perform tst.server(format($q$update public.estimates set status = 'sent' where id = %L$q$, e));
   perform tst.set_token(e, 'tok_attack_0123456789ab');
   perform set_config('tst.attack', e::text || ',' || o::text || ',' || li::text || ',' || v::text, false);
 end $$;
@@ -2352,8 +2361,8 @@ begin
     ('0e3a0000-0000-0000-0000-000000000032', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000032', 'Standard');
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
     ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000032', 'labor', 'Gutters', 1, 100000, false);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000032';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000032' where id = '0e1a0000-0000-0000-0000-000000000032';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000032'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000032' where id = '0e1a0000-0000-0000-0000-000000000032'$q$);
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 select public.portal_accept('tok_t32_0123456789abcdefg', '0e3a0000-0000-0000-0000-000000000032', null, 'T32 Client', 'M0 0 L5 5', true) ->> 'status' = 'awaiting_countersign' as client_signed;
@@ -2686,8 +2695,9 @@ do $$
 declare e uuid := split_part(current_setting('tst.e2b_4'), ',', 1)::uuid;
 begin
   perform tst.ok(public.countersign_estimate(e, null, (select id from public.member_signatures where user_id = 'a0000000-0000-0000-0000-000000000003' and revoked_at is null)) = 'approved', 'signed');
-  perform tst.ok((select signer_title from public.estimate_approvals where estimate_id = e and party = 'contractor') = 'President',
-                 'no title in the profile: the one typed with the signature');
+  -- #1599: the title typed with a saved signature is not used (anyone could type «Owner»): only the profile's
+  perform tst.ok((select signer_title from public.estimate_approvals where estimate_id = e and party = 'contractor') is null,
+                 'no title in the profile: none (never the one typed with the signature)');
 end $$;
 \echo 'T23 contract title from the profile ok'
 
@@ -3369,13 +3379,13 @@ insert into public.estimate_versions (id, company_id, estimate_id, version_no, t
 select tst.ok(tst.cnt($q$select 1 from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000001' and not tax_enabled$q$) = 1, 'an estimate of an exempt client without tax is kept');
 select tst.fails($q$update public.estimate_versions set tax_enabled = true where id = '0e411000-0000-4000-8000-000000000001'$q$, 'the tax is not switched on later for an exempt client');
 select tst.ok((select tax_enabled from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000002') = true, 'a client with tax keeps it');
-update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000002';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000002'$q$);
 update public.customers set tax_exempt = true where id = 'c4100000-0000-4000-8000-000000000002';
 select tst.ok((select tax_enabled from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000002') = true, 'a sent (locked) estimate keeps its tax when the client becomes exempt');
 -- a draft with tax made before the client became exempt is not sent with it (sending locks the version)
 select tst.fails($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000003'$q$, 'a draft with tax is not sent once the client is exempt');
 update public.estimate_versions set tax_enabled = false where id = '0e411000-0000-4000-8000-000000000003';
-update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000003';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000003'$q$);
 select tst.ok((select locked_at is not null and not tax_enabled from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000003'), 'with the tax off it is sent');
 select tst.ok(tst.cnt($q$select 1 from public.audit_log where entity_type = 'customers' and entity_id = 'c4100000-0000-4000-8000-000000000002' and (after ->> 'tax_exempt') = 'true'$q$) = 1, '«without tax» changes leave a trace');
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 19377, 'a job keeps its tax snapshot when the client becomes exempt');
@@ -3829,8 +3839,13 @@ do $$ begin
   update public.estimates set status = 'expired' where id = '0e440000-0000-4000-8000-000000000001';
   perform set_config('app.signing_estimate', '', true);
 end $$;
+-- #1600: the app sets no status but «draft» — the do-not-service guard is checked on the server's own path
 :as_office_a
-select tst.dns($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'an expired estimate is not revived into «viewed»');
+select tst.fails_like($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, '%the app sets only%',
+                      'the app does not set «viewed»');
+:as_super
+select tst.dns($q$select tst.server($s$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$s$)$q$, 'an expired estimate is not revived into «viewed»');
+:as_office_a
 -- a job of another client at the client's property: «Работы» t14 refuses it first (the address is not a property of
 -- that client, 22023) — still refused; t44 stays the guard for estimates and visits
 do $$ begin
@@ -3963,8 +3978,8 @@ begin
   update public.estimates set current_version_id = v where id = '0e470000-0000-4000-8000-000000000002';
   insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Fix (test price)', 1, 4700);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
-  update public.estimates set status = 'sent', sent_version_id = v where id = '0e470000-0000-4000-8000-000000000002';
+  perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, v));
+  perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = '0e470000-0000-4000-8000-000000000002'$q$, v));
   perform tst.ok(public.sign_estimate_on_site('0e470000-0000-4000-8000-000000000002', 'T47 Two', 'M0 0 L2 2') = 'awaiting_countersign', 'T47: the client signs on site');
   perform tst.ok(public.countersign_estimate('0e470000-0000-4000-8000-000000000002', 'M0 0 L3 3') = 'approved', 'T47: the company signs');
   perform tst.ok((select status = 'draft' and contract_total_cents = 4700 from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'a signed estimate still makes its job, waiting for a date');
@@ -5368,8 +5383,8 @@ begin
 end $$;
 -- a sent estimate is read through sent_version_id: the same cut
 :as_super
-update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T60 costs');
-update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T60 costs';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T60 costs')$q$);
+select tst.server($q$update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T60 costs'$q$);
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.ok((public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc')::text !~* 'cost' and
               jsonb_array_length(public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc' -> 'options' -> 0 -> 'lines') = 2,
@@ -6084,8 +6099,8 @@ begin
     ('0e3a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '0e2a7600-0000-4000-8000-000000000001', 'Standard');
   insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
     ('ca760000-0000-4000-8000-000000000000', '0e3a7600-0000-4000-8000-000000000001', 'labor', 'Gutters (тестовые цены)', 1, 100000, false);
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000001';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000001' where id = '0e1a7600-0000-4000-8000-000000000001';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000001'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000001' where id = '0e1a7600-0000-4000-8000-000000000001'$q$);
   perform tst.set_token('0e1a7600-0000-4000-8000-000000000001', 'tok_t76_closed_0123456789ab');
   -- a second estimate the client has never opened: «sent» (its first view would make it «viewed» and notify the company)
   insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
@@ -6093,8 +6108,8 @@ begin
   insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
     ('0e2a7600-0000-4000-8000-000000000002', 'ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000002', 1);
   update public.estimates set current_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002';
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000002';
-  update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002';
+  perform tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000002'$q$);
+  perform tst.server($q$update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002'$q$);
   perform tst.set_token('0e1a7600-0000-4000-8000-000000000002', 'tok_t76_sent_0123456789abcd');
   -- a letter queued minutes before the company was closed
   insert into public.email_outbox (company_id, estimate_id, kind) values ('ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000001', 'signed_copy');
@@ -8249,8 +8264,8 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_versions v join public.es
               'T97 another company reads nothing');
 -- a sent (locked) version is read through sent_version_id: cut the same way
 :as_super
-update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T97 module lines');
-update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T97 module lines';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T97 module lines')$q$);
+select tst.server($q$update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T97 module lines'$q$);
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.ok((public.portal_estimate('tok_t97src_0123456789abcd') -> 'doc')::text !~* '(source|testPrice|noPrice|revisionId|gutters)'
               and jsonb_array_length(public.portal_estimate('tok_t97src_0123456789abcd') -> 'doc' -> 'options' -> 0 -> 'lines') = 3,
@@ -8859,7 +8874,7 @@ select tst.fails($q$update public.leads set cost_cents = 100 where company_id = 
 select tst.fails($q$update public.lead_sources set default_cost_cents = 100 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T99 lead_sources.default_cost_cents is retired');
 -- a sent version stays locked (t40 is on again after the migration)
 :as_owner_a
-update public.estimate_versions set locked_at = now() where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = 'a1000000-0000-4000-8000-000000000002'$q$);
 select tst.fails($q$update public.estimate_versions set totals = '{"total": 1, "marginPct": "9"}' where id = 'a1000000-0000-4000-8000-000000000002'$q$,
   'T100 a locked version does not change, margin or not');
 :as_super
@@ -9031,7 +9046,7 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_ite
 :as_super
 -- the T106 document is a fake (lines do not match it): locked past the lock check of T107 — this test is about the cost keeping
 alter table public.estimate_versions disable trigger t50_lock_lines_match;
-update public.estimate_versions set locked_at = now() where id = 'a1060000-0000-4000-8000-000000000002';
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = 'a1060000-0000-4000-8000-000000000002'$q$);
 alter table public.estimate_versions enable trigger t50_lock_lines_match;
 :as_tech_a
 select tst.fails($q$delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000c1'$q$, 'T106 the tech deletes a line of a locked version');
@@ -9498,7 +9513,7 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
   ('a1100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Downspout', 1, 900, 'ea'), ('a1100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Removed', 1, 900, 'ea');
 insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 50), ('a1100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 60);
 update public.estimate_line_items set deleted_at = now() where id = 'a1100000-0000-4000-8000-0000000000b4';   -- a deleted source (T111)
-update public.estimate_versions set locked_at = now() where id in ('a1100000-0000-4000-8000-0000000000d1', 'a1100000-0000-4000-8000-0000000000d9');
+select tst.server($q$update public.estimate_versions set locked_at = now() where id in ('a1100000-0000-4000-8000-0000000000d1', 'a1100000-0000-4000-8000-0000000000d9')$q$);
 update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d2' where id = 'a1100000-0000-4000-8000-0000000000e1';
 update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d9' where id = 'a1100000-0000-4000-8000-0000000000e2';
 :as_sales_a
@@ -9538,7 +9553,7 @@ insert into public.estimate_versions (id, company_id, estimate_id, version_no) v
 insert into public.estimate_options (id, company_id, version_id, name) values ('a1100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d3', 'A');
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values ('a1100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a3', 'Later', 1, 500);
 insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 300);
-update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000d3';
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000d3'$q$);
 :as_sales_a
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
   values ('a1100000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From a later version', 1, 500, 'a1100000-0000-4000-8000-0000000000b3');
@@ -9552,7 +9567,7 @@ insert into public.estimate_versions (id, company_id, estimate_id, version_no) v
 insert into public.estimate_options (id, company_id, version_id, name) values ('a1100000-0000-4000-8000-0000000000ab', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000db', 'A');
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values ('a1100000-0000-4000-8000-0000000000bb', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000ab', 'Gutter', 1, 1200);
 insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000bb', 'cb000000-0000-0000-0000-000000000000', 999);
-update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000db';
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000db'$q$);
 :as_sales_a
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, unit, copied_from_line_id) values
   ('a1100000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter guard', 1, 5000, 'ea', 'a1100000-0000-4000-8000-0000000000b2'),
@@ -10319,7 +10334,7 @@ insert into public.estimates (id, company_id, customer_id, property_id, title) v
   ('c1340000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000b4', 'T134 draft'),
   ('c1340000-0000-4000-8000-0000000000b6', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000b4', 'T134 signed');
 select set_config('app.signing_estimate', 'c1340000-0000-4000-8000-0000000000b6', false);
-update public.estimates set status = 'sent' where id = 'c1340000-0000-4000-8000-0000000000b6';
+select tst.server($q$update public.estimates set status = 'sent' where id = 'c1340000-0000-4000-8000-0000000000b6'$q$);
 update public.estimates set status = 'awaiting_countersign' where id = 'c1340000-0000-4000-8000-0000000000b6';
 update public.estimates set status = 'approved' where id = 'c1340000-0000-4000-8000-0000000000b6';
 select set_config('app.signing_estimate', '', false);
@@ -12960,9 +12975,9 @@ end $$;
 create function tst.t195_sent(p_e uuid) returns void language plpgsql as $$
 declare v uuid := (select current_version_id from public.estimates where id = p_e);
 begin
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
+  perform tst.server(format($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = %L$q$, v));
   perform set_config('app.signing_estimate', p_e::text, true);
-  update public.estimates set status = 'sent', sent_version_id = v where id = p_e;
+  perform tst.server(format($q$update public.estimates set status = 'sent', sent_version_id = %L where id = %L$q$, v, p_e));
   perform set_config('app.signing_estimate', '', true);
 end $$;
 -- the addon ids of an example, as the server keeps them
@@ -13634,7 +13649,7 @@ select tst.ok(exists (select 1 from public.estimate_line_items where id = 'b2000
               and not exists (select 1 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b5'),
               'T200 a tech saves his own draft; no cost is written');
 select set_config('app.signing_estimate', 'e2000000-0000-4000-8000-000000000002', false);
-update public.estimates set status = 'sent' where id = 'e2000000-0000-4000-8000-000000000002';
+select tst.server($q$update public.estimates set status = 'sent' where id = 'e2000000-0000-4000-8000-000000000002'$q$);
 select set_config('app.signing_estimate', '', false);
 :as_tech_a
 select tst.fails($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000002', 'f2000000-0000-4000-8000-000000000003', 'T200 tech 2',
@@ -13666,7 +13681,7 @@ select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs wher
               'T200 the other estimate''s line, cost and version as they were; ours too (red before the security-check fix)');
 -- a locked (sent) version: its lines do not change
 :as_super
-update public.estimate_versions set locked_at = now() where id = 'f2000000-0000-4000-8000-000000000001';
+select tst.server($q$update public.estimate_versions set locked_at = now() where id = 'f2000000-0000-4000-8000-000000000001'$q$);
 :as_office_a
 select tst.fails_like($q$select tst.t200_save('T200 locked', 'doc5', '[]')$q$, '%is locked%', 'T200 a locked version is not changed');
 :as_super
@@ -14163,10 +14178,10 @@ update public.companies set estimate_settings = estimate_settings || '{"terms_by
 -- sent: the version locked, the estimate «sent», its link (as send_estimate leaves them; the document here has no lines)
 -- 2 was locked before #1304: the lock trigger was not there yet
 alter table public.estimate_versions disable trigger t06_terms_on_lock;
-update public.estimate_versions set locked_at = now(), sent_at = now() where id = 'e2050000-0000-4000-8000-0000000000a2';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = 'e2050000-0000-4000-8000-0000000000a2'$q$);
 alter table public.estimate_versions enable trigger t06_terms_on_lock;
-update public.estimate_versions set locked_at = now(), sent_at = now() where estimate_id::text like 'e2050000-%' and locked_at is null;
-update public.estimates set status = 'sent', sent_version_id = current_version_id where id::text like 'e2050000-%';
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where estimate_id::text like 'e2050000-%' and locked_at is null$q$);
+select tst.server($q$update public.estimates set status = 'sent', sent_version_id = current_version_id where id::text like 'e2050000-%'$q$);
 select tst.ok((select calc_inputs ->> 'terms' = 'T205 Garantía 1 año' and terms_text = 'T205 Garantía 1 año'
                  from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a4')
               and (select not (calc_inputs ? 'terms') from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a2')
@@ -14625,6 +14640,141 @@ select tst.ok((select convalidated from pg_constraint where conname = 'expenses_
               'T214 the receipt is a file of the same company (foreign key); rule 18: the trigger function for nobody');
 \echo 'T214 an expense''s receipt in the cloud ok'
 
+-- T215 (#1600): what the client signs is what the office sent — «sent» and the sent version only through send_estimate;
+-- an estimate points only at its own versions; a version is locked only by the server (red before 20261115130000)
+:as_owner_a
+insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+  ('e2150000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T215 one'),
+  ('e2150000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T215 two');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('e2150000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 1), ('e2150000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000002', 1), ('e2150000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 2);
+update public.estimates set current_version_id = 'e2150000-0000-4000-8000-0000000000a1' where id = 'e2150000-0000-4000-8000-000000000001';
+update public.estimates set current_version_id = 'e2150000-0000-4000-8000-0000000000a2' where id = 'e2150000-0000-4000-8000-000000000002';
+select public.send_estimate('e2150000-0000-4000-8000-000000000002');
+select tst.fails_like($q$update public.estimates set status = 'sent' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%sent by send_estimate%',
+                      'T215 the office does not mark an estimate sent by hand');
+select tst.fails_like($q$update public.estimates set sent_version_id = 'e2150000-0000-4000-8000-0000000000a1' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%set by send_estimate%',
+                      'T215 nor sets its sent version');
+select tst.fails_like($q$update public.estimates set current_version_id = 'e2150000-0000-4000-8000-0000000000a2' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%version of this estimate%',
+                      'T215 an estimate does not point at another estimate''s (locked) version');
+select tst.fails_like($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = 'e2150000-0000-4000-8000-0000000000a1'$q$, '%locked by send_estimate%',
+                      'T215 the app does not lock a version by hand');
+select tst.fails_like($q$update public.estimate_versions set estimate_id = 'e2150000-0000-4000-8000-000000000002' where id = 'e2150000-0000-4000-8000-0000000000a3'$q$, '%stays with its estimate%',
+                      'T215 a version does not move to another estimate');
+-- send_estimate still sends: «sent», the current version locked and sent
+select public.send_estimate('e2150000-0000-4000-8000-000000000001');
+select tst.ok((select status = 'sent' and sent_version_id = 'e2150000-0000-4000-8000-0000000000a1' from public.estimates where id = 'e2150000-0000-4000-8000-000000000001')
+              and (select locked_at is not null from public.estimate_versions where id = 'e2150000-0000-4000-8000-0000000000a1'),
+              'T215 send_estimate sends and locks the version');
+select tst.fails_like($q$update public.estimates set sent_version_id = 'e2150000-0000-4000-8000-0000000000a2' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%set by send_estimate%',
+                      'T215 a sent estimate''s version is not swapped for another locked one');
+select tst.fails_like($q$insert into public.estimates (company_id, number, customer_id, property_id, title, sent_version_id) values ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T215 x', 'e2150000-0000-4000-8000-0000000000a1')$q$,
+                      '%set by send_estimate%', 'T215 a new estimate does not come with a sent version');
+select tst.fails_like($q$insert into public.estimate_versions (company_id, estimate_id, version_no, sent_at) values ('ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 9, now() - interval '30 days')$q$,
+                      '%locked by send_estimate%', 'T215 a new version does not come with a «sent» date');
+select tst.fails($q$insert into public.estimate_versions (company_id, estimate_id, version_no, locked_at) values ('ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 8, now())$q$,
+                 'T215 nor locked');
+select tst.fails_like($q$update public.estimates set current_version_id = 'e2150000-0000-4000-8000-0000000000a3' where id = 'e2150000-0000-4000-8000-000000000002'$q$, '%version of this estimate%',
+                      'T215 nor at another estimate''s open version');
+select tst.fails_like($q$update public.estimates set status = 'declined' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%the app sets only%',
+                      'T215 the app does not decline by hand (decline_countersign)');
+-- even the server's own update keeps an estimate to its own versions
+:as_super
+select tst.fails_like($q$update public.estimates set sent_version_id = 'e2150000-0000-4000-8000-0000000000a2' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%version of this estimate%',
+                      'T215 no caller points an estimate at another estimate''s version');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_version_lock_by_send()', 'EXECUTE'), 'T215 rule 18: the trigger function for nobody');
+\echo 'T215 an estimate is sent only by send_estimate ok'
+
+-- T216 (#1599): the name under the company's signature is the signer's account (full name, else email), never the text
+-- typed with a saved signature; the title only from the profile (red before 20261115130000)
+:as_owner_a
+do $$
+declare e uuid; v uuid; o uuid; k int;
+begin
+  for k in 1..2 loop
+    insert into public.estimates (company_id, customer_id, property_id, title) values
+      ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T216 ' || k) returning id into e;
+    insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e, 1) returning id into v;
+    update public.estimates set current_version_id = v where id = e;
+    insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 50000);
+    perform set_config('tst.t216_' || k, e::text || ',' || o::text || ',' || public.send_estimate(e), false);
+  end loop;
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare k int;
+begin
+  for k in 1..2 loop
+    perform public.portal_accept(split_part(current_setting('tst.t216_' || k), ',', 3), split_part(current_setting('tst.t216_' || k), ',', 2)::uuid,
+                                 null, 'T216 Client', 'M0 0 L4 4', true);
+  end loop;
+end $$;
+:as_owner_a
+do $$
+declare v_sig uuid; e uuid := split_part(current_setting('tst.t216_1'), ',', 1)::uuid; v_name text;
+begin
+  select full_name into v_name from public.users where id = 'a0000000-0000-0000-0000-000000000001';
+  insert into public.member_signatures (company_id, user_id, svg, name, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'M5 5 L6 6', 'Somebody Else', 'Owner') returning id into v_sig;
+  perform tst.ok(public.countersign_estimate(e, null, v_sig) = 'approved', 'T216 signed with a saved signature');
+  perform tst.ok((select signer_name = v_name and signer_name <> 'Somebody Else' from public.estimate_approvals where estimate_id = e and party = 'contractor'),
+                 'T216 the name is the account''s, not the one typed with the signature');
+end $$;
+:as_super
+update public.users set full_name = '' where id = 'a0000000-0000-0000-0000-000000000001';
+:as_owner_a
+do $$
+declare e uuid := split_part(current_setting('tst.t216_2'), ',', 1)::uuid;
+begin
+  perform tst.ok(public.countersign_estimate(e, 'M7 7 L8 8') = 'approved', 'T216 signed with a drawn signature');
+  perform tst.ok((select signer_name = (select email from public.users where id = 'a0000000-0000-0000-0000-000000000001')
+                    from public.estimate_approvals where estimate_id = e and party = 'contractor'),
+                 'T216 no full name: the account''s email');
+  perform tst.ok((select name = (select email from public.users where id = 'a0000000-0000-0000-0000-000000000001')
+                    from public.member_signatures where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000' and revoked_at is null),
+                 'T216 the drawn signature is saved under the account''s name too');
+end $$;
+:as_super
+update public.users set full_name = 'Owner A' where id = 'a0000000-0000-0000-0000-000000000001' and full_name = '';
+\echo 'T216 the company signs with the signer''s own name ok'
+
+-- T217 (#1601): a subcontractor never signs for the company, even with the right switched on by hand
+:as_super
+update public.memberships set can_sign_contracts = true where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a5600000-0000-4000-8000-000000000002';
+:as_owner_a
+do $$
+declare e uuid; v uuid; o uuid;
+begin
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T217') returning id into e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e, 1) returning id into v;
+  update public.estimates set current_version_id = v where id = e;
+  insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 50000);
+  perform set_config('tst.t217', e::text || ',' || o::text || ',' || public.send_estimate(e), false);
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin perform public.portal_accept(split_part(current_setting('tst.t217'), ',', 3), split_part(current_setting('tst.t217'), ',', 2)::uuid, null, 'T217 Client', 'M0 0 L4 4', true); end $$;
+:as_sub56
+-- (the public path refuses him earlier — he does not read the estimate, and can_sign_contracts excludes him; the
+-- membership check in countersign_estimate is the third line of defence, #1601)
+select tst.fails(format($q$select public.countersign_estimate(%L, 'M1 1 L2 2')$q$, split_part(current_setting('tst.t217'), ',', 1)),
+                 'T217 a subcontractor does not sign for the company');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = split_part(current_setting('tst.t217'), ',', 1)::uuid),
+              'T217 the estimate still waits for the company');
+-- a waiting client signature is not dropped by a quiet «draft» from the app (reopen_estimate is the way)
+:as_sales_a
+select tst.fails(format($q$update public.estimates set status = 'draft' where id = %L$q$, split_part(current_setting('tst.t217'), ',', 1)),
+                 'T217 the app does not turn a signed estimate back into a draft');
+:as_owner_a
+select tst.fails_like(format($q$update public.estimates set status = 'draft' where id = %L$q$, split_part(current_setting('tst.t217'), ',', 1)),
+                      '%reopened or declined by the server%', 'T217 not even the owner, by hand');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = split_part(current_setting('tst.t217'), ',', 1)::uuid),
+              'T217 the client''s signature still waits for the company');
+\echo 'T217 only an employee signs for the company ok'
 -- T245 (#1631): the team's notes about a client, a property, a job — a tech of the work reads and adds them; a
 -- subcontractor on the same visit does neither (red before 20261115150000)
 :as_super

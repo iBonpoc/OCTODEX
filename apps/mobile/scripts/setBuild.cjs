@@ -14,6 +14,7 @@ const path = require("node:path");
 
 const FILE = path.join(__dirname, "../src/config/version.ts");
 const LINE = /^export const BUILD = \d+;$/m;
+const AT_LINE = /^export const BUILT_AT = "[^"]*";$/m;
 
 /** The PR a commit of main came from: «Merge pull request #713 from …» or the last «(#N)» of a squash subject («… (#606) (#725)» → 725). */
 function buildFromMessage(subject) {
@@ -31,10 +32,12 @@ function pickBuild(given, subject) {
   return subject == null ? null : buildFromMessage(subject);
 }
 
-function writeBuild(n, file = FILE) {
+/** Writes the number and the moment of the build («BUILT_AT», ISO UTC) — the header shows the date even where the platform gives none (#1506). */
+function writeBuild(n, file = FILE, at = new Date().toISOString()) {
   const src = fs.readFileSync(file, "utf8");
   if (!LINE.test(src)) throw new Error(`${file}: no «export const BUILD = <n>;» line`);
-  fs.writeFileSync(file, src.replace(LINE, `export const BUILD = ${n};`));
+  if (!AT_LINE.test(src)) throw new Error(`${file}: no «export const BUILT_AT = "…";» line`);
+  fs.writeFileSync(file, src.replace(LINE, `export const BUILD = ${n};`).replace(AT_LINE, `export const BUILT_AT = "${at}";`));
 }
 
 if (require.main === module) {

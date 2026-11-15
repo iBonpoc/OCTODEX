@@ -2,7 +2,8 @@ import { APP_NAME } from "@/config/product";
 import Constants from "expo-constants";
 import * as Updates from "expo-updates";
 import { usePathname } from "expo-router";
-import { BUILD } from "@/config/version";
+import { BUILD, BUILT_AT } from "@/config/version";
+import { versionLabel } from "./versionLabel";
 import { useI18n } from "@/i18n";
 import { T } from "@/ui/primitives";
 
@@ -16,9 +17,8 @@ function publishedAt(): string | null {
 
 export function useVersionLabel(): string {
   const { day, time } = useI18n();
-  const v = Constants.expoConfig?.version ?? "1.0.0";
-  const at = publishedAt();
-  return `${APP_NAME} v${v} · ${BUILD || "dev"}${at ? ` · ${day(at)} ${time(at)}` : ""}`;
+  const version = Constants.expoConfig?.version ?? "1.0.0";
+  return versionLabel({ app: APP_NAME, version, build: BUILD, updatedAt: publishedAt(), builtAt: BUILT_AT }, { day, time });
 }
 
 /** Small line at the top of every screen header; hidden on the client page (/p/…) and the request page (/f/…). */

@@ -58,7 +58,7 @@ exports.run = async (h) => {
   await p.getByRole("switch", { name: /Acepto recibir/ }).click();
   failNext = true; // the first send meets a busy server
   await send().click();
-  await h.expectText(/No se pudo enviar/, "a failed send says so and keeps the form");
+  await h.expectText(/Revise la conexión y envíe de nuevo/, "a busy server: the page says what to do and keeps the form");
   await send().click();
   await h.expectText(/Solicitud enviada/, "sent");
   await h.expectText(/Sunset Gutters recibió su solicitud/, "who got it");
