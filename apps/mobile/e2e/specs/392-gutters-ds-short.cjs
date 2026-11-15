@@ -48,6 +48,9 @@ exports.run = async (h) => {
   await warn.waitFor({ timeout: 5000 });
   const text = await warn.innerText();
   h.expect(/0\D+1/.test(text), `the warning says how many stand of how many it needs («0 из 1») (${JSON.stringify(text)})`);
+  // …and the gutter it means is picked: it shows on the drawing as picked, the summary names it (founder 14.11: «что значит, нет подсветки жёлоба?»)
+  await tid("draw-summary").waitFor({ timeout: 5000 });
+  h.expect(/^Желоб/.test((await tid("draw-summary").innerText()).trim()), `the short gutter is picked (${JSON.stringify(await tid("draw-summary").innerText())})`);
   await h.shot("ds-short");
 
   // «Поставить водосток»: the downspout is back (automatic), the warning is gone
