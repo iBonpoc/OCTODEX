@@ -2,6 +2,7 @@ import { useState } from "react";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
+import { Button } from "@/ui/controls";
 import { ListCard } from "@/ui/listCard";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { MessageSheet, type MessagePreset } from "./MessageSheet";
@@ -20,7 +21,7 @@ export function MessagesScreen() {
   return (
     <Screen fab="messages" fabOn={{ message: write }} title={t("nav.messages")} subtitle={t("nav.messages.hint")}>
       {threads.length === 0 ? (
-        <Empty icon="sms" title={t("nav.messages.empty")} hint={t("nav.messages.emptyHint")} />
+        <Empty icon="sms" title={t("nav.messages.empty")} hint={t("nav.messages.emptyHint")} action={<Button testID="messages-empty-new" label={t("w6.msg.new")} icon="sms" variant="secondary" onPress={write} />} />
       ) : (
         <CardList>
           {threads.map((th) => {
