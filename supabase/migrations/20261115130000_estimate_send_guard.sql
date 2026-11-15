@@ -92,7 +92,7 @@ create or replace function app.tg_version_lock_by_send()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   if current_user in ('authenticated', 'anon')
-     and (tg_op = 'INSERT' and new.sent_at is not null
+     and (tg_op = 'INSERT' and (new.sent_at is not null or new.locked_at is not null)
           or tg_op = 'UPDATE' and ((new.locked_at, new.sent_at) is distinct from (old.locked_at, old.sent_at)
                                    or new.estimate_id is distinct from old.estimate_id)) then
     raise exception 'a version is locked by send_estimate and stays with its estimate' using errcode = '42501';

@@ -14614,6 +14614,8 @@ select tst.fails_like($q$insert into public.estimates (company_id, number, custo
                       '%set by send_estimate%', 'T215 a new estimate does not come with a sent version');
 select tst.fails_like($q$insert into public.estimate_versions (company_id, estimate_id, version_no, sent_at) values ('ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 9, now() - interval '30 days')$q$,
                       '%locked by send_estimate%', 'T215 a new version does not come with a «sent» date');
+select tst.fails($q$insert into public.estimate_versions (company_id, estimate_id, version_no, locked_at) values ('ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 8, now())$q$,
+                 'T215 nor locked');
 select tst.fails_like($q$update public.estimates set current_version_id = 'e2150000-0000-4000-8000-0000000000a3' where id = 'e2150000-0000-4000-8000-000000000002'$q$, '%version of this estimate%',
                       'T215 nor at another estimate''s open version');
 select tst.fails_like($q$update public.estimates set status = 'declined' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%the app sets only%',
