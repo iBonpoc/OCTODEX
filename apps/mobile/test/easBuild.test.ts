@@ -119,7 +119,7 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
     const NATIVE = [
       "@react-native-async-storage/async-storage", "expo", "expo-blur", "expo-clipboard", "expo-constants", "expo-crypto",
       "expo-document-picker", "expo-file-system", "expo-font", "expo-glass-effect", "expo-haptics", "expo-image-manipulator", "expo-image-picker",
-      "expo-linking", "expo-localization", "expo-location", "expo-notifications", "expo-print", "expo-router", "expo-sharing",
+      "expo-linking", "expo-localization", "expo-location", "expo-notifications", "expo-print", "expo-router", "expo-secure-store", "expo-sharing",
       "expo-splash-screen", "expo-status-bar", "expo-updates", "react-native", "react-native-gesture-handler", "react-native-reanimated",
       "react-native-safe-area-context", "react-native-screens", "react-native-svg", "react-native-worklets",
     ];
