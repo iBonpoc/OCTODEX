@@ -9,7 +9,7 @@ import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Card, Screen } from "@/ui/surfaces";
+import { FieldGroup, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 type Mode = "code" | "password" | "signup";
@@ -64,55 +64,53 @@ export default function SignIn() {
 
   return (
     <Screen title={t("auth.title")} back={back}>
-      <Card>
-        <View style={{ gap: space[3] }}>
-          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="mail" />
-          <LegalAgree on={agreed} onChange={setAgreed} />
-          {mode === "code" ? (
-            <>
-              {!sent ? (
-                <Button label={t("auth.sendCode")} icon="send" full disabled={!agreed || !okEmail || busy} onPress={() => act(() => auth.sendCode(email.trim()), () => setSent(true))} />
-              ) : (
-                <>
-                  <T v="caption" tone="mut">
-                    {t("auth.codeSent", { email: email.trim() })}
-                  </T>
-                  <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} />
-                  <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} />
-                </>
-              )}
-            </>
-          ) : null}
-          {mode !== "code" ? (
-            <>
-              {mode === "signup" ? <TextField type="name" value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
-              <TextField type={mode === "signup" ? "newPassword" : "password"} value={password} onChangeText={setPassword} placeholder={t("auth.password")} />
-              {mode === "password" ? (
-                <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} />
-              ) : (
-                <Button
-                  label={t("auth.signUp")}
-                  icon="plus"
-                  full
-                  disabled={!agreed || !okEmail || password.length < 6 || !name.trim() || busy}
-                  onPress={() =>
-                    act(() => auth.signUpPassword(email.trim(), password, name.trim()), () => {
-                      setMsg(t("auth.checkEmail"));
-                      setMode("password");
-                    })
-                  }
-                />
-              )}
-            </>
-          ) : null}
-          {msg ? (
-            <StatusNote tone="ok">{msg}</StatusNote>
-          ) : null}
-          {err ? (
-            <StatusNote tone="bad">{err}</StatusNote>
-          ) : null}
-        </View>
-      </Card>
+      <FieldGroup under testID="auth-fields">
+        <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="mail" />
+        <LegalAgree on={agreed} onChange={setAgreed} />
+        {mode === "code" ? (
+          <>
+            {!sent ? (
+              <Button label={t("auth.sendCode")} icon="send" full disabled={!agreed || !okEmail || busy} onPress={() => act(() => auth.sendCode(email.trim()), () => setSent(true))} />
+            ) : (
+              <>
+                <T v="caption" tone="mut">
+                  {t("auth.codeSent", { email: email.trim() })}
+                </T>
+                <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} />
+                <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} />
+              </>
+            )}
+          </>
+        ) : null}
+        {mode !== "code" ? (
+          <>
+            {mode === "signup" ? <TextField type="name" value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
+            <TextField type={mode === "signup" ? "newPassword" : "password"} value={password} onChangeText={setPassword} placeholder={t("auth.password")} />
+            {mode === "password" ? (
+              <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} />
+            ) : (
+              <Button
+                label={t("auth.signUp")}
+                icon="plus"
+                full
+                disabled={!agreed || !okEmail || password.length < 6 || !name.trim() || busy}
+                onPress={() =>
+                  act(() => auth.signUpPassword(email.trim(), password, name.trim()), () => {
+                    setMsg(t("auth.checkEmail"));
+                    setMode("password");
+                  })
+                }
+              />
+            )}
+          </>
+        ) : null}
+        {msg ? (
+          <StatusNote tone="ok">{msg}</StatusNote>
+        ) : null}
+        {err ? (
+          <StatusNote tone="bad">{err}</StatusNote>
+        ) : null}
+      </FieldGroup>
       <View style={{ gap: space[2] }}>
         {mode !== "code" ? <Button label={t("auth.useCode")} variant="ghost" onPress={() => setMode("code")} /> : null}
         {mode === "code" ? <Button label={t("auth.usePassword")} variant="ghost" onPress={() => setMode("password")} /> : null}
