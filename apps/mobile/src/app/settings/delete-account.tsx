@@ -8,7 +8,7 @@ import { useI18n } from "@/i18n";
 import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { accountErrorKey, afterDelete, codeErrorKey, CONFIRM_WORD, deleteBlock, makeOnce, normalizeWord, wordOk, type AccountErrorKey, type OwnedCompany } from "@/features/deleteAccount";
 import { deleteAccount, myLastOwnerCompanies, sendDeleteCode, transferOwnership, verifyDeleteCode } from "@/cloud/account";
 
@@ -162,8 +162,8 @@ export default function DeleteAccount() {
         </Card>
       ) : null}
 
-      <SectionTitle title={t("acct.code.title")} />
-      <Card>
+      {/* the code and the word: fields straight on the background (DS §11 п.17, #1411); what is lost and kept stays in cards */}
+      <FieldGroup title={t("acct.code.title")}>
         {fresh ? (
           <RowView>
             <StatusChip status="ok" label={t("acct.code.ok")} />
@@ -177,7 +177,7 @@ export default function DeleteAccount() {
             <Button label={t("acct.code.check")} icon="check" variant="secondary" disabled={!account || !codeSent || code.trim().length < 6 || busy || unsent > 0} onPress={checkCode} />
           </>
         )}
-      </Card>
+      </FieldGroup>
 
       {companies?.length ? (
         <>
@@ -217,8 +217,7 @@ export default function DeleteAccount() {
         </>
       ) : null}
 
-      <SectionTitle title={t("acct.word.title", { word: CONFIRM_WORD[lang] })} />
-      <Card>
+      <FieldGroup title={t("acct.word.title", { word: CONFIRM_WORD[lang] })}>
         <TextField type="text" value={word} onChangeText={setWord} placeholder={CONFIRM_WORD[lang]} label={t("acct.word.title", { word: CONFIRM_WORD[lang] })} />
         {failed ? (
           // asked already; the answer was lost — the same deletion once more (the server answers «repeat» if it is done)
@@ -226,7 +225,7 @@ export default function DeleteAccount() {
         ) : (
           <Button label={t("acct.delete")} icon="trash" variant="danger" full disabled={block !== null || busy} onPress={() => needNet() && setSure(true)} />
         )}
-      </Card>
+      </FieldGroup>
 
       {/* «Передать компанию»: choose an admin (rows), then a question — it cannot be undone (rule 5) */}
       <Sheet visible={!!transfer} onClose={() => setTransfer(null)} title={transfer ? t("acct.co.transferTo", { name: transfer.co.name }) : undefined}>

@@ -9,7 +9,7 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
@@ -28,48 +28,113 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
+import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { addDownspout, alongAxis, endAt, finishStroke, flipFace, moveDs, moveEndAlong, setCornerAngle, setCornerSplash, setRunUnit, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
-import { dsKindOf, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
+import { CornerSheet } from "./CornerSheet";
+import { EndSheet } from "./EndSheet";
+import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
+import { dsKindOf, PROFILE_ICON, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import type { GutterProfile } from "@octo/estimating-engine";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { ghostChipAt } from "./ghostChip";
+import { haptics } from "@/ui/haptics";
 import { SAVE_ICON, saveMark } from "./saveMark";
 import { InputWindow } from "./InputWindow";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
-import { fmtLen, ftIn } from "../canvas/format";
-import { forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { fmtLen } from "../canvas/format";
+import { dropHaptic, forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf, relink, removeMeasurement } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { onAppLeave } from "@/data/appActive";
 import { LinkSheet } from "./LinkSheet";
+import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
+import { GridLayer } from "../canvas/GridLayer";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, cornerCut, findCorners, splashOff, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, capSide, houseSides, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { localUndo, type GuardedUndo } from "@/data/undo";
 
 type Tool = "line" | "ds";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
 const FINGER = sizes.hitMin / 2;
+
+/** a window opened BY a tap waits `durFast`: the `click` the browser sends after the touch — late on a busy page — must not land in it (see the tap handler) */
+const afterTap = (f: () => void) => setTimeout(f, motion.durFast);
+/** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
+const SNAP_PX = sizes.hitMin / 4;
+/** a tap this soon after a two-finger gesture began or ended is not a tap */
+const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
-/** one cell of the canvas toolbar (spec 33 П20.8): a 36 circle (44 to touch, rule 3) and its word under it — a picture
- *  alone was read wrong (founder's walk-through 08.11). `body` replaces the icon (the storey: «Эт N» in its colour) */
-function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean }) {
+/** the name in the header (#1274): a button that SHRINKS — a long name or «Сделать заявкой» is cut with «…» in its own width, never under the icons beside it */
+function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
+  const { c } = useTheme();
+  return (
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.button.phone} containerStyle={{ flexShrink: 1, minWidth: 0 }}
+      style={{ height: component.button.phone, flexShrink: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: filled ? c.surf2 : "transparent", borderWidth: filled ? 1 : 0, borderColor: c.bd }}>
+      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      <T v="button" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{label}</T>
+    </Press>
+  );
+}
+
+/** one cell of the canvas toolbar (spec 33 П20.8; #1274, founder 12.11: «без длинных надписей, значки»): a 36 circle (44 to touch, rule 3), ONLY the picture —
+ *  its word is read aloud (`accessibilityLabel`), shown on the web by `title`, and written over it on a long press (`ToolHint`, a bubble for a moment).
+ *  `body` replaces the icon (the storey: «Эт N» in its colour) */
+function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabled, dim, below }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean; /** nothing to act on (the bin without a pick): muted, no action — but the long press still says its name */ disabled?: boolean; /** looks off, still answers a tap (it says why): the muted look of `disabled` without the lock */ dim?: boolean; /** the toolbar is at the top: the caption goes under it */ below?: boolean }) {
   const { c } = useTheme();
   const s = component.dockBtn;
+  const [tip, setTip] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  const showTip = () => {
+    setTip(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setTip(false), motion.longPressMs * 3);
+  };
   return (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ selected: !!active }} containerStyle={grow ? { flex: 1 } : undefined} style={{ alignItems: "center", gap: space[1], minWidth: sizes.hitMin }}>
-      <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
+    <Press
+      onPress={disabled ? () => {} : onPress}
+      onLongPress={showTip}
+      delayLongPress={motion.longPressMs}
+      accessibilityRole="button"
+      accessibilityLabel={a11y ?? label}
+      accessibilityState={{ selected: !!active, disabled: !!disabled }}
+      // a tool is a toggle: the web says «pressed» (accessibilityState.selected is not rendered on a button there)
+      {...({ title: label, ...(active !== undefined ? { "aria-pressed": !!active } : {}) } as object)}
+      containerStyle={grow ? { flex: 1 } : undefined}
+      style={{ alignItems: "center", minWidth: sizes.hitMin }}
+    >
+      {/* DS §19а (#1426): the chosen tool is the ONLY filled circle of the bar — inverted (ink + shadow-sm, the icon in bg); the other tool —
+          no fill, mut; the actions (↶ ↷ 🗑) — the icon alone in ink, as an iOS toolbar; the bin with nothing picked — dimOpacity; the
+          storey — its colour ring, no fill. Never acc: yellow is the screen's main action */}
+      <View
+        style={[
+          { minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+          // the chosen tool: inverted — an ink circle, the icon in the background's colour (DS §19а: the most visible thing of the bar,
+          // in the sun too; surf2 was 1.07:1 to the bar in the light theme and the storey's ring looked chosen instead)
+          active ? [fillStyle(c), { backgroundColor: c.ink }] : ring ? { borderWidth: dt.runW / 2, borderColor: ring } : null,
+          disabled ? { opacity: component.dimOpacity } : null,
+        ]}
+      >
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.bg : active === false || dim ? c.mut : c.ink} /> : null}
       </View>
-      <T v="micro" w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={grow ? 1 : undefined}>{label}</T>
+      {tip ? (
+        <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
+          <T v="caption" w="semibold">{label}</T>
+        </View>
+      ) : null}
     </Press>
   );
 }
@@ -78,6 +143,40 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { ic
 const dsSizeText = (s: string) => (s.includes("x") ? s.replace("x", "×") : `${s}″`);
 
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
+
+/** the chip with the angle beside a swung end: the same look and place as the live length of a new gutter */
+function SwingChip({ swing, view, box, gap }: { swing: { a: P; b: P; deg: number }; view: PlanView; box: { w: number; h: number; top: number }; gap: number }) {
+  const [chip, setChip] = useState({ w: 0, h: 0 });
+  const a = toScreen(view, swing.a), b = toScreen(view, swing.b);
+  return (
+    <View
+      pointerEvents="none"
+      testID="draw-swing-chip"
+      onLayout={(e) => {
+        const { width, height } = e.nativeEvent.layout;
+        if (width !== chip.w || height !== chip.h) setChip({ w: width, h: height });
+      }}
+      style={{ position: "absolute", opacity: chip.w ? 1 : 0, ...ghostChipAt(a, b, chip, box, gap) }}
+    >
+      <StatusChip status="neutral" label={`${swing.deg}°`} />
+    </View>
+  );
+}
+
+/** the look of the summary chip (not glass: the overlay colour and a hairline, DS «Экран-холст») */
+const SUMMARY_CHIP = (c: { ov: string; bd: string }) => ({ height: component.button.phone, flexDirection: "row" as const, alignItems: "center" as const, gap: space[2], paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd });
+
+/** «86′ · Дальше: водостоки» — the hint with its action */
+function NextDsLine({ gutterFt, icon, text }: { gutterFt: number; icon: IconKey; text: string }) {
+  const { c } = useTheme();
+  return (
+    <View testID="draw-next" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+      <Icon name={icon} s={sizes.iconSm} color={c.ink} />
+      <T v="caption" w="semibold">{`${gutterFt}′`}</T>
+      <T v="caption" tone="mut">{text}</T>
+    </View>
+  );
+}
 
 export default function DrawScreen() {
   const { t, money } = useI18n();
@@ -100,6 +199,8 @@ export default function DrawScreen() {
   const ch = useMemo(() => choicesFor(settings), [settings]);
   // the company's rules and use (M7c) and its corner method: the $ under the drawing counts by them
   const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
+  /** the downspouts it puts by itself (#1246): the company's setting — one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
+  const autoDs = useMemo(() => { const r = readRules(settings); return r.dsAuto ? { spacingIn: r.runPerDsFt * 12, edgeIn: r.dsEdgeIn } : null; }, [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -113,13 +214,17 @@ export default function DrawScreen() {
   const [view, setView] = useState<PlanView | null>(null);
   const [ghost, setGhost] = useState<{ a: P; b: P } | null>(null);
   const [ghostChip, setGhostChip] = useState({ w: 0, h: 0 });
+  // a free end being swung (#818): the standing end, the end under the finger and the angle between — the chip beside it
+  const [swing, setSwing] = useState<{ a: P; b: P; deg: number } | null>(null);
   /** 390: the attribute sheet is open (820/1280 show the panel whenever something is picked) */
   const [sheet, setSheet] = useState(false);
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
   // «⋯» → «Точность замера» or «Где панель инструментов» (founder 10.11, #739: «что такое „как мерили“?»)
-  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | null>(null);
+  const [moreSheet, setMoreSheet] = useState<"acc" | "place" | "layers" | null>(null);
+  // the layers of the view (#930): on this screen only, not saved with the measurement; all on to begin with
+  const [layers, setLayers] = useState({ grid: true, labels: true, ds: true });
   /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
   const [quickRun, setQuickRun] = useState<string | null>(null);
   /** a length label tapped (founder 09.11): the length of that gutter, without its properties */
@@ -129,6 +234,14 @@ export default function DrawScreen() {
   const sceneRef = useRef<Scene | null>(null);
   /** the corner tapped: inside / outside (founder 08.11) */
   const [cornerSheet, setCornerSheet] = useState<string | null>(null);
+  // «Конец желоба» (a double tap on a free end, #1273): the run and its end
+  const [endSheet, setEndSheet] = useState<{ id: string; end: 0 | 1 } | null>(null);
+  // the last tap on the canvas: a second one on the same object inside `motion.doubleTapMs` is a double tap (spec 33 §3); a single tap never waits for it
+  const lastTap = useRef<LastTap | null>(null);
+  // the window a double tap is about to open (`afterTap`): gone with the screen and with the tool
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (openTimer.current) clearTimeout(openTimer.current); }, []);
+  useEffect(() => { if (openTimer.current) { clearTimeout(openTimer.current); openTimer.current = null; } }, [tool]);
   /** a downspout just put blinks three times (founder 08.11: you see what appeared); `dim` — its off beat */
   const [fresh, setFresh] = useState<string | null>(null);
   const [dim, setDim] = useState(false);
@@ -148,16 +261,18 @@ export default function DrawScreen() {
     return () => clearInterval(iv);
   }, [fresh, reduce]);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
-  const [hint, setHint] = useState<Tool | "select" | null>(null);
+  const [hint, setHint] = useState<Tool | "select" | "move" | null>(null);
   const live = useLive();
   const viewNow = view ?? NO_VIEW;
   // pan with two fingers and pinch: they run together with the one-finger draw and tap below (a second finger
   // cancels the stroke — founder 09.11: the pinch never came once the first finger had moved)
-  const canvas = useCanvasGestures(viewNow, setView, live, 2);
+  // the limits of the scale (#1281): the whole drawing in a quarter of the screen at the farthest, 1″ as big as a finger's target at the nearest
+  const zoomLim = useMemo(() => zoomLimits(drawing.runs.flatMap((r) => [r.a, r.b]), size.w > 0 ? size : { w: 390, h: 844 }, space[8], sizes.hitMin), [drawing.runs, size]);
+  const canvas = useCanvasGestures(viewNow, setView, live, 2, { lim: zoomLim, viewport: size.w > 0 ? size : { w: 390, h: 844 }, onEdge: () => haptics.selection() });
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch });
-  cur.current = { drawing, view, tool, story, selected, m, canSave, ch };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch, layers, autoDs, size };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -181,7 +296,15 @@ export default function DrawScreen() {
         // «saved» is what the screen would write for this drawing: only a real change is sent — opening the canvas
         // never turns a ready measurement into a draft (review M8b №7, e2e 154)
         saver.seed(toElements(d, mid), v.m);
-        setDrawing(d);
+        // an old drawing may have a gutter lying on another (#1256): cleaned once, here, keeping the one with the smallest id; the write
+        // below is a real change, so an estimate made of this drawing says «Чертёж изменён» (#1314 review); «Отменить» puts it back
+        const clean = withoutDuplicates(d);
+        setDrawing(clean);
+        // read-only (or the module off): nothing is written, so nothing is said — the toast would come at every opening (director, 13.11)
+        if (clean !== d && cur.current.canSave) {
+          later.current();
+          toast.show(t("mod.gutters.draw.dupCleaned"), localUndo(() => commit(d, cur.current.drawing)));
+        }
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
       const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
@@ -238,8 +361,16 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (next: Drawing, prev = cur.current.drawing) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false) => {
+      // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
+      const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
+      // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
+      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+        announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
+      }
+      // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
+      if (next.downspouts.length > prev.downspouts.length && !cur.current.layers.ds) setLayers((x) => ({ ...x, ds: true }));
       setHint(null);
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
@@ -254,16 +385,49 @@ export default function DrawScreen() {
   );
 
   const tolIn = () => FINGER / (cur.current.view?.k ?? 1);
+  /** the width of a magnet's window in plan inches (pixels, not degrees: the same on a 3 ft and a 30 ft gutter) */
+  const snapIn = () => SNAP_PX / (cur.current.view?.k ?? 1);
   const plan = (x: number, y: number): P => (cur.current.view ? toPlan(cur.current.view, [x, y]) : [0, 0]);
 
   // one finger: draw a run, or drag an end of the picked run
   const dragRef = useRef<Stroke | null>(null);
   /** a stroke just ended and no finger has touched down since: on the web the lift of a drag is also a tap on the spot — not a tap on an end cap (it turned the new line's face, #854) */
   const liftTap = useRef(false);
+  /** what the line being drawn is held by (`drawSnap`): a tick on entering a snap, none while it stays */
+  const lineSnap = useRef<string | null>(null);
   // where the finger touched down: the pan activates only after it has moved a little
   const downAt = useRef<[number, number]>([0, 0]);
   // when it touched down: held still before moving = a long press (founder 08.11: from an end cap — a new line)
   const downTime = useRef(0);
+  /** the «joint of three ends» toast was shown in this drag (#1282) */
+  const threeShown = useRef(false);
+  /** the hold that picks something up (canvas/holdLift.ts, #1272): the state of this touch, its timer, and what is lifted (the point is drawn bigger) */
+  const hold = useRef<Hold>("idle");
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [lifted, setLifted] = useState<Lift | null>(null);
+  const clearHold = () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+  };
+  useEffect(() => clearHold, []); // the screen is left with a touch down: no timer left running
+  /** the touch took something (at its first move): `light` once, unless the hold did it already; the point is lifted */
+  const takeTick = (target: Lift | null, atOnce = true) => {
+    const r = holdMove(hold.current, atOnce);
+    hold.current = r.hold;
+    if (r.light) haptics.light();
+    if (target) setLifted(target);
+  };
+  /** the hold ran out with the finger still: if it is on something that can be taken, `light` and the lifted look — before any move */
+  const liftAtHold = () => {
+    holdTimer.current = null;
+    const target = dragRef.current || !cur.current.canSave ? null : liftTarget(withoutDs(cur.current.drawing, !cur.current.layers.ds), plan(downAt.current[0], downAt.current[1]), tolIn());
+    const r = holdFire(hold.current, !!target);
+    hold.current = r.hold;
+    if (!r.light || !target) return;
+    haptics.light();
+    setSelected(target.id);
+    setLifted(target);
+  };
   const pan = usePanGesture({
     runOnJS: true,
     maxPointers: 1,
@@ -271,33 +435,70 @@ export default function DrawScreen() {
     onBegin: (e) => {
       downAt.current = [e.x, e.y];
       downTime.current = Date.now();
+      threeShown.current = false;
+      // held on an end, a corner or a downspout for longPressMs without moving: picked up AT ONCE, before the finger goes (#1272, founder
+      // 12.11: «не чувствую момента, когда можно тянуть»); the drag after it has no second «взял»
+      hold.current = holdBegin().hold;
+      setLifted(null);
+      clearHold();
+      holdTimer.current = setTimeout(liftAtHold, motion.longPressMs);
+    },
+    onFinalize: () => {
+      clearHold(); // let go without moving, or a second finger: nothing changes, no «medium» (the drawing is untouched)
+      hold.current = holdCancel(hold.current).hold;
+      setLifted(null);
     },
     onActivate: () => {
+      clearHold(); // moved: before the hold it is drawing as ever; after it the pick-up was made already
+      lineSnap.current = null;
       const { drawing: d, tool: tl } = cur.current;
       const p0 = plan(downAt.current[0], downAt.current[1]);
-      const h = hitTest(d, p0, tolIn());
-      const held = Date.now() - downTime.current >= motion.durSlow;
-      // a free end cap taken (#504, founder 11.11: «долгое нажатие на эндкапу — тяни за край»): held, with any tool but «Желоб», or at
-      // once on the picked gutter's handle — the end follows the finger along its gutter, longer or
-      // shorter. A corner's end is not taken (it would break the corner). «Желоб» without a hold goes on from the end, as before
-      if (h?.kind === "end" && cur.current.canSave && tl !== "line" && (held || h.id === cur.current.selected) && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap") {
-        dragRef.current = { kind: "pull", id: h.id, end: h.end, before: d };
-        setSelected(h.id);
-        return;
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p0, tolIn());
+      const held = Date.now() - downTime.current >= motion.longPressMs;
+      // An end or a corner taken (#818, П35; founder 12.11: «долгое нажатие работает в любом режиме»). Taken: by a long press on any end
+      // with ANY tool, and by a drag from an end with the downspout tool (it has no other use for it; the picked gutter's ring too).
+      // Not taken: «Желоб» without a hold — it goes on from the end, as drawing always did: a new line (a corner, or the same gutter
+      // grown straight on); from the picked gutter's ring along the gutter it is a pull, across it a new line (#504).
+      const endHere = h?.kind === "end" && cur.current.canSave ? h : null;
+      if (endHere) {
+        const corner = findCorners(d).find((c) => c.runs.some((x) => x.id === endHere.id && x.end === endHere.end));
+        const sel = cur.current.selected;
+        const ring = endHere.id === sel || (!!corner && corner.runs.some((x) => x.id === sel));
+        if (held || (ring && tl !== "line") || tl === "ds") {
+          // a joint of three ends is not moved (spec П35): say why, once, instead of doing nothing
+          if (corner && !cornerMovable(d, corner.id)) {
+            haptics.warning();
+            toast.show(t("mod.gutters.draw.hint.threeEnds"));
+            return;
+          }
+          if (corner && cornerMovable(d, corner.id)) {
+            dragRef.current = { kind: "corner", cornerId: corner.id, before: d, from: p0, held: [true, true], tol: snapIn(), onEnd: null };
+            setSelected(endHere.id);
+            takeTick({ kind: "corner", id: endHere.id, cornerId: corner.id }); // picked up (already, if the hold ran out first: #1272)
+            return;
+          }
+          if (!corner && runEnds(d, findCorners(d))[endHere.id]?.[endHere.end]?.kind === "cap") {
+            dragRef.current = { kind: "pull", id: endHere.id, end: endHere.end, before: d, from: p0, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
+            setSelected(endHere.id);
+            takeTick({ kind: "end", id: endHere.id, end: endHere.end }); // picked up (already, if the hold ran out first: #1272)
+            return;
+          }
+        }
       }
       // a downspout under the finger slides along its run (founder 08.11), whatever the tool
       if (h?.kind === "ds" && cur.current.canSave) {
         dragRef.current = { kind: "ds", id: h.id, before: d };
+        takeTick({ kind: "ds", id: h.id });
         setSelected(h.id);
         return;
       }
       // «Желоб» from an end continues the gutter (a corner, or the same gutter grown straight on); so does a long press
       // on an end with «Водосток». «Выбрать» (a quick drag that moved an end) is gone (#687): the length is changed by
       // its label or «Свойства»; handles on the ends of the picked gutter come with #682
-      if (tl === "line" || (held && h?.kind === "end")) {
+      if (tl === "line") {
         const a = startAt(d, p0, tolIn());
-        // «Желоб» held on a free cap, or at once on the picked gutter's handle: along the gutter it is a pull, across it a new gutter (decided on the first move)
-        const cap = tl === "line" && (held || h?.kind === "end" && h.id === cur.current.selected) && h?.kind === "end" && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
+        // on the picked gutter's ring (a free end): along the gutter it is a pull, across it a new gutter (decided on the first move)
+        const cap = h?.kind === "end" && h.id === cur.current.selected && cur.current.canSave && runEnds(d, findCorners(d))[h.id]?.[h.end]?.kind === "cap";
         dragRef.current = { kind: "line", a, ...(cap && h?.kind === "end" ? { pullable: { id: h.id, end: h.end, before: d } } : {}) };
         setGhost({ a, b: a });
       }
@@ -311,40 +512,97 @@ export default function DrawScreen() {
         const run = g.pullable.before.runs.find((x) => x.id === g.pullable!.id);
         const far = Math.hypot(p[0] - g.a[0], p[1] - g.a[1]) > tolIn();
         if (run && far && alongAxis(run, g.a, p, tolIn())) {
-          dragRef.current = { kind: "pull", ...g.pullable, fromLine: true };
+          // along its own line: the end is taken and follows the finger (it may then leave the line: it swings, #818)
+          dragRef.current = { kind: "pull", ...g.pullable, fromLine: true, from: g.a, held: HELD_ORIGINAL, tol: snapIn(), onEnd: null };
+          takeTick({ kind: "end", id: g.pullable.id, end: g.pullable.end }); // picked up (the «Желоб» stroke turned into a pull)
           setGhost(null);
           setSelected(g.pullable.id);
-          setDrawing(moveEndAlong(g.pullable.before, g.pullable.id, g.pullable.end, p));
+          const sw = swingEnd(g.pullable.before, g.pullable.id, g.pullable.end, grabbedEnd(g.pullable.before, g.pullable.id, g.pullable.end, g.a, p), HELD_ORIGINAL, snapIn());
+          if (sw) setDrawing(sw.drawing);
           return;
         }
         if (far) dragRef.current = { kind: "line", a: g.a }; // across: a new gutter, as before
       }
-      if (g.kind === "line") setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
+      if (g.kind === "line") {
+        setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
+        // a tick on every snap on entering it: another gutter's end, a step of 45° (DS §15.6)
+        const key = drawSnap(d, g.a, p, tolIn(), undefined, lineSnap.current);
+        if (drawTick(key, lineSnap.current)) haptics.selection();
+        lineSnap.current = key;
+      }
       else if (g.kind === "ds") setDrawing(moveDs(g.before, g.id, p));
-      else if (g.kind === "pull") setDrawing(moveEndAlong(g.before, g.id, g.end, p));
+      else if (g.kind === "corner") {
+        const mv = moveCorner(g.before, g.cornerId, grabbedCorner(g.before, g.cornerId, g.from, p), g.held, g.tol, g.onEnd ?? null);
+        // none: the joint would land on another gutter's end, or a side would be too short — the last frame stays
+        if (mv) {
+          setDrawing(mv.drawing);
+          const f = findCorners(mv.drawing).find((c) => c.id === g.cornerId);
+          const fixed = f ? f.runs.map((x) => mv.drawing.runs.find((r) => r.id === x.id)!).map((r, i) => (f.runs[i]!.end === 0 ? r.b : r.a)) : null;
+          if (f && fixed) setSwing({ a: fixed[0]!, b: f.at, deg: mv.deg });
+          // a tick on EVERY snap on entering it: a side onto a step / its own direction, the joint onto another gutter's end (DS §15.6, table «место → вибрация» in spec 33)
+          if (cornerTick(mv, g)) haptics.selection();
+          g.held = mv.held;
+          g.onEnd = mv.end ?? null;
+        }
+      }
+      else if (g.kind === "pull") {
+        // the end follows the finger (by its move from the touch): along its own line it stays straight and only grows or shrinks,
+        // across it swings round the other end, held at 45° steps (#818, П30) — no corridor, no tool to switch to
+        const sw = swingEnd(g.before, g.id, g.end, grabbedEnd(g.before, g.id, g.end, g.from, p), g.held ?? null, g.tol, g.onEnd ?? null);
+        // none: the end would land on another gutter's end — the last frame stays (and is what the lift keeps)
+        if (sw) {
+          setDrawing(sw.drawing);
+          const mv = sw.drawing.runs.find((x) => x.id === g.id);
+          if (mv && sw.step !== HELD_ORIGINAL) setSwing({ a: g.end === 0 ? mv.b : mv.a, b: g.end === 0 ? mv.a : mv.b, deg: sw.deg });
+          else setSwing(null);
+          // a tick on EVERY snap on entering it (a step of 45°, the gutter's own direction, another gutter's end), not on every move at its edge
+          if (pullTick(sw, g)) haptics.selection();
+          g.held = sw.step;
+          g.onEnd = sw.end ?? null;
+        } else {
+          // #1282: the end would join a corner → a joint of three ends (П35): say so, once per drag, the last frame stays
+          const r0 = g.before.runs.find((x) => x.id === g.id);
+          if (r0 && !threeShown.current && onCornerPoint(g.before, r0, new Set([g.id]), grabbedEnd(g.before, g.id, g.end, g.from, p), tolIn())) {
+            threeShown.current = true;
+            haptics.warning();
+            toast.show(t("mod.gutters.draw.hint.threeJoin"));
+          }
+        }
+      }
       else setDrawing(moveEnd(g.before, g.id, g.end, p, tolIn()));
     },
     onDeactivate: (e) => {
       const g = dragRef.current;
       dragRef.current = null;
       setGhost(null);
+      setSwing(null);
       if (!g) return;
       // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
       const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: newRunAttrs(cur.current.ch, cur.current.story) });
-      if (g.kind === "end" || g.kind === "ds" || g.kind === "pull") {
+      if (g.kind === "end" || g.kind === "ds" || g.kind === "pull" || g.kind === "corner") {
         if (e.canceled) setDrawing(g.before);
         else {
           commit(next, g.before);
+          if (next !== g.before) haptics.medium(); // set down (DS §15.6) — only when something moved
           // «Желоб»: drawn on / pulled out straight from the end → its length window, as growing a gutter always did (founder 09.11)
-          if (g.kind === "pull" && g.fromLine && next !== g.before) {
+          if (g.kind === "pull" && g.fromLine && next !== g.before && sameDirection(g.before, next, g.id)) {
             setQuickRun(g.id);
             quickGrew.current = true;
           }
         }
         liftTap.current = true;
         return;
+      }
+      // a line drawn over a gutter from one end to the other makes no second gutter on it (#1256): say so
+      if (next === d && g.kind === "line") {
+        const b = endAt(d, g.a, plan(e.x, e.y), tolIn());
+        const why = e.canceled ? null : lineRefused(d, g.a, b, Number(cur.current.story) || 1, tolIn());
+        if (why) {
+          haptics.warning();
+          toast.show(t(why === "dup" ? "mod.gutters.draw.dupRun" : "mod.gutters.draw.overlapRun"));
+        }
       }
       if (next !== d) {
         commit(next, d);
@@ -365,16 +623,22 @@ export default function DrawScreen() {
       liftTap.current = false;
     },
     onActivate: (e) => {
+      if (Date.now() - canvas.multiAt.current < MULTI_TAP_MS) { lastTap.current = null; return; } // the fingers of a pinch / two-finger pan lifting are not a tap (a pinch that ended over a length label opened its sheet)
+      if (!holdIsTap(hold.current)) return; // a touch that picked something up (a hold) is not a tap: the release does not flip a cap or open a menu (#1272)
       const { drawing: d, tool: tl } = cur.current;
       const p = plan(e.x, e.y);
       // a tap on a label opens what it says (founder 09.11): a length → its length, a corner → the corner, the
       // fittings word over a downspout → its menu
       const lab = cur.current.canSave ? sceneRef.current?.labels.find((l) => Math.abs(e.x - l.x) <= l.w / 2 && Math.abs(e.y - l.y) <= l.h / 2) : undefined;
+      // (the lift of a drag is a tap on the spot on the web: it opens no label it ended over — a downspout dragged under its own word, spec 170)
+      if ((lab?.id.startsWith("len:") || lab?.id.startsWith("ds:")) && liftTap.current) return;
       if (lab?.id.startsWith("len:")) {
         setSelected(lab.id.slice(4));
         setLenEdit(lab.id.slice(4));
         return;
       }
+      // (the lift of a drag of an end or a corner is a tap on the spot on the web: not a tap on its label, #818 review)
+      if (lab?.id.startsWith("corner:") && liftTap.current) return;
       if (lab?.id.startsWith("corner:")) {
         setCornerSheet(lab.id.slice(7));
         return;
@@ -386,17 +650,20 @@ export default function DrawScreen() {
       }
       // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
       // in a tap on the web)
-      const onDs = hitTest(d, p, tolIn());
-      if (tl === "ds" && onDs?.kind === "ds") {
+      const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
+      if (tl === "ds" && onDs?.kind === "ds" && !liftTap.current) {
         setSelected(onDs.id);
         setSheet(true); // its menu (founder 09.11)
         return;
       }
+      // …nor a tap that puts a downspout (the downspout tool drags ends and corners now)
+      if (tl === "ds" && liftTap.current) return;
       if (tl === "ds") {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch), cur.current.ch);
         if (next !== d) {
           commit(next);
+          haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
           // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open
@@ -404,24 +671,43 @@ export default function DrawScreen() {
         }
         return;
       }
-      const h = hitTest(d, p, tolIn());
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (h) setHint(null);
-      // an end (founder 08.11): an end cap swaps left ↔ right (the whole line's face); a corner asks inside / outside
-      if (h?.kind === "end" && cur.current.canSave && !liftTap.current) {
-        const found = findCorners(d);
-        const corner = found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end));
-        if (corner) {
-          setSelected(h.id);
-          setCornerSheet(corner.id);
-          return;
-        }
-        if (runEnds(d, found)[h.id]?.[h.end]?.kind === "cap") {
-          commit(flipFace(d, h.id));
-          setSelected(h.id);
-          return;
-        }
+      // a tap picks AT ONCE and never waits for a second one (spec 33 §3, #1273); what used to happen on the spot — the corner's sheet on an end,
+      // the flip of a cap — is the second tap's (a double tap on the same object inside `doubleTapMs`) or a row of its sheet
+      const found = h?.kind === "end" ? findCorners(d) : [];
+      const corner = h?.kind === "end" ? found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end)) : undefined;
+      // a free end: not a corner, not butted to another gutter — and one with «без заглушки» stays one (its sheet brings the cap back)
+      const freeEnd = h?.kind === "end" && !corner && (!!d.runs.find((r) => r.id === h.id)?.noCap?.[h.end] || runEnds(d, found)[h.id]?.[h.end]?.kind !== "join");
+      const key = !h ? "" : corner ? `corner:${corner.id}` : h.kind === "end" ? `end:${h.id}:${h.end}` : h.id;
+      const now = Date.now();
+      const dbl = !liftTap.current && isDoubleTap(lastTap.current, now, key, motion.doubleTapMs);
+      lastTap.current = dbl || liftTap.current ? null : { at: now, id: key };
+      if (!dbl) {
+        if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
+        setSelected(h ? h.id : null);
+        return;
       }
-      setSelected(h ? h.id : null);
+      haptics.light();
+      if (!h) {
+        if (tl === "line" && cur.current.size.w) setView(fit(d, cur.current.size)); // two taps on the empty place: the whole drawing
+        return;
+      }
+      setSelected(h.id);
+      if (!cur.current.canSave && h.kind === "end") return;
+      // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
+      // then — a row of a window opened in the same beat would be pressed by the tap that opened it (the toast has the same guard,
+      // `toastArmMs`; found by e2e 211)
+      if (openTimer.current) clearTimeout(openTimer.current);
+      const pickedId = h.id;
+      openTimer.current = afterTap(() => {
+        openTimer.current = null;
+        // what was picked meanwhile or another tool: the tap that asked is no longer the person's wish
+        if (cur.current.selected !== pickedId || cur.current.tool !== tl) return;
+        if (corner) setCornerSheet(corner.id);
+        else if (freeEnd && h.kind === "end") setEndSheet({ id: h.id, end: h.end });
+        else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
+      });
     },
   });
   const fingers = useSimultaneousGestures(pan, tap);
@@ -430,28 +716,27 @@ export default function DrawScreen() {
     () =>
       view && size.w > 0
         ? buildScene(drawing, {
+            fmt: ch.lenFormat,
             view,
             viewport: size,
             fontSize: LABEL_FONT,
             padX: space[1],
             gap: dt.labelGap,
             selected,
+            lift: lifted,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
             dsPad: DS_MARK_R,
             dsText: (n) => t("mod.gutters.ds", { n }),
             storyText: (n) => t("mod.gutters.story", { n }),
-            cornerText: (kind, splash, angleDeg) => {
-              // the word and the angle between the walls (#933): «внутр. 90°», a skew one «наруж. 106°»
-              const k = `${t(kind === "in" ? "mod.gutters.draw.cornerIn" : kind === "out" ? "mod.gutters.draw.cornerOut" : "mod.gutters.draw.cornerBay")} ${angleDeg}°`;
-              return splash ? t("mod.gutters.draw.cornerSplash", { k }) : k;
-            },
+            // only the angle between the walls, «135°» (founder 12.11, #1275): no «наруж./внутр./эркер» on the canvas; the kind and the guard are in the corner's sheet
+            cornerText: (_kind, _splash, angleDeg) => `${angleDeg}°`,
             faceOff: dt.runW * 2,
             dimDs: dim ? fresh : null,
-            gridMinPx: space[6],
+            layers,
           })
         : null,
-    [drawing, view, size, selected, t, dim, fresh],
+    [drawing, view, size, selected, t, dim, fresh, ch.lenFormat, layers, lifted],
   );
   sceneRef.current = scene;
 
@@ -460,7 +745,7 @@ export default function DrawScreen() {
   const selText = !sel
     ? null
     : "a" in sel
-      ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), sel.unit), n: storyOf(sel.attrs.story) })
+      ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
       : t("mod.gutters.draw.selDsKind", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
   const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
@@ -512,9 +797,9 @@ export default function DrawScreen() {
     setM((x) => (x ? { ...x, accuracy: a } : x));
     later.current();
   };
+  const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
-  const [sketchW, setSketchW] = useState(0);
   const cornerKind = (kind: "in" | "out") => {
     // the sheet stays open (founder 09.11: a tap closed it) — the kind switches, the cut below follows
     if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
@@ -528,10 +813,11 @@ export default function DrawScreen() {
     sel && m && stored.elements.some((e) => e.id === sel.id) && (canSave || has(sel.id)) ? (
       <MeasurePhotos measurementId={m.id} elementId={sel.id} testID="attr-photos" onRemoved={() => setSheet(false)} readOnly={!canSave} />
     ) : null;
+  const photoN = m ? photosOf(store.db, m.id).length : 0;
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} onUnit={(u) => commit(setRunUnit(cur.current.drawing, sel.id, u))} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} run={drawing.runs.find((r) => r.id === sel.runId)?.attrs} />}
       {elPhotos}
     </>
   );
@@ -562,7 +848,7 @@ export default function DrawScreen() {
     setSelected(null);
     const gone = selected;
     // «Отменить» puts back what was deleted and keeps what was drawn since
-    toast.show(t("mod.gutters.draw.deleted"), () => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing));
+    toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing, true))); // put back as it was: no recount (#1264)
   };
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
@@ -577,7 +863,10 @@ export default function DrawScreen() {
   const [dropAt, setDropAt] = useState<ToolbarPlace | null>(null);
   const gripPan = usePanGesture({
     runOnJS: true,
-    onActivate: () => setGripping(true),
+    onActivate: () => {
+      setGripping(true);
+      haptics.light(); // picked up (DS §15.6, #1159)
+    },
     onUpdate: (e) => {
       setGripAt([e.translationX, e.translationY]);
       setDropAt(placeAt(e.absoluteX, e.absoluteY, win.width, win.height));
@@ -591,6 +880,8 @@ export default function DrawScreen() {
       setGripping(false);
       if (e.canceled) return;
       const p = placeAt(e.absoluteX, e.absoluteY, win.width, win.height);
+      const dh = dropHaptic(place, p); // set down on another edge — only when it moved (DS §15.6)
+      if (dh) haptics[dh]();
       setPlace(p);
       void saveToolbarPlace(p);
     },
@@ -600,7 +891,29 @@ export default function DrawScreen() {
     setMoreSheet(null);
     void saveToolbarPlace(p);
   };
+  /** a layer on or off (#930): off with the downspouts — no downspout stays picked, and the downspout tool gives way to «Желоб» */
+  const toggleLayer = (l: "grid" | "labels" | "ds", on: boolean) => {
+    setLayers((x) => ({ ...x, [l]: on }));
+    if (l === "ds" && !on) {
+      if (cur.current.drawing.downspouts.some((x) => x.id === cur.current.selected)) setSelected(null);
+      if (cur.current.tool === "ds") setTool("line");
+      setSheet(false);
+    }
+  };
+  /** the toast «Водостоков стало N» (kept fresh each render: `commit` is made once) */
+  const announceDs = useRef<(n: number, undo: GuardedUndo) => void>(() => {});
+  announceDs.current = (n, undo) => toast.show(t("mod.gutters.draw.dsAutoCount", { n }), undo);
+  /** «Расставить водостоки»: every chain of an old measurement gets its downspouts — one step of «Назад» (#1246) */
+  const placeAutoDs = () => {
+    const o = cur.current.autoDs;
+    if (!o) return;
+    const next = autoDownspouts(cur.current.drawing, { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }, undefined, true);
+    if (!layers.ds) setLayers((x) => ({ ...x, ds: true }));
+    commit(next, cur.current.drawing, true);
+  };
   const pick = (tl: Tool) => {
+    // «Водосток» needs the downspouts seen: the layer comes back on (a downspout is never put in the dark, #930 review)
+    if (tl === "ds" && !layers.ds) setLayers((x) => ({ ...x, ds: true }));
     setTool(tl);
     setHint(tl);
   };
@@ -616,18 +929,38 @@ export default function DrawScreen() {
   // «⋯» (founder 09.11, #692 #690; spec 33 П24 Б5, Б6): link to another, unlink back to the drafts, delete the measurement
   const whoRef = useRef<React.ComponentRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  type WhoKey = "acc" | "place" | "relink" | "unlink" | "delete";
+  type WhoKey = "fit" | "props" | "end0" | "end1" | "acc" | "place" | "layers" | "autods" | "relink" | "unlink" | "delete";
   const linked = !!leadId || !!placeId;
+  // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
+  const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
+  const endRows = (() => {
+    if (!endRun0) return [] as { end: 0 | 1; side: string }[];
+    const found = findCorners(drawing), kinds = runEnds(drawing, found)[endRun0.id], hs = houseSides(drawing)(endRun0);
+    return ([0, 1] as const).filter((e) => !!endRun0.noCap?.[e] || kinds?.[e]?.kind === "cap").map((e) => ({ end: e, side: capSide(e, hs) }));
+  })();
   const whoItems: { key: WhoKey; label: string; destructive?: boolean }[] = [
+    // «вписать» left the header (#1273): the whole drawing is a double tap on the empty place, and a row here
+    { key: "fit", label: t("mod.gutters.draw.fit") },
+    // what a double tap opens, as rows too (a screen reader has no double tap, a phone on its side has no panel): the properties of the picked
+    // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
+    ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
+    ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
     // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
     // «Как мерили, панель» the founder did not understand)
     ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
     { key: "place", label: t("mod.gutters.draw.placeItem") },
+    { key: "layers", label: t("mod.gutters.draw.layersItem") },
+    // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
+    ...(canSave && autoDs && drawing.runs.length > 0 && !autoManaged(drawing) ? [{ key: "autods" as const, label: t("mod.gutters.draw.autoDsItem") }] : []),
     ...(linked ? [{ key: "relink" as const, label: t("mod.gutters.link.relink") }, { key: "unlink" as const, label: t("mod.gutters.link.unlink") }] : []),
     ...(inStore ? [{ key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true }] : []),
   ];
   const onWho = (k: WhoKey) => {
-    if (k === "acc" || k === "place") return setMoreSheet(k);
+    if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
+    if (k === "props") return setSheet(true);
+    if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
+    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
     if (k === "relink") setLinkSheet(true);
@@ -679,24 +1012,39 @@ export default function DrawScreen() {
   );
   /** 390 at the bottom: the row takes the width, six cells share it */
   const grow = !side && !wide && !flat;
+  // the tools show what is chosen (#1274): the gutter's profile, the downspout's kind
+  const lineIcon = PROFILE_ICON[(newRunAttrs(ch, story).profile as GutterProfile)] ?? "channel";
+  const dsIcon = (() => { const a = newDsAttrs(ch); return dsKindOf(a.shape, a.dsStyle).icon; })();
   const tools = (
     <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: gripping ? dt.runW / 2 : 1, borderColor: gripping ? c.ink : c.bd, flexShrink: 0, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
       {grip}
-      <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="channel" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
-      <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
-      {/* «Выбрать» is gone (founder 09.11, #687): a tap picks with any tool; in its place «Свойства» of what is picked —
-          on the phone (820/1280 show them in the side panel) */}
-      {!wide ? (
-        <View testID="draw-props" style={[grow ? { flex: 1 } : { flexShrink: 0 }, sel ? null : { opacity: component.dimOpacity }]}><ToolCell icon="sliders" label={t("mod.gutters.attr.props")} onPress={() => (sel ? setSheet(true) : setHint("select"))} grow={grow} /></View>
-      ) : null}
-      <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
-      <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
+      <View testID="draw-tool-line" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={lineIcon} label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} below={at === "top"} /></View>
+      <View testID="draw-tool-ds" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon={dsIcon} label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} below={at === "top"} /></View>
+      <View testID="draw-story" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} below={at === "top"} /></View>
+      <View testID="draw-undo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} below={at === "top"} /></View>
       {/* «Вперёд» beside «Назад» (founder 09.11): «Ещё» is gone — how it was measured and the toolbar's place open from
           the accuracy mark at the top */}
-      <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} /></View>
+      <View testID="draw-redo" style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="redo" label={t("mod.gutters.draw.redoShort")} onPress={doRedo} grow={grow} below={at === "top"} /></View>
+      {/* the bin (#1274, founder 12.11: «🗑 в панели, виден всегда, активен только при выборе»): «Отменить» for 5 s after (rule 5) */}
+      {/* the bin without a pick: a `disabled` button is deaf to the long press that says its name, so the cell is not disabled — it answers nothing, and the state is said here */}
+      <View testID="draw-delete" {...({ "aria-disabled": !sel || undefined } as object)} style={grow ? { flex: 1 } : { flexShrink: 0 }}><ToolCell icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} grow={grow} disabled={!sel} below={at === "top"} /></View>
     </View>
   );
-  const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
+  // the summary chip: the parts are the engine's (rule 8) from the drawing as it is when the finger rests — not on every frame of a drag
+  const calmDrawing = useDeferredValue(drawing);
+  const parts = useMemo(() => (calmDrawing.runs.length ? computeGutterParts(toMeasurement(calmDrawing, { method: rules.corner }), rules.over).parts : []), [calmDrawing, rules]);
+  const summary0 = summaryOf(drawing, parts, selText ? { text: selText, dsIcon: selDsIcon } : null, tool === "ds" || !!ghost);
+  // a module that is off still says what is picked (as the old row did); the hint and the totals are for a drawing that is saved
+  const summary = canSave || summary0?.kind === "selected" ? summary0 : null;
+  const summaryA11y = !summary ? "" : summary.kind === "selected" ? summary.text : summary.kind === "nextDs" ? t("mod.gutters.draw.nextDs") : t("mod.gutters.draw.summaryA11y", { g: summary.gutterFt, d: summary.dsCount, p: summary.pipeFt });
+  // #818 (founder 12.11: «не понимаю, как тянуть край»): once per opening of the canvas, when a gutter is first picked, the hint bubble says how
+  // an end and a corner are taken, with any tool (the bubble the tools' hints use: it never replaces a toast with «Отменить», rule 5)
+  const movedHint = useRef(false);
+  useEffect(() => {
+    if (movedHint.current || !canSave || !selected || !drawing.runs.some((r) => r.id === selected)) return;
+    movedHint.current = true;
+    setHint("move");
+  }, [selected, canSave, drawing.runs]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
@@ -709,7 +1057,17 @@ export default function DrawScreen() {
       <Stack.Screen options={{ gestureEnabled: false, fullScreenGestureEnabled: false }} />
       {/* the drawing under everything */}
       <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
-        <CanvasView view={viewNow} onView={setView} live={live} size={size} onSize={setSize} gestures={canvas} testID="draw-canvas">
+        <CanvasView
+          view={viewNow}
+          onView={setView}
+          live={live}
+          size={size}
+          onSize={setSize}
+          gestures={canvas}
+          testID="draw-canvas"
+          // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
+          under={layers.grid && view && size.w > 0 ? <GridLayer view={viewNow} live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+        >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
               {scene ? <SvgPainter scene={scene} w={size.w} h={size.h} testID="draw-svg" /> : null}
@@ -725,52 +1083,57 @@ export default function DrawScreen() {
         </CanvasView>
       </View>
 
-      {/* top: back, title, the save state; a module that is off or past the trial says it before the work starts */}
+      {/* top, ONE row (#1274, founder 12.11: «шапка — в одну строку»): back · the name (a lead, an address, «Привязать»; «Замер» before it is saved)
+          · a small mark when the drawing is only on the phone (no cloud when all is saved) · fit · photos · «⋯» · «Готово»; a module that is off or
+          past the trial says it under the row before the work starts */}
       <View pointerEvents="box-none" style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
-        <RowView>
+        <RowView style={{ alignItems: "center", gap: space[1] }}>
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
-          <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
-          <View style={{ flex: 1 }} />
-          <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
+          <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: space[1] }}>
+            {flat || !canSave ? (
+              <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
+            ) : lead ? (
+              <View testID="draw-lead" style={{ flexShrink: 1 }}>
+                <NameButton icon="user" label={lead.name} onPress={() => router.push(`/lead/${lead.id}`)} />
+              </View>
+            ) : addr ? (
+              // linked to a client's address (LinkSheet): that address, it opens the property
+              <View testID="draw-place" style={{ flexShrink: 1 }}>
+                <NameButton icon="pin" label={addr.address} onPress={() => router.push(`/property/${addr.id}`)} />
+              </View>
+            ) : inStore && !leadId && !inStore.propertyId ? (
+              <View testID="draw-to-lead" style={{ flexShrink: 1 }}>
+                <NameButton icon="plus" label={t("mod.gutters.draw.toLead")} filled onPress={() => setLinkSheet(true)} />
+              </View>
+            ) : (
+              <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
+            )}
+            {/* no cloud when all is saved and sent: only «on the phone» (not sent yet / no connection), a tap says it in words (#507 → #1274) */}
+            {canSave && !flat && (mark === "sending" || mark === "phone") ? (
+              <View testID="draw-local">
+                <IconButton icon={SAVE_ICON[mark]} label={t(`mod.gutters.draw.save.${mark}`)} onPress={() => toast.show(t(`mod.gutters.draw.save.${mark}`))} />
+              </View>
+            ) : null}
+          </View>
+          {mPhotos && !wide && !flat && canSave ? (
+            <View testID="draw-photos-open">
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
+                <Icon name="camera" s={sizes.iconMd} color={c.ink} />
+                {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
+              </Press>
+            </View>
+          ) : null}
+          {canSave ? (
+            <View ref={whoRef} collapsable={false} testID="draw-who">
+              <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
+            </View>
+          ) : null}
           {inStore ? (
             <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
-        {flat && canSave ? null : canSave ? (
-          <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
-            {/* the save mark (#507): an icon of three states, a tap says it in words; how it was measured is in «⋯» (#681) */}
-            {mark !== "none" ? (
-              <View testID="draw-saved">
-                <IconButton icon={SAVE_ICON[mark]} label={t(`mod.gutters.draw.save.${mark}`)} onPress={() => toast.show(t(`mod.gutters.draw.save.${mark}`))} />
-              </View>
-            ) : null}
-            {lead ? (
-              <View testID="draw-lead">
-                <Button label={lead.name} icon="user" size="sm" variant="ghost" onPress={() => router.push(`/lead/${lead.id}`)} />
-              </View>
-            ) : addr ? (
-              // linked to a client's address (LinkSheet): that address, it opens the property
-              <View testID="draw-place">
-                <Button label={addr.address} icon="pin" size="sm" variant="ghost" onPress={() => router.push(`/property/${addr.id}`)} />
-              </View>
-            ) : inStore && !leadId && !inStore.propertyId ? (
-              <View testID="draw-to-lead">
-                <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={() => setLinkSheet(true)} />
-              </View>
-            ) : null}
-            {mPhotos && !wide ? (
-              <View testID="draw-photos-open">
-                <Button label={t("mod.gutters.photo.open")} icon="camera" size="sm" variant="ghost" onPress={() => setPhotoSheet(true)} />
-              </View>
-            ) : null}
-            {canSave ? (
-              <View ref={whoRef} collapsable={false} testID="draw-who">
-                <IconButton icon="more" label={t("mod.gutters.draw.whoMenu")} onPress={() => whoRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setWhoAt({ x, y, w, h }))} />
-              </View>
-            ) : null}
-          </RowView>
-        ) : (
-          <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+        {canSave ? null : (
+          <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <StatusChip status="warn" label={t("mod.gutters.draw.notSaved")} />
             <T v="caption">{t(access === "expired" ? "mod.gutters.draw.expired" : "mod.gutters.draw.off")}</T>
             <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
@@ -791,6 +1154,8 @@ export default function DrawScreen() {
       {!drawing.runs.length && !ghost ? (
         <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
           <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
+          {/* the tools carry pictures only (#1274): where their words are, said while the drawing is still empty (the first opening) */}
+          <T v="caption" tone="mut" center>{t("mod.gutters.draw.emptyTools")}</T>
         </View>
       ) : null}
       {/* the live length beside the line being drawn (founder 09.11, #689), not at the top of the screen */}
@@ -804,9 +1169,12 @@ export default function DrawScreen() {
           }}
           style={{ position: "absolute", opacity: ghostChip.w ? 1 : 0, ...ghostChipAt(gA, gB, ghostChip, { w: size.w, h: size.h, top: ins.top + space[8] + space[6] }, dt.labelGap + dt.runWSel) }}
         >
-          <StatusChip status="neutral" label={ftIn(ghostLen)} />
+          <StatusChip status="neutral" label={fmtLen(ghostLen, ch.lenFormat)} />
         </View>
       ) : null}
+
+      {/* the angle beside a free end being swung (#818): «90°» when it is held at a step */}
+      {swing && view ? <SwingChip swing={swing} view={view} box={{ w: size.w, h: size.h, top: ins.top + space[8] + space[6] }} gap={dt.labelGap + dt.runWSel} /> : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       {/* where the toolbar sticks if let go now (founder 09.11): that edge outlined */}
@@ -829,39 +1197,57 @@ export default function DrawScreen() {
       ) : null}
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
         {gripping ? (
-          <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+          <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
           </View>
         ) : null}
-        {/* what next (П20.9): gutters drawn, no downspout yet → put them — a bubble, not a row of the total (09.11) */}
-        {nextDs && !hintText && !gripping && !flat ? (
-          <View testID="draw-next" style={{ alignSelf: "center", flexDirection: "row", alignItems: "center", gap: space[2], paddingVertical: space[1], paddingLeft: space[3], paddingRight: space[1], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
-            <T v="caption" tone="mut">{t("mod.gutters.draw.nextDs")}</T>
-            <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
-          </View>
-        ) : null}
         {hintText && !gripping ? (
-          <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+          <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
         ) : null}
         {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
-        {selText ? (
-        <View testID="draw-sel-bar" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1], ...(flat ? { flex: 1 } : {}) }}>
-          {/* one row (founder 09.11: the block took too much room): what is picked and «Свойства»; the total and the
-              estimate are on «Просмотр замера» now (#700) */}
-            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-              <View testID="draw-selected" style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] }}>
-                {selDsIcon ? <View testID="draw-selected-kind"><Icon name={selDsIcon} s={sizes.iconSm} color={c.ink} /></View> : null}
-                <T v="caption" w="semibold" numberOfLines={2} style={{ flex: 1 }}>{selText}</T>
-              </View>
-              {/* «Удалить» where «Свойства» was (founder 09.11, #687); «Свойства» is on the toolbar */}
-              <View testID="draw-delete">
-                <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="secondary" onPress={doDelete} />
-              </View>
-            </RowView>
-        </View>
+        {/* the summary chip (#1274, founder 12.11: «строки выбора нет — маленькая полупрозрачная плашка-сводка в нижнем углу», over the drawing, no row of its own):
+            what is picked, else «Дальше: водостоки», else the totals; a tap opens the measurement's «Просмотр» (the materials and the sum) */}
+        {summary && !gripping && (!flat || summary.kind === "selected") ? (
+          <View pointerEvents="box-none" style={{ alignItems: "flex-start", gap: space[2], flexShrink: 1 }}>
+            <Press
+              testID="draw-summary"
+              // «Дальше: водостоки» is a hint with its action (the downspout tool); the rest opens the measurement's «Просмотр»
+              onPress={() => { if (summary.kind === "nextDs") pick("ds"); else if (inStore) router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(inStore.id)}`); }}
+              disabled={!canSave || (summary.kind !== "nextDs" && !inStore)}
+              visibleHeight={component.button.phone}
+              accessibilityRole="button"
+              accessibilityLabel={summaryA11y}
+              style={SUMMARY_CHIP(c)}
+            >
+              {summary.kind === "selected" ? (
+                <View testID="draw-selected" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                  {summary.dsIcon ? <View testID="draw-selected-kind"><Icon name={summary.dsIcon} s={sizes.iconSm} color={c.ink} /></View> : null}
+                  <T v="caption" w="semibold" numberOfLines={1}>{summary.text}</T>
+                </View>
+              ) : summary.kind === "nextDs" ? (
+                <NextDsLine gutterFt={summary.gutterFt} icon={lineIcon} text={t("mod.gutters.draw.nextDsShort")} />
+              ) : (
+                <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                  <Icon name={lineIcon} s={sizes.iconSm} color={c.ink} />
+                  <T v="caption" w="semibold">{`${summary.gutterFt}′`}</T>
+                  <T v="caption" tone="mut">·</T>
+                  <Icon name={dsIcon} s={sizes.iconSm} color={c.ink} />
+                  <T v="caption" w="semibold">{`${summary.dsCount} · ${summary.pipeFt}′`}</T>
+                  {/* it opens «Просмотр замера»: the chevron says it is pressable */}
+                  <Icon name="chevronRight" s={sizes.iconSm} color={c.mut} />
+                </View>
+              )}
+            </Press>
+            {/* a picked one hides nothing: «Дальше: водостоки» stays under it until the first downspout is there (founder 12.11) */}
+            {summary.kind === "selected" && summary.next !== null && !flat && canSave ? (
+              <Press testID="draw-summary-next" onPress={() => pick("ds")} visibleHeight={component.button.phone} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.nextDs")} style={SUMMARY_CHIP(c)}>
+                <NextDsLine gutterFt={summary.next} icon={lineIcon} text={t("mod.gutters.draw.nextDsShort")} />
+              </Press>
+            ) : null}
+          </View>
         ) : null}
         {flat ? tools : null}
         </View>
@@ -869,7 +1255,7 @@ export default function DrawScreen() {
 
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
       {wide ? (
-        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[2] }}>
+        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
           {attrs ? (
             <>
               <RowView style={{ justifyContent: "flex-end" }}>
@@ -893,59 +1279,43 @@ export default function DrawScreen() {
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
       <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
-        {editRun ? <QuickLength key={editRun.id} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
+        {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}
       </InputWindow>
       <InputWindow visible={canSave && !!quick} onClose={cancelQuick}>
-        {quick ? <QuickLength run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
+        {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
+      {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}
+      <Sheet visible={canSave && !!endRun} onClose={() => setEndSheet(null)}>
+        {endRun && endSheet ? (
+          <EndSheet
+            capOff={!!endRun.noCap?.[endSheet.end]}
+            side={houseSides(drawing)(endRun)}
+            onCap={(off) => commit(setCapOff(cur.current.drawing, endSheet.id, endSheet.end, off))}
+            onFlip={() => commit(flipFace(cur.current.drawing, endSheet.id))}
+          />
+        ) : null}
+      </Sheet>
       <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
         {corner ? (
-          <View testID="corner-sheet" style={{ gap: space[3] }}>
-            <T v="heading" w="semibold">{t("mod.gutters.draw.cornerTitle")}</T>
-            {corner.kind === "bay" ? <T tone="mut">{t("mod.gutters.draw.cornerBay")}</T> : null}
-            <View testID="corner-kind">
-              <ChoiceChips
-                items={(["out", "in"] as const).map((k) => ({ key: k, label: t(k === "in" ? "mod.gutters.attr.ck.in" : "mod.gutters.attr.ck.out") }))}
-                value={corner.kind === "in" ? "in" : "out"}
-                onChange={(k) => cornerKind(k)}
-              />
-            </View>
-            {corner.kind === "in" ? (
-              <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
-                <T v="body" style={{ flex: 1 }}>{t("mod.gutters.draw.splash")}</T>
-                <View testID="corner-splash"><Toggle on={!splashOff(drawing, corner)} onChange={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))} label={t("mod.gutters.draw.splash")} /></View>
-              </RowView>
-            ) : null}
-            <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
-            {/* the cut (founder 08.11): each run along the wall and along the face, to 1/8″ */}
-            {cut ? (
-              <View testID="corner-cut" style={{ gap: space[2] }}>
-                <RowView style={{ justifyContent: "space-between" }}>
-                  <T v="body" w="semibold">{t("mod.gutters.draw.cutTitle")}</T>
-                  <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>
-                </RowView>
-                {cut.runs.map((r) => (
-                  <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[1], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: c.bd }}>
-                    <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: drawing.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
-                    <RowView style={{ justifyContent: "space-between" }}>
-                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutBack")}</T>
-                      <View testID="cut-back"><T v="body" tabular>{ftIn(r.backIn)}</T></View>
-                    </RowView>
-                    <RowView style={{ justifyContent: "space-between" }}>
-                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutFront")}</T>
-                      <View testID="cut-front"><T v="body" w="semibold" tabular>{ftIn(r.frontIn)}</T></View>
-                    </RowView>
-                  </View>
-                ))}
-                {!tape ? <View testID="corner-cut-rough"><StatusChip status="warn" label={t("mod.gutters.draw.accRoughCut")} soft /></View> : null}
-                <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
-                  {sketchW > 0 ? <CornerSketch d={drawing} f={corner} cut={cut.runs} w={sketchW} /> : null}
-                </View>
-                <T v="caption" tone="mut">{t("mod.gutters.draw.cutNote", { off: cut.runs[0]!.offsetIn })}</T>
-              </View>
-            ) : null}
-            {<CornerTriangle key={corner.id} d={drawing} f={corner} onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))} />}
-          </View>
+          <CornerSheet
+            d={drawing}
+            f={corner}
+            cut={cut}
+            fmt={ch.lenFormat}
+            tape={tape}
+            splashOn={!splashOff(drawing, corner)}
+            onKind={cornerKind}
+            onSplash={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))}
+            onSplit={() => {
+              const before = cur.current.drawing;
+              const next = splitCorner(before, corner, tolIn());
+              setCornerSheet(null);
+              if (next === before) return;
+              commit(next, before);
+              toast.show(t("mod.gutters.draw.cornerSplit.done"), localUndo(() => commit(before, cur.current.drawing, true))); // put back as it was: no recount (#1264)
+            }}
+            onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))}
+          />
         ) : null}
       </Sheet>
       <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
@@ -960,6 +1330,21 @@ export default function DrawScreen() {
                 onChange={(a) => setAccuracy(a)}
               />
               <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
+            </View>
+          ) : null}
+          {moreSheet === "layers" ? (
+            <View testID="draw-layers" style={{ gap: space[2] }}>
+              <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>
+              {(["grid", "labels", "ds"] as const).map((l) => (
+                <RowView key={l} style={{ gap: space[3], justifyContent: "space-between" }}>
+                  <View style={{ flex: 1 }}>
+                    <T v="body">{t(`mod.gutters.draw.layer.${l}`)}</T>
+                    {l === "ds" ? <T v="caption" tone="mut">{t("mod.gutters.draw.layer.dsHint")}</T> : null}
+                  </View>
+                  <View testID={`draw-layer-${l}`}><Toggle on={layers[l]} onChange={(on) => toggleLayer(l, on)} label={t(`mod.gutters.draw.layer.${l}`)} /></View>
+                </RowView>
+              ))}
+              <View testID="draw-layers-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.layersHint")}</T></View>
             </View>
           ) : null}
           {moreSheet === "place" ? (

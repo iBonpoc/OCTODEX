@@ -3,9 +3,10 @@
  * the «Не заполнено: N» sheet. Nothing here locks a step (founder 05.11): the sheet warns and offers «Заполнить» (back to
  * the list) or «Пропустить» (the items are marked skipped — still «not done» — and the step goes on).
  */
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useState } from "react";
 import { View } from "react-native";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { ChecklistItem, Visit } from "@/data/types";
@@ -17,6 +18,7 @@ import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView } from "@/ui/surfaces";
+import { type GuardedUndo } from "@/data/undo";
 
 /** the checklist card of a visit at work (or an inspection on site) */
 export function ChecklistCard({ v, missing }: { v: Visit; missing: Missing }) {
@@ -95,6 +97,7 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
           title={t("chk.photoItem")}
           onAdd={canAttachPhoto(store.role) ? (uri) => toast.show(t("toast.photo"), store.attachItemPhoto(v.id, item.id, uri)) : undefined}
           onRemove={(id) => toast.show(t("photo.deleted"), store.removePhoto(v.id, id))}
+          onRetry={(id) => toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), store.retryPhoto(v.id, id))}
         />
       </View>
     );
@@ -105,7 +108,7 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
       testID={`chk-item-${item.id}`}
       disabled={!may}
       onPress={() => {
-        Haptics.selectionAsync().catch(() => {});
+        haptics.selection();
         store.toggleCheck(v.id, item.id);
       }}
       accessibilityRole="checkbox"
@@ -195,8 +198,9 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
   const [extra, setExtra] = useState("");
   const [extraRequired, setExtraRequired] = useState(true);
   const [editing, setEditing] = useState<ChecklistItem | null>(null);
+  const editHeld = useHeldSheet(editing); // the sheet goes out before it is unmounted (#1163)
   const [picking, setPicking] = useState(false);
-  const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  const say = (msg: string, undo: GuardedUndo) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const templates = templatesForVisit(v, store.db.checklistTemplates ?? []);
   const add = () => {
     if (!extra.trim()) return;
@@ -292,12 +296,12 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
         </View>
       </Sheet>
 
-      {editing ? <EditItemSheet v={v} item={editing} onClose={() => setEditing(null)} /> : null}
+      {editHeld.value ? <EditItemSheet key={editHeld.opening} v={v} item={editHeld.value} visible={editHeld.visible} onExited={editHeld.onExited} onClose={() => setEditing(null)} /> : null}
     </View>
   );
 }
 
-function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; onClose: () => void }) {
+function EditItemSheet({ v, item, onClose, visible, onExited }: { v: Visit; item: ChecklistItem; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -311,13 +315,13 @@ function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; on
     ...(required !== itemRequired(item) && canSetRequired(store.role, required) ? { required } : {}),
   };
   const dirty = Object.keys(next).length > 0;
-  const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  const say = (msg: string, undo: GuardedUndo) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const save = () => {
     onClose();
     if (dirty) say(t("chk3.edited"), store.editVisitItem(v.id, item.id, next));
   };
   return (
-    <Sheet visible onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
       <View testID="chk-edit-sheet" style={{ gap: space[2] }}>
         <TextField label={t("chk3.label")} type="text" value={label} onChangeText={(x) => setLabel(x.slice(0, LABEL_MAX))} />
         <RowView style={{ justifyContent: "space-between" }}>

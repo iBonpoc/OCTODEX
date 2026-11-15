@@ -3,6 +3,7 @@
  * company — without it the person silently worked in the demo (store: no company → demo). Not over sign-in, the
  * company setup (it has the card itself), the client page and the legal texts.
  */
+import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useState } from "react";
 import { usePathname } from "expo-router";
 import { View } from "react-native";
@@ -30,17 +31,19 @@ export function ClosedCompanyNotice() {
   // the consent gate goes first (it covers the app while it asks)
   const open = !!auth.session && !auth.company && seen !== null && auth.legal !== "first" && auth.legal !== "changed" && !QUIET.test(path);
   const next = open ? unseenClosed(auth.closedCompanies, seen)[0] : undefined;
-  if (!next) return null;
+  const held = useHeldSheet(next ?? null);
+  const shown = held.value;
+  if (!shown) return null;
   const done = () => {
-    const all = [...(seen ?? []), next.companyId];
+    const all = [...(seen ?? []), shown.companyId];
     setSeen(all);
     void AsyncStorage.setItem(CLOSED_SEEN_KEY, JSON.stringify(all)).catch(() => {});
   };
   return (
-    <Sheet visible onClose={done} title={t("fr9.closed.title", { company: next.name })}>
+    <Sheet visible={held.visible} onExited={held.onExited} onClose={done} title={t("fr9.closed.title", { company: shown.name })}>
       <View testID="closed-notice" style={{ gap: space[3] }}>
         <T v="body" tone="mut">
-          {t("fr9.closed.text", { date: closedDay(next.closedAt) })}
+          {t("fr9.closed.text", { date: closedDay(shown.closedAt) })}
         </T>
         <Button label={t("fr9.closed.ok")} variant="primary" full onPress={done} />
       </View>

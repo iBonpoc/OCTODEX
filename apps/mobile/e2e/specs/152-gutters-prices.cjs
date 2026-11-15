@@ -75,15 +75,15 @@ exports.run = async (h) => {
   // all at once: test prices, «Отменить», again
   const before = (await gutterItems()).length;
   // a double press: the second makes nothing and keeps the first one's «Отменить» (rule 5)
-  await tid("gpr-make-all-btn").getByRole("button").dblclick();
+  await tid("gpr-missing-n-action").getByRole("button").dblclick();
   await waitFor(async () => (await gutterItems()).length > before + 10, "all the missing items made");
   const made = (await gutterItems()).filter((x) => x.id !== "own-install-4");
   h.expect(made.every((x) => x.placeholder === true && Number.isInteger(x.priceCents) && x.priceCents >= 0), "every made item is a test price in whole cents (rule 9)");
   await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
   await waitFor(async () => (await gutterItems()).length === before, "«Отменить»: the made items are gone");
-  await tid("gpr-make-all-btn").getByRole("button").click();
+  await tid("gpr-missing-n-action").getByRole("button").click();
   await waitFor(async () => (await gutterItems()).length > before + 10, "made again");
-  await waitFor(async () => (await tid("gpr-make-all-btn").count()) === 0 && (await tid("gpr-all-found").count()) === 1, "nothing left to make: no second press");
+  await waitFor(async () => (await tid("gpr-missing-n-action").count()) === 0 && (await tid("gpr-all-found").count()) === 1, "nothing left to make: no second press");
   h.expect((await missingCards()) === 0, "no row is missing");
   const all = await gutterItems();
   const sig = all.map((x) => `${x.unit}|${JSON.stringify(Object.entries(x.attributes).sort())}`);
@@ -145,13 +145,13 @@ exports.run = async (h) => {
   await h.go("/module/gutters/prices");
   await tid("gpr-screen").waitFor({ timeout: 5000 });
   await tid("gpr-ro").waitFor({ timeout: 5000 });
-  h.expect((await tid("gpr-make-all-btn").count()) === 0, "a tech makes nothing");
+  h.expect((await tid("gpr-missing-n-action").count()) === 0, "a tech makes nothing");
   // the trial over: read only
   await h.go("/today");
   await setRole(h, "director");
   await editDb((d) => ({ ...d, company: { ...d.company, modules: { ...d.company.modules, gutters: { ...d.company.modules.gutters, trialEndsAt: "2020-01-01T00:00:00.000Z" } } } }));
   await h.go("/module/gutters/prices");
   await tid("gpr-locked").waitFor({ timeout: 5000 });
-  h.expect((await tid("gpr-make-all-btn").count()) === 0, "the trial over: nothing to press");
+  h.expect((await tid("gpr-missing-n-action").count()) === 0, "the trial over: nothing to press");
   await h.shot("locked");
 };

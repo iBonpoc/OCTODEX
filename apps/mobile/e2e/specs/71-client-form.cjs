@@ -57,7 +57,7 @@ exports.run = async (h) => {
 
   // the card shows the billing address in its row
   await h.go("/client/c2");
-  const rows = (await p.getByTestId("client-rows").innerText()).replace(/\s+/g, " ");
+  const rows = (await p.getByTestId("client-billing").locator("visible=true").first().innerText()).replace(/\s+/g, " ");
   h.expect(/Адрес для счетов\s*PO Box 4512, Sherman Oaks, CA 91413/.test(rows), `billing row (${rows})`);
   await h.expectText(/\(818\) 555-0177/, "the new phone in the contacts");
 

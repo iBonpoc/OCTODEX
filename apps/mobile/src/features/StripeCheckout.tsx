@@ -8,6 +8,7 @@ import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { loadStripeJs, type StripeLike } from "./stripeJs";
+import { StatusNote } from "@/ui/statusNote";
 
 export type OnlineOutcome = "succeeded" | "processing";
 type Phase = "loading" | "ready" | "paying" | "error";
@@ -157,9 +158,9 @@ export function StripeCheckout({
             <View ref={host as never} testID="stripe-payment-element" style={{ minHeight: phase === "error" ? 0 : space[8] }} />
             {err ? (
               <View testID="stripe-error">
-                <T v="body" tone="bad">
+                <StatusNote tone="bad" v="body">
                   {err}
-                </T>
+                </StatusNote>
               </View>
             ) : null}
             <T v="caption" tone="mut">

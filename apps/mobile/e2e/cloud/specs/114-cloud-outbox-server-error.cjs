@@ -98,7 +98,7 @@ exports.run = async (h, { seed, admin }) => {
   h.expect((await p.getByTestId("stuck-confirm-q-gone").count()) > 0, "a second step before discarding (rule 5)");
   await h.expectText(/На сервер оно не попадёт/, "it says what discarding does");
   h.expect((await p.getByTestId("stuck-money-q-gone").count()) > 0, "money: the «Деньги» chip in the second step");
-  await h.expectText(/Это деньги: счёт, оплата, задаток или расход/, "money: the warning in words");
+  await h.expectText(/Это деньги: счёт, оплата, депозит или расход/, "money: the warning in words");
   await p.getByTestId("stuck-confirm-q-gone").last().getByRole("button", { name: "Да, отменить" }).click();
   // wait for what is checked (CHECKS §9 №3): the card gone, then the stored outbox without it — not a fixed pause
   for (let i = 0; i < 25 && (await p.getByTestId("stuck-q-gone").count()) > 0; i++) await p.waitForTimeout(200);

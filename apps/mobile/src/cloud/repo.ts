@@ -2,6 +2,8 @@
  * Read the company's data from the OCTODEX database and map it to the app's view model (src/data/types.ts).
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
+import { estimateSavedAt } from "@/features/estimateTax";
+import { normalizeDoc } from "@/features/estimateDoc";
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
@@ -13,8 +15,10 @@ import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
 import { visitPayment } from "@octo/estimating-engine";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
+import { isContractKind } from "@/features/contractInvoice";
 import { posFromRows } from "@/features/purchaseOrderRows";
-import type { CostHistoryEntry } from "@/data/types";
+import type { CostHistoryEntry, Photo, PriceHistoryEntry } from "@/data/types";
+import { priceHistoryFromRow } from "@/features/catalogCard";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -135,15 +139,17 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("visit_assignees", "visit_id, user_id, created_at"),
       live<Row>("leads"),
       live<Row>("estimates"),
-      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, deposit_rule, template_id"),
+      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, tax_rate_ppm, deposit_rule, template_id"),
       live<Row>("estimate_options", "id, version_id, name, position, created_at, discount_mode, discount_value"),
       live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position, taxable"),
-      every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method"),
+      every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method, decision, version_id"),
       live<Row>("invoices"),
       live<Row>("payments"),
       // wave П-1: customer_id is new — on a database without the migration read the old columns (preview of a PR)
       // a server before M5d has no measurement_id / element_id; before wave П-1 no customer_id
-      live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at")
+      // upload_status (#1431): a photo the cloud refused is shown so on every phone; a server without it reads as before
+      live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at, upload_status")
+        .catch(() => live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at"))
         .catch(() => live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at"))
         .catch(() => live<Row>("files", "id, visit_id, job_id, stage, storage_key, kind, created_at")),
       live<Row>("expenses"),
@@ -333,7 +339,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const withCosts = (doc: unknown): EstimateDoc | undefined => {
     const d = doc as EstimateDoc | null;
     if (!d || !Array.isArray(d.options) || !d.settings) return undefined;
-    return { ...d, options: d.options.map((o) => ({ ...o, lines: o.lines.map((l) => (costOf.has(l.id) ? { ...l, unitCostCents: costOf.get(l.id) } : l)) })) };
+    // as it may be counted and shown (Р3, Р4): a priced line marked hidden is visible again, sections within the limits
+    return normalizeDoc({ ...d, options: d.options.map((o) => ({ ...o, lines: o.lines.map((l) => (costOf.has(l.id) ? { ...l, unitCostCents: costOf.get(l.id) } : l)) })) }).doc;
   };
 
   const sourceName = new Map(sources.map((r) => [s(r.id), s(r.name)]));
@@ -423,12 +430,16 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         photoMins: photoMinsFromDb(v.checklist_min_photos_before, v.checklist_min_photos_after),
         photos: files
           .filter((f) => f.visit_id === v.id && f.kind === "photo")
-          .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),
+          .map((f): Photo => ({
+            id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined,
+            // the server knows only «failed», not why: the phone that sent it keeps its reason (keepPhotoLocal)
+            ...(f.upload_status === "failed" ? { upload: { failed: "refused" as const, at: s(f.created_at) } } : {}),
+          })),
         // what a payment on this visit takes — the server's rule (record_visit_payment, #757 A-17): the final invoice's
         // balance, or what is not yet billed (a deposit off); not the whole contract. Sent invoices only, as the server and the
         // invoice list read them (a draft is not billed)
         amountDueCents: job
-          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id && i.status === "sent").map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents) }))).amountCents
+          ? visitPayment(n(job.contract_total_cents), invoices.filter((i) => i.job_id === job.id && i.status === "sent" && isContractKind(typeof i.kind === "string" ? i.kind : undefined)).map((i) => ({ kind: s(i.kind), totalCents: n(i.total_cents), paidCents: n(i.paid_cents) }))).amountCents
           : 0,
         signature: (v.signature_svg as string | null) ?? undefined,
         closed: v.status === "completed" || v.status === "no_show" || undefined,
@@ -462,9 +473,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const legacy = legacyForEstimate(e, { versionOf, options, lines, signed: !!appr });
     // E2a: the company's signature (an employee in their own name)
     const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
-    const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
+    const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number; tax?: number } | null;
     const depositJob = jobs.find((j) => j.estimate_id === e.id);
-    const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit") : undefined;
+    const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit" && i.status === "sent") : undefined;
     return {
       id: s(e.id),
       serviceCategoryId: (e.service_category_id as string | null) ?? undefined,
@@ -472,9 +483,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
       leadId: (e.lead_id as string | null) ?? undefined,
+      createdBy: (e.created_by as string | null) ?? undefined,
       totalCents: sel?.total !== undefined ? n(sel.total) : legacy ? legacy.totalCents : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
+      savedAt: estimateSavedAt(ver?.calc_inputs, (ver?.sent_at as string | null) ?? undefined, s(e.updated_at) || undefined),
       // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
       approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,
       depositCents: sel?.deposit !== undefined ? n(sel.deposit) : legacy ? legacy.depositCents : totals.deposit,
@@ -490,6 +503,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
           ? {
               optionId: s(appr.option_id), addonIds: sel?.addon_ids ?? [], signerName: s(appr.signer_name), signature: s(appr.signature_svg),
               at: s(appr.signed_at), channel: appr.channel === "portal" ? "portal" : "on_site", totalCents: n(sel?.total ?? totals.total), depositCents: n(sel?.deposit ?? totals.deposit),
+              ...(typeof sel?.tax === "number" ? { taxCents: n(sel.tax) } : {}),
             }
           : undefined,
       depositPaidAt: depInv && n(depInv.paid_cents) > 0 ? s(depInv.updated_at) : undefined,
@@ -510,10 +524,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
 
   const lastPayment = new Map<string, Row>();
   for (const p of payments) if (p.invoice_id && paymentShown(s(p.status))) lastPayment.set(s(p.invoice_id), p);
-  const mappedInvoices: Invoice[] = invoices
-    // a draft is not sent, so not a debt (wave 8): it stays out like a void one until the app has drafts
-    .filter((i) => i.status === "sent")
-    .map((i) => ({
+  const toInvoice = (i: Row): Invoice => ({
       id: s(i.id),
       customerId: s(i.customer_id),
       jobId: s(i.job_id),
@@ -523,14 +534,22 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       dueDate: s(i.due_date) || s(i.sent_at) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
       method: lastPayment.has(s(i.id)) ? paymentMethodFromDb(s(lastPayment.get(s(i.id))?.method)) : undefined,
-      kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
+      // the exact kind (review of #865 З3): a standalone / recurring invoice of a job is outside its contract, as on the server
+      kind: i.kind === "deposit" || i.kind === "progress" || i.kind === "standalone" || i.kind === "recurring" ? i.kind : "final",
       number: s(i.number) || undefined,
       title: (i.title as string | null) ?? undefined,
       sentAt: (i.sent_at as string | null) ?? undefined,
       subtotalCents: i.subtotal_cents == null ? undefined : n(i.subtotal_cents),
       taxCents: n(i.tax_cents) || undefined,
       taxMode: (["included_in_price", "added_on_top", "tax_inclusive_display", "exempt"] as const).find((m) => m === i.tax_mode),
-    }));
+    ...(i.status === "void"
+      ? { status: "void" as const, voidReason: (i.void_reason as string | null) ?? undefined, voidedAt: (i.voided_at as string | null) ?? undefined }
+      : {}),
+  });
+  // a draft is not sent, so not a debt (wave 8): it stays out until the app has drafts
+  const mappedInvoices: Invoice[] = invoices.filter((i) => i.status === "sent").map(toInvoice);
+  // В1-5 (#1107): a voided invoice — apart (DB.voidInvoices), no sum reads it
+  const mappedVoidInvoices: Invoice[] = invoices.filter((i) => i.status === "void").map(toInvoice);
 
   const mappedLeads: Lead[] = leads.map((l) => ({
     id: s(l.id),
@@ -588,6 +607,17 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       taxable: !!r.taxable, totalCents: n(r.line_total_cents),
     }))
     .sort((a, b) => a.jobId.localeCompare(b.jobId) || a.position - b.position);
+  // #865 З5: the contract's tax as the server reads it (app.job_contract_tax): the client's approval of the job's approved
+  // version (approved, party customer), its selection's tax a number; none — the phone counts it (contractTaxOf)
+  const contractTaxOfRow = (j: Row): { contractTaxCents?: number } => {
+    if (!j.estimate_id) return {};
+    const a = approvals
+      .filter((x) => x.estimate_id === j.estimate_id && (x.decision ?? "approved") === "approved" && (x.party ?? "customer") === "customer"
+        && (!j.approved_version_id || x.version_id === j.approved_version_id))
+      .filter((x) => typeof (x.selection as { tax?: unknown } | null)?.tax === "number")
+      .sort((x, y) => s(y.signed_at).localeCompare(s(x.signed_at)))[0];
+    return a ? { contractTaxCents: n((a.selection as { tax: number }).tax) } : {};
+  };
   const toJob = (j: Row): Job => ({
     id: s(j.id),
     propertyId: s(j.property_id),
@@ -601,8 +631,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     tagIds: tagsOfJob.get(s(j.id)) ?? [],
     taxEnabled: j.tax_enabled == null ? undefined : !!j.tax_enabled,
     taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
+    taxRatePpm: j.tax_rate_ppm == null ? undefined : n(j.tax_rate_ppm),
     status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
+    ...contractTaxOfRow(j),
     estimateId: (j.estimate_id as string | null) ?? undefined,
     serviceCategoryId: (j.service_category_id as string | null) ?? undefined,
   });
@@ -726,6 +758,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     leads: mappedLeads,
     estimates: mappedEstimates,
     invoices: mappedInvoices,
+    voidInvoices: mappedVoidInvoices,
     expenses: mappedExpenses,
     ...paymentsFromRows(payments, refundRows),
     pendingPayments: pendingFromRows(payments),
@@ -772,6 +805,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         // spec 36: absent before the migration and for items without a supplier
         ...(typeof r.supplier_id === "string" ? { supplierId: r.supplier_id } : {}),
         ...(typeof r.supplier_sku === "string" ? { supplierSku: r.supplier_sku } : {}),
+        // РС-10: the card's fields (absent before the migration, and when not set)
+        ...catalogCardFromRow(r),
       })),
     memberSignatures: signatureRows.map((r) => ({
       id: s(r.id), userId: s(r.user_id), svg: s(r.svg), name: s(r.name), title: (r.title as string | null) ?? undefined,
@@ -808,6 +843,25 @@ export function deletedMembers(rows: readonly Row[], known: ReadonlySet<string> 
     seen.add(id);
     out.push({ id, name: "", initials: "—", kind: r.role === "subcontractor" ? "sub" : "employee", roles: appRoles(r.role as DbRole), pending: true, deleted: true });
   }
+  return out;
+}
+
+/** РС-10: catalog_items.sku / barcode / product_url / service_category_id and who made and changed it → the item's
+ *  fields; absent or empty — left out */
+export function catalogCardFromRow(r: Row): Pick<CatalogItem, "sku" | "barcode" | "productUrl" | "serviceCategoryId" | "createdAt" | "createdBy" | "updatedAt" | "updatedBy"> {
+  const str = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v : undefined);
+  const out: ReturnType<typeof catalogCardFromRow> = {};
+  const set = <K extends keyof typeof out>(k: K, v: string | undefined) => {
+    if (v !== undefined) out[k] = v;
+  };
+  set("sku", str(r.sku));
+  set("barcode", str(r.barcode));
+  set("productUrl", str(r.product_url));
+  set("serviceCategoryId", str(r.service_category_id));
+  set("createdAt", str(r.created_at));
+  set("createdBy", str(r.created_by));
+  set("updatedAt", str(r.updated_at));
+  set("updatedBy", str(r.updated_by));
   return out;
 }
 
@@ -896,6 +950,26 @@ export function pendingFromRows(rows: Row[]): PendingPayment[] {
  * spec 36: the newest history rows of one item or of one supplier (catalog_cost_history; RLS: only who sees costs —
  * others get none). Read when the item's or the supplier's screen opens. A server before the migration: none.
  */
+/**
+ * РС-10: the newest price and markup changes of one item (catalog_price_history; RLS: only who sees costs — others get
+ * none). Read when the item's card opens. A server before the migration: none.
+ */
+export async function loadPriceHistory(companyId: string, itemId: string, limit = 20): Promise<PriceHistoryEntry[]> {
+  const { data, error } = await supabase
+    .from("catalog_price_history")
+    .select("id, item_id, unit_price_cents, prev_unit_price_cents, markup_bps, prev_markup_bps, source, at, by")
+    .eq("company_id", companyId)
+    .eq("item_id", itemId)
+    .order("at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return (data as Row[]).map(priceHistoryFromRow);
+}
+
 export async function loadCostHistory(companyId: string, where: { itemId?: string; supplierId?: string }, limit = 20): Promise<CostHistoryEntry[]> {
   let b = supabase.from("catalog_cost_history").select("id, item_id, supplier_id, unit_cost_cents, vendor_tax_bps, source, at").eq("company_id", companyId);
   if (where.itemId) b = b.eq("item_id", where.itemId);

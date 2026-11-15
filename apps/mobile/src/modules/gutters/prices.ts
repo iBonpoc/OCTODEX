@@ -13,15 +13,16 @@
  */
 import { computeGutterParts, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
-import { attributesLine, catalogMatch } from "@/features/catalogMatch";
+import { catalogMatch } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
+import { fmtLen, type LenFormat } from "./canvas/format";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
 
 /** what a part is, for the parts the engine leaves without `part` (their key's first word says it) */
-const PART_BY_KEY: Record<string, string> = { gutter: "gutter", ds: "downspout", guard: "guard_run" };
+const PART_BY_KEY: Record<string, string> = { gutter: "gutter", ds: "downspout", guard: "guard_run", coil: "gutter", section: "gutter", dsstick: "downspout" };
 /** properties that never change the price: an end cap left or right is one item (the founder's lists: one SKU) */
 const NOT_PRICED = new Set(["side"]);
 
@@ -46,16 +47,28 @@ const live = (it: CatalogItem) => it.kind !== "kit";
 /** the company's item for a part: its properties and its unit; the closest first (catalogMatch), else undefined */
 export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): CatalogItem | undefined {
   const unit = p.unit.trim().toLowerCase();
-  return catalogMatch(catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit), matchAttrs(p))[0];
+  const pool = catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit);
+  const want = matchAttrs(p);
+  const own = catalogMatch(pool, want)[0];
+  if (own) return own;
+  // #871: before the fix the engine counted «A» for a round downspout's elbows by default, and a company priced that row
+  // («колено A round»). The 45° elbow takes that price until the company prices its own — nothing to move, no $0 line
+  const legacy = LEGACY_ROUND_ELBOW(want);
+  return legacy ? catalogMatch(pool, legacy)[0] : undefined;
 }
+
+/** a round downspout's default 45° elbow → the same elbow under its old name «A» (see findItem); anything else → none */
+const LEGACY_ROUND_ELBOW = (w: Record<string, string>): Record<string, string> | null =>
+  w.part === "elbow" && w.shape === "round" && w.style === "45" ? { ...w, style: "A" } : null;
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
 export const PART_WORDS = new Set([
   "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
+  "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
 ]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile"]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
 /* ---------- the parts the company prices ---------- */
 
@@ -70,6 +83,10 @@ export const LABOR_PARTS: readonly PartQty[] = [
   labor("labor.corner_cut", "ea", { work: "corner_cut" }),
   labor("labor.tearoff", "ft", { work: "tearoff" }),
   labor("labor.tile", "ft", { work: "tile" }),
+  // the starter estimates (#1323): a cleaning, a downspout flush and a guard installation are priced like the rest of the labor
+  labor("labor.cleaning", "ft", { work: "cleaning" }),
+  labor("labor.flush", "ea", { work: "flush" }),
+  labor("labor.guard_install", "ft", { work: "guard_install" }),
 ];
 
 /**
@@ -85,7 +102,8 @@ export function sampleJob(raw: unknown): MeasurementInput {
   const run = (id: string, lengthIn: number, ends: MeasurementInput["runs"][number]["ends"]) => ({ ...ra, id, lengthIn, ends, houseSide: "R" as const });
   return {
     runs: [
-      run("a", 480, [{ kind: "cap" }, { kind: "corner", cornerId: "c1" }]),
+      // guards on the first run: the price list gets the guard row too (the starter «Только guards», #1323)
+      { ...run("a", 480, [{ kind: "cap" }, { kind: "corner", cornerId: "c1" }]), guardsIn: 480 },
       run("b", 360, [{ kind: "corner", cornerId: "c1" }, { kind: "corner", cornerId: "c2" }]),
       run("c", 240, [{ kind: "corner", cornerId: "c2" }, { kind: "cap" }]),
     ],
@@ -95,6 +113,17 @@ export function sampleJob(raw: unknown): MeasurementInput {
     ],
     downspouts: [{ ...(newDsAttrs(ch) as Omit<MeasurementInput["downspouts"][number], "id" | "runId">), id: "d", runId: "a" }],
   };
+}
+
+/**
+ * #1336: which item a starter estimate's line means for THIS company: the line's `match` ({part: "gutter"}) with the company's own default stock
+ * (profile, size, metal, colour… of a new run) — the very properties a drawing's estimate line asks for, so the starter and the drawing take
+ * the same item. A line with no part (labor: work, storey) or a part the sample job has no row for stays as it is.
+ */
+export function starterWant(settings: unknown, match: Record<string, string>): Record<string, string> {
+  if (!match.part) return match;
+  const row = materialRows(settings).find((r) => matchAttrs(r.part).part === match.part);
+  return row ? { ...matchAttrs(row.part), ...match } : match;
 }
 
 /** the material parts of the sample job, one row per item (labor is LABOR_PARTS) */
@@ -183,7 +212,7 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
  * A part's name when the price list has no item for it (PricesScreen «создать», the estimate's line with «нет цены»):
  * `t` — the app's translator on the page, the CLIENT's language for an estimate line (rule 7). Pure.
  */
-export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty): string {
+export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty, fmt: LenFormat = "ftin"): string {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
     const w = p.attrs.work ?? "";
@@ -192,6 +221,44 @@ export function partName(t: (key: DictKey, params?: Record<string, string | numb
   }
   const { part, ...rest } = matchAttrs(p);
   const word = part && PART_WORDS.has(part) ? t(k(`p.${part}`)) : part ?? p.key;
-  const line = attributesLine(rest);
+  const line = Object.keys(rest)
+    .sort((x, y) => x.localeCompare(y))
+    .map((key) => attrText(t, key, rest[key]!, fmt))
+    .join(" · ");
   return line ? `${word} · ${line}` : word;
+}
+
+/** the dictionary group of an enum property's words: «k» is «K-style», «painted» is «Painted» */
+const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal: "m", color: "c", finish: "f", shape: "sh" };
+/** a property in inches (a coil's blank, a section's length): feet-inches-sixteenths, as on the drawing */
+const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
+
+/**
+ * A property's value for a person (#1090): a word where the dictionary has one (the company's own colour stays as it is),
+ * ″ after a size, feet-inches for a length — never «11.875» or a bare code. `t` — the document's translator (rule 7).
+ */
+function attrText(t: (key: DictKey, params?: Record<string, string | number>) => string, key: string, v: string, fmt: LenFormat): string {
+  if (ATTR_IN.has(key)) {
+    const n = Number(v);
+    return Number.isFinite(n) ? fmtLen(n, fmt) : v;
+  }
+  if (key === "size" || key === "gutterSize") return /^\d+(\.\d+)?$/.test(v) ? `${v}″` : v;
+  const group = key === "buy" ? "buy" : ATTR_WORDS[key];
+  if (!group) return v;
+  const k = (key === "buy" ? `mod.gutters.pr.buy.${v}` : `mod.gutters.attr.${group}.${v}`) as DictKey;
+  const w = t(k);
+  return w === k ? v : w;
+}
+
+/**
+ * A part's quantity for a person (#1090): a length in feet as feet-inches-sixteenths (the sum of the engine is decimal, a
+ * person reads «73′ 2″», not «73.16666666666667»), a count whole or to two places; the unit is a word of the document.
+ */
+export function partQty(t: (key: DictKey, params?: Record<string, string | number>) => string, p: Pick<PartQty, "qty" | "unit">, fmt: LenFormat = "ftin"): string {
+  const n = Number(p.qty);
+  if (!Number.isFinite(n)) return p.qty;
+  const uk = `mod.gutters.view.u.${p.unit}` as DictKey;
+  const u = t(uk) === uk ? p.unit : t(uk);
+  if (p.unit === "ft") return fmtLen(n * 12, fmt);
+  return `${Math.round(n * 100) / 100} ${u}`;
 }

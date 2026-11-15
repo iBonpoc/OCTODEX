@@ -4,10 +4,10 @@ import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
 import { space, size } from "@octo/design-tokens";
 import { jobProfit, useStore, visitContext } from "@/data/store";
 import { canSeeProfit } from "@/nav/roles";
+import { haptics } from "@/ui/haptics";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { CancelNotifySheet, WhenWho } from "@/features/VisitForm";
@@ -31,9 +31,11 @@ import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls"
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { canSeeVisit } from "@/features/access";
 import { canTakeVisitPayment } from "@/features/moneyLists";
+import { StatusNote } from "@/ui/statusNote";
 
-const haptic = () => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+const haptic = () => haptics.medium();
 
 /** Technician visit flow: En route → On site → Work (photos, checklist) → Signature → Payment. Works offline. */
 export default function VisitScreen() {
@@ -68,12 +70,23 @@ export default function VisitScreen() {
         {cancelAsk}
       </Screen>
     );
+  // another tech's visit (#868): no access, as the server would answer
+  if (!canSeeVisit(db, { role: store.role, mode: store.mode, me: db.me }, v.id))
+    return (
+      <Screen title={t("visit.title")} back={back}>
+        <Empty icon="alert" title={t("mny.noAccess")} testID="no-access" />
+      </Screen>
+    );
 
   const { job, property, customer } = visitContext(db, v);
   const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
   const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");
+  // #1431 «Повторить»: a photo the cloud did not take is sent again from this phone
+  const retryPhoto = (id: string) => toast.show(store.online ? t("photoUp.retried") : t("offline.queued"), store.retryPhoto(v.id, id));
+  // the photos the cloud did not take, on a step where the strips are not shown (before the work, after the signature)
+  const failedHere = v.photos.filter((p) => p.upload);
   const gate = checklistGate(v, visitSettings(db), db.checklistTemplates ?? []);
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
   // «Перенести / Отменить»: the office only (owner / admin / office ↔ director / dispatcher), like cancel_visit on the server
@@ -130,7 +143,7 @@ export default function VisitScreen() {
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
-    <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
+    <Screen testID="visit-screen" title={customer?.name ?? t("visit.title")} back={back} subtitle={`${v.allDay ? t("job5.allDayChip") : time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
       <RelatedBlock of={{ type: "visit", id: v.id }} />
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -221,6 +234,7 @@ export default function VisitScreen() {
             photos={before}
             onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
             onRemove={removePhoto}
+            onRetry={retryPhoto}
           />
           {v.step === "on_site" && v.kind === "inspection" ? (
             // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
@@ -229,13 +243,18 @@ export default function VisitScreen() {
           {v.step === "on_site" && v.kind !== "inspection" ? (
             <>
               {gate.missing.photosBefore > 0 ? (
-                <T v="caption" tone="warn">
-                  {t("chk.needBefore", { n: gate.missing.photosBefore })}
-                </T>
+                <StatusNote tone="warn">{t("chk.needBefore", { n: gate.missing.photosBefore })}</StatusNote>
               ) : null}
               <Button label={t("visit.next", { step: t("step.working") })} full onPress={goWork} />
             </>
           ) : null}
+        </Card>
+      ) : null}
+
+      {v.step !== "on_site" && v.step !== "working" && failedHere.length ? (
+        <Card>
+          <T v="heading">{t("photoUp.title")}</T>
+          <PhotoStrip photos={failedHere} onRetry={retryPhoto} />
         </Card>
       ) : null}
 
@@ -244,11 +263,9 @@ export default function VisitScreen() {
           {v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
           <Card>
             <T v="heading">{t("visit.photosAfter")}</T>
-            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} />
+            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} onRetry={retryPhoto} />
             {gate.missing.photosAfter > 0 ? (
-              <T v="caption" tone="warn">
-                {t("chk.needAfter", { n: gate.missing.photosAfter })}
-              </T>
+              <StatusNote tone="warn">{t("chk.needAfter", { n: gate.missing.photosAfter })}</StatusNote>
             ) : null}
           </Card>
           <SectionTitle title={t("step.sign")} />

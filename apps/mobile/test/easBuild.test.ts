@@ -70,6 +70,12 @@ describe("the one-time first iPhone build (npm run ios:first)", () => {
     expect(first).toMatch(/unset EXPO_ASC_API_KEY_PATH EXPO_ASC_KEY_ID EXPO_ASC_ISSUER_ID/);
     expect(first).toContain('"expo-notifications"');
   });
+  // #656: a copy pulled after the first install kept the old modules; the build failed in `expo config` with no reason
+  it("installs again when the lockfile is newer than the installed modules, and checks the config before the build", () => {
+    expect(first).toMatch(/package-lock\.json -nt \.\.\/\.\.\/node_modules\/\.package-lock\.json/);
+    expect(first.indexOf("npx expo config --json")).toBeGreaterThan(first.indexOf("npm ci"));
+    expect(first.indexOf("npx expo config --json")).toBeLessThan(first.indexOf("build --platform ios"));
+  });
 });
 
 describe("eas.json", () => {
@@ -93,7 +99,19 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
     expect(app.runtimeVersion).toEqual({ policy: "sdkVersion" });
     expect(app.updates.url).toBe(`https://u.expo.dev/${app.extra.eas.projectId}`);
     expect(pkg.dependencies["expo-updates"]).toBeTruthy();
-    expect(app.ios.bundleIdentifier).toBe("com.octodex.app");
+    expect(app.ios.bundleIdentifier).toBe("com.gorix.app");
+    expect(app.android.package).toBe("com.gorix.app");
+  });
+  // #656 слой 2: the app is GoRix — its own scheme only (nothing ever linked to octodex://; sign-in goes over https)
+  it("the link scheme is gorix:// only", () => {
+    expect(app.scheme).toBe("gorix");
+  });
+  it("#656: the new App Store record; Android stops at once until Firebase has com.gorix.app (#1444)", () => {
+    expect(eas.submit.testflight.ios.ascAppId).toBe("6834689554");
+    expect(wf).toMatch(/Android paused[\s\S]*?inputs\.platform == 'android'[\s\S]*?exit 1/);
+    // while Android is paused, a build started without a choice is iOS (review #1448)
+    expect(wf).toMatch(/options: \[android, ios\]\s*default: ios/);
+    for (const f of [JSON.stringify(app), JSON.stringify(eas)]) expect(f).not.toMatch(/com\.octodex\.app|6831904411/);
   });
   // A JS update reaches a build made before a new native module was added: the update must load such a module lazily
   // (like src/features/pushNative.ts) and a new TestFlight build is needed. Update this list in the same PR.
@@ -102,7 +120,7 @@ describe("app.json: what the build and Expo Go share (spec 30, п.8–9)", () =>
       "@react-native-async-storage/async-storage", "expo", "expo-blur", "expo-clipboard", "expo-constants", "expo-crypto",
       "expo-document-picker", "expo-file-system", "expo-font", "expo-glass-effect", "expo-haptics", "expo-image-manipulator", "expo-image-picker",
       "expo-linking", "expo-localization", "expo-location", "expo-notifications", "expo-print", "expo-router", "expo-sharing",
-      "expo-status-bar", "expo-updates", "react-native", "react-native-gesture-handler", "react-native-reanimated",
+      "expo-splash-screen", "expo-status-bar", "expo-updates", "react-native", "react-native-gesture-handler", "react-native-reanimated",
       "react-native-safe-area-context", "react-native-screens", "react-native-svg", "react-native-worklets",
     ];
     // native = the package ships iOS code (an Expo module, an ios/ folder or a podspec); without node_modules — by name

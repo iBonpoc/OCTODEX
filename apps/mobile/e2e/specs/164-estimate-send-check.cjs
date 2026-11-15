@@ -60,10 +60,10 @@ exports.run = async (h) => {
   await tid("send-check-edit").getByRole("button").click();
   await p.waitForURL(new RegExp(`/estimate/new\\?id=${EID}`), { timeout: 8000 });
   await tid("ue-line-marks-l-np").click();
-  await tid("ue-line-price").locator("input").waitFor({ timeout: 5000 });
-  await tid("ue-line-price").locator("input").fill("12");
-  await tid("ue-line-save").getByRole("button").click();
-  await waitFor(async () => (await tid("ue-line-price").count()) === 0, "the line sheet closed");
+  await tid("est-price-l-np").locator("input").waitFor({ timeout: 5000 });
+  await tid("est-price-l-np").locator("input").fill("12");
+  await tid("est-collapse-l-np").getByRole("button").click();
+  await waitFor(async () => (await tid("est-price-l-np").count()) === 0, "the row closed");
   await tid("ue-save").getByRole("button").click();
   await waitFor(async () => (await est())?.doc?.options?.[0]?.lines?.find((l) => l.id === "l-np")?.unitPriceCents === 1200, "the price is saved");
   await p.waitForURL(new RegExp(`/estimate/${EID}`), { timeout: 8000 });

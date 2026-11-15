@@ -120,6 +120,12 @@ export function visitMissed(visit: Visit, settings: VisitSettings, templates: Ch
 export const missedCount = (m: Missing): number => m.items.length + (m.photosBefore > 0 ? 1 : 0) + (m.photosAfter > 0 ? 1 : 0);
 
 /**
+ * The templates a new visit may take (#607 review): a module's template only while that module is on — a module switched off (or
+ * past its trial) puts nothing into new visits; the company's own and the core's always. The template itself stays (§11.11 №4).
+ */
+export const templatesOfActiveModules = <T extends { module?: string }>(templates: readonly T[], isActive: (module: string) => boolean): T[] => templates.filter((t) => !t.module || isActive(t.module));
+
+/**
  * The snapshot of templates that comes into a new visit (§5; S4, S9): «every visit» → by the visit's kind → by the
  * services (catalog items of the chosen option and of the job's lines). Archived templates are left out; an item of a
  * template already taken is not taken twice. Each item gets a new id (`newId`): a visit's item is its own row.

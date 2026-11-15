@@ -31,6 +31,7 @@ import { laborRows, materialRows, missingItems, partName, sampleJob } from "../s
 import type { MeasurementRow } from "../src/modules/gutters/canvas/model";
 import { tFor } from "../src/i18n/translate";
 import { newDoc } from "../src/features/estimateDoc";
+import { markUndo, type GuardedUndo } from "../src/data/undo";
 
 const C = "11111111-1111-4111-8111-111111111111";
 const name = (p: PartQty) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;
@@ -132,13 +133,18 @@ describe("makeEstimate — through the core's store", () => {
         if (!active) return null;
         sent.push({ kind: c.kind, payload: c.payload });
         s.db = c.apply(s.db);
-        return () => undone.push(c.kind);
+        return markUndo(() => (undone.push(c.kind), true));
       },
-      leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: () => undone.push("target") }),
+      undoTogether: (us: readonly unknown[]) =>
+        markUndo(() => {
+          [...us].reverse().forEach((u) => typeof u === "function" && (u as () => unknown)());
+          return true;
+        }),
+      leadEstimateTarget: (leadId: string) => (targets.push(leadId), { customerId: "c-new", propertyId: "p-new", undo: markUndo(() => (undone.push("target"), true)) }),
       saveEstimate: (e: (typeof saved)[number]) => {
         saved.push(e);
         s.db = { ...s.db, estimates: [...s.db.estimates.filter((x) => x.id !== e.id), { ...e, title: "T", totalCents: 0, status: "draft" } as Estimate] };
-        return () => undone.push("estimate");
+        return markUndo(() => (undone.push("estimate"), true));
       },
     };
     return { s, sent, saved, targets, undone };
@@ -169,6 +175,45 @@ describe("makeEstimate — through the core's store", () => {
     // «Отменить»: the estimate, the status, the client made from the lead
     r.undo();
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
+  });
+  it("#1279 (the director's review of 14bcd1f): an estimate of a place the client already has (its target's undo is NO_UNDO) — «Отменить» is not refused", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement({ ...M, leadId: null, propertyId: "p1" }))));
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = ok(makeEstimate(h.s, input({ ...M, leadId: null, propertyId: "p1" })));
+    expect(r.undo()).toBe(true);
+    expect(err).not.toHaveBeenCalled();
+    err.mockRestore();
+    // the estimate and the measurement back; the place's own «nothing to undo» changed nothing
+    expect(h.undone).toEqual(["estimate", K.mSave]);
+  });
+  it("#1244 (the director's 3rd review): with the core's undoTogether — one «Отменить» of all three parts, all or none (too late → nothing undone)", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const asked: unknown[][] = [];
+    const st = { ...h.s, undoTogether: (undos: readonly unknown[]) => (asked.push([...undos]), (() => false) as unknown as GuardedUndo) };
+    // the harness's own functions write through h.s: keep the db in step
+    Object.defineProperty(st, "db", { get: () => h.s.db });
+    const r = ok(makeEstimate(st, input(M)));
+    expect(r.undo()).toBe(false);
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toHaveLength(3);
+    expect(h.undone).toEqual([]);
+  });
+  it("#1138 (review of #1169 Б1): where the person may not make a new estimate — «notHere», and NOTHING is written (before: a revision, «ready», a client from the lead and a false «Смета составлена»)", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const asked: (string | undefined)[] = [];
+    const s = { ...h.s, mayMakeEstimateAt: (pid: string | undefined) => (asked.push(pid), false) };
+    const r = makeEstimate(s, input(M));
+    expect(r).toEqual({ ok: false, reason: "notHere" });
+    expect(h.sent).toEqual([]); // no revision, no «ready»
+    expect(h.targets).toEqual([]); // no client made from the lead
+    expect(h.saved).toEqual([]);
+    expect(asked).toHaveLength(1); // asked once, at the lead's property (or its client's), before anything
+  });
+  it("…where he may: made as before (the question does not change the rest)", () => {
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const s = { ...h.s, mayMakeEstimateAt: () => true };
+    expect(makeEstimate(s, input(M)).ok).toBe(true);
+    expect(h.saved).toHaveLength(1);
   });
   it("P4b-2 (#705): the drawing goes with the estimate as its page; «Обновить» replaces it; without a page — none", () => {
     const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));

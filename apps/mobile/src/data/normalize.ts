@@ -9,15 +9,41 @@
  *   - wave П-1 / П-2a / П-2b: cancelledJobs, jobTypes, files, jobLines, calendarEvents, customFields, customFieldValues
  *     default to empty (demo: the standard job types); a job without
  *     customerId takes the client of its property; demo jobs get their JOB number from the seed or the next one
+ *   - an estimate's document goes through normalizeDoc (a priced line marked hidden is visible, sections in limits)
  */
 import { fromLegacyTrades } from "@/features/serviceCategories";
+import { normalizeDoc } from "@/features/estimateDoc";
 import { nextJobNumber } from "./jobs";
 import { makeSeed, SEED_JOB_TYPES, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
 import { MEMBER_PREFS_DEFAULT, type Customer, type DB, type Job, type Property, type Visit } from "./types";
 
 type Legacy = { source?: string; sourceId?: string };
 
+/** #1189: the lists of a store (every list the seed has): a record of an older version without one gets it empty */
+let listKeys: string[] | null = null;
+function withLists(d: DB): DB {
+  listKeys ??= Object.entries(makeSeed()).filter(([, v]) => Array.isArray(v)).map(([k]) => k);
+  const missing = listKeys.filter((k) => !Array.isArray((d as unknown as Record<string, unknown>)[k]));
+  return missing.length ? ({ ...d, ...Object.fromEntries(missing.map((k) => [k, []])) } as DB) : d;
+}
+
+/** a list of the wrong type (an object, a text) is as if missing: never `.map` on it (code-reviewer of #1189 №8) */
+function withoutBadLists(d: DB): DB {
+  listKeys ??= Object.entries(makeSeed()).filter(([, v]) => Array.isArray(v)).map(([k]) => k);
+  const r = d as unknown as Record<string, unknown>;
+  const bad = listKeys.filter((k) => r[k] !== undefined && !Array.isArray(r[k]));
+  if (!bad.length) return d;
+  const out = { ...r };
+  for (const k of bad) delete out[k];
+  return out as unknown as DB;
+}
+
 export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
+  // the lists it does not build itself, filled at the end (what it builds from older fields — jobs from visits — first)
+  return withLists(normalizeFields(withoutBadLists(d), mode));
+}
+
+function normalizeFields(d: DB, mode: "demo" | "cloud"): DB {
   const sources = Array.isArray(d.sources) && d.sources.length ? d.sources : mode === "demo" ? SEED_SOURCES : [];
   const byName = new Map(sources.map((s) => [s.name.toLowerCase(), s.id]));
   const fallback = sources.find((s) => s.name === "Other")?.id ?? sources[0]?.id ?? "";
@@ -28,6 +54,10 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     notices: d.notices ?? [],
     notes: d.notes ?? [],
     payments: d.payments ?? [],
+    // an estimate's document as it may be counted and shown (normalizeDoc, spec 2026-11-12-estimate-editor Р3, Р4): the
+    // phone's own copy at the start too, not only the cloud's — a priced line marked hidden is visible, sections in limits
+    estimates: (d.estimates ?? []).map((e) => (e.doc && Array.isArray(e.doc.options) ? { ...e, doc: normalizeDoc(e.doc).doc } : e)),
+    ...invoicesApart(d),
     company: d.company ?? null,
     sources,
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
@@ -53,6 +83,18 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
       (d.customers ?? []).map((c) => (c.sourceId ? c : { ...c, sourceId: sourceIdOf(c as Legacy) })),
       mode,
     ),
+  };
+}
+
+/** В1-5 (#1107): a voided invoice never stays among the live ones (an older record, a copy from the server) — it moves
+ *  to voidInvoices, so no sum counts it; an old record without voidInvoices gets [] */
+function invoicesApart(d: DB): Pick<DB, "invoices" | "voidInvoices"> {
+  const all = d.invoices ?? [];
+  const moved = all.filter((i) => i.status === "void");
+  const kept = Array.isArray(d.voidInvoices) ? d.voidInvoices : [];
+  return {
+    invoices: moved.length ? all.filter((i) => i.status !== "void") : all,
+    voidInvoices: moved.length ? [...kept.filter((k) => !moved.some((m) => m.id === k.id)), ...moved] : kept,
   };
 }
 

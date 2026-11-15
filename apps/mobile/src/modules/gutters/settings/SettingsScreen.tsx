@@ -6,27 +6,32 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { GUTTER_MOUNTS } from "@octo/estimating-engine";
-import { component, radius, space } from "@octo/design-tokens";
+import { component, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleHref, moduleState } from "@/modules/registry";
 import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
+import { Banner } from "@/ui/banner";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
-import { Press, T } from "@/ui/primitives";
+import { Icon, Press, T } from "@/ui/primitives";
+import { fillStyle } from "@/ui/fill";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
+import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, notSavedKey, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
+/** the sample under the choice: 73′ 2½″ */
+const LEN_SAMPLE_IN = 73 * 12 + 2.5;
 const a = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const k = (s: string) => `mod.gutters.set.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
@@ -44,6 +49,15 @@ function FieldWarn({ at }: { at: string }) {
       <StatusChip status="warn" label={warn.text} soft />
     </View>
   ) : null;
+}
+/** a choice that names its field (a segment or a dropdown) with the refusal said under it (#374: the save was refused, the pick rolled back) */
+function ChoiceWarn<K extends string>(p: React.ComponentProps<typeof ChoiceChips<K>> & { testID: string }) {
+  return (
+    <View style={{ gap: space[2] }}>
+      <ChoiceChips {...p} label={p.label} />
+      <FieldWarn at={p.testID} />
+    </View>
+  );
 }
 /** a stepper with its note under it */
 function Step({ testID, children }: { testID: string; children: React.ReactNode }) {
@@ -90,9 +104,8 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
 }
 
 /**
- * Checkboxes as chips: the look of ChoiceChips (ink frame on the surface, «✓» and bold when checked). The core's
- * MultiChips fills checked chips with the accent — a page of them would be all yellow, and yellow is kept for the one
- * main action (rule 2). TODO(ui): move into src/ui as MultiChips' look (a «Лиды и клиенты» file) — said in the PR.
+ * Checkboxes as chips with an id each (`<testID>-<key>`): the look of the core's MultiChips — «Заливка» and `check` before the word (DS «Выделение
+ * выбранного», #1306), never the accent (yellow is the main action's alone, rule 2).
  */
 function MultiChips<K extends string>({ items, value, onToggle, testID }: { items: { key: K; label: string }[]; value: K[]; onToggle: (k: K) => void; testID: string }) {
   const ro = useReadOnly();
@@ -113,10 +126,10 @@ function MultiChips<K extends string>({ items, value, onToggle, testID }: { item
             accessibilityState={{ checked: sel, disabled: ro }}
             {...({ "aria-checked": sel } as object)}
             accessibilityLabel={it.label}
-            style={{ height: h, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", backgroundColor: c.surf2, borderWidth: sel ? component.selectedBorder : 1, borderColor: sel ? c.ink : c.bd }}
+            style={{ height: h, paddingHorizontal: space[3], borderRadius: radius.pill, justifyContent: "center", ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }), flexDirection: "row", alignItems: "center", gap: space[1], borderWidth: component.hairline, borderColor: sel ? "transparent" : c.bd }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
-              {sel ? "✓ " : ""}
+            {sel ? <Icon name="check" s={sizes.iconSm} color={c.ink} /> : null}
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>
@@ -170,8 +183,19 @@ export default function GutterSettingsScreen() {
   // the field's testID: «gset-ds-style» for dsStyle (the others are «gset-ds-<key>»)
   const setDs = (key: string, v: unknown) => put(`gset-ds-${key === "dsStyle" ? "style" : key}`, ["ds", key], v);
   const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
-  const setRule = (key: string, v: unknown) => put(`gset-rule-${key}`, ["rules", key], v);
+  const setRule = (key: string, v: unknown) => {
+    // rule 16, step 1: write the old field too, so a phone with the old app does not buy differently: «без запаса» is the old `wastePct: 0`; on again — the old default 10 %
+    if (key === "wasteFt") {
+      const old = (raw as { rules?: { wastePct?: unknown } } | undefined)?.rules?.wastePct;
+      const next = setPath(raw, ["rules", "wasteFt"], v);
+      return save(v === 0 ? setPath(next, ["rules", "wastePct"], 0) : old === 0 ? setPath(next, ["rules", "wastePct"], 10) : next, "gset-rule-wasteFt");
+    }
+    return put(`gset-rule-${key}`, ["rules", key], v);
+  };
   /** a number rule as a stepper: its unit, range and step (spec П4) */
+  // the feet the company had before «без запаса»: switching it on again brings them back (in this visit; the stored value is 0 meanwhile)
+  const lastWaste = useRef<number>(RULE_NUMS.wasteFt.def);
+  if (rules.wasteFt > 0) lastWaste.current = rules.wasteFt;
   const num = (key: keyof typeof RULE_NUMS, unit: string, label: string) => {
     const r = RULE_NUMS[key];
     return (
@@ -199,15 +223,17 @@ export default function GutterSettingsScreen() {
     <Screen title={t(k("title"))} back={back} subtitle={t("mod.gutters.title")}>
       <View style={{ gap: space[4] }} testID="gset-screen">
         <T v="body" tone="mut">{t(k("intro"))}</T>
+        {/* the screen's state — one banner, not a chip (DS Б9, §15.3; #1426): «Подключить» is its one action */}
         {!active ? (
-          <View testID="gset-locked" style={{ gap: space[2] }}>
-            <StatusChip status="warn" label={t(k("locked"))} />
-            {director ? <View testID="gset-connect"><Button label={t("mod.gutters.draw.connect")} variant="secondary" onPress={() => router.push("/company/modules")} /></View> : null}
-          </View>
+          <Banner
+            tone="warn"
+            testID="gset-locked"
+            title={t(k("locked"))}
+            hint={t(k("lockedHint"))}
+            action={director ? { label: t("mod.gutters.draw.connect"), onPress: () => router.push("/company/modules") } : undefined}
+          />
         ) : !director ? (
-          <View testID="gset-ro">
-            <StatusChip status="info" label={t(k("askOwner"))} />
-          </View>
+          <Banner tone="info" testID="gset-ro" title={t(k("askOwner"))} />
         ) : null}
 
         {/* M7d (spec П22.10): prices live in the company's price list — their own page */}
@@ -220,6 +246,16 @@ export default function GutterSettingsScreen() {
         </View>
 
         <ReadOnly value={ro}>
+          {/* #1092: one format for every length — the drawing, the review, the documents, the parts */}
+          <Part title={t(k("len"))} hint={t(k("lenHint"))} testID="gset-len">
+            <ChoiceWarn label={t(k("lenFormat"))} testID="gset-len-format" items={LEN_FORMATS.map((f) => ({ key: f, label: t(k(`lenf.${f}`)) }))} value={ch.lenFormat} onChange={(f) => put("gset-len-format", ["lenFormat"], f)} />
+            <View testID="gset-len-sample"><T v="caption" tone="mut">{t(k("lenSample"), { len: fmtLen(LEN_SAMPLE_IN, ch.lenFormat) })}</T></View>
+          </Part>
+          {/* #932 (founder 11.11): where the roof's overhang is set */}
+          <Part title={t(k("house"))} hint={t(k("houseHint"))} testID="gset-house">
+            <ChoiceWarn label={t(k("roofOverhang"))} testID="gset-roof-overhang" items={OVERHANG_FT.map((n) => ({ key: String(n), label: fmtLen(n * 12, ch.lenFormat) }))} value={String(ch.roofOverhangFt)} onChange={(v) => put("gset-roof-overhang", ["roofOverhangFt"], Number(v))} />
+            <T v="caption" tone="mut">{t(k("roofOverhangHint"), { def: fmtLen(DEFAULT_OVERHANG_FT * 12, ch.lenFormat) })}</T>
+          </Part>
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">
               <MultiChips items={PROFILES.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={offer.profiles} testID="gset-profiles" onToggle={(x) => toggle("gset-profiles", "profiles", null, x)} />
@@ -313,7 +349,19 @@ export default function GutterSettingsScreen() {
             {num("storyFt", t(k("ft")), t(k("r.storyFt")))}
             {num("hangerSpacingIn", t(k("in")), t(k("r.hangerSpacingIn")))}
             <Switch testID="gset-rule-hangerExtra" on={rules.hangerExtra} onChange={(v) => setRule("hangerExtra", v)} label={t(k("r.hangerExtra"))} />
-            {num("wastePct", "%", t(k("r.wastePct")))}
+            {/* waste (#1355, founder 14.11: «10 фит запас на каждый вид желоба; значение можно менять»): a switch («без запаса» = 0) and the feet under it while it is on */}
+            <Switch testID="gset-rule-wasteOn" on={rules.wasteFt > 0} onChange={(v) => setRule("wasteFt", v ? lastWaste.current : 0)} label={t(k("r.wasteOn"))} />
+            {rules.wasteFt > 0 ? (
+              <>
+                <Step testID="gset-rule-wasteFt">
+                  <Stepper label={t(k("r.wasteFt"))} unit={t(k("ft"))} value={rules.wasteFt} min={1} max={RULE_NUMS.wasteFt.max} step={RULE_NUMS.wasteFt.step} onChange={(v) => setRule("wasteFt", v)} />
+                </Step>
+                <T v="caption" tone="mut">{t(k("r.wasteFtHint"))}</T>
+              </>
+            ) : (
+              <T v="caption" tone="mut">{t(k("r.wasteOff"))}</T>
+            )}
+            {num("cutCornerOutIn", t(k("in")), t(k("r.cutCornerOutIn")))}
             {num("cutCornerIn", t(k("in")), t(k("r.cutCornerIn")))}
             <Field label={t(k("r.corner"))} testID="gset-rule-corner">
               <ChoiceChips items={CORNER_METHODS.map((m) => ({ key: m, label: t(a(`cm.${m}`)) }))} value={rules.corner} onChange={(m) => setRule("corner", m)} />
@@ -329,6 +377,8 @@ export default function GutterSettingsScreen() {
             </Field>
             <Switch testID="gset-rule-dsShareOffcuts" on={rules.dsShareOffcuts} onChange={(v) => setRule("dsShareOffcuts", v)} label={t(k("r.dsShareOffcuts"))} />
             {num("dsExtensionIn", t(k("in")), t(k("r.dsExtensionIn")))}
+            <Switch testID="gset-rule-dsAuto" on={rules.dsAuto} onChange={(v) => setRule("dsAuto", v)} label={t(k("r.dsAuto"))} />
+            {num("dsEdgeIn", t(k("in")), t(k("r.dsEdgeIn")))}
             <Field label={t(k("r.rainBasis"))} testID="gset-rule-rainBasis">
               <ChoiceChips items={(["smacna", "code"] as const).map((b) => ({ key: b, label: t(k(`r.rain.${b}`)) }))} value={rules.rainBasis} onChange={(b) => setRule("rainBasis", b)} />
               <T v="caption" tone="mut">{t(k("r.rainHint"))}</T>
@@ -377,19 +427,11 @@ export default function GutterSettingsScreen() {
           </Part>
 
           <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
-            <Field label={t(a("profile"))} testID="gset-run-profile">
-              <ChoiceChips items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
-            </Field>
-            <Field label={t(a("size"))} testID="gset-run-size">
-              <ChoiceChips items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
-            </Field>
-            <Field label={t(a("material"))} testID="gset-run-material">
-              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
-            </Field>
+            <ChoiceWarn label={t(a("profile"))} testID="gset-run-profile" items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
+            <ChoiceWarn label={t(a("size"))} testID="gset-run-size" items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
+            <ChoiceWarn label={t(a("material"))} testID="gset-run-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
             {runGauges.length ? (
-              <Field label={t(a("gauge"))} testID="gset-run-gauge">
-                <ChoiceChips items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
-              </Field>
+              <ChoiceWarn label={t(a("gauge"))} testID="gset-run-gauge" items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
             ) : null}
             {MILL_ONLY.has(ch.run.material) ? null : (
               <Field label={t(a("finish"))} testID="gset-run-finish">
@@ -420,22 +462,12 @@ export default function GutterSettingsScreen() {
           </Part>
 
           <Part title={t(k("defDs"))} hint={t(k("defDsHint"))} testID="gset-def-ds">
-            <Field label={t(a("shape"))} testID="gset-ds-shape">
-              <ChoiceChips items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
-            </Field>
-            <Field label={t(a("size"))} testID="gset-ds-size">
-              <ChoiceChips items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
-            </Field>
-            <Field label={t(a("dsStyle"))} testID="gset-ds-style">
-              <ChoiceChips items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
-            </Field>
-            <Field label={t(a("material"))} testID="gset-ds-material">
-              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
-            </Field>
+            <ChoiceWarn label={t(a("shape"))} testID="gset-ds-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
+            <ChoiceWarn label={t(a("size"))} testID="gset-ds-size" items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
+            <ChoiceWarn label={t(a("dsStyle"))} testID="gset-ds-style" items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
+            <ChoiceWarn label={t(a("material"))} testID="gset-ds-material" items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
             {dsGauges.length ? (
-              <Field label={t(a("gauge"))} testID="gset-ds-gauge">
-                <ChoiceChips items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
-              </Field>
+              <ChoiceWarn label={t(a("gauge"))} testID="gset-ds-gauge" items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
             ) : null}
             {MILL_ONLY.has(ch.ds.material) ? null : (
               <Field label={t(a("finish"))} testID="gset-ds-finish">

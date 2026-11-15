@@ -8,7 +8,7 @@
  */
 async function signInScreen(h) {
   await h.go("/auth/sign-in");
-  await h.expectText(/Вход в OCTODEX/, "the sign-in screen");
+  await h.expectText(/Вход в GoRix/, "the sign-in screen");
 }
 async function agreeAndEmail(h, email) {
   const p = h.page;
@@ -26,6 +26,7 @@ async function expectCompany(h, name, notName) {
   const t = await h.text();
   await h.go("/settings");
   h.expect(!/Сбросить тестовые данные/.test(await h.text()), "cloud mode: no demo reset in «Настройки приложения»");
+  h.expect((await p.getByTestId("demo-badge").count()) === 0, "cloud mode: no «Демо» strip");
   if (notName) h.expect(!t.includes(notName), `nothing of ${notName}`);
 }
 

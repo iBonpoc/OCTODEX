@@ -5,6 +5,7 @@
  */
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { clientDoc } from "@/features/estimateDoc";
+import { termsByLangFrom, termsForClient } from "@/features/estimateTerms";
 import { docLanguageFor } from "@/data/people";
 import { linkOpen } from "@/features/estimateSign";
 import { tFor, type DocLang } from "@/i18n/translate";
@@ -42,6 +43,9 @@ export interface PortalData {
   invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string; pendingCents: number }[];
   /** the client's language for this page and its PDF (rule 7); from the server: portal_estimate.doc_language */
   lang: DocLang;
+  /** #1304: the «Terms & conditions» the client reads above the signature — the estimate's own text, or (an estimate made
+   *  before #1304) the company's default in the client's language; "" — no block. One rule: features/estimateTerms termsForClient */
+  terms: string;
   /** «Pay by card» (simulated until Stripe): only for a demo company (portal_estimate.simulated_pay, audit 06.11) */
   simulatedPay: boolean;
   /** 20в: the company's Stripe takes charges — the page shows the real Payment Element (portal_estimate.online_pay) */
@@ -56,7 +60,7 @@ export interface PortalData {
 type Raw = {
   number?: string; title?: string; status: string; sent_at?: string; doc?: EstimateDoc | null;
   company?: {
-    name?: string; phone?: string; email?: string; website?: string; address?: string; logo?: string; color?: string; terms?: string; license?: string; timezone?: string;
+    name?: string; phone?: string; email?: string; website?: string; address?: string; logo?: string; color?: string; terms?: string; terms_by_lang?: unknown; license?: string; timezone?: string;
     licenses?: { kind: string; number: string; classes?: string[] }[];
     contacts?: { name: string; title?: string; phone?: string; email?: string }[];
   };
@@ -75,6 +79,9 @@ type Raw = {
 
 export function fromRaw(r: Raw): PortalData {
   const p = r.property ?? {};
+  const lang: DocLang = r.doc_language === "es" || r.doc_language === "ru" ? r.doc_language : "en";
+  // the defaults by language from the server (none from an older one: the old single text is the English one)
+  const defaults = { estimate: { validDays: 0, depositBps: null, terms: r.company?.terms, termsByLang: termsByLangFrom(r.company?.terms_by_lang) } };
   return {
     source: "cloud",
     number: r.number,
@@ -104,7 +111,8 @@ export function fromRaw(r: Raw): PortalData {
         }
       : null,
     depositPaid: !!r.deposit_paid,
-    lang: r.doc_language === "es" || r.doc_language === "ru" ? r.doc_language : "en",
+    lang,
+    terms: termsForClient(r.doc ?? undefined, defaults, lang, !!r.approval || r.status === "approved" || r.status === "awaiting_countersign"),
     // an older server has no field: keep the button as before; a newer one says false for a real company
     // a closed company (7а-3) has no field either: never the button
     simulatedPay: r.status !== "closed" && r.simulated_pay !== false,
@@ -160,6 +168,7 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
       : null,
     depositPaid: !!e.depositPaidAt,
     lang: docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }),
+    terms: termsForClient(e.doc, db.company, docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }), !!e.approval || e.status === "approved" || e.status === "awaiting_countersign"),
     simulatedPay: true, // the demo on this phone
     onlinePay: false, // Stripe needs the server
     invoices: (() => {

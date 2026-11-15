@@ -14,6 +14,7 @@ import { Button, ChoiceChips, MultiChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
+import { type GuardedUndo } from "@/data/undo";
 
 /** a new property of this client, ready for the sheet */
 export const newProperty = (customerId: string): Property => ({
@@ -48,7 +49,7 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={exists ? t("prop.edit") : t("prop.new")} dirty={JSON.stringify(d) !== d0} onSave={ok ? save : undefined}>
+    <Sheet visible={!!value} onClose={onClose} title={exists ? t("prop.edit") : t("prop.new")} dirty={JSON.stringify(d) !== d0} onSave={ok ? save : undefined}>
       <Labeled label={t("prop.street")}>
         <TextField type="street" value={d.address} onChangeText={(v) => set({ address: v })} placeholder={t("prop.street")} icon="pin" />
       </Labeled>
@@ -95,14 +96,14 @@ export function AccessSheet({ value, onClose }: { value: Property | null; onClos
   if (!value) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
   const dirty = notes !== (value.accessNotes ?? "") || gate !== (value.gateCode ?? "");
   const save = () => {
-    const undos: (() => void)[] = [];
+    const undos: GuardedUndo[] = [];
     if (notes !== (value.accessNotes ?? "")) undos.push(store.saveProperty({ ...value, accessNotes: notes }));
     if (gate !== (value.gateCode ?? "")) undos.push(store.setGateCode(value.id, gate));
-    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), () => undos.reverse().forEach((u) => u()));
+    toast.show(gate !== (value.gateCode ?? "") ? t("prop.gateSaved") : t("prop.saved"), store.undoTogether(undos));
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("prop.access")} dirty={dirty} onSave={save}>
+    <Sheet visible={!!value} onClose={onClose} title={t("prop.access")} dirty={dirty} onSave={save}>
       <Labeled label={t("prop.accessNotes")}>
         <TextField type="note" value={notes} onChangeText={setNotes} placeholder={t("prop.accessNotesHint")} label={t("prop.accessNotes")} multiline />
       </Labeled>
@@ -133,7 +134,7 @@ export function PropertyPeopleSheet({ value, onClose }: { value: Property | null
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={t("prop.people")} dirty={dirty} onSave={save}>
+    <Sheet visible={!!value} onClose={onClose} title={t("prop.people")} dirty={dirty} onSave={save}>
       <T v="caption" tone="mut">
         {t("prop.peopleHint")}
       </T>

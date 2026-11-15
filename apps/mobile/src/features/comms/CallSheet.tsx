@@ -1,12 +1,13 @@
 import { useRef, useState, type ReactNode } from "react";
-import { ScrollView, View } from "react-native";
+import { useHeldSheet } from "@/ui/heldSheet";
+import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CallInput, CallOutcome } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import { CALL_OUTCOME, CALL_OUTCOMES, callPlaces, callPlacesAtClient, callReady, peopleOfSubject } from "./comms";
 
@@ -24,7 +25,7 @@ export type CallPreset = Partial<Pick<CallInput, "subjectType" | "subjectId" | "
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={{ gap: space[1] }}>
-      <T v="micro" tone="mut">
+      <T v="caption" tone="mut">
         {label}
       </T>
       {children}
@@ -33,11 +34,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function CallSheet({ preset, onClose }: { preset: CallPreset | null; onClose: () => void }) {
-  if (!preset) return null;
-  return <CallSheetBody key={`${preset.subjectType ?? ""}-${preset.subjectId ?? ""}-${preset.contactId ?? ""}`} preset={preset} onClose={onClose} />;
+  const h = useHeldSheet(preset);
+  if (!h.value) return null;
+  const p = h.value;
+  return <CallSheetBody key={`${p.subjectType ?? ""}-${p.subjectId ?? ""}-${p.contactId ?? ""}-${h.opening}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
-function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () => void }) {
+function CallSheetBody({ preset, onClose, visible, onExited }: { preset: CallPreset; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { db, role } = store;
   const { t } = useI18n();
@@ -70,7 +73,7 @@ function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () =>
   };
 
   return (
-    <Sheet visible onClose={onClose} title={t("w6.call.title")} dirty={!!outcome || !!note.trim() || minutes > 0} onSave={ok ? save : undefined}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("w6.call.title")} dirty={!!outcome || !!note.trim() || minutes > 0} onSave={ok ? save : undefined}>
       <View style={{ gap: space[3] }}>
         <Field label={t("w6.call.to")}>
           {chosen ? (
@@ -84,7 +87,7 @@ function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () =>
               {atClient.length ? null : (
                 <TextField type="search" icon="search" value={query} onChangeText={setQuery} placeholder={t(role === "tech" ? "w6.call.toSearchTech" : "w6.call.toSearch")} />
               )}
-              <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+              <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {places.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
                 ) : (
@@ -95,7 +98,7 @@ function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () =>
                     </View>
                   ))
                 )}
-              </ScrollView>
+              </SheetScroll>
             </View>
           )}
         </Field>

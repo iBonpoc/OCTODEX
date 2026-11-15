@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
-import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory } from "@/cloud/repo";
+import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
@@ -20,29 +20,35 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
+import { canMakeEstimateAt, leadEstimatePropertyId } from "@/features/access";
+import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
 /** app lead status → public.leads.status */
 const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
-import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { cleanPeople, docLanguageFor, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { tFor, type DocLang } from "@/i18n/translate";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
-import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
+import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine, type JobTaxSet } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
-import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
-import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
+import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/features/estimateDoc";
+import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
+import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
+import { canRetry, keepPhotoLocal, markPhoto } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { cloudCacheKey, isNewCacheKey, othersCaches } from "./cacheKey";
+import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cacheKey";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
@@ -57,6 +63,9 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { sameValue, undoOwn } from "@/data/undoOwn";
+import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
+import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
@@ -111,11 +120,79 @@ import {
   type PurchaseOrder,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
-import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, templatesOfActiveModules, visitSettingsOf } from "@/features/checklist";
 
-type Undo = () => void;
-/** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
-export type GuardedUndo = () => boolean;
+/** every action's «Отменить» is a GuardedUndo (#1261): true — back, false — too late, undefined — nothing to take back */
+type Undo = GuardedUndo;
+export type { GuardedUndo };
+
+/**
+ * What an undo would do now, without doing it (the director's review of #1244, remark 1): the store's value after it and
+ * the rest of its work (the queue, the outbox) — or why not: "done" (already taken back), "dead" (the server dropped the
+ * action: nothing to take back), null (changed since: too late). Kept for every undo mutate and undoTogether make, so a
+ * screen's undo of several actions is all or nothing (DS §15.2 «Полуотката не бывает»).
+ */
+type UndoPlan = (cur: DB) => { value: DB; commit: () => void; check?: (final: DB) => boolean } | "done" | "dead" | null;
+/** what undoTogether takes: the store's undos only (a screen's step after it — withAfter at the toast) */
+export type UndoParts = readonly (GuardedUndo | null | undefined)[];
+const undoPlans = new WeakMap<object, UndoPlan>();
+
+/** the plan of undos in the order they were made: the last first, each on what the one after it left; a function the
+ *  store did not make (a screen's own reset, a «nothing to undo», a reverse op) runs after, when all of them went back —
+ *  one that throws does not stop the rest, and the toast still closes (the director's 3rd review, remark 2). None of the
+ *  store's own parts left to take back (all dead, or only such functions) — undefined: nothing happens (remark 3). A part
+ *  already taken back on its own (its own toast) — false: the rest is not taken back after it (remark 4). */
+function planTogether(undos: UndoParts): UndoPlan {
+  return (cur) => {
+    let value = cur;
+    const commits: (() => void)[] = [];
+    const checks: ((final: DB) => boolean)[] = [];
+    let live = 0;
+    for (const u of [...undos].reverse()) {
+      if (typeof u !== "function" || u === NO_UNDO) continue;
+      const plan = undoPlans.get(u);
+      if (!plan) {
+        // the store's reverse step (no plan to fold): a part of its own — asked first, run with the others' commits
+        const mark = markOf(u);
+        if (!mark) {
+          // not the store's (a function of a screen, a bind of an undo): it cannot be asked or folded — a refusal, never a
+          // silent half undo (the director's review of #1279); a screen's step goes through withAfter at the toast
+          const msg = "[undo] undoTogether got a function the store did not make — refused";
+          if (process.env.NODE_ENV === "test") throw new Error(msg);
+          console.error(msg);
+          return null;
+        }
+        // asked on the state after the other parts (review of #1279 №3)
+        if (!mark.ready(value)) return null;
+        commits.push(() => {
+          // asked just before: it goes back — a «no» now is a bug to see, never a silent half undo
+          if ((u as () => boolean | undefined)() !== true) console.error("[undo] a reverse step refused after it was ready");
+        });
+        live++;
+        continue;
+      }
+      const r = plan(value);
+      if (r === "dead") continue;
+      if (r === "done" || r === null) return r;
+      value = r.value;
+      commits.push(r.commit);
+      if (r.check) checks.push(r.check);
+      live++;
+    }
+    if (!live) return "dead";
+    // every part asked once more on the end state of all of them (a folded op is written from it — review of #1279)
+    if (!checks.every((c) => c(value))) return null;
+    return { value, commit: () => commits.forEach((f) => f()) };
+  };
+}
+
+/** tests only: an action's result is already what the store will show — normalizeDB changes nothing in it (Б3) */
+function assertNormalized(label: string, next: DB, mode: "demo" | "cloud") {
+  const shown = normalizeDB(next, mode) as unknown as Record<string, unknown>;
+  const raw = next as unknown as Record<string, unknown>;
+  const off = Object.keys(shown).filter((k) => !sameValue(shown[k], raw[k]));
+  if (off.length) throw new Error(`mutate «${label}»: normalizeDB changes ${off.join(", ")} — «Отменить» would see a conflict`);
+}
 export type Mode = "demo" | "cloud";
 export type Link = "ok" | "offline" | "server";
 export interface StuckOp {
@@ -193,6 +270,8 @@ interface StoreCtx {
   addPhoto: (visitId: ID, kind: "before" | "after", uri?: string) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
+  /** #1431 «Повторить»: a photo the cloud refused is sent again (its mark goes until the cloud answers); nothing to send — no-op */
+  retryPhoto: (visitId: ID, photoId: ID) => Undo;
   /** extra checklist item added on site by the tech (always optional, docs/specs/08 §11.2 №9) */
   addCheckItem: (visitId: ID, label: string) => Undo;
   /* step 14 (docs/specs/08 §10.1): one row per item — a tick and an office edit never overwrite each other */
@@ -215,7 +294,7 @@ interface StoreCtx {
   /** «Просмотрено» on the «not done» card */
   reviewVisitMissed: (visitId: ID) => Undo;
   /** a checklist template, whole (new or changed; archive = archivedAt) */
-  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => Undo;
+  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => GuardedUndo;
   /** the company's photo rules (owner, admin) */
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
@@ -268,9 +347,12 @@ interface StoreCtx {
    *  (offline — the queue). A newer change with the same coalesceKey replaces a waiting one. null = not saved: the module
    *  is not active (trial over, not paid — founder О2) */
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: DB) => DB; coalesceKey?: string; made?: string[] }) => Undo | null;
+  /** «Отменить» of several actions made together (each the undo a store action returned, in the order they were made):
+   *  all of them go back or none — false: too late, nothing changed (DS §15.2) */
+  undoTogether: (undos: UndoParts) => GuardedUndo;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
-  setLocationConsent: (on: boolean) => ConsentChange;
+  setLocationConsent: (on: boolean) => Omit<ConsentChange, "undo"> & { undo: GuardedUndo };
   /** wave 7б-2: a point of mine on an open visit: kept as the last one and sent at once (never queued) */
   recordVisitPoint: (p: VisitPoint, source: "status_change" | "foreground") => void;
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
@@ -309,14 +391,26 @@ interface StoreCtx {
    *  database's rules); in the cloud the server applies (cloud/advance.ts), then refresh(). null — done, else our word. */
   applyAdvanceDemo: (advanceId: ID, invoiceId: ID) => AdvanceError | null;
   /** progress (by stage) or final balance invoice for a job */
-  issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
-  /** create or update a universal estimate (draft) */
+  /** #865: null — refused, nothing written or queued (above the contract: engine canIssue); the screen says so
+   *  (inv.rej.overContract) and shows no «Отменить» */
+  issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo | null;
+  /** В1-5 (#1107): void a sent invoice — director (owner / admin) only, no payment on it, the reason required. The
+   *  invoice moves to voidInvoices (no sum counts it); no «Отменить»: the server never lets it back. null — done;
+   *  else why not (the screen shows it). Server: tg_invoice_guard (db T197). */
+  voidInvoice: (id: ID, reason: string) => VoidRefusal | null;
+  /** #1304 (docs/specs/40 §6): the Terms a new estimate starts with — the company's default in the client's language */
+  estimateTerms: (at: TermsFor) => { text: string; lang: DocLang };
+  /** #1304: the client of a draft changed — the untouched default follows the new client's language, an edited text stays */
+  estimateTermsOnClientChange: (current: string | undefined, at: { from: TermsFor; to: TermsFor }) => string;
+  /** create or update a universal estimate (draft); a new one without `doc.terms` gets estimateTerms (#1304) */
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
   /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
-  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
+  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => GuardedUndo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
+  /** #1138: may the person make a NEW estimate at this property (a tech: only where he works, as the server) */
+  mayMakeEstimateAt: (propertyId: ID | undefined) => boolean;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
   convertLead: (leadId: ID, reasonText: string) => Undo;
   /** New client entered by hand (not from a lead): active client with one property. */
@@ -347,7 +441,7 @@ interface StoreCtx {
   /** «Отменить» of these runs the same check (lineChangeRefusal) and returns false when it is refused: nothing changes */
   saveJobLine: (line: Omit<JobLineItem, "totalCents">, isNew: boolean) => GuardedUndo;
   removeJobLine: (id: ID) => GuardedUndo;
-  setJobTax: (jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }) => GuardedUndo;
+  setJobTax: (jobId: ID, tax: JobTaxSet) => GuardedUndo;
   setJobTags: (jobId: ID, tagIds: ID[]) => Undo;
   setJobType: (jobId: ID, jobTypeId: ID | null) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
@@ -379,11 +473,11 @@ interface StoreCtx {
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
-  saveSupplier: (x: Supplier) => Undo;
+  saveSupplier: (x: Supplier) => GuardedUndo;
   /** spec 36: archive or bring back a supplier («Отменить» 5 s) */
-  setSupplierActive: (id: ID, active: boolean) => Undo;
+  setSupplierActive: (id: ID, active: boolean) => GuardedUndo;
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
-  applySupplierTax: (id: ID) => Undo;
+  applySupplierTax: (id: ID) => GuardedUndo;
   /** spec 37: the job's drafts per supplier (an open draft of that supplier is kept, not doubled); the ids to open */
   makeJobOrders: (jobId: ID) => { ids: ID[]; made: number; undo: Undo };
   /** spec 37: a new empty draft (for stock, or a job), or a changed order (lines of a draft / sent order) */
@@ -396,10 +490,12 @@ interface StoreCtx {
   receivePurchaseOrder: (id: ID, lines: { id: ID; received: string }[]) => Undo;
   /** spec 36: read the newest history of one item or one supplier from the server (cloud, online, who sees costs) */
   loadCostHistory: (where: { itemId?: ID; supplierId?: ID }) => void;
+  /** РС-10: the item's price and markup changes, read when its card opens (only who sees costs; offline — none) */
+  loadPriceHistory: (itemId: ID) => void;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
    *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
    *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
-  saveCatalogItems: (items: CatalogItem[], opts?: { onlyNew?: boolean }) => Undo;
+  saveCatalogItems: (items: CatalogItem[], opts?: { onlyNew?: boolean }) => GuardedUndo;
   readNotices: () => void;
   /** invite a person (demo: added as pending; cloud: email invites come with the email service) */
   inviteMember: (m: { name: string; email?: string; phone?: string; roles: Role[]; kind: "employee" | "sub" }) => Undo;
@@ -466,13 +562,17 @@ export function StoreProvider({
   // the cache is the person's in the company (#864): the next person on a shared phone never reads it
   const cacheKey = mode === "cloud" ? cloudCacheKey(company!.companyId, auth.userId!) : "octo.db.v5";
 
-  // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
+  // Demo data is kept as the person left it, any day — never reseeded silently at midnight (the founder's measurement was
+  // wiped that way, 12.11; К1). Only «Сбросить тестовые данные» starts it over (with «Отменить»). Cloud data is a cache
+  // of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
     {
+      // #1189: only the shape — the record is an object of this mode; a list it lacks (an older version's record) is filled
+      // by normalizeDB, never a reason to start the demo over (that wiped the person's own records)
       validate: (v) =>
-        Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
+        typeof v?.db === "object" && v.db !== null && !Array.isArray(v.db) && (mode === "cloud" ? v.day === "cloud" : typeof v?.day === "string" && v.day !== "cloud"),
       // an empty start shows an empty company: tried longer before it (#926)
       patient: true,
       // the first start of this version: the older person-less cache is the signed-in person's only when its «me» is
@@ -508,6 +608,8 @@ export function StoreProvider({
       .then(async (ks) => {
         const gone: string[] = [];
         for (const k of othersCaches(ks, me)) if (ks.includes(mine) || isNewCacheKey(k) || !(await myOld(k).catch(() => true))) gone.push(k);
+        // their kept copies (#1189) go at once: a snapshot of another person's company is never kept for them (#1260 Б1)
+        gone.push(...othersCopies(ks, me));
         return gone;
       })
       .then((gone) => (gone.length ? AsyncStorage.multiRemove(gone) : undefined))
@@ -656,6 +758,10 @@ export function StoreProvider({
   const settingsStale = useRef(new Set<string>());
   /** ops dropped on a conflict: their «Отменить» does nothing (review #374 №2) */
   const deadOps = useRef(new Set<string>());
+  /** #1265: a waiting module op folded into a later one (coalesceKey) — older id → the id that carries it now */
+  const foldedInto = useRef(new Map<string, string>());
+  /** the ops whose action was taken back (#1265: a later op folded over one of them restores it no more) */
+  const undoneOps = useRef(new Set<string>());
   /** read one module's row again and take the server's settings and version; until then its settings are not saved */
   const rereadSettings = async (mod: string, cid: string | undefined) => {
     settingsStale.current.add(mod);
@@ -683,7 +789,8 @@ export function StoreProvider({
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
         // spec 36: the history read on open stays (the full read has none)
-        setDb(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current));
+        // #1431: a photo's file on this phone and why the cloud refused it — only the phone knows them
+        setDb(keepPhotoLocal(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current), dbRef.current));
         // the whole company read again: every module's settings are the server's now
         settingsStale.current.clear();
       }
@@ -778,7 +885,7 @@ export function StoreProvider({
         inFlight.current = item.id;
         setSendingId(item.id);
         try {
-          await applyOp(item.op, w.companyId, w.userId);
+          const sent = await applyOp(item.op, w.companyId, w.userId);
           inFlight.current = null;
           setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
@@ -789,6 +896,14 @@ export function StoreProvider({
           answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
+          // #1431: the cloud refused a photo's file — the photo says so (and why); taken — the mark goes
+          if (sent?.photo) {
+            const marked = markPhoto(dbRef.current, sent.photo.id, sent.photo.failed, new Date().toISOString());
+            if (marked !== dbRef.current) {
+              dbRef.current = marked;
+              setDb(marked);
+            }
+          }
           if (!still()) break;
         } catch (e) {
           inFlight.current = null;
@@ -839,7 +954,11 @@ export function StoreProvider({
             const mod = item.op.module;
             const { kept, gone } = dropModuleOps(outboxRef.current, mod, w);
             outboxRef.current = kept;
-            for (const g of gone) opPause.current.delete(g.id);
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              // their «Отменить» has nothing to take back: the toast just closes, not «too late» (#1266)
+              deadOps.current.add(g.id);
+            }
             // the phone's copy of the module's data holds what was just dropped: it goes until the next read (a canvas
             // that saves again then sends its measurement whole — review M5a №4)
             const cur = dbRef.current;
@@ -934,12 +1053,39 @@ export function StoreProvider({
     };
   }, [mode, refresh, flush]);
 
+  /** an undo that runs a plan: the store's value once, then the rest — true; too late — false; nothing to take back —
+   *  undefined (the toast just closes) */
+  const runnable = useCallback(
+    (plan: UndoPlan): GuardedUndo => {
+      const undo = markUndo(() => {
+        const r = plan(dbRef.current);
+        if (r === "dead") return undefined;
+        if (r === "done" || r === null) return false;
+        if (r.check && !r.check(r.value)) return false;
+        dbRef.current = r.value;
+        setDb(dbRef.current);
+        r.commit();
+        return true;
+      });
+      undoPlans.set(undo, plan);
+      return undo;
+    },
+    [setDb],
+  );
+  /** «Отменить» of several actions made together (a new client and its name parts, a job and its visit): all of them go
+   *  back or none (remark 1 of the director's review of #1244) */
+  const undoTogether = useCallback((undos: UndoParts): GuardedUndo => runnable(planTogether(undos)), [runnable]);
+
   /* ---------- mutations ---------- */
   /** Apply locally; in cloud mode record the op; return undo. */
   const mutate = useCallback(
-    (label: string, fn: (d: DB) => DB, op?: Op): Undo => {
+    (label: string, fn: (d: DB) => DB, op?: Op): GuardedUndo => {
       const prev = dbRef.current;
       const next = fn(prev);
+      // the director's review of #1244 Б3: the store shows normalizeDB(next) — a record the action writes that the render
+      // fills in (a demo client's number, a source) differs from it at once, and «Отменить» sees a conflict and is dead.
+      // Every store test runs every action through this check (test/undoOwnStore.test.ts makes one of each kind)
+      if (process.env.NODE_ENV === "test") assertNormalized(label, next, modeRef.current);
       dbRef.current = next;
       setDb(next);
       let qid: string | null = null;
@@ -954,6 +1100,7 @@ export function StoreProvider({
         const at = coalesceAt(outboxRef.current, op, whoRef.current, inFlight.current);
         if (at >= 0) {
           replaced = outboxRef.current[at]!;
+          foldedInto.current.set(replaced.id, oid);
           outboxRef.current = outboxRef.current.map((x, i) => (i === at ? coalesced(replaced!, item) : x));
         } else outboxRef.current = [...outboxRef.current, item];
         setOutbox(outboxRef.current);
@@ -961,19 +1108,69 @@ export function StoreProvider({
         qid = uid();
         setQueue((q) => [...q, { id: qid!, label, at: new Date().toISOString() }]);
       }
-      return () => {
-        // dropped by the server as built on a lost base: nothing to take back (review #374 №2)
-        if (oid && deadOps.current.has(oid)) return;
-        dbRef.current = prev;
-        setDb(prev);
-        if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
-        if (oid) {
-          outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
-          setOutbox(outboxRef.current);
-        }
+      let done = false;
+      /** the op that carries this action now: its own, or a later one it was folded into (#1265) */
+      const carrierId = () => {
+        let id = oid;
+        while (id && foldedInto.current.has(id)) id = foldedInto.current.get(id)!;
+        return id;
       };
+      /** a module's op written again from the phone's data `d` (ModuleDef.rebuild); null — it cannot */
+      const rebuilt = (item: OwnedItem, d: DB): OwnedItem | null => {
+        if (item.op.k !== "module.op") return null;
+        const payload = moduleDef(item.op.module)?.rebuild?.({ kind: item.op.kind, payload: item.op.payload }, d);
+        return payload ? { ...item, op: { ...item.op, payload } } : null;
+      };
+      return runnable((cur) => {
+        // a second «Отменить» of the same action: nothing more to take back
+        if (done) return "done";
+        const live = carrierId();
+        // dropped by the server (a lost base, the module turned off): nothing to take back, the toast just closes (review
+        // #374 №2) — its own op or the one it was folded into (#1266)
+        if (oid && (deadOps.current.has(oid) || (live && deadOps.current.has(live)))) return "dead";
+        // already on its way to the server or there (sent, being sent): taking it back on the phone only would be undone
+        // by the next read — too late (the director's 4th review of #1244)
+        if (live && (inFlight.current === live || !outboxRef.current.some((x) => x.id === live))) return null;
+        // #1193 п.6: only this action's own changes go back — what came after it (another action, the server's copy) stays;
+        // all or nothing: when a part of it was changed since, nothing is taken back and its op stays in the queue (the
+        // toast says it is too late — never a half undo, the director's review of #1244 Б2)
+        const r = undoOwn(prev, next, cur);
+        if (!r.ok) return null;
+        // folded into a later op (#1265): that op stays and is written again from the phone's whole record after the undo
+        // — so it carries every later change folded into it, and none of this one's; its module says how
+        // (ModuleDef.rebuild); a module that cannot — too late, as before
+        const folded = !!live && live !== oid;
+        return {
+          value: r.value,
+          // asked on the end state (of the whole undoTogether): the carrier must be writable from it
+          ...(folded ? { check: (final: DB) => !!rebuilt(outboxRef.current.find((x) => x.id === carrierId())!, final) } : {}),
+          commit: () => {
+            done = true;
+            if (oid) undoneOps.current.add(oid);
+            if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
+            if (!oid) return;
+            // resolved again now: another part of the same «Отменить» (undoTogether) may have put this op back already
+            const now = carrierId();
+            if (now && now !== oid) {
+              // still folded: the carrier written from what the phone holds now — after every part of this «Отменить»
+              const carrier = outboxRef.current.find((x) => x.id === now);
+              const again = carrier ? rebuilt(carrier, dbRef.current) : null;
+              // asked on this very state just before (check): a null now is a bug to see
+              if (again) outboxRef.current = outboxRef.current.map((x) => (x.id === now ? again : x));
+              else console.error("[undo] a folded op could not be written again after its check");
+            } else {
+              // the op it replaced comes back in its place — unless that action was taken back already (#1265); back in
+              // place, it carries itself again (the director's review of #1279 Б1)
+              const back = replaced && !undoneOps.current.has(replaced.id) ? replaced : null;
+              if (replaced) foldedInto.current.delete(replaced.id);
+              outboxRef.current = back ? outboxRef.current.map((x) => (x.id === oid ? back : x)) : outboxRef.current.filter((x) => x.id !== oid);
+            }
+            setOutbox(outboxRef.current);
+          },
+        };
+      });
     },
-    [setDb, setQueue, setOutbox],
+    [runnable, setQueue, setOutbox],
   );
 
   const patchVisit = (d: DB, id: ID, fn: (v: Visit) => Visit): DB => ({
@@ -991,9 +1188,9 @@ export function StoreProvider({
   const recordPayment = (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string, fromClient?: boolean): Undo => {
     const d0 = dbRef.current;
     const inv = d0.invoices.find((i) => i.id === invoiceId);
-    if (!inv) return () => {};
+    if (!inv) return NO_UNDO;
     const amount = acceptPayment(inv, amountCents);
-    if (amount <= 0) return () => {};
+    if (amount <= 0) return NO_UNDO;
     const now = new Date().toISOString();
     // who took it (wave 8): the person recording it; a client paying on /p/ is nobody on the team
     const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined, receivedBy: fromClient ? undefined : d0.me };
@@ -1079,9 +1276,11 @@ export function StoreProvider({
   const dismissRejected = (id: ID): Undo => {
     const was = rejected.find((x) => x.id === id);
     setRejected((prev) => prev.filter((x) => x.id !== id));
-    return () => {
-      if (was) setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
-    };
+    return markUndo(() => {
+      if (!was) return undefined;
+      setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
+      return true;
+    });
   };
   const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
   // like discardOp: refused while one of them is on its way to the server (it would get there although the card says no)
@@ -1108,8 +1307,8 @@ export function StoreProvider({
     const l = d0.leads.find((x) => x.id === leadId);
     if (!l) return null;
     if (l.customerId) {
-      const propertyId = l.propertyId ?? d0.properties.find((p) => p.customerId === l.customerId)?.id;
-      if (propertyId) return { customerId: l.customerId, propertyId, undo: () => {} };
+      const propertyId = leadEstimatePropertyId(d0, l);
+      if (propertyId) return { customerId: l.customerId, propertyId, undo: NO_UNDO };
     }
     const ids = { customerId: uid(), contactId: uid(), propertyId: uid() };
     const now = new Date().toISOString();
@@ -1118,7 +1317,7 @@ export function StoreProvider({
       (d) => ({
         ...d,
         // the lead's people become the client's (S3; the server moves them the same way, app.move_lead_people)
-        customers: [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "prospect", people: clientPeopleFromLead(l, ids.contactId) }],
+        customers: [...d.customers, { id: ids.customerId, number: modeRef.current === "demo" ? nextClientNumber(d) : undefined, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "prospect", people: clientPeopleFromLead(l, ids.contactId) }],
         properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }],
         leads: d.leads.map((x) => (x.id === leadId ? { ...x, customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
       }),
@@ -1172,7 +1371,8 @@ export function StoreProvider({
     return mutate(label, fn, legacy ? { k: "visit.checklist", visitId, checklist: list.map((c) => ({ id: c.id, label: c.label, done: c.done })) } : undefined);
   };
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
-  const noop: Undo = () => {};
+  /** nothing to take back: the toast just closes */
+  const noop = NO_UNDO;
   /** spec 37: an order on the phone and in the queue (header, lines, the lines taken out) */
   const putOrder = (o0: PurchaseOrder, removedLineIds: ID[]): Undo => {
     // the server moves row_version by one per save (a new order: the insert, then the update → 2) — mirrored here so a
@@ -1190,25 +1390,24 @@ export function StoreProvider({
   };
   /**
    * spec 36: change several price-list items at once (a supplier's tax or its new name) — each a catalog.save with its
-   * cost change and the phone's history row; «Отменить» sends the reverse ops (the change may already be on the
-   * server — review SUP1 №1), the last one wins.
+   * cost change and the phone's history row; «Отменить» takes them all back from the phone and the queue, or none
+   * (#1244 Б1).
    */
-  const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): Undo => {
+  const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): GuardedUndo => {
     if (!pairs.length) return noop;
     const go = (from: CatalogItem, to: CatalogItem, at: string) => {
       const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);
-      mutate(
+      return mutate(
         "catalog.save",
         (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
         { k: "catalog.save", item: to, costs: catalogCostChange(from, to) },
       );
     };
     const at = new Date().toISOString();
-    pairs.forEach(({ prev, next }) => go(prev, next, at));
-    return () => {
-      const back = new Date().toISOString();
-      [...pairs].reverse().forEach(({ prev, next }) => go(next, prev, back));
-    };
+    // «Отменить» takes back the store's own changes, all or none (the director's 4th review of #1244 Б1): a reverse op
+    // wrote each item whole from before and could put back over a price the server brought meanwhile; the ops are still
+    // in the queue while the toast is up (SEND_AFTER_MS is longer than it)
+    return undoTogether(pairs.map(({ prev, next }) => go(prev, next, at)));
   };
   const checkItemFn = (visitId: ID, itemId: ID, done: boolean): Undo => {
     const v = visitOf(visitId);
@@ -1243,7 +1442,8 @@ export function StoreProvider({
   const snapshotFor = (kind: ChecklistVisitKind, services: ID[]): { items: ChecklistItem[]; mins?: { before?: number; after?: number } } => {
     const d0 = dbRef.current;
     if (!canEditTemplates(role)) return { items: [] };
-    const templates = d0.checklistTemplates ?? [];
+    // a module switched off puts nothing into a new visit (#607 review)
+    const templates = templatesOfActiveModules(d0.checklistTemplates ?? [], (k) => moduleActive(d0.company, k));
     // 200 items per visit is the server's limit (54000): more would be refused and hold the queue
     const items = checklistFor({ kind, catalogItemIds: services }, templates, () => uid()).slice(0, 200).map((c) => ({ ...c, addedBy: d0.me }));
     return { items, mins: snapshotPhotoMins(items, templates) };
@@ -1263,7 +1463,7 @@ export function StoreProvider({
       }),
     );
     if (snap.mins) undos.push(mutate("check.mins", same, { k: "chk.visit.mins", visitId, before: snap.mins.before ?? null, after: snap.mins.after ?? null }));
-    return () => [...undos].reverse().forEach((u) => u());
+    return undoTogether(undos);
   };
 
   const value = useMemo<StoreCtx>(
@@ -1354,10 +1554,7 @@ export function StoreProvider({
           // the old server has no photos of items: the photo itself went
           false,
         );
-        return () => {
-          undoItem();
-          undoPhoto();
-        };
+        return undoTogether([undoPhoto, undoItem]);
       },
       addVisitItem: addVisitItemFn,
       removeVisitItem: (visitId, itemId) => {
@@ -1389,8 +1586,7 @@ export function StoreProvider({
             return { ...x, checklist: [...list].sort((p, q) => (p.position ?? 0) - (q.position ?? 0)) };
           });
         if (dbRef.current.checklistLegacy) return chkMutate("check.move", visitId, apply, { k: "chk.item.edit", id: itemId, visitId });
-        const undos = moves.map((m, i) => mutate("check.move", i === 0 ? apply : (d) => d, { k: "chk.item.edit", id: m.id, visitId, position: m.position }));
-        return () => [...undos].reverse().forEach((u) => u());
+        return undoTogether(moves.map((m, i) => mutate("check.move", i === 0 ? apply : (d) => d, { k: "chk.item.edit", id: m.id, visitId, position: m.position })));
       },
       addVisitTemplate: (visitId, templateId) => {
         const d0 = dbRef.current;
@@ -1414,7 +1610,7 @@ export function StoreProvider({
           }),
         );
         if (minsChanged && mins) undos.push(mutate("check.mins", (d) => d, { k: "chk.visit.mins", visitId, before: mins.before ?? null, after: mins.after ?? null }));
-        return () => [...undos].reverse().forEach((u) => u());
+        return undoTogether(undos);
       },
       reviewVisitMissed: (visitId) => {
         // an old server has no «Просмотрено» (and no card: attention.ts) — nothing that would come back after a reload
@@ -1424,8 +1620,10 @@ export function StoreProvider({
         mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at });
         // «Отменить» (rule 5): the op may already be on the server (the outbox goes every 1.5 s) — a reverse op, not a
         // take-back of the queue; while both wait they go in order, the last one wins
-        return () =>
-          void mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
+        return markUndo(() => {
+          mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
+          return true;
+        });
       },
       saveChecklistTemplate: (t, opts) => {
         const clean = cleanTemplate(t);
@@ -1458,13 +1656,20 @@ export function StoreProvider({
           })),
           { k: "photo.remove", id: photoId },
         ),
+      retryPhoto: (visitId, photoId) => {
+        const p = visitOf(visitId)?.photos.find((x) => x.id === photoId);
+        if (!p || !canRetry(p) || !p.uri) return noop;
+        const uri = p.uri;
+        // the mark goes at once (the photo is being sent); a second refusal puts it back with the reason
+        return mutate("photo.retry", (d) => markPhoto(d, photoId, null, ""), { k: "photo.retry", id: photoId, visitId, uri });
+      },
       addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),
       payVisit: (visitId, method) => {
         const d0 = dbRef.current;
         const v = d0.visits.find((x) => x.id === visitId);
-        if (!v) return () => {};
+        if (!v) return NO_UNDO;
         const invoiceId = uid();
         const paymentId = uid();
         // an inspection (no job) takes no payment
@@ -1473,7 +1678,8 @@ export function StoreProvider({
         // the amount is the same rule as the server's record_visit_payment (#757, audit A-17 / B-05): the job's final
         // invoice takes its balance; with none, a new final invoice bills what is not yet billed (a deposit off)
         const job = v.jobId ? findJob(d0, v.jobId) : undefined;
-        const jobInvoices = v.jobId ? d0.invoices.filter((i) => i.jobId === v.jobId) : [];
+        // #1193 п.1: the contract's own invoices (a standalone one is outside the contract) — as the server
+        const jobInvoices = v.jobId ? contractInvoices(d0, v.jobId) : [];
         // the same amount the screen showed (features/visitDue.ts) — the money in the tech's hand
         const plan = job ? visitPayment(job.amountCents, jobInvoices) : { amountCents: 0, into: "none" as const, overCents: 0 };
         // the final invoice the engine counted (void ones never reach the phone: repo.ts loads live invoices only)
@@ -1491,7 +1697,7 @@ export function StoreProvider({
             const billed =
               plan.into === "final"
                 ? next
-                : { ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] };
+                : withTaxSplit({ ...next, invoices: [...next.invoices, { id: invoiceId, customerId, jobId: v.jobId!, totalCents: plan.amountCents, paidCents: 0, dueDate: now, method, kind: "final" as const }] }, invoiceId);
             return withPayment(
               billed,
               // the invoice's client, as the server writes it (record_visit_payment, #857 С4) — review of #1103 №3
@@ -1522,7 +1728,7 @@ export function StoreProvider({
       markReminded: (id) => patchLead(id, { remindedAt: new Date().toISOString(), askAgainAt: undefined }),
       remindInvoice: (invoiceId, channel) => {
         const inv = dbRef.current.invoices.find((i) => i.id === invoiceId);
-        if (!inv) return () => {};
+        if (!inv) return NO_UNDO;
         const activityId = uid();
         const at = new Date().toISOString();
         return mutate(
@@ -1585,7 +1791,7 @@ export function StoreProvider({
         mutate("lead.cost", (d) => ({ ...d, leads: d.leads.map((x) => (x.id === id ? { ...x, costCents: cents } : x)) }), { k: "lead.cost", leadId: id, cents }),
       saveLeadPeople: (leadId, people) => {
         const l = dbRef.current.leads.find((x) => x.id === leadId);
-        if (!l) return () => {};
+        if (!l) return NO_UNDO;
         const named = people.map((p, i) => (i === 0 ? { ...p, name: l.name, role: "main" as const } : p));
         if (l.customerId && dbRef.current.customers.some((c) => c.id === l.customerId)) return saveCustomerPeople(l.customerId, named);
         const clean = cleanPeople(named, uid);
@@ -1647,6 +1853,7 @@ export function StoreProvider({
           },
           { k: "module.disable", module: key },
         ),
+      undoTogether,
       moduleOp: (module, { kind, payload, apply, coalesceKey, made }) => {
         if (!moduleActive(dbRef.current.company, module)) return null;
         const op: Op = { k: "module.op", module, kind, payload, ...(coalesceKey ? { coalesceKey } : {}), ...(made?.length ? { made } : {}) };
@@ -1669,12 +1876,12 @@ export function StoreProvider({
           setDb(d);
         };
         const cid = company?.companyId;
-        return changeConsent(
+        const c = changeConsent(
           {
             get: () => dbRef.current,
             set: put,
             cloud: modeRef.current === "cloud",
-            sendNow: (v) => (cid && auth.userId ? applyOp({ k: "me.location", on: v }, cid, auth.userId) : Promise.reject(new Error("no company"))),
+            sendNow: (v) => (cid && auth.userId ? applyOp({ k: "me.location", on: v }, cid, auth.userId).then(() => undefined) : Promise.reject(new Error("no company"))),
             enqueue: (op) => {
               const oid = uid();
               outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
@@ -1690,6 +1897,14 @@ export function StoreProvider({
           },
           on,
         );
+        // the consent's own step back (locationConsent.ts): the store's undo, so the toast takes it (#1261)
+        return {
+          done: c.done,
+          undo: markUndo(() => {
+            c.undo();
+            return true;
+          }),
+        };
       },
       recordVisitPoint: (p, source) => {
         const next = { ...dbRef.current, visitPoints: keepLast(dbRef.current.visitPoints, p) };
@@ -1719,12 +1934,12 @@ export function StoreProvider({
       },
       bookLead: (id, at) => {
         const l = dbRef.current.leads.find((x) => x.id === id);
-        if (!l || !isOpenLeadStatus(l.status)) return () => {};
+        if (!l || !isOpenLeadStatus(l.status)) return NO_UNDO;
         // S4 (docs/specs/03 §1): an inspection is a visit of the lead at the property, without a job.
         // One planned inspection at a time (double tap, second booking): reschedule lives in the Plan.
-        if (hasPlannedInspection(dbRef.current, l)) return () => {};
+        if (hasPlannedInspection(dbRef.current, l)) return NO_UNDO;
         const target = leadTarget(id);
-        if (!target) return () => {};
+        if (!target) return NO_UNDO;
         const ids = { visitId: at.visitId ?? uid() };
         const now = new Date().toISOString();
         const snap = snapshotFor("inspection", []);
@@ -1750,20 +1965,12 @@ export function StoreProvider({
             techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x),
           },
         );
-        const undoSnap = snapshotOps(ids.visitId, snap);
-        const undoVisit = () => {
-          undoSnap();
-          undoVisit0();
-        };
-        return () => {
-          undoVisit();
-          target.undo();
-        };
+        return undoTogether([target.undo, undoVisit0, snapshotOps(ids.visitId, snap)]);
       },
       cancelVisit: (id, reason, text) => {
         const d0 = dbRef.current;
         const v = d0.visits.find((x) => x.id === id);
-        if (!v || !canCancel(v) || (reason === "other" && !text?.trim())) return () => {};
+        if (!v || !canCancel(v) || (reason === "other" && !text?.trim())) return NO_UNDO;
         const leadBack = leadRollsBack(d0, id);
         const jobBack = jobRollsBack(d0, id);
         return mutate(
@@ -1796,14 +2003,7 @@ export function StoreProvider({
           }),
           { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: people[0] ?? null, assigneeIds: people, note, scope },
         );
-        const undoSnap = snapshotOps(id, snap);
-        return {
-          id,
-          undo: () => {
-            undoSnap();
-            undo0();
-          },
-        };
+        return { id, undo: undoTogether([undo0, snapshotOps(id, snap)]) };
       },
       markNotified: (visitId) => {
         const at = new Date().toISOString();
@@ -1811,7 +2011,7 @@ export function StoreProvider({
       },
       rescheduleVisit: (id, start, durationMin, allDay) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
-        if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
+        if (!v || !canReschedule(v) || durationMin <= 0) return NO_UNDO;
         return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => rescheduled(x, start, durationMin, allDay)), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
       },
       addLead: (lead) => {
@@ -1834,14 +2034,14 @@ export function StoreProvider({
       assignVisit: (visitId, userIds) => {
         const v = dbRef.current.visits.find((x) => x.id === visitId);
         // people change only before the tech is on site (§4.1; the server refuses the same, public.assign_visit)
-        if (!v || !canReschedule(v)) return () => {};
+        if (!v || !canReschedule(v)) return NO_UNDO;
         const list = [...new Set(userIds)];
         return mutate("visit.assign", (d) => patchVisit(d, visitId, (x) => withAssignees(x, list)), { k: "visit.assign", visitId, userIds: list });
       },
       addEstimate: (e) => {
         const id = uid();
         const serviceCategoryId = inheritCategory(dbRef.current, { kind: "estimate", leadId: e.leadId, customerId: e.customerId }, e.serviceCategoryId);
-        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId }] }), {
+        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId, createdBy: d.me }] }), {
           k: "estimate.add", id, versionId: uid(), optionId: uid(), customerId: e.customerId, propertyId: e.propertyId, title: e.title,
           totalCents: e.totalCents, depositCents: e.depositCents, marginPct: e.marginPct ?? null, lines: e.lines ?? [],
         });
@@ -1856,7 +2056,7 @@ export function StoreProvider({
       },
       payInvoice: (id, method) => {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
-        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : () => {};
+        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : NO_UNDO;
       },
       recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
       refundPaymentDemo: (paymentId, amountCents) => {
@@ -1871,11 +2071,35 @@ export function StoreProvider({
         mutate("payment.advanceDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices, advances: r.advances }));   // no op
         return null;
       },
+      voidInvoice: (id, reason) => {
+        const d0 = dbRef.current;
+        const refusal = voidRefusal(d0, id, reason, role);
+        if (refusal) return refusal;
+        const inv = d0.invoices.find((i) => i.id === id)!;
+        const why = reason.trim();
+        mutate(
+          "invoice.void",
+          (d) => {
+            const cur = d.invoices.find((i) => i.id === id);
+            if (!cur) return d;
+            return {
+              ...d,
+              invoices: d.invoices.filter((i) => i.id !== id),
+              voidInvoices: [...(d.voidInvoices ?? []).filter((i) => i.id !== id), { ...cur, status: "void", voidReason: why, voidedAt: new Date().toISOString() }],
+            };
+          },
+          { k: "invoice.void", id, jobId: inv.jobId, reason: why, totalCents: inv.totalCents },
+        );
+        return null;
+      },
       issueInvoice: (jobId, kind, amountCents, title) => {
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
         const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
-        if (!job || !customerId || amountCents <= 0) return () => {};
+        if (!job || !customerId || amountCents <= 0) return NO_UNDO;
+        // #865: never more than the contract (engine canIssue; the server refuses the same from В1-4б); the tax inside the total
+        const split = contractInvoice(d0, job, amountCents);
+        if (!split) return null;
         const id = uid();
         const now = new Date().toISOString();
         return mutate(
@@ -1884,19 +2108,24 @@ export function StoreProvider({
             ...d,
             invoices: [
               ...d.invoices,
-              { id, customerId, jobId, kind, title, totalCents: amountCents, paidCents: 0, dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined },
+              { id, customerId, jobId, kind, title, totalCents: amountCents, ...split, paidCents: 0, dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined },
             ],
           }),
           { k: "invoice.issue", id, jobId, customerId, kind, title, totalCents: amountCents, dueDate: companyToday(Date.parse(now)) },
         );
       },
       sendEstimate: (id, tk) => {
+        // #1113: a tech never sends (the server's send_estimate is the office side's — T142): nothing «sent» on his phone,
+        // no link made, nothing queued to be refused
+        if (role === "tech") return noop;
         const cur = dbRef.current.estimates.find((e) => e.id === id);
         // a revoked token never comes back (the server refuses it too and makes its own)
         const token = (cur?.linkRevokedAt ? undefined : cur?.token) ?? tk ?? newToken();
         return mutate(
           "estimate.send",
-          (d) => {
+          (d0) => {
+            // #1304 (review): sending freezes the Terms (the server's t06_terms_on_lock the same)
+            const d = withFrozenTerms(d0, id);
             const est = d.estimates.find((e) => e.id === id);
             const now = new Date().toISOString();
             return {
@@ -1947,10 +2176,24 @@ export function StoreProvider({
           },
         );
       },
+      estimateTerms: (at) => termsForNew(dbRef.current, at),
+      estimateTermsOnClientChange: (current, at) => termsOnClientChange(dbRef.current, current, at.from, at.to),
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
-        if (prev?.status === "approved") return () => {};
-        const { doc, linesFrom } = docForSave(prev?.status, doc0, uid);
+        if (prev?.status === "approved") return NO_UNDO;
+        // #1138: a tech makes a new estimate only where the server lets him (estimates_insert — a property he works at);
+        // elsewhere it would vanish behind «нет доступа» after saving (demo) or be refused (cloud)
+        if (!prev && !canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId)) return NO_UNDO;
+        // as it may be counted and shown (Р3, Р4) before it is counted and saved
+        const norm = normalizeDoc(doc0).doc;
+        // #1304: a new estimate without Terms (a module, a template, an editor that did not set them) takes the company's
+        // default in the client's language; an existing one never gets the key here (its client keeps seeing the default)
+        const withTerms = !prev && norm.terms === undefined ? { ...norm, terms: termsForNew(dbRef.current, { customerId, leadId: leadId0 }).text } : norm;
+        const saved = docForSave(prev?.status, withTerms, uid);
+        const linesFrom = saved.linesFrom;
+        // the mark of «the last estimate» goes into the document itself (the server's rows have no save time of their own)
+        const savedAt = new Date().toISOString();
+        const doc: EstimateDoc = { ...saved.doc, savedAt };
         const sum = summarize(doc);
         const versionId = uid();
         return mutate(
@@ -1959,6 +2202,9 @@ export function StoreProvider({
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // who made it (the server's created_by: a tech keeps seeing his own, estimates_select — #1138)
+              createdBy: prev ? prev.createdBy : d.me,
+              savedAt,
               // E3: an estimate keeps the template it was made from; a new one from a template counts one use (demo too)
               templateId: prev ? prev.templateId : templateId0,
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
@@ -1977,43 +2223,45 @@ export function StoreProvider({
       },
       approveEstimate: (id, a) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return () => {};
+        if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return NO_UNDO;
         // on site the client signs on an employee's device: only someone who may sign contracts (server: the same)
-        if (a.channel === "on_site" && !canCountersign(dbRef.current, dbRef.current.me)) return () => {};
+        if (a.channel === "on_site" && !canCountersign(dbRef.current, dbRef.current.me)) return NO_UNDO;
         if (a.channel === "on_site") a = { ...a, deviceUserId: dbRef.current.me };
         const token = e.token ?? newToken();
         const ids = { jobId: jobOfEstimate(dbRef.current, id)?.id ?? uid(), invoiceId: uid() };
         const now = new Date().toISOString();
-        return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
+        return mutate("estimate.approve", (d) => withTaxSplit(clientSigned(withFrozenTerms(d, id), id, a, ids, now, token), ids.invoiceId), {
           k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
+          // #1147: on site, the total the client saw (the option with its add-ons, as summarize counts it — the server the same)
+          ...(a.channel === "on_site" ? { totalCents: summarize(e.doc, a).totalCents } : {}),
         });
       },
       countersignEstimate: (id, signature) => {
         const d0 = dbRef.current;
         const e = d0.estimates.find((x) => x.id === id);
-        if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return () => {};
+        if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return NO_UNDO;
         const now = new Date().toISOString();
         // the same ids on the phone and the server (the client may have signed on the page: no ids were stored then)
         const ids = { jobId: jobOfEstimate(d0, id)?.id ?? e.approval?.jobId ?? uid(), invoiceId: e.approval?.invoiceId ?? uid() };
         // the saved signature (one tap) or one drawn now (the server saves it as the new own signature)
         const saved = typeof signature === "string" ? undefined : (d0.memberSignatures ?? []).find((s) => s.id === signature.savedId && s.userId === d0.me && !s.revokedAt);
-        if (typeof signature !== "string" && !saved) return () => {};
+        if (typeof signature !== "string" && !saved) return NO_UNDO;
         const svg = typeof signature === "string" ? signature : saved!.svg;
         return mutate(
           "estimate.countersign",
-          (d) => companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn", title: saved?.title }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined), (x) => (modeRef.current === "demo" ? nextJobNumber(x) : undefined)),
+          (d) => withTaxSplit(companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn", title: saved?.title }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined), (x) => (modeRef.current === "demo" ? nextJobNumber(x) : undefined)), ids.invoiceId),
           { k: "estimate.countersign", id, svg: saved ? undefined : svg, memberSignatureId: saved?.id, jobId: ids.jobId, invoiceId: ids.invoiceId },
         );
       },
       saveMySignature: (svg, name, title) => {
-        if (svg.length < 3 || !name.trim()) return () => {};
+        if (svg.length < 3 || !name.trim()) return NO_UNDO;
         const sig = { id: uid(), userId: dbRef.current.me, svg, name: name.trim(), title: title?.trim() || undefined };
         return mutate("member.signature", (d) => savedSignature(d, sig, new Date().toISOString()), { k: "member.signature", ...sig });
       },
       updateMember: (id, patch) => {
         const d0 = dbRef.current;
         // security-check #98: check the role before applying — offline must not show an edit the server refuses
-        if (!d0.members.some((m) => m.id === id) || !canEditMember(d0, d0.me)) return () => {};
+        if (!d0.members.some((m) => m.id === id) || !canEditMember(d0, d0.me)) return NO_UNDO;
         // the right to sign: owner only (the server refuses others too)
         const p = { ...patch, canSignContracts: canGrantSign(d0, d0.me) ? patch.canSignContracts : undefined };
         return mutate(
@@ -2031,18 +2279,18 @@ export function StoreProvider({
       },
       declineCountersign: (id, text) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e || e.status !== "awaiting_countersign" || !text.trim() || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e || e.status !== "awaiting_countersign" || !text.trim() || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
         return mutate("estimate.decline", (d) => companyDeclined(d, id, text), { k: "estimate.decline", id, text: text.trim() });
       },
       reopenEstimate: (id, reason) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
         return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim() });
       },
       revokeEstimateLink: (id) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         // the server allows the director and the office only (revoke_estimate_link)
-        if (!e?.token || e.linkRevokedAt || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e?.token || e.linkRevokedAt || !canManageLink(dbRef.current, dbRef.current.me)) return NO_UNDO;
         const now = new Date().toISOString();
         // the phone keeps the old token marked revoked: the page says "not valid" at once, the next send makes a new one
         return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, linkRevokedAt: now } : x)) }), {
@@ -2050,10 +2298,13 @@ export function StoreProvider({
         });
       },
       leadEstimateTarget: (leadId) => leadTarget(leadId),
+      // #1138: may the person make a new estimate at this property (a tech: where he works — estimates_insert); a module
+      // asks before it writes anything for an estimate (review of #1169 Б1)
+      mayMakeEstimateAt: (propertyId) => canMakeEstimateAt(dbRef.current, { role, mode, me: dbRef.current.me }, propertyId),
       convertLead: (leadId, reasonText) => {
         const d0 = dbRef.current;
         const l = d0.leads.find((x) => x.id === leadId);
-        if (!l || l.status === "won") return () => {};
+        if (!l || l.status === "won") return NO_UNDO;
         const ids = { customerId: l.customerId ?? uid(), contactId: uid(), propertyId: l.propertyId ?? uid(), noteId: uid() };
         const needCustomer = !l.customerId;
         const now = new Date().toISOString();
@@ -2062,7 +2313,7 @@ export function StoreProvider({
           (d) => ({
             ...d,
             customers: needCustomer
-              ? [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active", people: clientPeopleFromLead(l, ids.contactId) }]
+              ? [...d.customers, { id: ids.customerId, number: modeRef.current === "demo" ? nextClientNumber(d) : undefined, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active", people: clientPeopleFromLead(l, ids.contactId) }]
               : d.customers.map((c) => (c.id === ids.customerId ? { ...c, status: statusAfterManualWin(c.status) } : c)),
             properties: needCustomer ? [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }] : d.properties,
             leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "won", wonVia: "manual", customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
@@ -2100,11 +2351,11 @@ export function StoreProvider({
         ),
       // a repeat (a double tap, the pair already merged / marked) queues nothing: a second op would outlive its «Отменить»
       mergeCustomers: (keepId, dropId) => {
-        if (mergeCustomersDb(dbRef.current, keepId, dropId) === dbRef.current) return () => {};
+        if (mergeCustomersDb(dbRef.current, keepId, dropId) === dbRef.current) return NO_UNDO;
         return mutate("customer.merge", (d) => mergeCustomersDb(d, keepId, dropId), { k: "customer.merge", keepId, dropId });
       },
       markNotDuplicate: (aId, bId) => {
-        if (markNotDuplicateDb(dbRef.current, aId, bId) === dbRef.current) return () => {};
+        if (markNotDuplicateDb(dbRef.current, aId, bId) === dbRef.current) return NO_UNDO;
         return mutate("customer.notDup", (d) => markNotDuplicateDb(d, aId, bId), { k: "customer.notDup", id: aId, otherId: bId });
       },
       saveServiceCategory: (cat) => {
@@ -2133,35 +2384,47 @@ export function StoreProvider({
         const back = lineSaveUndo(dbRef.current, line);
         mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew });
         // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
-        return () => {
-          const now = dbRef.current;
-          const after = back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line);
-          // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
-          if (lineChangeRefusal(now, after, line.jobId)) return false;
+        const after = (now: DB) => (back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line));
+        // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
+        // on a given state (undoTogether asks on the state after its other parts), or now
+        const ready = (v?: unknown) => {
+          const d = (v as DB | undefined) ?? dbRef.current;
+          return !lineChangeRefusal(d, after(d), line.jobId);
+        };
+        return markUndo(() => {
+          if (!ready()) return false;
           if (back.k === "remove") mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id });
           else mutate("jobLine.save", (d) => withJobLine(d, back.line), { k: "jobLine.save", line: back.line, isNew: false });
           return true;
-        };
+        }, ready);
       },
       removeJobLine: (id) => {
         const line = (dbRef.current.jobLines ?? []).find((l) => l.id === id);
-        if (!line) return () => false;
+        if (!line) return markUndo(() => false);
         mutate("jobLine.remove", (d) => withoutJobLine(d, id), { k: "jobLine.remove", id });
         // the removal may already be on the server: «Отменить» puts the line back as its own step
-        return () => {
-          if (lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId)) return false;
+        const ready = (v?: unknown) => {
+          const d = (v as DB | undefined) ?? dbRef.current;
+          return !lineChangeRefusal(d, withJobLine(d, line), line.jobId);
+        };
+        return markUndo(() => {
+          if (!ready()) return false;
           mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
           return true;
-        };
+        }, ready);
       },
       setJobTax: (jobId, tax) => {
         const prev = taxBefore(dbRef.current, jobId);
         mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
-        return () => {
-          if (lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId)) return false;
+        const ready = (v?: unknown) => {
+          const d = (v as DB | undefined) ?? dbRef.current;
+          return !lineChangeRefusal(d, withJobTax(d, jobId, prev), jobId);
+        };
+        return markUndo(() => {
+          if (!ready()) return false;
           mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });
           return true;
-        };
+        }, ready);
       },
       setJobTags: (jobId, tagIds) => {
         // a tag switched off since cannot be put back (job_tags_insert): «Отменить» leaves it out
@@ -2169,13 +2432,13 @@ export function StoreProvider({
         const prev = (dbRef.current.jobs.find((j) => j.id === jobId)?.tagIds ?? []).filter((id) => active.has(id));
         const put = (ids: ID[]) => mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds: ids } : j)) }), { k: "job.tags", id: jobId, tagIds: ids });
         put(tagIds);
-        return () => void put(prev);
+        return markUndo(() => (put(prev), true));
       },
       setJobType: (jobId, jobTypeId) => {
         const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.jobTypeId ?? null;
         const put = (id: ID | null) => mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: id ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId: id });
         put(jobTypeId);
-        return () => void put(prev);
+        return markUndo(() => (put(prev), true));
       },
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
@@ -2233,20 +2496,27 @@ export function StoreProvider({
         ),
       // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
       saveCatalogItem: (it0) => {
-        const it = cleanSupplierLink(cleanCatalogItem(it0));
-        const prev = dbRef.current.catalog.find((x) => x.id === it.id);
+        const prev = dbRef.current.catalog.find((x) => x.id === it0.id);
+        // РС-10: the link, the barcode and the direction as the server will keep them (the phone and the server the same)
+        const it = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
         const costs = catalogCostChange(prev, it);
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
         const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
+        // РС-10: the price and markup change too (the card shows «было → стало» at once, offline as well)
+        const now = new Date().toISOString();
+        const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
+        // on the phone: changed now, by me (the server writes its own); in the queue: never these columns
+        const local: CatalogItem = { ...it, updatedAt: now, ...(dbRef.current.me ? { updatedBy: dbRef.current.me } : {}), ...(prev ? {} : { createdAt: now, ...(dbRef.current.me ? { createdBy: dbRef.current.me } : {}) }) };
         return mutate(
           "catalog.save",
           (d) => ({
             ...d,
-            catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it],
+            catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? local : x)) : [...d.catalog, local],
             ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
+            ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
           }),
-          { k: "catalog.save", item: it, costs },
+          { k: "catalog.save", item: itemForSave(it), costs },
         );
       },
       saveSupplier: (x0) => {
@@ -2270,22 +2540,15 @@ export function StoreProvider({
           ? itemsOfSupplier(dbRef.current, x.id).filter((it) => it.vendor !== x.name).map((it) => ({ prev: it, next: { ...it, vendor: x.name } }))
           : [];
         const undoItems = saveItemsBoth(renamed);
-        // «Отменить» (rule 5): a new supplier is taken back from the queue (nothing reached the server yet, or it stays
-        // as made); a changed one gets a reverse op — the change may already be on the server
-        return () => {
-          undoItems();
-          if (before) put(before);
-          else undoSup();
-        };
+        // «Отменить» (rule 5): the supplier and its items' new name, all or none (Б1)
+        return undoTogether([undoSup, undoItems]);
       },
       setSupplierActive: (id, active) => {
         const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
         if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
         const next = { ...x, active };
-        mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? next : y)) }), { k: "supplier.save", supplier: next });
-        // «Отменить» (rule 5): the op may already be on the server — a reverse op, the last one wins
-        return () =>
-          void mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? x : y)) }), { k: "supplier.save", supplier: x });
+        // «Отменить» (rule 5): its own change back while its op waits in the queue (Б1: no reverse op over others' changes)
+        return mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? next : y)) }), { k: "supplier.save", supplier: next });
       },
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
@@ -2310,7 +2573,7 @@ export function StoreProvider({
           ids.push(o.id);
           undos.push(putOrder(o, []));
         }
-        return { ids, made: undos.length, undo: () => [...undos].reverse().forEach((u) => u()) };
+        return { ids, made: undos.length, undo: undoTogether(undos) };
       },
       savePurchaseOrder: (o) => {
         const d0 = dbRef.current;
@@ -2355,10 +2618,12 @@ export function StoreProvider({
         const before = o.lines.filter((l) => lines.some((x) => x.id === l.id)).map((l) => ({ id: l.id, received: l.receivedQty }));
         apply(o, lines);
         // «Отменить» (rule 5): the quantities as they were — the op may already be on the server, a reverse call
-        return () => {
+        return markUndo(() => {
           const cur = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === id);
-          if (cur) apply(cur, before);
-        };
+          if (!cur) return undefined;
+          apply(cur, before);
+          return true;
+        });
       },
       loadCostHistory: (where) => {
         const cid = whoRef.current?.companyId;
@@ -2372,6 +2637,19 @@ export function StoreProvider({
           })
           .catch(() => undefined);
       },
+      loadPriceHistory: (itemId) => {
+        const cid = whoRef.current?.companyId;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        void loadPriceHistory(cid, itemId)
+          .then((rows) => {
+            if (whoRef.current?.companyId !== cid) return;
+            // the item's rows as the server has them now; other items' stay; the phone's own while its save is queued
+            const pending = outboxRef.current.some((o) => o.op.k === "catalog.save" && (o.op as { item?: { id?: string } }).item?.id === itemId);
+            dbRef.current = { ...dbRef.current, priceHistory: mergePriceHistory(dbRef.current.priceHistory, itemId, rows, pending) };
+            setDb(dbRef.current);
+          })
+          .catch(() => undefined);
+      },
       applySupplierTax: (id) => {
         const d0 = dbRef.current;
         const x = (d0.suppliers ?? []).find((y) => y.id === id);
@@ -2381,23 +2659,31 @@ export function StoreProvider({
       saveCatalogItems: (items, opts) => {
         const onlyNew = !!opts?.onlyNew;
         const fresh = onlyNew ? items.filter((x) => !dbRef.current.catalog.some((c) => c.id === x.id)) : items;
-        const undos = fresh.map(cleanCatalogItem).map((it) =>
-          mutate(
+        // РС-10: the card's fields as the server will keep them, the same as one item's save
+        const undos = fresh.map((x) => cleanCardFields(cleanCatalogItem(x), dbRef.current.catalog.find((c) => c.id === x.id), dbRef.current)).map((it) => {
+          const prev = dbRef.current.catalog.find((x) => x.id === it.id);
+          // РС-10: a change of an item there (not onlyNew) shows its price / markup row at once too
+          const priceHist = onlyNew || dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, new Date().toISOString(), dbRef.current.me ?? undefined);
+          return mutate(
             "catalog.save",
-            (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it] }),
+            (d) => ({
+              ...d,
+              catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it],
+              ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
+            }),
             onlyNew
-              ? { k: "catalog.save", item: it, onlyNew: true, costs: catalogCostChange(undefined, it) }
-              : { k: "catalog.save", item: it, costs: catalogCostChange(dbRef.current.catalog.find((x) => x.id === it.id), it) },
-          ),
-        );
-        // the last one first: each undo puts back the phone's state from before its own save
-        return () => [...undos].reverse().forEach((u) => u());
+              ? { k: "catalog.save", item: itemForSave(it), onlyNew: true, costs: catalogCostChange(undefined, it) }
+              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it) },
+          );
+        });
+        // all of them or none (DS §15.2)
+        return undoTogether(undos);
       },
       removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
       scheduleJob: (jobId, sch) => {
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
-        if (!job) return () => {};
+        if (!job) return NO_UNDO;
         const e = job.estimateId ? d0.estimates.find((x) => x.id === job.estimateId) : undefined;
         const visitId = sch.visitId ?? uid();
         const opt = e?.doc && e.approval ? e.doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
@@ -2424,16 +2710,14 @@ export function StoreProvider({
           }),
           { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope, allDay: !!sch.allDay },
         );
-        const undoSnap = snapshotOps(visitId, snap);
-        return () => {
-          undoSnap();
-          undo0();
-        };
+        return undoTogether([undo0, snapshotOps(visitId, snap)]);
       },
       saveCompany: (patch) => {
         const cur = dbRef.current.company;
-        if (!cur) return () => {};
-        const next = { ...cur, ...patch };
+        if (!cur) return NO_UNDO;
+        // #1304: the old single Terms and the English default stay one (the server's t08 the same) — a screen that still
+        // edits estimate.terms is not lost behind termsByLang.en
+        const next = { ...cur, ...patch, estimate: syncCompanyTerms(cur.estimate, { ...cur, ...patch }.estimate) };
         return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined });
       },
       saveLicense: (l) =>
@@ -2470,20 +2754,20 @@ export function StoreProvider({
           { k: "contact.remove", id },
         ),
       inviteMember: (m) => {
-        if (modeRef.current !== "demo") return () => {};
+        if (modeRef.current !== "demo") return NO_UNDO;
         const initials = m.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
         const expiresAt = new Date(Date.now() + 7 * 864e5).toISOString();
         return mutate("member.invite", (d) => ({ ...d, members: [...d.members, { id: uid(), ...m, initials, pending: true, expiresAt }] }));
       },
       revokeInvite: (id) => {
-        if (modeRef.current !== "demo" || !dbRef.current.members.some((m) => m.id === id && m.pending)) return () => {};
+        if (modeRef.current !== "demo" || !dbRef.current.members.some((m) => m.id === id && m.pending)) return NO_UNDO;
         return mutate("member.revoke", (d) => ({ ...d, members: d.members.filter((m) => m.id !== id) }));
       },
       setMemberDisabled: (id, disabled) => {
-        if (modeRef.current !== "demo") return () => {};
+        if (modeRef.current !== "demo") return NO_UNDO;
         const d0 = dbRef.current;
         const m = d0.members.find((x) => x.id === id && (disabled ? !x.pending : !!x.disabled));
-        if (!m || m.id === d0.me) return () => {};
+        if (!m || m.id === d0.me) return NO_UNDO;
         // the person stays in `members` (old records keep the name); `pending` keeps them out of pickers
         return mutate("member.status", (d) => ({
           ...d,
@@ -2496,7 +2780,8 @@ export function StoreProvider({
         mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
       },
       signEstimate: (id, path) =>
-        !canCountersign(dbRef.current, dbRef.current.me) ? () => {} : mutate(
+        // #1126: a draft only by someone who may send it (the server signs only a sent, locked version)
+        !canCountersign(dbRef.current, dbRef.current.me) || !canSignDraftOnSite(role, dbRef.current.estimates.find((x) => x.id === id)?.status ?? "draft") ? NO_UNDO : mutate(
           "estimate.sign",
           (d) => ({
             ...d,
@@ -2505,11 +2790,19 @@ export function StoreProvider({
               e.id === id && e.status !== "approved" ? { ...e, status: "awaiting_countersign", signature: path, sentAt: e.sentAt ?? new Date().toISOString() } : e,
             ),
           }),
-          { k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client" },
+          {
+            k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client",
+            sent: dbRef.current.estimates.find((x) => x.id === id)?.status === "sent",
+            // #1147: the total the client saw on the phone — the server refuses another (the office changed it meanwhile).
+            // Not while this phone's own estimate.add of it is still queued: that op writes its lines' prices as
+            // round(total / qty), cents off the phone's total — a refusal that only looks like a change; the door without
+            // the total then, as before (#1153 removes that door once no such op is left)
+            ...(signTotalFor(dbRef.current.estimates.find((x) => x.id === id), outboxRef.current.some((x) => x.op.k === "estimate.add" && x.op.id === id))),
+          },
         ),
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e || !e.depositCents) return () => {};
+        if (!e || !e.depositCents) return NO_UNDO;
         const job0 = jobOfEstimate(dbRef.current, id);
         const depInv = job0 ? dbRef.current.invoices.find((i) => i.jobId === job0.id && i.kind === "deposit") : undefined;
         if (depInv) return recordPayment(depInv.id, depInv.totalCents - depInv.paidCents, method, undefined, fromClient);
@@ -2530,7 +2823,8 @@ export function StoreProvider({
             jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, number: modeRef.current === "demo" ? nextJobNumber(d) : undefined, customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
             invoices: [
               ...d.invoices,
-              { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: "Deposit" },
+              // В1-7б (rule 7): what goes to the client is named in the client's language, not the app's and not English
+              { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: tFor(docLanguageFor(d, { customerId: e.customerId }))("path.inv.deposit") },
             ],
             payments: [
               { id: paymentId, invoiceId, customerId: e.customerId, amountCents: e.depositCents!, method, at: now, receiptNumber: modeRef.current === "demo" ? nextReceipt(d) : undefined },
@@ -2543,10 +2837,10 @@ export function StoreProvider({
           },
         );
       },
-      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
+      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : NO_UNDO),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],
   );
 
   // nothing is written while a state is not loaded: the screen only reads again (A-01)

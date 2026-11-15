@@ -1,7 +1,7 @@
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
@@ -58,7 +58,7 @@ export default function ScheduleJob() {
 
   const save = () => {
     if (f.past) return;
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+    haptics.success();
     const visitId = uid();
     const undo = store.scheduleJob(job.id, { ...f.value, visitId });
     toast.show(store.online ? (f.value.allDay ? t("job5.allDaySaved", { date: day(f.value.start) }) : t("sch.saved", { date: day(f.value.start), time: time(f.value.start) })) : t("offline.queued"), undo);

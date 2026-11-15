@@ -3,7 +3,7 @@
  * person signed in has read their own.
  */
 import { describe, expect, it } from "vitest";
-import { cloudCacheKey, othersCaches } from "../src/data/cacheKey";
+import { cloudCacheKey, othersCaches, othersCopies } from "../src/data/cacheKey";
 
 describe("unit:cacheKey — the cloud cache by person (#864)", () => {
   it("the key names the company and the person", () => {
@@ -22,5 +22,12 @@ describe("unit:cacheKey — the cloud cache by person (#864)", () => {
       "octo.db.v5",
     ];
     expect(othersCaches(keys, "u1").sort()).toEqual(["octo.cloud.v1.c1", "octo.cloud.v1.c1.u2"]);
+  });
+});
+
+describe("unit:cacheKey — othersCopies (#1260 Б1)", () => {
+  it("the kept copies of other people's caches and of the person-less ones; not mine, not the outbox's", () => {
+    const keys = ["octo.broken.octo.cloud.v1.c1.u2.5", "octo.broken.octo.cloud.v1.c1.5", "octo.broken.octo.cloud.v1.c1.u1.5", "octo.broken.octo.outbox.v1.5", "octo.broken.octo.db.v5.5", "octo.cloud.v1.c1.u2"];
+    expect(othersCopies(keys, "u1").sort()).toEqual(["octo.broken.octo.cloud.v1.c1.5", "octo.broken.octo.cloud.v1.c1.u2.5"]);
   });
 });

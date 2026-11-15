@@ -8,24 +8,29 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { supplierToRow } from "@/features/suppliers";
+import { normalizeBarcode, normalizeProductUrl } from "@/features/catalogCard";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
 import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
-import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
-import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
+import { ENGINE_VERSION, bpsFromPpm, jobLineQty, taxRatePpm } from "@octo/estimating-engine";
+import type { PhotoFail, PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
+import { photoFailOf, storageNotNow, tooBig } from "@/data/photoUpload";
 import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
 import { MODULE_INACTIVE, unknownOp } from "@/data/outboxRetry";
 import { withSendablePages } from "@/features/docPages";
+import { versionRows } from "./estimateRows";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
   | { k: "visit.step"; visitId: string; to: VisitStep; at?: string }
   | { k: "photo.add"; id: string; visitId: string; jobId?: string; stage: "before" | "after"; uri?: string }
   | { k: "photo.remove"; id: string }
+  /** #1431 «Повторить»: the file of a photo the cloud refused, sent again (its files row is already there) */
+  | { k: "photo.retry"; id: string; visitId: string; uri: string }
   /** the whole list at once — what the app sent before step 14; kept for ops still in old queues (the server's
    *  legacy trigger moves only ticks and new optional items of it into the rows, migration 20261108140000) */
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
@@ -155,9 +160,13 @@ export type Op =
       channel: "on_site" | "portal";
       jobId: string;
       invoiceId?: string;
+      /** on site: the total the client saw — the server refuses another (#1147; an older app's op has none) */
+      totalCents?: number;
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
+  /** В1-5 (#1107): void a sent invoice without payments, with the reason (owner / admin; the server checks the same) */
+  | { k: "invoice.void"; id: string; jobId: string; reason: string; totalCents: number }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
   | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean }
   | { k: "license.save"; license: CompanyLicense }
@@ -233,7 +242,7 @@ export type Op =
   | { k: "job.complete"; id: string }
   | { k: "job.create"; id: string; customerId: string; propertyId: string; title: string; description: string | null; jobTypeId: string | null; serviceCategoryId: string | null }
   // wave П-1 (13 §5): description and type of a job; the company's list of job types
-  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number }
+  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number; taxRatePpm?: number }
   // wave П-2a: tags and own lines of a job (the server counts line and job totals)
   | { k: "job.tags"; id: string; tagIds: string[] }
   | { k: "jobLine.save"; line: Omit<JobLineItem, "totalCents">; isNew: boolean }
@@ -256,7 +265,9 @@ export type Op =
   | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
-  | { k: "estimate.sign"; id: string; svg: string; signer?: string }
+  /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
+   *  totalCents: the total the client saw — the server refuses another (#1147; an older app's op has none) */
+  | { k: "estimate.sign"; id: string; svg: string; signer?: string; sent?: boolean; totalCents?: number }
   /* ---- wave E2a: the company signs; the client link can be revoked (docs/specs/07 §2.2 А, Б) ---- */
   | { k: "estimate.countersign"; id: string; svg?: string; memberSignatureId?: string; jobId?: string; invoiceId?: string }
   | { k: "estimate.revoke"; id: string }
@@ -331,6 +342,17 @@ async function moduleActiveOnServer(companyId: string, module: string): Promise<
 /** the sign-in expired (401 / PGRST301): renew it quietly before the outbox tries again (review #244) */
 export async function renewSession(): Promise<void> {
   await supabase.auth?.refreshSession?.().catch(() => {});
+}
+
+/**
+ * #1147: the client's signature on the device goes with the total the client saw (the server refuses another: 22023,
+ * hint estimate_total_mismatch — the client signs again). A server without that door yet (PostgREST «no such function»,
+ * PGRST202) and an older op without the total: the door without it, as before.
+ */
+async function rpcWithTotal(fn: string, args: Record<string, unknown>, totalCents: number | undefined) {
+  if (totalCents === undefined) return supabase.rpc(fn, args);
+  const r = await supabase.rpc(fn, { ...args, p_total_cents: totalCents });
+  return r.error?.code === "PGRST202" ? supabase.rpc(fn, args) : r;
 }
 
 async function run(p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) {
@@ -458,25 +480,35 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
   return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }
 
-/** a photo's bytes to Storage and its files row marked; shared with modules (a measurement's photo, spec 33 П21.10) */
-export async function uploadPhoto(companyId: string, fileId: string, uri: string) {
+/**
+ * a photo's bytes to Storage and its files row marked; shared with modules (a measurement's photo, spec 33 П21.10).
+ * The storage's «no» marks the photo failed and says why (#1431): null — taken. No network or the server's «not now»
+ * throws: the op stays in the queue and the upload is tried again (upsert: true).
+ */
+export async function uploadPhoto(companyId: string, fileId: string, uri: string): Promise<PhotoFail | null> {
+  const failed = async (why: PhotoFail) => {
+    await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+    return why;
+  };
   let blob: Blob;
   try {
     blob = await (await fetch(uri)).blob();
   } catch {
     // the photo is gone from the phone: nothing to send again
-    return run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+    return failed("gone");
   }
+  // over the bucket's limit: the storage would refuse it — not 25 MB sent for nothing (#1430)
+  if (tooBig(blob.size)) return failed("tooBig");
   try {
     const key = `${companyId}/${fileId}.jpg`;
     const { error } = await supabase.storage.from("files").upload(key, blob, { contentType: blob.type || "image/jpeg", upsert: true });
     if (error) throw error;
     await run(supabase.from("files").update({ storage_key: key, upload_status: "uploaded", mime: blob.type || "image/jpeg", size: blob.size }).eq("id", fileId));
+    return null;
   } catch (e) {
-    // no network or the server's «not now»: the op stays in the queue and the upload is tried again (upsert: true);
     // only a refusal marks the photo failed
-    if (classify(e) !== "refusal") throw e;
-    await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+    if (classify(e) !== "refusal" || storageNotNow(e)) throw e;
+    return failed(photoFailOf(e));
   }
 }
 
@@ -521,7 +553,10 @@ export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<
   return cols;
 }
 
-export async function applyOp(op: Op, companyId: string, userId: string): Promise<void> {
+/** what a sent op tells the phone back: a photo's file refused by the cloud, or taken (#1431) */
+export type OpResult = { photo: { id: string; failed: PhotoFail | null } };
+
+export async function applyOp(op: Op, companyId: string, userId: string): Promise<OpResult | void> {
   const c = companyId;
   switch (op.k) {
     case "visit.step": {
@@ -537,9 +572,11 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await run(
         ins("files", { id: op.id, company_id: c, kind: "photo", visit_id: op.visitId, job_id: realJob(op.jobId), stage: op.stage, taken_at: new Date().toISOString() }),
       );
-      if (op.uri) await uploadPhoto(c, op.id, op.uri);
+      if (op.uri) return { photo: { id: op.id, failed: await uploadPhoto(c, op.id, op.uri) } };
       return;
     }
+    case "photo.retry":
+      return { photo: { id: op.id, failed: await uploadPhoto(c, op.id, op.uri) } };
     case "photo.remove":
       return run(supabase.from("files").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "visit.checklist":
@@ -830,10 +867,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         } catch (e) {
           if (!(e instanceof PermanentError && e.code === "42501")) throw e;
         }
-        const { error, status } = await supabase.rpc("accept_on_site", {
+        const { error, status } = await rpcWithTotal("accept_on_site", {
           p_estimate_id: op.id, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
           p_job_id: op.jobId, p_invoice_id: op.invoiceId ?? null,
-        });
+        }, op.totalCents);
         // a server without the door yet (PostgREST «no such function»): the old way — by the token, as before
         if (error?.code !== "PGRST202") return run(Promise.resolve({ error, status }));
       }
@@ -891,6 +928,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
         }),
       );
+    case "invoice.void":
+      // only a sent one: a retry after the server already voided it changes nothing (a void invoice is immutable)
+      return run(supabase.from("invoices").update({ status: "void", void_reason: op.reason }).eq("id", op.id).eq("status", "sent"));
     case "lead.prospect": {
       await createCustomer(c, op, "prospect");
       return run(supabase.from("leads").update({ customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
@@ -943,9 +983,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const cols: Record<string, string | null> = {};
       if (op.description !== undefined) cols.description = op.description?.trim() || null;
       if (op.jobTypeId !== undefined) cols.job_type_id = op.jobTypeId;
-      const money: Record<string, boolean | number> = {};
+      const money: Record<string, boolean | number | null> = {};
       if (op.taxEnabled !== undefined) money.tax_enabled = op.taxEnabled;
       if (op.taxRateBps !== undefined) money.tax_rate_bps = op.taxRateBps;
+      // #1219: the rate in ppm when set (the server writes its basis points); a rate in basis points only (an older
+      // queued change, «Отменить» back to a job without ppm) says ppm is gone — the server keeps a ppm it is not told
+      // about while the basis points stay the same (888 for 8.875 % and 8.88 %)
+      if (op.taxRatePpm !== undefined) money.tax_rate_ppm = op.taxRatePpm;
+      else if (op.taxRateBps !== undefined) money.tax_rate_ppm = null;
       if (Object.keys(money).length) return run(supabase.from("jobs").update({ ...cols, ...money }).eq("id", op.id));
       return Object.keys(cols).length ? run(supabase.from("jobs").update(cols).eq("id", op.id)) : undefined;
     }
@@ -1020,7 +1065,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "catalog.save": {
       const it = op.item;
       const costCols = catalogCostCols(op);
-      await run(
+      const card = catalogCardCols(it);
+      const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(
           {
             id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
@@ -1033,11 +1079,24 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             // spec 36: the same — only once set ("" = cleared)
             ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
             ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
+            // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server
+            // keeps them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
+            ...cardCols,
           },
           // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
-        ),
-      );
+        );
+      let r = await upsertItem(card);
+      // РС-10 (code-reviewer): the card's fields never cost the item's save — a direction the server does not have (made
+      // offline and refused, 23503 on catalog_items_service_category_fk) goes without it; a server before the migration
+      // (PGRST204, no such column) gets the item without the card's fields
+      if (r.error?.code === "23503" && "service_category_id" in card && /service_category/.test(r.error.message ?? "")) {
+        const { service_category_id: _sc, ...rest } = card;
+        r = await upsertItem(rest);
+      } else if (r.error?.code === "PGRST204" && Object.keys(card).length) {
+        r = await upsertItem({});
+      }
+      await run(Promise.resolve(r));
       if (!op.onlyNew) {
         // 19 §9: the server moves a cost sent above into catalog_item_costs, but a null there means «not sent» (old
         // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —
@@ -1079,9 +1138,16 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "estimate.sign": {
       // a quick estimate signed on site: the server records the client's signature and the total (sign_estimate_on_site);
       // the app no longer writes the signature or the status directly (security-check 05.11)
-      await applyOp({ k: "estimate.send", id: op.id }, c, userId);
-      const { error, status } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
-      return run(Promise.resolve({ error, status }));
+      // #1126: a tech may not send — the office did (the client signed an estimate already sent): that refusal is not the
+      // end, as estimate.approve on site; other refusals (changed lines) still stop it. An older app's op (no `sent`) may be
+      // a tech's draft the office has changed and sent since — it stays refused, never signed onto another version.
+      try {
+        await applyOp({ k: "estimate.send", id: op.id }, c, userId);
+      } catch (e) {
+        if (!(op.sent && e instanceof PermanentError && e.code === "42501")) throw e;
+      }
+      const args = { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg };
+      return run(rpcWithTotal("sign_estimate_on_site", args, op.totalCents));
     }
     case "estimate.countersign": {
       const { error, status } = await supabase.rpc("countersign_estimate", {
@@ -1140,6 +1206,23 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
 
 /** the cost fields of a price-list item (CatalogItem) and their columns */
 export type CatalogCostChange = Partial<Record<"costCents" | "vendorTaxBps" | "markupBps", number | null>>;
+/** РС-10: catalog_items.sku / barcode / product_url / service_category_id of a save — only what is set; a link or
+ *  barcode the server would refuse (23514 would drop the whole save from the queue) is left out */
+export function catalogCardCols(it: Pick<CatalogItem, "sku" | "barcode" | "productUrl" | "serviceCategoryId">): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  if (it.sku !== undefined) out.sku = it.sku.trim() || null;
+  if (it.barcode !== undefined) {
+    const b = normalizeBarcode(it.barcode);
+    if (b.ok) out.barcode = b.barcode || null;
+  }
+  if (it.productUrl !== undefined) {
+    const u = normalizeProductUrl(it.productUrl);
+    if (u.ok) out.product_url = u.url || null;
+  }
+  if (it.serviceCategoryId !== undefined) out.service_category_id = it.serviceCategoryId || null;
+  return out;
+}
+
 const COST_COL = { costCents: "unit_cost_cents", vendorTaxBps: "vendor_tax_bps", markupBps: "markup_bps" } as const;
 /** what changed between the item on the phone before and now (a new item: what it has); empty — nothing */
 export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem): CatalogCostChange {
@@ -1161,14 +1244,6 @@ function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string,
  * options and line items mirrored from the doc (same ids), costs in the restricted side table.
  * The doc without costs is kept in estimate_versions.calc_inputs for the app and the client page.
  */
-/** A line's quantity as estimate_line_items keeps it; a text that is not a number goes as before (the server says no). */
-const storedQty = (q: DecLike): string | number => {
-  try {
-    return jobLineQty(q);
-  } catch {
-    return Number(q as string);
-  }
-};
 async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
   await run(
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: op.templateId ? "template" : "manual", number: "" }),
@@ -1197,7 +1272,58 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     versionId = op.versionId;
   }
   const s = op.doc.settings;
-  const taxOn = s.tax.enabled && Object.values(s.tax.groups).some(Boolean);
+  // what the server counts the totals from (#1147: the same rows as the phone's summarize — test/signTotals.test.ts, T195)
+  const rows = versionRows(op.doc);
+  const taxOn = rows.taxEnabled;
+  // #1220: the version, the estimate's current version, the options, lines and costs — one transaction on the server
+  // (public.save_estimate_version): a refusal leaves the version, its lines and the current version as they were. Only a
+  // server without the function yet (PGRST202) gets the separate requests below; any other refusal is the op's, as before.
+  const versionCols = (doc: unknown) => ({
+    calc_inputs: doc, engine_version: ENGINE_VERSION,
+    source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
+    totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
+    // #1219: the rate in ppm and its basis points (a ppm left behind by an editor that writes only the basis points
+    // does not count — taxRatePpm)
+    tax_enabled: taxOn, tax_rate_ppm: taxRatePpm(s.tax), tax_rate_bps: bpsFromPpm(taxRatePpm(s.tax)), tax_mode: "added_on_top", deposit_rule: s.deposit,
+    contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
+  });
+  const optionRows = rows.options.map((o) => ({
+    id: o.id, name: o.name, position: o.position, is_recommended: o.isRecommended, discount_mode: o.discountMode, discount_value: o.discountValue,
+  }));
+  const lineRows = rows.lines.map((l) => ({
+    id: l.id, option_id: l.optionId, position: l.position, line_group: l.group, catalog_item_id: null,
+    origin: l.catalogItemId ? "catalog" : "manual", name: l.name, description: l.description,
+    quantity: l.quantity, unit: l.unit, unit_price_cents: l.unitPriceCents, taxable: l.taxable, is_optional: l.isOptional,
+    client_visible: l.clientVisible !== false,
+    ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
+  }));
+  const costRows = lineRows.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, unit_cost_cents: op.costs[l.id] }));
+  // the server keeps at most 500 characters of the title (a longer one would be refused for good): cut here, by
+  // character — an emoji stays whole
+  const title500 = Array.from(op.title ?? "").slice(0, 500).join("");
+  const saveTx = (doc: unknown) =>
+    supabase.rpc("save_estimate_version", {
+      p_estimate_id: op.id, p_version_id: versionId, p_title: title500, p_version: versionCols(doc),
+      p_options: op.doc.options.length ? optionRows : [], p_lines: op.doc.options.length ? lineRows : [], p_costs: op.doc.options.length ? costRows : [],
+    });
+  // pages the server would refuse are left out, the estimate itself goes (spec 33 П24.7; trigger t07_doc_pages)
+  const sendable = withSendablePages(op.doc);
+  const first = await saveTx(sendable);
+  if (first.error?.code !== "PGRST202") {
+    try {
+      await run(Promise.resolve(first));
+    } catch (e) {
+      if (!(e instanceof PermanentError) || !/doc_pages:/.test(e.message) || sendable.pages === undefined) throw e;
+      const { pages: _refused, ...bare } = op.doc;
+      await run(saveTx(bare));
+    }
+    return;
+  }
+  await saveLegacy(op, c, versionId!, rows, taxOn, s);
+}
+
+/** the separate requests of a save (a server before #1220's public.save_estimate_version) — as they were */
+async function saveLegacy(op: Extract<Op, { k: "estimate.save" }>, c: string, versionId: string, rows: ReturnType<typeof versionRows>, taxOn: boolean, s: Extract<Op, { k: "estimate.save" }>["doc"]["settings"]) {
   const saveVersion = (doc: unknown) =>
     run(
       supabase
@@ -1207,7 +1333,9 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
           // E3: the server counts a use on version 1 (estimate_template_uses); every save keeps the same source
           source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
           totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
-          tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
+          // #1219: the rate in ppm and its basis points (a ppm left behind by an editor that writes only the basis points
+          // does not count — taxRatePpm)
+          tax_enabled: taxOn, tax_rate_ppm: taxRatePpm(s.tax), tax_rate_bps: bpsFromPpm(taxRatePpm(s.tax)), tax_mode: "added_on_top", deposit_rule: s.deposit,
           contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
         })
         .eq("id", versionId),
@@ -1234,26 +1362,22 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   if (!op.doc.options.length) return;
   await run(
     supabase.from("estimate_options").insert(
-      op.doc.options.map((o, i) => ({
-        id: o.id, company_id: c, version_id: versionId, name: o.name, position: i, is_recommended: !!o.recommended,
-        discount_mode: s.discount ? s.discount.kind : null,
-        discount_value: s.discount ? (s.discount.kind === "pct" ? discountBps(s.discount.value) : s.discount.cents) : null,
+      rows.options.map((o) => ({
+        id: o.id, company_id: c, version_id: versionId, name: o.name, position: o.position, is_recommended: o.isRecommended,
+        discount_mode: o.discountMode, discount_value: o.discountValue,
       })),
     ),
   );
-  const lines = op.doc.options.flatMap((o) =>
-    o.lines
-      .filter((l) => l.name.trim() !== "" || l.unitPriceCents !== 0)
-      .map((l, i) => ({
-        id: l.id, company_id: c, option_id: o.id, position: i, line_group: l.group, catalog_item_id: null,
-        origin: l.catalogItemId ? "catalog" : "manual", name: l.name.trim() || "—", description: l.description ?? null,
-        // the stored quantity (numeric(14,4)) — the same the engine counts (Н1): the lock check finds no difference
-        quantity: storedQty(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
-        taxable: taxOn && !!s.tax.groups[l.group], is_optional: !!l.optional,
-        // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
-        ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
-      })),
-  );
+  const lines = rows.lines.map((l) => ({
+    id: l.id, company_id: c, option_id: l.optionId, position: l.position, line_group: l.group, catalog_item_id: null,
+    origin: l.catalogItemId ? "catalog" : "manual", name: l.name, description: l.description,
+    quantity: l.quantity, unit: l.unit, unit_price_cents: l.unitPriceCents, taxable: l.taxable, is_optional: l.isOptional,
+    // a line hidden from the client ($0 only — the check of estimate_line_items): the page and the PDF leave it out. On
+    // every row: a batch insert sends the columns of all rows, a row without the key would send NULL (not null column)
+    client_visible: l.clientVisible !== false,
+    // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
+    ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
+  }));
   if (lines.length) {
     const r = await supabase.from("estimate_line_items").insert(lines);
     // a server before migration 20261108200000 has no copied_from_line_id: the lines go without it (the cost is not

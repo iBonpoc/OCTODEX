@@ -7,8 +7,9 @@
  * - «Обновить из замера» → the review's «Перенести изменения в смету» → the same estimate, the quantity grew, the word is gone.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const { pressEscUntilClosed } = require("../sheet.cjs");
-const { skipLength, openView } = require("../gutters.cjs");
+const { skipLength, openView, savedOnce } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -50,7 +51,7 @@ exports.run = async (h) => {
   await tid("module-gutters-measure").getByRole("button").click();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await drawRun(0.4);
-  await tid("draw-saved").waitFor({ timeout: 5000 });
+  await savedOnce(p); // saved into the phone (no cloud mark any more, #1274)
   await waitFor(() => !!new URL(p.url()).searchParams.get("m"), "saved: the address names the measurement");
   const mid = new URL(p.url()).searchParams.get("m");
   // «Готово» → «Просмотр замера» → «Сделать смету» (#698 #699)
@@ -70,7 +71,7 @@ exports.run = async (h) => {
 
   // nothing changed: no word on the estimate
   await h.go(`/estimate/${eid}`);
-  await tid("est-pdf").waitFor({ timeout: 8000 });
+  await estMore(p);
   h.expect((await tid("module-gutters-stale").count()) === 0, "no «Замер изменился» while the drawing is as estimated");
 
   // the drawing changes after the estimate
@@ -103,7 +104,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("send-copy").getByRole("button").getAttribute("aria-disabled")) !== "true", "«Всё равно отправить» opens the send");
   await pressEscUntilClosed(p);
   await h.go(`/estimate/${eid}`);
-  await tid("est-pdf").getByRole("button").click();
+  await estAct(p, "pdf");
   await tid("pdf-check-module").waitFor({ timeout: 8000 });
   await p.evaluate(() => {
     window.__pdf = null;
@@ -126,6 +127,6 @@ exports.run = async (h) => {
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "ready"), "ready again");
   h.expect((await estimatesOf(mid)).length === 1, "one estimate of the measurement");
   await h.go(`/estimate/${eid}`);
-  await tid("est-pdf").waitFor({ timeout: 8000 });
+  await estMore(p);
   h.expect((await tid("module-gutters-stale").count()) === 0, "the word is gone after the update");
 };

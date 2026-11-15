@@ -1,4 +1,5 @@
 import { useState, type ReactElement, type ReactNode } from "react";
+import { useOpening } from "@/ui/heldSheet";
 import { visitPropertyId } from "@/data/selectors";
 import { Image, Linking, View } from "react-native";
 import { router } from "expo-router";
@@ -9,6 +10,7 @@ import { usePersistentState } from "@/data/persist";
 import {
   isClosedLead, leadDuplicatesFor, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, type LeadTurn, type ManualWinReason,
+  timelineText,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
 import { canSeeClientMoney, canServe, notServed } from "@/features/clients";
@@ -22,6 +24,7 @@ import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } fro
 import { Icon, Press, T } from "@/ui/primitives";
 import { liveUri } from "@/features/photoUri";
 import { Sheet, useToast } from "@/ui/overlays";
+import { canMakeEstimateAt, canSeeEstimate, leadEstimatePropertyId } from "@/features/access";
 import { Card, Empty, Grid, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -52,6 +55,11 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
   const toast = useToast();
   const [tab, setTab] = usePersistentState<Tab>("octo.leadTab.v2", "overview");
   const [sheet, setSheet] = useState<SheetName>(null);
+  // a form starts fresh at each opening — by a counter that grows at the opening, not a key that flips at the close (#1163)
+  const open_call = useOpening(sheet === "call");
+  const open_book = useOpening(sheet === "book");
+  const open_snooze = useOpening(sheet === "snooze");
+  const open_close = useOpening(sheet === "close");
   const [winReason, setWinReason] = useState<ManualWinReason>("paper");
   const [winText, setWinText] = useState("");
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
@@ -66,11 +74,15 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
   const closedIds = new Set(closed.map((c) => c.id));
   const dupCustomers = dups.customers.filter((c) => c.id !== l.customerId && !closedIds.has(c.id));
   const servable = canServe(db, l.customerId);
-  const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
+  // a tech: only the estimates the server shows him (canSeeEstimate, #1138); a new one only where he works (estimates_insert)
+  const who = { role, mode: store.mode, me: db.me };
+  const estimates = db.estimates.filter((e) => (e.leadId === l.id || (l.customerId && e.customerId === l.customerId)) && canSeeEstimate(db, who, e.id));
+  const mayMakeEstimate = canMakeEstimateAt(db, who, leadEstimatePropertyId(db, l));
   const assignee = db.members.find((m) => m.id === l.assigneeId);
   const events = leadTimeline(db, l, db.me, t("acct.deletedName"));
 
   const makeEstimate = () => {
+    if (!mayMakeEstimate) return void toast.show(t("est.tech.notHere"));
     const target = store.leadEstimateTarget(l.id);
     if (target) router.push(`/estimate/new?customerId=${target.customerId}&propertyId=${target.propertyId}&leadId=${l.id}`);
   };
@@ -196,7 +208,7 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
                   key={e.id}
                   density="compact"
                   lead={{ kind: "icon", icon: "clock" }}
-                  title={t(e.key, Object.fromEntries(Object.entries(e.params ?? {}).map(([k, v]) => [k, v.startsWith("lead.") ? t(v as DictKey) : v])))}
+                  title={timelineText(e, t)}
                   when={day(e.at)}
                 />
               ))}
@@ -218,14 +230,14 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
           <LeadVisits leadId={l.id} />
         </>
       ) : null}
-      {tab === "estimates" ? <LeadEstimates leadId={l.id} onNew={makeEstimate} part="estimates" /> : null}
-      {tab === "files" ? <LeadEstimates leadId={l.id} onNew={makeEstimate} part="files" /> : null}
+      {tab === "estimates" ? <LeadEstimates leadId={l.id} onNew={mayMakeEstimate ? makeEstimate : undefined} part="estimates" /> : null}
+      {tab === "files" ? <LeadEstimates leadId={l.id} onNew={mayMakeEstimate ? makeEstimate : undefined} part="files" /> : null}
 
       <ReplySheet leadId={sheet === "reply" ? l.id : null} onClose={() => setSheet(null)} />
-      <CallResultSheet key={`call-${sheet === "call"}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => (isOpenLead(l) ? setSheet("next") : undefined)} />
+      <CallResultSheet key={`call-${open_call}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => (isOpenLead(l) ? setSheet("next") : undefined)} />
       <NextStepSheet office={role !== "tech"} l={l} visible={sheet === "next"} onClose={() => setSheet(null)} onBook={() => setSheet("book")} onEstimate={makeEstimate} onCloseLead={() => setSheet("close")} />
-      <BookSheet key={`book-${sheet === "book"}`} l={l} visible={sheet === "book"} onClose={() => setSheet(null)} />
-      <SnoozeSheet key={`snooze-${sheet === "snooze"}`} l={l} visible={sheet === "snooze"} onClose={() => setSheet(null)} />
+      <BookSheet key={`book-${open_book}`} l={l} visible={sheet === "book"} onClose={() => setSheet(null)} />
+      <SnoozeSheet key={`snooze-${open_snooze}`} l={l} visible={sheet === "snooze"} onClose={() => setSheet(null)} />
       <StatusSheet
         l={l}
         visible={sheet === "status"}
@@ -235,7 +247,7 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
         onSnooze={() => setSheet("snooze")}
       />
       <LostOrWaitSheet l={l} visible={sheet === "low"} onClose={() => setSheet(null)} />
-      <CloseSheet key={`close-${sheet === "close"}`} l={l} visible={sheet === "close"} onClose={() => setSheet(null)} />
+      <CloseSheet key={`close-${open_close}`} l={l} visible={sheet === "close"} onClose={() => setSheet(null)} />
       <Sheet visible={sheet === "won"} onClose={() => setSheet(null)} title={t("lead.makeClient")}>
         <T v="caption" tone="mut">{t("lead.makeClientHint")}</T>
         <ChoiceChips value={winReason} onChange={setWinReason} items={MANUAL_WIN_REASONS.map((r) => ({ key: r, label: t(`lead.win.${r}` as DictKey) }))} />
@@ -317,18 +329,18 @@ function LeadVisits({ leadId }: { leadId: string }) {
 }
 
 /** Estimates of the lead + photos taken on its visits. */
-function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => void; part: "estimates" | "files" }) {
-  const { db, role } = useStore();
+function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew?: () => void; part: "estimates" | "files" }) {
+  const { db, role, mode } = useStore();
   const { t, money, day } = useI18n();
   const { c } = useTheme();
   const l = db.leads.find((x) => x.id === leadId)!;
-  const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
+  const estimates = db.estimates.filter((e) => (e.leadId === l.id || (l.customerId && e.customerId === l.customerId)) && canSeeEstimate(db, { role, mode, me: db.me }, e.id));
   const photos = db.visits.filter((v) => v.leadId === l.id || (!!l.propertyId && visitPropertyId(db, v) === l.propertyId)).flatMap((v) => v.photos);
   return (
-    <View style={{ gap: space[3] }}>
+    <View testID={`lead-${part}`} style={{ gap: space[3] }}>
       {part === "estimates" ? (
       <>
-      <SectionTitle title={t("client.estimates")} right={isOpenLead(l) ? <Button label={t("lead.makeEstimateShort")} icon="plus" size="sm" variant="ghost" onPress={onNew} /> : undefined} />
+      <SectionTitle title={t("client.estimates")} right={isOpenLead(l) && onNew ? <View testID="lead-new-estimate"><Button label={t("lead.makeEstimateShort")} icon="plus" size="sm" variant="ghost" onPress={onNew} /></View> : undefined} />
       {estimates.length ? (
         <CardGrid>
           {estimates.map((e) => (

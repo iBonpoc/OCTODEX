@@ -3,6 +3,7 @@
  * their costs; archive with «Отменить» (rule 5). Owner, admin, office only (nav/roles.ts). «new» (or any id
  * not on the phone) — a new supplier.
  */
+import { useRequiredForm } from "@/ui/requiredForm";
 import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -12,7 +13,7 @@ import { useStore } from "@/data/store";
 import type { PaymentTerms, Supplier } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { emailBad, historyOf, itemsOfSupplier, itemsWithOtherTax, PAYMENT_TERMS } from "@/features/suppliers";
+import { applyTaxUndo, emailBad, historyOf, itemsOfSupplier, itemsWithOtherTax, PAYMENT_TERMS } from "@/features/suppliers";
 import { mailtoHref, telHref } from "@/features/contactLinks";
 import { Labeled } from "@/features/fields";
 import { parsePctToBps } from "@octo/estimating-engine";
@@ -20,8 +21,10 @@ import { CostHistory } from "@/features/SupplierParts";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
+import { CardList, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
+import { NotFound } from "@/ui/emptyStates";
+import { type GuardedUndo } from "@/data/undo";
 
 type TermsKey = PaymentTerms | "none";
 
@@ -33,11 +36,19 @@ export default function SupplierScreen() {
   const found = (store.db.suppliers ?? []).find((x) => x.id === id);
   const [s, setS] = useState<Supplier>(() => found ?? { id: uid(), name: "", active: true });
   const [ask, setAsk] = useState<{ n: number; pct: string } | null>(null);
-  const undoRef = useRef<(() => void) | null>(null);
+  const undoRef = useRef<GuardedUndo | null>(null);
   const [taxText, setTaxText] = useState(() => (found?.taxBps === undefined ? "" : String(found.taxBps / 100)));
   const set = (p: Partial<Supplier>) => setS((x) => ({ ...x, ...p }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/suppliers"));
-  const ok = s.name.trim() !== "" && !emailBad(s.email);
+  const form = useRequiredForm();
+  const submit = () =>
+    form.submit(
+      [
+        ...(s.name.trim() !== "" ? [] : [{ id: "name", text: t("form.req.supName") }]),
+        ...(emailBad(s.email) ? [{ id: "email", text: t("sup.emailBad") }] : []),
+      ],
+      save,
+    );
   const costs = store.db.costsVisible !== false;
   const items = found ? itemsOfSupplier(store.db, found.id) : [];
   // spec 36: the newest history rows of this supplier from the server, when opened (director's check of #459 Н4)
@@ -64,11 +75,9 @@ export default function SupplierScreen() {
     const n = ask?.n ?? 0;
     const undoApply = store.applySupplierTax(s.id);
     const undoSave = undoRef.current;
-    // one «Отменить» for both: the items' tax and the supplier's own (review SUP1 №6 — the second toast replaces the first)
-    toast.show(t("sup.applied", { n }), () => {
-      undoApply();
-      undoSave?.();
-    });
+    // one «Отменить» for both: the items' tax and the supplier's own (review SUP1 №6 — the second toast replaces the first);
+    // the supplier's save already sent — only «Применить» (applyTaxUndo)
+    toast.show(t("sup.applied", { n }), applyTaxUndo(store.undoTogether, undoSave, undoApply));
     setAsk(null);
     back();
   };
@@ -81,7 +90,7 @@ export default function SupplierScreen() {
   if (!found && id !== "new") {
     return (
       <Screen title={t("sup.edit")} back={back}>
-        <Empty icon="truck" title={t("sup.notFound")} />
+        <NotFound testID="sup-not-found" title={t("sup.notFound")} listLabel={t("empty.toSuppliers")} onList={() => router.replace("/suppliers")} />
       </Screen>
     );
   }
@@ -91,16 +100,15 @@ export default function SupplierScreen() {
 
   return (
     <Screen title={found ? t("sup.edit") : t("sup.new")} back={back}>
-      <Card>
+      <FieldGroup>
         <View testID="sup-name">
-          <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} />
+          <TextField type="company" value={s.name} onChangeText={(v) => set({ name: v })} placeholder={t("sup.name")} label={t("sup.nameLabel")} field={form.field("name")} />
         </View>
         <TextField type="name" value={s.contactName ?? ""} onChangeText={(v) => set({ contactName: v })} placeholder={t("sup.contact")} />
         <View testID="sup-phone">
           <TextField type="phone" value={s.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder={t("sup.phone")} />
         </View>
-        <TextField type="email" value={s.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder={t("sup.email")} />
-        {emailBad(s.email) ? <T v="caption" tone="bad">{t("sup.emailBad")}</T> : null}
+        <TextField type="email" value={s.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder={t("sup.email")} field={form.field("email", (v) => (emailBad(v) ? t("sup.emailBad") : undefined))} />
         <View testID="sup-account">
           <TextField type="identifier" value={s.accountNumber ?? ""} onChangeText={(v) => set({ accountNumber: v })} placeholder={t("sup.account")} />
         </View>
@@ -111,11 +119,12 @@ export default function SupplierScreen() {
             {mail ? <Button label={t("sup.write")} icon="mail" variant="secondary" size="sm" onPress={() => void Linking.openURL(mail).catch(() => undefined)} /> : null}
           </RowView>
         ) : null}
-      </Card>
+      </FieldGroup>
 
-      <Card>
-        <T v="caption" tone="mut">{t("sup.terms")}</T>
+      <FieldGroup>
         <ChoiceChips<TermsKey>
+          label={t("sup.terms")}
+          testID="supplier-terms"
           value={terms}
           onChange={(k) => set({ terms: k === "none" ? undefined : k })}
           items={[{ key: "none", label: t("sup.terms.none") }, ...PAYMENT_TERMS.map((k) => ({ key: k as TermsKey, label: t(`sup.terms.${k}` as DictKey) }))]}
@@ -149,11 +158,10 @@ export default function SupplierScreen() {
         )}
         <T v="caption" tone="mut">{t("sup.taxHint")}</T>
         <TextField type="note" value={s.notes ?? ""} onChangeText={(v) => set({ notes: v })} placeholder={t("sup.notes")} multiline />
-      </Card>
+      </FieldGroup>
 
-      {!ok ? <T v="caption" tone="mut">{t("sup.need")}</T> : null}
       <View testID="sup-save">
-        <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
+        <Button label={t("ue.save")} icon="check" full testID="supplier-save" onPress={submit} />
       </View>
 
       {found ? (

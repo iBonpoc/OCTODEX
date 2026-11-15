@@ -10,6 +10,7 @@ import { pickTrades, tradeMatches } from "@/features/firstSteps";
 import { Button, MultiChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Screen, SectionTitle } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 type Trade = (typeof TRADES)[number];
 
@@ -53,9 +54,7 @@ export default function TradeStep() {
           <SectionTitle title={t("trade.other")} />
           <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} />
           {ownTaken ? (
-            <T v="caption" tone="warn">
-              {`⚠ ${t("dir.taken")}`}
-            </T>
+            <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
           ) : null}
           <T v="caption" tone="mut">
             {t("co.tradesNote")}

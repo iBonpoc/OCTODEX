@@ -3,12 +3,12 @@
  * - a pinch whose first finger has moved before the second lands (always so on a phone): the drawing gets smaller —
  *   and again (two pinches), and nothing is drawn;
  * - the corner sheet: «наружный» / «внутренний» switch the kind and the sheet stays open;
- * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the letters A, B, C;
+ * - the cut's small drawing is as wide as the sheet, with «стена …» / «лицевая …» chips and the arc with its degrees (no letters: #1276);
  *   the triangle says A, B, C in plain words;
  * - drawn on from a gutter's free end straight on → one gutter, its length the sum (no second line).
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { doubleTap, skipLength, canvasAt, fitAll } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -39,7 +39,7 @@ exports.run = async (h) => {
   const runs = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt), KEY);
   const lines = () => svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => Math.hypot(l.x2.baseVal.value - l.x1.baseVal.value, l.y2.baseVal.value - l.y1.baseVal.value)));
   /** two fingers pinching in about a point (CDP touch: the web has no other two-finger input) */
-  const pinchIn = async (cx, cy) => {
+  const pinchIn = async (cx, cy, to = 40, step = 5) => {
     const cdp = await p.context().newCDPSession(p);
     const pts = (d) => [{ x: cx - d, y: cy, id: 1 }, { x: cx + d, y: cy, id: 2 }];
     // fingers never land together: the first one has already moved a little when the second lands (on the phone the
@@ -47,7 +47,7 @@ exports.run = async (h) => {
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: cx - 150, y: cy, id: 1 }] });
     for (let d = 145; d >= 120; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: cx - d, y: cy, id: 1 }] });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(120) });
-    for (let d = 115; d >= 40; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
+    for (let d = 115; d >= to; d -= step) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
     await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await cdp.detach();
     await p.waitForTimeout(400);
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   // 5) straight on from the free end: one gutter, the sum
   await stroke([x0, y], [x1, y], 45);
   await waitFor(async () => (await runs()).some((r) => r.geom.lengthIn === 540), "45 ft");
-  await tid("draw-fit").getByRole("button").click(); // 45 ft runs off the screen: the whole drawing in view
+  await fitAll(p); // 45 ft runs off the screen: the whole drawing in view
   await p.waitForTimeout(300);
   const caps = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const right = caps.sort((a, c) => c[0] - a[0])[0];
@@ -76,7 +76,7 @@ exports.run = async (h) => {
   // grown again, then «Отменить» in its length sheet: back to the length before — the gutter stays (part 1 × #479)
   const before = (await runs())[0].geom.lengthIn;
   // grown, its end may run under the properties panel beside the canvas (820/1280): the whole drawing in view first
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
   const caps3 = await svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => { const r = g.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
   const r3 = caps3.sort((a, c) => c[0] - a[0])[0];
@@ -90,17 +90,50 @@ exports.run = async (h) => {
   await waitFor(async () => { const rs = await runs(); return rs.length === 1 && rs[0].geom.lengthIn === before; }, `«Отменить» after growing: one gutter, ${before}″ again`);
 
   // 1) a pinch after a long length and a moved view: smaller, and smaller again
-  await tid("draw-fit").getByRole("button").click();
+  await fitAll(p);
   await p.waitForTimeout(300);
   const l0 = (await lines())[0];
-  await pinchIn(b.x + b.width / 2, b.y + b.height / 2);
+  // the farthest the canvas goes is a QUARTER of the «fit» size each way (#1403, founder 14.11: «уменьшать ещё меньше»; was half, #1281):
+  // two GENTLE pinches (many small steps, about ×0.7 each) stay above it, and the second one must still work; then hard ones end at the limit
+  const mid = [b.x + b.width / 2, b.y + b.height / 2];
+  await pinchIn(mid[0], mid[1], 76, 2);
   const l1 = (await lines())[0];
-  h.expect(l1 < l0 * 0.8, `a pinch makes it smaller (${Math.round(l0)} → ${Math.round(l1)} px)`);
-  await pinchIn(b.x + b.width / 2, b.y + b.height / 2);
+  h.expect(l1 < l0 * 0.9 && l1 > l0 * 0.5, `a gentle pinch makes it smaller, above the limit (${Math.round(l0)} → ${Math.round(l1)} px)`);
+  await pinchIn(mid[0], mid[1], 76, 2);
   const l2 = (await lines())[0];
-  h.expect(l2 < l1 * 0.8, `…and a second pinch smaller again (${Math.round(l1)} → ${Math.round(l2)} px)`);
-  h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, "the pinch drew nothing (the first finger's stroke was dropped)");
-  await tid("draw-fit").getByRole("button").click();
+  h.expect(l2 < l1 * 0.92, `…and a second pinch smaller again (${Math.round(l1)} → ${Math.round(l2)} px)`);
+  await pinchIn(mid[0], mid[1]);
+  await pinchIn(mid[0], mid[1]);
+  const l3 = (await lines())[0];
+  h.expect(l3 >= l0 * 0.24 && l3 <= l0 * 0.26, `the farthest limit: a quarter of the fit size; a hard pinch goes no further (${Math.round(l0)} → ${Math.round(l3)} px)`);
+  // #1403, #1434: the grid is its own screen-sized layer (draw-grid), out of the scaled one: at the farthest scale its lines span the whole screen
+  const grid = () => p.getByTestId("draw-grid").first();
+  const gridXs = ((await grid().locator("#grid-minor").getAttribute("d")) + (await grid().locator("#grid-major").getAttribute("d"))).match(/M(-?[\d.]+) 0V/g).map((m) => parseFloat(m.slice(1))).sort((a, b) => a - b);
+  const vw = (await svg().boundingBox()).width;
+  const cellPx = Math.min(...gridXs.slice(1).map((x, i) => Math.abs(x - gridXs[i])).filter((d) => d > 0));
+  h.expect(Math.min(...gridXs) <= cellPx + 1 && Math.max(...gridXs) >= vw - cellPx - 1, `the grid's lines span the whole screen (${Math.min(...gridXs)} … ${Math.max(...gridXs)}, cell ${cellPx}, screen ${Math.round(vw)})`);
+  // #1403: fingers STILL DOWN at the farthest scale and beyond: the live layer is smaller than the screen, the grid must still cover all of it
+  {
+    const before = await grid().locator("#grid-minor").getAttribute("d");
+    const cdp = await p.context().newCDPSession(p);
+    const pts = (d) => [{ x: mid[0] - d, y: mid[1], id: 1 }, { x: mid[0] + d, y: mid[1], id: 2 }];
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: mid[0] - 150, y: mid[1], id: 1 }] });
+    for (let d = 145; d >= 120; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: mid[0] - d, y: mid[1], id: 1 }] });
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts(120) });
+    for (let d = 115; d >= 30; d -= 5) await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: pts(d) });
+    // #1434: the grid follows the live view of the fingers (its paths change before any release), not the committed one
+    await waitFor(async () => (await grid().locator("#grid-minor").getAttribute("d")) !== before, "fingers down: the grid's lines move with the fingers (the live view), before the release", 20);
+    // the layer follows the fingers on the UI thread: wait until the drawing has shrunk (the live scale is on), then look at the grid
+    let g = await grid().locator("#grid-minor").boundingBox();
+    const covers = (r) => r.x <= b.x + 1 && r.x + r.width >= b.x + b.width - 1 && r.y <= b.y + 1 && r.y + r.height >= b.y + b.height - 1;
+    await waitFor(async () => covers((g = await grid().locator("#grid-minor").boundingBox())), `fingers down, zoomed far out: the grid covers the whole canvas (grid ${Math.round(g.x)},${Math.round(g.y)} ${Math.round(g.width)}×${Math.round(g.height)}; canvas ${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}×${Math.round(b.height)})`, 20);
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await cdp.detach();
+    let l4 = 0;
+    await waitFor(async () => Math.abs((l4 = (await lines())[0]) - l3) <= l3 * 0.02, `let go at the limit: the scale stays at the limit (${Math.round(l3)} → ${Math.round(l4)} px)`, 30);
+  }
+  h.expect((await runs()).length === 1 && (await tid("quick-length").count()) === 0, `the pinch drew nothing (the first finger's stroke was dropped): runs ${(await runs()).length}, length sheet ${await tid("quick-length").count()}`);
+  await fitAll(p);
   await p.waitForTimeout(300);
 
   // a corner: a second gutter down from the right end
@@ -111,7 +144,7 @@ exports.run = async (h) => {
 
   // 2) the corner sheet stays open while the kind switches
   const k = await svg().locator('[id^="c:"]').boundingBox();
-  await p.mouse.click(k.x + k.width / 2, k.y + k.height / 2);
+  await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   const kind0 = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
   const other = kind0 === "наружный" ? "внутренний" : "наружный";
@@ -127,17 +160,17 @@ exports.run = async (h) => {
   h.expect(sk.width >= sheetW * 0.9, `the sketch is as wide as the sheet (${Math.round(sk.width)} of ${Math.round(sheetW)})`);
   const texts = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
   h.expect(texts.filter((t) => /^стена /.test(t)).length === 2 && texts.filter((t) => /^лицевая /.test(t)).length === 2, `«стена …», «лицевая …» on each gutter (${texts.join(" | ")})`);
-  h.expect(["A", "B", "C"].every((x) => texts.includes(x)), "the letters A, B, C");
+  h.expect(!["A", "B", "C"].some((x) => texts.includes(x)) && texts.includes("90°"), "no letters A, B, C on the drawing (#1276: they are the triangle's, in words); the arc says 90°");
   // the chips do not overlap
   const boxes = await tid("corner-sketch").locator("rect").evaluateAll((rs) => rs.map((r) => { const b = r.getBoundingClientRect(); return [b.x, b.y, b.x + b.width, b.y + b.height]; }));
   const overlap = boxes.some((a, i) => boxes.some((c, j) => j > i && a[0] < c[2] && c[0] < a[2] && a[1] < c[3] && c[1] < a[3]));
   h.expect(!overlap, "the chips do not overlap");
   // the face is away from the house: on an outside corner the «лицевая» chips are outside the angle (farther from the
-  // C diagonal than the «стена» ones), on an inside corner inside it
+  // arc's degrees than the «стена» ones), on an inside corner inside it
   const pos = await tid("corner-sketch").locator("text").evaluateAll((ts) => ts.map((t) => { const r = t.getBoundingClientRect(); return { t: (t.textContent || "").trim(), x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
   const at = (re) => pos.filter((q) => re.test(q.t));
-  const [la, lb] = [at(/^A$/)[0], at(/^B$/)[0]];
-  const cm = [(la.x + lb.x) / 2, (la.y + lb.y) / 2];
+  const deg = at(/^\d+°$/)[0]; // the arc's degrees stand inside the angle (the letters A, B and the C line are gone, #1276)
+  const cm = [deg.x, deg.y];
   const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - cm[0], q.y - cm[1]), 0) / qs.length;
   const faceOut = far(at(/^лицевая /)) > far(at(/^стена /));
   h.expect(faceOut === (kind0 === "наружный"), `${kind0}: the face is ${kind0 === "наружный" ? "outside" : "inside"} the angle`);

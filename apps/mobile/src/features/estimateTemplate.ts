@@ -3,16 +3,16 @@
  * Core, trade-agnostic. All money math goes through @octo/estimating-engine (rule 8): this file only picks prices
  * (current catalog, else the template's) and never sums anything itself.
  */
-import { DEFAULT_TAX, parseQty, type CustomLine, type CustomOption } from "@octo/estimating-engine";
+import { DEFAULT_TAX, parseQty, sectionIdOk, type CustomLine, type CustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { StarterEstimate } from "@/modules/registry";
 import { catalogMatch } from "./catalogMatch";
 import { canEditTemplates, stableUuid } from "./checklist";
-import { catalogUnitCost, catalogUnitPrice, mainOption, newDoc, optionTotals, uid } from "./estimateDoc";
+import { MAX_OPTIONS, catalogUnitCost, catalogUnitPrice, clientSectionsOf, markedHidden, mainOption, newDoc, nextOptionName, normalizeDoc, optionTotals, uid } from "./estimateDoc";
 
 /** The keys of a template line the server takes (app.valid_estimate_template_doc); a module's `source` never rides along */
-type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected">;
+type TemplateLine = Pick<CustomLine, "id" | "name" | "description" | "group" | "quantity" | "unit" | "unitPriceCents" | "unitCostCents" | "catalogItemId" | "optional" | "selected" | "clientVisible" | "sectionId">;
 
 /** text the server takes: no control characters, at most `n` characters (never half an emoji: by code points) */
 // eslint-disable-next-line no-control-regex
@@ -35,6 +35,10 @@ function templateLine(l: CustomLine, withCost: boolean, keepIds = false): Templa
     out.optional = true;
     out.selected = false;
   }
+  // #1232: its section, and «hidden from the client» — only at $0 (the engine and the server: a priced line is visible)
+  if (sectionIdOk(l.sectionId)) out.sectionId = l.sectionId;
+  // hidden as the phone reads it (false, or «false» / 0 written by another copy) — always a boolean false to the server
+  if (markedHidden(l) && l.unitPriceCents === 0) out.clientVisible = false;
   // who does not see costs sends no key: the server then keeps what it had (spec 07 §11, E3b duty)
   if (withCost && l.unitCostCents !== undefined) out.unitCostCents = l.unitCostCents;
   return out;
@@ -50,6 +54,8 @@ export function toTemplateDoc(doc: EstimateDoc, costsVisible: boolean, taxExempt
       id: keepIds ? o.id : uid(),
       name: cut(o.name, 120),
       ...(o.recommended ? { recommended: true } : {}),
+      // #1232: the sections as the client reads them (the server checks that form); the lines keep their sectionId
+      ...(clientSectionsOf(o).length ? { sections: clientSectionsOf(o) } : {}),
       lines: o.lines.map((l) => templateLine(l, costsVisible, keepIds)),
     })),
     // a tax-exempt client's estimate has its tax switched off (exemptDoc): the template must not carry that to others
@@ -89,6 +95,8 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
   for (const o of doc.options) {
     if (!ID.test(o.id) || optIds.has(o.id) || !text(o.name, 120) || o.lines.length > 200) return false;
     optIds.add(o.id);
+    // #1232: sections — a list (the server puts them in the client's form itself, trigger t02, before its check)
+    if (o.sections != null && !Array.isArray(o.sections)) return false;
     for (const l of o.lines) {
       if (!ID.test(l.id) || lineIds.has(l.id)) return false;
       lineIds.add(l.id);
@@ -98,6 +106,10 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
       const c = l.unitCostCents ?? costs[l.id];
       if (c !== undefined && !cents(c)) return false;
       if (l.catalogItemId != null && !ID.test(l.catalogItemId)) return false;
+      // a boolean or none (the server's jsonb_typeof); false only at $0
+      if (l.clientVisible != null && typeof l.clientVisible !== "boolean") return false;
+      if (l.clientVisible === false && l.unitPriceCents !== 0) return false;
+      if (l.sectionId != null && !sectionIdOk(l.sectionId)) return false;
     }
   }
   const s = doc.settings;
@@ -105,6 +117,8 @@ export function validTemplateDoc(doc: EstimateDoc, costs: Record<string, number>
     if (s.discount.kind === "fixed" ? !cents(s.discount.cents) : !SHARE.test(String(s.discount.value))) return false;
   }
   if (!cents(s.tax.rateBps, 10000)) return false;
+  // #1219: the rate in ppm, when there is one — a whole 0..1000000 (the server the same, app.valid_estimate_template_doc)
+  if (s.tax.ratePpm !== undefined && !cents(s.tax.ratePpm, 1_000_000)) return false;
   if (s.deposit.kind === "pct" ? !cents(s.deposit.bps, 10000) : s.deposit.kind === "fixed" ? !cents(s.deposit.cents) : false) return false;
   return true;
 }
@@ -113,6 +127,8 @@ export interface FromTemplate {
   doc: EstimateDoc;
   /** ids (in the new doc) of lines whose catalog item is gone: the template's price, «нет в каталоге, проверьте цену» */
   checkPrice: string[];
+  /** ids of lines that were hidden and got a price from the catalog: shown to the client again (the mark «Снова видна клиенту») */
+  unhidden: string[];
 }
 
 /**
@@ -144,7 +160,81 @@ export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Re
       return line;
     }),
   }));
-  return { doc: { options, settings: { ...tpl.settings }, ...(tpl.note ? { note: tpl.note } : {}) }, checkPrice };
+  // a hidden line takes the catalog price → it is priced, so it is shown again (Р3 п.2: normalizeDoc on every entrance of a document)
+  // the tax never comes from a template: a new estimate has it off, always (founder 12.11; spec 39 §11.9 п.3, DS §8.7) — the
+  // client's total is the sum of the lines until the tax is switched on in this estimate
+  const made = normalizeDoc({ options, settings: { ...tpl.settings, tax: { ...DEFAULT_TAX, groups: { ...DEFAULT_TAX.groups } } }, ...(tpl.note ? { note: tpl.note } : {}) });
+  return { doc: made.doc, checkPrice, unhidden: made.unhidden };
+}
+
+/** what «Добавить из шаблона…» brought into an estimate: «Вернуть» takes out only these (DS §8.13, §15.2) */
+export interface Appended {
+  lineIds: string[];
+  sectionIds: string[];
+  optionIds: string[];
+  /** the template's options that did not fit (three at most): their names, for the toast */
+  skipped: string[];
+  /** the arrived lines of the option being edited, in order: «Кол-во» of the first takes the cursor, «›» goes on */
+  chain: string[];
+}
+
+/**
+ * «Добавить из шаблона…» (DS §8.13, spec 39 §11.9 п.2): only adds — what is typed stays. `add` is the template as a new
+ * estimate's document (fromTemplate: today's catalog prices, no tax). One option in the template: its lines go to the end
+ * of the option being edited (`cur`); several: by number, the ones past the estimate's become new options while there are
+ * fewer than three (a name already there gets the next free one), the rest are named in `skipped`. Sections come as
+ * sections under new ids (the same template twice never clashes); the estimate's settings stay (no tax, no discount from
+ * the template); the template's note goes in only where the estimate's is empty.
+ */
+export function appendTemplate(doc: EstimateDoc, add: EstimateDoc, cur: number): { doc: EstimateDoc; added: Appended } {
+  const added: Appended = { lineIds: [], sectionIds: [], optionIds: [], skipped: [], chain: [] };
+  const options = [...doc.options];
+  const at = Math.max(0, Math.min(cur, options.length - 1));
+  add.options.forEach((src, i) => {
+    // the lines keep the ids fromTemplate gave them (fresh; «проверьте цену» and «Снова видна» point at them); the sections
+    // get new ones — the template's own ids would clash with the same template added before
+    const ids = new Map<string, string>();
+    const srcSecs = Array.isArray(src.sections) ? src.sections.filter((x) => !!x && typeof x === "object") : [];
+    for (const x of srcSecs) if (!ids.has(x.id)) ids.set(x.id, uid());
+    const to = (id: string | undefined) => (id !== undefined && ids.has(id) ? ids.get(id)! : id);
+    const lines = src.lines.map((l) => (l.sectionId !== undefined && ids.has(l.sectionId) ? { ...l, sectionId: to(l.sectionId) } : l));
+    const secs = srcSecs.map((x) => ({ ...x, id: to(x.id)!, ...(x.parentId !== undefined ? { parentId: to(x.parentId) } : {}) }));
+    const { recommended: _rec, ...plain } = src;
+    const c: CustomOption = { ...plain, id: uid(), lines, ...(srcSecs.length ? { sections: secs } : {}) };
+    const target = add.options.length === 1 ? at : i;
+    const into = options[target];
+    if (into) {
+      options[target] = { ...into, lines: [...into.lines, ...lines], ...(secs.length || into.sections ? { sections: [...(Array.isArray(into.sections) ? into.sections : []), ...secs] } : {}) };
+      if (target === at) added.chain.push(...lines.map((l) => l.id));
+    } else if (options.length < MAX_OPTIONS) {
+      const name = options.some((o) => o.name.trim() === c.name.trim()) ? nextOptionName(options) : c.name;
+      options.push({ ...c, name });
+      added.optionIds.push(c.id);
+    } else {
+      added.skipped.push(src.name);
+      return;
+    }
+    added.lineIds.push(...lines.map((l) => l.id));
+    added.sectionIds.push(...secs.map((x) => x.id));
+  });
+  const note = !doc.note?.trim() && add.note?.trim() ? { note: add.note } : {};
+  return { doc: { ...doc, ...note, options }, added };
+}
+
+/** «Вернуть» of «Добавить из шаблона…»: the arrived lines, sections and options go; every other edit since stays */
+export function removeAppended(doc: EstimateDoc, added: Appended): EstimateDoc {
+  const lines = new Set(added.lineIds);
+  const secs = new Set(added.sectionIds);
+  const opts = new Set(added.optionIds);
+  const options = doc.options
+    .filter((o) => !opts.has(o.id))
+    .map((o) => ({
+      ...o,
+      lines: o.lines.filter((l) => !lines.has(l.id)),
+      ...(Array.isArray(o.sections) ? { sections: o.sections.filter((x) => !secs.has(x.id)) } : {}),
+    }));
+  // every own option was deleted after the add: an empty one stays (an estimate has one), never the template's lines
+  return { ...doc, options: options.length ? options : [{ ...doc.options[0]!, lines: [], sections: [] }] };
 }
 
 /** «от $X» in the picker: the recommended option's total at today's catalog prices (the engine sums) */
@@ -191,10 +281,46 @@ export function estimateStartersToAdd(
   return mods.flatMap((m) => (m.estimateTemplates ?? []).filter((s) => !have.has(starterEstimateId(companyId, m.key, s.key))).map((starter) => ({ module: m.key, starter })));
 }
 
-/** the catalog item a starter's line names: its properties and the same unit; a kit never (no price of its own) */
-export function starterItem(catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string): CatalogItem | undefined {
-  if (!match) return undefined;
-  return catalogMatch(catalog.filter((it) => it.kind !== "kit" && it.unit.trim().toLowerCase() === unit.trim().toLowerCase()), match)[0];
+/**
+ * What a starter's line finds in the catalog (#1336): its properties and the same unit; a kit never (no price of its own). The item must be ONE —
+ * of several equally close candidates no first-by-name is taken (`several`: no link, $0 and «проверьте цену»).
+ * `narrowed` — the module's own wish for this company: tried first. Only when nothing has it the line's wider `match` is the question (an item
+ * priced by hand with fewer properties still serves, if it is the only one) — and such an item must not CONTRADICT the wish: one that
+ * says another variant than the company's default is another thing, not a hand-priced version of it (`none`).
+ */
+export function starterLookup(catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string, narrowed?: Record<string, string>): { item?: CatalogItem; why: "found" | "none" | "several" } {
+  if (!match) return { why: "none" };
+  const pool = catalog.filter((it) => it.kind !== "kit" && it.unit.trim().toLowerCase() === unit.trim().toLowerCase());
+  const only = (hits: CatalogItem[]): { item?: CatalogItem; why: "found" | "none" | "several" } => {
+    if (!hits.length) return { why: "none" };
+    const n = (it: CatalogItem) => Object.keys(it.attributes ?? {}).length;
+    const top = hits.filter((h) => n(h) === n(hits[0]!)); // catalogMatch sorts the closest first
+    return top.length === 1 ? { item: top[0]!, why: "found" } : { why: "several" };
+  };
+  if (narrowed) {
+    const near = catalogMatch(pool, narrowed);
+    if (near.length) return only(near);
+  }
+  const agrees = (it: CatalogItem) => !narrowed || Object.keys(narrowed).every((k) => { const v = it.attributes?.[k]; return v === undefined || v.trim().toLowerCase() === narrowed[k]!.trim().toLowerCase(); });
+  return only(catalogMatch(pool, match).filter(agrees));
+}
+
+export const starterItem = (catalog: readonly CatalogItem[], match: Record<string, string> | undefined, unit: string, narrowed?: Record<string, string>): CatalogItem | undefined => starterLookup(catalog, match, unit, narrowed).item;
+
+/**
+ * Would a starter come out with NO line priced (#1336)? Then it is not added: all lines $0 and unlinked, and a later item does not find its line.
+ * `none` — the catalog has nothing for its lines (an empty price list); `several` — some line has several equally fitting items and none of the
+ * others is found (the company must sort its price list out). Counted the way `starterEstimateTemplate` finds items.
+ */
+export function starterAllUnpriced(s: StarterEstimate, ctx: { catalog: readonly CatalogItem[]; want?: (match: Record<string, string>) => Record<string, string> }): "none" | "several" | null {
+  let total = 0, several = 0;
+  for (const o of s.options) for (const l of o.lines) {
+    total++;
+    const r = starterLookup(ctx.catalog, l.match, l.unit, l.match && ctx.want ? ctx.want(l.match) : undefined);
+    if (r.why === "found") return null;
+    if (r.why === "several") several++;
+  }
+  return total ? (several ? "several" : "none") : null;
 }
 
 /**
@@ -206,7 +332,7 @@ export function starterItem(catalog: readonly CatalogItem[], match: Record<strin
 export function starterEstimateTemplate(
   moduleKey: string,
   s: StarterEstimate,
-  ctx: { id: string; catalog: readonly CatalogItem[]; tApp: (k: DictKey) => string; tDoc: (k: DictKey) => string; depositBps?: number | null; costsVisible: boolean },
+  ctx: { id: string; catalog: readonly CatalogItem[]; tApp: (k: DictKey) => string; tDoc: (k: DictKey) => string; depositBps?: number | null; costsVisible: boolean; /** #1336: the module's wish for this company (moduleDef.starterWant with its settings) */ want?: (match: Record<string, string>) => Record<string, string> },
 ): EstimateTemplate | null {
   const base = newDoc(ctx.depositBps);
   const costs: Record<string, number> = {};
@@ -216,7 +342,7 @@ export function starterEstimateTemplate(
       name: cut(ctx.tDoc(o.nameKey), 120),
       ...(o.recommended ? { recommended: true } : {}),
       lines: o.lines.map((l) => {
-        const it = starterItem(ctx.catalog, l.match, l.unit);
+        const it = starterLookup(ctx.catalog, l.match, l.unit, l.match && ctx.want ? ctx.want(l.match) : undefined).item;
         const line: CustomLine = {
           id: uid(),
           name: cut(ctx.tDoc(l.nameKey), 300),

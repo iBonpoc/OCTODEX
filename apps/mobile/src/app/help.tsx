@@ -8,6 +8,7 @@ import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Divider, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * «Помощь и поддержка» (7а-1; App Store 1.5 — a way to reach the developer, docs/specs/14-app-store.md §1 п.3;
@@ -32,9 +33,7 @@ export default function Help() {
               {SUPPORT_EMAIL}
             </T>
             {SUPPORT_PLACEHOLDER ? (
-              <T v="caption" tone="warn">
-                {t("support.placeholder")}
-              </T>
+              <StatusNote tone="warn">{t("support.placeholder")}</StatusNote>
             ) : null}
             <Button label={t("support.write")} icon="mail" full onPress={() => open(mailto(SUPPORT_EMAIL, t("support.writeSubject")))} />
             <Button

@@ -12,11 +12,12 @@ import { useStore } from "@/data/store";
 import { uid } from "@/features/estimateDoc";
 import type { Job, JobLineItem, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, percentToBps, shownLineQty, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
+import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, jobRateText, percentToRate, shownLineQty, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
 import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { whenLate, type GuardedUndo } from "@/data/undo";
 
 /** who changes a job's own lines: the server's app.is_staff (owner, admin, office, sales) */
 export const canEditJobLines = (role: Role) => role !== "tech";
@@ -45,9 +46,10 @@ export function JobLinesBlock({ job }: { job: Job }) {
   const toast = useToast();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [orig, setOrig] = useState<Draft | null>(null);
-  const [rate, setRate] = useState((job.taxRateBps ?? 0) / 100 + "");
+  // #1219: the rate with up to four decimals (8.875 %), as the job keeps it (ppm, else the basis points)
+  const [rate, setRate] = useState(jobRateText(job));
   // a rate that came from the server (another phone, a sync) shows here too
-  useEffect(() => setRate((job.taxRateBps ?? 0) / 100 + ""), [job.taxRateBps]);
+  useEffect(() => setRate(jobRateText(job)), [job.taxRateBps, job.taxRatePpm]);
   if (job.estimateId) return null;
   const lines = linesOf(db, job.id);
   const editable = linesEditable(job) && canEditJobLines(store.role);
@@ -55,7 +57,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
   const totals = totalOf(lines, job);
   const warn = caContractWarning(db, job.id);
   // «Отменить» may be refused (an invoice went out meanwhile): then say why, nothing changes
-  const done = (msg: string, undo: () => boolean) => toast.show(store.online ? msg : t("offline.queued"), () => { if (!undo()) toast.show(t("job5.lines.err.undo")); });
+  const done = (msg: string, undo: GuardedUndo) => toast.show(store.online ? msg : t("offline.queued"), whenLate(undo, () => toast.show(t("job5.lines.err.undo"))));
   const refuse = (after: typeof db): boolean => {
     const r = lineChangeRefusal(db, after, job.id);
     if (r) toast.show(t(REFUSAL_KEY[r]));
@@ -89,11 +91,12 @@ export function JobLinesBlock({ job }: { job: Job }) {
     setDraft(null);
   };
   const setTax = (taxEnabled: boolean, rateText = rate) => {
-    const parsed = taxEnabled ? percentToBps(rateText) : (job.taxRateBps ?? 0);
+    // switched off: the rate stays as the job has it
+    const parsed = taxEnabled ? percentToRate(rateText) : { taxRateBps: job.taxRateBps ?? 0, ...(job.taxRatePpm !== undefined ? { taxRatePpm: job.taxRatePpm } : {}) };
     if (parsed === null) return toast.show(t("job5.lines.err.rate"));
-    const taxRateBps = parsed;
-    if (refuse(withJobTax(db, job.id, { taxEnabled, taxRateBps }))) return;
-    done(t("job5.lines.taxSaved"), store.setJobTax(job.id, { taxEnabled, taxRateBps }));
+    const set = { taxEnabled, ...parsed };
+    if (refuse(withJobTax(db, job.id, set))) return;
+    done(t("job5.lines.taxSaved"), store.setJobTax(job.id, set));
   };
 
   return (
@@ -123,10 +126,12 @@ export function JobLinesBlock({ job }: { job: Job }) {
             <T v="body" tabular>{money(totals.subtotal)}</T>
           </RowView>
           {job.taxEnabled ? (
-            <RowView style={{ justifyContent: "space-between" }}>
-              <T v="body" tone="mut">{t("job5.lines.tax", { rate: (job.taxRateBps ?? 0) / 100 })}</T>
-              <T v="body" tabular>{money(totals.tax)}</T>
-            </RowView>
+            <View testID="job-tax-line">
+              <RowView style={{ justifyContent: "space-between" }}>
+                <T v="body" tone="mut">{t("job5.lines.tax", { rate: jobRateText(job) })}</T>
+                <T v="body" tabular>{money(totals.tax)}</T>
+              </RowView>
+            </View>
           ) : null}
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="heading">{t("job5.lines.total")}</T>
@@ -141,13 +146,17 @@ export function JobLinesBlock({ job }: { job: Job }) {
       ) : null}
       {editable && lines.length && (!exempt || job.taxEnabled) ? (
         <Card>
-          <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
+          <View testID="job-tax-toggle">
+            <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
+          </View>
           {job.taxEnabled ? (
             <RowView>
-              <View style={{ flex: 1 }}>
+              <View testID="job-tax-rate" style={{ flex: 1 }}>
                 <TextField type="percent" value={rate} onChangeText={setRate} placeholder={t("job5.lines.rate")} />
               </View>
-              <Button label={t("job5.lines.rateSave")} size="sm" variant="secondary" onPress={() => setTax(true, rate)} />
+              <View testID="job-tax-save">
+                <Button label={t("job5.lines.rateSave")} size="sm" variant="secondary" onPress={() => setTax(true, rate)} />
+              </View>
             </RowView>
           ) : null}
         </Card>

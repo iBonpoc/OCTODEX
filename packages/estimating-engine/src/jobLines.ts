@@ -13,6 +13,8 @@ export interface JobLine {
 export interface JobTax {
   enabled: boolean;
   rateBps: number;
+  /** #1219: jobs.tax_rate_ppm — the rate when present */
+  ratePpm?: number;
 }
 export interface JobLinesTotals {
   subtotal: number;
@@ -33,7 +35,7 @@ export const jobLineQty = (q: DecLike): string => dec(q).toDecimalPlaces(4, D.RO
 export function jobLinesTotals(lines: JobLine[], tax: JobTax): JobLinesTotals {
   const r = computeOption(
     lines.map((l, i) => ({ name: `line ${i + 1}`, quantity: jobLineQty(l.quantity), unitPriceCents: l.unitPriceCents, taxable: !!l.taxable })),
-    { mode: "added_on_top", enabled: tax.enabled, rateBps: tax.rateBps },
+    { mode: "added_on_top", enabled: tax.enabled, rateBps: tax.rateBps, ratePpm: tax.ratePpm },
   );
   return { subtotal: r.subtotal, tax: r.tax, total: r.total, lineTotals: r.lineTotals };
 }

@@ -6,8 +6,10 @@
  * the company's settings (M7b, spec 33 П22), /module/gutters/prices — labor prices and the price list's items (M7d, П22.10).
  */
 import { moduleHref, type ModuleDef } from "../registry";
-import { asGutterData, guttersOps, linkLead, loadGutters, measureHref } from "./data";
-import { staleMeasurements } from "./estimateLink";
+import { asGutterData, guttersOps, linkLead, loadGutters, measureHref, rebuildOp } from "./data";
+import { engineStaleMeasurements, staleMeasurements } from "./estimateLink";
+import { starterWant } from "./prices";
+import { benchOfferedHere } from "./bench/visible";
 
 const draw = moduleHref("gutters", "draw");
 /** «Просмотр замера» (#698): the drawing whole, its list, the estimate by the state; estimate=1 does the estimate at once */
@@ -48,7 +50,7 @@ const gutters: ModuleDef = {
     ],
     // «Замеры» in the bottom tabs and the side menu (founder 09.11: «делай»): every measurement, the drafts too
     tab: () => [{ id: "list", labelKey: "mod.gutters.list.tab", icon: "note", href: moduleHref("gutters", "list") }],
-    // the module's own card in «Компания → Модули»: the speed check saves nothing, so it is there even when off
+    // the module's own card in «Компания → Модули»: the speed check saves nothing, so it is there even when off (in Expo Go / dev only)
     // the canvas draws even when off: it says at once that nothing will be saved (§6, founder О2)
     // «Настройки» (M7b, spec 33 П22): the director changes them, the office reads them; a tech or a seller never needs the page
     settings: (ctx) => [
@@ -57,17 +59,20 @@ const gutters: ModuleDef = {
       ...(ctx.role !== "tech" ? [{ id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") }] : []),
       { id: "list", labelKey: "mod.gutters.list.action", icon: "note", href: moduleHref("gutters", "list") },
       { id: "draw", labelKey: "mod.gutters.draw.action", icon: "pencil", href: draw },
-      { id: "bench", labelKey: "mod.gutters.bench.action", icon: "clock", href: moduleHref("gutters", "bench") },
+      // the speed check is a developer's screen (DS §12.8, #1426): offered in Expo Go and a dev build only, never to an owner of the store app or the web
+      ...(benchOfferedHere() ? [{ id: "bench", labelKey: "mod.gutters.bench.action" as const, icon: "clock" as const, href: moduleHref("gutters", "bench") }] : []),
     ],
   },
   // the measurement's tables (spec 33 П19) and its changes (П21): DB.moduleData.gutters
   load: loadGutters,
   ops: guttersOps,
-  // starter checklist templates (docs/specs/08 §2, §11.11; CH3b): the office adds them on «Компания → Чек-листы»; they
-  // come into no visit by themselves — the office ties them to services of its catalog or adds them to a visit
+  // starter checklist templates (docs/specs/08 §2, §11.11; CH3b): the office adds them on «Компания → Чек-листы»; once added, «Перед монтажом» and «Сдача
+  // работы» come into every «работа» visit by themselves (#607); «Чистка» not (a cleaning is not part of every job: it would
+  // bring its required items into every installation) — the office ties it to a service of its catalog; the office may change any
   checklistTemplates: [
     {
       key: "pre",
+      visitKinds: ["work"],
       nameKey: "mod.gutters.chk.pre",
       items: [
       { id: "69385b0b-9477-4163-a2ae-2f60f172261c", labelKey: "mod.gutters.chk.pre1", kind: "check", required: true },
@@ -78,6 +83,7 @@ const gutters: ModuleDef = {
     },
     {
       key: "handover",
+      visitKinds: ["work"],
       nameKey: "mod.gutters.chk.handover",
       items: [
       { id: "4c70b085-e445-47ac-80e9-949a63c7b31e", labelKey: "mod.gutters.chk.handover1", kind: "check", required: true },
@@ -96,15 +102,58 @@ const gutters: ModuleDef = {
       ],
     },
   ],
+  // starter ESTIMATE templates (docs/specs/07 §12, #1323): «загрузил и меняю количество» — the office adds them on «Сметы → Шаблоны»; every line names
+  // the company's price-list item by its properties and unit (the same as a drawing's estimate line), the price is the item's today
+  // (a test one is marked «тестовая цена» in the list, rule 9); a line without an item is $0 with «проверьте цену». The quantities
+  // are only a start. They never touch a measurement's lines — the main way is «Смета из замера»
+  starterWant,
+  estimateTemplates: [
+    {
+      key: "clean",
+      nameKey: "mod.gutters.est.tpl.clean",
+      options: [{ key: "main", nameKey: "mod.gutters.est.tpl.clean.opt", recommended: true, lines: [
+        { key: "clean", nameKey: "mod.gutters.est.tpl.clean.l1", group: "labor", quantity: "100", unit: "ft", match: { work: "cleaning" } },
+        { key: "flush", nameKey: "mod.gutters.est.tpl.clean.l2", group: "labor", quantity: "4", unit: "ea", match: { work: "flush" } },
+      ] }],
+    },
+    {
+      key: "guards",
+      nameKey: "mod.gutters.est.tpl.guards",
+      options: [{ key: "main", nameKey: "mod.gutters.est.tpl.guards.opt", recommended: true, lines: [
+        { key: "guard", nameKey: "mod.gutters.est.tpl.guards.l1", group: "material", quantity: "100", unit: "ft", match: { part: "guard_run" } },
+        { key: "install", nameKey: "mod.gutters.est.tpl.guards.l2", group: "labor", quantity: "100", unit: "ft", match: { work: "guard_install" } },
+      ] }],
+    },
+    {
+      key: "replace",
+      nameKey: "mod.gutters.est.tpl.replace",
+      options: [{ key: "main", nameKey: "mod.gutters.est.tpl.replace.opt", recommended: true, lines: [
+        { key: "tearoff", nameKey: "mod.gutters.est.tpl.replace.l1", group: "labor", quantity: "100", unit: "ft", match: { work: "tearoff" } },
+        { key: "gutter", nameKey: "mod.gutters.est.tpl.replace.l2", group: "material", quantity: "100", unit: "ft", match: { part: "gutter" } },
+        { key: "caps", nameKey: "mod.gutters.est.tpl.replace.l3", group: "material", quantity: "4", unit: "ea", match: { part: "end_cap" } },
+        { key: "ds", nameKey: "mod.gutters.est.tpl.replace.l4", group: "material", quantity: "20", unit: "ft", match: { part: "downspout" } },
+        { key: "install", nameKey: "mod.gutters.est.tpl.replace.l5", group: "labor", quantity: "100", unit: "ft", match: { work: "install", story: "1" } },
+        { key: "dsinstall", nameKey: "mod.gutters.est.tpl.replace.l6", group: "labor", quantity: "2", unit: "ea", match: { work: "downspout", story: "1" } },
+      ] }],
+    },
+  ],
   rejectedKey: "mod.gutters.rejected",
   // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the review's «Перенести изменения в смету»)
   estimateNotes: (e, db) => {
     const m = staleMeasurements(db, e)[0];
-    return m
-      ? [{ id: "stale", labelKey: "mod.gutters.est.stale", hintKey: "mod.gutters.est.staleHint", action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate", icon: "pencil", href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` } }]
-      : [];
+    // the drawing's change says it first: not two buttons that do the same
+    const eng = engineStaleMeasurements(db, e).find((x) => x.id !== m?.id);
+    const notes = [];
+    if (m) notes.push({ id: "stale", labelKey: "mod.gutters.est.stale" as const, hintKey: "mod.gutters.est.staleHint" as const, action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate" as const, icon: "pencil" as const, href: `${view}?m=${encodeURIComponent(m.id)}&estimate=1` } });
+    // #1165: the engine's rule changed since the estimate was computed → «Обновить» (a signed estimate is not offered notes at all)
+    if (eng) notes.push({ id: "engine", labelKey: "mod.gutters.est.engine" as const, hintKey: "mod.gutters.est.engineHint" as const, action: { id: "engine-update", labelKey: "mod.gutters.est.staleUpdate" as const, icon: "pencil" as const, href: `${view}?m=${encodeURIComponent(eng.id)}&estimate=1` } });
+    return notes;
   },
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
+  rebuild: rebuildOp,
+  // the canvas and its speed check take the whole screen: no bottom tabs, no side menu (#1426, DS Б11); the list, the review,
+  // the settings and the prices keep them
+  fullScreen: ["draw", "bench"],
   screens: {
     draw: () => require("./draw/DrawScreen").default,
     view: () => require("./view/ViewScreen").default,

@@ -9,7 +9,7 @@
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
-const { skipLength, canvasAt } = require("../gutters.cjs");
+const { openProps, skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -76,6 +76,15 @@ exports.run = async (h) => {
   h.expect(/^Как у желоба/.test(await tid("attr-color-value").innerText()), "the colour: «Как у желоба»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
+  // the length is a dropdown now (#1276: size, colour and length are folded rows): «по этажу» by default, a number of feet on a pick, back to «по этажу»
+  h.expect((await tid("attr-ds-length-value").count()) === 1 && /^По этажу/.test(await tid("attr-ds-length-value").innerText()), "the length: a folded row, «По этажу» by default");
+  await tid("attr-ds-length-open").click();
+  await p.getByRole("button", { name: "20′", exact: true }).or(p.getByText("20′", { exact: true })).last().click();
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20′ picked: the downspout's own height is 240″");
+  await tid("attr-ds-length-open").click();
+  await p.getByText("По этажу", { exact: true }).last().click();
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "«По этажу»: no own height");
+
   // offsets: 1, then 3″, then its own 2½″
   await tid("attr-offset-qty").getByRole("button", { name: /\+1$/ }).click();
   await tid("attr-offset-len").getByRole("radio", { name: "3″", exact: true }).click();
@@ -90,7 +99,7 @@ exports.run = async (h) => {
   // the gutter turns black → the downspout follows
   await tid("draw-tool-line").getByRole("button").click(); // a tap picks with any tool but «Водосток» (#687)
   await p.mouse.click(x0 + 1, y1 - (y1 - y0) * 0.15);
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await panel().waitFor({ timeout: 5000 });
   await pickIn("attr-color", "Чёрный");
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.color === "black", "the downspout follows its gutter: black");

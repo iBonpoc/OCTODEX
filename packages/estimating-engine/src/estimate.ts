@@ -1,4 +1,4 @@
-import { D, dec, bps, roundCents, type DecLike } from "./decimal.js";
+import { D, dec, bps, ppm, taxRatePpm, roundCents, type DecLike } from "./decimal.js";
 
 /**
  * Estimate / option totals (PRD 05 §7.2, PRD 19 §7.5). All money in integer cents, round half up.
@@ -26,6 +26,8 @@ export interface TaxContext {
   mode: TaxMode;
   enabled: boolean;
   rateBps: number;
+  /** #1219: the rate in ppm (8.875 % = 88750); when set, it is the rate and rateBps is only its rounded copy */
+  ratePpm?: number;
   includePurchaseTaxInCost?: boolean; // default true
 }
 
@@ -96,7 +98,7 @@ export function computeOption(lines: Line[], tax: TaxContext, discount: Discount
   const taxableSub = lines.reduce((s, l, i) => (included(l) && l.taxable ? s + lineTotals[i]! : s), 0);
   const taxableDisc = subtotal === 0 ? 0 : roundCents(dec(disc).mul(taxableSub).div(subtotal));
   const base = dec(taxableSub - taxableDisc);
-  const rate = bps(tax.rateBps);
+  const rate = ppm(taxRatePpm(tax));
   let taxCents = 0;
   if (tax.enabled && tax.mode === "added_on_top") taxCents = roundCents(base.mul(rate));
   if (tax.enabled && tax.mode === "tax_inclusive_display") taxCents = roundCents(base.mul(rate).div(rate.add(1)));

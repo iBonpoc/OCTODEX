@@ -10,6 +10,7 @@ import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Screen } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 type Mode = "code" | "password" | "signup";
 
@@ -65,7 +66,7 @@ export default function SignIn() {
     <Screen title={t("auth.title")} back={back}>
       <Card>
         <View style={{ gap: space[3] }}>
-          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="message" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="mail" />
           <LegalAgree on={agreed} onChange={setAgreed} />
           {mode === "code" ? (
             <>
@@ -105,14 +106,10 @@ export default function SignIn() {
             </>
           ) : null}
           {msg ? (
-            <T v="caption" tone="ok">
-              {msg}
-            </T>
+            <StatusNote tone="ok">{msg}</StatusNote>
           ) : null}
           {err ? (
-            <T v="caption" tone="bad">
-              {err}
-            </T>
+            <StatusNote tone="bad">{err}</StatusNote>
           ) : null}
         </View>
       </Card>

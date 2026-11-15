@@ -37,7 +37,7 @@ function deps(opt: Partial<ConnectDeps> & { tg?: Target | null; answers?: Record
       return answers[`${method} ${path}`] ?? { status: 404, body: { error: { type: "invalid_request_error", message: `secret ${KEY}` } } };
     },
     keyMode: "test",
-    appUrl: "https://octodex.expo.app/",
+    appUrl: "https://gorix.expo.app/",
     log: (m) => logs.push(m),
     ...over,
   };
@@ -94,8 +94,8 @@ describe("unit:stripeConnectFn — start and status", () => {
     expect(x.saved).toHaveLength(1);
     expect(x.calls[1]!.form).toEqual({
       account: "acct_New1", type: "account_onboarding",
-      refresh_url: "https://octodex.expo.app/company/payments?stripe=refresh",
-      return_url: "https://octodex.expo.app/company/payments?stripe=return",
+      refresh_url: "https://gorix.expo.app/company/payments?stripe=refresh",
+      return_url: "https://gorix.expo.app/company/payments?stripe=return",
     });
   });
   it("start with an account: no second account, only a fresh link", async () => {

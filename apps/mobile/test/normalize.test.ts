@@ -55,6 +55,29 @@ describe("old saved data after an app update", () => {
     expect(cloud.customers.find((c) => c.id === "c1")!.number).toBeUndefined();
     expect(peopleOf(cloud.customers.find((c) => c.id === "c1")!)).toHaveLength(1);
   });
+  it("В1-5: an old record without voidInvoices gets []", () => {
+    const d = makeSeed() as unknown as Record<string, unknown>;
+    delete d.voidInvoices;
+    expect(normalizeDB(d as unknown as DB, "cloud").voidInvoices).toEqual([]);
+  });
+  it("В1-5: a voided invoice among the live ones (an old record, a server copy) moves to voidInvoices — no sum sees it", () => {
+    const d = makeSeed();
+    const i1 = d.invoices[0]!;
+    const n = normalizeDB({ ...d, invoices: d.invoices.map((i) => (i.id === i1.id ? { ...i, status: "void" as const, voidReason: "wrong" } : i)) }, "cloud");
+    expect(n.invoices.some((i) => i.id === i1.id)).toBe(false);
+    expect(n.voidInvoices).toEqual([{ ...i1, status: "void", voidReason: "wrong" }]);
+    // already apart and copied again: one card, not two
+    expect(normalizeDB({ ...n, invoices: [...n.invoices, n.voidInvoices![0]!] }, "cloud").voidInvoices).toHaveLength(1);
+  });
+  it("an estimate in the phone's own copy is normalized at the start (a priced line marked hidden is visible)", () => {
+    const d = makeSeed();
+    const e = d.estimates.find((x) => x.doc) ?? { ...d.estimates[0]!, doc: { options: [], settings: d.estimates[0]!.doc?.settings } };
+    const doc = { options: [{ id: "o", name: "A", lines: [{ id: "l", name: "W", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 500, clientVisible: false }] }], settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" } } };
+    const n = normalizeDB({ ...d, estimates: [{ ...e, id: "e-n", doc } as never, { ...e, id: "e-bad", doc: { options: [{ id: "x" }], settings: doc.settings } } as never] }, "cloud");
+    expect(n.estimates.find((x) => x.id === "e-n")!.doc!.options[0]!.lines[0]!.clientVisible).toBeUndefined();
+    // a broken option is left as it is, never an error
+    expect(n.estimates.find((x) => x.id === "e-bad")!.doc!.options[0]).toEqual({ id: "x" });
+  });
   it("today's data is left as is", () => {
     const d = makeSeed();
     expect(normalizeDB(d, "demo")).toEqual(d);

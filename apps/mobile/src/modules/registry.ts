@@ -64,6 +64,8 @@ export type ModuleOpHandler = (
 export interface ModuleStore {
   db: import("@/data/types").DB;
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: import("@/data/types").DB) => import("@/data/types").DB; coalesceKey?: string; made?: string[] }) => unknown;
+  /** the store's «Отменить» of several actions: all or none (store.tsx). Missing in an older test store — then one by one */
+  undoTogether?: (undos: readonly (import("@/data/undo").GuardedUndo | null | undefined)[]) => import("@/data/undo").GuardedUndo;
 }
 
 /**
@@ -72,8 +74,11 @@ export interface ModuleStore {
  * (money through the engine, the offline queue, «Отменить»). A module never writes an estimate any other way.
  */
 export interface ModuleEstimateStore extends ModuleStore {
-  leadEstimateTarget: (leadId: string) => { customerId: string; propertyId: string; undo: () => void } | null;
-  saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => () => void;
+  leadEstimateTarget: (leadId: string) => { customerId: string; propertyId: string; undo: import("@/data/undo").GuardedUndo } | null;
+  /** a new estimate at this property is the person's to make (a tech: where he works — the server's estimates_insert);
+   *  asked before anything is written for it (#1138). Missing in an older test store — then «yes». */
+  mayMakeEstimateAt?: (propertyId: string | undefined) => boolean;
+  saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => import("@/data/undo").GuardedUndo;
 }
 
 /**
@@ -148,6 +153,9 @@ export interface StarterEstimate {
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
+  /** #1265: a waiting op of this module written again from the phone's data `d` (an earlier change folded into it by
+   *  coalesceKey was taken back): its payload now, or null — cannot (then that «Отменить» is too late) */
+  rebuild?: (op: { kind: string; payload: Record<string, unknown> }, d: import("@/data/types").DB) => Record<string, unknown> | null;
   titleKey: DictKey;
   hintKey: DictKey;
   trialDays: number;
@@ -164,6 +172,11 @@ export interface ModuleDef {
    */
   screens?: Record<string, () => import("react").ComponentType>;
   /**
+   * the screens that take the whole screen (a drawing canvas, its speed check): no bottom tabs on the phone, no side menu from
+   * 820 (DS Б11, §12.10; #1426). The module's other screens (lists, cards, settings) keep the app's bottom tabs and side menu.
+   */
+  fullScreen?: readonly string[];
+  /**
    * reads the module's own tables into DB.moduleData[key] (spec 33 П21.2 №4). Called when the company has the module's
    * row (switched on once — after the trial drafts still open, founder О2). A failed read keeps what the phone had.
    */
@@ -172,7 +185,7 @@ export interface ModuleDef {
    * a lead was made from a module's thing (S1b «Сделать заявкой»: /lead/new?module=<key>&ref=<id>): the module links its
    * thing to the lead through the store it is given (moduleOp). The lead form is the core's, unchanged (spec 14).
    */
-  leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
+  leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => import("@/data/undo").GuardedUndo | null | undefined;
   /** its words on an open (draft / sent) estimate; `data` — DB.moduleData[key]. Pure: called on every render */
   estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
   /**
@@ -185,6 +198,12 @@ export interface ModuleDef {
   checklistTemplates?: StarterChecklist[];
   /** starter estimate templates the office may add (optional; docs/specs/07 §12) */
   estimateTemplates?: StarterEstimate[];
+  /**
+   * which price-list item a starter's line means FOR THIS COMPANY (#1336): the line's `match` made narrower by the company's own defaults
+   * (a trade's own stock: the properties a new item of the company is made with, the same ones its estimate lines ask for). `settings` — the
+   * company's module settings (CompanyModule.settings). Pure; without it the line's own `match` is all there is.
+   */
+  starterWant?: (settings: unknown, match: Record<string, string>) => Record<string, string>;
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
@@ -332,6 +351,9 @@ export function keepModuleData<T extends { moduleData?: Record<string, unknown>;
   return { ...next, moduleData: { ...next.moduleData, ...Object.fromEntries(keep.map((k) => [k, had[k]])) } };
 }
 
+/** the module's screen takes the whole screen (ModuleDef.fullScreen): the route hides the bottom tabs and the side menu */
+export const moduleFullScreen = (key: string | undefined, screen: string | undefined): boolean =>
+  !!key && !!screen && !!defs.get(key)?.fullScreen?.includes(screen);
 /** a module's screen by its address parts; unknown module or screen → undefined */
 export const moduleScreen = (key: string | undefined, screen: string | undefined): (() => import("react").ComponentType) | undefined =>
   key && screen ? defs.get(key)?.screens?.[screen] : undefined;

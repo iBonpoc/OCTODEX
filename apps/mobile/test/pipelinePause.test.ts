@@ -6,8 +6,8 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const repo = join(__dirname, "../../..");
-const { decide, stopsFrom, liveLabels } = require("../../../scripts/pipelinePause.cjs") as {
-  liveLabels: (l: unknown, fallback: string[]) => string[];
+const { decide, stopsFrom, prLabelsFrom } = require("../../../scripts/pipelinePause.cjs") as {
+  prLabelsFrom: (csv: string | undefined, current: unknown) => string[];
   decide: (a: { event: string; prLabels: string[]; stops: { number: number }[] }) => { pause: boolean; message: string };
   stopsFrom: (l: unknown) => { number: number }[];
 };
@@ -33,18 +33,6 @@ describe("decide: who is paused", () => {
   it("pull requests in the issues list are not stops", () => {
     expect(stopsFrom([{ number: 5, pull_request: {} }, { number: 6 }])).toEqual([{ number: 6, title: undefined }]);
     expect(stopsFrom(null)).toEqual([]);
-  });
-});
-
-describe("live labels (probe #1129: «починка» added while the run waited for a runner)", () => {
-  it("the live list wins over the event's labels", () => expect(liveLabels([{ name: "починка" }, { name: "ошибка" }], [])).toEqual(["починка", "ошибка"]));
-  it("a broken answer keeps the fallback instead of dropping the label", () => {
-    expect(liveLabels(null, ["починка"])).toEqual(["починка"]);
-    expect(liveLabels({ message: "Not Found" }, ["починка"])).toEqual(["починка"]);
-  });
-  it("a PR labelled «починка» live is not paused even though the event had no labels", () => {
-    const prLabels = liveLabels([{ name: "починка" }], []);
-    expect(decide({ event: "pull_request", prLabels, stops: [{ number: 1 }] }).pause).toBe(false);
   });
 });
 
@@ -110,5 +98,19 @@ describe("the workflows", () => {
   it("label names and numbers reach the shell through env, never pasted into the command", () => {
     expect(checks).toMatch(/PR_LABELS: \$\{\{ join\(github\.event\.pull_request\.labels\.\*\.name/);
     expect(checks).not.toMatch(/run: [^\n]*\$\{\{ github\.event\.pull_request\.labels/);
+  });
+});
+
+describe("#1253: «починка» put on after the push still counts (a re-run keeps the old payload)", () => {
+  it("label only in the current labels → the fix PR runs", () => {
+    const prLabels = prLabelsFrom("", [{ name: "починка" }]);
+    expect(decide({ event: "pull_request", prLabels, stops: [{ number: 1253 }] }).pause).toBe(false);
+  });
+  it("payload and current are merged, junk ignored", () => {
+    expect(prLabelsFrom("a, b", [{ name: "b" }, { name: "c" }, null, { x: 1 }]).sort()).toEqual(["a", "b", "c"]);
+    expect(prLabelsFrom(undefined, undefined)).toEqual([]);
+  });
+  it("the pause step passes the PR number so the script can read the labels now", () => {
+    expect(wf("checks.yml")).toMatch(/PR_NUMBER: \$\{\{ github\.event\.pull_request\.number \}\}/);
   });
 });

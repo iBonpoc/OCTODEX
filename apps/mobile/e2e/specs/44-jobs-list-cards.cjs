@@ -13,15 +13,15 @@ exports.run = async (h) => {
   const cardOf = (text) => p.locator('[data-testid="list-card"]').filter({ hasText: text }).first();
   const nameOf = (j) => db.customers.find((c) => c.id === db.properties.find((x) => x.id === j.propertyId)?.customerId)?.name;
 
-  // a scheduled job (filter «Запланирован»)
+  // a scheduled job (the filter «scheduled», by its key)
   const job = db.jobs.find((j) => j.status === "scheduled");
   h.expect(job, "demo has a scheduled job");
-  await p.getByText(/^Запланирован · \d+$/).last().click();
+  await p.getByTestId("filter-lane-scheduled").locator("visible=true").first().click();
   await p.waitForTimeout(300);
   const card = cardOf(job.title);
   await card.scrollIntoViewIfNeeded();
   const txt = await card.innerText();
-  for (const s of [nameOf(job), job.title, "Запланирован"]) h.expect(txt.includes(s), `job card shows «${s}»: ${txt.slice(0, 200)}`);
+  for (const s of [nameOf(job), job.title, "Запланирована"]) h.expect(txt.includes(s), `job card shows «${s}»: ${txt.slice(0, 200)}`);
   h.expect(/\$[\d,]+/.test(txt), "office sees the amount");
   const visit = db.visits.filter((v) => v.jobId === job.id).sort((a, b) => a.start.localeCompare(b.start)).find((v) => v.step !== "paid" && v.step !== "done");
   // everyone assigned to the next visit (assigneeIds, else techId)
@@ -44,7 +44,7 @@ exports.run = async (h) => {
   // tech: the same list, no amounts anywhere on the cards
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/jobs");
-  await p.getByText(/^Запланирован · \d+$/).last().click();
+  await p.getByTestId("filter-lane-scheduled").locator("visible=true").first().click();
   await p.waitForTimeout(300);
   const cards = await p.locator('[data-testid="list-card"]').allInnerTexts();
   h.expect(cards.length > 0, "the tech sees the jobs");

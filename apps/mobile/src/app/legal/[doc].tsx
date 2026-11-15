@@ -6,6 +6,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Screen } from "@/ui/surfaces";
+import { NotFound } from "@/ui/emptyStates";
 
 /** the sections of each draft (i18n legal.<doc>.<n>.t / .b) — the outline of legal/01 §3.2 (Terms) and §3.3 (Privacy) */
 const SECTIONS: Record<LegalDoc, number> = { terms: 8, privacy: 7 };
@@ -22,7 +23,7 @@ export default function LegalDocument() {
   if (!isLegalDoc(doc))
     return (
       <Screen title={t("support.documents")} back={back}>
-        <Empty icon="doc" title={t("legal.notFound")} />
+        <NotFound testID="legal-not-found" title={t("legal.notFound")} listLabel={t("empty.toDocs")} onList={back} />
       </Screen>
     );
   const n = Array.from({ length: SECTIONS[doc] }, (_, i) => i + 1);

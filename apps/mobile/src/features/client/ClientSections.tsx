@@ -14,6 +14,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { clientHistory, type HistoryKind } from "@/features/clients";
 import { clientRecords, type ClientRow } from "@/features/clientRows";
 import { invoiceChip } from "@/features/ContractStatement";
+import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 import { estView } from "@/features/boards";
 import { jobStatusView } from "@/features/jobs";
 import { leadStatusView } from "@/features/leads";
@@ -26,7 +27,8 @@ import { callPlaceForClient } from "@/features/comms/comms";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { propertyTitle } from "@/features/properties";
 import { mailtoHref } from "@/features/contactLinks";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, ListRow, SectionTitle } from "@/ui/surfaces";
@@ -71,20 +73,28 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
   const { t, money, day } = useI18n();
   const toast = useToast();
   const office = role !== "tech";
-  const r = clientRecords(db, c, role);
+  const r = clientRecords(db, c, role, store.mode);
   const [newProp, setNewProp] = useState<Property | null>(null);
   const [people, setPeople] = useState(false);
   const [hist, setHist] = useState<"all" | HistoryKind>("all");
   const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
   const [calling, setCalling] = useState<CallPreset | null>(null);
 
+  const newTask = () => setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me });
+
   switch (s) {
     case "properties":
       return (
         <>
-          {office ? <Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /> : null}
+          {office && r.properties.length ? <Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /> : null}
           {r.properties.length === 0 ? (
-            <Empty icon="home2" title={t("client.empty.properties")} hint={t("client.empty.propertiesHint")} />
+            // an empty list says what to do: the button to make the first one stands in it (S-42, #882)
+            <Empty
+              icon="home2"
+              title={t("client.empty.properties")}
+              hint={t("client.empty.propertiesHint")}
+              action={office ? <View testID="client-empty-add-property"><Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /></View> : undefined}
+            />
           ) : (
             <CardGrid>
               {r.properties.map((p) => {
@@ -178,7 +188,28 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
 
     case "estimates":
       return r.estimates.length === 0 ? (
-        <Empty icon="invoice" title={t("client.empty.estimates")} hint={t("client.empty.documentsHint")} />
+        <>
+          <PropertySheet value={newProp} onClose={() => setNewProp(null)} />
+          <Empty
+            icon="invoice"
+            title={t("client.empty.estimates")}
+            hint={t("client.empty.documentsHint")}
+            // an estimate is made for an address: no address yet — the first thing to make is the address
+            action={
+              office ? (
+                <View testID="client-empty-add-estimate">
+                  <Button
+                    label={r.properties.length ? t("est.new") : t("prop.add")}
+                    icon="plus"
+                    // inside the client card the yellow is «Создать смету» above (rule 2: one accent, #1343 review)
+                    variant="secondary"
+                    onPress={() => (r.properties.length ? router.push(`/estimate/new?customerId=${c.id}&propertyId=${r.properties[0]!.id}`) : setNewProp(newProperty(c.id)))}
+                  />
+                </View>
+              ) : undefined
+            }
+          />
+        </>
       ) : (
         <CardGrid>
           {r.estimates.map((e) => {
@@ -201,7 +232,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       );
 
     case "invoices":
-      return r.invoices.length + r.receipts.length === 0 ? (
+      return r.invoices.length + r.receipts.length + (db.voidInvoices ?? []).filter((i) => i.customerId === c.id).length === 0 ? (
         <Empty icon="invoice" title={t("client.empty.invoices")} hint={t("client.empty.documentsHint")} />
       ) : (
         <>
@@ -224,6 +255,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
               );
             })}
           </CardGrid>
+          <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.customerId === c.id)} testPrefix="client" />
           {r.receipts.length ? <SectionTitle title={t("client.receipts")} /> : null}
           <CardGrid>
             {r.receipts.map((p) => (
@@ -249,9 +281,16 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       return (
         <>
           {/* wave 6-1/6-2: the one task form (20 §7) — the client is already «к чему» */}
-          {office ? <Button label={t("task.new")} icon="plus" variant="secondary" onPress={() => setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me })} /> : null}
+          {office && (open.length || done.length) ? <Button label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} /> : null}
           <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
-          {open.length === 0 && done.length === 0 ? <Empty icon="check" title={t("client.empty.tasks")} hint={office ? t("client.empty.tasksHint") : undefined} /> : null}
+          {open.length === 0 && done.length === 0 ? (
+            <Empty
+              icon="check"
+              title={t("client.empty.tasks")}
+              hint={office ? t("client.empty.tasksHint") : undefined}
+              action={office ? <View testID="client-empty-add-task"><Button label={t("task.new")} icon="plus" variant="secondary" onPress={newTask} /></View> : undefined}
+            />
+          ) : null}
           {open.length ? (
             <CardGrid>
               {open.map((x) => (
@@ -308,10 +347,11 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       const items = hist === "all" ? history : history.filter((h) => h.kind === hist);
       return (
         <>
-          <ChoiceChips<"all" | HistoryKind>
+          {/* the list's one filter row (31 §6, DS §5.5: «Все» last): one line that scrolls sideways — not a second row of tabs that wraps (#1416) */}
+          <FilterBar<"all" | HistoryKind>
             value={hist}
             onChange={setHist}
-            items={(office ? (["all", "talk", "docs", "money"] as const) : (["all", "talk", "docs"] as const)).map((k) => ({ key: k, label: t(`client.h.f.${k}`) }))}
+            items={(office ? (["talk", "docs", "money", "all"] as const) : (["talk", "docs", "all"] as const)).map((k) => ({ key: k, label: t(`client.h.f.${k}`), count: k === "all" ? history.length : history.filter((h) => h.kind === k).length }))}
           />
           {items.length === 0 ? (
             <Empty icon="clock" title={t("client.empty.history")} hint={t("client.empty.historyHint")} />

@@ -29,7 +29,7 @@ const useQ = () => {
 };
 
 /** After a call from the card: did you get through? Only "yes" stops the reply timer (Р13). */
-export function CallResultSheet({ l, visible, onClose, onAnswered }: { l: Lead; visible: boolean; onClose: () => void; onAnswered: () => void }) {
+export function CallResultSheet({ l, visible, onClose, onAnswered, onExited }: { l: Lead; visible: boolean; onClose: () => void; onAnswered: () => void; onExited?: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -48,7 +48,7 @@ export function CallResultSheet({ l, visible, onClose, onAnswered }: { l: Lead; 
   // closed without an answer: the call still counts as an attempt (never lost from the history)
   const dismiss = () => done("no_answer");
   return (
-    <Sheet visible={visible} onClose={dismiss} title={t("lead.call.title")}>
+    <Sheet visible={visible} onExited={onExited} onClose={dismiss} title={t("lead.call.title")}>
       <Button label={t("lead.call.yes")} icon="check" full onPress={() => done("answered")} />
       <RowView style={{ flexWrap: "wrap" }}>
         <Button label={t("lead.call.no")} variant="secondary" onPress={() => done("no_answer")} />

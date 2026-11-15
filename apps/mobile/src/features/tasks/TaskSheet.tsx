@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { ScrollView, View } from "react-native";
+import { useHeldSheet } from "@/ui/heldSheet";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -14,7 +15,7 @@ import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { minuteIn, getZone } from "@/features/zone";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
 import { SUBJECT_KIND, taskAssignees, taskPlaces, taskSubject } from "./tasks";
 import { goneId } from "@/features/team";
@@ -41,7 +42,7 @@ type PlanMode = "none" | "allDay" | "time";
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={{ gap: space[1] }}>
-      <T v="micro" tone="mut">
+      <T v="caption" tone="mut">
         {label}
       </T>
       {children}
@@ -50,11 +51,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function TaskSheet({ value, onClose }: { value: TaskDraft | null; onClose: () => void }) {
-  if (!value) return null;
-  return <TaskSheetBody key={value.id ?? `new-${value.subjectId}`} value={value} onClose={onClose} />;
+  const h = useHeldSheet(value);
+  if (!h.value) return null;
+  return <TaskSheetBody key={`${h.value.id ?? `new-${h.value.subjectId}`}-${h.opening}`} value={h.value} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
-function TaskSheetBody({ value, onClose }: { value: TaskDraft; onClose: () => void }) {
+function TaskSheetBody({ value, onClose, visible, onExited }: { value: TaskDraft; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { db, role } = store;
   const { t, day: dayText, time } = useI18n();
@@ -112,7 +114,7 @@ function TaskSheetBody({ value, onClose }: { value: TaskDraft; onClose: () => vo
   const places = draft.subjectId ? [] : taskPlaces(db, role, placeQuery).slice(0, 20);
 
   return (
-    <Sheet visible onClose={onClose} title={value.id ? t("task.edit") : t("task.new")} dirty={dirty} onSave={ok ? save : undefined}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={value.id ? t("task.edit") : t("task.new")} dirty={dirty} onSave={ok ? save : undefined}>
       <View style={{ gap: space[3] }}>
         <Field label={t("w6.task.subject")}>
           {s ? (
@@ -125,7 +127,7 @@ function TaskSheetBody({ value, onClose }: { value: TaskDraft; onClose: () => vo
           ) : (
             <View style={{ gap: space[2] }} testID="task-places">
               <TextField type="search" icon="search" value={placeQuery} onChangeText={setPlaceQuery} placeholder={t("w6.task.subjectSearch")} />
-              <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+              <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {places.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
                 ) : (
@@ -136,7 +138,7 @@ function TaskSheetBody({ value, onClose }: { value: TaskDraft; onClose: () => vo
                     </View>
                   ))
                 )}
-              </ScrollView>
+              </SheetScroll>
             </View>
           )}
         </Field>

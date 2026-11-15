@@ -56,10 +56,8 @@ exports.run = async (h) => {
 
   // the other side of the stake: a new estimate line from the item takes the same price (the engine, as spec 01)
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
-  await p.getByRole("button", { name: "Добавить позицию" }).first().click();
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("railing bracket");
-  await h.sheet().getByText("Railing bracket", { exact: true }).click();
-  await h.sheet().getByRole("button", { name: "Готово" }).click();
+  await require("../estimateLine.cjs").addCatalog(h, "railing bracket", "Railing bracket");
+  await require("../estimateLine.cjs").fold(h);
   await h.expectText(/Сумма \| \$13\.34/, "a new estimate line counts with the supplier's tax");
   await h.go(`/catalog/${ITEM}`);
   await p.getByTestId("catalog-history").locator("visible=true").first().waitFor({ timeout: 5000 });

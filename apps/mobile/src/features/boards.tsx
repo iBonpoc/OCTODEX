@@ -17,6 +17,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardList, Empty } from "@/ui/surfaces";
+import { canSeeEstimate } from "@/features/access";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
 export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
@@ -42,7 +43,7 @@ export function matchEstimate(db: DB, e: Estimate, q: string): boolean {
 
 /** `wrap` — the screen around the board: on 1280 it gets the open estimate as its `aside` (spec 06 «Панель 1280») */
 export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: ReactNode) => ReactElement }) {
-  const { db } = useStore();
+  const { db, role, mode } = useStore();
   const { t, money, day } = useI18n();
   const { device } = useDevice();
   // spec 31 §6 п.7: the status is kept on this device for this list; the search is not
@@ -50,7 +51,8 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
   const f: EstimateFilter = ESTIMATE_LANE.includes(kept) ? kept : "open";
   const [q, setQ] = useState("");
   const now = Date.now();
-  const all = db.estimates.map((e) => ({ e, g: estimateGroup(e, now) }));
+  // the tech: only estimates of his work (#868; estimates_select in the database)
+  const all = db.estimates.filter((e) => canSeeEstimate(db, { role, mode, me: db.me }, e.id)).map((e) => ({ e, g: estimateGroup(e, now) }));
   const count = (x: EstimateFilter) => all.filter(({ g }) => inEstimateFilter(g, x)).length;
   const list = all
     .filter(({ g }) => inEstimateFilter(g, f))
@@ -59,20 +61,33 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
   // the one estimate card (features/listCards.tsx), shared with the «Today» figures
   const groups = ESTIMATE_GROUPS.map((g) => [g, list.filter((x) => x.g === g)] as const).filter(([, xs]) => xs.length);
   // 1280: the open estimate beside the list, `/estimates?open=<id>`; the order of the rows on screen is the groups'
-  const panel = useListPanel(groups.flatMap(([, xs]) => xs.map((x) => x.e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id));
-  const openE = panel.openId ? db.estimates.find((x) => x.id === panel.openId) : undefined;
+  // the tech: only his own opens in the panel by `?open=` too (director's review of #1134 Б3; as invoice/index.tsx)
+  const mayOpen = (id: string) => canSeeEstimate(db, { role, mode, me: db.me }, id);
+  const panel = useListPanel(groups.flatMap(([, xs]) => xs.map((x) => x.e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id) && mayOpen(id));
+  const openE = panel.openId && mayOpen(panel.openId) ? db.estimates.find((x) => x.id === panel.openId) : undefined;
   const card = ({ e }: { e: Estimate; g: EstimateGroup }) => (
     <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
   );
+  // #1412: as the estimate's screen — «⋯» in the panel's header row, the main button at the top of the card
   const aside = openE ? (
-    <ListPanel
-      title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
-      // as the estimate's screen: the client and the address under the title
-      subtitle={estimateSubtitle(db, openE)}
-      outside={panel.outside}
-      onOpen={panel.full} onClose={panel.close}>
-      <EstimateCardBody key={openE.id} e={openE} />
-    </ListPanel>
+    <EstimateCardBody
+      key={openE.id}
+      e={openE}
+      frame={({ more, main, body }) => (
+        <ListPanel
+          title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
+          // as the estimate's screen: the client and the address under the title
+          subtitle={estimateSubtitle(db, openE)}
+          outside={panel.outside}
+          actions={more}
+          onOpen={panel.full}
+          onClose={panel.close}
+        >
+          {main}
+          {body}
+        </ListPanel>
+      )}
+    />
   ) : undefined;
   return wrap(
     <View style={{ gap: space[3] }}>

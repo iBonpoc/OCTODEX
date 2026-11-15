@@ -7,6 +7,7 @@
  * Now both come from the same lines and the same rule, through the engine (rule 8). Not mirrored: negative sums (a legacy estimate has none). Review #415, security-check №2. Pure: test/legacyTotals.test.ts (and T121).
  */
 import { computeOption, depositAmount, depositSettingFromRule, type DepositSetting } from "@octo/estimating-engine";
+import type { Estimate } from "@/data/types";
 
 export interface LegacyLine {
   lineTotalCents: number;
@@ -17,6 +18,8 @@ export interface LegacyLine {
 export interface LegacyVersion {
   taxEnabled: boolean;
   taxRateBps: number | null;
+  /** #1219: estimate_versions.tax_rate_ppm (null: the basis points are the rate) */
+  taxRatePpm?: number | null;
   depositRule: unknown;
   discountMode: string | null;
   discountValue: number | null;
@@ -37,7 +40,7 @@ export function legacyTotals(lines: LegacyLine[], v: LegacyVersion): { totalCent
     : null;
   const t = computeOption(
     counted.map((l, i) => ({ name: `line ${i + 1}`, quantity: 1, unitPriceCents: l.lineTotalCents, taxable: l.taxable })),
-    { mode: "added_on_top", enabled: v.taxEnabled, rateBps: v.taxRateBps ?? 0 },
+    { mode: "added_on_top", enabled: v.taxEnabled, rateBps: v.taxRateBps ?? 0, ratePpm: v.taxRatePpm ?? undefined },
     discount,
   );
   return { totalCents: t.total, depositCents: depositAmount(t.total, serverDepositRule(v.depositRule)) };
@@ -68,8 +71,37 @@ export function legacyForEstimate(
   return legacyTotals(
     d.lines.filter((l) => l.option_id === opt.id).map((l) => ({ lineTotalCents: num(l.line_total_cents), taxable: !!l.taxable, optional: !!l.is_optional, clientVisible: l.client_visible !== false })),
     {
-      taxEnabled: !!ver.tax_enabled, taxRateBps: ver.tax_rate_bps == null ? null : num(ver.tax_rate_bps), depositRule: ver.deposit_rule,
+      taxEnabled: !!ver.tax_enabled, taxRateBps: ver.tax_rate_bps == null ? null : num(ver.tax_rate_bps), taxRatePpm: ver.tax_rate_ppm == null ? null : num(ver.tax_rate_ppm), depositRule: ver.deposit_rule,
       discountMode: (opt.discount_mode as string | null) ?? null, discountValue: opt.discount_value == null ? null : num(opt.discount_value),
     },
   );
+}
+
+/**
+ * #1147: the total the server will count for a quick estimate this phone made (estimate.add writes each line's price as
+ * Math.round(total / qty) — ops.ts — and the server sums floor(qty × price + 0.5)), its first option, no add-on, no tax
+ * or discount (estimate.add sets none). When it is not the total the phone shows, the signature goes without the total
+ * (the door without it): a few cents of our own rounding are not «the estimate changed».
+ */
+export function addedTotalCents(lines: { qty: string; totalCents: number; optional?: boolean }[]): number {
+  const t = computeOption(
+    lines.filter((l) => !l.optional).map((l, i) => {
+      const qty = Number(l.qty) || 1;
+      return { name: `line ${i + 1}`, quantity: qty, unitPriceCents: Math.round(l.totalCents / qty), taxable: false };
+    }),
+    { mode: "added_on_top", enabled: false, rateBps: 0 },
+    null,
+  );
+  return t.total;
+}
+
+/**
+ * #1147: the total a quick estimate's on-site signature carries — the one the phone showed — or none (the door without
+ * the total) when the server will count it from this phone's own estimate.add rows a few cents apart (Math.round of the
+ * line prices): while that op is still queued, or when its rounding makes another total (addedTotalCents).
+ */
+export function signTotalFor(e: Pick<Estimate, "totalCents" | "lines"> | undefined, addQueued: boolean): { totalCents?: number } {
+  if (!e || addQueued) return {};
+  if (e.lines?.length && addedTotalCents(e.lines) !== e.totalCents) return {};
+  return { totalCents: e.totalCents };
 }

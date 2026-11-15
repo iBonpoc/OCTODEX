@@ -262,6 +262,18 @@ export interface TimelineEntry {
  * assignment, notes, estimate visits, estimates sent / opened / signed.
  */
 /** `deletedWord` — «Удалённый пользователь» in the viewer's language (a person who deleted their account, S22) */
+/**
+ * The words of one timeline entry in the viewer's language — for both lists of the lead's history (the card's compact
+ * cards and the history tab). A status and a reason come as dictionary keys: they are translated here, the reason goes
+ * after a colon (#1104: the card showed the raw key «st.replied»).
+ */
+export function timelineText(e: Pick<TimelineEntry, "key" | "params">, t: (k: DictKey, p?: Record<string, string>) => string): string {
+  const p: Record<string, string> = { ...(e.params ?? {}) };
+  if (p.status) p.status = t(p.status as DictKey);
+  if ("reason" in p) p.reason = p.reason ? `: ${t(p.reason as DictKey)}` : "";
+  return t(e.key, p);
+}
+
 export function leadTimeline(db: DB, l: Lead, viewer?: string, deletedWord = ""): TimelineEntry[] {
   const out: TimelineEntry[] = [{ id: `rcv-${l.id}`, at: l.receivedAt, icon: "inbox", key: "tl.received", params: { source: sourceName(db, l.sourceId) }, body: l.message || undefined }];
   for (const a of db.activities.filter((x) => x.subjectType === "lead" && x.subjectId === l.id)) {

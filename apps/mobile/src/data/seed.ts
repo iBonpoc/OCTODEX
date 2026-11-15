@@ -144,8 +144,8 @@ export const SEED_SERVICE_CATEGORIES: ServiceCategory[] = ["handyman", "plumbing
 /** Demo company: partly filled so the setup checklist shows what is left. Test license number. */
 export const DEMO_COMPANY: Company = {
   id: "demo-company",
-  name: "OCTODEX Demo Home Services",
-  legalName: "OCTODEX Demo Home Services LLC",
+  name: "GoRix Demo Home Services",
+  legalName: "GoRix Demo Home Services LLC",
   entityType: "llc",
   phone: "(626) 555-0100",
   email: "office@example.com",
@@ -314,6 +314,7 @@ export function makeSeed(): DB {
       { id: "x2", jobId: "j1", vendor: "ABC Supply", category: "materials", amountCents: 88400, at: daysAgo(1), memberId: "m-alex" },
       { id: "x3", jobId: null, vendor: "Chevron", category: "fuel", amountCents: 7850, at: minutesAgo(200), memberId: "m-alex" },
     ],
+    voidInvoices: [],
     invoices: [
       { id: "i1", number: "INV-0101", title: "Final balance", kind: "final", customerId: "c2", jobId: "j2", totalCents: 184000, paidCents: 0, dueDate: daysAgo(9), sentAt: daysAgo(12) },
       { id: "i2", number: "INV-0102", title: "Final balance", kind: "final", customerId: "c4", jobId: "j4", totalCents: 96000, paidCents: 0, dueDate: daysAgo(-3), sentAt: daysAgo(1) },

@@ -10,7 +10,7 @@
  * - the office (dispatcher): read only, «ask the owner».
  * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» has no testID — by its name).
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 /** an in-app move: a full load would put the demo back online */
@@ -100,9 +100,10 @@ exports.run = async (h) => {
   await skipLength(p);
   await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run");
   await waitFor(async () => (((await db()).moduleData?.gutters?.elements) || []).some((e) => e.kind === "run" && e.attrs.color === pal[4]), "a new run has the company's colour");
-  if (!wide) await tid("draw-props").getByRole("button").click();
+  if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
   await more();
+  await tid("attr-profile-open").click(); // a dropdown (#677)
   h.expect((await radios("attr-profile").count()) === 4, "the panel offers 4 profiles (no Box)");
   await tid("attr-color-open").click(); // folded (founder 09.11)
   h.expect((await radios("attr-color").count()) === 9, "the panel offers the palette's 8 colours and «Без покраски»");
@@ -127,7 +128,7 @@ exports.run = async (h) => {
   }, KEY);
   await h.go("/module/gutters/settings");
   await tid("gset-locked").waitFor({ timeout: 5000 });
-  await tid("gset-connect").waitFor({ timeout: 3000 });
+  await tid("gset-locked-action").waitFor({ timeout: 3000 });
   h.expect((await tid("gset-color-add").count()) === 0, "the trial over: nothing to add");
   await tid("gset-profiles-k").click({ force: true });
   await p.waitForTimeout(400);
@@ -144,7 +145,7 @@ exports.run = async (h) => {
   }, KEY);
   await h.go("/module/gutters/settings");
   await tid("gset-ro").waitFor({ timeout: 5000 });
-  h.expect((await tid("gset-color-add").count()) === 0 && (await tid("gset-palette-berger").count()) === 0 && (await tid("gset-connect").count()) === 0, "the office adds no colours");
+  h.expect((await tid("gset-color-add").count()) === 0 && (await tid("gset-palette-berger").count()) === 0 && (await tid("gset-locked-action").count()) === 0, "the office adds no colours");
   await tid("gset-profiles-k").click({ force: true });
   await p.waitForTimeout(400);
   h.expect(!(await off("profiles")).includes("k"), "the office cannot uncheck");

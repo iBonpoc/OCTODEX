@@ -2,22 +2,27 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { canServe, visibleClients } from "@/features/clients";
 import { mergedTarget } from "@/features/clientDuplicates";
-import { clientRowsFor, isClientSection } from "@/features/clientRows";
+import { clientRowsFor, isClientSection, isClientTab } from "@/features/clientRows";
 import { ClientSection } from "@/features/client/ClientSections";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { Empty, Screen } from "@/ui/surfaces";
+import { View } from "react-native";
+import { component, space } from "@octo/design-tokens";
+import { useDevice } from "@/theme/ThemeProvider";
 
 /**
- * Client card (docs/specs/13-app-structure.md §3.3, wave 4). Header: name; one line "CLT-0001 · status · tags";
- * call / SMS / email / route; money (office). Below — not tabs but rows with counters, each opens its own list
- * (`/client/<id>?s=jobs`): properties, billing address, people, jobs, leads, estimates, invoices, tasks, notes, files, history.
+ * Client card (docs/specs/13-app-structure.md §3.3; prototype v6 approved by the founder 14.11, #1343). Header: name;
+ * one line "CLT-0001 · status · tags"; Позвонить · Написать · Маршрут; «Создать смету»; money (office). Below — view tabs
+ * (DS §9 А1п): Обзор · Сметы · Счета · Работы · Задачи · Заметки · Файлы · История, the number — what waits. An old link
+ * `/client/<id>?s=<row>` still opens that row's own list.
  */
 export default function ClientScreen() {
-  const { id, s } = useLocalSearchParams<{ id: string; s?: string }>();
+  const { id, s, tab } = useLocalSearchParams<{ id: string; s?: string; tab?: string }>();
   const { db, role } = useStore();
   const { t } = useI18n();
+  const { device } = useDevice();
   const c = visibleClients(db, role).find((x) => x.id === id);
   const toCard = () => router.replace(`/client/${id}`);
   const back = () => (router.canGoBack() ? router.back() : s ? toCard() : router.replace("/clients"));
@@ -49,16 +54,38 @@ export default function ClientScreen() {
       </Screen>
     );
   const office = role !== "tech";
+  // the open tab is in the address: back from a document returns to it
+  const onTab = (k: string) => router.setParams({ tab: k });
+  const edit = office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined;
+  // no yellow round «＋» on the client card (prototype v6, founder 14.11, #1343): «Создать смету» and «＋ Новая …» in the tabs
   return (
-    <Screen
-      title={c.name}
-      back={back}
-      // «do not service»: no «＋» (nothing new for the client, docs/specs/04 §12; the server refuses too)
-      fab={canServe(db, c.id) ? "client" : undefined}
-      fabCtx={{ customerId: c.id }}
-      right={office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined}
-    >
-      <ClientCardBody c={c} />
-    </Screen>
+    <ClientCardBody
+      c={c}
+      tab={isClientTab(tab) ? tab : undefined}
+      onTab={onTab}
+      frame={({ summary, tabs, content, rest, mini }) =>
+        device === "desktop" ? (
+          // desktop (DS §12.3, #1416): the tabs and their content on the left, the summary in a side column 360 on the right
+          <Screen title={c.name} back={back} right={edit}>
+            {/* the summary first for a screen reader and the Tab key (DS §12.3: header, summary, then the tabs), on the right to the eye */}
+            <View style={{ flexDirection: "row-reverse", alignItems: "flex-start", gap: space[6] }}>
+              <View testID="client-side" style={{ width: component.panelW, gap: space[3] }}>
+                {summary}
+              </View>
+              <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>
+                {tabs}
+                {content}
+              </View>
+            </View>
+            {rest}
+          </Screen>
+        ) : (
+          // phone, tablet: the tabs stick under a mini header (name · call · write · route) while the page scrolls (DS §9 А1п)
+          <Screen title={c.name} back={back} right={edit} tabs={tabs} tabKey={isClientTab(tab) ? tab : undefined} tabsMini={mini} below={<>{content}{rest}</>}>
+            {summary}
+          </Screen>
+        )
+      }
+    />
   );
 }

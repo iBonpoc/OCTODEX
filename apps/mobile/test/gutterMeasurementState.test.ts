@@ -23,7 +23,7 @@ const db = (measurements: unknown[], estimates: unknown[] = [], elements: unknow
 
 describe("measurementState (П25.4)", () => {
   it("no lead and no address — unlinked («Черновик»), whatever the database status says", () => {
-    expect(measurementState(db([]), M("a", { status: "ready" }) as never, true)).toEqual({ state: "unlinked", changed: false });
+    expect(measurementState(db([]), M("a", { status: "ready" }) as never, true)).toEqual({ state: "unlinked", changed: false, engineChanged: false });
   });
   it("linked, no estimate of it — noEstimate; a declined one does not count", () => {
     expect(measurementState(db([]), M("a", { leadId: "l1" }) as never, true).state).toBe("noEstimate");

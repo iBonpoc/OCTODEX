@@ -32,7 +32,7 @@
 ## Как запустить тесты локально
 
 ```bash
-supabase/tests/run.sh             # Postgres 16 из /usr/lib/postgresql/16/bin, порт 54329
+supabase/tests/run.sh             # Postgres 17 (как боевая база, #806) из /usr/lib/postgresql/17/bin, порт 54329
 VERBOSE=1 supabase/tests/run.sh   # плюс текст каждой ожидаемой ошибки
 ```
 

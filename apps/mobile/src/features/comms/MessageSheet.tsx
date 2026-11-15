@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
-import { Linking, ScrollView, View } from "react-native";
+import { useHeldSheet } from "@/ui/heldSheet";
+import { Linking, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Person } from "@/data/types";
@@ -9,12 +10,13 @@ import { mailtoHref } from "@/features/contactLinks";
 import { smsWithBody } from "@/features/sms";
 import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import {
   firstEmail, firstPhone, messageJobChoices, messageLanguage, messagePeople, messageSubject, messageTemplates, messageText, ownerName, ownerPeople, TEMPLATE_LABEL,
   type MessageTemplate, type Owner,
 } from "./messages";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * «Новое сообщение» (docs/specs/20 «6-3»; 13 §2.1.1): to whom → SMS or email (what the person has) → a ready text in the
@@ -27,7 +29,7 @@ export type MessagePreset = { owner?: Owner; person?: Person };
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <View style={{ gap: space[1] }}>
-      <T v="micro" tone="mut">
+      <T v="caption" tone="mut">
         {label}
       </T>
       {children}
@@ -36,11 +38,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 export function MessageSheet({ preset, onClose }: { preset: MessagePreset | null; onClose: () => void }) {
-  if (!preset) return null;
-  return <MessageSheetBody key={`${preset.owner?.id ?? ""}-${preset.person?.id ?? ""}`} preset={preset} onClose={onClose} />;
+  const h = useHeldSheet(preset);
+  if (!h.value) return null;
+  const p = h.value;
+  return <MessageSheetBody key={`${p.owner?.id ?? ""}-${p.person?.id ?? ""}-${h.opening}`} preset={p} visible={h.visible} onExited={h.onExited} onClose={onClose} />;
 }
 
-function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose: () => void }) {
+function MessageSheetBody({ preset, onClose, visible, onExited }: { preset: MessagePreset; onClose: () => void; visible: boolean; onExited: () => void }) {
   const store = useStore();
   const { db, role } = store;
   const { t } = useI18n();
@@ -98,8 +102,8 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
         : messagePeople(db, role, query)
       ).slice(0, 20);
   return (
-    <Sheet visible onClose={onClose} title={t("w6.msg.new")} dirty={text.trim().length > 0} onSave={ok ? send : undefined}>
-      <View style={{ gap: space[3] }}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("w6.msg.new")} dirty={text.trim().length > 0} onSave={ok ? send : undefined}>
+      <View style={{ gap: space[3] }} testID="msg-sheet">
         <Field label={t("w6.msg.to")}>
           {to ? (
             <ListRow
@@ -110,7 +114,7 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
           ) : (
             <View style={{ gap: space[2] }} testID="msg-people">
               {preset.owner ? null : <TextField type="search" icon="search" value={query} onChangeText={setQuery} placeholder={t("w6.msg.toSearch")} />}
-              <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+              <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {people.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
                 ) : (
@@ -121,7 +125,7 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
                     </View>
                   ))
                 )}
-              </ScrollView>
+              </SheetScroll>
             </View>
           )}
         </Field>
@@ -130,8 +134,8 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
             <ChoiceChips<string> value={jobId ?? ""} onChange={setJobId} items={jobs.map((j) => ({ key: j.id, label: j.label }))} />
           </Field>
         ) : null}
-        {to && !subject && jobs.length <= 1 ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.cannot")}`}</T> : null}
-        {to && !phone && !email ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.noAddress")}`}</T> : null}
+        {to && !subject && jobs.length <= 1 ? <StatusNote tone="warn">{t("w6.msg.cannot")}</StatusNote> : null}
+        {to && !phone && !email ? <StatusNote tone="warn">{t("w6.msg.noAddress")}</StatusNote> : null}
         {to && (subject || jobs.length > 1) && (phone || email) ? (
           <>
             {phone && email ? (

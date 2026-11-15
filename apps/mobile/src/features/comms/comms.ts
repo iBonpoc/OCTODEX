@@ -36,7 +36,7 @@ export interface CommsEntry {
   subjectType: Activity["subjectType"];
   subjectId: string;
   contactId?: string;
-  /** out = from OCTODEX; in = a reply (with the own number, later) */
+  /** out = from the app; in = a reply (with the own number, later) */
   direction?: "in" | "out";
 }
 

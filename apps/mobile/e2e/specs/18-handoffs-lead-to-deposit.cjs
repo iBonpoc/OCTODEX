@@ -26,11 +26,7 @@ exports.run = async (h) => {
   // S5: estimate from the lead (S3: prospect client + property are created for it)
   await h.clickText("Сметы");
   await h.click("Смета");
-  await h.page.getByRole("button", { name: "Добавить позицию" }).first().click(); await h.page.waitForTimeout(300);
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("Replace water heater");
-  await h.sheet().getByText(/Своя позиция:/).click(); await h.page.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("1850");
-  await h.sheet().getByRole("button", { name: "Готово" }).click(); await h.page.waitForTimeout(250);
+  await require("../estimateLine.cjs").addCustom(h, "Replace water heater", "1850");
 
   // S6: sent (the link goes to the client when it is copied / shared)
   await h.page.getByRole("button", { name: "Сохранить и отправить" }).click(); await h.page.waitForTimeout(700);

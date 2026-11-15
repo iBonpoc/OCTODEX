@@ -186,9 +186,13 @@ export interface Job {
   jobTypeId?: ID;
   /** wave П-2a: tags of the job (the company's Tag list, server: job_tags) */
   tagIds?: ID[];
+  /** #865: the contract's tax as signed (server: the client's approval of the job's approved version, selection → tax) */
+  contractTaxCents?: number;
   /** wave П-2a: tax of a job without an estimate (server: jobs.tax_enabled / tax_rate_bps); an exempt client → off */
   taxEnabled?: boolean;
   taxRateBps?: number;
+  /** #1219: the rate in ppm (8.875 % = 88750; server jobs.tax_rate_ppm) — the rate when set; absent — the basis points */
+  taxRatePpm?: number;
 }
 
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
@@ -338,10 +342,18 @@ export interface VisitSettings {
   minPhotosAfter: number;
 }
 
+/**
+ * why the cloud did not take a photo's file (#1431): tooBig — over the bucket's 25 MB (#1430); type — a type it does not
+ * keep; gone — the file is no longer on this phone (nothing to send again); refused — any other «no» of the storage
+ */
+export type PhotoFail = "tooBig" | "type" | "gone" | "refused";
+
 export interface Photo {
   id: ID;
   kind: "before" | "after";
   uri?: string;
+  /** the cloud refused the file (#1431): shown on the photo with «Повторить»; none — sent, waiting, or never asked */
+  upload?: { failed: PhotoFail; at: string };
 }
 
 /** ach — a bank payment online (Stripe, step 20; docs/specs/35); people record only card / cash / check / zelle by hand */
@@ -587,8 +599,15 @@ export type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
 export interface EstimateDoc {
   options: CustomOption[];
   settings: CustomSettings;
-  /** note to the client (scope, terms) */
+  /** «Notes» — a note to the client (scope, what is included) */
   note?: string;
+  /** «Terms & conditions» (#1304, docs/specs/40): the text the client reads before signing, a snapshot in the version — a later
+   *  change of the company's default never moves it. Absent = an estimate made before #1304 (the client sees the company's
+   *  default in their language, features/estimateTerms termsForClient); "" = cleared on purpose (no block). ≤ TERMS_MAX */
+  terms?: string;
+  /** when the phone last saved this version: the server's version row has no time of its own, and estimates.updated_at moves with
+   *  anything (a client's view, sending, signing) — «the last estimate» reads this (РС-7a) */
+  savedAt?: string;
   /** «страницы-вложения» a module adds (a drawing of shapes, a table of words) — after the lines on /p/ and in the PDF;
    *  drawn only through features/docPages (clientPages), the server passes them through app.doc_pages (spec 33 П24.7) */
   pages?: DocAttachPage[];
@@ -604,6 +623,8 @@ export interface EstimateApproval {
   channel: "on_site" | "portal";
   totalCents: number;
   depositCents: number;
+  /** the contract's tax as signed (server: estimate_approvals.selection → tax); #865 splits the invoices by it */
+  taxCents?: number;
   /* ---- company signature (docs/specs/07 §3.2, wave E2a) ---- */
   /** ids the job and the deposit invoice will get when the company signs (offline: the same ids on the phone and the server) */
   jobId?: ID;
@@ -636,6 +657,8 @@ export interface MemberSignature {
 }
 export interface Estimate {
   id: ID;
+  /** who made it (server: estimates.created_by) — a tech sees his own estimate (estimates_select, #1138) */
+  createdBy?: ID;
   /** direction of the business (docs/specs/11-trade.md): from the lead, else the client's latest, else the only one */
   serviceCategoryId?: ID;
   customerId: ID;
@@ -644,6 +667,9 @@ export interface Estimate {
   totalCents: number;
   status: EstimateStatus;
   sentAt?: string;
+  /** when this estimate was last SAVED by a phone: the document's own mark; for one saved before it existed — the time it was sent, else
+   *  estimates.updated_at (that one moves with a client's view, so it is the last resort) */
+  savedAt?: string;
   approvedAt?: string;
   /** client-visible lines of the chosen option (hidden BOM lines stay in the engine) */
   lines?: { name: string; qty: string; totalCents: number; optional?: boolean }[];
@@ -703,6 +729,20 @@ export interface CatalogItem {
   supplierId?: ID;
   /** the supplier's own code of the item */
   supplierSku?: string;
+  /* ---- РС-10 (the item's card, spec 2026-11-12-estimate-editor Р11): absent = not set, and not sent ---- */
+  /** our own code of the item (catalog_items.sku) */
+  sku?: string;
+  /** letters, digits, space . _ / -; at most 64 (catalog_items.barcode) */
+  barcode?: string;
+  /** only https:// with a host (catalog_items.product_url; features/catalogCard normalizeProductUrl) */
+  productUrl?: string;
+  /** the direction of the business (catalog_items.service_category_id → ServiceCategory) */
+  serviceCategoryId?: ID;
+  /** when and by whom the item was made and last changed (the server's own columns; read only) */
+  createdAt?: string;
+  createdBy?: ID;
+  updatedAt?: string;
+  updatedBy?: ID;
 }
 
 /** how a supplier wants to be paid (printed on the supplier order, spec 36 §5) */
@@ -782,6 +822,22 @@ export interface CostHistoryEntry {
   source: string;
   at: string;
   /** made by this phone at a save (shown at once); the server's rows replace it when the screen reads them */
+  local?: boolean;
+}
+
+/** РС-10: one change of an item's selling price or markup, before and after (server: catalog_price_history — only who
+ *  sees costs). A price row has no markup, a markup row no price. */
+export interface PriceHistoryEntry {
+  id: ID;
+  itemId: ID;
+  priceCents?: number;
+  prevPriceCents?: number;
+  markupBps?: number;
+  prevMarkupBps?: number;
+  source: string;
+  at: string;
+  by?: ID;
+  /** made by this phone at a save (shown at once, offline too); kept while that save is still in the queue */
   local?: boolean;
 }
 
@@ -873,7 +929,14 @@ export interface Company {
   visitSettings?: Partial<VisitSettings>;
   /** the «not done» card looks at visits started from here (docs/specs/08 §11.5 №26; companies.checklist_since) */
   checklistSince?: string;
-  estimate: { validDays: number; depositBps: number | null; terms?: string };
+  estimate: {
+    validDays: number;
+    depositBps: number | null;
+    /** the old single default (rule 16, step 1: still written = termsByLang.en for older phones; read only as the last fallback) */
+    terms?: string;
+    /** #1304: the default «Terms & conditions» of a new estimate by the client's language — en is the fallback, es / ru optional */
+    termsByLang?: Partial<Record<import("@/i18n/translate").DocLang, string>>;
+  };
   payment: { zelle?: string; checkPayableTo?: string };
   licenses: CompanyLicense[];
   contacts: CompanyContact[];
@@ -903,7 +966,7 @@ export interface Invoice {
   paidAt?: string;
   method?: PaymentMethod;
   /** deposit → progress (by stage) → final balance; each takes partial payments */
-  kind?: "deposit" | "progress" | "final";
+  kind?: "deposit" | "progress" | "final" | "standalone" | "recurring";
   number?: string;
   /** what the client sees: "Deposit", "Progress: rough-in", "Final balance" */
   title?: string;
@@ -913,6 +976,10 @@ export interface Invoice {
   /** the invoice's tax and its mode (server: tax_cents, tax_mode) — a refund's tax part (step 20д, PRD 19 §7.9) */
   taxCents?: number;
   taxMode?: "included_in_price" | "added_on_top" | "tax_inclusive_display" | "exempt";
+  /** В1-5 (#1107): voided (server: status void, void_reason, voided_at) — such an invoice lives in DB.voidInvoices */
+  status?: "void";
+  voidReason?: string;
+  voidedAt?: string;
 }
 
 /** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */
@@ -1070,13 +1137,19 @@ export interface DB {
   visits: Visit[];
   leads: Lead[];
   estimates: Estimate[];
+  /** live invoices only (sent; a draft is not loaded): every sum reads these */
   invoices: Invoice[];
+  /** В1-5 (#1107): voided invoices — apart, so no sum, «к оплате», «собрано» or «Требует внимания» ever counts them;
+   *  shown only as «Аннулирован» cards on the job's statement and the client's invoices (absent in old data → []) */
+  voidInvoices?: Invoice[];
   expenses: Expense[];
   catalog: CatalogItem[];
   /** spec 36: the company's suppliers (absent in old saved data → []; a tech and sales read none) */
   suppliers?: Supplier[];
   /** spec 36: the history of the items' costs, newest first (only who sees costs; absent → []) */
   costHistory?: CostHistoryEntry[];
+  /** РС-10: the newest price / markup changes of the items whose card was opened (catalog_price_history; absent → []) */
+  priceHistory?: PriceHistoryEntry[];
   /** spec 37: purchase orders (the office all; a tech those of his jobs, without costs; absent → []) */
   purchaseOrders?: PurchaseOrder[];
   /** the server has no purchase_orders yet (before 20261110090000): orders are not written */
