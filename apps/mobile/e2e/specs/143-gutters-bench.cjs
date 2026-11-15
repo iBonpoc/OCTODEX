@@ -3,7 +3,7 @@
  * - «Компания → Модули»: the web build does not offer «Проверка скорости» (a developer's screen: Expo Go and dev builds only,
  *   #1426); /module/gutters/bench opens by its address, without the bottom bar;
  * - the bench drawing is the founder's load: 50 lines, 40 downspouts, 150 labels; storeys by colour with «эт N»;
- * - «Начать» runs the four checks and shows each with a number and «прошло / ниже нормы» (icon + word); «Скопировать
+ * - «Начать» runs the four checks and shows each with a number and «прошло / ниже предела» (icon + word); «Скопировать
  *   итог» appears. The speed thresholds are NOT checked here: the browser in CI is not a phone (the founder measures
  *   on his phones); this spec checks that the bench counts and shows;
  * - a wrong module or screen → «Такого экрана у модуля нет».
@@ -46,7 +46,7 @@ exports.run = async (h) => {
   await tid("bench-copy").waitFor({ timeout: 60_000 });
   for (const k of ["open", "pan", "drag", "tap"]) {
     const row = (await tid(`bench-${k}`).innerText()).replace(/\s+/g, " ");
-    h.expect(/(прошло|ниже нормы)/.test(row), `${k}: a verdict (${row})`);
+    h.expect(/(прошло|ниже предела)/.test(row), `${k}: a verdict (${row})`);
     const m = row.match(/(\d+) (кадров\/с|мс) · нужно (≥|<) (\d+)/);
     h.expect(!!m && Number(m[1]) > 0, `${k}: a number and the threshold (${row})`);
   }

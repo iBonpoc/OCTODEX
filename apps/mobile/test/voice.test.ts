@@ -8,9 +8,9 @@ import { ru } from "../src/i18n/ru";
  * ошибка / сбой» and their EN/ES likes. The words below are looked up in every string the person can read.
  */
 const BAD: Record<"ru" | "en" | "es", RegExp> = {
-  ru: /не удалось|не получилось|не смог|не вышло|не сработало|ошибк|ошибоч|сбой|сбои|сбоя|неудач|что-то пошло не так/i,
+  ru: /не удалось|не получилось|не смог|не вышло|не прошло|не удаётся|не получается|не сработало|ошибк|ошибоч|сбой|сбои|сбоя|неудач|что-то пошло не так/i,
   en: /couldn[’']t|could not|\bfail|\berror|did not work|didn[’']t work|did not go|went wrong|\bunable\b/i,
-  es: /no se pudo|no pudimos|\berror|\bfall[óo]\b|\bfallos?\b|no funcion[óo]|algo sali[óo] mal/i,
+  es: /no se pudo|no pudimos|\berror|\bfall[óo]\b|\bfallos?\b|no funcion[óo]|no se ha podido|inv[aá]lid|algo sali[óo] mal/i,
 };
 
 /**
