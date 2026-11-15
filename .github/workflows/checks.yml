@@ -37,6 +37,7 @@ jobs:
     permissions:
       contents: read
       issues: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
       - name: No open stop (or the PR is a fix)
