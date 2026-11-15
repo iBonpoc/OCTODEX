@@ -4,6 +4,7 @@
  * sums (it moves to voidInvoices), the statement shows it as «Аннулирован» with the reason, and «Выставить остаток»
  * is there again; the right invoice goes through. The server's side — db T197.
  */
+const { invAct, invHas } = require("../invoiceMenu.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const pick = async (pred, what) => {
@@ -24,8 +25,8 @@ exports.run = async (h) => {
   h.expect(true, "the contract is billed in full: «Выставить остаток» is gone");
 
   await h.go(`/invoice/${wrong.id}`);
-  await p.getByTestId("invoice-more").locator("visible=true").click();
-  await h.sheet().getByTestId("invoice-void-item").click();
+  // «⋯» is a menu at the button now (#1474): «Аннулировать…» opens the sheet with the reason
+  await invAct(p, "void");
   await h.sheet().getByTestId("invoice-void-reason").locator("input, textarea").fill("Wrong amount");
   await h.sheet().getByTestId("invoice-void-confirm").getByRole("button").click();
   db = await pick((d) => (d.voidInvoices ?? []).some((i) => i.voidReason === "Wrong amount"), "the invoice is voided with its reason");

@@ -8,6 +8,7 @@
  * - a signed estimate: the PDF at once (a copy of what was signed, no check).
  * The core reads only the source flags — the estimates are seeded, no module needed. By testID; waits on what it checks.
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -24,7 +25,7 @@ exports.run = async (h) => {
       };
     });
   const pdfMade = () => p.evaluate(() => window.__pdf);
-  const pressPdf = () => tid("est-pdf").getByRole("button").click();
+  const pressPdf = () => estAct(p, "pdf");
 
   await h.go("/today");
   await p.evaluate((k) => {

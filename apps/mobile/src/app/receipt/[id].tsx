@@ -1,5 +1,5 @@
 import { APP_NAME } from "@/config/product";
-import { useState } from "react";
+import { useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { router, useLocalSearchParams } from "expo-router";
@@ -18,9 +18,11 @@ import { receiptHtml, receiptMessage } from "@/features/docPdf";
 import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { openEmail, openSms } from "@/features/sendEstimate";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Menu, useToast } from "@/ui/overlays";
+import { ActionBar } from "@/ui/actionBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { Card, Divider, Empty, RowView, Screen } from "@/ui/surfaces";
 import { RelatedBlock } from "@/features/RelatedBlock";
 
@@ -35,6 +37,9 @@ export default function ReceiptScreen() {
   const auth = useAuth();
   const [refund, setRefund] = useState(false);
   const [apply, setApply] = useState(false);
+  const { wide } = useDevice();
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [moreAt, setMoreAt] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/money"));
   const p = db.payments.find((x) => x.id === id) ?? (db.advances ?? []).find((x) => x.id === id);
   if (!p)
@@ -65,8 +70,49 @@ export default function ReceiptScreen() {
       </T>
     </RowView>
   );
+  // #1474 (DS §7.3, §8.9, Б4; as the estimate #1412): one main button and «⋯» with the rest — no row of five pills
+  const pdf = () => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+  const sms = cust?.phone ? () => void openSms(cust.phone, msg.text).catch(() => {}) : undefined;
+  const email = cust?.email ? () => void openEmail(cust.email!, msg.subject, msg.text).catch(() => {}) : undefined;
+  const send = sms ?? email;
+  // the next step: an advance is applied to an invoice; any other receipt goes to the client (by SMS when there is a phone)
+  const applyBtn = (bar: boolean) => (
+    <View testID="rcpt-apply">
+      <Button label={t("mny.adv.apply")} icon="check" size={bar ? "bar" : undefined} full={bar} onPress={() => setApply(true)} />
+    </View>
+  );
+  const sendBtn = (bar: boolean, second: boolean) => (
+    <View testID="rcpt-send">
+      <Button label={t("rcpt.send")} icon="send" variant={second ? "secondary" : undefined} size={bar ? "bar" : undefined} full={bar} onPress={send!} />
+    </View>
+  );
+  const mainBtn = (bar: boolean) => (canApply ? applyBtn(bar) : send ? sendBtn(bar, false) : null);
+  const secondBtn = (bar: boolean) => (canApply && send ? sendBtn(bar, true) : null);
+  const items = [
+    { key: "pdf", label: t("ue.pdf"), icon: "invoice" as const, testID: "rcpt-act-pdf" },
+    ...(sms ? [{ key: "sms", label: t("ue.sendSms"), icon: "message" as const, testID: "rcpt-act-sms" }] : []),
+    ...(email ? [{ key: "email", label: t("ue.sendEmail"), icon: "send" as const, testID: "rcpt-act-email" }] : []),
+    // money back: the entry only — the sheet asks how much and why, and confirms (rule 5, unchanged)
+    ...(canRefund ? [{ key: "refund", label: t("mny.refund.menu"), icon: "undo" as const, destructive: true, testID: "rcpt-refund" }] : []),
+  ];
+  const more = (
+    <View ref={moreRef} collapsable={false} testID="rcpt-more">
+      <IconButton
+        icon="more"
+        label={`${t("lead.more")}: ${`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()}`}
+        onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMoreAt({ x, y, w, h }))}
+      />
+    </View>
+  );
+  const barMain = !wide ? mainBtn(true) : null;
   return (
-    <Screen title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()} back={back} subtitle={cust?.name}>
+    <Screen
+      title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()}
+      back={back}
+      subtitle={cust?.name}
+      right={more}
+      footer={barMain ? <ActionBar testID="rcpt-actionbar" main={barMain} second={secondBtn(true) ?? undefined} /> : undefined}
+    >
       {/* «Связано»: invoice, job, client (15-flows §2 «квитанция → счёт → работа → клиент») */}
       <RelatedBlock of={{ type: "receipt", id: p.id }} />
       <Card status="ok">
@@ -116,25 +162,27 @@ export default function ReceiptScreen() {
           </T>
         ) : null}
       </Card>
-      <RowView style={{ flexWrap: "wrap" }}>
-        <Button
-          label={t("ue.pdf")}
-          icon="invoice"
-          onPress={() => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })))}
-        />
-        {cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, msg.text).catch(() => {})} /> : null}
-        {cust?.email ? <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, msg.subject, msg.text).catch(() => {})} /> : null}
-        {canApply ? (
-          <View testID="rcpt-apply">
-            <Button label={t("mny.adv.apply")} onPress={() => setApply(true)} />
-          </View>
-        ) : null}
-        {canRefund ? (
-          <View testID="rcpt-refund">
-            <Button label={t("mny.refund.action")} variant="secondary" onPress={() => setRefund(true)} />
-          </View>
-        ) : null}
-      </RowView>
+      {/* from 820 the same buttons right after the receipt (the same place on every width, #1474) */}
+      {wide && (mainBtn(false) || secondBtn(false)) ? (
+        <RowView style={{ flexWrap: "wrap" }}>
+          {mainBtn(false)}
+          {secondBtn(false)}
+        </RowView>
+      ) : null}
+      <Menu
+        visible={!!moreAt}
+        anchor={moreAt}
+        title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()}
+        items={items}
+        onSelect={(k) => {
+          setMoreAt(null);
+          if (k === "pdf") void pdf();
+          else if (k === "sms") sms?.();
+          else if (k === "email") email?.();
+          else if (k === "refund") setRefund(true);
+        }}
+        onClose={() => setMoreAt(null)}
+      />
       {canRefund ? (
         <RefundSheet
           visible={refund}

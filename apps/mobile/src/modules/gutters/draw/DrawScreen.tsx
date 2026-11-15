@@ -28,6 +28,7 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
+import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
 import { CornerSheet } from "./CornerSheet";
@@ -57,6 +58,7 @@ import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from 
 import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
+import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
@@ -110,12 +112,24 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
       accessibilityRole="button"
       accessibilityLabel={a11y ?? label}
       accessibilityState={{ selected: !!active, disabled: !!disabled }}
-      {...({ title: label } as object)}
+      // a tool is a toggle: the web says «pressed» (accessibilityState.selected is not rendered on a button there)
+      {...({ title: label, ...(active !== undefined ? { "aria-pressed": !!active } : {}) } as object)}
       containerStyle={grow ? { flex: 1 } : undefined}
       style={{ alignItems: "center", minWidth: sizes.hitMin }}
     >
-      <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
-        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : disabled || dim ? c.mut : c.ink} /> : null}
+      {/* DS §19а (#1426): the chosen tool is the ONLY filled circle of the bar — inverted (ink + shadow-sm, the icon in bg); the other tool —
+          no fill, mut; the actions (↶ ↷ 🗑) — the icon alone in ink, as an iOS toolbar; the bin with nothing picked — dimOpacity; the
+          storey — its colour ring, no fill. Never acc: yellow is the screen's main action */}
+      <View
+        style={[
+          { minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center" },
+          // the chosen tool: inverted — an ink circle, the icon in the background's colour (DS §19а: the most visible thing of the bar,
+          // in the sun too; surf2 was 1.07:1 to the bar in the light theme and the storey's ring looked chosen instead)
+          active ? [fillStyle(c), { backgroundColor: c.ink }] : ring ? { borderWidth: dt.runW / 2, borderColor: ring } : null,
+          disabled ? { opacity: component.dimOpacity } : null,
+        ]}
+      >
+        {body ? <T v="caption" center w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.bg : active === false || dim ? c.mut : c.ink} /> : null}
       </View>
       {tip ? (
         <View pointerEvents="none" style={{ position: "absolute", [below ? "top" : "bottom"]: s + space[1], alignSelf: "center", paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
@@ -415,7 +429,8 @@ export default function DrawScreen() {
     setSelected(target.id);
     setLifted(target);
   };
-  const pan = usePanGesture({
+  // made once (#1403): a new config on every render registered the gesture again, in the middle of a pinch too
+  const pan = usePanGesture(useJsGestureConfig<NonNullable<Parameters<typeof usePanGesture>[0]>>({
     runOnJS: true,
     maxPointers: 1,
     simultaneousWith: [canvas.pinch, canvas.pan],
@@ -601,9 +616,9 @@ export default function DrawScreen() {
         quickGrew.current = !!grown && got === grown;
       }
     },
-  });
+  }, [canvas.pinch, canvas.pan]));
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
-  const tap = useTapGesture({
+  const tap = useTapGesture(useJsGestureConfig<NonNullable<Parameters<typeof useTapGesture>[0]>>({
     runOnJS: true,
     simultaneousWith: [canvas.pinch, canvas.pan],
     onBegin: () => {
@@ -696,7 +711,7 @@ export default function DrawScreen() {
         else setSheet(true); // the run's (or a downspout's) properties: a sheet on the phone, wider the panel is already open
       });
     },
-  });
+  }, [canvas.pinch, canvas.pan]));
   const fingers = useSimultaneousGestures(pan, tap);
 
   const scene = useMemo(
@@ -1053,7 +1068,7 @@ export default function DrawScreen() {
           gestures={canvas}
           testID="draw-canvas"
           // the grid (#1434): a screen-sized layer under the drawing, following the live view on the UI thread — not clipped on an iPhone
-          under={layers.grid && view && size.w > 0 ? <GridLayer view={viewNow} live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
+          under={layers.grid && view && size.w > 0 ? <GridLayer live={live} size={size} minPx={space[6]} testID="draw-grid" /> : null}
         >
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">

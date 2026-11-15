@@ -55,6 +55,26 @@ exports.run = async (h) => {
     h.expect(b.x + b.width > w - 40 && b.y + b.height <= tabs.y, `390: bottom-right, above the tabs (${b.x},${b.y} vs tabs ${tabs.y})`);
     h.expect(Math.round(b.height) <= 36, `visible ≤ 36 (${b.height})`);
   }
+  // the «＋» of «Главная» is yellow on every width — the floating one and the header one alike (DS §5.3, audit №2, #1395)
+  const yellow = await plus().evaluate((el) => {
+    const m = getComputedStyle(el.querySelector("div") ?? el).backgroundColor.match(/\d+/g) ?? [];
+    const pick = (e) => getComputedStyle(e).backgroundColor;
+    // the press's own box or its painted child: the one that is not transparent
+    const bg = [el, ...el.querySelectorAll("div")].map(pick).find((x) => x && x !== "rgba(0, 0, 0, 0)" && x !== "transparent") ?? "";
+    const [r, g, bl] = (bg.match(/\d+/g) ?? m).map(Number);
+    return r > 200 && g > 200 && bl < 120;
+  });
+  h.expect(yellow, `${w}: the «＋» of «Главная» is yellow`);
+  if (wide) {
+    // the side menu's «＋ Создать» is on every screen: neutral, so «Главная» has one yellow (DS §3.1 п.3, §5.3, #1395)
+    const menuYellow = await p.getByTestId("side-nav").getByRole("button", { name: "Создать", exact: true }).evaluate((el) =>
+      [el, ...el.querySelectorAll("div")].map((e) => getComputedStyle(e).backgroundColor).some((bg) => {
+        const [r, g, b] = (bg.match(/\d+/g) ?? []).map(Number);
+        return r > 200 && g > 200 && b < 120;
+      }),
+    );
+    h.expect(!menuYellow, `${w}: «Создать» in the side menu is not yellow`);
+  }
 
   // Главная: only what works
   await plus().click();

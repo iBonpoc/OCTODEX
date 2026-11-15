@@ -68,15 +68,26 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
   const card = ({ e }: { e: Estimate; g: EstimateGroup }) => (
     <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
   );
+  // #1412: as the estimate's screen — «⋯» in the panel's header row, the main button at the top of the card
   const aside = openE ? (
-    <ListPanel
-      title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
-      // as the estimate's screen: the client and the address under the title
-      subtitle={estimateSubtitle(db, openE)}
-      outside={panel.outside}
-      onOpen={panel.full} onClose={panel.close}>
-      <EstimateCardBody key={openE.id} e={openE} />
-    </ListPanel>
+    <EstimateCardBody
+      key={openE.id}
+      e={openE}
+      frame={({ more, main, body }) => (
+        <ListPanel
+          title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
+          // as the estimate's screen: the client and the address under the title
+          subtitle={estimateSubtitle(db, openE)}
+          outside={panel.outside}
+          actions={more}
+          onOpen={panel.full}
+          onClose={panel.close}
+        >
+          {main}
+          {body}
+        </ListPanel>
+      )}
+    />
   ) : undefined;
   return wrap(
     <View style={{ gap: space[3] }}>

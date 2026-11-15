@@ -3,6 +3,8 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
 import { Empty, Screen } from "@/ui/surfaces";
+import { ActionBar } from "@/ui/actionBar";
+import { useDevice } from "@/theme/ThemeProvider";
 import { canSeeEstimate } from "@/features/access";
 import { NotFound } from "@/ui/emptyStates";
 
@@ -11,6 +13,7 @@ export default function EstimateScreen() {
   const { id, send } = useLocalSearchParams<{ id: string; send?: string }>();
   const { db, role, mode } = useStore();
   const { t } = useI18n();
+  const { wide } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const e = db.estimates.find((x) => x.id === id);
   if (!e)
@@ -26,14 +29,24 @@ export default function EstimateScreen() {
         <Empty icon="invoice" title={t("mny.noAccess")} testID="no-access" />
       </Screen>
     );
+  // #1412 (DS §7.3, §8.9, Б4): «⋯» in the header, the one main button pinned at the bottom on a phone, at the top of the content from 820
   return (
-    <Screen
-      testID="estimate-screen"
-      title={[e.number, e.title].filter(Boolean).join(" · ") || t("est.detail")}
-      back={back}
-      subtitle={estimateSubtitle(db, e)}
-    >
-      <EstimateCardBody e={e} openSend={send === "1"} />
-    </Screen>
+    <EstimateCardBody
+      e={e}
+      openSend={send === "1"}
+      frame={({ more, main, mainBar, body }) => (
+        <Screen
+          testID="estimate-screen"
+          title={[e.number, e.title].filter(Boolean).join(" · ") || t("est.detail")}
+          back={back}
+          subtitle={estimateSubtitle(db, e)}
+          right={more}
+          footer={mainBar ? <ActionBar testID="est-view-actionbar" main={mainBar} /> : undefined}
+        >
+          {wide ? main : null}
+          {body}
+        </Screen>
+      )}
+    />
   );
 }
