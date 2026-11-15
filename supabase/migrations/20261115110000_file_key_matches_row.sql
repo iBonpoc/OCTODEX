@@ -1,5 +1,5 @@
 -- #1572: a files row points only at its own object, and an object is written only for a live files row.
--- (1) storage_key, set by the app, is `<company_id>/<id>.<ext>` of the row itself (cloud/ops.ts uploadPhoto writes
+-- (1) a row keeps its id, and storage_key, set by the app, is `<company_id>/<id>.<ext>` of the row itself (cloud/ops.ts uploadPhoto writes
 --     exactly that, old builds included; letter case is not held against an old build) — never another file's object.
 --     Rows already stored are not checked again.
 -- (2) «one row, one object» holds for the office too (before: only for the author).
@@ -11,6 +11,10 @@
 create or replace function app.tg_files_key_own()
 returns trigger language plpgsql set search_path = '' as $$
 begin
+  -- a row keeps its id: a renamed row would carry its key to another id and leave a clean row on the old one
+  if current_user in ('authenticated', 'anon') and tg_op = 'UPDATE' and new.id is distinct from old.id then
+    raise exception 'a file''s id is set once' using errcode = '42501';
+  end if;
   if current_user in ('authenticated', 'anon') and new.storage_key is not null
      and (tg_op = 'INSERT' or new.storage_key is distinct from old.storage_key)
      and new.storage_key !~* ('^' || new.company_id::text || '/' || new.id::text || '\.[a-z0-9]+$') then
@@ -22,7 +26,7 @@ $$;
 -- rule 18 (T52): a trigger function; nobody calls it
 revoke all on function app.tg_files_key_own() from public, anon, authenticated;
 drop trigger if exists t09_key_own on public.files;
-create trigger t09_key_own before insert or update of storage_key on public.files
+create trigger t09_key_own before insert or update of id, storage_key on public.files
   for each row execute function app.tg_files_key_own();
 
 -- 2, 3 ---------------------------------------------------------------------------------------------
