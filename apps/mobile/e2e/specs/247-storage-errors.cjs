@@ -1,6 +1,6 @@
 /**
  * #756 (A-01, A-02): the device storage fails (docs/audit/2026-11-11-full-audit.md §2).
- * - the outbox on the device is not JSON: the app is not loaded, the screen «Не удалось прочитать данные с устройства»
+ * - the outbox on the device is not JSON: the app is not loaded, the screen «Откройте данные с устройства ещё раз»
  *   with «Повторить»; the record on the device is never overwritten; once it can be read, «Повторить» opens the app;
  *   «Сохранить копию и продолжить» (after a confirmation) keeps the broken record aside and opens the app (review of #910);
  * - the device refuses a write (full storage): «Не сохранено на устройстве» in «Ещё», never «Онлайн · всё сохранено».
