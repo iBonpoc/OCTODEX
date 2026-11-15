@@ -195,7 +195,7 @@ export default function Clients() {
           icon="search"
           title={t("clients.empty")}
           hint={q.trim() ? t("clients.emptyHint") : t("card.emptyFilter")}
-          action={office && q.trim() ? <Button label={t("clients.new")} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
+          action={office ? <Button testID="clients-empty-new" label={t("clients.new")} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
         />
       ) : device === "tablet" ? (
         <CardGrid>{list.map(card)}</CardGrid>
