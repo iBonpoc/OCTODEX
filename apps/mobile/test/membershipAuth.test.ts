@@ -59,7 +59,7 @@ import { render, settle, type Root } from "./support/miniReact";
 import { AuthProvider } from "../src/cloud/auth";
 import { lastCompanyKey } from "../src/cloud/membershipSync";
 
-type V = { accessDenied: () => void; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: () => Promise<unknown> };
+type V = { accessDenied: () => void; membershipCheckedAt: number | null; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: () => Promise<unknown> };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: V } }).props.value;
 const row = (c: string, role = "tech") => ({ company_id: c, role, status: "active", companies: { name: c } });
@@ -82,8 +82,15 @@ beforeEach(() => {
 });
 
 describe("unit:membershipAuth — «read again» on a refusal (#1633 A2)", () => {
-  it("inside the 5-minute window: one wait to its end (not dropped, not more often); after it — one read", async () => {
+  it("the first signal reads at once (the start's own read does not delay it) and confirms; inside the next 5 minutes one wait to its end (not dropped, not more often); then one read", async () => {
     const r = await start({ data: [row("c1")], error: null });
+    expect(valueOf(r).membershipCheckedAt).toBeNull();
+    valueOf(r).accessDenied();
+    await wait(5);
+    await settle();
+    srv.reads[srv.reads.length - 1]!.resolve({ data: [row("c1")], error: null });
+    await settle();
+    expect(valueOf(r).membershipCheckedAt).toBeGreaterThan(Date.now() - 5_000);
     const spy = vi.spyOn(globalThis, "setTimeout");
     const reads = srv.reads.length;
     valueOf(r).accessDenied();

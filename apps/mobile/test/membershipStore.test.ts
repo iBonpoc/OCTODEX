@@ -29,6 +29,7 @@ const auth = {
   memberships: [] as { companyId: string; role: string; companyName: string }[],
   membershipsFor: null as string | null,
   membershipStamp: 0,
+  membershipCheckedAt: null as number | null,
   accessDenied: vi.fn(),
 };
 vi.mock("@/cloud/auth", () => ({ useAuth: () => auth }));
@@ -85,7 +86,7 @@ beforeEach(() => {
   storage.clear();
   server.loads.length = 0;
   server.sends.length = 0;
-  Object.assign(auth, { session: null, company: null, userId: null, memberships: [], membershipsFor: null, membershipStamp: 0 });
+  Object.assign(auth, { session: null, company: null, userId: null, memberships: [], membershipsFor: null, membershipStamp: 0, membershipCheckedAt: null });
   auth.accessDenied = vi.fn();
 });
 afterEach(() => {
@@ -217,6 +218,20 @@ describe("unit:membershipStore — «no rights» (42501) and a removed company's
     await settle();
     await wait(300);
     expect(outbox()[0]?.tries).toBe(2);
+  });
+
+  it("the memberships were just read again on a signal and I am still here: a refusal is a try at once (e2e 118)", { timeout: 20_000 }, async () => {
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "o1", op: { k: "lead.update", id: "l1", cols: { notes: "x" } }, at, tries: 0, owner: { userId: "u1", companyId: "c1" } }]));
+    signIn("owner");
+    Object.assign(auth, { membershipStamp: 2, membershipCheckedAt: Date.now() - 1_000 });
+    root = render(StoreProvider as (p: P) => unknown, { children: null });
+    await settle();
+    await wait(1700);
+    await settle();
+    server.sends[0]!.d.reject(denied());
+    await settle();
+    await wait(300);
+    expect(outbox()[0]?.tries).toBe(1);
   });
 
   it("the ops of a company the server confirmed I left do not count for the deletion (they stay on the phone); unconfirmed — all count", async () => {

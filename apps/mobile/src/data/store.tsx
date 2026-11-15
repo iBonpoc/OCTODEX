@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth, type DbRole } from "@/cloud/auth";
-import { memberMatches } from "@/cloud/membershipSync";
+import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
@@ -698,6 +698,8 @@ export function StoreProvider({
   accessDeniedRef.current = auth.accessDenied;
   const stampRef = useRef(auth.membershipStamp);
   stampRef.current = auth.membershipStamp;
+  const checkedAtRef = useRef(auth.membershipCheckedAt);
+  checkedAtRef.current = auth.membershipCheckedAt;
   /** an op refused for lack of rights (42501) → the confirmed answer it waits for (the stamp at the refusal; -Infinity —
    *  confirmed since, its refusals are tries) */
   const deniedAt = useRef(new Map<string, number>());
@@ -1002,7 +1004,10 @@ export function StoreProvider({
           // for «Убрать»); confirmed since and still here — a «no» like any other
           if (isAccessDenied(e) && accessDeniedRef.current && stampRef.current !== undefined) {
             const at = deniedAt.current.get(item.id);
-            if (at === undefined || at >= stampRef.current) {
+            // the memberships were just read again on such a signal and I am still here: a plain «no» (e2e 118)
+            const checked = checkedAtRef.current;
+            const fresh = checked != null && Date.now() - checked < MEMBERSHIP_REREAD_MS;
+            if (!fresh && (at === undefined || at >= stampRef.current)) {
               if (at === undefined) deniedAt.current.set(item.id, stampRef.current);
               accessDeniedRef.current();
               failedOnce(item, msg);

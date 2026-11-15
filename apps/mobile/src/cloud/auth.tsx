@@ -39,8 +39,10 @@ interface AuthCtx {
   membershipsFor: string | null;
   membershipStamp: number;
   /** the server refused for lack of rights (42501) or the company's own read shows me gone / another role: the
-   *  memberships are read again — at once, or at the end of the 5-minute window (never more often) */
+   *  memberships are read again — at once, or at the end of the 5-minute window of the last such read (never more often) */
   accessDenied: () => void;
+  /** when such a read (on a signal) last confirmed the memberships: a refusal soon after it is a plain «no» (e2e 118) */
+  membershipCheckedAt: number | null;
   /**
    * The consent to the current Terms and Privacy (7а-1): "unknown" until asked or without the network (never blocks work),
    * "first" / "changed" — the gate asks. `legalChecked` — the check for this session has run (ok or failed).
@@ -79,17 +81,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const memTicket = useRef(0);
   /** the companies the person is in by the newest confirmed answer (the wipe of the others reads it on every pass) */
   const activeRef = useRef<ReadonlySet<string>>(new Set());
-  const lastMemRead = useRef<number | null>(null);
+  /** the last read asked by a signal (the window counts these only: the start's own read never delays the first signal) */
+  const lastSignalRead = useRef<number | null>(null);
+  const [membershipCheckedAt, setMembershipCheckedAt] = useState<number | null>(null);
   const rereadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** signed out: no answer asked before counts, nothing waits to be read again */
   const forgetMems = () => {
     memTicket.current += 1;
     if (rereadTimer.current) clearTimeout(rereadTimer.current);
     rereadTimer.current = null;
-    lastMemRead.current = null;
+    lastSignalRead.current = null;
     activeRef.current = new Set();
     setMems([]);
     setMembershipsFor(null);
+    setMembershipCheckedAt(null);
   };
   const [legal, setLegal] = useState<LegalState>("unknown");
   const [legalChecked, setLegalChecked] = useState(false);
@@ -149,7 +154,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * No session is the sign-out, not «no memberships». The order is fixed, the company worked in stays first (a read
    * again never switches it). A confirmed answer then wipes the caches of every company the person is no longer in.
    */
-  const reloadMemberships = useCallback(async (): Promise<Membership[] | null> => {
+  const readMemberships = useCallback(async (signal: boolean): Promise<Membership[] | null> => {
     const ticket = ++memTicket.current;
     const { data: s } = await supabase.auth.getSession();
     if (!s.session) {
@@ -162,7 +167,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return [];
     }
     const uid = s.session.user.id;
-    lastMemRead.current = Date.now();
+    if (signal) lastSignalRead.current = Date.now();
     const preferred = memRef.current[0]?.companyId ?? (await AsyncStorage.getItem(lastCompanyKey(uid)).catch(() => null));
     const { data, error } = await supabase
       .from("memberships")
@@ -183,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     activeRef.current = new Set(list.map((m) => m.companyId));
     setMembershipsFor(uid);
     setMembershipStamp((n) => n + 1);
+    if (signal) setMembershipCheckedAt(Date.now());
     if (list[0]) void AsyncStorage.setItem(lastCompanyKey(uid), list[0].companyId).catch(() => {});
     void wipeLeftCompanies(uid, { signedIn: () => signedUid.current, active: () => activeRef.current });
     // no company: was it closed by its owner? (only then; not waited for — the start never waits on it)
@@ -190,13 +196,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     else askClosed(uid);
     return list;
   }, []);
+  const reloadMemberships = useCallback(() => readMemberships(false), [readMemberships]);
   const accessDenied = useCallback(() => {
     if (rereadTimer.current) return;
     rereadTimer.current = setTimeout(() => {
       rereadTimer.current = null;
-      void reloadMemberships();
-    }, rereadDelay(Date.now(), lastMemRead.current));
-  }, [reloadMemberships]);
+      void readMemberships(true);
+    }, rereadDelay(Date.now(), lastSignalRead.current));
+  }, [readMemberships]);
 
   /**
    * 7а-2b (§6.9, §6.11 п.4; review #220): a profile that is deleted but could still sign in (the sign-in close was
@@ -353,11 +360,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       membershipsFor,
       membershipStamp,
       accessDenied,
+      membershipCheckedAt,
       accountDeleted,
       setAccountDeleted,
       closedCompanies,
     }),
-    [ready, session, memberships, reloadMemberships, membershipsFor, membershipStamp, accessDenied, legal, legalChecked, tickets, accountDeleted, closedCompanies],
+    [ready, session, memberships, reloadMemberships, membershipsFor, membershipStamp, accessDenied, membershipCheckedAt, legal, legalChecked, tickets, accountDeleted, closedCompanies],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
