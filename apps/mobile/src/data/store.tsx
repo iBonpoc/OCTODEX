@@ -923,8 +923,14 @@ export function StoreProvider({
    */
   const prepBusy = useRef(false);
   const mutateRef = useRef<((label: string, fn: (d: DB) => DB, op?: Op) => unknown) | null>(null);
-  const prepRound = useCallback(async (only?: PrepTarget) => {
-    if (prepBusy.current) return;
+  // asked while a round runs (a tap on «Подготовить снова», the timer after «Повторить»): done right after it, never lost
+  const prepLater = useRef<{ all: boolean; only: PrepTarget[] }>({ all: false, only: [] });
+  const prepRound = useCallback(async (only?: PrepTarget): Promise<void> => {
+    if (prepBusy.current) {
+      if (only) prepLater.current.only.push(only);
+      else prepLater.current.all = true;
+      return;
+    }
     prepBusy.current = true;
     try {
       const list = only ? [only] : prepTargets(dbRef.current, Date.now(), false, SEND_AFTER_MS);
@@ -945,6 +951,11 @@ export function StoreProvider({
       }
     } finally {
       prepBusy.current = false;
+      const later = prepLater.current;
+      prepLater.current = { all: false, only: [] };
+      // a tapped photo first (it may be «unreadable», which a plain round skips), then the due ones
+      for (const t of later.only) await prepRound(t);
+      if (later.all) await prepRound();
     }
   }, [setDb]);
   useEffect(() => {

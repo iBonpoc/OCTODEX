@@ -24,7 +24,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 }));
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 // #1558: the picture is made anew by a stand-in — `manip.fail` makes every way fail
-const manip = { fail: false, made: 0 };
+const manip = { fail: false, made: 0, started: 0, hold: null as Promise<void> | null };
 vi.mock("expo-image-manipulator", () => ({
   SaveFormat: { JPEG: "jpeg" },
   ImageManipulator: {
@@ -33,6 +33,8 @@ vi.mock("expo-image-manipulator", () => ({
         return this;
       },
       async renderAsync() {
+        manip.started++;
+        if (manip.hold) await manip.hold;
         if (manip.fail) throw new Error("cannot decode");
         return { width: 800, height: 600, saveAsync: async () => ({ uri: `file:///made-${++manip.made}.jpg` }), release() {} };
       },
@@ -91,7 +93,7 @@ const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.val
 let root: Root<P> | null = null;
 
 beforeEach(() => {
-  Object.assign(manip, { fail: false, made: 0 });
+  Object.assign(manip, { fail: false, made: 0, started: 0, hold: null });
   vi.spyOn(console, "warn").mockImplementation(() => {});
   storage.clear();
   server.loads.length = 0;
@@ -288,5 +290,29 @@ describe("unit:photoUploadStore — #1558 the original never goes to the cloud (
     await settle();
     expect(valueOf(r).db.expenses![0]).toMatchObject({ receiptUri: "file:///made-1.jpg" });
     expect(valueOf(r).db.expenses![0]!.receiptFailed).toBeUndefined();
+  });
+
+  it("«Подготовить снова» while a round runs is done right after it, not lost", { timeout: 20_000 }, async () => {
+    const gate = deferred<void>();
+    manip.hold = gate.promise;
+    const r = await start();
+    const seed = makeSeed();
+    const v = seed.visits[0]!;
+    const old = "2026-11-01T00:00:00Z";
+    v.photos = [
+      { id: "p-due", kind: "before", uri: "file:///a.heic", upload: { failed: "preparing", at: old }, prep: [{ at: old, way: "c2", why: "x" }] },
+      { id: "p-tap", kind: "before", uri: "file:///b.heic", upload: { failed: "unreadable", at: old }, prep: [{ at: old, way: "c2", why: "x" }] },
+    ];
+    await load(seed);
+    // the round at the start is busy with p-due (the picture is still being read)
+    for (let i = 0; i < 40 && manip.started === 0; i++) await wait(100);
+    expect(manip.started).toBe(1);
+    valueOf(r).preparePhotoAgain({ photoId: "p-tap" });
+    manip.hold = null;
+    gate.resolve();
+    // the queue sends one at a time: the first answered, the second goes
+    (await sent(1)).d.resolve({ photo: { id: server.sends[0]!.op.id, failed: null } });
+    await sent(2);
+    expect(server.sends.map((x) => x.op.id).sort()).toEqual(["p-due", "p-tap"]);
   });
 });
