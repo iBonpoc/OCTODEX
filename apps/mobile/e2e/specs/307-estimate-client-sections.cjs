@@ -5,6 +5,7 @@
  * - the company's PDF of an unsigned estimate offers every add-on as «+ $X», none in the total;
  * - a title typed with markup is shown as text on the page and escaped in the PDF (never markup).
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const TOKEN = "demo0handyman0estimate0000000001";
 const DB_KEY = "octo.db.v5";
 const EVIL = "Roof <b>bold</b>";
@@ -34,7 +35,7 @@ exports.run = async (h) => {
       const add = document.body.appendChild.bind(document.body);
       document.body.appendChild = (el) => { const r = add(el); if (el.tagName === "IFRAME") el.contentWindow.print = () => { window.__pdf = el.contentDocument.documentElement.outerHTML; }; return r; };
     });
-    await tid(clickTestId).getByRole("button").click();
+    await (typeof clickTestId === "function" ? clickTestId() : tid(clickTestId).getByRole("button").click());
     await p.waitForFunction(() => !!window.__pdf, null, { timeout: 5000 });
     return p.evaluate(() => window.__pdf);
   };
@@ -62,8 +63,8 @@ exports.run = async (h) => {
 
   // the company's PDF of an unsigned estimate: every add-on offered, none in the total; the title escaped
   await h.go("/estimate/e6");
-  await tid("est-pdf").waitFor({ timeout: 8000 });
-  pdf = await pdfHtml("est-pdf");
+  await estMore(p);
+  pdf = await pdfHtml(() => estAct(p, "pdf"));
   h.expect(/Roof &lt;b&gt;bold&lt;\/b&gt;/.test(pdf) && !/Roof <b>bold<\/b>/.test(pdf), "the PDF escapes the title");
   h.expect(/Roof &lt;b&gt;bold&lt;\/b&gt; subtotal/.test(pdf), "and its subtotal line");
   h.expect(/Leaf guards/.test(pdf) && />\+ \$400</.test(pdf) && /<td class="r">\$1,900<\/td>/.test(pdf), "the company's PDF: the add-on offered, not in the total");
