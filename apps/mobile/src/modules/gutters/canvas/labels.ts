@@ -38,9 +38,33 @@ export interface PlacedLabel {
 export interface Box { x0: number; y0: number; x1: number; y1: number }
 
 const boxOf = (x: number, y: number, w: number, h: number): Box => ({ x0: x - w / 2, y0: y - h / 2, x1: x + w / 2, y1: y + h / 2 });
-/** the work of the last layouts, for the speed test: how many segment-vs-box checks were made (a count does not depend on the machine) */
-export const work = { segTests: 0 };
+/** the work of the last layouts, for the speed tests (a count does not depend on the machine): how many segment-vs-box
+ *  checks were made; how many cells the drawn lines were put into (#1681) */
+export const work = { segTests: 0, lineCells: 0 };
 export const overlaps = (p: Box, q: Box) => p.x0 < q.x1 && q.x0 < p.x1 && p.y0 < q.y1 && q.y0 < p.y1;
+
+/** the part of the segment a–b inside the box (Liang–Barsky, as `segmentHitsBox`); none — null (a broken point too) */
+export function clipSegment(a: [number, number], b: [number, number], q: Box): [[number, number], [number, number]] | null {
+  if (![a[0], a[1], b[0], b[1]].every(Number.isFinite)) return null;
+  let t0 = 0, t1 = 1;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  for (const [p, d] of [[a[0] - q.x0, -dx], [q.x1 - a[0], dx], [a[1] - q.y0, -dy], [q.y1 - a[1], dy]] as const) {
+    if (d === 0) {
+      if (p < 0) return null;
+    } else {
+      const r = p / d;
+      if (d < 0) {
+        if (r > t1) return null;
+        if (r > t0) t0 = r;
+      } else {
+        if (r < t0) return null;
+        if (r < t1) t1 = r;
+      }
+    }
+  }
+  if (t0 > t1) return null;
+  return [[a[0] + dx * t0, a[1] + dy * t0], [a[0] + dx * t1, a[1] + dy * t1]];
+}
 
 /** does the segment a–b cross the box (Liang–Barsky)? */
 export function segmentHitsBox(a: [number, number], b: [number, number], q: Box): boolean {
@@ -115,15 +139,21 @@ export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; 
   const offMarks = (b: Box) => !markBoxes.some((q) => overlaps(b, q));
   // the drawn lines, put into the same cells they pass through: a candidate looks only at the lines of its own cells
   const lineGrid = new Map<number, { a: [number, number]; b: [number, number] }[]>();
+  // only the part on the screen (and a cell round it) is put into cells (#1681): a label is placed only wholly inside the
+  // screen, so a line crosses its box on the screen; far in, a line thousands of px long took ~100× the cells
+  const screen: Box = { x0: -cell, y0: -cell, x1: viewport.w + cell, y1: viewport.h + cell };
   for (const l of lines) {
-    const n = Math.max(1, Math.ceil(Math.hypot(l.b[0] - l.a[0], l.b[1] - l.a[1]) / (cell / 2)));
+    const c = clipSegment(l.a, l.b, screen);
+    if (!c) continue;
+    const [a, b] = c;
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / (cell / 2)));
     const seen = new Set<number>();
     // a step of half a cell can not skip one; the neighbours of a point are added for a box that only touches the edge
     for (let i = 0; i <= n; i++) {
-      const x = l.a[0] + ((l.b[0] - l.a[0]) * i) / n, y = l.a[1] + ((l.b[1] - l.a[1]) * i) / n;
+      const x = a[0] + ((b[0] - a[0]) * i) / n, y = a[1] + ((b[1] - a[1]) * i) / n;
       for (const dx of [-1, 0, 1]) for (const dy of [-1, 0, 1]) {
         const k = (Math.floor(x / cell) + dx) * 100_003 + (Math.floor(y / cell) + dy);
-        if (!seen.has(k)) { seen.add(k); (lineGrid.get(k) ?? lineGrid.set(k, []).get(k)!).push(l); }
+        if (!seen.has(k)) { seen.add(k); work.lineCells++; (lineGrid.get(k) ?? lineGrid.set(k, []).get(k)!).push(l); }
       }
     }
   }

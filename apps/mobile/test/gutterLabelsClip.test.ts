@@ -4,7 +4,12 @@
  * ~200 seeded scenes and a few made on purpose, taken on the code before the change.
  */
 import { describe, expect, it } from "vitest";
-import { layoutLabels, type LabelWant } from "../src/modules/gutters/canvas/labels";
+import { vi } from "vitest";
+vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {} }));
+import { size as sizes } from "@octo/design-tokens";
+import { clipSegment, layoutLabels, work, type LabelWant } from "../src/modules/gutters/canvas/labels";
+import { buildScene, fitView, zoomLimits, type View } from "../src/modules/gutters/canvas/scene";
+import type { Drawing, P } from "../src/modules/gutters/geometry";
 
 type Pt = [number, number];
 const vp = { w: 390, h: 844 };
@@ -76,5 +81,46 @@ describe("#1681 the placement is the same with the lines cut to the screen", () 
         "must": "m@194.973,424.058;n@195.027,395.942",
       }
     `);
+  });
+});
+
+describe("#1681 the work of the labels does not grow with the scale (a count, not a clock)", () => {
+  const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
+  const big: Drawing = { runs: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, a: [i * 100, 0] as P, b: [i * 100 + 90, 400] as P, attrs })), downspouts: [] };
+  const pts = big.runs.flatMap((r) => [r.a, r.b]);
+  const lim = zoomLimits(pts, vp, 32, sizes.hitMin);
+  const opts = (view: View) => ({ view, viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}` });
+  const cells = (view: View) => {
+    work.lineCells = 0;
+    buildScene(big, opts(view));
+    return work.lineCells;
+  };
+  it("the lines' cells at the nearest and the farthest scale: at most 3× the fitted view's (the part off the screen is not indexed)", () => {
+    const fit = cells(fitView(pts, vp, 32));
+    expect(fit).toBeGreaterThan(0);
+    for (const k of [lim.kMin, lim.kMax]) {
+      const n = cells({ k, ox: vp.w / 2, oy: vp.h / 2 });
+      expect(n, `k=${k}: ${n} cells vs fitted ${fit}`).toBeLessThanOrEqual(fit * 3);
+    }
+  });
+});
+
+describe("clipSegment: the part of a segment inside a box", () => {
+  const box = { x0: 0, y0: 0, x1: 100, y1: 50 };
+  it("inside — the same; across — its ends on the edges; past — none", () => {
+    expect(clipSegment([10, 10], [90, 40], box)).toEqual([[10, 10], [90, 40]]);
+    expect(clipSegment([-100, 25], [200, 25], box)).toEqual([[0, 25], [100, 25]]);
+    expect(clipSegment([50, -100], [50, 100], box)).toEqual([[50, 0], [50, 50]]);
+    expect(clipSegment([-10, -10], [-1, 60], box)).toBeNull();
+    expect(clipSegment([0, 80], [100, 80], box)).toBeNull();
+  });
+  it("a point inside and outside; a segment that touches a corner only", () => {
+    expect(clipSegment([5, 5], [5, 5], box)).toEqual([[5, 5], [5, 5]]);
+    expect(clipSegment([500, 5], [500, 5], box)).toBeNull();
+    expect(clipSegment([-50, 50], [0, 100], { x0: 0, y0: 0, x1: 100, y1: 100 })).toEqual([[0, 100], [0, 100]]);
+  });
+  it("a broken point (NaN, Infinity) — none, as before: it never gave a cell", () => {
+    expect(clipSegment([NaN, 0], [10, 10], box)).toBeNull();
+    expect(clipSegment([0, 0], [Infinity, 10], box)).toBeNull();
   });
 });
