@@ -62,6 +62,8 @@ exports.run = async (h) => {
   await h.go(`/visit/${mine.id}`);
   await vis("visit-bar-expense").first().click();
   await p.waitForURL(/\/expense\/new/, { timeout: 5000 });
+  // the expense is tied to THIS visit's job, not the first job of the day (#1677)
+  h.expect(!mine.jobId || new URL(p.url()).searchParams.get("jobId") === mine.jobId, `«Расход» carries the visit's job (${p.url()})`);
 
   // an inspection: «⋯» has the estimate too
   const insp = db.visits.find((v) => v.kind === "inspection" && (v.leadId || v.jobId));

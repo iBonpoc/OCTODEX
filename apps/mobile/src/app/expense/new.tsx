@@ -1,7 +1,7 @@
 import { useRequiredForm } from "@/ui/requiredForm";
 import { useState } from "react";
 import { Image } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { radius, space, component } from "@octo/design-tokens";
 import { isToday, useStore, visitContext } from "@/data/store";
@@ -28,8 +28,11 @@ export default function NewExpense() {
   const VENDORS = expenseVendors(db, USUAL);
   const [vendor, setVendor] = useState(VENDORS[0] ?? "Home Depot");
   const [category, setCategory] = useState<ExpenseCategory>("materials");
+  // from a visit (#1677): «Расход» on that visit's panel names its job — not the first job of the day
+  const { jobId: fromJob } = useLocalSearchParams<{ jobId?: string }>();
   const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
-  const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
+  const given = fromJob && db.jobs.some((j) => j.id === fromJob) ? fromJob : undefined;
+  const [jobId, setJobId] = useState<string>(given ?? todays[0]?.jobId ?? "none");
   const [photo, setPhoto] = useState<string | undefined>();
   const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100);
   const ok = Number.isFinite(cents) && cents > 0;
@@ -45,6 +48,11 @@ export default function NewExpense() {
     { key: "none", label: t("exp.noJob") },
     ...todays.filter((v): v is typeof v & { jobId: string } => !!v.jobId).map((v) => ({ key: v.jobId, label: visitContext(db, v).customer?.name ?? v.jobId })),
   ];
+  // a job that is not among today's visits is still offered when it was asked for
+  if (given && !jobs.some((x) => x.key === given)) {
+    const j = db.jobs.find((x) => x.id === given);
+    jobs.push({ key: given, label: db.customers.find((c) => c.id === j?.customerId)?.name ?? j?.title ?? given });
+  }
   return (
     <Screen title={t("exp.title")} back={back}>
       {/* the fields straight on the background, no card around them (DS §11 п.17, #1411) */}

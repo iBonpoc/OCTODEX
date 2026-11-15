@@ -164,7 +164,7 @@ export default function VisitScreen() {
     </View>
   );
   const expenseBtn = (bar: boolean) => (
-    <Button label={t("visit.bar.expense")} icon="dollar" variant="secondary" size={bar ? "bar" : "md"} full={bar} testID="visit-bar-expense" onPress={() => router.push("/expense/new")} />
+    <Button label={t("visit.bar.expense")} icon="dollar" variant="secondary" size={bar ? "bar" : "md"} full={bar} testID="visit-bar-expense" onPress={() => router.push(v.jobId ? `/expense/new?jobId=${v.jobId}` : "/expense/new")} />
   );
   const photoBtn = (bar: boolean) => (
     <Button label={t("photo.addShort")} icon="camera" variant="secondary" size={bar ? "bar" : "md"} full={bar} testID="visit-bar-photo" onPress={() => void pickPhoto(v.id)} />
