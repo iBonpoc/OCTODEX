@@ -15259,6 +15259,10 @@ select tst.ok((select bool_and(app.can_write_file_object('ca000000-0000-0000-000
               'T278 five receipts taken offline: each gets its bytes after its expense');
 select tst.ok(app.hanging_receipts_count('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000001', null, false, null) = 0,
               'T278 another person''s count is never told');
+-- a phone's old date never takes a receipt out of the day: on a fresh count, 50 such rows go and the 51st is refused
+insert into public.files (id, company_id, kind, created_at) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', '2000-01-01' from generate_series(1, 50);
+select tst.fails_like($q$insert into public.files (id, company_id, kind, created_at) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', '2000-01-01')$q$,
+                      '%at most 50%', 'T278 the day is the server''s: 50 rows dated 2000 count, the 51st is refused');
 :as_super
 select tst.ok(has_function_privilege('authenticated', 'app.hanging_receipts_count(uuid, uuid, uuid, boolean, timestamptz)', 'EXECUTE')
               and not has_function_privilege('anon', 'app.hanging_receipts_count(uuid, uuid, uuid, boolean, timestamptz)', 'EXECUTE')
