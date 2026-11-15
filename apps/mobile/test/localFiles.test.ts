@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 
-import { dropPickedCopy, fileName, inAppDir, keptHere, namesIn, setMemoryRecords, SWEEP_MIN_AGE_MS, sweepLocalFiles, sweepSoon, toSweep, type FoundFile, type SweepDeps } from "../src/data/localFiles";
+import { asMs, dropPickedCopy, fileName, inAppDir, keptHere, namesIn, setMemoryRecords, SWEEP_MIN_AGE_MS, sweepLocalFiles, sweepSoon, toSweep, type FoundFile, type SweepDeps } from "../src/data/localFiles";
 
 const C = "file:///var/mobile/Containers/Data/Application/AAAA/Library/Caches";
 const DIRS = [`${C}/ImagePicker/`, `${C}/ImageManipulator/`];
@@ -34,7 +34,7 @@ describe("unit:localFiles — only the app's own folders (#1659)", () => {
   });
   it("the picker's copy goes after the shrink only from the picker's folder; the library and a failed shrink — never", () => {
     const remove = vi.fn();
-    const d = { dirs: () => DIRS, remove };
+    const d = { dirs: () => DIRS, remove, exists: () => true };
     expect(dropPickedCopy(`${C}/ImagePicker/a.jpg`, `${C}/ImageManipulator/b.jpg`, d)).toBe(true);
     expect(remove).toHaveBeenCalledWith(`${C}/ImagePicker/a.jpg`);
     remove.mockClear();
@@ -44,7 +44,7 @@ describe("unit:localFiles — only the app's own folders (#1659)", () => {
     expect(dropPickedCopy(`${C}/ImageManipulator/x.jpg`, `${C}/ImageManipulator/b.jpg`, d)).toBe(false); // not the picker's
     expect(dropPickedCopy("blob:https://app/1", "blob:https://app/2", d)).toBe(false); // the web
     expect(remove).not.toHaveBeenCalled();
-    expect(dropPickedCopy(`${C}/ImagePicker/a.jpg`, `${C}/ImageManipulator/b.jpg`, { dirs: () => DIRS, remove: () => { throw new Error("busy"); } })).toBe(false);
+    expect(dropPickedCopy(`${C}/ImagePicker/a.jpg`, `${C}/ImageManipulator/b.jpg`, { dirs: () => DIRS, remove: () => { throw new Error("busy"); }, exists: () => true })).toBe(false);
   });
 });
 
@@ -153,5 +153,25 @@ describe("unit:localFiles — review of #1659", () => {
     finish();
     for (let i = 0; i < 6; i++) await Promise.resolve();
     expect(calls).toBe(2);
+  });
+});
+
+describe("unit:localFiles — the director's review of #1691", () => {
+  it("times are ms (expo-file-system 58, iOS and Android); a value in seconds is read as seconds, not 1970", () => {
+    expect(asMs(now)).toBe(now);
+    expect(asMs(Math.floor(now / 1000))).toBe(Math.floor(now / 1000) * 1000);
+    expect(asMs(null)).toBeNull();
+    expect(asMs(0)).toBeNull();
+    const C2 = `${C}/ImageManipulator/`;
+    // a fresh file whose time came in seconds is still fresh (never swept as «old»)
+    expect(toSweep([{ uri: `${C2}s.jpg`, modified: Math.floor((now - 1000) / 1000) }], new Set(), DIRS, now)).toEqual([]);
+    expect(toSweep([{ uri: `${C2}o.jpg`, modified: Math.floor(old / 1000) }], new Set(), DIRS, now)).toEqual([`${C2}o.jpg`]);
+  });
+  it("the picker's copy stays when the smaller one is not on the device (or it cannot be told)", () => {
+    const remove = vi.fn();
+    expect(dropPickedCopy(`${C}/ImagePicker/a.jpg`, `${C}/ImageManipulator/b.jpg`, { dirs: () => DIRS, remove, exists: () => false })).toBe(false);
+    expect(dropPickedCopy(`${C}/ImagePicker/a.jpg`, `${C}/ImageManipulator/b.jpg`, { dirs: () => DIRS, remove })).toBe(false);
+    expect(dropPickedCopy(`${C}/ImagePicker/a.jpg`, `${C}/ImageManipulator/b.jpg`, { dirs: () => DIRS, remove, exists: () => { throw new Error("busy"); } })).toBe(false);
+    expect(remove).not.toHaveBeenCalled();
   });
 });

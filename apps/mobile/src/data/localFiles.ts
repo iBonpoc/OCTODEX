@@ -81,9 +81,20 @@ export interface FoundFile {
   /** ms since the epoch; null — not known (never swept) */
   modified: number | null;
 }
+/**
+ * a file's time in ms: expo-file-system 58 gives ms on iOS (timeIntervalSince1970 × 1000) and Android (File.lastModified);
+ * a value that reads as seconds (an older native side) is taken as seconds — never as a time in 1970 (every file «old»)
+ */
+export const asMs = (t: number | null): number | null => (t == null || !Number.isFinite(t) || t <= 0 ? null : t < 1e11 ? t * 1000 : t);
+
 /** the files to remove: inside the app's folders, named by no record, old enough (pure) */
 export function toSweep(files: readonly FoundFile[], named: ReadonlySet<string>, dirs: readonly string[], now: number, minAge = SWEEP_MIN_AGE_MS): string[] {
-  return files.filter((f) => inAppDir(f.uri, dirs) && f.modified != null && now - f.modified >= minAge && !named.has(fileName(f.uri))).map((f) => f.uri);
+  return files
+    .filter((f) => {
+      const t = asMs(f.modified);
+      return inAppDir(f.uri, dirs) && t != null && now - t >= minAge && !named.has(fileName(f.uri));
+    })
+    .map((f) => f.uri);
 }
 
 /** what the sweep needs of the device (tests give stand-ins) */
@@ -93,6 +104,8 @@ export interface SweepDeps {
   /** the files directly in a folder (none if it does not exist) */
   list: (dir: string) => FoundFile[];
   remove: (uri: string) => void;
+  /** the file is on the device (the smaller copy before the picker's goes) */
+  exists?: (uri: string) => boolean;
   keys: () => Promise<readonly string[]>;
   read: (key: string) => Promise<string | null>;
   log?: (what: string) => void;
@@ -218,6 +231,10 @@ function deviceDeps(): SweepDeps {
       const { File } = fs();
       new File(uri).delete();
     },
+    exists: (uri) => {
+      const { File } = fs();
+      return new File(uri).exists;
+    },
     keys: () => AsyncStorage.getAllKeys(),
     read: (k) => AsyncStorage.getItem(k),
     // eslint-disable-next-line no-console
@@ -229,7 +246,7 @@ function deviceDeps(): SweepDeps {
  * photoShrink.ts: the picker's copy goes once the smaller one is saved — only a file in the app's own picker folder (a
  * photo of the person's library or any other path is never touched). Never throws.
  */
-export function dropPickedCopy(picked: string, kept: string, deps?: Pick<SweepDeps, "dirs" | "remove">): boolean {
+export function dropPickedCopy(picked: string, kept: string, deps?: Pick<SweepDeps, "dirs" | "remove" | "exists">): boolean {
   try {
     if (picked === kept || !picked.startsWith("file://")) return false;
     const d = deps ?? deviceDeps();
@@ -237,6 +254,8 @@ export function dropPickedCopy(picked: string, kept: string, deps?: Pick<SweepDe
     if (!dirs) return false;
     const pickerDir = dirs.filter((u) => /\/ImagePicker\/?$/.test(u));
     if (!inAppDir(picked, pickerDir)) return false;
+    // the smaller copy must be on the device first: otherwise the picker's is the only one (never lose the photo)
+    if (!d.exists || !d.exists(kept)) return false;
     d.remove(picked);
     return true;
   } catch {
