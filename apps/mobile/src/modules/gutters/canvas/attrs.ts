@@ -10,12 +10,14 @@
 import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultHangerKit, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
-import { MM_OF, MM_PER_IN, type LenUnit } from "./format";
+import { DENOM, MM_OF, MM_PER_IN, type LenUnit } from "./format";
 
 export type RunAttrs = DrawnRun["attrs"];
 export type DsAttrs = Omit<DrawnDownspout, "id" | "runId" | "atIn">;
 
 export const PROFILES: readonly GutterProfile[] = ["k", "half_round", "fascia", "box", "euro"];
+/** the profile as an icon (a cross-section; `extraIcons`): the canvas toolbar's «Желоб» shows the chosen one (#1274) */
+export const PROFILE_ICON = { k: "xsK", half_round: "xsHalf", fascia: "xsFascia", box: "xsBox", euro: "xsEuro" } as const satisfies Record<GutterProfile, string>;
 /** nominal sizes, inches, by profile (until M7) */
 export const SIZES_BY_PROFILE: Record<GutterProfile, readonly string[]> = {
   k: ["5", "6", "7"],
@@ -248,35 +250,35 @@ export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string
 const same = (a: object, b: object) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const sorted = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).sort(([x], [y]) => (x < y ? -1 : 1)));
 
-/** feet, inches and eighths typed on the tape → inches (to 1/8″); nothing sensible (empty, 0, negative, too long) → null */
+/** feet, inches (a decimal one: 5.0625 is fine) and sixteenths (0–15) typed on the tape → inches (to 1/16″); nothing sensible (empty, 0, negative, too long) → null */
 export const MAX_RUN_IN = 12 * 500;
-export function tapeIn(ft: string, inch: string, eighths = 0): number | null {
+export function tapeIn(ft: string, inch: string, sixteenths = 0): number | null {
   const f = ft.trim() === "" ? 0 : Number(ft);
   const i = inch.trim() === "" ? 0 : Number(inch);
   if (!Number.isFinite(f) || !Number.isFinite(i) || f < 0 || i < 0 || i >= 12 || !Number.isInteger(f)) return null;
-  // 1/8″ (founder 08.11: re-measured 8′ 9¼″)
-  const n = Math.round((f * 12 + i + Math.max(0, Math.min(7, Math.round(eighths))) / 8) * 8) / 8;
+  // 1/16″ (founder 11.11; 08.11: re-measured 8′ 9¼″)
+  const n = Math.round((f * 12 + i + Math.max(0, Math.min(15, Math.round(sixteenths))) / DENOM) * DENOM) / DENOM;
   return n > 0 && n <= MAX_RUN_IN ? n : null;
 }
 
 /**
- * one number typed in inches, metres, centimetres or millimetres → inches to 1/8″; nothing sensible → null (the same
+ * one number typed in inches, metres, centimetres or millimetres → inches to 1/16″; nothing sensible → null (the same
  * limits as the tape). «,» is a decimal point too.
  */
 export function oneIn(v: string, unit: LenUnit): number | null {
   const x = Number(v.replace(",", "."));
   if (!Number.isFinite(x) || x <= 0) return null;
-  const r = Math.round((unit === "in" || unit === "ftin" ? x : (x * MM_OF[unit]) / MM_PER_IN) * 8) / 8;
+  const r = Math.round((unit === "in" || unit === "ftin" ? x : (x * MM_OF[unit]) / MM_PER_IN) * DENOM) / DENOM;
   return r > 0 && r <= MAX_RUN_IN ? r : null;
 }
 
 /**
- * A length in inches written into the fields of `unit` (#922): feet + inches + eighths for ftin, the inches alone, or
+ * A length in inches written into the fields of `unit` (#922): feet + inches + sixteenths for ftin, the inches alone, or
  * a metric number (millimetres whole, as the label shows it). Switching the unit shows the SAME length in the new one.
  */
-export function unitFields(inches: number, unit: LenUnit): { ft: string; inc: string; e8: number; one: string } {
-  const e = Math.round(inches * 8);
-  const ftin = { ft: String(Math.floor(e / 96)), inc: String(Math.floor((e % 96) / 8)), e8: e % 8 };
+export function unitFields(inches: number, unit: LenUnit): { ft: string; inc: string; e16: number; one: string } {
+  const e = Math.round(inches * DENOM);
+  const ftin = { ft: String(Math.floor(e / 192)), inc: String(Math.floor((e % 192) / 16)), e16: e % 16 };
   if (unit === "ftin") return { ...ftin, one: String(inches) };
   if (unit === "in") return { ...ftin, one: String(inches) };
   return { ...ftin, one: String(Math.round(inches * MM_PER_IN) / MM_OF[unit]) };
@@ -294,3 +296,9 @@ export const OFFSETS_IN = [1, 2, 3, 4, 5] as const;
 export const DS_HEADS = ["none", "funnel", "conductor"] as const;
 /** the panel's «Своя высота», feet: 0 = by the storey */
 export const MAX_DS_HEIGHT_FT = 60;
+
+/** feet and inches of a length, to the sixteenth: 11.97″ is a foot, never «12″» (the corner sketch fields) */
+export const asFields = (n: number) => {
+  const q = Math.round(n * DENOM); // whole sixteenths: 11.97″ is a foot, never «12″»
+  return { ft: String(Math.floor(q / (12 * DENOM))), inch: String((q % (12 * DENOM)) / DENOM) };
+};

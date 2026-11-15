@@ -97,6 +97,8 @@ exports.run = async (h) => {
     await p.waitForTimeout(500);
     h.expect((await p.getByRole("menu").locator("visible=true").count()) === 0, "Esc closed the menu");
     h.expect(p.url().includes(`/client/${owner}`), `…and stayed on the client (${p.url()})`);
+  } else {
+    h.expect(false, "the client's status button is on the client screen");
   }
   await escOnPage(p);
   await p.waitForTimeout(600);

@@ -66,15 +66,18 @@ exports.run = async (h) => {
   h.expect(/выходной/.test(String(await tCell.getAttribute("aria-label"))), "… and the screen reader hears it");
   await planMaster(p, null);
 
-  // the Month: the same count, the picked day is an ink frame, not the accent
+  // the Month: the same count; the picked day is «Заливка» with a check (DS «Выделение выбранного»), not the accent, no ink frame
   await h.clickText("Месяц"); await p.waitForTimeout(300);
   h.expect((await countOf(today)) === n1, "the Month counts the same as the Week");
-  const border = await dayCell(today).evaluate((el) => {
-    const all = [el, ...el.querySelectorAll("*")];
-    return all.map((x) => getComputedStyle(x).borderTopColor);
+  const cell = dayCell(today);
+  const look = await cell.evaluate((el) => {
+    const all = [el, ...el.querySelectorAll("*")].map((x) => getComputedStyle(x));
+    return { borders: all.map((st) => st.borderTopColor), shadow: all.some((st) => st.boxShadow && st.boxShadow !== "none") };
   });
-  h.expect(!border.includes(ACC), "the picked day is not yellow");
-  h.expect(border.some((b) => INKS.includes(b)), "the picked day is an ink frame");
+  h.expect(!look.borders.includes(ACC), "the picked day is not yellow");
+  h.expect(!look.borders.some((b) => INKS.includes(b)), "the picked day has no ink frame any more");
+  h.expect(look.shadow, "the picked day is raised (the small shadow of «Заливка»)");
+  h.expect((await cell.getByTestId("selected-check").count()) === 1, "the picked day carries the check");
   await expectOneAccent(h, "the Month");
   await h.shot("month");
 

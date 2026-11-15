@@ -14,8 +14,8 @@
  *    ACH first from $1,000 (spec 35 §2 п.3: the contractor pays less).
  * 5) rate limits (spec 35 §4д): before the link is looked at — per link (sha256); a link that is NOT found — per address
  *    (HMAC of «pay:» + the IP; IPv6 by /64 and /48; no address — one ceiling for the whole function); a real link never
- *    counts by address; after the link is checked — per invoice (the expensive step). Over a limit → 429 {error:"rate_limited", retryAfter} + Retry-After. The limit itself failing lets the
- *    request through (a payment is never refused for our fault), with a line in the log.
+ *    counts by address; after the link is checked — per invoice (the expensive step). Over a limit → 429 {error:"rate_limited", retryAfter} + Retry-After. The per-link or per-invoice limit
+ *    itself failing answers the same «wait» (LIMIT_DOWN_WAIT_S), with a line in the log (review of 14.11).
  * Test mode only: a live key is refused until the founder says (spec 35 §3). The key never appears in a log or an answer;
  * Stripe's own error text is not passed on either. Money is never written here: only the webhook (20г) records a payment.
  */
@@ -82,8 +82,10 @@ export interface Res {
   headers: Record<string, string>;
 }
 
-/** the sites that may call it from a browser: the production site only (a PR preview pays nothing) */
-export const ALLOWED_ORIGINS: readonly string[] = ["https://octodex.expo.app"];
+/** the sites that may call it from a browser: the production site only (a PR preview pays nothing). gorix.expo.app only
+ *  (#656 слой 2): the old name octodex was released when the Hosting subdomain changed — anyone may take it now, so a page
+ *  there is a stranger's and must not pay (no client links were ever sent to it) */
+export const ALLOWED_ORIGINS: readonly string[] = ["https://gorix.expo.app"];
 /** from this balance ACH comes first (spec 35 §2 п.3) */
 export const ACH_FIRST_CENTS = 100000;
 /** the states in which the client can still pay an existing PaymentIntent */
@@ -94,6 +96,8 @@ const PI = /^pi_[A-Za-z0-9]{1,64}$/;
 export const SET_TRIES = 3;
 /** a refusal of the limit never asks to wait longer than this (the window is 10 minutes) */
 const MAX_WAIT_S = 600;
+/** a per-link or per-invoice limit that cannot be read: the client waits and tries again (no intent is made meanwhile) */
+const LIMIT_DOWN_WAIT_S = 30;
 
 // ---- the client's IP — the same rules as lead-intake (a function imports no other function's file; unit:stripePayFn checks
 // that the two give the same keys) ----
@@ -228,7 +232,8 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     const wait = await deps.rate(await deps.sha256(body.token));
     if (wait !== null && wait !== undefined) return busy(wait);
   } catch {
-    deps.log?.("stripe-pay: rate limit failed — let through");
+    deps.log?.("stripe-pay: rate limit failed — wait");
+    return busy(LIMIT_DOWN_WAIT_S);
   }
 
   let a: Attempt;
@@ -254,7 +259,8 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     const wait = await deps.invoiceRate(a.invoice_id);
     if (wait !== null && wait !== undefined) return busy(wait);
   } catch {
-    deps.log?.("stripe-pay: invoice rate limit failed — let through");
+    deps.log?.("stripe-pay: invoice rate limit failed — wait");
+    return busy(LIMIT_DOWN_WAIT_S);
   }
   const fail = (what: string, r?: StripeAnswer) => {
     const type = r?.body && typeof r.body.error === "object" && r.body.error ? String((r.body.error as Record<string, unknown>).type ?? "") : "";

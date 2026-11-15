@@ -9,6 +9,7 @@ import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Screen } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 
 /**
  * The consent gate (7а-1, docs/specs/19 §5; legal/01 §3.2 п.10, §3.5): a signed-in person without the current Terms and
@@ -36,9 +37,7 @@ export default function TermsGate() {
             ) : null}
             <LegalAgree on={agreed} onChange={setAgreed} testID="legal-gate-agree" />
             {err ? (
-              <T v="caption" tone="bad">
-                {err}
-              </T>
+              <StatusNote tone="bad">{err}</StatusNote>
             ) : null}
             <Button
               label={t("legal.gate.accept")}

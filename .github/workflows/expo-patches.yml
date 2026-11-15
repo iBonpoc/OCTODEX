@@ -1,0 +1,36 @@
+# Daily (#1074): do the Expo patch versions still match package.json? Expo publishes patches without any change of ours; PRs only
+# WARN about it (checks.yml), and this run keeps ONE task «Обновить патчи Expo» open while they differ. Never red: main stays green.
+name: Expo patches
+on:
+  schedule:
+    - cron: '41 9 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+  issues: write
+concurrency:
+  group: expo-patches
+  cancel-in-progress: false
+jobs:
+  expo-patches:
+    name: Expo patch versions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - id: check
+        name: expo install --check
+        working-directory: apps/mobile
+        run: |
+          if npx expo install --check; then echo "mismatch=false" >> "$GITHUB_OUTPUT"; else echo "mismatch=true" >> "$GITHUB_OUTPUT"; fi
+      - name: Keep the task in step
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MISMATCH: ${{ steps.check.outputs.mismatch }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: node scripts/expoPatchesIssue.cjs

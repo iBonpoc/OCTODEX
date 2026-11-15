@@ -12,7 +12,7 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { EstimateTemplate } from "@/data/types";
 import {
-  canEditEstimateTemplates, copyTemplate, ESTIMATE_TEMPLATE_NAME_MAX, estimateStartersToAdd, pickableTemplates, starterEstimateId, starterEstimateTemplate,
+  canEditEstimateTemplates, copyTemplate, ESTIMATE_TEMPLATE_NAME_MAX, estimateStartersToAdd, pickableTemplates, starterAllUnpriced, starterEstimateId, starterEstimateTemplate,
   fromTemplate, templateFromCents,
 } from "@/features/estimateTemplate";
 import { tFor } from "@/i18n/translate";
@@ -22,6 +22,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { withAfter } from "@/data/undo";
 
 export default function EstimateTemplates() {
   const store = useStore();
@@ -51,21 +52,26 @@ export default function EstimateTemplates() {
   const addStarter = (module: string, starter: StarterEstimate) => {
     const id = starterEstimateId(companyId, module, starter.key);
     if (pressed.current.has(id)) return;
+    const want = (m: Record<string, string>) => moduleDef(module)?.starterWant?.(store.db.company?.modules?.[module]?.settings, m) ?? m;
     const tpl = starterEstimateTemplate(module, starter, {
       id, catalog: store.db.catalog, tApp: t, tDoc: tFor(store.db.company?.docLanguage ?? "en"),
-      depositBps: store.db.company?.estimate.depositBps, costsVisible: seeCosts,
+      depositBps: store.db.company?.estimate.depositBps, costsVisible: seeCosts, want,
     });
     if (!tpl) return;
+    // #1336: no line of the starter priced (an empty price list, or several equally fitting items): not added, the way is said
+    const blocked = starterAllUnpriced(starter, { catalog: store.db.catalog, want });
+    if (blocked) {
+      toast.show(t(blocked === "several" ? "est.tpl.starterSeveral" : "est.tpl.starterNeedPrices"));
+      return;
+    }
     pressed.current.add(id);
     const undo = store.saveEstimateTemplate(tpl, { ifNew: true });
     // lines the catalog lacked: price 0 — said at once (and «проверьте цену» in the builder)
     const unpriced = fromTemplate(tpl.doc, store.db.catalog, {}, false, true).checkPrice;
     const msg = unpriced.length ? t("est.tpl.starterNoPrice", { n: unpriced.length }) : t("est.tpl.starterAdded", { name: tpl.name });
-    toast.show(store.online ? msg : t("offline.queued"), () => {
-      pressed.current.delete(id);
-      // the insert waits on the phone while the toast is up (SEND_AFTER_MS): «Отменить» takes it out of the queue
-      undo();
-    });
+    // the insert waits on the phone while the toast is up (SEND_AFTER_MS): «Отменить» takes it out of the queue; too
+    // late (false) — the template stays, and so does «pressed» (#1244)
+    toast.show(store.online ? msg : t("offline.queued"), withAfter(undo, () => pressed.current.delete(id)));
   };
   const copy = (x: EstimateTemplate) => {
     const c = copyTemplate(x, t("est.tpl.copyName", { name: x.name }), seeCosts);

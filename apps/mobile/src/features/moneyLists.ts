@@ -14,6 +14,21 @@ import { dayKeyIn, daysBetween, dueDayKey, getZone } from "./zone";
 /** who opens the lists (13 §4): «Счета» — not the tech (he opens the invoice of his own job); «Оплаты» — owner, admin, office */
 export const canSeeInvoiceList = (role: Role) => role !== "tech";
 export const canSeePayments = (role: Role) => role === "director" || role === "dispatcher";
+/**
+ * Who takes a payment on an invoice (13 §4; the database since #868): the office — any part; sales — only the whole
+ * deposit of a deposit invoice (17: it goes through the server's deposit function, record_estimate_deposit — a part of it
+ * would be a payment of their own, refused 42501); nobody else on the invoice screen. The tech takes it on his visit.
+ */
+export type PaymentRight = "any" | "wholeDeposit" | "none";
+/** the payment on a visit (record_visit_payment): the office and the tech of the visit — not sales (#1061; whether to
+ *  bring it back is the founder's #1042) */
+export const canTakeVisitPayment = (role: Role) => role !== "sales";
+export function paymentRight(role: Role, inv: Pick<Invoice, "kind">, of: { fromEstimate: boolean; pendingCents?: number }): PaymentRight {
+  if (role !== "sales") return "any";
+  // only the deposit of an estimate goes through the server's deposit function; a hand-made one would be a payment of
+  // their own (42501). A payment of it on its way (ACH): the function refuses — paying now would pay it twice (Б1)
+  return inv.kind === "deposit" && of.fromEstimate && !(of.pendingCents && of.pendingCents > 0) ? "wholeDeposit" : "none";
+}
 
 /** chips of «Счета»: owed = not paid · overdue (the default — the one path to debts), paid, all */
 export type InvoiceFilter = "owed" | "paid" | "all";

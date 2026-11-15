@@ -9,6 +9,7 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { visitContext } from "@/data/selectors";
+import { canRetry } from "@/data/photoUpload";
 import { useI18n } from "@/i18n";
 import { attentionHref, type AttentionItem } from "./attention";
 import { attentionPeople, subjectOf } from "./attentionPeople";
@@ -20,7 +21,7 @@ import { useToast } from "@/ui/overlays";
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
 export function useAttentionVerbs() {
-  const { db, online, reviewVisitMissed } = useStore();
+  const { db, online, reviewVisitMissed, retryPhoto, undoTogether } = useStore();
   const { t } = useI18n();
   const toast = useToast();
   const [reply, setReply] = useState<string | null>(null);
@@ -42,6 +43,13 @@ export function useAttentionVerbs() {
       // «Просмотрено» (docs/specs/08 §8): the card goes, the items stay «not done» in the visit's history; «Отменить» 5 s
       case "visitMissed":
         return { label: t("chk2b.reviewed"), onPress: () => toast.show(online ? t("chk2b.reviewedToast") : t("offline.queued"), reviewVisitMissed(it.refId)) };
+      // #1431: the photos of the visit whose file is still on this phone are sent again (another phone's — nothing to send)
+      case "photoFailed": {
+        const ps = db.visits.find((x) => x.id === it.refId)?.photos.filter(canRetry) ?? [];
+        return ps.length
+          ? { label: t("photoUp.retry"), onPress: () => toast.show(online ? t("photoUp.retried") : t("offline.queued"), undoTogether(ps.map((p) => retryPhoto(it.refId, p.id)))) }
+          : undefined;
+      }
       default:
         return undefined;
     }

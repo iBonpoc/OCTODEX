@@ -4020,6 +4020,49 @@ begin
      and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
   perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
 
+  -- authenticated: only the functions on this list, by full signature (a new RPC or overload is added here by its PR — review of 14.11)
+  select string_agg(p.oid::regprocedure::text, ' | ' order by p.oid::regprocedure::text) into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and has_function_privilege('authenticated', p.oid, 'EXECUTE')
+     and p.oid::regprocedure::text <> all (array[
+                        'accept_invitation(text)', 'accept_legal(jsonb,text,text)',
+                        'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid)',
+                        'accept_on_site(uuid,uuid,uuid[],text,text,boolean,uuid,uuid,bigint)', 'advance_apply(uuid,uuid)',
+                        'assign_visit(uuid,uuid[])', 'cancel_visit(uuid,text,text)', 'company_location_sharing(uuid)', 'complete_job(uuid)',
+                        'countersign_estimate(uuid,text,uuid,uuid,uuid)', 'create_job(uuid,uuid,uuid,text,text,uuid,uuid)',
+                        'decline_countersign(uuid,text)', 'delete_account(text,uuid[])', 'estimate_link(uuid)', 'estimate_links(uuid)',
+                        'forget_push_device(text)', 'import_customers(uuid,jsonb)', 'import_customers_finish(uuid)',
+                        'import_customers_start(uuid,uuid,text,text,integer,uuid)', 'intake_endpoint_create(uuid,text,uuid)',
+                        'intake_endpoint_rotate(uuid)', 'intake_endpoint_set(uuid,boolean,uuid,uuid,boolean,boolean,boolean,integer,boolean)',
+                        'intake_event_decide(uuid,boolean)', 'invite_member(uuid,text,text,text,boolean)', 'legal_status()',
+                        'mark_not_duplicate(uuid,uuid)', 'merge_customers(uuid,uuid)', 'module_disable(uuid,text)', 'module_enable(uuid,text)',
+                        'module_save_settings(uuid,text,jsonb,integer)', 'my_closed_companies()', 'po_receive(uuid,jsonb,bigint)',
+                        'portal_accept(text,uuid,uuid[],text,text,boolean,text,uuid,uuid,uuid)', 'portal_estimate(text)',
+                        'portal_pay_simulated(text,uuid)', 'record_estimate_deposit(uuid,uuid,text)',
+                        'record_visit_payment(uuid,uuid,uuid,text,date,bigint)', 'refund_record(uuid,bigint,text,text,text)',
+                        'register_push_device(text,text,text,text)', 'reissue_estimate_link(uuid)', 'reopen_estimate(uuid,text)',
+                        'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
+                        'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
+                        'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
+                        'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
+                        'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
+                        'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
+                        'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
+                        'trash_restore(text,uuid[])', 'undo_customer_import(uuid)', 'uuid_generate_v7()']::text[]);
+  perform tst.ok(bad is null, 'authenticated runs only the listed functions in public: ' || coalesce(bad, ''));
+
+  -- schema extensions: the API creates nothing there (nor in public / app), and no definer function there runs for it
+  perform tst.ok(to_regnamespace('extensions') is not null
+             and not has_schema_privilege('anon', 'extensions', 'CREATE') and not has_schema_privilege('authenticated', 'extensions', 'CREATE')
+             and not has_schema_privilege('anon', 'public', 'CREATE') and not has_schema_privilege('authenticated', 'public', 'CREATE')
+             and not has_schema_privilege('anon', 'app', 'CREATE') and not has_schema_privilege('authenticated', 'app', 'CREATE'),
+             'anon / authenticated create nothing in extensions, public, app');
+  select string_agg(p.oid::regprocedure::text, ', ') into bad
+    from pg_proc p
+   where p.pronamespace = 'extensions'::regnamespace and p.prosecdef
+     and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'));
+  perform tst.ok(bad is null, 'no security definer function in extensions runs for anon / authenticated: ' || coalesce(bad, ''));
+
   -- schemas public and app: no function runs for PUBLIC (a forgotten revoke), but the id helper of column defaults
   select string_agg(n.nspname || '.' || p.proname, ', ') into bad
     from pg_proc p join pg_namespace n on n.oid = p.pronamespace
@@ -4077,8 +4120,11 @@ insert into public.invoices (id, company_id, number, customer_id, kind, status, 
   ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
 select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', -100, -100)$q$, 'an invoice is not born with a negative total');
 select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', -1, 0)$q$, 'an invoice is not born with a negative subtotal');
+-- the payment is the office's: sales take none on an invoice (T191, #868)
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
+:as_sales_a
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
 select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
 select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
@@ -4108,8 +4154,10 @@ update public.invoices set title = 'T53 renamed', due_date = tst.today() + 30, r
 select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
 update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
 select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
+:as_sales_a
 select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
 -- a draft still changes, but not below what is paid; once sent it is frozen
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
@@ -4118,8 +4166,10 @@ update public.invoices set subtotal_cents = 6000, total_cents = 6000 where id = 
 select tst.ok((select total_cents = 6000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'), 'a draft invoice still changes its amounts');
 select tst.fails($q$update public.invoices set total_cents = -1 where id = '15300000-0000-4000-8000-000000000002'$q$, 'a draft does not go negative');
 -- a paid draft: the total does not go below what is paid (check_violation, not the freeze)
+:as_office_a
 insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
   ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
+:as_sales_a
 do $$ begin
   update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
   raise exception 'FAILED: a draft went below what is paid';
@@ -4150,7 +4200,7 @@ select tst.ok((select status = 'void' from public.invoices where id = '15300000-
 -- ---------------------------------------------------------------- T54: the simulated card payment only for a demo company (security audit 06.11, item 2)
 :as_super
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
-select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'progress', 'sent', 'T54 progress', 5400, 5400, now()
+select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'standalone', 'sent', 'T54 extra work', 5400, 5400, now()   -- the contract is billed in full: extra work outside it (В1-4б)
   from public.jobs j join public.estimates e on e.id = j.estimate_id,
        (values ('15400000-0000-4000-8000-000000000001'), ('15400000-0000-4000-8000-000000000002')) x(id)
  where e.id = tst.est_of('tok_inv_0123456789abcdef');
@@ -5644,9 +5694,12 @@ update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0
 do $$ begin
   insert into public.jobs (id, company_id, title, customer_id, property_id, status, contract_total_cents) values
     ('e6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T69 old', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', 10000);
-  insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
-    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
 end $$;
+-- old data made before В1-4б (now the server refuses invoices above the contract, T197): the check is off for this row only
+alter table public.invoices disable trigger t41_invoice_contract;
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+  ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
+alter table public.invoices enable trigger t41_invoice_contract;
 :as_office_a
 update public.jobs set title = 'T69 old renamed', description = 'still fine' where id = 'e6900000-0000-4000-8000-000000000002';
 select tst.ok((select title from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 'T69 old renamed', 'old data over-invoiced: an edit that keeps the total passes');
@@ -10094,7 +10147,7 @@ select tst.ok(not has_function_privilege('anon', 'public.stripe_pay_open(text,uu
   'T131 only the Edge Function (service_role) opens an attempt and keeps its PaymentIntent');
 insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
 select '11310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T131-1', 'c1a00000-0000-0000-0000-000000000001',
-       j.id, 'progress', 'sent', 'T131 progress', 150000, 150000, now()
+       j.id, 'standalone', 'sent', 'T131 extra work', 150000, 150000, now()   -- outside the billed-in-full contract (В1-4б)
   from public.jobs j where j.estimate_id = '0e1a0000-0000-0000-0000-000000000088';
 :as_service
 select tst.fails_like($q$select public.stripe_pay_open('tok_lead_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
@@ -12557,5 +12610,1826 @@ select tst.ok((select status = 'sent' and paid_cents = 50000 from public.invoice
 select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.payments where id = '21820000-0000-4000-8000-0000000000a2'), 'T181 the payment''s client is the invoice''s, not the job''s (С4)');
 select tst.ok((select paid_cents = 0 from public.invoices where id = '01820000-0000-4000-8000-000000000001'), 'T181 the unpaid deposit is untouched');
 \echo 'T181 visit payment: who may, one answer to another company or tech ok'
+
+-- T191 (#868, Q-42): sales take no payment on an invoice (13 §4) and see only their own expenses (#1042, default «no»);
+-- the deposit at the signing stays theirs (17, T73 — a security-definer function), the office's rights are unchanged
+:as_super
+insert into public.expenses (id, company_id, vendor, amount_cents, category, created_by) values
+  ('e1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T191 owner vendor', 1000, 'materials', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T191 sales vendor', 2000, 'materials', 'a0000000-0000-0000-0000-000000000005');
+:as_sales_a
+do $$ begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+    values ('ca000000-0000-0000-0000-000000000000', '01a00000-0000-0000-0000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
+            'cash', 100, 'succeeded', 't191-sales-pay');
+  raise exception 'FAILED: T191 sales took a payment on an invoice';
+exception when insufficient_privilege then null;   -- RLS (42501), not some other error
+end $$;
+select tst.ok(true, 'T191 sales cannot take a payment on an invoice (payments_insert_staff, 42501)');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'$q$) = 0, 'T191 sales do not see another person''s expense');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where created_by <> 'a0000000-0000-0000-0000-000000000005'$q$) = 0, 'T191 sales see no expense of the company but their own');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'$q$) = 1, 'T191 sales see their own expense');
+select tst.blocked($q$update public.expenses set amount_cents = 1 where id = 'e1910000-0000-4000-8000-000000000001'$q$, 'T191 sales cannot change another person''s expense');
+update public.expenses set amount_cents = 2500 where id = 'e1910000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok((select amount_cents = 2500 from public.expenses where id = 'e1910000-0000-4000-8000-000000000002'), 'T191 sales change their own expense');
+select tst.ok((select amount_cents = 1000 from public.expenses where id = 'e1910000-0000-4000-8000-000000000001'), 'T191 another person''s expense is untouched');
+:as_office_a
+-- a live invoice of its own (01a…001 is void by now: no payment goes into a void invoice — В1-5, T197)
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T191 office', 1000, 1000, now());
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '01910000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001', 'cash', 100, 'succeeded', 't191-office-pay');
+select tst.ok(tst.cnt($q$select 1 from public.expenses where id in ('e1910000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-000000000002')$q$) = 2, 'T191 the office sees every expense');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.payments where idempotency_key = 't191-office-pay'$q$) = 1, 'T191 the office still takes a payment on an invoice');
+-- the deposit at the signing stays sales' (17): the server's deposit function on the deposit the signature made (approved,
+-- the signed version, the client's deposit); a deposit invoice sales put in themselves, or of another sum, is refused
+-- (security-check of #1061 В-1: an own «deposit» of $99 999 was paid)
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed'),
+  ('0e191000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, no deposit'),
+  ('0e191000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 signed, another sum');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', 1, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000001', '51910000-0000-4000-8000-000000000001', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000002', '51910000-0000-4000-8000-000000000002', 'customer', 'approved', 'Ann', '{"deposit": 1000}'),  -- = the office's hand-made invoice 11910…004: only the version refuses
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000003', '51910000-0000-4000-8000-000000000003', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;  -- straight to «approved» (the signing itself is S8's tests)
+update public.estimates set status = 'approved' where id in ('0e191000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002', '0e191000-0000-4000-8000-000000000003');
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000001'),
+  ('e1910000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 2', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000002'),
+  ('e1910000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000003');
+-- the deposit invoices as the signature leaves them (the signed version, the client's deposit) — and one of another sum
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f1', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000001'),
+  ('11910000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f3', 'deposit', 'sent', 'Deposit', 9999900, 9999900, now(), '51910000-0000-4000-8000-000000000003');
+:as_sales_a
+-- В-1: sales put in a «deposit» of their own on a signed estimate without one — the database refuses the insert
+do $$ begin
+  insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id)
+  values ('11910000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 9999900, 9999900, now(), '51910000-0000-4000-8000-000000000002');
+  raise exception 'FAILED: T191 sales inserted a deposit invoice';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales cannot insert a deposit invoice (invoices_insert, 42501)');
+-- a deposit invoice of another sum than the client signed: the function refuses sales
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000003', 'a1910000-0000-4000-8000-000000000003', 'cash');
+  raise exception 'FAILED: T191 the function paid sales a deposit of another sum';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 a deposit invoice of another sum than the signed deposit: refused to sales (42501)');
+select tst.ok((public.record_estimate_deposit('0e191000-0000-4000-8000-000000000001', 'a1910000-0000-4000-8000-000000000001', 'cash') ->> 'repeat') = 'false', 'T191 sales take the deposit the signature made (record_estimate_deposit)');
+:as_super
+select tst.ok((select balance_cents = 0 from public.invoices where id = '11910000-0000-4000-8000-000000000001'), 'T191 the deposit invoice is paid');
+select tst.ok((select balance_cents = 9999900 from public.invoices where id = '11910000-0000-4000-8000-000000000003'), 'T191 the deposit of another sum stays unpaid');
+-- В-2: the same $99 999 through record_visit_payment — sales put in a visit and a draft final of their own: refused
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f1910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1910000-0000-4000-8000-0000000000f2', now());
+update public.visits set status = 'on_site' where id = 'f1910000-0000-4000-8000-000000000001';
+-- the job has a contract: with sales in the function's roles it would pay (the test fails on «FAILED», not on «nothing due»)
+update public.jobs set contract_total_cents = 9999900 where id = 'e1910000-0000-4000-8000-0000000000f2';
+:as_sales_a
+do $$ begin
+  perform public.record_visit_payment('f1910000-0000-4000-8000-000000000001', '11910000-0000-4000-8000-0000000000a5', 'a1910000-0000-4000-8000-000000000005', 'cash', null, 9999900);
+  raise exception 'FAILED: T191 record_visit_payment paid sales';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales take no payment on a visit (record_visit_payment, 42501)');
+-- С-1: a draft progress invoice of their own turned «deposit» of the signed version by an update: refused
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('11910000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'progress', 'draft', 'T191 draft', 9999900, 9999900);
+do $$ begin
+  update public.invoices set kind = 'deposit', source_estimate_version_id = '51910000-0000-4000-8000-000000000002' where id = '11910000-0000-4000-8000-000000000006';
+  raise exception 'FAILED: T191 sales turned a draft into a deposit';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 sales do not change what an invoice is (kind, version: tg_invoice_guard, 42501)');
+:as_super
+select tst.ok((select kind = 'progress' and source_estimate_version_id is null from public.invoices where id = '11910000-0000-4000-8000-000000000006'), 'T191 the draft stays a progress invoice');
+select tst.ok(tst.cnt($q$select 1 from public.payments where id = 'a1910000-0000-4000-8000-000000000005'$q$) = 0, 'T191 no payment from sales on the visit');
+-- the office's visit payment: T181 (unchanged)
+-- the office: a deposit invoice by hand, as before
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+  values ('11910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f2', 'deposit', 'sent', 'Deposit', 1000, 1000, now());
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.invoices where id = '11910000-0000-4000-8000-000000000004'$q$) = 1, 'T191 the office still inserts a deposit invoice');
+-- the new branches of the function (rule 15): the hand-made deposit invoice of the office (no signed version) — sales are
+-- refused; the estimate not approved — sales are refused; a payment on its way (ACH) — nobody pays the deposit twice
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000002', 'a1910000-0000-4000-8000-000000000008', 'cash');
+  raise exception 'FAILED: T191 sales paid the office''s hand-made deposit invoice';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 a deposit invoice the office made by hand (no signed version): refused to sales (42501)');
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 another version');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', 2, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000007', '51910000-0000-4000-8000-000000000017', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;
+update public.estimates set status = 'approved' where id = '0e191000-0000-4000-8000-000000000007';
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f7', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 7', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000007');
+-- the deposit invoice of version 1, the client signed version 2: the same sum, another version
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000017', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f7', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000007');
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000007', 'a1910000-0000-4000-8000-000000000017', 'cash');
+  raise exception 'FAILED: T191 sales paid a deposit invoice of another version than the client signed';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 another version than the client signed, the same sum: refused to sales (42501)');
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e191000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 not approved'),
+  ('0e191000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T191 ACH on its way');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('51910000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', 1, '{"kind":"none"}'),
+  ('51910000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', 1, '{"kind":"none"}');
+insert into public.estimate_approvals (company_id, estimate_id, version_id, party, decision, signer_name, selection) values
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000004', '51910000-0000-4000-8000-000000000004', 'customer', 'approved', 'Ann', '{"deposit": 2500}'),
+  ('ca000000-0000-0000-0000-000000000000', '0e191000-0000-4000-8000-000000000005', '51910000-0000-4000-8000-000000000005', 'customer', 'approved', 'Ann', '{"deposit": 2500}');
+set session_replication_role = replica;
+update public.estimates set status = 'approved' where id = '0e191000-0000-4000-8000-000000000005';
+set session_replication_role = origin;
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e1910000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 4', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000004'),
+  ('e1910000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', '', 'T191 job 5', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e191000-0000-4000-8000-000000000005');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at, source_estimate_version_id) values
+  ('11910000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f4', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000004'),
+  ('11910000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e1910000-0000-4000-8000-0000000000f5', 'deposit', 'sent', 'Deposit', 2500, 2500, now(), '51910000-0000-4000-8000-000000000005');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('a1910000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', '11910000-0000-4000-8000-000000000009', 'c7300000-0000-4000-8000-000000000001', 'ach', 2500, 'pending', 't191-ach');
+:as_sales_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000004', 'a1910000-0000-4000-8000-000000000009', 'cash');
+  raise exception 'FAILED: T191 sales paid the deposit of an estimate not approved';
+exception when insufficient_privilege then null;
+end $$;
+select tst.ok(true, 'T191 the estimate not approved: refused to sales (42501)');
+:as_office_a
+do $$ begin
+  perform public.record_estimate_deposit('0e191000-0000-4000-8000-000000000005', 'a1910000-0000-4000-8000-0000000000b0', 'cash');
+  raise exception 'FAILED: T191 a deposit with an ACH on its way was paid again';
+exception when sqlstate '22023' then null;
+end $$;
+select tst.ok(true, 'T191 an ACH of the deposit on its way: the deposit is not paid twice (22023, any role)');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '11910000-0000-4000-8000-000000000009'$q$) = 1, 'T191 only the ACH on the deposit');
+\echo 'T191 sales: no payment on an invoice, only their own expenses; the office as before'
+
+-- ======================================================================================================================
+-- T192 (#1113, П-23/П-44): a tech does not send an estimate to the client — not even his own draft. The app opened the send
+-- sheet by its address (?send=1) for him; the server's answer is the guard: no «sent», no locked version, no client link
+-- (a tech with the link could sign as the client, spec 35 §4д п.10). e1420000-…03 — the T142 draft the tech made.
+-- ======================================================================================================================
+:as_tech_a
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', 'T192tokenTheTechTriesToSend0123456789ab')$q$, '%only the office%',
+  'T192 the tech does not send his own draft');
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000003', null)$q$, '%only the office%',
+  'T192 …nor without a token of his own');
+select tst.blocked($q$update public.estimates set status = 'sent' where id = 'e1420000-0000-4000-8000-000000000003'$q$, 'T192 the tech does not mark it «sent» by hand');
+select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000003')$q$, '%only the office%', 'T192 the tech gets no client link of it');
+-- a new estimate made «sent» at once, or with a link of his own on it: not sent, no link (director's review of #1134 п.2)
+select tst.fails($q$insert into public.estimates (id, company_id, customer_id, property_id, title, status) values ('e1920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 sent at once', 'sent')$q$,
+  'T192 the tech does not insert an estimate «sent» at once');
+do $$ begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title, public_token) values ('e1920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T192 own link', 'T192tokenTheTechPutsOnHisDraft0123456789');
+exception when others then null;   -- refused, or kept without the link (t02_public_token_null) — both checked below
+end $$;
+do $$ begin
+  update public.estimates set public_token = 'T192tokenTheTechPutsOnHisDraft0123456789' where id = 'e1420000-0000-4000-8000-000000000003';
+exception when others then null;
+end $$;
+:as_super
+select tst.ok((select status = 'draft' and sent_version_id is null from public.estimates where id = 'e1420000-0000-4000-8000-000000000003'),
+  'T192 the draft is still a draft: not sent');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where estimate_id = 'e1420000-0000-4000-8000-000000000003'$q$) = 0, 'T192 …no client link made');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = 'e1920000-0000-4000-8000-000000000001'$q$) = 0, 'T192 …no «sent» estimate inserted');
+select tst.ok(tst.cnt($q$select 1 from app.estimate_tokens where token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0
+          and tst.cnt($q$select 1 from public.estimates where public_token = 'T192tokenTheTechPutsOnHisDraft0123456789'$q$) = 0,
+  'T192 …a link the tech writes himself (on a new draft or his own) is kept nowhere');
+select tst.ok((select locked_at is null and sent_at is null from public.estimate_versions where id = 'e1420000-0000-4000-8000-0000000000a3'), 'T192 …its version not locked');
+:as_office_a
+select tst.ok(public.send_estimate('e1420000-0000-4000-8000-000000000003', null) is not null, 'T192 the office sends it as before');
+\echo 'T192 a tech does not send an estimate to the client (not his own draft either); the office as before'
+-- T193 (#1126): the client signs an older quick estimate on a tech's phone (sign_estimate_on_site). The app no longer stops
+-- at the tech's refused send (42501) — this is the server's door it then relies on: a tech who may sign contracts, not staff,
+-- who sees the estimate (his own): a SENT one is signed; a DRAFT one is refused (only a sent, locked version is signed).
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+do $$
+declare n int; e uuid; v uuid; o uuid;
+begin
+  for n in 1..2 loop
+    e := ('e1930000-0000-4000-8000-00000000000' || n)::uuid; v := ('e1930000-0000-4000-8000-0000000000a' || n)::uuid;
+    o := ('e1930000-0000-4000-8000-0000000000b' || n)::uuid;
+    insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+      (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T193 ' || n,
+       'a0000000-0000-0000-0000-000000000003');
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (v, 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"none"}');
+    update public.estimates set current_version_id = v where id = e;
+    insert into public.estimate_options (id, company_id, version_id, name) values (o, 'ca000000-0000-0000-0000-000000000000', v, 'Only');
+    insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+      (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
+  end loop;
+end $$;
+:as_office_a
+select public.send_estimate('e1930000-0000-4000-8000-000000000001', null);
+:as_tech_a
+select tst.ok(not app.is_staff('ca000000-0000-0000-0000-000000000000'), 'T193 (fixture: the tech is not staff)');
+select tst.ok(public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000001', 'Ann Client', 'M0 0 L1 1') = 'awaiting_countersign',
+  'T193 a sent quick estimate: the client signs on the tech''s phone');
+select tst.ok(public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000001', 'Ann Client', 'M0 0 L1 1') = 'awaiting_countersign',
+  'T193 …a repeat (no network) changes nothing');
+select tst.fails_like($q$select public.sign_estimate_on_site('e1930000-0000-4000-8000-000000000002', 'Ann Client', 'M0 0 L1 1')$q$, '%not open for approval%',
+  'T193 a draft: refused (the office sends it first)');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_approvals where estimate_id = 'e1930000-0000-4000-8000-000000000001' and party = 'customer'$q$) = 1,
+  'T193 one client signature, kept');
+select tst.ok((select status = 'draft' from public.estimates where id = 'e1930000-0000-4000-8000-000000000002'), 'T193 the draft stays a draft');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T193 the client signs a sent quick estimate on a tech''s phone; a draft is refused'
+
+-- ======================================================================================================================
+-- T194 (#1135): the company's countersignature checks that the person may read the estimate (as sign_estimate_on_site /
+-- accept_on_site). A tech who may sign contracts, on an estimate at a property of nothing of his: «not found» — not signed,
+-- and its status not told.
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', '194 Other St', 'Pasadena');
+-- 1: signed by the client for real (director's review of #1149): sent by the office, the client signs on the page — so
+-- without the read check the tech's countersignature would make it «approved» with its job; 2: a draft
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e1940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 awaiting', 'a0000000-0000-0000-0000-000000000001'),
+  ('e1940000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd1940000-0000-4000-8000-000000000001', 'T194 draft', 'a0000000-0000-0000-0000-000000000001');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e1940000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e1940000-0000-4000-8000-000000000001', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e1940000-0000-4000-8000-0000000000a1' where id = 'e1940000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('e1940000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'e1940000-0000-4000-8000-0000000000a1', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'e1940000-0000-4000-8000-0000000000b1', 'labor', 'Work', 1, 40000);
+:as_office_a
+select public.send_estimate('e1940000-0000-4000-8000-000000000001', 'T194tokenSentByTheOffice0123456789abcd') is not null as t194_sent;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('T194tokenSentByTheOffice0123456789abcd', 'e1940000-0000-4000-8000-0000000000b1', null, 'T194 Client', 'M0 0 L5 5', true) ->> 'status' = 'awaiting_countersign' as t194_client_signed;
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1940000-0000-4000-8000-000000000001'),
+  'T194 (fixture: the client signed it, it awaits the company)');
+:as_tech_a
+select tst.ok(not app.can_read_estimate('e1940000-0000-4000-8000-000000000001'), 'T194 (fixture: the tech does not read it)');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000001', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 the tech does not countersign an estimate of nothing of his');
+select tst.fails_like($q$select public.countersign_estimate('e1940000-0000-4000-8000-000000000002', 'M0 0 L3 3')$q$, '%not found%',
+  'T194 …nor learns its status (a draft: «not found», not «status draft»)');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1940000-0000-4000-8000-000000000001'), 'T194 still awaiting the company''s signature');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = 'e1940000-0000-4000-8000-000000000001'$q$) = 0, 'T194 …no job made');
+-- the control: someone who reads it countersigns as before — «approved», its job made (the same estimate, nothing else changed)
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.ok(public.countersign_estimate('e1940000-0000-4000-8000-000000000001', 'M0 0 L3 3') = 'approved', 'T194 …the owner countersigns it as before');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = 'e1940000-0000-4000-8000-000000000001'$q$) = 1, 'T194 …and its job is made');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T194 the countersignature: only someone who reads the estimate'
+
+-- ======================================================================================================================
+-- T195 (#1147): the client's signature on an employee's device carries the total the client saw.
+-- (а) The totals the phone shows (summarize) = the totals the server signs (app.estimate_option_totals), on the same
+--     examples as apps/mobile/test/signTotals.test.ts (test/fixtures/signTotals.json): the rows estimate.save writes.
+-- (б) sign_estimate_on_site / accept_on_site with the total: the same → signed; another (the office changed and sent it
+--     again meanwhile) → 22023 estimate_total_mismatch, nothing signed; the old ones without the total as before.
+-- ======================================================================================================================
+\set totals_json `cat :sign_totals`
+:as_super
+select set_config('tst.t195_json', :'totals_json', false);
+create function tst.t195_id(p_case int, p_key text) returns uuid language sql immutable as $$
+  select (substr(md5('t195:' || p_case || ':' || p_key), 1, 8) || '-' || substr(md5('t195:' || p_case || ':' || p_key), 9, 4) || '-4' ||
+          substr(md5('t195:' || p_case || ':' || p_key), 14, 3) || '-8' || substr(md5('t195:' || p_case || ':' || p_key), 18, 3) || '-' ||
+          substr(md5('t195:' || p_case || ':' || p_key), 21, 12))::uuid
+$$;
+-- an estimate of one example: its version (tax, the deposit rule), options (discount) and lines as estimate.save writes them
+create function tst.t195_make(p_case int, c jsonb, p_by uuid) returns uuid language plpgsql as $$
+declare e uuid := tst.t195_id(p_case, 'estimate'); v uuid := tst.t195_id(p_case, 'version'); r jsonb := c -> 'rows'; x jsonb;
+begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+    (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T195 ' || p_case, p_by);
+  -- #1219: the rate in ppm too, as estimate.save writes it (the 8.875 % example)
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, tax_rate_ppm, deposit_rule) values
+    (v, 'ca000000-0000-0000-0000-000000000000', e, 1, (r ->> 'taxEnabled')::boolean, (r ->> 'taxRateBps')::int, (r ->> 'taxRatePpm')::int, c -> 'doc' -> 'settings' -> 'deposit');
+  update public.estimates set current_version_id = v where id = e;
+  for x in select * from jsonb_array_elements(r -> 'options') loop
+    insert into public.estimate_options (id, company_id, version_id, name, position, discount_mode, discount_value) values
+      (tst.t195_id(p_case, x ->> 'id'), 'ca000000-0000-0000-0000-000000000000', v, x ->> 'name', (x ->> 'position')::int, x ->> 'discountMode', (x ->> 'discountValue')::bigint);
+  end loop;
+  for x in select * from jsonb_array_elements(r -> 'lines') loop
+    -- client_visible as estimate.save writes it (hidden only at $0 — the table's check refuses a priced hidden line)
+    insert into public.estimate_line_items (id, company_id, option_id, position, line_group, name, quantity, unit, unit_price_cents, taxable, is_optional, client_visible) values
+      (tst.t195_id(p_case, x ->> 'id'), 'ca000000-0000-0000-0000-000000000000', tst.t195_id(p_case, x ->> 'optionId'), (x ->> 'position')::int,
+       (x ->> 'group')::text, x ->> 'name', (x ->> 'quantity')::numeric, x ->> 'unit', (x ->> 'unitPriceCents')::bigint, (x ->> 'taxable')::boolean, (x ->> 'isOptional')::boolean,
+       coalesce((x ->> 'clientVisible')::boolean, true));
+  end loop;
+  return e;
+end $$;
+-- sent as send_estimate leaves it: the current version locked and sent (the signing functions' own flag, as T194)
+create function tst.t195_sent(p_e uuid) returns void language plpgsql as $$
+declare v uuid := (select current_version_id from public.estimates where id = p_e);
+begin
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
+  perform set_config('app.signing_estimate', p_e::text, true);
+  update public.estimates set status = 'sent', sent_version_id = v where id = p_e;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+-- the addon ids of an example, as the server keeps them
+create function tst.t195_addons(p_case int, c jsonb) returns uuid[] language sql immutable as $$
+  select coalesce(array_agg(tst.t195_id(p_case, a)), '{}') from jsonb_array_elements_text(c -> 'sel' -> 'addonIds') a
+$$;
+select tst.t195_make(i::int, c, 'a0000000-0000-0000-0000-000000000001')
+  from jsonb_array_elements((:'totals_json')::jsonb -> 'cases') with ordinality as x(c, i);
+
+-- (а) the server's totals of each example = the phone's
+select tst.ok(coalesce(string_agg(x.c ->> 'name', '; '), '') = '',
+              format('T195 the server counts what the phone shows: %s', coalesce(string_agg((x.c ->> 'name') || ' → ' || t.total || '/' || t.deposit, '; '), '')))
+  from jsonb_array_elements((:'totals_json')::jsonb -> 'cases') with ordinality as x(c, i),
+       lateral app.estimate_option_totals(tst.t195_id(i::int, 'version'), tst.t195_id(i::int, x.c -> 'sel' ->> 'optionId'), tst.t195_addons(i::int, x.c)) t
+ where t.total is distinct from (x.c ->> 'totalCents')::bigint or t.deposit is distinct from (x.c ->> 'depositCents')::bigint;
+select tst.ok(count(*) = jsonb_array_length((:'totals_json')::jsonb -> 'cases') and count(*) >= 3 and bool_and(t.total > 0),
+              'T195 (every example counted on the server, at least three)')
+  from jsonb_array_elements((:'totals_json')::jsonb -> 'cases') with ordinality as x(c, i),
+       lateral app.estimate_option_totals(tst.t195_id(i::int, 'version'), tst.t195_id(i::int, x.c -> 'sel' ->> 'optionId'), tst.t195_addons(i::int, x.c)) t;
+
+-- (а′) a quick estimate this phone made (estimate.add rows: price = round(total / qty)): the server's total =
+--      addedTotalCents on the phone (apps/mobile/test/signTotals.test.ts, the same «quick» examples)
+do $$
+declare q jsonb; i int := 0; e uuid; v uuid; o uuid; r jsonb; t record; bad text := '';
+begin
+  for q in select * from jsonb_array_elements((current_setting('tst.t195_json'))::jsonb -> 'quick') loop
+    i := i + 1;
+    e := tst.t195_id(100 + i, 'estimate'); v := tst.t195_id(100 + i, 'version'); o := tst.t195_id(100 + i, 'option');
+    insert into public.estimates (id, company_id, customer_id, property_id, title) values
+      (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T195 quick ' || i);
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (v, 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"pct","value":"0.1"}');
+    insert into public.estimate_options (id, company_id, version_id, name, is_recommended) values (o, 'ca000000-0000-0000-0000-000000000000', v, 'Quick', true);
+    for r in select * from jsonb_array_elements(q -> 'rows') loop
+      insert into public.estimate_line_items (company_id, option_id, position, line_group, name, quantity, unit_price_cents, is_optional, origin) values
+        ('ca000000-0000-0000-0000-000000000000', o, (r ->> 'position')::int, 'labor', 'Quick line', (r ->> 'quantity')::numeric, (r ->> 'unitPriceCents')::bigint, (r ->> 'isOptional')::boolean, 'assembly');
+    end loop;
+    select * into t from app.estimate_option_totals(v, o, '{}');
+    if t.total is distinct from (q ->> 'serverTotalCents')::bigint then bad := bad || (q ->> 'name') || ' → ' || t.total || '; '; end if;
+  end loop;
+  if i < 3 or bad <> '' then raise exception 'FAILED: T195 the quick estimate''s server total = the phone''s addedTotalCents (% examples): %', i, bad; end if;
+end $$;
+select tst.ok(true, 'T195 the quick estimate''s server total = the phone''s addedTotalCents');
+
+-- (б) the universal estimate (example 1) signed on the owner's device with the total the client saw
+select tst.t195_sent(tst.t195_id(1, 'estimate'));
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select (:'totals_json')::jsonb -> 'cases' -> 0 ->> 'totalCents' as t195_total1 \gset
+:as_owner_a
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann Client', 'M0 0 L1 1', true, null, null, %s)$q$,
+         tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0), :t195_total1 - 100),
+       '%another total%', 'T195 another total than the server counts: refused, not signed');
+:as_super
+select tst.ok(tst.cnt(format($q$select 1 from public.estimate_approvals where estimate_id = %L$q$, tst.t195_id(1, 'estimate'))) = 0
+          and (select status = 'sent' from public.estimates where id = tst.t195_id(1, 'estimate')), 'T195 …no signature, still sent');
+-- the refusal says why in a code the phone knows (outboxRejected REJECT_REASONS): 22023 + hint estimate_total_mismatch
+:as_owner_a
+do $$
+declare h text; st text;
+begin
+  perform public.accept_on_site(tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), '{}', 'Ann Client', 'M0 0 L1 1', true, null, null, 1);
+  raise exception 'T195: not refused';
+exception when others then
+  get stacked diagnostics h = pg_exception_hint, st = returned_sqlstate;
+  if st <> '22023' or h is distinct from 'estimate_total_mismatch' then raise exception 'T195 FAILED: refused with % / %', st, h; end if;
+end $$;
+select tst.ok(true, 'T195 …the refusal: 22023 with the hint estimate_total_mismatch');
+:as_super
+:as_owner_a
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann Client', 'M0 0 L1 1', true, null, null, null)$q$,
+         tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0)),
+       '%another total%', 'T195 no total at all (null) through the new door: refused (22023)');
+:as_owner_b
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann Client', 'M0 0 L1 1', true, null, null, %s)$q$,
+         tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0), :t195_total1),
+       '%not found%', 'T195 another company, the right total: «not found»');
+:as_owner_a
+select tst.ok((public.accept_on_site(tst.t195_id(1, 'estimate'), tst.t195_id(1, 'o2'), tst.t195_addons(1, (:'totals_json')::jsonb -> 'cases' -> 0),
+                                     'Ann Client', 'M0 0 L1 1', true, null, null, :t195_total1) ->> 'status') = 'awaiting_countersign',
+  'T195 the total the client saw: signed');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = :t195_total1 and version_id = tst.t195_id(1, 'version')
+                 from public.estimate_approvals where estimate_id = tst.t195_id(1, 'estimate') and party = 'customer'),
+  'T195 …the signature keeps that total and the sent version');
+
+-- the quick estimate (example 3: one option, its add-ons not counted) on the tech's device, his own estimate
+select tst.t195_make(9, (:'totals_json')::jsonb -> 'cases' -> 2, 'a0000000-0000-0000-0000-000000000003');
+select tst.t195_sent(tst.t195_id(9, 'estimate'));
+select t.total as t195_quick from app.estimate_option_totals(tst.t195_id(9, 'version'), tst.t195_id(9, 'o1'), '{}') t \gset
+-- without the right to sign: 42501 on a real sent estimate (director's review of #1146)
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(9, 'estimate'), :t195_quick),
+       '%may sign contracts%', 'T195 a tech without the right to sign: 42501');
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- another tech, who does not read it: «not found»
+:as_tech2_a
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(9, 'estimate'), :t195_quick),
+       '%not found%', 'T195 another tech: «not found»');
+:as_tech_a
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', null)$q$, tst.t195_id(9, 'estimate')),
+       '%another total%', 'T195 the quick estimate, no total at all (null): refused (22023)');
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(9, 'estimate'), :t195_quick + 1),
+       '%another total%', 'T195 the quick estimate, another total: refused');
+select tst.ok(public.sign_estimate_on_site(tst.t195_id(9, 'estimate'), 'Ann', 'M0 0 L1 1', :t195_quick) = 'awaiting_countersign',
+  'T195 the quick estimate, the total the client saw: signed');
+select tst.ok(public.sign_estimate_on_site(tst.t195_id(9, 'estimate'), 'Ann', 'M0 0 L1 1', :t195_quick + 1) = 'awaiting_countersign',
+  'T195 …a repeat (no network) changes nothing, whatever the total');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = :t195_quick and version_id = tst.t195_id(9, 'version')
+                 from public.estimate_approvals where estimate_id = tst.t195_id(9, 'estimate') and party = 'customer'),
+  'T195 …the quick estimate''s signature keeps that total and the sent version');
+
+-- the right to sign comes first in the new accept_on_site too (director's review of #1155 Б2): a tech who reads the
+-- estimate but may not sign gets 42501 whatever the total — never the total check
+select tst.t195_make(7, (:'totals_json')::jsonb -> 'cases' -> 0, 'a0000000-0000-0000-0000-000000000003');
+select tst.t195_sent(tst.t195_id(7, 'estimate'));
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.ok(app.can_read_estimate(tst.t195_id(7, 'estimate')), 'T195 (fixture: the tech reads his estimate)');
+select tst.fails_like(format($q$select public.accept_on_site(%L, %L, %L, 'Ann', 'M0 0 L1 1', true, null, null, 1)$q$,
+         tst.t195_id(7, 'estimate'), tst.t195_id(7, 'o2'), tst.t195_addons(7, (:'totals_json')::jsonb -> 'cases' -> 0)),
+       '%may sign contracts%', 'T195 the new accept_on_site: no right to sign → 42501 before the total');
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- a link the office revoked (a wrong price): the new door does not sign it either, whatever the total
+select tst.t195_make(6, (:'totals_json')::jsonb -> 'cases' -> 2, 'a0000000-0000-0000-0000-000000000003');
+select tst.t195_sent(tst.t195_id(6, 'estimate'));
+select t.total as t195_rev from app.estimate_option_totals(tst.t195_id(6, 'version'), tst.t195_id(6, 'o1'), '{}') t \gset
+:as_office_a
+select public.send_estimate(tst.t195_id(6, 'estimate')) is not null as t195_link;   -- the client's link exists
+select public.revoke_estimate_link(tst.t195_id(6, 'estimate'));
+:as_super
+select tst.ok((select link_revoked_at is not null from public.estimates where id = tst.t195_id(6, 'estimate')), 'T195 (fixture: the office revoked the link)');
+:as_tech_a
+select tst.fails_like(format($q$select public.sign_estimate_on_site(%L, 'Ann', 'M0 0 L1 1', %s)$q$, tst.t195_id(6, 'estimate'), :t195_rev),
+       '%revoked%', 'T195 a revoked link through the new door: refused');
+:as_super
+
+-- the old doors without the total (older app versions): as before
+select tst.t195_make(8, (:'totals_json')::jsonb -> 'cases' -> 2, 'a0000000-0000-0000-0000-000000000003');
+select tst.t195_sent(tst.t195_id(8, 'estimate'));
+:as_tech_a
+select tst.ok(public.sign_estimate_on_site(tst.t195_id(8, 'estimate'), 'Ann', 'M0 0 L1 1') = 'awaiting_countersign', 'T195 the old door without the total: signed as before');
+:as_super
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+drop function tst.t195_make(int, jsonb, uuid);
+drop function tst.t195_sent(uuid);
+\echo 'T195 the client signs on the phone the total the server keeps; another total is refused'
+
+-- ======================================================================================================================
+-- T196 (#865 В1-4а, audit X-01, X-02): the tax split inside each invoice of a contract.
+-- (а) a job of its own lines with tax (test prices): $400 + $100 taxable, 10% → contract $510, tax $10. The app's
+--     invoice.issue (subtotal = total, no tax — as every app version writes it): the server splits it, the one that bills
+--     the rest takes the rest of the tax — Σ tax = $10, the same as the engine (invoiceTaxShare, contract.test.ts).
+-- (б) a void one does not count; a draft is split when it is sent; a standalone invoice is outside the contract; someone
+--     of another company is refused by the policy as before (the trigger counts nothing for them). The server's refusal
+--     above the contract is В1-4б (with voiding, #1107).
+-- (в) every contract invoice the other tests made (signature deposits, visit finals): its tax ≤ the contract's, and a
+--     fully billed contract has all of its tax in its invoices.
+-- ======================================================================================================================
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T196 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1960000-0000-4000-8000-000000000001', '196 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T196 lines', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+end $$;
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 0, 'T196 labor', 2, 20000, false),
+  ('a1960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000001', 1, 'T196 part', 1, 10000, true);
+:as_super
+select tst.ok((select contract_total_cents from public.jobs where id = 'e1960000-0000-4000-8000-000000000001') = 51000
+              and app.job_contract_tax('e1960000-0000-4000-8000-000000000001') = 1000, 'T196 (fixture: contract $510 with $10 tax)');
+select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_tax(uuid)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.job_contract_tax(uuid)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_invoice_contract()', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.invoice_tax_split(uuid,uuid,uuid,bigint)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_invoice_contract()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.invoice_tax_split(uuid,uuid,uuid,bigint)'::regprocedure),
+              'T196 rule 18; the trigger runs as the writer (invoker), the count as definer');
+:as_office_a
+-- what invoice.issue writes (ops.ts): subtotal = total, no tax
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress payment', 17000, 17000, now());
+select tst.ok((select (subtotal_cents, tax_cents, total_cents) = (16667, 333, 17000) from public.invoices where id = '01960000-0000-4000-8000-000000000001'),
+              'T196 a progress invoice of $170 keeps its total: $166.67 + tax $3.33 (17000 × 1000 / 51000 = 333.3)');
+-- a draft is not billed: no tax yet; sent later, it is split then (and once only)
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'draft', 'T196 draft', 5100, 5100);
+select tst.ok((select tax_cents = 0 from public.invoices where id = '01960000-0000-4000-8000-000000000004'), 'T196 a draft takes no tax');
+update public.invoices set status = 'sent', sent_at = now() where id = '01960000-0000-4000-8000-000000000004';
+select tst.ok((select (subtotal_cents, tax_cents) = (5000, 100) from public.invoices where id = '01960000-0000-4000-8000-000000000004'),
+              'T196 the draft sent now: $50 + $1 tax');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T196 a test draft' where id = '01960000-0000-4000-8000-000000000004';
+:as_office_a
+-- a standalone invoice of the job (extra work) is outside the contract
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T196 extra', 5000, 5000, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (5000, 0) from public.invoices where id = '01960000-0000-4000-8000-000000000005'), 'T196 a standalone invoice is not split');
+-- the rest exactly: takes the rest of the tax
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'final', 'sent', 'Final balance', 34000, 34000, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (33333, 667) from public.invoices where id = '01960000-0000-4000-8000-000000000002'),
+              'T196 the final balance takes the rest of the tax: $6.67');
+select tst.ok((select sum(tax_cents) = 1000 and sum(total_cents) = 51000 from public.invoices
+                where job_id = 'e1960000-0000-4000-8000-000000000001' and kind in ('deposit', 'progress', 'final') and status = 'sent'),
+              'T196 Σ tax of the invoices = the contract''s tax, Σ totals = the contract');
+-- a void invoice does not count: voided (owner, no payments), the same amount is billed again with the same tax
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T196 wrong stage' where id = '01960000-0000-4000-8000-000000000001';
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress payment', 17000, 17000, now());
+select tst.ok((select tax_cents = 333 from public.invoices where id = '01960000-0000-4000-8000-000000000003'), 'T196 a void invoice frees its part and its tax');
+-- another company: the policy refuses as before, whatever the amount
+:as_owner_b
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+         ('ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000001', 'progress', 'sent', 'T196 B', 1, now())$q$,
+       '%row-level security%', 'T196 another company: only the policy''s refusal');
+-- the count itself answers nothing to someone who may not read the job — on a job with its whole contract still to bill,
+-- so a check that does not work would hand out a share (security-check of #1197): another company; a tech of ours who
+-- has no visit on it. A tech on a job of his (his visit payment's final, record_visit_payment) is split as the office.
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T196 open', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+  insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+    ('a1960000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 0, 'T196 part', 1, 50000, true);
+end $$;
+select tst.ok((select contract_total_cents from public.jobs where id = 'e1960000-0000-4000-8000-000000000003') = 55000, 'T196 (fixture: an open contract $550, tax $50)');
+:as_owner_b
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) is null,
+              'T196 another company learns no share of our job');
+:as_tech_a
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) is null,
+              'T196 a tech with no visit on the job learns no share of it (as he cannot read its invoices)');
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f1960000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1960000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(app.invoice_tax_split('ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000003', 'f1960000-0000-4000-8000-000000000009', 11000) = 1000,
+              'T196 the tech of the job (his visit payment''s final) is split as the office: $110 → $10 tax');
+-- an invoice issued before the split (no tax although its share is not 0): the last one takes only its own share
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e1960000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T196 old', 'c1960000-0000-4000-8000-000000000001', 'd1960000-0000-4000-8000-000000000001', 'draft', true, 1000);
+  insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+    ('a1960000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e1960000-0000-4000-8000-000000000002', 0, 'T196 part', 1, 50000, true);
+end $$;
+alter table public.invoices disable trigger t41_invoice_contract;   -- as an invoice made before this migration
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000002', 'deposit', 'sent', 'Deposit', 5500, 5500, now());
+alter table public.invoices enable trigger t41_invoice_contract;
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01960000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '', 'c1960000-0000-4000-8000-000000000001', 'e1960000-0000-4000-8000-000000000002', 'final', 'sent', 'Final balance', 49500, 49500, now());
+select tst.ok((select (subtotal_cents, tax_cents) = (45000, 4500) from public.invoices where id = '01960000-0000-4000-8000-000000000007'),
+              'T196 after an old invoice without tax: the final takes its own share $45, not the whole $50 (З4)');
+-- (в) every contract the other tests billed
+:as_super
+select tst.ok(coalesce(string_agg(x.title, '; '), '') = '', format('T196 the invoices of every contract keep its tax: %s', coalesce(string_agg(x.title, '; '), '')))
+  from (select j.title, j.contract_total_cents as c, app.job_contract_tax(j.id) as ct, sum(i.total_cents) as inv, sum(i.tax_cents) as tx,
+               -- a contract with an invoice issued before the split: each invoice its own share (З4), no rest gathered
+               bool_or(i.tax_cents = 0 and floor(i.total_cents::numeric * app.job_contract_tax(j.id) / nullif(j.contract_total_cents, 0) + 0.5) > 0) as before
+          from public.jobs j join public.invoices i on i.job_id = j.id and i.kind in ('deposit', 'progress', 'final') and i.status = 'sent' and i.deleted_at is null
+         group by j.id) x
+ where x.tx > x.ct or (x.inv = x.c and x.tx <> x.ct and not x.before);
+select tst.ok((select count(*) >= 1 from public.invoices i join public.jobs j on j.id = i.job_id
+                where i.kind = 'deposit' and i.tax_cents > 0 and j.estimate_id is not null),
+              'T196 a signature''s deposit carries its share of the tax');
+\echo 'T196 the invoices of a contract: the tax split inside, Σ = the contract''s'
+
+-- ======================================================================================================================
+-- T197 (#865 В1-4б + #1107 В1-5, audit X-03, П-07, П-09): never more than the contract; a wrong invoice is voided.
+-- (а) one cent above the contract: refused (23514, hint invoice_over_contract), nothing written; a draft above it is not
+--     sent; a standalone invoice is outside the contract; a void one frees its part — the right invoice goes through.
+-- (б) two phones at once (two sessions, dblink): of two invoices that together go over, one passes.
+-- (в) the visit's payment into the office's draft final above the rest of the contract: billed as that rest, paid.
+-- (г) void: owner / admin only (office, sales — no: invoice_void_forbidden), never with a payment (invoice_has_payments),
+--     never without a reason, once — a void invoice never changes again.
+-- ======================================================================================================================
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T197 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1970000-0000-4000-8000-000000000001', '197 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T197 cap', 'c1970000-0000-4000-8000-000000000001', 'd1970000-0000-4000-8000-000000000001', 'draft'),
+    ('e1970000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T197 two phones', 'c1970000-0000-4000-8000-000000000001', 'd1970000-0000-4000-8000-000000000001', 'draft'),
+    ('e1970000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T197 visit', 'c1970000-0000-4000-8000-000000000001', 'd1970000-0000-4000-8000-000000000001', 'draft');
+end $$;
+:as_office_a
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000001', 0, 'T197 work (test price)', 1, 100000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000002', 0, 'T197 work (test price)', 1, 50000, false),
+  ('ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000003', 0, 'T197 work (test price)', 1, 50000, false);
+select tst.ok((select array_agg(contract_total_cents order by id) = array[100000, 50000, 50000]::bigint[] from public.jobs where id::text like 'e1970000%'), 'T197 (fixture: contracts $1,000, $500, $500)');
+-- (а) a deposit $100 and a wrong progress $900 instead of $90 — then nothing more fits
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Deposit part', 10000, 10000, now()),
+  ('01970000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress: wrong', 90000, 90000, now());
+do $$ declare h text; begin
+  insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+    ('01970000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'final', 'sent', 'Final balance', 1, 1, now());
+  raise exception 'FAILED: T197 an invoice above the contract was written';
+exception when check_violation then
+  get stacked diagnostics h = pg_exception_hint;
+  perform tst.ok(h = 'invoice_over_contract', 'T197 one cent above the contract: refused (invoice_over_contract), red before В1-4б');
+end $$;
+select tst.ok(not exists (select 1 from public.invoices where id = '01970000-0000-4000-8000-000000000003'), 'T197 nothing written');
+-- a draft above the contract is not sent
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01970000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'final', 'draft', 'T197 draft', 500, 500);
+select tst.fails_like($q$update public.invoices set status = 'sent', sent_at = now() where id = '01970000-0000-4000-8000-000000000004'$q$,
+       '%more than its contract%', 'T197 a draft above the contract is not sent');
+-- extra work outside the contract (standalone) still goes
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T197 extra', 5000, 5000, now());
+select tst.ok(exists (select 1 from public.invoices where id = '01970000-0000-4000-8000-000000000005' and status = 'sent'), 'T197 a standalone invoice is outside the contract');
+-- (г) void: office and sales may not; the owner may, with a reason; then the right invoice fits
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+do $$ declare h text; begin
+  update public.invoices set status = 'void', void_reason = 'T197 office' where id = '01970000-0000-4000-8000-000000000002';
+  raise exception 'FAILED: T197 the office voided an invoice';
+exception when insufficient_privilege then
+  get stacked diagnostics h = pg_exception_hint;
+  perform tst.ok(h = 'invoice_void_forbidden', 'T197 the office does not void (invoice_void_forbidden)');
+end $$;
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.fails($q$update public.invoices set status = 'void', void_reason = 'T197 sales' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 sales do not void');
+:as_owner_a
+select tst.fails($q$update public.invoices set status = 'void' where id = '01970000-0000-4000-8000-000000000002'$q$, 'T197 no void without a reason');
+update public.invoices set status = 'void', void_reason = 'T197 wrong amount: $900 instead of $90' where id = '01970000-0000-4000-8000-000000000002';
+select tst.ok((select status = 'void' and voided_by = 'a0000000-0000-0000-0000-000000000001' and voided_at is not null from public.invoices where id = '01970000-0000-4000-8000-000000000002'),
+              'T197 the owner voids the wrong invoice: who and when kept');
+select tst.fails_like($q$update public.invoices set status = 'sent' where id = '01970000-0000-4000-8000-000000000002'$q$, '%void -> sent%', 'T197 a void invoice never comes back');
+-- a payment that comes after the void (it waited on the invoice's lock while the void went in) is refused: nothing is paid
+:as_office_a
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+         ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000002', 'c1970000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't197-after-void')$q$,
+       '%void invoice%', 'T197 no payment goes into a voided invoice (red before: it was taken)');
+:as_owner_a
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'Progress: right', 90000, 90000, now());
+select tst.ok(exists (select 1 from public.invoices where id = '01970000-0000-4000-8000-000000000006'), 'T197 the void one freed its part: the right invoice goes through');
+-- a paid invoice is not voided (refund first)
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000001', 'c1970000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't197-pay');
+:as_owner_a
+do $$ declare h text; begin
+  update public.invoices set status = 'void', void_reason = 'T197 paid' where id = '01970000-0000-4000-8000-000000000001';
+  raise exception 'FAILED: T197 a paid invoice was voided';
+exception when check_violation then
+  get stacked diagnostics h = pg_exception_hint;
+  perform tst.ok(h = 'invoice_has_payments', 'T197 an invoice with a payment is not voided (invoice_has_payments)');
+end $$;
+-- (б) two phones at once: $300 + $300 on a $500 contract — the job's lock lets one through
+:as_super
+create extension if not exists dblink;
+select set_config('tst.t197_conn', format('host=%s port=%s dbname=%s user=%s', split_part(current_setting('unix_socket_directories'), ',', 1),
+                  current_setting('port'), current_database(), current_user), false);
+do $$
+declare c text := current_setting('tst.t197_conn'); n int; msg text := ''; set_who text :=
+  'set request.jwt.claim.sub = ''a0000000-0000-0000-0000-000000000002''; set role authenticated;';
+begin
+  perform dblink_connect('t197a', c);
+  perform dblink_connect('t197b', c);
+  perform dblink_exec('t197a', 'begin');
+  perform dblink_exec('t197a', set_who);
+  perform dblink_exec('t197a', $q$insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+    ('01970000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'progress', 'sent', 'Phone A', 30000, now())$q$);
+  -- the second phone waits on the job's lock while the first is not committed
+  perform dblink_send_query('t197b', 'begin; ' || set_who || $q$ insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at) values
+    ('01970000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'progress', 'sent', 'Phone B', 30000, now()); commit;$q$);
+  perform pg_sleep(0.3);
+  perform tst.ok(dblink_is_busy('t197b') = 1, 'T197 (the second phone waits on the job)');
+  perform dblink_exec('t197a', 'commit');
+  -- the second one goes on once the first is in: it is refused (over the contract); its connection is dropped (rolled back)
+  for i in 1..100 loop exit when dblink_is_busy('t197b') = 0; perform pg_sleep(0.05); end loop;
+  -- why the second one was refused: the contract, not anything else (RLS, the role)
+  -- one result per statement of the batch: read them all, keep what each said
+  for i in 1..8 loop
+    begin
+      perform * from dblink_get_result('t197b', false) as x(t text);
+    exception when others then null;
+    end;
+    msg := msg || ' ' || coalesce(dblink_error_message('t197b'), '');
+  end loop;
+  perform tst.ok(msg like '%more than its contract%', 'T197 the second phone is refused for the contract');
+  perform dblink_disconnect('t197a');
+  perform dblink_disconnect('t197b');
+  select count(*) into n from public.invoices where job_id = 'e1970000-0000-4000-8000-000000000002' and status = 'sent';
+  perform tst.ok(n = 1, format('T197 two phones at once: one invoice of the two passes (%s)', n));
+end $$;
+drop extension dblink;   -- only for this test (its functions are open to everyone by default)
+-- (в) the visit's payment into the office's draft final above the rest: billed as the rest, paid
+:as_office_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'progress', 'sent', 'Progress', 30000, 30000, now());
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01970000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000003', 'final', 'draft', 'Final balance', 35000, 30000);
+update public.invoices set discount_cents = 5000 where id = '01970000-0000-4000-8000-000000000008';   -- the office's own discount
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, status) values ('f1970000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000003', now(), 'scheduled');
+update public.visits set status = 'on_site' where id = 'f1970000-0000-4000-8000-000000000001';
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1970000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(((public.record_visit_payment('f1970000-0000-4000-8000-000000000001', '01970000-0000-4000-8000-0000000000c1', '21970000-0000-4000-8000-0000000000c1', 'cash', null, 20000) ->> 'amount_cents')::bigint) = 20000,
+              'T197 the money in hand ($200) is taken, not refused for the office''s draft of $300');
+:as_super
+select tst.ok((select status = 'sent' and total_cents = 20000 and paid_cents = 20000 from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
+              'T197 the draft final is billed as the rest of the contract ($200) and paid');
+select tst.ok((select discount_cents = 0 and subtotal_cents + tax_cents = total_cents from public.invoices where id = '01970000-0000-4000-8000-000000000008'),
+              'T197 billed as the rest: no discount of the draft''s own left, subtotal + tax = total (security-check of #1203 №2)');
+-- never born removed: such a row would pass the contract check and come back later (security-check of #1203 №1)
+:as_sales_a
+select tst.fails_like($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, total_cents, sent_at, deleted_at) values
+         ('ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'progress', 'sent', 'T197 hidden', 999900, now(), now())$q$,
+       '%created removed%', 'T197 an invoice is never inserted removed (the way past the cap)');
+:as_super
+-- and never brought back from removed (a row of before, made by hand): the cap would not see it come back
+alter table public.invoices disable trigger t05_forbid_delete;
+update public.invoices set deleted_at = now() where id = '01970000-0000-4000-8000-000000000005';
+alter table public.invoices enable trigger t05_forbid_delete;
+:as_office_a
+select tst.fails_like($q$update public.invoices set deleted_at = null where id = '01970000-0000-4000-8000-000000000005'$q$,
+       '%does not come back%', 'T197 a removed invoice is never brought back');
+-- the reason of a void: written and not a book
+:as_owner_a
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T197 to void', 100, 100, now());
+select tst.fails($q$update public.invoices set status = 'void', void_reason = '   ' where id = '01970000-0000-4000-8000-000000000009'$q$, 'T197 a blank reason is not one');
+select tst.fails(format($q$update public.invoices set status = 'void', void_reason = %L where id = '01970000-0000-4000-8000-000000000009'$q$, repeat('x', 501)), 'T197 nor a reason of 501 characters');
+-- an admin voids as the owner does (office_a is an admin by now in these tests)
+:as_office_a
+update public.invoices set status = 'void', void_reason = 'T197 admin' where id = '01970000-0000-4000-8000-000000000009';
+select tst.ok((select status = 'void' from public.invoices where id = '01970000-0000-4000-8000-000000000009'), 'T197 an admin voids');
+-- the visit's payment into a draft final when nothing of the contract is left: refused (the tech hands it to the office)
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('01970000-0000-4000-8000-00000000000a', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'progress', 'sent', 'Progress: rest', 20000, 20000, now());
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents) values
+  ('01970000-0000-4000-8000-00000000000b', 'ca000000-0000-0000-0000-000000000000', '', 'c1970000-0000-4000-8000-000000000001', 'e1970000-0000-4000-8000-000000000002', 'final', 'draft', 'Final balance', 100, 100);
+:as_super
+insert into public.visits (id, company_id, job_id, starts_at, status) values ('f1970000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e1970000-0000-4000-8000-000000000002', now(), 'scheduled');
+update public.visits set status = 'on_site' where id = 'f1970000-0000-4000-8000-000000000002';
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1970000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.fails_like($q$select public.record_visit_payment('f1970000-0000-4000-8000-000000000002', '01970000-0000-4000-8000-0000000000c2', '21970000-0000-4000-8000-0000000000c2', 'cash', null, 100)$q$,
+       '%more in hand than due%', 'T197 nothing of the contract left: the money in hand is refused (22023, «hand it to the office»)');
+:as_super
+select tst.ok((select status = 'draft' from public.invoices where id = '01970000-0000-4000-8000-00000000000b')
+              and not exists (select 1 from public.payments where id = '21970000-0000-4000-8000-0000000000c2'), 'T197 nothing written');
+\echo 'T197 the invoices of a contract: never above it; a wrong one is voided by the owner, without payments, with a reason'
+
+-- ======================================================================================================================
+-- T198: the payment check (app.tg_payment_not_above_balance) says nothing to someone outside the invoice's company — it
+-- runs before the RLS check: another company gets only the policy's refusal, whatever the amount; the company's own
+-- overpayment is refused without amounts in the text. And no payment goes into a voided invoice by a server path either
+-- (no signed-in user — the Stripe webhook's database calls, a migration): t06_payment_not_void.
+-- ======================================================================================================================
+:as_owner_b
+do $$ declare st text; msg text; begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-b-1');
+  raise exception 'FAILED: T198 another company wrote a payment';
+exception when others then
+  get stacked diagnostics st = returned_sqlstate, msg = message_text;
+  perform tst.ok(st = '42501' and msg not like '%balance%', format('T198 another company: only the policy''s refusal (%s %s)', st, msg));
+end $$;
+do $$ declare st text; msg text; begin
+  -- its own company on the payment, our invoice: the foreign key refuses, nothing about our invoice is said
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('cb000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-b-2');
+  raise exception 'FAILED: T198 another company wrote a payment on our invoice';
+exception when others then
+  get stacked diagnostics st = returned_sqlstate, msg = message_text;
+  perform tst.ok(msg not like '%balance%' and msg not like '%9000%', format('T198 our invoice under another company''s payment: nothing said about it (%s)', st));
+end $$;
+:as_office_a
+do $$ declare h text; msg text; begin
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-a-1');
+  raise exception 'FAILED: T198 an overpayment was written';
+exception when check_violation then
+  get stacked diagnostics h = pg_exception_hint, msg = message_text;
+  perform tst.ok(h = 'payment_above_balance' and msg !~ '[0-9]', 'T198 our own overpayment: refused, no amounts in the text');
+end $$;
+:as_tech_a
+do $$ declare st text; msg text; begin
+  -- a tech of the company, not on that job (he cannot read the invoice): only the policy's refusal, whatever the amount
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+    ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'cash', 999999999, 'succeeded', 't198-tech-1');
+  raise exception 'FAILED: T198 a tech wrote a payment on another job''s invoice';
+exception when others then
+  get stacked diagnostics st = returned_sqlstate, msg = message_text;
+  perform tst.ok(st = '42501' and msg not like '%balance%', format('T198 a tech of another job learns no balance (%s %s)', st, msg));
+end $$;
+-- a server path above the balance: refused (the Stripe webhook's database calls keep the check)
+:as_super
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+         ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000006', 'c1970000-0000-4000-8000-000000000001', 'card', 999999999, 'succeeded', 't198-server-over')$q$,
+       '%exceeds invoice balance%', 'T198 a server path above the balance: refused');
+-- a server path (no signed-in user) into a voided invoice: refused as for a person
+:as_super
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+         ('ca000000-0000-0000-0000-000000000000', '01970000-0000-4000-8000-000000000002', 'c1970000-0000-4000-8000-000000000001', 'card', 100, 'succeeded', 't198-server-void')$q$,
+       '%void invoice%', 'T198 a server path pays no voided invoice either');
+\echo 'T198 the payment check: nothing to another company, no amounts, no payment into a voided invoice'
+
+-- ======================================================================================================================
+-- T199 (РС-6 of the estimate editor): what the client reads of an estimate carries the sections.
+-- (а) app.client_sections on the shared examples (apps/mobile/test/fixtures/clientSections.json — the engine the same).
+-- (б) app.client_doc: an option passes its sections, a line its sectionId; a hidden line goes only at $0 (a priced one
+--     marked hidden is shown, as the engine counts it); costs and a module's source never pass.
+-- ======================================================================================================================
+\set sections_json `cat :client_sections`
+:as_super
+select tst.ok(coalesce(string_agg(c ->> 'name', '; '), '') = '',
+              format('T199 the server passes the sections as the engine counts them: %s', coalesce(string_agg((c ->> 'name') || ' → ' || app.client_sections(c -> 'sections')::text, '; '), '')))
+  from jsonb_array_elements((:'sections_json')::jsonb -> 'cases') c
+ where app.client_sections(c -> 'sections') is distinct from c -> 'client';
+select tst.ok(jsonb_array_length((:'sections_json')::jsonb -> 'cases') >= 3, 'T199 (at least three shared examples)');
+do $$
+declare d jsonb := app.client_doc(jsonb_build_object('options', jsonb_build_array(jsonb_build_object(
+  'id', 'o1', 'name', 'A',
+  'sections', jsonb_build_array(jsonb_build_object('id', 's1', 'title', 'Roof', 'module', 'gutters', 'secret', 'x')),
+  'lines', jsonb_build_array(
+    jsonb_build_object('id', 'l1', 'name', 'Work', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 1000, 'sectionId', 's1', 'unitCostCents', 400,
+                       'source', jsonb_build_object('module', 'gutters', 'key', 'k')),
+    jsonb_build_object('id', 'l2', 'name', 'Kit', 'group', 'material', 'quantity', '1', 'unitPriceCents', 0, 'clientVisible', false),
+    jsonb_build_object('id', 'l3', 'name', 'Old hidden', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 500, 'clientVisible', false),
+    jsonb_build_object('id', 'l4', 'name', 'Kit 2', 'group', 'material', 'quantity', '1', 'unitPriceCents', 0, 'clientVisible', 'false'))))));
+  o jsonb := d -> 'options' -> 0;
+begin
+  perform tst.ok(o -> 'sections' = '[{"id": "s1", "title": "Roof"}]'::jsonb, 'T199 an option passes its sections, no module key: ' || (o -> 'sections')::text);
+  perform tst.ok((select array_agg(l ->> 'id' order by n) from jsonb_array_elements(o -> 'lines') with ordinality x(l, n)) = array['l1', 'l3'],
+                 'T199 a hidden $0 line goes; a priced one marked hidden is shown (the engine counts it): ' || (o -> 'lines')::text);
+  perform tst.ok(o -> 'lines' -> 0 ->> 'sectionId' = 's1', 'T199 a line passes its sectionId');
+  perform tst.ok(not (o -> 'lines' -> 0) ?| array['unitCostCents', 'source', 'clientVisible'], 'T199 no cost, source or mark reaches the client');
+end $$;
+-- a signed (locked) version is read as it was signed: a line marked hidden goes whatever its price; a sectionId past 64 is
+-- no link; «false» as a string hides at $0
+do $$
+declare doc jsonb := jsonb_build_object('options', jsonb_build_array(jsonb_build_object('id', 'o1', 'name', 'A', 'lines', jsonb_build_array(
+  jsonb_build_object('id', 'l1', 'name', 'Old hidden', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 500, 'clientVisible', false),
+  jsonb_build_object('id', 'l2', 'name', 'Long', 'group', 'labor', 'quantity', '1', 'unitPriceCents', 100, 'sectionId', repeat('y', 65)),
+  jsonb_build_object('id', 'l3', 'name', 'Kit', 'group', 'material', 'quantity', '1', 'unitPriceCents', 0, 'clientVisible', 'false')))));
+begin
+  perform tst.ok((select array_agg(l ->> 'id') from jsonb_array_elements(app.client_doc(doc, true) -> 'options' -> 0 -> 'lines') l) = array['l2'],
+                 'T199 a signed version as it was signed: a line marked hidden goes whatever its price');
+  perform tst.ok((select array_agg(l ->> 'id') from jsonb_array_elements(app.client_doc(doc) -> 'options' -> 0 -> 'lines') l) = array['l1', 'l2'],
+                 'T199 unsigned: the priced one is shown, «false» as a string hides at $0');
+  perform tst.ok(not (app.client_doc(doc) -> 'options' -> 0 -> 'lines' -> 1) ? 'sectionId', 'T199 a sectionId longer than 64 is no link');
+end $$;
+-- #1232 (T203): app.client_title and app.client_sections — pure functions of their argument — are granted to the member
+-- who saves a template (its check uses them); app.client_doc stays closed, anon never
+select tst.ok(not has_function_privilege('authenticated', 'app.client_doc(jsonb,boolean)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.client_title(text)', 'EXECUTE'), 'T199 rule 18: the new forms are closed too');
+select tst.ok(not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE'), 'T199 rule 18: anon never reads it');
+\echo 'T199 the client reads the sections; a hidden line only at $0'
+
+-- ======================================================================================================================
+-- T200 (#1220): an estimate's save in one transaction (public.save_estimate_version) — a refusal in the middle leaves the
+-- version (its document), the estimate's current version and title, its options and lines as they were.
+-- ======================================================================================================================
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e2000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T200 before');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2000000-0000-4000-8000-000000000001', 1);
+create function tst.t200_save(p_title text, p_doc text, p_lines jsonb, p_costs jsonb default '[]', p_options jsonb default null) returns void language sql as $$
+  select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', p_title,
+    jsonb_build_object('calc_inputs', jsonb_build_object('mark', p_doc), 'engine_version', 't', 'tax_enabled', false, 'tax_mode', 'added_on_top'),
+    coalesce(p_options, '[{"id": "a2000000-0000-4000-8000-0000000000a1", "name": "A", "position": 0}]'::jsonb), p_lines, p_costs)
+$$;
+grant execute on function tst.t200_save(text, text, jsonb, jsonb, jsonb) to authenticated;
+:as_office_a
+select tst.t200_save('T200 one', 'doc1', '[{"id": "b2000000-0000-4000-8000-0000000000b1", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Work", "quantity": "2.5", "unit": "ea", "unit_price_cents": 1000, "client_visible": true}]',
+                     '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b1", "unit_cost_cents": 600}]');
+:as_super
+select tst.ok((select title = 'T200 one' and current_version_id = 'f2000000-0000-4000-8000-000000000001' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
+              and (select calc_inputs ->> 'mark' = 'doc1' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and (select count(*) = 1 and sum(line_total_cents) = 2500 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b1')
+              and (select unit_cost_cents = 600 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b1'),
+              'T200 the version, its current version and title, the lines and the cost — in one call');
+-- a refusal in the middle (a priced line hidden from the client: the table's check) — nothing of it is written
+:as_office_a
+select tst.fails_like($q$select tst.t200_save('T200 two', 'doc2', '[{"id": "b2000000-0000-4000-8000-0000000000b2", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Hidden", "quantity": "1", "unit": "ea", "unit_price_cents": 500, "client_visible": false}]')$q$,
+                 '%estimate_line_items_check%', 'T200 a line the table refuses (after the version was written): the save is refused');
+:as_super
+select tst.ok((select title = 'T200 one' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
+              and (select calc_inputs ->> 'mark' = 'doc1' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and (select count(*) = 1 from public.estimate_line_items li join public.estimate_options o on o.id = li.option_id where o.version_id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b1'),
+              'T200 refused in the middle: the document, the title, the current version, the options and lines are as they were (red before #1220)');
+-- another company: nothing
+:as_owner_b
+select tst.fails($q$select tst.t200_save('T200 B', 'docB', '[]')$q$, 'T200 another company cannot save our estimate');
+-- sales without the right to costs: the lines are saved, the cost left out (as before on 42501)
+:as_sales_a
+select tst.t200_save('T200 sales', 'doc3', '[{"id": "b2000000-0000-4000-8000-0000000000b3", "option_id": "a2000000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "labor", "name": "Work", "quantity": "1", "unit": "ea", "unit_price_cents": 700}]',
+                     '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b3", "unit_cost_cents": 300}]');
+:as_super
+select tst.ok(exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b3')
+              and not exists (select 1 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b3')
+              and not exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b1'),
+              'T200 without the right to costs: the lines replaced, no cost written');
+-- the caps and the shape
+:as_office_a
+select tst.fails_like(format($q$select tst.t200_save('T200 big', 'doc4', '[]', '[]', %L::jsonb)$q$,
+         (select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'name', 'O', 'position', i)) from generate_series(1, 11) i)::text),
+       '%too large%', 'T200 more than 10 options: refused (estimate_save_size)');
+select tst.fails_like(format($q$select tst.t200_save('T200 big', 'doc4', %L::jsonb)$q$,
+         (select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'option_id', 'a2000000-0000-4000-8000-0000000000a1', 'name', repeat('x', 3000), 'quantity', 1, 'unit', 'ea', 'unit_price_cents', 1)) from generate_series(1, 1500) i)::text),
+       '%too large%', 'T200 more than 4 MB: refused');
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', 'x', '[]', '[]', '[]', '[]')$q$,
+       '%expected shape%', 'T200 not the expected shape: refused');
+-- a second, open version: refused while saving into it, the estimate's current version stays the first
+:as_super
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e2000000-0000-4000-8000-000000000001', 2);
+:as_office_a
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000002', 'T200 v2',
+         '{"calc_inputs": {"mark": "v2"}, "tax_mode": "added_on_top"}'::jsonb, '[{"id": "a2000000-0000-4000-8000-0000000000a2", "name": "A"}]'::jsonb,
+         '[{"id": "b2000000-0000-4000-8000-0000000000b4", "option_id": "a2000000-0000-4000-8000-0000000000a2", "name": "Hidden", "quantity": 1, "unit": "ea", "unit_price_cents": 500, "client_visible": false}]'::jsonb, '[]'::jsonb)$q$,
+       '%estimate_line_items_check%', 'T200 saving into a second version, refused in the middle');
+:as_super
+select tst.ok((select current_version_id = 'f2000000-0000-4000-8000-000000000001' and title = 'T200 sales' from public.estimates where id = 'e2000000-0000-4000-8000-000000000001')
+              and (select calc_inputs is null from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000002')
+              and not exists (select 1 from public.estimate_options where version_id = 'f2000000-0000-4000-8000-000000000002'),
+              'T200 refused: the current version is still the first, the second as it was (no document, no options)');
+-- a discount, the pages the server refuses (the phone saves again without them on «doc_pages:»), the line cap
+:as_office_a
+select tst.t200_save('T200 discount', 'doc6', '[]', '[]', '[{"id": "a2000000-0000-4000-8000-0000000000a1", "name": "A", "position": 0, "discount_mode": "pct", "discount_value": 1250}]');
+:as_super
+select tst.ok((select discount_mode = 'pct' and discount_value = 1250 from public.estimate_options where id = 'a2000000-0000-4000-8000-0000000000a1'), 'T200 the option''s discount goes through');
+:as_office_a
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000001', 'x',
+         '{"calc_inputs": {"pages": "not a list"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$,
+       'doc_pages:%', 'T200 pages the server refuses: «doc_pages:» as before (the phone saves again without them)');
+select tst.fails_like(format($q$select tst.t200_save('T200 lines', 'doc7', %L::jsonb)$q$,
+         (select jsonb_agg(jsonb_build_object('id', gen_random_uuid(), 'option_id', 'a2000000-0000-4000-8000-0000000000a1', 'name', 'x', 'quantity', 1, 'unit', 'ea', 'unit_price_cents', 1)) from generate_series(1, 2001) i)::text),
+       '%too large%', 'T200 more than 2000 lines: refused');
+-- a tech: his own draft — the lines saved, the cost left out; a sent one — refused
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e2000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T200 tech', 'a0000000-0000-0000-0000-000000000003');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2000000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e2000000-0000-4000-8000-000000000002', 1);
+:as_tech_a
+select public.save_estimate_version('e2000000-0000-4000-8000-000000000002', 'f2000000-0000-4000-8000-000000000003', 'T200 tech',
+  '{"calc_inputs": {"mark": "tech"}, "tax_mode": "added_on_top"}'::jsonb, '[{"id": "a2000000-0000-4000-8000-0000000000a3", "name": "A"}]'::jsonb,
+  '[{"id": "b2000000-0000-4000-8000-0000000000b5", "option_id": "a2000000-0000-4000-8000-0000000000a3", "name": "Work", "quantity": 1, "unit": "ea", "unit_price_cents": 900}]'::jsonb,
+  '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b5", "unit_cost_cents": 400}]'::jsonb);
+:as_super
+select tst.ok(exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b5')
+              and not exists (select 1 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b5'),
+              'T200 a tech saves his own draft; no cost is written');
+select set_config('app.signing_estimate', 'e2000000-0000-4000-8000-000000000002', false);
+update public.estimates set status = 'sent' where id = 'e2000000-0000-4000-8000-000000000002';
+select set_config('app.signing_estimate', '', false);
+:as_tech_a
+select tst.fails($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000002', 'f2000000-0000-4000-8000-000000000003', 'T200 tech 2',
+         '{"calc_inputs": {"mark": "tech2"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$, 'T200 a tech does not change a sent estimate');
+:as_super
+select tst.ok((select calc_inputs ->> 'mark' = 'tech' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000003'), 'T200 the sent one as it was');
+-- security-check of #1226: only this version's rows — a line into another estimate's option, a cost over another
+-- estimate's line (the same company), another estimate's version, another company's version; a title past 500
+:as_super
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('b2000000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 400) on conflict (line_item_id) do update set unit_cost_cents = 400;
+:as_office_a
+select tst.fails_like($q$select tst.t200_save('T200 other option', 'doc8', '[{"id": "b2000000-0000-4000-8000-0000000000b8", "option_id": "a2000000-0000-4000-8000-0000000000a3", "name": "Into another", "quantity": 1, "unit": "ea", "unit_price_cents": 100}]')$q$,
+       '%outside this version%', 'T200 a line into another estimate''s option: refused');
+select tst.fails_like($q$select tst.t200_save('T200 other cost', 'doc8', '[]', '[{"line_item_id": "b2000000-0000-4000-8000-0000000000b5", "unit_cost_cents": 1}]')$q$,
+       '%outside this version%', 'T200 a cost over another estimate''s line: refused');
+select tst.fails_like($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', 'f2000000-0000-4000-8000-000000000003', 'x',
+         '{"calc_inputs": {"mark": "idor"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$, '%no such version%', 'T200 our estimate with another estimate''s version: refused (42501)');
+select tst.fails_like(format($q$select public.save_estimate_version('e2000000-0000-4000-8000-000000000001', %L, 'x',
+         '{"calc_inputs": {"mark": "idor"}}'::jsonb, '[]'::jsonb, '[]'::jsonb, '[]'::jsonb)$q$,
+         (select id from public.estimate_versions where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1)), '%no such version%', 'T200 our estimate with another company''s version: refused (42501)');
+select tst.fails_like($q$select tst.t200_save(repeat('t', 501), 'doc8', '[]')$q$, '%too large%', 'T200 a title past 500 characters: refused');
+:as_super
+select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'b2000000-0000-4000-8000-0000000000b5')
+              and not exists (select 1 from public.estimate_line_items where id = 'b2000000-0000-4000-8000-0000000000b8')
+              and (select calc_inputs ->> 'mark' = 'tech' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000003')
+              and (select calc_inputs ->> 'mark' = 'doc6' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_versions where company_id = 'cb000000-0000-0000-0000-000000000000'),
+              'T200 the other estimate''s line, cost and version as they were; ours too (red before the security-check fix)');
+-- a locked (sent) version: its lines do not change
+:as_super
+update public.estimate_versions set locked_at = now() where id = 'f2000000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.fails_like($q$select tst.t200_save('T200 locked', 'doc5', '[]')$q$, '%is locked%', 'T200 a locked version is not changed');
+:as_super
+select tst.ok((select calc_inputs ->> 'mark' = 'doc6' from public.estimate_versions where id = 'f2000000-0000-4000-8000-000000000001')
+              and exists (select 1 from public.estimate_options where id = 'a2000000-0000-4000-8000-0000000000a1'), 'T200 the locked version is as it was');
+select tst.ok(not has_function_privilege('anon', 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE')
+              and has_function_privilege('authenticated', 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'public.save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)'::regprocedure),
+              'T200 rule 18; the caller''s own rights (security invoker)');
+drop function tst.t200_save(text, text, jsonb, jsonb, jsonb);
+\echo 'T200 an estimate is saved in one transaction: a refusal leaves it as it was'
+-- T201 (#1219): a tax rate with three decimals — ppm (1 = 0.0001 %) next to the basis points. Test prices.
+-- (а) a new phone writes ppm (8.875 % = 88750): the server writes the basis points from it (888), any basis points it sent
+--     — no refusal; the contract counts 8.875 %: $1000 → tax $88.75 (the engine the same, taxPpm.test.ts).
+-- (б) an older phone saves the document without ratePpm and the basis points 888: ppm goes back to null, its 8.88 % is the
+--     rate (as before, $88.80); the send check compares the version's ppm with its document's.
+-- (в) a job's own lines: 8.875 % → $88.75; an older phone changes the basis points — ppm follows them.
+-- (г) what the client reads keeps ratePpm; a template may carry it (0..1000000); rule 18.
+-- ======================================================================================================================
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a2010000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T201 NY tax');
+-- a new phone: ppm 88750 with basis points that do not follow it (0) — the server writes 888
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, tax_rate_ppm, deposit_rule, calc_inputs)
+  values ('a2010000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-000000000001', 1, true, 0, 88750, '{"kind":"none"}', $j${"options":[
+   {"id":"a2010000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a2010000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":100000}]}],
+ "settings":{"tax":{"enabled":true,"rateBps":888,"ratePpm":88750,"groups":{"service":true,"labor":true,"material":true}},"deposit":{"kind":"none"},"discount":null}}$j$);
+update public.estimates set current_version_id = 'a2010000-0000-4000-8000-000000000002' where id = 'a2010000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended) values
+  ('a2010000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-000000000002', 'A', 0, true);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000a1', 'Install', 1, 100000, true);
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'),
+              'T201 ppm 88750 written: the server sets the basis points 888 (round half up), no refusal');
+:as_super
+select tst.ok((select (t.tax, t.total) = (8875::bigint, 108875::bigint) from app.estimate_option_totals('a2010000-0000-4000-8000-000000000002', 'a2010000-0000-4000-8000-0000000000a1', '{}') t),
+              'T201 $1000 × 8.875 % = $88.75 tax, $1088.75 total (the basis points gave $88.80)');
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a2010000-0000-4000-8000-000000000002')$q$) = 0, 'T201 the version''s ppm matches its document''s');
+:as_office_a
+-- the version's ppm apart from the document's (88800 against 88750): the send check says «tax»
+update public.estimate_versions set tax_rate_ppm = 88800 where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88800, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 (fixture: ppm 88800)');
+select tst.fails_like($q$select public.send_estimate('a2010000-0000-4000-8000-000000000001', 'tok_t201_0123456789abcdef')$q$, '%(tax)%', 'T201 a rate apart from the document: not sent');
+-- (б) an older phone saves: the document without ratePpm, the basis points 888 → ppm null, 8.88 % is the rate
+update public.estimate_versions set tax_rate_ppm = 88750 where id = 'a2010000-0000-4000-8000-000000000002';
+update public.estimate_versions set tax_rate_bps = 888, calc_inputs = calc_inputs #- '{settings,tax,ratePpm}' where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 888 from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'),
+              'T201 an older phone''s save: ppm back to null, its basis points are the rate');
+:as_super
+select tst.ok((select t.tax = 8880 from app.estimate_option_totals('a2010000-0000-4000-8000-000000000002', 'a2010000-0000-4000-8000-0000000000a1', '{}') t)
+              and tst.cnt($q$select 1 from app.version_lines_mismatch('a2010000-0000-4000-8000-000000000002')$q$) = 0,
+              'T201 the older phone''s estimate counts as before ($88.80) and matches its document');
+:as_office_a
+-- an older phone changes only the basis points of a ppm version: ppm follows them (null)
+update public.estimate_versions set tax_rate_ppm = 88750, calc_inputs = jsonb_set(calc_inputs, '{settings,tax,ratePpm}', '88750') where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 the new phone saves again: 88750 / 888');
+update public.estimate_versions set tax_rate_bps = 950 where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 950 from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 only the basis points changed: ppm null');
+update public.estimate_versions set tax_rate_ppm = 88750, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-000000000002';
+-- the same save again (ppm, basis points and the document unchanged): ppm stays
+update public.estimate_versions set tax_rate_ppm = 88750, tax_rate_bps = 888, calc_inputs = calc_inputs where id = 'a2010000-0000-4000-8000-000000000002';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002'), 'T201 the same save again: ppm stays');
+select tst.fails_like($q$update public.estimate_versions set tax_rate_ppm = 1000001 where id = 'a2010000-0000-4000-8000-000000000002'$q$, '%tax_rate_ppm%', 'T201 above 100 %: refused');
+select tst.ok(public.send_estimate('a2010000-0000-4000-8000-000000000001', 'tok_t201_0123456789abcdef') = 'tok_t201_0123456789abcdef', 'T201 the ppm estimate is sent');
+select tst.fails_like($q$update public.estimate_versions set tax_rate_ppm = 88760 where id = 'a2010000-0000-4000-8000-000000000002'$q$, '%is locked%',
+                      'T201 a sent version: not even its ppm alone changes');
+:as_super
+select tst.ok((select (x -> 'settings' -> 'tax' ->> 'ratePpm') = '88750' from app.client_doc((select calc_inputs from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000002')) x),
+              'T201 what the client reads keeps ratePpm');
+-- (в) a job's own lines
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps, tax_rate_ppm) values
+  ('a2010000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T201 lines', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'draft', true, 0, 88750);
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000e1', 0, 'T201 part', 1, 100000, true);
+select tst.ok((select (tax_rate_ppm, tax_rate_bps, contract_total_cents) = (88750, 888, 108875::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 a job of its own lines at 8.875 %: $1088.75, basis points 888');
+update public.jobs set tax_rate_bps = 950 where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select tax_rate_ppm is null and contract_total_cents = 109500 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 an older phone sets 9.5 % in basis points: ppm null, $1095.00');
+update public.jobs set tax_rate_ppm = 73750, tax_rate_bps = 950 where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select (tax_rate_ppm, tax_rate_bps, contract_total_cents) = (73750, 738, 107375::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 a new phone sets 7.375 %: basis points 738, $1073.75');
+:as_super
+select tst.ok(app.job_contract_tax('a2010000-0000-4000-8000-0000000000e1') = 7375, 'T201 the contract''s tax at 7.375 %: $73.75');
+-- a job with a sent invoice of its whole total: a ppm change alone (the same basis points 888: 8.88 % → 8.876 %) may not
+-- bring the total below what is invoiced (t19 fires on tax_rate_ppm too)
+:as_office_a
+update public.jobs set tax_rate_ppm = 88800, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('a2010000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'a2010000-0000-4000-8000-0000000000e1', 'final', 'sent', 'T201 final', 108880, 108880, now());
+select tst.fails_like($q$update public.jobs set tax_rate_ppm = 88760 where id = 'a2010000-0000-4000-8000-0000000000e1'$q$, '%below what is invoiced%',
+                      'T201 a ppm change alone below the invoiced total: refused');
+select tst.ok((select (tax_rate_ppm, contract_total_cents) = (88800, 108880::bigint) from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'), 'T201 the job stays at 8.88 %, $1088.80');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T201 test' where id = 'a2010000-0000-4000-8000-0000000000f1';
+:as_super
+-- the same basis points with ppm gone (this phone's «Отменить» back to 8.88 %: ops job.update writes tax_rate_ppm null)
+:as_office_a
+update public.jobs set tax_rate_ppm = 88750, tax_rate_bps = 888 where id = 'a2010000-0000-4000-8000-0000000000e1';
+update public.jobs set tax_rate_bps = 888, tax_rate_ppm = null where id = 'a2010000-0000-4000-8000-0000000000e1';
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 888 and contract_total_cents = 108880 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e1'),
+              'T201 the same basis points, ppm null: 8.88 % again ($1088.80)');
+-- an older phone makes a job with the basis points only: no ppm, its rate counts
+:as_owner_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+  ('a2010000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'T201 old', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'draft', true, 950);
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2010000-0000-4000-8000-0000000000e4', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-0000000000e3', 0, 'T201 part', 1, 100000, true);
+select tst.ok((select tax_rate_ppm is null and contract_total_cents = 109500 from public.jobs where id = 'a2010000-0000-4000-8000-0000000000e3'),
+              'T201 an older phone''s job: no ppm, 9.5 % as before ($1095.00)');
+:as_super
+-- (г) a template may carry ratePpm, a whole one 0..1000000
+select tst.ok((select bool_and(app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '88750'))
+                      and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '1000001'))
+                      and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '8.875'))
+                      and not app.valid_estimate_template_doc(jsonb_set(doc, '{settings,tax,ratePpm}', '"88750"')))
+                 from public.estimate_templates where app.valid_estimate_template_doc(doc))
+              and exists (select 1 from public.estimate_templates where app.valid_estimate_template_doc(doc)),
+              'T201 a template: ratePpm 88750 passes; above 100 %, a fraction, a string — refused');
+select tst.ok(app.doc_tax_ppm('{"rateBps": 950}') = 95000 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750}') = 88750
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 1.5}') = 88800 and app.doc_tax_ppm('{}') = 0
+              and app.doc_tax_ppm('{"rateBps": 950, "ratePpm": 88750}') = 95000
+              and app.doc_tax_ppm('{"ratePpm": 88750}') = 0
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750.0}') = 88750 and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 88750.5}') = 88800
+              and app.doc_tax_ppm('{"rateBps": 888, "ratePpm": 8.875e4}') = 88750 and app.doc_tax_ppm('{"rateBps": 0, "ratePpm": 1e300}') = 0 and app.doc_tax_ppm('{"rateBps": "888", "ratePpm": 88750}') = 0,
+              'T201 the document''s rate: ppm (rounding to its basis points), else the basis points × 100');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_rate_ppm()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.job_lines_totals_ppm(uuid,boolean,int)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.version_tax_ppm(int,int)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.doc_tax_ppm(jsonb)', 'EXECUTE')
+              and has_function_privilege('authenticated', 'app.doc_tax_ppm(jsonb)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_tax_rate_ppm()'::regprocedure), 'T201 rule 18; the sync runs as the writer');
+-- the save in one transaction (#1220) writes the ppm rate; an older phone's call (no tax_rate_ppm) leaves it null
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a2010000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T201 tx');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('a2010000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'a2010000-0000-4000-8000-000000000011', 1);
+select public.save_estimate_version('a2010000-0000-4000-8000-000000000011', 'a2010000-0000-4000-8000-000000000012', 'T201 tx',
+  '{"calc_inputs": {"settings": {"tax": {"enabled": true, "rateBps": 888, "ratePpm": 88750}}}, "tax_enabled": true, "tax_rate_bps": 0, "tax_rate_ppm": 88750, "tax_mode": "added_on_top"}'::jsonb,
+  '[]'::jsonb, '[]'::jsonb, '[]'::jsonb);
+select tst.ok((select (tax_rate_ppm, tax_rate_bps) = (88750, 888) from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000012'),
+              'T201 save_estimate_version writes ppm 88750 (the basis points 888 from it)');
+select public.save_estimate_version('a2010000-0000-4000-8000-000000000011', 'a2010000-0000-4000-8000-000000000012', 'T201 tx',
+  '{"calc_inputs": {"settings": {"tax": {"enabled": true, "rateBps": 950}}}, "tax_enabled": true, "tax_rate_bps": 950, "tax_mode": "added_on_top"}'::jsonb,
+  '[]'::jsonb, '[]'::jsonb, '[]'::jsonb);
+select tst.ok((select tax_rate_ppm is null and tax_rate_bps = 950 from public.estimate_versions where id = 'a2010000-0000-4000-8000-000000000012'),
+              'T201 an older phone''s save_estimate_version (no ppm): null, its basis points are the rate');
+\echo 'T201 a tax rate with three decimals: ppm next to the basis points'
+
+-- ======================================================================================================================
+-- T202 (РС-9, #1096): the catalog item's card — barcode, product link, direction; the history of the selling price and
+-- the markup (catalog_price_history: before and after, who), read only by who sees costs; the purchase history
+-- (catalog_cost_history) gets no price rows. Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger', 'ea', 1190);
+update public.catalog_items set barcode = '0123456789012', product_url = 'https://abc.example/hanger?id=5',
+       service_category_id = (select id from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000' order by created_at limit 1)
+ where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select barcode = '0123456789012' and product_url like 'https://%' and service_category_id is not null
+                 from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 a barcode, a link and a direction of our own are kept');
+select tst.fails_like($q$update public.catalog_items set product_url = 'http://abc.example/x' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%product_url%', 'T202 a link without https:// — refused');
+select tst.fails_like($q$update public.catalog_items set product_url = 'https://abc.example/a b' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%product_url%', 'T202 a link with a space — refused');
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, 'https://x.example/' || repeat('a', 490)), '%product_url%', 'T202 a link past 500 — refused');
+select tst.fails_like(format($q$update public.catalog_items set barcode = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, repeat('1', 65)), '%barcode%', 'T202 a barcode past 64 — refused');
+select tst.fails_like($q$update public.catalog_items set barcode = E'12\n34' where id = 'a2020000-0000-4000-8000-000000000001'$q$, '%barcode%', 'T202 a barcode with a control character — refused');
+-- security-check of РС-9: no other scheme in any case; no invisible format characters (Cf, as app.client_title)
+-- (each call raises unless it is refused) javascript:, data: and other schemes in any case — refused; only https:// itself
+select tst.fails_like(format($q$update public.catalog_items set product_url = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, u), '%product_url%', 'T202 not https: ' || u)
+  from unnest(array['javascript:alert(1)', 'JavaScript:alert(1)', 'JAVASCRIPT://x', 'data:text/html,<b>x', 'DATA:text/html,x',
+                    'HTTPS://abc.example/x', 'vbscript:x', ' https://abc.example/x', 'https:/abc', 'https://']) u;
+-- zero-width, bidirectional and other invisible format characters in the barcode or the link — refused
+select tst.fails_like(format($q$update public.catalog_items set %s = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, c, v), '%' || c || '%', 'T202 a format character in ' || c)
+  from (values ('barcode', U&'0123\200B456'), ('barcode', U&'0123\202E456'), ('barcode', U&'\FEFF0123'), ('barcode', U&'01\00AD23'),
+                              ('product_url', U&'https://abc.example/\200Dx'), ('product_url', U&'https://abc.example/\2066x'), ('product_url', U&'https://abc.example/\061Cx'),
+               -- security-check of #1233: blanks that are not format characters, and a barcode of a blank only
+               ('product_url', U&'https://abc.example/\00A0x'), ('product_url', U&'https://abc.example/\2028x'), ('product_url', U&'https://abc.example/\3000x'),
+               ('product_url', U&'https://abc.example\200B/x'), ('product_url', 'https:///x'), ('product_url', 'https://a@b.example/x'),
+               ('product_url', 'https://user:pw@b.example/x'), ('product_url', 'https://abc.example:x/'), ('product_url', 'https://abc_example/'),
+               ('barcode', U&'\00A0'), ('barcode', U&'\00A0\00A0'), ('barcode', U&'\200B'), ('barcode', '   '), ('barcode', 'АБВ123'), ('barcode', '12;34'), ('barcode', '<b>')) x(c, v);
+select tst.ok((select barcode = '0123456789012' and product_url = 'https://abc.example/hanger?id=5' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 after the refusals the barcode and the link are as they were');
+-- what passes: a port, a query or a fragment right after the host; a barcode of letters, digits, space . _ / -
+update public.catalog_items set product_url = 'https://abc.example:8443/x' where id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_items set product_url = 'https://abc.example?q=1', barcode = '0123-456 A/B.c_d' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select product_url = 'https://abc.example?q=1' and barcode = '0123-456 A/B.c_d' from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 a port, a query; a barcode with a space, a dash, a slash, a dot and an underscore — kept');
+update public.catalog_items set product_url = 'https://abc.example/hanger?id=5', barcode = '0123456789012' where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.fails_like(format($q$update public.catalog_items set service_category_id = %L where id = 'a2020000-0000-4000-8000-000000000001'$q$, :'b_cat'), '%catalog_items_service_category_fk%', 'T202 another company''s direction — refused');
+-- an older phone's save — the whole item as an upsert (ops.ts catalog.save), without the new columns, the same price:
+-- the new fields stay, no price row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1190)
+  on conflict (id) do update set name = excluded.name, unit = excluded.unit, unit_price_cents = excluded.unit_price_cents, kind = excluded.kind;
+select tst.ok((select barcode = '0123456789012' and product_url is not null and service_category_id is not null and name = 'T202 Hanger 5in'
+                 from public.catalog_items where id = 'a2020000-0000-4000-8000-000000000001'), 'T202 an older phone''s save keeps the new fields');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0,
+              'T202 the same price saved again: no history row');
+-- the price changes (an upsert, as the phone): before and after, who; the same upsert again (a replay of the queue): no row
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T202 Hanger 5in', 'ea', 1213)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select count(*) = 1 and bool_and(prev_unit_price_cents = 1190 and unit_price_cents = 1213 and markup_bps is null
+                  and by = 'a0000000-0000-0000-0000-000000000002' and source = 'manual')
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'),
+              'T202 the price changed: $11.90 → $12.13, who; the same save again — no second row');
+-- the markup: a first one (insert, none before), a change, the same again
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('a2020000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1000, 1025, 1000);
+update public.catalog_item_costs set markup_bps = 1200 where item_id = 'a2020000-0000-4000-8000-000000000001';
+update public.catalog_item_costs set markup_bps = 1200, unit_cost_cents = 1010 where item_id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok((select array_agg(coalesce(prev_markup_bps, -1) || '>' || markup_bps order by at, id) = array['-1>1000', '1000>1200']
+                 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and markup_bps is not null),
+              'T202 the markup: the first (none before) and a change; the same markup with another cost — no row');
+-- a markup only, no cost (a labor item: catalog_item_costs takes a cost and a markup of any kind, spec §9 п.2)
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T202 Install', 'hr', 9000);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values ('a2020000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 4500, 500);
+select tst.ok((select unit_cost_cents = 4500 from public.catalog_item_costs where item_id = 'a2020000-0000-4000-8000-000000000002')
+              and tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000002' and markup_bps = 500$q$) = 1,
+              'T202 a labor item takes a cost and a markup; its markup is in the history');
+-- an older phone sends the markup on the item row (t30 moves it to catalog_item_costs): a row too
+update public.catalog_items set markup_bps = 1500 where id = 'a2020000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001' and prev_markup_bps = 1200 and markup_bps = 1500$q$) = 1,
+              'T202 a markup written the old way is in the history');
+-- the purchase history (older phones' «История закупки и налога», the supplier's screen) gets no price or markup row
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 2,
+              'T202 the purchase history keeps only the purchase rows (the first cost and the cost change)');
+-- who reads: the office yes; a tech, sales without view_costs, another company no; nobody writes it by hand
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 4, 'T202 the office reads the price history');
+select tst.fails($q$insert into public.catalog_price_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 the office does not write the history by hand');
+select tst.fails($q$update public.catalog_price_history set unit_price_cents = 1 where item_id = 'a2020000-0000-4000-8000-000000000001'$q$, 'T202 …nor change it (no update right)');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 a tech reads no price history');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history$q$) = 0, 'T202 sales without view_costs reads none');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 0, 'T202 another company reads none');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_price_history()', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.tg_price_history()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_markup_history()', 'EXECUTE')
+              and not has_table_privilege('anon', 'public.catalog_price_history', 'SELECT')
+              and not has_table_privilege('authenticated', 'public.catalog_price_history', 'INSERT')
+              and (select prosecdef from pg_proc where oid = 'app.tg_price_history()'::regprocedure)
+              and (select prosecdef from pg_proc where oid = 'app.tg_markup_history()'::regprocedure), 'T202 rule 18; the history is written by definer triggers only');
+\echo 'T202 the catalog card: barcode, link, direction; the price and markup history'
+
+-- ======================================================================================================================
+-- T203 (#1232): an estimate template keeps the hidden $0 lines and the sections. A line's clientVisible (false only at
+-- $0) and sectionId (≤ 64); an option's sections already as the client reads them (app.client_sections of them = them).
+-- Saved by the office through the table's own check (it runs as the member: app.client_sections is executable). Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('e2030000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T203 Roof', $j${"options":[{"id":"o1","name":"Good",
+   "sections":[{"id":"s1","title":"Roof work"},{"id":"s1b","title":"Flashing","parentId":"s1"},{"id":"s2","kind":"labor"},{"id":"s3","title":"Gutters","kind":"module"}],
+   "lines":[
+    {"id":"l1","name":"Shingles","group":"material","quantity":"10","unit":"sq","unitPriceCents":12000,"sectionId":"s1b"},
+    {"id":"l2","name":"Hanger kit","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"clientVisible":false,"sectionId":"s3"},
+    {"id":"l3","name":"Labor","group":"labor","quantity":"1","unit":"hr","unitPriceCents":5000,"clientVisible":true,"sectionId":"s2"}]}],
+ "settings":{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":true,"labor":true,"material":true}},"deposit":{"kind":"none"}}}$j$);
+select tst.ok((select doc #> '{options,0,sections}' = '[{"id":"s1","title":"Roof work"},{"id":"s1b","title":"Flashing","parentId":"s1"},{"id":"s2","kind":"labor"},{"id":"s3","title":"Gutters","kind":"module"}]'::jsonb
+                  and doc #>> '{options,0,lines,1,clientVisible}' = 'false' and doc #>> '{options,0,lines,0,sectionId}' = 's1b'
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 the office saves a template with sections, a hidden $0 line and each line''s section (red before #1232)');
+:as_super
+create function tst.t203_doc(p_option jsonb, p_line jsonb) returns jsonb language sql immutable as $$
+  select jsonb_build_object('options', jsonb_build_array(jsonb_build_object('id', 'o1', 'name', 'Good',
+           'lines', jsonb_build_array(jsonb_build_object('id', 'l1', 'name', 'Shingles', 'group', 'material', 'quantity', '1', 'unit', 'ea', 'unitPriceCents', 12000) || p_line)) || p_option),
+         'settings', '{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":true,"labor":true,"material":true}},"deposit":{"kind":"none"}}'::jsonb)
+$$;
+select tst.ok(app.valid_estimate_template_doc(tst.t203_doc('{}', '{}'))
+              and app.valid_estimate_template_doc(tst.t203_doc('{"sections": null}', '{"sectionId": null, "clientVisible": null}'))
+              and app.valid_estimate_template_doc(tst.t203_doc('{"sections": []}', '{"sectionId": "x"}')),
+              'T203 a template without these keys, or with them empty, is valid as before');
+select tst.ok(not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"clientVisible": false}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"clientVisible": "false"}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', jsonb_build_object('sectionId', repeat('x', 65))))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"sectionId": ""}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{}', '{"sectionId": 5}')),
+              'T203 refused: hidden with a price, hidden not a boolean, a sectionId past 64, empty or not a string');
+select tst.ok(not app.valid_estimate_template_doc(tst.t203_doc('{"sections": "s1"}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s1", "title": "Roof", "module": "gutters"}]}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', jsonb_build_array(jsonb_build_object('id', 's1', 'title', E'Roof​work'))), '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s1"}, {"id": "s1"}]}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s2", "parentId": "nope"}]}', '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', (select jsonb_agg(jsonb_build_object('id', 's' || i)) from generate_series(1, 41) i)), '{}'))
+              and not app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"id": "s1", "kind": "roof"}]}', '{}')),
+              'T203 refused: sections not as the client reads them — not a list, a module key, an invisible character, an id twice, an orphan subsection, past 40, an unknown kind');
+select tst.ok(app.valid_estimate_template_doc(tst.t203_doc('{"sections": [{"kind": "labor", "id": "s2"}, {"parentId": "s2", "title": "Gutters", "id": "s3"}]}', '{"sectionId": "s3"}')),
+              'T203 the order of a section''s keys does not count');
+-- the server puts the sections in the client's form itself before its check (t02, code-reviewer of #1232): a phone
+-- with another cleaning never meets a refusal for it; only sections that are not a list are refused
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('e2030000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T203 raw',
+   tst.t203_doc(jsonb_build_object('sections', jsonb_build_array(
+     jsonb_build_object('id', 's1', 'title', E'  Roof\u200Bwork  ', 'module', 'gutters', 'kind', 'roof'), jsonb_build_object('id', 's1', 'title', 'Twice'),
+     jsonb_build_object('id', 'orphan', 'parentId', 'nope'), jsonb_build_object('id', 's2', 'parentId', 's1'))), '{"sectionId": "s2"}'));
+select tst.ok((select doc #> '{options,0,sections}' = '[{"id": "s1", "title": "Roofwork"}, {"id": "s2", "parentId": "s1"}]'::jsonb
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000002'),
+              'T203 sections in another form: kept in the client''s form (title cleaned, no module key or unknown kind, an id once, no orphan)');
+select tst.fails($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'T203 bad', tst.t203_doc('{"sections": "s1"}', '{}'))$q$,
+                 'T203 sections that are not a list — refused');
+-- the update path (t02, t30 and the check as the member): the office renames the template and changes its sections
+update public.estimate_templates set name = 'T203 Roof renamed' where id = 'e2030000-0000-4000-8000-000000000001';
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,sections}', '[{"id": "s9", "title": " New\u0007 "}]'::jsonb) where id = 'e2030000-0000-4000-8000-000000000001';
+select tst.ok((select name = 'T203 Roof renamed' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb and doc #>> '{options,0,lines,1,clientVisible}' = 'false'
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 the office renames and edits a template with sections; the hidden line stays');
+-- a rename alone (no doc in the update) passes; t02 runs on every update (security-check of #1238: after a later change
+-- of app.client_sections a rename still puts the stored sections in the form first, never a refusal)
+update public.estimate_templates set name = 'T203 renamed again' where id = 'e2030000-0000-4000-8000-000000000001';
+select tst.ok((select name = 'T203 renamed again' and doc #> '{options,0,sections}' = '[{"id": "s9", "title": "New"}]'::jsonb
+                 from public.estimate_templates where id = 'e2030000-0000-4000-8000-000000000001'),
+              'T203 a rename alone passes, the sections as they were');
+select tst.ok((select tgtype & 16 = 16 and tgtype & 4 = 4 and not exists (select 1 from pg_attribute a where a.attrelid = t.tgrelid and a.attnum = any (t.tgattr))
+                 from pg_trigger t where t.tgname = 't02_template_sections'), 'T203 t02 is before insert and every update (not only «of doc»)');
+-- too large or too many options: t02 leaves it to the check (refused)
+select tst.fails(format($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'T203 big', %L::jsonb)$q$,
+                 jsonb_build_object('options', (select jsonb_agg(jsonb_build_object('id', 'o' || i, 'name', 'O', 'lines', '[]'::jsonb, 'sections', '[]'::jsonb)) from generate_series(1, 11) i),
+                                    'settings', '{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}'::jsonb)), 'T203 eleven options — refused by the check');
+-- the shared examples (apps/mobile/test/fixtures/clientSections.json): what the phone sends is what the server keeps
+:as_super
+select tst.ok(coalesce(string_agg(c ->> 'name', '; '), '') = '', format('T203 a template keeps every example in the client''s form: %s', coalesce(string_agg(c ->> 'name', '; '), '')))
+  from jsonb_array_elements((:'sections_json')::jsonb -> 'cases') c
+ where not app.valid_estimate_template_doc(tst.t203_doc(jsonb_build_object('sections', c -> 'client'), '{}'))
+    or app.client_sections(c -> 'sections') is distinct from c -> 'client';
+select tst.ok(has_function_privilege('authenticated', 'app.client_sections(jsonb)', 'EXECUTE') and has_function_privilege('authenticated', 'app.client_title(text)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.client_sections(jsonb)', 'EXECUTE') and not has_function_privilege('anon', 'app.client_title(text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_template_sections()', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.tg_template_sections()'::regprocedure),
+              'T203 rule 18: the template check''s helpers — the member who saves, never anon; the trigger as the writer');
+drop function tst.t203_doc(jsonb, jsonb);
+\echo 'T203 a template keeps the hidden $0 lines and the sections'
+-- T204 (#1193 п.1, review #1203 №4): what a contract has billed is counted one way everywhere (app.job_contract_billed):
+-- its deposit / progress / final invoices sent and not removed. A standalone invoice of the job is extra work outside the
+-- contract (the director 12.11): a payment on a visit bills the contract's whole rest, the contract may go down to what
+-- the contract has billed. Test prices.
+-- ======================================================================================================================
+:as_office_a
+insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+  ('e2040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T204 contract + extra', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a2040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001', 0, 'T204 work (test price)', 1, 100000, false);
+insert into public.visits (id, company_id, job_id, starts_at) values ('f2040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001', now());
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f2040000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+-- a deposit of $200 (contract), a standalone of $300 (extra work), a draft progress of $100 (not billed yet)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, subtotal_cents, total_cents, sent_at) values
+  ('02040000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e2040000-0000-4000-8000-000000000001', 'deposit', 'sent', 20000, 20000, now()),
+  ('02040000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e2040000-0000-4000-8000-000000000001', 'standalone', 'sent', 30000, 30000, now()),
+  ('02040000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'e2040000-0000-4000-8000-000000000001', 'progress', 'draft', 10000, 10000, null);
+:as_super
+select tst.ok(app.job_contract_billed('ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001') = 20000,
+              'T204 billed by the contract: the deposit only (the standalone and the draft do not count)');
+-- the contract may go down to $200 (its own invoices), the standalone $300 does not hold it up
+:as_office_a
+update public.job_line_items set unit_price_cents = 25000 where id = 'a2040000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents = 25000 from public.jobs where id = 'e2040000-0000-4000-8000-000000000001'),
+              'T204 the contract goes down to $250 — above its own invoices, below all of the job''s (red before #1193)');
+select tst.fails_like($q$update public.job_line_items set unit_price_cents = 15000 where id = 'a2040000-0000-4000-8000-000000000001'$q$,
+                      '%below what is invoiced%', 'T204 …not below what the contract billed ($200)');
+update public.job_line_items set unit_price_cents = 100000 where id = 'a2040000-0000-4000-8000-000000000001';
+-- the visit pays the contract's whole rest: $1000 − $200 = $800 (the standalone does not eat it)
+update public.visits set status = 'on_site' where id = 'f2040000-0000-4000-8000-000000000001';
+:as_tech_a
+select tst.ok(((public.record_visit_payment('f2040000-0000-4000-8000-000000000001', '02040000-0000-4000-8000-0000000000a1', '22040000-0000-4000-8000-0000000000a1', 'cash', null, 80000) ->> 'amount_cents')::bigint) = 80000,
+              'T204 a payment on the visit bills the contract''s whole rest, $800 (red before #1193: $500)');
+:as_super
+select tst.ok((select kind = 'final' and total_cents = 80000 from public.invoices where id = '02040000-0000-4000-8000-0000000000a1')
+              and app.job_contract_billed('ca000000-0000-0000-0000-000000000000', 'e2040000-0000-4000-8000-000000000001') = 100000,
+              'T204 the final of $800: the contract fully billed ($1000), the standalone outside it');
+select tst.ok(not has_function_privilege('authenticated', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.job_contract_billed(uuid,uuid)', 'EXECUTE')
+              and (select not prosecdef from pg_proc where oid = 'app.job_contract_billed(uuid,uuid)'::regprocedure),
+              'T204 rule 18: the count is the definer functions'' own; it runs with its caller''s rights (invoker)');
+\echo 'T204 what a contract billed is counted one way'
+
+-- ======================================================================================================================
+-- T205 (#1304, docs/specs/40): «Notes» and «Terms & conditions». The company's default Terms by language (en / es / ru) and
+-- the old single key in one (rule 16, step 1: t08 both ways, the shape refused); only owner / admin change them; the
+-- version's copy terms_text comes from its document and is frozen by sending; the page passes the estimate's own Terms and
+-- the defaults by language (the page picks — the same inputs as apps/mobile/test/estimateTerms.test.ts). Test data.
+-- ======================================================================================================================
+:as_super
+-- a row written with the old key only (an older phone, a row the migration has not reached): t08 makes it the English one
+update public.companies set estimate_settings = estimate_settings - 'terms_by_lang' || '{"terms": "T205 old terms"}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings -> 'terms_by_lang' = '{"en": "T205 old terms"}'::jsonb from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 t08: an older phone''s old key alone → it is the English one');
+:as_owner_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings ->> 'terms' = 'T205 Warranty 1 year' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 a new phone changes en → the old key follows (older phones read it)');
+-- an older phone: re-reads the row, writes its own `terms`, keeps terms_by_lang as stored
+update public.companies set estimate_settings = estimate_settings || '{"terms": "T205 Edited on an old phone"}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings -> 'terms_by_lang' = '{"en": "T205 Edited on an old phone", "es": "T205 Garantía 1 año"}'::jsonb
+                 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 an older phone changes the old key → en follows, es stays');
+-- both changed in one write and differ: en (the newer phone) wins
+update public.companies set estimate_settings = estimate_settings || '{"terms": "T205 stale", "terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings ->> 'terms' = 'T205 Warranty 1 year' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 both changed and differ — en wins');
+-- estimate_settings written whole without the new key (a writer that does not keep it): es stays, en follows the old key
+update public.companies set estimate_settings = (estimate_settings - 'terms_by_lang') || '{"terms": "T205 Written whole"}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select estimate_settings -> 'terms_by_lang' = '{"en": "T205 Written whole", "es": "T205 Garantía 1 año"}'::jsonb
+                      and estimate_settings ->> 'terms' = 'T205 Written whole'
+                 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 written whole without terms_by_lang: es kept, en from the old key (red before the review of #1328)');
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb
+ where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.fails_like($q$update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"de": "x"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+                      '%en / es / ru%', 'T205 a language other than en / es / ru — refused');
+select tst.fails_like(format($q$update public.companies set estimate_settings = estimate_settings || jsonb_build_object('terms_by_lang', jsonb_build_object('en', %L)) where id = 'ca000000-0000-0000-0000-000000000000'$q$, repeat('x', 10001)),
+                      '%10000%', 'T205 longer than 10000 characters — refused');
+select tst.fails_like($q$update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": 5}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000'$q$,
+                      '%en / es / ru%', 'T205 not a text — refused');
+-- rights: the defaults are owner / admin's (companies_update) — office and a tech change nothing, an admin may
+:as_super
+select role as t205_role from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000' \gset
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 by the office"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 by a tech"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select estimate_settings -> 'terms_by_lang' ->> 'en' = 'T205 Warranty 1 year' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 office and a tech cannot change the defaults (RLS: owner / admin only)');
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año", "ru": "T205 by an admin"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok((select estimate_settings -> 'terms_by_lang' ->> 'ru' = 'T205 by an admin' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 …an admin may');
+update public.memberships set role = :'t205_role' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- a Spanish client; an estimate with its own Terms, one without (made before #1304), one cleared
+insert into public.customers (id, company_id, display_name) values ('c2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T205 client');
+insert into public.contacts (id, company_id, customer_id, name, is_primary, preferred_language) values
+  ('b2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c2050000-0000-4000-8000-000000000001', 'Ana T205', true, 'es');
+update public.customers set primary_contact_id = 'b2050000-0000-4000-8000-000000000001' where id = 'c2050000-0000-4000-8000-000000000001';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c2050000-0000-4000-8000-000000000001', '205 Terms St', 'Pasadena');
+do $$
+declare i int;
+begin
+  for i in 1..4 loop
+    insert into public.estimates (id, company_id, customer_id, property_id, title) values
+      (format('e2050000-0000-4000-8000-00000000000%s', i)::uuid, 'ca000000-0000-0000-0000-000000000000', 'c2050000-0000-4000-8000-000000000001', 'd2050000-0000-4000-8000-000000000001', 'T205 #' || i);
+    insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule, calc_inputs) values
+      (format('e2050000-0000-4000-8000-0000000000a%s', i)::uuid, 'ca000000-0000-0000-0000-000000000000', format('e2050000-0000-4000-8000-00000000000%s', i)::uuid, 1, '{"kind":"none"}',
+       jsonb_build_object('note', 'T205 notes', 'options', '[]'::jsonb)
+       || case i when 1 then '{"terms": "T205 own terms"}'::jsonb when 3 then '{"terms": ""}'::jsonb else '{}'::jsonb end);
+    -- 2 — a version locked before #1304 (no Terms of its own); 4 — a draft made before #1304, sent after it
+    update public.estimates set current_version_id = format('e2050000-0000-4000-8000-0000000000a%s', i)::uuid where id = format('e2050000-0000-4000-8000-00000000000%s', i)::uuid;
+    insert into public.estimate_options (id, company_id, version_id, name) values
+      (format('e2050000-0000-4000-8000-0000000000b%s', i)::uuid, 'ca000000-0000-0000-0000-000000000000', format('e2050000-0000-4000-8000-0000000000a%s', i)::uuid, 'Only');
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values
+      ('ca000000-0000-0000-0000-000000000000', format('e2050000-0000-4000-8000-0000000000b%s', i)::uuid, 'labor', 'Work', 1, 40000);
+  end loop;
+end $$;
+select tst.ok((select array_agg(terms_text order by id) from public.estimate_versions where estimate_id::text like 'e2050000-%')
+                is not distinct from array['T205 own terms', null, '', null],
+              'T205 terms_text is the document''s own Terms (none — null; cleared — "")');
+select tst.fails_like($q$update public.estimate_versions set calc_inputs = calc_inputs || jsonb_build_object('terms', repeat('y', 10001)) where id = 'e2050000-0000-4000-8000-0000000000a1'$q$,
+                      '%terms_text_len%', 'T205 a version''s Terms longer than 10000 — refused');
+-- the copy is never set apart from the document (security-check of #1304)
+update public.estimate_versions set terms_text = 'T205 forged' where id = 'e2050000-0000-4000-8000-0000000000a1';
+select tst.ok((select terms_text = 'T205 own terms' from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a1'),
+              'T205 terms_text written apart from the document goes back to the document''s Terms');
+-- an older row's value the migration could not move (too long) never blocks a save of the other settings
+alter table public.companies disable trigger t08_company_estimate_terms;
+update public.companies set estimate_settings = estimate_settings || jsonb_build_object('terms', repeat('z', 10001)) where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t08_company_estimate_terms;
+:as_owner_a
+update public.companies set estimate_settings = estimate_settings || '{"valid_days": 14}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select (estimate_settings ->> 'valid_days')::int = 14 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'),
+              'T205 an old oversized `terms` does not block saving the other settings (only a changed key is checked)');
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 Warranty 1 year", "es": "T205 Garantía 1 año"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+-- sent: the version locked, the estimate «sent», its link (as send_estimate leaves them; the document here has no lines)
+-- 2 was locked before #1304: the lock trigger was not there yet
+alter table public.estimate_versions disable trigger t06_terms_on_lock;
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = 'e2050000-0000-4000-8000-0000000000a2';
+alter table public.estimate_versions enable trigger t06_terms_on_lock;
+update public.estimate_versions set locked_at = now(), sent_at = now() where estimate_id::text like 'e2050000-%' and locked_at is null;
+update public.estimates set status = 'sent', sent_version_id = current_version_id where id::text like 'e2050000-%';
+select tst.ok((select calc_inputs ->> 'terms' = 'T205 Garantía 1 año' and terms_text = 'T205 Garantía 1 año'
+                 from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a4')
+              and (select not (calc_inputs ? 'terms') from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a2')
+              and (select calc_inputs ->> 'terms' = 'T205 own terms' from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a1')
+              and (select calc_inputs ->> 'terms' = '' from public.estimate_versions where id = 'e2050000-0000-4000-8000-0000000000a3'),
+              'T205 sending a draft made before #1304 freezes the default in the client''s language (es) into it; its own and "" stay (red before the review of #1328)');
+insert into app.estimate_tokens (token, estimate_id, company_id) values
+  ('T205tokenOldDraft0123456789abcdefghi', 'e2050000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000'),
+  ('T205tokenOwnTerms0123456789abcdefgh', 'e2050000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000'),
+  ('T205tokenNoTerms0123456789abcdefghi', 'e2050000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000'),
+  ('T205tokenCleared0123456789abcdefghi', 'e2050000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000');
+:as_owner_a
+-- sending froze the text: the company's default changes, the sent version does not
+update public.companies set estimate_settings = estimate_settings || '{"terms_by_lang": {"en": "T205 New default", "es": "T205 Nuevo"}}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.fails($q$update public.estimate_versions set calc_inputs = calc_inputs || '{"terms": "T205 changed after sending"}'::jsonb where id = 'e2050000-0000-4000-8000-0000000000a1'$q$,
+                 'T205 a sent version''s Terms cannot change (t40)');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('T205tokenOwnTerms0123456789abcdefgh') -> 'doc' ->> 'terms') = 'T205 own terms'
+              and (public.portal_estimate('T205tokenOwnTerms0123456789abcdefgh') -> 'doc' ->> 'note') = 'T205 notes',
+              'T205 the page reads the estimate''s own Terms and its Notes (the snapshot, not the new default)');
+select tst.ok(not (public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'doc') ? 'terms'
+              and public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company' -> 'terms_by_lang' = '{"en": "T205 New default", "es": "T205 Nuevo"}'::jsonb
+              and public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') ->> 'doc_language' = 'es',
+              format('T205 an estimate made before #1304: no own Terms — the page gets the defaults by language and the client''s language (es): %s / %s / %s',
+                     public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'doc', public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company' -> 'terms_by_lang',
+                     public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') ->> 'doc_language'));
+select tst.ok((public.portal_estimate('T205tokenCleared0123456789abcdefghi') -> 'doc' ->> 'terms') = '', 'T205 cleared on purpose: "" reaches the page (no block)');
+select tst.ok((public.portal_estimate('T205tokenOldDraft0123456789abcdefghi') -> 'doc' ->> 'terms') = 'T205 Garantía 1 año',
+              'T205 the old draft sent after #1304: the page shows the text frozen at sending, not the company''s new default');
+-- signed, without its own Terms: the page gets no defaults by language — only the old single text it showed then
+:as_super
+select set_config('app.signing_estimate', 'e2050000-0000-4000-8000-000000000002', false);
+update public.estimates set status = 'approved' where id = 'e2050000-0000-4000-8000-000000000002';
+select set_config('app.signing_estimate', '', false);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(not (public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company') ? 'terms_by_lang'
+              and public.portal_estimate('T205tokenNoTerms0123456789abcdefghi') -> 'company' ->> 'terms' = 'T205 New default',
+              'T205 a signed older estimate: no newer defaults by language, the old single text (security-check of #1304)');
+-- the old draft signed: still the text it was sent with
+:as_super
+select set_config('app.signing_estimate', 'e2050000-0000-4000-8000-000000000004', false);
+update public.estimates set status = 'approved' where id = 'e2050000-0000-4000-8000-000000000004';
+select set_config('app.signing_estimate', '', false);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('T205tokenOldDraft0123456789abcdefghi') -> 'doc' ->> 'terms') = 'T205 Garantía 1 año',
+              'T205 …signed: the same text the client saw (review of #1328)');
+:as_super
+select tst.ok(app.estimate_terms_by_lang('{"terms_by_lang": {"en": "a", "es": "  ", "de": "x", "ru": 3}}') = '{"en": "a"}'::jsonb
+              and app.estimate_terms_by_lang('{"terms_by_lang": "x"}') = '{}'::jsonb,
+              'T205 the page gets only en / es / ru texts, not blank');
+select tst.ok(not has_function_privilege('anon', 'app.estimate_terms_by_lang(jsonb)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.estimate_terms_by_lang(jsonb)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_company_estimate_terms()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_version_terms_text()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_version_terms_on_lock()', 'EXECUTE'),
+              'T205 rule 18: the new functions are closed (the triggers and the definer page call them)');
+\echo 'T205 Notes and Terms: the defaults by language, the snapshot in the version ok'
+
+-- ======================================================================================================================
+-- T206–T210 (review of 14.11, migration 20261114100000): rights and limits.
+-- ======================================================================================================================
+-- T206: a rotated form that is switched off — the old link is not taken either
+:as_owner_b
+insert into tst.intake_tok (k, id, token)
+  select 'form206', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('cb000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001') r;
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form206'), p_enabled => true) is not null as t206_on;
+insert into tst.intake_tok (k, token) select 'form206-old', token from tst.intake_tok where k = 'form206';
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'form206';
+:as_super
+select tst.ok(tst.intake('form', 'form206-old', 'old206a', '{"phone":"(310) 555-0206"}', '5.5.206.1') ->> 'status' = 'held',
+              'T206 (fixture: the form is on — its old link is held for a person, as T125)');
+:as_owner_b
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form206'), p_enabled => false) is not null as t206_off;
+:as_super
+select tst.ok(tst.intake('form', 'form206-old', 'old206b', '{"phone":"(310) 555-0207"}', '5.5.206.2') ->> 'status' = 'unknown',
+              'T206 the form switched off: its old link is unknown too (red before 20261114100000)');
+select tst.ok(tst.intake('form', 'form206', 'new206', '{"phone":"(310) 555-0208"}', '5.5.206.3') ->> 'status' = 'unknown',
+              'T206 …and its new link, as before');
+select tst.ok(tst.cnt($q$select 1 from public.intake_events where event_key = 'old206b'$q$) = 0, 'T206 nothing is kept from it');
+\echo 'T206 a switched-off form takes nothing by its old link ok'
+
+-- T207: outside the office a person's own expense moves only to a job they may add it to
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('e2070000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T207 his job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001'),
+  ('e2070000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T207 not his job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('e2070000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e2070000-0000-4000-8000-000000000001', now() + interval '2 days');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'e2070000-0000-4000-8000-0000000000a1', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+insert into public.expenses (id, company_id, vendor, amount_cents, category) values
+  ('e2070000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T207 vendor', 1500, 'materials');
+select tst.fails($q$insert into public.expenses (company_id, vendor, amount_cents, category, job_id) values ('ca000000-0000-0000-0000-000000000000', 'T207 x', 100, 'materials', 'e2070000-0000-4000-8000-000000000002')$q$,
+                 'T207 (fixture: a tech adds no expense to a job not his — insert)');
+select tst.fails($q$update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where id = 'e2070000-0000-4000-8000-0000000000e1'$q$,
+                 'T207 …nor moves his own expense onto it (red before 20261114100000)');
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000001', amount_cents = 1600 where id = 'e2070000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000001' and amount_cents = 1600 from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
+              'T207 his own job: moved and changed as before');
+:as_office_a
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where id = 'e2070000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000002' from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
+              'T207 the office moves any expense, as before');
+-- taken off the job: his expense on it is still his to correct; moving it to null is allowed, back onto the job — no
+:as_super
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000001' where id = 'e2070000-0000-4000-8000-0000000000e1';
+update public.visit_assignees set deleted_at = now() where visit_id = 'e2070000-0000-4000-8000-0000000000a1';
+:as_tech_a
+update public.expenses set amount_cents = 1700, vendor = 'T207 vendor fixed' where id = 'e2070000-0000-4000-8000-0000000000e1';
+:as_super
+select tst.ok((select amount_cents = 1700 from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e1'),
+              'T207 taken off the job, the author still corrects the amount of his expense on it');
+:as_tech_a
+update public.expenses set job_id = null where id = 'e2070000-0000-4000-8000-0000000000e1';
+select tst.fails_like($q$update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000001' where id = 'e2070000-0000-4000-8000-0000000000e1'$q$,
+                      '%job of your own%', 'T207 …but does not put it back onto that job');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_expense_job_guard()', 'EXECUTE'), 'T207 rule 18: the guard runs for nobody');
+-- sales: every job is theirs to see (docs/specs/13 «Продажи»), their own expense moves onto any job, as on insert
+:as_sales_a
+insert into public.expenses (id, company_id, vendor, amount_cents, category) values
+  ('e2070000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T207 sales vendor', 900, 'materials');
+update public.expenses set job_id = 'e2070000-0000-4000-8000-000000000002' where id = 'e2070000-0000-4000-8000-0000000000e2';
+:as_super
+select tst.ok((select job_id = 'e2070000-0000-4000-8000-000000000002' from public.expenses where id = 'e2070000-0000-4000-8000-0000000000e2'),
+              'T207 sales put their own expense on any job, as on insert');
+\echo 'T207 an expense moves only to a job its author may add it to ok'
+
+-- T208: trash_items locks no row of a company the caller is not in
+begin;
+:as_owner_b
+select tst.ok((select reason = 'noRight' and not ok from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000002'::uuid])),
+              'T208 another company''s client: noRight, as before');
+:as_super
+select tst.ok((select xmax::text from public.customers where id = 'c1a00000-0000-0000-0000-000000000002') <> (txid_current() % 4294967296)::text,
+              'T208 …and its row was not locked (red before 20261114100000)');
+rollback;
+begin;
+:as_owner_a
+select tst.ok((select coalesce(reason, '') <> 'noRight' from public.trash_items('customer', array['c1a00000-0000-0000-0000-000000000002'::uuid])),
+              'T208 the owner''s own client is not «noRight» (it goes through the rule as before)');
+:as_super
+select tst.ok((select xmax::text from public.customers where id = 'c1a00000-0000-0000-0000-000000000002') = (txid_current() % 4294967296)::text,
+              'T208 …and its row was locked or written in this transaction');
+rollback;
+\echo 'T208 the trash locks only the caller''s company rows ok'
+
+-- T209: the client's signature has a size
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e2090000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T209 sign', 'a0000000-0000-0000-0000-000000000001');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e2090000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e2090000-0000-4000-8000-0000000000a1' where id = 'e2090000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('e2090000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000a1', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000b1', 'labor', 'Work', 1, 40000);
+:as_office_a
+select public.send_estimate('e2090000-0000-4000-8000-000000000001', 'T209tokenSentByTheOffice0123456789abcd') is not null as t209_sent;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like(format($q$select public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, %L, 'M0 0 L5 5', true)$q$, repeat('n', 121)),
+                      '%too long%', 'T209 a signer''s name over 120 characters is refused (red before 20261114100000)');
+select tst.fails_like(format($q$select public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, 'T209 Client', %L, true)$q$, 'M0 0 ' || repeat('L1 1 ', 13108)),
+                      '%too long%', 'T209 a signature over 64 KB is refused');
+select tst.ok(public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, repeat('n', 120), 'M0 0 ' || repeat('L1 1 ', 13000), true) ->> 'status' = 'awaiting_countersign',
+              'T209 120 characters and a long ordinary signature still sign');
+:as_super
+select tst.ok((select count(*) = 1 from public.estimate_approvals where estimate_id = 'e2090000-0000-4000-8000-000000000001'), 'T209 one approval, the refused ones left nothing');
+-- a repeat from the queue with the long name: «repeat» as before, not an error (director's review of #1409)
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_accept('T209tokenSentByTheOffice0123456789abcd', 'e2090000-0000-4000-8000-0000000000b1', null, repeat('n', 121), 'M0 0 L5 5', true) ->> 'status' = 'awaiting_countersign',
+              'T209 a repeat of a signed estimate answers as a repeat, whatever the size');
+-- on site: the own answer (22023, hint signature_too_long), not the table's check_violation
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('e2090000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T209 on site', 'a0000000-0000-0000-0000-000000000001');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+  ('e2090000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000002', 1, '{"kind":"none"}');
+update public.estimates set current_version_id = 'e2090000-0000-4000-8000-0000000000a2' where id = 'e2090000-0000-4000-8000-000000000002';
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('e2090000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000a2', 'Only');
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-0000000000b2', 'labor', 'Work', 1, 40000);
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select public.send_estimate('e2090000-0000-4000-8000-000000000002', 'T209tokenOnSiteByTheOffice0123456789ab') is not null as t209_sent2;
+:as_owner_a
+do $$
+declare v_state text; v_hint text;
+begin
+  begin
+    perform public.sign_estimate_on_site('e2090000-0000-4000-8000-000000000002', repeat('n', 121), 'M0 0 L5 5', 40000);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  end;
+  perform tst.ok(v_state = '22023' and v_hint = 'signature_too_long',
+                 format('T209 on site a name over 120: 22023 / signature_too_long (got %s / %s)', v_state, v_hint));
+  v_state := null; v_hint := null;
+  begin
+    perform public.accept_on_site('e2090000-0000-4000-8000-000000000002', 'e2090000-0000-4000-8000-0000000000b2', '{}', 'T209 Client',
+                                  'M0 0 ' || repeat('L1 1 ', 13108), true, null, null, 40000);
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+  end;
+  perform tst.ok(v_state = '22023' and v_hint = 'signature_too_long',
+                 format('T209 on site (universal) a signature over 64 KB: 22023 / signature_too_long (got %s / %s)', v_state, v_hint));
+end $$;
+select tst.ok(public.sign_estimate_on_site('e2090000-0000-4000-8000-000000000002', 'T209 Client', 'M0 0 L5 5', 40000) = 'awaiting_countersign',
+              'T209 on site an ordinary signature signs');
+select tst.ok(public.sign_estimate_on_site('e2090000-0000-4000-8000-000000000002', repeat('n', 121), 'M0 0 L5 5', 40000) = 'awaiting_countersign',
+              'T209 …and its repeat with a long name answers as a repeat');
+-- every other door is held by the table: a client's name > 120, any signature > 64 KB
+:as_super
+select tst.fails_like($q$insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg, esign_consent, channel)
+                        values ('ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 'e2090000-0000-4000-8000-0000000000a1', 'e2090000-0000-4000-8000-0000000000b1', 'approved', 'x', repeat('L', 65537), true, 'on_site')$q$,
+                      '%estimate_approvals_sizes_check%', 'T209 the table holds a signature over 64 KB (any door, e.g. the older on-site one)');
+select tst.fails_like(format($q$insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg, esign_consent, channel)
+                        values ('ca000000-0000-0000-0000-000000000000', 'e2090000-0000-4000-8000-000000000001', 'e2090000-0000-4000-8000-0000000000a1', 'e2090000-0000-4000-8000-0000000000b1', 'approved', %L, 'M0 0', true, 'on_site')$q$, repeat('n', 121)),
+                      '%estimate_approvals_sizes_check%', 'T209 …and a client''s name over 120 characters');
+select tst.fails_like($q$insert into public.member_signatures (company_id, user_id, svg, name) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', repeat('L', 65537), 'Office')$q$,
+                      '%member_signatures_svg_check%', 'T209 the company''s saved signature has its own limit (20,000)');
+\echo 'T209 the client''s signature has a size ok'
+
+-- T210: a refund key is the company's own
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, tax_mode, sent_at) values
+  ('e2100000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'T210-1', 'c1b00000-0000-0000-0000-000000000001', 'standalone', 'sent', 'T210 B', 10000, 0, 10000, 'exempt', now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('e2100000-0000-4000-8000-0000000000c1', 'cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-000000000001', 'c1b00000-0000-0000-0000-000000000001', 'cash', 6000, 'succeeded', 't210-b-1'),
+  ('e2100000-0000-4000-8000-0000000000c2', 'cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-000000000001', 'c1b00000-0000-0000-0000-000000000001', 'cash', 4000, 'succeeded', 't210-b-2');
+-- rows made before 20261114100000 keep their older key
+insert into public.refunds (company_id, payment_id, amount_cents, status, idempotency_key, created_by, method, tax_cents, net_cents) values
+  ('cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-0000000000c2', 500, 'succeeded', 'octo:k210-older', 'b0000000-0000-0000-0000-000000000001', 'cash', 0, 500),
+  ('cb000000-0000-0000-0000-000000000000', 'e2100000-0000-4000-8000-0000000000c2', 100, 'succeeded', 'octo:k210:colon', 'b0000000-0000-0000-0000-000000000001', 'cash', 0, 100);
+:as_owner_b
+select tst.ok(public.refund_record('e2100000-0000-4000-8000-0000000000c1', 1000, 'goodwill', null, 'k133-cash-1') ->> 'status' = 'succeeded',
+              'T210 a key another company used is this company''s own (red before 20261114100000)');
+select tst.ok((select r ->> 'id' from (select public.refund_record('e2100000-0000-4000-8000-0000000000c1', 1000, 'goodwill', null, 'k133-cash-1') r) x)
+              = (select id::text from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1'),
+              'T210 …its retry is the same refund');
+select tst.fails_like($q$select public.refund_record('e2100000-0000-4000-8000-0000000000c2', 1000, 'goodwill', null, 'k133-cash-1')$q$, '%key used%',
+                      'T210 in the company a key of another refund is still not taken');
+select tst.ok((select r ->> 'amount_cents' = '500' from (select public.refund_record('e2100000-0000-4000-8000-0000000000c2', 500, 'goodwill', null, 'k210-older') r) x),
+              'T210 a retry of a refund made before finds it by its older key');
+select tst.ok(public.refund_record('e2100000-0000-4000-8000-0000000000c1', 200, 'goodwill', null, 'k210:colon') ->> 'amount_cents' = '200',
+              'T210 a key with '':'' is never read in the older form (a new refund, not another payment''s row)');
+:as_super
+select tst.ok((select count(*) = 1 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1' and idempotency_key = 'octo:cb000000-0000-0000-0000-000000000000:k133-cash-1')
+              and (select count(*) = 1 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c1' and idempotency_key = 'octo:cb000000-0000-0000-0000-000000000000:k210:colon')
+              and (select count(*) = 2 from public.refunds where payment_id = 'e2100000-0000-4000-8000-0000000000c2')
+              and (select refunded_cents = 1200 from public.payments where id = 'e2100000-0000-4000-8000-0000000000c1'),
+              'T210 the key is stored with its company; one refund each, the money once');
+select tst.ok(not has_function_privilege('anon', 'app.refund_key(uuid, text)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.refund_key(uuid, text)', 'EXECUTE'),
+              'T210 rule 18: the key helper runs for nobody');
+\echo 'T210 a refund key is the company''s own ok'
+
+-- T211 (#1430, docs/specs/19 F4): the bucket «files» takes a file of at most 25 MB; it stays private; no type list (a photo
+-- comes with any type on Android and the web — refusing it would lose it)
+:as_super
+select tst.ok((select file_size_limit = 26214400 and not public and allowed_mime_types is null from storage.buckets where id = 'files'),
+              format('T211 the bucket files: 25 MB, private, no type list (red before 20261114200000): %s',
+                     (select row(file_size_limit, public, allowed_mime_types) from storage.buckets where id = 'files')));
+\echo 'T211 the bucket files has a size limit ok'
 
 \echo 'ALL TESTS PASSED'

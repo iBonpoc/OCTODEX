@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, drawing, drawingPrint, font, icons, motion, print, radius, size, space, spaceHalf, themes } from "../src/index";
+import { component, drawing, drawingPrint, font, icons, motion, print, radius, shopSheet, size, space, spaceHalf, themes } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -29,7 +29,7 @@ const norm = (c: string) => c.replace(/\s+/g, "").replace(/(\d)\.0+\b/g, "$1").r
 
 describe("app tokens mirror the founder's DS css", () => {
   it("type scale and weights", () => {
-    expect(font.size).toMatchObject({ display: px("fs-display"), title: px("fs-title"), heading: px("fs-heading"), body: px("fs-body"), caption: px("fs-caption"), micro: px("fs-micro") });
+    expect(font.size).toMatchObject({ display: px("fs-display"), title: px("fs-title"), heading: px("fs-heading"), body: px("fs-body"), caption: px("fs-caption"), micro: px("fs-micro"), input: px("fs-input") });
     expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body"), snug: px("lh-snug") });
     expect(font.size.button).toBe(px("fs-btn"));
   });
@@ -58,12 +58,15 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
     expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
     expect(component.segmented).toEqual({ h: px("seg-h"), pad: px("seg-pad") });
-    expect(component.tab.h).toBe(px("tab-h"));
+    expect(component.tab).toEqual({ h: px("tab-h"), fadeW: px("tab-fade-w") });
     expect(component.switch).toEqual({ w: px("switch-w"), h: px("switch-h"), knob: px("switch-knob") });
     expect(component.help).toEqual({ visible: px("help-visible"), icon: px("help-icon") });
     expect(component.tip).toEqual({ fs: px("tip-fs"), px: px("tip-px"), py: px("tip-py"), radius: px("tip-radius"), max: px("tip-max"), gap: px("tip-gap") });
     expect(component.fab).toBe(px("fab"));
     expect(component.dockBtn).toBe(px("dock-btn"));
+    expect(component.tapeTick).toBe(px("tape-tick"));
+    expect(component.brand).toEqual({ mark: px("brand-mark"), wait: px("brand-wait"), about: px("brand-about"), splash: px("brand-splash"), intro: px("brand-intro") });
+    expect(component.estRow).toEqual({ qty: px("est-qty-w"), unit: px("est-unit-w") });
     expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
     for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
   });
@@ -76,22 +79,62 @@ describe("app tokens mirror the founder's DS css", () => {
       sheetW: px("draw-print-sheet-w"), pageW: px("draw-print-page-w"), margin: px("draw-print-margin"), runW: px("draw-print-run-w"), thinW: px("draw-print-thin-w"),
       dimOff: px("draw-print-dim-off"), dimStep: px("draw-print-dim-step"), extGap: px("draw-print-ext-gap"), tick: px("draw-print-tick"),
       numR: px("draw-print-num-r"), dsR: px("draw-print-ds-r"), font: px("draw-print-font"), fontSm: px("draw-print-font-sm"),
-      stampH: px("draw-print-stamp-h"), scalePx: px("draw-print-scale-px"),
+      stampH: px("draw-print-stamp-h"), scalePx: px("draw-print-scale-px"), panelMin: px("draw-print-panel-min"), panelGap: px("draw-print-panel-gap"), insetFrac: px("draw-print-inset-frac"), insetW: px("draw-print-inset-w"), insetH: px("draw-print-inset-h"), insetSheetFrac: px("draw-print-inset-sheet-frac"),
     });
   });
+  it("the shop drawings' sheet (#1349)", () => {
+    const n = (k: string) => parseFloat(v(k));
+    expect(shopSheet).toEqual({
+      wIn: n("shop-w-in"), hIn: n("shop-h-in"), letterWIn: n("shop-letter-w-in"), letterHIn: n("shop-letter-h-in"), borderIn: n("shop-border-in"), minPt: n("shop-min-pt"), letterMinPt: n("shop-letter-min-pt"), capEm: n("shop-cap-em"),
+      textSm: n("shop-text-sm"), text: n("shop-text"), textTitle: n("shop-text-title"), textSheet: n("shop-text-sheet"),
+      lwBorder: n("shop-lw-border"), lwRun: n("shop-lw-run"), lwHeavy: n("shop-lw-heavy"), lwBlock: n("shop-lw-block"), lwMed: n("shop-lw-med"), lwThin: n("shop-lw-thin"), lwHair: n("shop-lw-hair"),
+      band: v("shop-band"),
+    });
+    // 11 pt on the sheet is 7 pt when the sheet is reduced to Letter
+    expect((shopSheet.textSm / shopSheet.capEm) * 72).toBeGreaterThanOrEqual(shopSheet.minPt);
+    expect(shopSheet.minPt * Math.min(shopSheet.letterWIn / shopSheet.wIn, shopSheet.letterHIn / shopSheet.hIn)).toBeGreaterThanOrEqual(shopSheet.letterMinPt);
+  });
   it("drawing canvas sizes", () => {
-    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap") });
+    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap"), liftScale: parseFloat(v("draw-lift-scale")) });
+  });
+  it("dialog, sheet and popover sizes, the brand splash", () => {
+    expect([component.alertMaxW, component.sheetMediumRatio, component.popoverW]).toEqual([px("alert-max-w"), parseFloat(v("sheet-medium-ratio")), px("popover-w")]);
+    expect(motion.durBrand).toBe(px("dur-brand"));
+    expect([motion.durBrandQuick, motion.durBrandEdge, motion.durBrandPause, motion.durBrandFold]).toEqual([px("dur-brand-quick"), px("dur-brand-edge"), px("dur-brand-pause"), px("dur-brand-fold")]);
+    expect([motion.durBrandHold, motion.brandExitScale]).toEqual([px("dur-brand-hold"), px("brand-exit-scale")]);
+    expect([motion.brandExitFadeDelay, motion.durBrandBounce, motion.brandBounceLift, motion.brandBounceSquash, motion.durBrandFirstMax, motion.durBrandWaitMin]).toEqual(
+      [px("brand-exit-fade-delay"), px("dur-brand-bounce"), px("brand-bounce-lift"), px("brand-bounce-squash"), px("dur-brand-first-max"), px("dur-brand-wait-min")],
+    );
+    // the first launch fits its budget: the fade at the dot's place overlaps the drive, then the bounce and the exit
+    expect(motion.durBrandQuick + motion.durBrandBounce + motion.durBase).toBeLessThanOrEqual(motion.durBrandFirstMax);
+    // the exit: the fade starts after its delay and ends with the growth
+    expect(motion.brandExitFadeDelay + motion.durFast).toBe(motion.durBase);
+  });
+  it("small shadow of the raised «Заливка»", () => {
+    const m = v("shadow-sm").match(/^0 (\d+)px (\d+)px rgba\(0,\s*0,\s*0,\s*([.\d]+)\)$/)!;
+    expect(component.shadowSm).toMatchObject({ offsetY: Number(m[1]), radius: Number(m[2]), opacity: Number(m[3]) }); // elevation — Android only, app-only
   });
   it("motion", () => {
-    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart")]);
+    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart, motion.longPressMs]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart"), px("long-press-ms")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
     expect([...motion.easeOut]).toEqual(bez("ease-out"));
+    expect([...motion.easeIn]).toEqual(bez("ease-in"));
     expect([...motion.easeSpring]).toEqual(bez("ease-spring"));
     expect([...motion.easeLiquid]).toEqual(bez("ease-liquid"));
+    expect([motion.toastInfoMs, motion.toastUndoA11yMs, motion.spinnerDelayMs, motion.actionTimeoutMs]).toEqual([px("toast-info-ms"), px("toast-undo-a11y-ms"), px("spinner-delay-ms"), px("action-timeout-ms")]);
+    expect([motion.menuScale, motion.alertScale, motion.skeletonCycle]).toEqual([parseFloat(v("menu-scale")), parseFloat(v("alert-scale")), px("skeleton-cycle")]);
     expect([motion.liquidStretch, motion.liquidSettle]).toEqual([px("liquid-stretch"), px("liquid-settle")]);
   });
   describe.each(["dark", "light"] as const)("%s theme colours", (t) => {
     const c = themes[t];
+    it("surfSolid mirrors the css and is `surf` laid over `bg`", () => {
+      expect(norm(c.surfSolid)).toBe(norm(v("surf-solid", t)));
+      const rgb = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+      const m = c.surf.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)/)!;
+      const a = Number(m[4]);
+      const over = rgb(c.bg).map((b, i) => Math.round(b + (Number(m[i + 1]) - b) * a));
+      expect(rgb(c.surfSolid)).toEqual(over);
+    });
     it("surfaces, ink, accent", () => {
       for (const k of ["page", "bg", "ink", "mut", "surf", "surf2", "in", "bd", "track", "ov"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
       expect(norm(c.acc)).toBe(norm(v("acc", t)));
@@ -147,6 +190,8 @@ describe("print tokens mirror print.css (docs/specs/07 §2.2 В, §3.4)", () => 
     expect(s.sectionGapPt).toBe(px(k("section-gap")));
   });
   it("the default style is the base print type (classic)", () => expect(print.styles.classic.fontPt).toEqual(print.fontPt));
+  it("#1324: the contract floor (an estimate's PDF) mirrors print.css", () =>
+    expect(print.contract).toEqual({ minPt: px("print-contract-min"), headingPt: px("print-contract-heading"), noticePt: px("print-contract-notice") }));
   it("no colours in the styles: the brand band colour is a company setting", () => {
     expect(JSON.stringify(print.styles)).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });

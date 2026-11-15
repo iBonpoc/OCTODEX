@@ -53,7 +53,7 @@ exports.run = async (h) => {
   h.expect(path(h) === "/legal/terms", `the Terms link opens /legal/terms (${path(h)})`);
   await vis("legal-terms").waitFor({ timeout: 4000 });
   const terms = await vis("legal-terms").innerText();
-  for (const s of ["Черновик", "Редакция от", "Кто принимает", "Что такое OCTODEX", "Пределы ответственности", "Common Paper"])
+  for (const s of ["Черновик", "Редакция от", "Кто принимает", "Что такое GoRix", "Пределы ответственности", "Common Paper"])
     h.expect(terms.includes(s), `the Terms draft: «${s}»`);
   h.expect(/Обязательным считается текст на английском/.test(terms), "a translation says the English text governs");
   h.expect(!/compliant|guarantee|гарантир/i.test(terms), "no compliance promise or guarantee");
@@ -77,7 +77,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(700);
   h.expect(path(h) === "/help", `the tile opens /help (${path(h)})`);
   const help = await vis("help-screen").innerText();
-  for (const s of ["support@octodex.example", "Написать в поддержку", "Сообщить о проблеме", "Юридических и налоговых советов мы не даём", "Условия использования", "Политика конфиденциальности", "OCTODEX v"])
+  for (const s of ["support@gorix.example", "Написать в поддержку", "Сообщить о проблеме", "Юридических и налоговых советов мы не даём", "Условия использования", "Политика конфиденциальности", "GoRix v"])
     h.expect(help.includes(s), `help: «${s}»`);
   await h.shot("help");
 

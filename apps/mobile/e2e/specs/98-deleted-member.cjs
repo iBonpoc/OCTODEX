@@ -56,7 +56,7 @@ exports.run = async (h) => {
   // the Plan (day): «Чей план» back to «Все»; v6 is in the group «Не назначено · N»
   await h.go("/plan");
   await h.expectText(/Ivan Sokolov/, "a «Чей план» on a deleted person falls back to «Все»: the people's columns are shown");
-  const group = p.getByText(/^Не назначено · \d+$/).locator("visible=true").first().locator("xpath=..");
+  const group = p.getByTestId("plan-unassigned").locator("visible=true").first();
   await group.waitFor({ timeout: 4000 });
   h.expect((await group.innerText()).includes(client), `v6 (${client}) is in «Не назначено · N» of the day`);
 

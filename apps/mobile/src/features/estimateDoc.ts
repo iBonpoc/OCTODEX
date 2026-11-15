@@ -15,9 +15,16 @@ import {
   type CustomTotals,
   type LineGroup,
   type LineSource,
+  type EstimateSection,
+  SECTIONS_MAX,
+  SECTION_TITLE_MAX,
+  countedSections,
+  isSubsection,
+  sectionIdOk,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
 import { clientPages, pagesProblem } from "./docPages";
+import { cleanTerms } from "./estimateTerms";
 import { taxModeFor } from "@octo/estimating-engine";
 
 /** UUID: Web Crypto when present (web, Node tests), expo-crypto on the phone. */
@@ -29,6 +36,8 @@ export const uid = (): string => {
 };
 export const MAX_OPTIONS = 3;
 export const OPTION_NAMES = ["Good", "Better", "Best"];
+/** an option's name as the screen keeps it — the same cap a template keeps (toTemplateDoc) */
+export const OPTION_NAME_MAX = 120;
 
 export const DEFAULT_SETTINGS: CustomSettings = {
   discount: null,
@@ -55,9 +64,145 @@ export function newDoc(defaultDepositBps?: number | null): EstimateDoc {
   return { options: [newOption(0)], settings: { ...DEFAULT_SETTINGS, deposit } };
 }
 
-/** A copy of an option with fresh ids (for "add option"). */
-export function cloneOption(o: CustomOption, i: number): CustomOption {
-  return { id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines: o.lines.map((l) => ({ ...l, id: uid() })) };
+/** The name a new option takes: the first of Good / Better / Best no other option has, else «Option N». */
+export function nextOptionName(options: Pick<CustomOption, "name">[]): string {
+  const taken = new Set(options.map((o) => o.name.trim()));
+  const free = OPTION_NAMES.find((n) => !taken.has(n));
+  if (free) return free;
+  for (let i = options.length + 1; ; i++) if (!taken.has(`Option ${i}`)) return `Option ${i}`;
+}
+
+/**
+ * «Вариант — копия „…“» (DS §8.10, spec 39 §11.2.6): a full copy of the option's list with fresh ids for the lines AND the
+ * sections — a line keeps its place (its sectionId follows its section's new id, a subsection its parent's). The name is
+ * `name` (the screen gives nextOptionName); «recommended» does not go with the copy.
+ */
+export function cloneOption(o: CustomOption, name: string): CustomOption {
+  const secs = Array.isArray(o.sections) ? o.sections.filter((x) => !!x && typeof x === "object") : null;
+  const ids = new Map<string, string>();
+  for (const x of secs ?? []) if (typeof x.id === "string" && !ids.has(x.id)) ids.set(x.id, uid());
+  const to = (id: string | undefined) => (id !== undefined && ids.has(id) ? ids.get(id)! : id);
+  return {
+    id: uid(),
+    name,
+    lines: o.lines.map((l) => ({ ...l, id: uid(), ...(l.sectionId !== undefined ? { sectionId: to(l.sectionId) } : {}) })),
+    ...(secs ? { sections: secs.map((x) => ({ ...x, id: to(x.id)!, ...(x.parentId !== undefined ? { parentId: to(x.parentId) } : {}) })) } : {}),
+  };
+}
+
+/** Removing an option: the one picked to edit is the one before; «recommended» stays where it was, if that option stays. */
+export function withoutOption(options: CustomOption[], id: string): { options: CustomOption[]; cur: number } {
+  const i = options.findIndex((o) => o.id === id);
+  if (i < 0 || options.length < 2) return { options, cur: Math.max(0, i) };
+  const next = options.filter((o) => o.id !== id);
+  return { options: next, cur: Math.max(0, i - 1) };
+}
+
+/** «★ рекомендуем» on one option (at most one); off again — none. */
+export const recommend = (options: CustomOption[], id: string, on: boolean): CustomOption[] =>
+  options.map((o) => {
+    const rec = o.id === id ? on : on ? false : !!o.recommended;
+    if (rec === !!o.recommended) return o;
+    const c: CustomOption = { ...o };
+    if (rec) c.recommended = true;
+    else delete c.recommended;
+    return c;
+  });
+
+/** a section's title as it may be kept: no control characters, at most SECTION_TITLE_MAX (the server cuts the same) */
+// the same three sets as the server's app.client_title (migration 20261112150000): a control character (Cc) is a space,
+// a format character (Cf: zero width, the direction marks…) goes, the title is trimmed of these spaces
+// eslint-disable-next-line no-control-regex
+const TITLE_CC = /[\u0000-\u001f\u007f-\u009f]/g;
+const TITLE_CF = /[\u00ad\u0600-\u0605\u061c\u06dd\u070f\u08e2\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\ufeff\ufff9-\ufffb]/g;
+const TITLE_EDGE = /^[\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+const cleanTitle = (t: unknown): string | undefined => {
+  if (typeof t !== "string") return undefined;
+  // the length in characters (never half an emoji), cut before the trim — as the server
+  const x = Array.from(t.replace(TITLE_CC, " ").replace(TITLE_CF, "")).slice(0, SECTION_TITLE_MAX).join("").replace(TITLE_EDGE, "");
+  return x ? x : undefined;
+};
+/** a section title as the editor keeps it (the same cleaning as normalizeDoc) */
+export const cleanSectionTitle = cleanTitle;
+/** hidden from the client as the server reads it: false, or «false» / 0 written by another copy */
+export const markedHidden = (l: { clientVisible?: unknown }): boolean => l.clientVisible === false || ["false", "0"].includes(String(l.clientVisible).toLowerCase());
+
+const SECTION_KINDS: readonly string[] = ["service", "labor", "material", "module"];
+/** what the client reads of a section — the same keys app.client_sections passes: id, title, a known kind, parentId */
+const clientSection = (x: EstimateSection): EstimateSection => ({
+  id: x.id,
+  ...(cleanTitle(x.title) ? { title: cleanTitle(x.title) } : {}),
+  ...(typeof x.kind === "string" && SECTION_KINDS.includes(x.kind) ? { kind: x.kind } : {}),
+  ...(isSubsection(x) ? { parentId: x.parentId } : {}),
+});
+
+/** an option's sections as the client reads them — the same as app.client_sections (test/fixtures/clientSections.json);
+ *  a template keeps them so too (#1232: the server checks a template's sections are already in this form) */
+export const clientSectionsOf = (o: Pick<CustomOption, "sections">): EstimateSection[] => countedSections(o).map(clientSection);
+
+/**
+ * A document as it may be counted and shown (spec 2026-11-12-estimate-editor Р3, Р4) — on every way in (the cloud, a
+ * draft, a template, a module, the save): a line hidden from the client with a price is visible again (the founder: a
+ * hidden line never changes the client's total) — its id in `unhidden` for the «Снова видна клиенту» mark; sections
+ * past SECTIONS_MAX and a repeated id go (the engine's countedSections, the same order), a title is cleaned. A line whose
+ * section is not there keeps its sectionId («без раздела» only where it is shown and counted). Unchanged — the same object.
+ */
+export function normalizeDoc(doc: EstimateDoc): { doc: EstimateDoc; unhidden: string[] } {
+  const unhidden: string[] = [];
+  let changed = false;
+  const options = doc.options.map((o) => {
+    // a broken option (an older or damaged copy) is left as it is: one estimate never stops the phone's start
+    if (!o || typeof o !== "object" || !Array.isArray(o.lines)) return o;
+    let oc = false;
+    const lines = o.lines.map((l) => {
+      if (markedHidden(l) && l.unitPriceCents !== 0) {
+        unhidden.push(l.id);
+        oc = true;
+        const { clientVisible: _v, ...rest } = l;
+        return rest;
+      }
+      return l;
+    });
+    let sections = o.sections;
+    // not a list (a broken copy, another version): no sections — one estimate never stops the company's load
+    if (o.sections !== undefined && !Array.isArray(o.sections)) {
+      sections = undefined;
+      oc = true;
+    } else if (o.sections) {
+      const seen = new Set<string>();
+      // the engine's order (countedSections): the first 40, then the broken ones and a repeated id go
+      const kept = o.sections
+        .slice(0, SECTIONS_MAX)
+        .filter((x) => !!x && typeof x === "object" && sectionIdOk(x.id))
+        .filter((x) => !seen.has(x.id) && !!seen.add(x.id))
+        .map((x) => {
+          const title = cleanTitle(x.title);
+          if (title === x.title) return x;
+          const { title: _t, ...rest } = x;
+          return title === undefined ? rest : { ...rest, title };
+        });
+      if (kept.length !== o.sections.length || kept.some((x, i) => x !== o.sections![i])) {
+        sections = kept;
+        oc = true;
+      }
+    }
+    if (!oc) return o;
+    changed = true;
+    const { sections: _s, ...rest } = o;
+    return { ...rest, lines, ...(sections ? { sections } : {}) };
+  });
+  // #1304: Terms as they may be stored — not a string goes (an «old estimate»: the client sees the company's default)
+  let terms = doc.terms;
+  if (doc.terms !== undefined) {
+    const t = cleanTerms(doc.terms);
+    if (t !== doc.terms) {
+      terms = t;
+      changed = true;
+    }
+  }
+  if (!changed) return { doc, unhidden };
+  const { terms: _t, ...rest } = doc;
+  return { doc: { ...rest, options, ...(terms !== undefined ? { terms } : {}) }, unhidden };
 }
 
 /** Unit price of a catalog item (materials: purchase + supplier tax + markup). */
@@ -146,7 +291,17 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
     // the attached pages as app.client_doc passes them (spec 33 П24.7): a broken shape or page never reaches the client
     ...(pages.length ? { pages } : {}),
     // a line with quantity 0 bills nothing and is how a part is left out (spec 33 П23.8а №4, П23.9): never shown as a $0 row
-    options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !zeroQty(l)).map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
+    // a line hidden from the client (only at $0 — the engine the same, Р3; the server's app.client_doc the same from РС-6)
+    // goes whole; a section keeps only what the client reads (a module's key stays the company's)
+    options: doc.options.map((o) => ({
+      ...o,
+      // a sectionId longer than an id may be (64) is no link: not passed (the server the same)
+      lines: o.lines
+        .filter((l) => !zeroQty(l) && !(markedHidden(l) && l.unitPriceCents === 0))
+        .map(({ unitCostCents: _c, source: _s, sectionId, ...l }) => (sectionIdOk(sectionId) ? { ...l, sectionId } : l)),
+      // sections that are not a list (a broken copy) never reach the client (as app.client_sections)
+      sections: Array.isArray(o.sections) ? countedSections(o).map(clientSection) : undefined,
+    })),
   };
 }
 

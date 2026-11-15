@@ -65,7 +65,7 @@ export function AdvanceSheet({
   };
 
   return (
-    <Sheet visible={visible} onClose={busy ? () => {} : onClose} title={t("mny.adv.applyTitle", { amount: money(advance.amountCents) })}>
+    <Sheet visible={visible} canClose={!busy} onClose={busy ? () => {} : onClose} title={t("mny.adv.applyTitle", { amount: money(advance.amountCents) })}>
       <View style={{ gap: space[3] }} testID="advance-form">
         <T v="caption" tone="mut">
           {t("mny.adv.pick")}

@@ -1,0 +1,35 @@
+# Re-runs the pull requests the pipeline pause stopped (#1087): when a stop task is closed or loses its label, or a PR gets the
+# label «починка». Minimal rights: it merges nothing and changes no branch. One run at a time (the concurrency group), oldest PR
+# first (scripts/pipelineResume.cjs). A PR still behind an open stop without «починка» is left alone.
+name: Pipeline resume
+on:
+  issues:
+    types: [closed, unlabeled]
+  pull_request:
+    types: [labeled]
+permissions:
+  actions: write
+  issues: read
+  pull-requests: read
+  contents: read
+concurrency:
+  group: pipeline-resume
+  cancel-in-progress: false
+jobs:
+  resume:
+    name: Re-run the paused pull requests
+    # an issue event counts only for the stop label; a PR event only for the label «починка»
+    if: >-
+      (github.event_name == 'issues' && (github.event.issue.pull_request == null) &&
+        (github.event.action == 'closed' && contains(github.event.issue.labels.*.name, 'остановка') ||
+         github.event.action == 'unlabeled' && github.event.label.name == 'остановка')) ||
+      (github.event_name == 'pull_request' && github.event.label.name == 'починка')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Re-run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ONLY_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.number || '' }}
+        run: node scripts/pipelineResume.cjs

@@ -12,17 +12,16 @@ import { usePersistentState } from "@/data/persist";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { estimateStatusView } from "@/features/estimateStatus";
-import { moduleHref } from "@/modules/registry";
+import { moduleHref, moduleTabs } from "@/modules/registry";
 import { useListPanel } from "@/nav/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button } from "@/ui/controls";
+import { Button, IconButton } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { CardGrid, ListCard, ListCardHeader, type CardSign, type CardStatus } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { ListPanel } from "@/ui/listPanel";
-import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
-import { T } from "@/ui/primitives";
+import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { asMeasurementFilter, filterMeasurements, MEASUREMENT_FILTERS, measurementList, type MeasurementFilter, type MeasurementItem } from "../measurements";
 import { MeasurementView } from "../view/ViewScreen";
 
@@ -43,6 +42,9 @@ export default function MeasurementsScreen() {
   const draw = moduleHref("gutters", "draw");
   const view = moduleHref("gutters", "view");
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  // «Замеры» is a tab of the app for this person (the bottom bar, the side menu): a tab is a root — no «‹ Назад» over it, as the
+  // core's tab lists (#1426, design review); opened where it is not a tab (the role has no such tab) it keeps its «back»
+  const asTab = moduleTabs(store.db.company, store.role).some((m) => m.href === moduleHref("gutters", "list"));
   const [kept, setKept] = usePersistentState<MeasurementFilter>(`${filterStoreKey("gutters.measurements")}.status`, "all");
   const f = asMeasurementFilter(kept);
   const [q, setQ] = useState("");
@@ -66,8 +68,13 @@ export default function MeasurementsScreen() {
     }
     return { tone: "neutral", label: t(v.state === "unlinked" ? "mod.gutters.list.draft" : "mod.gutters.list.s.noEstimate") };
   };
-  const signsOf = (m: MeasurementItem): CardSign[] | undefined =>
-    m.view.changed ? [{ tone: "warn", label: t(m.view.state === "signed" ? "mod.gutters.list.s.changedSigned" : "mod.gutters.list.s.changed") }] : undefined;
+  const signsOf = (m: MeasurementItem): CardSign[] | undefined => {
+    const out: CardSign[] = [];
+    if (m.view.changed) out.push({ tone: "warn", label: t(m.view.state === "signed" ? "mod.gutters.list.s.changedSigned" : "mod.gutters.list.s.changed") });
+    // #1165: the engine's rule changed after the estimate was made (a signed one is only told)
+    if (m.view.engineChanged) out.push({ tone: "warn", label: t(m.view.state === "signed" ? "mod.gutters.list.s.engineSigned" : "mod.gutters.list.s.engine") });
+    return out.length ? out : undefined;
+  };
 
   const desktop = device === "desktop";
   const card = (m: MeasurementItem) => (
@@ -84,7 +91,7 @@ export default function MeasurementsScreen() {
         lines: t("mod.gutters.list.what", { runs: m.runs, ft: Math.round(m.lengthIn / 12), ds: m.downspouts }),
       }}
       // edge only for what needs action: the drawing changed after its estimate
-      edge={m.view.changed ? "warn" : null}
+      edge={m.view.changed || m.view.engineChanged ? "warn" : null}
       density={desktop ? "row" : "rich"}
       columns={panel.openId ? COLUMNS_PANEL : COLUMNS}
       selected={m.id === panel.openId}
@@ -92,13 +99,27 @@ export default function MeasurementsScreen() {
     />
   );
   const pick = (x: MeasurementFilter) => setKept(x);
+  const startNew = () => router.push(draw as Href);
+  // «＋» in the header is secondary (DS §12.2, #1426): an icon of 36 on the phone, the word from 820; yellow is only the
+  // screen's main action — on an empty list that is the empty state's own «Новый замер»
+  const add = (
+    <View testID="measurements-new">
+      {device === "phone" ? (
+        <IconButton icon="plus" label={t("mod.gutters.list.new")} onPress={startNew} />
+      ) : (
+        <Button label={t("mod.gutters.list.new")} icon="plus" size="sm" variant="secondary" onPress={startNew} />
+      )}
+    </View>
+  );
 
   return (
     <Screen
       title={t("mod.gutters.list.title")}
       subtitle={t("mod.gutters.title")}
-      back={back}
-      right={<Button label={t("mod.gutters.list.new")} icon="plus" size="sm" onPress={() => router.push(draw as Href)} />}
+      back={asTab ? undefined : back}
+      // DS §12.2: «?» first on the right of the header
+      help={t("mod.gutters.list.help")}
+      right={add}
       aside={
         openItem ? (
           <ListPanel title={titleOf(openItem)} subtitle={openItem.address ?? undefined} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
@@ -108,9 +129,18 @@ export default function MeasurementsScreen() {
       }
     >
       {items.length === 0 ? (
-        <Card>
-          <T tone="mut">{t("mod.gutters.list.empty")}</T>
-        </Card>
+        // DS §13 «Пусто — данных нет вообще»: the object's icon, the words, why, and the one button to start
+        <Empty
+          icon="note"
+          testID="measurements-empty"
+          title={t("mod.gutters.list.empty")}
+          hint={t("mod.gutters.list.emptyHint")}
+          action={
+            <View testID="measurements-empty-new">
+              <Button label={t("mod.gutters.list.new")} icon="plus" variant="primary" onPress={startNew} />
+            </View>
+          }
+        />
       ) : (
         <>
           <FilterBar<MeasurementFilter>

@@ -12,7 +12,7 @@
 |---|---|
 | `.github/workflows/eas-build.yml` (#275) | ручной запуск; ios — профиль `testflight`, `--non-interactive`, 4 секрета Apple; первая сборка «регистрирует bundle id и сертификаты» |
 | `apps/mobile/eas.json` | `testflight` extends `production`, channel `preview`; submit.testflight — ключ из `$EXPO_ASC_*` |
-| `apps/mobile/app.json` | bundle id `com.octodex.app`; тексты камеры, фото, геопозиции EN + locales RU/ES; `ITSAppUsesNonExemptEncryption: false`; `runtimeVersion.policy: sdkVersion`; нет `privacyManifests`, нет splash |
+| `apps/mobile/app.json` | bundle id `com.gorix.app` (до 14.11 — `com.octodex.app`, #656); тексты камеры, фото, геопозиции EN + locales RU/ES; `ITSAppUsesNonExemptEncryption: false`; `runtimeVersion.policy: sdkVersion`; нет `privacyManifests`, нет splash |
 | `release.yml` | `eas update --channel preview --platform all`, eas-cli 27.4.1 |
 | спека 27 §2 (#272) | «ключ APNs EAS создаёт при первой сборке» |
 | спека 14 §4, §10 | тексты разрешений; App Privacy заполняется в App Store Connect |
@@ -88,7 +88,7 @@ e2e не нужны: экраны не меняются.
 ## 9. Первый запуск (07.11.2026)
 - `npm run ios:first` на Mac основателя прошёл: bundle id зарегистрирован, сертификат и профиль созданы, ключ App Store Connect «[Expo] EAS Submit» (ADMIN) хранится в EAS, группа TestFlight «Team (Expo)».
 - Имя «OCTODEX» в App Store занято → Apple ID приложения **6831904411**, имя в App Store Connect «OCTODEX (ea2bef)» (поменять до публикации; на iPhone под иконкой — OCTODEX из app.json). Сборка 1.0.0 (2) отправлена в TestFlight.
-- `ascAppId` = 6831904411 в `eas.json` → дальше Actions → «EAS build» → ios + ios_submit.
+- `ascAppId` = 6834689554 в `eas.json` (новая запись «GoRix: Contractor CRM», #656; прежняя 6831904411 «OCTODEX» — для `com.octodex.app`) → дальше Actions → «EAS build» → ios + ios_submit. Новый bundle id: если первая сборка не стартует без учётных данных (профиль, ключ пушей для `com.gorix.app`) — один раз `npm run ios:first` на Mac (§4). Android временно не собирается — #1444.
 - Первая попытка упала, потому что в поле Apple ID ввели `y`. Подсказка в инструкции §5.2.
 - **Задача основателя перед публикацией в App Store:** переименовать приложение в App Store Connect («OCTODEX (ea2bef)» → своё имя, запасное — GoRix). App Store Connect → приложение → App Information → Name. Пересборка не нужна.
-- Ключ APNs: проверить на expo.dev → octodex → Credentials → iOS → com.octodex.app → Push Key. Если его нет — 11-setup §5.6 (`eas credentials` с Mac).
+- Ключ APNs: проверить на expo.dev → octodex → Credentials → iOS → com.gorix.app → Push Key. Если его нет — 11-setup §5.6 (`eas credentials` с Mac).

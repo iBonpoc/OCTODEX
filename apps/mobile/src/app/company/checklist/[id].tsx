@@ -16,7 +16,7 @@ import { uid as newId } from "@/features/estimateDoc";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Card, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 
 const blank = (): ChecklistTemplate => ({
   id: newId(),
@@ -95,14 +95,14 @@ function TemplateForm({ saved, isNew }: { saved?: ChecklistTemplate; isNew: bool
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       {tpl.archivedAt ? <StatusChip status="neutral" label={t("chk2.archived")} /> : null}
       <ReadOnly value={ro}>
-        <Card>
+        {/* the template's own fields straight on the background (DS §11 п.17, #1411); each item stays a card — an object of a list */}
+        <FieldGroup>
           <View testID="chk-tpl-name">
             <TextField label={t("chk2.name")} placeholder={t("chk2.name")} type="title" value={tpl.name} onChangeText={(v) => set({ name: v.slice(0, TEMPLATE_NAME_MAX) })} />
           </View>
-        </Card>
+        </FieldGroup>
 
-        <Card>
-          <T v="heading">{t("chk2.when")}</T>
+        <FieldGroup title={t("chk2.when")}>
           <T v="caption" tone="mut">{t("chk2.whenHint")}</T>
           <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
             <T v="body" style={{ flex: 1 }}>{t("chk2.every")}</T>
@@ -128,7 +128,7 @@ function TemplateForm({ saved, isNew }: { saved?: ChecklistTemplate; isNew: bool
               )}
             </>
           )}
-        </Card>
+        </FieldGroup>
 
         <T v="heading">{t("chk2.itemsTitle")}</T>
         {tpl.items.map((it, i) => (
@@ -161,12 +161,11 @@ function TemplateForm({ saved, isNew }: { saved?: ChecklistTemplate; isNew: bool
           </View>
         )}
 
-        <Card>
-          <T v="heading">{t("chk2.minPhotos")}</T>
+        <FieldGroup title={t("chk2.minPhotos")}>
           <T v="caption" tone="mut">{t("chk2.minPhotosHint")}</T>
           <Stepper label={t("chk2.minBefore")} value={tpl.minPhotosBefore ?? 0} min={0} max={20} onChange={(v) => set({ minPhotosBefore: v || undefined })} />
           <Stepper label={t("chk2.minAfter")} value={tpl.minPhotosAfter ?? 0} min={0} max={20} onChange={(v) => set({ minPhotosAfter: v || undefined })} />
-        </Card>
+        </FieldGroup>
       </ReadOnly>
 
       {error ? <StatusChip status="bad" label={error} /> : null}

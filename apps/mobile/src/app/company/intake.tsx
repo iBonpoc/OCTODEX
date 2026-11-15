@@ -3,7 +3,7 @@
  * (a link for its site, Google Business Profile, Facebook, a QR) and a key for Zapier / Make; the journal of requests and
  * «Принять / Отклонить» for the held ones. Cloud only and online: the server makes links and keys (like «Команда»).
  * The director changes the ways in (owner / admin); the office reads the journal and decides held requests (T112).
- * The top line says in words whether the form takes requests — never silently «on» without INTAKE_IP_SECRET (director 08.11).
+ * The top line says in words whether the form takes requests — never silently «on» without the IP secret on the server (director 08.11).
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { View } from "react-native";
@@ -186,7 +186,7 @@ export default function CompanyIntake() {
       </CardList>
 
       {/* closed only by «Готово»: a tap beside it would lose the key for good (security-check #422 №2) */}
-      <Sheet visible={!!shownKey} onClose={() => {}} title={t("intake.set.keyTitle")}>
+      <Sheet visible={!!shownKey} canClose={false} onClose={() => {}} title={t("intake.set.keyTitle")}>
         <View testID="intake-key-sheet" style={{ gap: space[3] }}>
           <T v="caption" tone="mut">{t("intake.set.keyOnce")}</T>
           <T v="body" tabular>{shownKey ?? ""}</T>

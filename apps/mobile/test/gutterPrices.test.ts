@@ -39,7 +39,7 @@ describe("какие свойства важны по виду детали", ()
   it("образец работы: только то, за что платит клиент (без рулона, палок, заклёпок), без работы", () => {
     expect(rows.every((r) => r.part.use !== "purchase" && r.part.kind === "material")).toBe(true);
     expect(rows.map((r) => matchAttrs(r.part).part)).toEqual(expect.arrayContaining(["gutter", "end_cap", "hanger", "downspout", "elbow", "outlet", "extension"]));
-    expect(laborRows().map((r) => r.part.attrs.work)).toEqual(["install", "install", "install", "install", "downspout", "downspout", "downspout", "downspout", "corner_cut", "tearoff", "tile"]);
+    expect(laborRows().map((r) => r.part.attrs.work)).toEqual(["install", "install", "install", "install", "downspout", "downspout", "downspout", "downspout", "corner_cut", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
   });
   it("образец — по умолчаниям компании: K6 медь → строки K6 медь; метод угла strip → угол strip", () => {
     const raw = { run: { profile: "k", size: "6", material: "copper" }, rules: { corner: "strip" } };

@@ -128,6 +128,7 @@ export function RefundSheet({
   return (
     <Sheet
       visible={visible}
+      canClose={!busy}
       onClose={busy ? () => {} : onClose}
       title={t("mny.refund.title")}
       dirty={step === "form" && amount !== max && !busy}

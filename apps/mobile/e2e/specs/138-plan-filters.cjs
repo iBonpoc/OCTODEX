@@ -32,6 +32,7 @@ exports.run = async (h) => {
   const bar = vis(p.getByTestId("filter-bar")).first();
   await bar.waitFor();
   const got = vis(p.getByRole("button", { name: "Понятно", exact: true }));
+  // optional: the first-visit hint of the screen shows once per device — close it only when it is there (#800)
   if (await got.count()) { await got.first().click(); await p.waitForTimeout(300); }
 
   // one row; the old switches are gone

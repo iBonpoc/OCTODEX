@@ -8,6 +8,7 @@ import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
 import { Button, TextField } from "./controls";
 import { activeFilterCount, chosenFilters, chosenLabel, filterLabel, SEARCH_FROM, searchAfter, sheetOptions, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
+import { fillStyle } from "./fill";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 
@@ -79,20 +80,20 @@ export function FilterBar<K extends string>({
       accessibilityLabel={a11y.label}
       testID={testID}
       style={{
-        height: h,
+        minHeight: h,
         paddingHorizontal: space[3],
         borderRadius: radius.pill,
         flexDirection: "row",
         alignItems: "center",
         gap: space[1],
-        // chosen: ink frame on the same surface — yellow is kept for the one main action (rule 2)
-        backgroundColor: c.surf2,
-        borderWidth: sel ? component.selectedBorder : component.hairline,
-        borderColor: sel ? c.ink : c.bd,
+        // chosen: «Заливка» (DS «Выделение выбранного»); yellow is the main action's alone (rule 2)
+        ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+        borderWidth: component.hairline,
+        borderColor: sel ? "transparent" : c.bd,
       }}
     >
       {icon}
-      <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }}>
+      <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
         {label}
       </T>
     </Press>
@@ -108,7 +109,8 @@ export function FilterBar<K extends string>({
       accessibilityRole="radiogroup"
       testID="filter-lane"
     >
-      {visibleFilters(items, value).map((it) => pill(it.key, filterLabel(it), it.key === value, () => onChange(it.key), { role: "radio", label: filterLabel(it) }))}
+      {/* each chip by its key (tests find a filter by it, not by its words — CHECKS §9 п.2) */}
+      {visibleFilters(items, value).map((it) => pill(it.key, filterLabel(it), it.key === value, () => onChange(it.key), { role: "radio", label: filterLabel(it) }, undefined, `filter-lane-${it.key}`))}
     </ScrollView>
   );
 
@@ -124,7 +126,7 @@ export function FilterBar<K extends string>({
       accessibilityLabel={t("fix.filters.a11y", { n: active })}
       testID="filter-button"
       style={{
-        height: component.button.phone,
+        minHeight: component.button.phone,
         minWidth: component.button.phone,
         paddingHorizontal: alone ? space[3] : active ? space[2] : 0,
         borderRadius: radius.pill,
@@ -132,9 +134,9 @@ export function FilterBar<K extends string>({
         alignItems: "center",
         justifyContent: "center",
         gap: space[1],
-        backgroundColor: c.surf2,
-        borderWidth: active ? component.selectedBorder : component.hairline,
-        borderColor: active ? c.ink : c.bd,
+        ...(active ? fillStyle(c) : { backgroundColor: "transparent" }),
+        borderWidth: component.hairline,
+        borderColor: active ? "transparent" : c.bd,
       }}
     >
       {sliders}
@@ -208,7 +210,7 @@ export function FilterBar<K extends string>({
               visibleHeight={component.button.sm}
               accessibilityRole="button"
               accessibilityLabel={t("card.filter.remove", { v: chosenLabel(group, option) })}
-              style={{ height: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
+              style={{ minHeight: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
             >
               <T v="button" w="semibold" style={{ color: c.ink }}>
                 {chosenLabel(group, option)}
@@ -326,14 +328,14 @@ function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
         testID="filter-search-toggle"
         style={{
           width: h,
-          height: h,
+          minHeight: h,
           borderRadius: radius.pill,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: c.surf2,
-          // on: an ink frame, like a chosen filter — not a colour (rule 2)
-          borderWidth: state === "closedActive" ? component.selectedBorder : component.hairline,
-          borderColor: state === "closedActive" ? c.ink : c.bd,
+          // on: «Заливка», like a chosen filter — not a colour (rule 2)
+          ...(state === "closedActive" ? fillStyle(c) : { backgroundColor: "transparent" }),
+          borderWidth: component.hairline,
+          borderColor: state === "closedActive" ? "transparent" : c.bd,
         }}
       >
         <Icon name="search" s={size.iconSm} color={c.ink} />
@@ -356,7 +358,7 @@ function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
         returnKeyType="search"
         autoCorrect={false}
         accessibilityLabel={placeholder}
-        style={{ flex: 1, minWidth: 0, height: fieldH, color: c.ink, fontFamily: font.families.regular, fontSize: font.size.body + 2, outlineStyle: "none" } as object}
+        style={{ flex: 1, minWidth: 0, height: fieldH, color: c.ink, fontFamily: font.families.regular, fontSize: font.size.input, outlineStyle: "none" } as object}
       />
       <Press
         onPress={() => {

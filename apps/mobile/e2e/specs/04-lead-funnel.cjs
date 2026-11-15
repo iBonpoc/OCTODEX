@@ -16,11 +16,7 @@ exports.run = async (h) => {
   await h.page.getByText("Kevin Brooks", { exact: true }).first().click(); await h.page.waitForTimeout(700);
   await h.clickText("Сметы");
   await h.click("Смета");
-  await h.page.getByRole("button", { name: "Добавить позицию" }).first().click(); await h.page.waitForTimeout(300);
-  await h.sheet().getByPlaceholder(/Начните писать/).fill("Replace water heater");
-  await h.sheet().getByText(/Своя позиция:/).click(); await h.page.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("1850");
-  await h.sheet().getByRole("button", { name: "Готово" }).click(); await h.page.waitForTimeout(250);
+  await require("../estimateLine.cjs").addCustom(h, "Replace water heater", "1850");
   await h.page.getByRole("button", { name: "Сохранить и отправить" }).click(); await h.page.waitForTimeout(700);
   await h.page.getByRole("button", { name: "Копировать ссылку" }).click(); await h.page.waitForTimeout(400);
   let db = await h.db();

@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import type { FieldBinding } from "./requiredForm";
 import { Platform, ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -9,9 +10,11 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
+import { component, spaceHalf, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
+import { fillStyle, fillStyleFlat } from "./fill";
 import { Icon, Press, T, type IconKey } from "./primitives";
+import { SelectField } from "./selectField";
 import { FIELD, type FieldType } from "./fieldTypes";
 import { focusPlan } from "./fieldFocus";
 import { offsetToShow } from "./segmentedScroll";
@@ -21,11 +24,8 @@ import { offsetToShow } from "./segmentedScroll";
  * Inside <ReadOnly value> fields do not take text and choice controls do not change (shown dimmed, a11y disabled).
  * Off by default — every existing screen behaves as before. Buttons that save are hidden by the screen itself.
  */
-const ReadOnlyCtx = createContext(false);
-export function ReadOnly({ value, children }: { value: boolean; children: ReactNode }) {
-  return <ReadOnlyCtx.Provider value={value}>{children}</ReadOnlyCtx.Provider>;
-}
-export const useReadOnly = () => useContext(ReadOnlyCtx);
+export { ReadOnly, useReadOnly } from "./readOnly";
+import { useReadOnly } from "./readOnly";
 export { fieldSpec, type FieldType } from "./fieldTypes";
 
 /* ---------- Button (DS: visible ≤ 36, hit 44) ---------- */
@@ -45,7 +45,8 @@ export function Button({
   label: string;
   onPress?: () => void;
   variant?: BtnVariant;
-  size?: "sm" | "md" | "phone";
+  /** "bar": a button of the pinned action bar (DS §8.9) — 44 high, a label in two lines grows it instead of being cut */
+  size?: "sm" | "md" | "phone" | "bar";
   icon?: IconKey;
   disabled?: boolean;
   full?: boolean;
@@ -55,7 +56,8 @@ export function Button({
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
-  const h = component.button[size ?? (wide ? "md" : "phone")];
+  const bar = size === "bar";
+  const h = bar ? component.button.hit : component.button[size ?? (wide ? "md" : "phone")];
   const bg =
     variant === "primary" ? c.acc : variant === "secondary" ? c.surf2 : variant === "danger" ? c.status.bad.fill : "transparent";
   const fg = variant === "primary" ? c.onAcc : variant === "danger" ? c.status.bad.on : c.ink;
@@ -69,9 +71,10 @@ export function Button({
       accessibilityLabel={accessibilityLabel ?? label}
       style={[
         {
-          height: h,
+          minHeight: h,
           paddingHorizontal: space[4],
           borderRadius: radius.pill,
+          ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
           borderWidth: variant === "secondary" ? 1 : 0,
           borderColor: c.bd,
@@ -84,8 +87,13 @@ export function Button({
         style,
       ]}
     >
-      {icon ? <Icon name={icon} s={sizes.iconSm} color={fg} /> : null}
-      <T v="button" style={{ color: fg }} numberOfLines={1}>
+      {/* the icon keeps its size: in a narrow button (the left one of a pinned bar) the words wrap, the icon never shrinks to a dot (#1474) */}
+      {icon ? (
+        <View style={{ flexShrink: 0 }}>
+          <Icon name={icon} s={sizes.iconSm} color={fg} />
+        </View>
+      ) : null}
+      <T v="button" style={bar ? { color: fg, flexShrink: 1, textAlign: "center" } : { color: fg }} numberOfLines={bar ? 2 : 1}>
         {label}
       </T>
     </Press>
@@ -107,13 +115,16 @@ export function IconButton({
 }) {
   const { c } = useTheme();
   const s = component.dockBtn;
-  const filled = tone === "acc" || active;
+  // yellow is the main action only (tone «acc»); a switched-on button (a pinned note) is «Заливка», like every chosen thing (DS §9,
+  // «Выделение выбранного», #1416)
+  const filled = tone === "acc";
   return (
     <Press
       onPress={onPress}
       visibleHeight={s}
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={active !== undefined ? { selected: active } : undefined}
       style={{
         width: s,
         height: s,
@@ -123,9 +134,12 @@ export function IconButton({
         backgroundColor: filled ? c.acc : c.surf2,
         borderWidth: filled ? 0 : 1,
         borderColor: c.bd,
+        // a toggle: off — no plate, `mut` icon; on — «Заливка» (the same as a chosen chip or tab)
+        ...(active === false ? { backgroundColor: "transparent", borderWidth: 0 } : null),
+        ...(active && !filled ? fillStyle(c) : null),
       }}
     >
-      <Icon name={icon} s={sizes.iconMd} color={filled ? c.onAcc : c.ink} />
+      <Icon name={icon} s={sizes.iconMd} color={filled ? c.onAcc : active === false ? c.mut : c.ink} />
     </Press>
   );
 }
@@ -142,7 +156,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
       accessibilityRole="text"
       accessibilityLabel={label}
       style={{
-        height: component.chip.h,
+        minHeight: component.chip.h,
         paddingHorizontal: component.chip.px,
         borderRadius: radius.chip,
         backgroundColor: bg,
@@ -152,10 +166,13 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
         alignItems: "center",
         gap: space[1],
         alignSelf: "flex-start",
+        // a long word (RU / ES, a bigger system font) wraps inside the chip, it is never cut (#1303)
+        maxWidth: "100%",
+        paddingVertical: spaceHalf.hair,
       }}
     >
       <Icon name={statusIcon[status]} s={sizes.iconSm} color={fg} />
-      <T v="caption" w="semibold" style={{ color: fg }} numberOfLines={1}>
+      <T v="caption" w="semibold" style={{ color: fg, flexShrink: 1 }}>
         {label}
       </T>
     </View>
@@ -163,7 +180,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
 }
 
 /* ---------- Toggle (spring knob) ---------- */
-export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
+export function Toggle({ on, onChange, label, disabled }: { on: boolean; onChange: (v: boolean) => void; label: string; /** the switch is there but does not answer (a client without tax): pale, skipped by Tab, read as «disabled» */ disabled?: boolean }) {
   const { c } = useTheme();
   const ro = useReadOnly();
   const reduce = useReducedMotion();
@@ -178,12 +195,12 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return (
     <Press
       onPress={() => onChange(!on)}
-      disabled={ro}
+      disabled={ro || disabled}
       visibleHeight={h}
       accessibilityRole="switch"
-      accessibilityState={{ checked: on, disabled: ro }}
+      accessibilityState={{ checked: on, disabled: ro || !!disabled }}
       // web: a switch is read by aria-checked (as the radio below); without it the state is silent there (P4c)
-      {...({ "aria-checked": on } as object)}
+      {...({ "aria-checked": on, "aria-disabled": ro || !!disabled || undefined } as object)}
       accessibilityLabel={label}
       style={{
         width: w,
@@ -194,6 +211,7 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
         backgroundColor: on ? c.acc : c.track,
         padding: pad,
         justifyContent: "center",
+        opacity: disabled ? component.dimOpacity : 1,
       }}
     >
       <Animated.View
@@ -210,13 +228,25 @@ export function Segmented<K extends string>({
   onChange,
   full,
   scroll,
+  testID,
+  radio,
+  label,
+  equal,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   full?: boolean;
+  /** each tab gets `<testID>-<key>` (tests find a tab by it, not by its words — CHECKS §9 п.2) */
+  testID?: string;
   /** many tabs: one line that scrolls sideways on a narrow phone (the page itself never scrolls sideways) */
   scroll?: boolean;
+  /** a choice of a value in a form (not tabs of a screen): read as a radio group (#1095: ChoiceChips with a few options) */
+  radio?: boolean;
+  /** what the group is a choice of — read with the group (the caption above it is not tied to it) */
+  label?: string;
+  /** with `full`: every segment the same width — a column under each lines up with it (the totals of the options, DS §8.10) */
+  equal?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -260,9 +290,10 @@ export function Segmented<K extends string>({
   const { h, pad } = component.segmented;
   const bar = (
     <View
-      accessibilityRole="tablist"
+      accessibilityRole={radio ? "radiogroup" : "tablist"}
+      accessibilityLabel={label}
       style={{
-        height: h,
+        minHeight: h,
         padding: pad,
         borderRadius: radius.pill,
         backgroundColor: c.track,
@@ -273,7 +304,7 @@ export function Segmented<K extends string>({
       {ready ? (
         <Animated.View
           // selected: ink frame on a raised surface — yellow is kept for the one main action (rule 2, unslop 05.11 №1)
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill }, fillStyleFlat(c), pill]}
         />
       ) : null}
       {items.map((it) => {
@@ -281,26 +312,30 @@ export function Segmented<K extends string>({
         return (
           <Press
             key={it.key}
+            testID={testID ? `${testID}-${it.key}` : undefined}
             onPress={() => onChange(it.key)}
             disabled={ro}
             visibleHeight={h}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: sel }}
+            containerStyle={equal ? { flex: 1 } : undefined}
+            accessibilityRole={radio ? "radio" : "tab"}
+            accessibilityState={radio ? { selected: sel, checked: sel } : { selected: sel }}
+            {...(radio ? ({ "aria-checked": sel } as object) : null)}
             onLayout={(e: LayoutChangeEvent) => {
               const { x, width: w } = e.nativeEvent.layout;
               setLayouts((p) => (p[it.key]?.x === x && p[it.key]?.w === w ? p : { ...p, [it.key]: { x, w } }));
             }}
             style={{
-              height: h - pad * 2,
+              minHeight: h - pad * 2,
               paddingHorizontal: space[3],
               justifyContent: "center",
+              ...(equal ? { alignItems: "center" } : null),
+              // a choice in a form never grows past its card: the labels give way, they do not push the segment out
+              ...(radio ? { flexShrink: 1 } : null),
               borderRadius: radius.pill,
-              backgroundColor: !ready && sel ? c.surf2 : "transparent",
-              borderWidth: !ready && sel ? 1 : 0,
-              borderColor: c.ink,
+              ...(!ready && sel ? fillStyle(c) : { backgroundColor: "transparent" }),
             }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }} numberOfLines={1}>
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
               {it.label}
             </T>
           </Press>
@@ -339,7 +374,7 @@ export function TagChip({ label, onPress }: { label: string; onPress?: () => voi
   const body = (
     <View
       style={{
-        height: component.button.sm,
+        minHeight: component.button.sm,
         paddingHorizontal: space[3],
         borderRadius: radius.pill,
         borderWidth: 1,
@@ -389,7 +424,7 @@ export function Avatar({ initials, s = component.avatar.md, sub }: { initials: s
 export function MetaTag({ label, icon }: { label: string; icon?: IconKey }) {
   const { c } = useTheme();
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], height: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
       {icon ? <Icon name={icon} s={sizes.iconXs} color={c.mut} /> : null}
       <T v="caption" w="medium" style={{ color: icon ? c.ink : c.mut }}>
         {label}
@@ -455,9 +490,22 @@ export function TextField({
   label,
   icon,
   multiline,
+  rows,
   onSubmit,
   autoFocus,
   selectOnFocus,
+  focusNow,
+  chain,
+  onFocus,
+  field,
+  error,
+  testID,
+  prefix,
+  suffix,
+  accessoryID,
+  onBlurText,
+  a11yLabel,
+  action,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -468,12 +516,39 @@ export function TextField({
   label?: string;
   icon?: IconKey;
   multiline?: boolean;
+  /** a multi-line field: how many lines it shows empty (2 by default); it grows with the text either way */
+  rows?: 1 | 2;
   /** return key on the keyboard */
   onSubmit?: () => void;
   /** focus (and the keyboard) as soon as the field appears — a sheet opened for one value */
   autoFocus?: boolean;
   /** the text is selected when the field gets the focus: a typed digit replaces a prefilled value */
   selectOnFocus?: boolean;
+  /** a counter: each time it grows the field takes the focus AT ONCE (no sheet-opening wait) and selects its text — the next field of a chain; the keyboard stays up (#1316) */
+  focusNow?: number;
+  /** a field of a chain (feet → inches): the keyboard's key says «next» and keeps the focus on submit — no close-and-open of the keyboard (Android, #1316) */
+  chain?: boolean;
+  /** the field took the focus (a tap, or `focusNow`) */
+  onFocus?: () => void;
+  /** a required field of a form (`useRequiredForm().field(id)`): its error, its place for the scroll, its focus */
+  field?: FieldBinding;
+  /** «что вписать» under the field: alert + text, the frame `status.bad` (DS §11 п.2; the form gives it through `field`) */
+  error?: string;
+  testID?: string;
+  /** the unit sign inside the field: «$» before the number, «%» / «ft» / «ea» after it (`mut`, DS А6.2) */
+  prefix?: string;
+  suffix?: string;
+  /** iOS: the bar above the keyboard (`nativeID` of an InputAccessoryView), the number keyboard has no «Готово» */
+  accessoryID?: string;
+  /** the person leaves the field */
+  onBlurText?: () => void;
+  /** screen-reader name with the unit («Цена, долларов») */
+  a11yLabel?: string;
+  /**
+   * the field's helper action («Вставить», «Очистить», «Показать»): an icon inside the field on the right, no words, no plate;
+   * a real 44 × 44 touch box (the web has no hitSlop), `label` for the screen reader and the web's hover hint (DS §11 п.18, #1411)
+   */
+  action?: { icon: IconKey; label: string; onPress: () => void; testID?: string };
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -481,43 +556,73 @@ export function TextField({
   const f = FIELD[type];
   const multi = multiline ?? f.multiline ?? false;
   const h = wide ? component.field.h : component.field.phone;
+  // a multi-line field grows with its text (the browser's textarea does not by itself)
+  const [textH, setTextH] = useState(0);
+  // one line empty: the text's own line height, the frame padded to the field's height (44 phone / 36 wide)
+  const line = Math.round(font.size.input * font.lineHeight.body);
+  const one = multi && rows === 1;
+  const minH = one ? line : multi ? h * (rows ?? 2) : h;
   const input = useRef<React.ComponentRef<typeof TextInput>>(null);
   const len = useRef(value.length);
   len.current = value.length;
   // a field that opens in a sheet: on a phone focus once the sheet is up and select by hand (#691, ./fieldFocus)
   const plan = focusPlan(Platform.OS, { autoFocus, selectOnFocus, readOnly: ro });
   const selectAll = () => input.current?.setSelection?.(0, len.current);
+  const shownError = error ?? field?.error;
+  const tid = testID ?? field?.testID;
+  useEffect(() => {
+    if (!focusNow) return;
+    input.current?.focus();
+    // all of the text selected AT ONCE (a digit typed right after replaces it): by hand on a phone, `select()` on the web's field
+    input.current?.setSelection?.(0, len.current);
+    (input.current as unknown as { select?: () => void } | null)?.select?.();
+  }, [focusNow]);
   useEffect(() => {
     if (plan.focusAfterMs === null) return;
     const id = setTimeout(() => input.current?.focus(), plan.focusAfterMs);
     return () => clearTimeout(id);
   }, [plan.focusAfterMs]);
   return (
+    <View ref={field?.anchorRef} testID={tid} collapsable={false} style={{ gap: space[1] }}>
     <View
       style={{
         minHeight: h,
         borderRadius: radius.field,
         borderWidth: 1,
-        borderColor: c.bd,
+        borderColor: shownError ? c.status.bad.fill : c.bd,
         backgroundColor: c.in,
         flexDirection: "row",
         alignItems: multi ? "flex-start" : "center",
         paddingHorizontal: space[3],
-        paddingVertical: multi ? space[2] : 0,
+        // the same frame as a one-line field of this height (e2e 343 compares them)
+        paddingVertical: one ? Math.max(0, (h - line) / 2) : multi ? space[2] : 0,
         gap: space[2],
       }}
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
+      {prefix ? <T tone="mut">{prefix}</T> : null}
       <TextInput
-        ref={input}
+        ref={(n) => {
+          input.current = n;
+          field?.inputRef(n);
+        }}
         value={value}
         editable={!ro}
-        onFocus={plan.selectByHand ? () => setTimeout(selectAll, 0) : undefined}
+        onFocus={plan.selectByHand || onFocus ? () => { onFocus?.(); if (plan.selectByHand) setTimeout(selectAll, 0); } : undefined}
+        onBlur={field || onBlurText ? () => { field?.blur(value); onBlurText?.(); } : undefined}
+        inputAccessoryViewID={accessoryID}
         aria-disabled={ro || undefined}
-        onChangeText={(v) => onChangeText(f.fmt ? f.fmt(v) : v)}
+        onChangeText={(v) => {
+          const nv = f.fmt ? f.fmt(v) : v;
+          // text taken away: measure again from the smallest height (a textarea's scrollHeight never drops below its height)
+          if (multi && nv.length < len.current) setTextH(0);
+          field?.edit(nv);
+          onChangeText(nv);
+        }}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
         multiline={multi}
+        onContentSizeChange={multi && Platform.OS === "web" ? (e) => setTextH(Math.ceil(e.nativeEvent.contentSize.height)) : undefined}
         keyboardType={f.kb ?? "default"}
         inputMode={f.kb === "decimal-pad" ? "decimal" : f.kb === "number-pad" ? "numeric" : f.kb === "phone-pad" ? "tel" : f.kb === "email-address" ? "email" : f.kb === "url" ? "url" : type === "search" ? "search" : "text"}
         autoComplete={f.ac}
@@ -527,22 +632,53 @@ export function TextField({
         spellCheck={f.correct ?? true}
         secureTextEntry={f.secure}
         maxLength={f.max}
-        returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
+        returnKeyType={multi ? "default" : chain ? "next" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
         autoFocus={plan.autoFocus}
         selectTextOnFocus={selectOnFocus}
-        submitBehavior={multi ? "newline" : "blurAndSubmit"}
-        accessibilityLabel={label ?? placeholder}
+        submitBehavior={multi ? "newline" : chain ? "submit" : "blurAndSubmit"}
+        accessibilityLabel={a11yLabel ?? label ?? placeholder}
+        aria-invalid={shownError ? true : undefined}
         style={{
           flex: 1,
-          minHeight: multi ? h * 2 : h,
+          minHeight: minH,
+          // the browser's textarea does not grow by itself; a phone's multi-line field does (minHeight is enough there)
+          height: multi && Platform.OS === "web" ? Math.max(minH, textH) : undefined,
           color: c.ink,
           fontFamily: font.families.regular,
-          fontSize: font.size.body + 2,
+          fontSize: font.size.input,
+          lineHeight: one ? line : undefined,
           textAlignVertical: multi ? "top" : "center",
+          fontVariant: type === "money" || type === "number" || type === "integer" || type === "percent" ? ["tabular-nums"] : undefined,
           outlineStyle: "none",
         } as object}
       />
+      {suffix ? <T tone="mut">{suffix}</T> : null}
+      {action ? (
+        <Press
+          onPress={action.onPress}
+          disabled={ro}
+          visibleHeight={sizes.hitMin}
+          accessibilityRole="button"
+          accessibilityLabel={action.label}
+          testID={action.testID}
+          {...({ title: action.label } as object)}
+          // the touch box is 44 × 44 even in a 34 field (it overhangs the frame), the icon sits `space[3]` from the frame's edge
+          containerStyle={{ marginVertical: (Math.min(h, sizes.hitMin) - sizes.hitMin) / 2, marginRight: -space[3], alignSelf: multi ? "flex-start" : "center" }}
+          style={{ width: sizes.hitMin, height: sizes.hitMin, alignItems: "center", justifyContent: "center" }}
+        >
+          <Icon name={action.icon} s={sizes.iconMd} color={c.mut} />
+        </Press>
+      ) : null}
+    </View>
+    {shownError ? (
+      <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessibilityLiveRegion="polite" testID={tid ? `${tid}-error` : undefined}>
+        <Icon name="alert" s={sizes.iconSm} color={c.status.bad.text} />
+        <T v="caption" tone="bad">
+          {shownError}
+        </T>
+      </View>
+    ) : null}
     </View>
   );
 }
@@ -596,18 +732,50 @@ export function Stepper({
 }
 
 /* ---------- ChoiceChips: wrapping single choice (when a segmented control would overflow) ---------- */
+export { fitsSegment } from "./segmentFit";
+import { fitsSegment } from "./segmentFit";
+
 export function ChoiceChips<K extends string>({
   items,
   value,
   onChange,
   nowrap,
+  label,
+  testID,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   /** one line (put inside a horizontal ScrollView) */
   nowrap?: boolean;
+  /** a segment gives each option `<testID>-<key>`; a field — `<testID>` (the row), `<testID>-button`, `<testID>-<key>` (menu items) */
+  testID?: string;
+  /** the field's name: the row of a `SelectField` when the options do not fit one line */
+  label?: string;
 }) {
+  // never a second line of chips (#1095): a few short options — a segment in one line, otherwise a field with a menu.
+  // Screens move over one by one, each naming its field with `label` (test/chipsLabel.test.ts keeps the list of the
+  // others from growing); without `label` — and in a horizontal scroll (`nowrap`) — the chips are as they were.
+  if (nowrap || !label) return <ChipsRow items={items} value={value} onChange={onChange} nowrap={nowrap} />;
+  if (fitsSegment(items.map((i) => i.label))) {
+    const seg = <Segmented radio full label={label} testID={testID} items={items} value={value} onChange={onChange} />;
+    // with a `label` the field names itself: a caption over the segment, the row's label in a field
+    return label ? (
+      <View style={{ gap: space[1] }}>
+        <T v="caption" tone="mut" w="semibold">
+          {label}
+        </T>
+        {seg}
+      </View>
+    ) : (
+      seg
+    );
+  }
+  return <SelectField label={label} testID={testID} value={value} items={items} onChange={onChange} />;
+}
+
+/** the chips of one line, inside a horizontal scroll (filters) */
+function ChipsRow<K extends string>({ items, value, onChange, nowrap }: { items: { key: K; label: string }[]; value: K; onChange: (k: K) => void; nowrap?: boolean }) {
   const ro = useReadOnly();
   const { c } = useTheme();
   const h = component.button.sm;
@@ -627,17 +795,17 @@ export function ChoiceChips<K extends string>({
             {...({ "aria-checked": sel } as object)}
             accessibilityLabel={it.label}
             style={{
-              height: h,
+              minHeight: h,
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              // selected: ink frame on the same surface — yellow is kept for the one main action (rule 2, spec 06 «Аудит» №1)
-              backgroundColor: c.surf2,
-              borderWidth: sel ? component.selectedBorder : 1,
-              borderColor: sel ? c.ink : c.bd,
+              // chosen: «Заливка» (DS «Выделение выбранного»); the unchosen keeps a hairline, no fill; yellow is the main action's alone (rule 2)
+              ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              borderWidth: component.hairline,
+              borderColor: sel ? "transparent" : c.bd,
             }}
           >
-            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }}>
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>
@@ -674,17 +842,20 @@ export function MultiChips<K extends string>({
             accessibilityState={{ checked: sel }}
             accessibilityLabel={it.label}
             style={{
-              height: h,
+              minHeight: h,
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              backgroundColor: sel ? c.acc : c.surf2,
-              borderWidth: sel ? 0 : 1,
-              borderColor: c.bd,
+              ...(sel ? fillStyle(c) : { backgroundColor: "transparent" }),
+              flexDirection: "row",
+              alignItems: "center",
+              gap: space[1],
+              borderWidth: component.hairline,
+              borderColor: sel ? "transparent" : c.bd,
             }}
           >
-            <T v="button" style={{ color: sel ? c.onAcc : c.ink }}>
-              {sel ? "✓ " : ""}
+            {sel ? <Icon name="check" s={sizes.iconSm} color={c.ink} /> : null}
+            <T v="button" w={sel ? "semibold" : undefined} style={{ color: sel ? c.ink : c.mut }}>
               {it.label}
             </T>
           </Press>

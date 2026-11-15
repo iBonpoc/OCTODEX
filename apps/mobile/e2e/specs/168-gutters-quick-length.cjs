@@ -72,7 +72,8 @@ exports.run = async (h) => {
   h.expect(await field("quick-length-ft").evaluate((el) => el.selectionStart === 0 && el.selectionEnd === el.value.length), "…selected: a digit replaces them");
   await h.shot("sheet");
   // #675: the unit is at the end of the number — no row of units above the fields; «дюйм» right of the inches
-  h.expect((await tid("quick-length").getByRole("radio").count()) === 0, "no unit chips above the fields");
+  // (the row of fractions under the fields, #1316, are radios too: only those outside it count)
+  h.expect((await tid("quick-length").locator('[role="radio"]').evaluateAll((rs) => rs.filter((r) => !r.closest('[data-testid="quick-length-fracs"]')).length)) === 0, "no unit chips above the fields");
   const ub = await tid("quick-length-unit").boundingBox();
   const ib = await tid("quick-length-in").boundingBox();
   h.expect(ub.x >= ib.x + ib.width - 1 && /дюйм/.test(await tid("quick-length-unit").innerText()), "«дюйм» at the end of the number");
@@ -95,13 +96,13 @@ exports.run = async (h) => {
   await tid("quick-length-bad").waitFor({ timeout: 3000 });
   h.expect((await tid("quick-length").count()) === 1, "a bad length keeps the sheet");
 
-  // a tape to pull (founder 09.11: «как рулетка»): dragged left three marks → ⅜ more; the fields follow
+  // a tape to pull (founder 09.11: «как рулетка»): dragged left six marks (1/16″ each) → ⅜ more; the fields follow
   const pull = async (marks) => {
     const tb = await tid("quick-length-tape").boundingBox();
     const cx = tb.x + tb.width / 2, cy = tb.y + tb.height / 2;
     await p.mouse.move(cx, cy);
     await p.mouse.down();
-    // one mark is 16 px (room for the fractions)
+    // one mark (1/16″) is 16 px (`tape-tick`, #1315): an eighth — 32 px, room for its fraction
     for (let i = 1; i <= 6; i++) await p.mouse.move(cx - (marks * 16 * i) / 6, cy);
     // the finger stops, then lifts: no flick (a flick runs on — the founder's sample; that is the arrows' and the unit's job)
     await p.mouse.move(cx - marks * 16, cy);
@@ -111,38 +112,40 @@ exports.run = async (h) => {
   await field("quick-length-in").fill("6"); // a good length again (25′ 6″) after the bad one
   const ft0 = await field("quick-length-ft").inputValue();
   const in0 = await field("quick-length-in").inputValue();
-  await pull(3);
-  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "the tape pulled three marks: ⅜");
+  await pull(6);
+  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "the tape pulled six marks (three eighths): ⅜");
   h.expect((await field("quick-length-ft").inputValue()) === ft0 && (await field("quick-length-in").inputValue()) === in0, "the feet and inches stay");
   await h.shot("tape");
-  // the arrows step one mark (the founder's sample): ⅜ → ½ → ⅜; the big value above follows
+  // the arrows step one mark (1/16″): ⅜ → 7/16 → ⅜; the big value above follows
   await tid("quick-length-tape-more").getByRole("button").click();
-  await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "½", "→ one mark longer: ½");
-  h.expect(/6½″/.test(await tid("quick-length-tape-value").innerText()), "the big value says 6½″");
+  await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "7/16", "→ one mark longer: 7/16");
+  h.expect(/6 7\/16″/.test(await tid("quick-length-tape-value").innerText()), "the big value says 6 7/16″");
   await tid("quick-length-tape-less").getByRole("button").click();
   await waitFor(async () => (await tid("quick-length-frac").innerText()).trim() === "⅜", "← one mark shorter: ⅜");
   // the tape says the whole length at every inch: «25′ 6″», «25′ 7″» … (founder 09.11)
   const marks = await tid("quick-length-tape").locator("text").evaluateAll((ts) => ts.map((t) => (t.textContent || "").trim()));
-  h.expect(["25′ 5″", "25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
+  // (the marks are 16 px apart, #1315: ±175 px of a phone-wide tape show the inches around the value — 25′ 6″ and 25′ 7″ — not a third one)
+  h.expect(marks.length >= 4, `the tape draws its marks (${marks.length})`);
+  h.expect(["25′ 6″", "25′ 7″"].every((m) => marks.includes(m)), `the whole length at each inch (${marks.join(" | ")})`);
   // a tap on a number: the tape comes to it — the whole inch, no eighths (the sample's click on a page)
   const seven = await tid("quick-length-tape").locator("text").filter({ hasText: /^25′ 7″$/ }).first().boundingBox();
   await p.mouse.click(seven.x + seven.width / 2, seven.y + seven.height / 2);
   await waitFor(async () => (await field("quick-length-in").inputValue()) === "7" && (await tid("quick-length-frac").count()) === 0, "a tap on «25′ 7″»: 7″, no eighths");
-  // the keyboard on a computer: → three times → ⅜
+  // the keyboard on a computer: → three times → 3/16
   await tid("quick-length-tape").focus();
   for (let i = 0; i < 3; i++) await p.keyboard.press("ArrowRight");
-  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "⅜", "→ → →: 7⅜″");
-  // a whole inch more: eight marks
+  await waitFor(async () => (await tid("quick-length-frac").count()) === 1 && (await tid("quick-length-frac").innerText()).trim() === "3/16", "→ → →: 7 3/16″");
+  // a whole inch more: sixteen marks
   const in1 = Number(await field("quick-length-in").inputValue());
-  await pull(8);
-  await waitFor(async () => (await field("quick-length-in").inputValue()) === String((in1 + 1) % 12), "eight marks more: an inch more");
+  await pull(16);
+  await waitFor(async () => (await field("quick-length-in").inputValue()) === String((in1 + 1) % 12), "sixteen marks more: an inch more");
 
-  // 25′ 6⅜″ → «Применить»
+  // 25′ 6 3/16″ → «Применить»
   await field("quick-length-in").fill("6");
   await tid("quick-length-apply").getByRole("button").click();
   await waitFor(async () => (await tid("quick-length").count()) === 0, "the sheet is gone after «Применить»");
-  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 306.375), "the run is 306⅜″ by tape in the store");
-  await waitFor(async () => /25′ 6⅜″/.test(await tid("draw-selected").innerText()), "the picked bar shows 25′ 6⅜″");
+  await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 306.1875), "the run is 306 3/16″ by tape in the store: " + JSON.stringify((await runs()).map((r) => r.geom?.lengthIn)));
+  await waitFor(async () => /25′ 6 3\/16″/.test(await tid("draw-selected").innerText()), "the picked bar shows 25′ 6 3/16″");
 
   // the second gutter → «Применить» untouched: the drawn length stays
   await stroke([x1, y + b.height * 0.2], [x0, y + b.height * 0.2]);

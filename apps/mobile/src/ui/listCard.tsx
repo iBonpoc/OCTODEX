@@ -6,7 +6,7 @@
  * Touch targets: 44 pt on iOS/web (App Store), 48 dp on Android (Google Play). Tokens only.
  * Layout rules are pure functions in ./listCardLayout (unit-tested); this file only draws them.
  */
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { Linking, Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native"; // ds-allow: src/ui primitive
 import { useReducedMotion } from "react-native-reanimated";
 import { component, font, layout, radius, size, space, spaceHalf, statusIcon, motion, type StatusName } from "@octo/design-tokens";
@@ -14,6 +14,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
 import { Sheet } from "./overlays";
+import { SelectedCheck } from "./selectedCheck";
 import {
   FACT_ICON, FACT_MAX_LINES, contactActions, edgeTone, layoutFacts, rowColumns, touchPad,
   type Contact, type ContactAction, type Density, type FactKey, type Facts, type OS,
@@ -263,9 +264,10 @@ export function ListCard(p: ListCardProps) {
         padding: compact ? space[2] : space[3],
         paddingLeft: space[4],
         borderRadius: compact ? radius.field : radius.inner,
-        backgroundColor: c.surf,
-        borderWidth: p.selected ? component.selectedBorder : component.hairline,
-        borderColor: p.selected ? c.ink : c.bd,
+        // the open one (panel on 1280): «Заливка» + a check, not an ink frame (DS «Выделение выбранного»)
+        backgroundColor: p.selected ? c.surf2 : c.surf,
+        borderWidth: component.hairline,
+        borderColor: p.selected ? "transparent" : c.bd,
         overflow: "hidden",
         shadowColor: c.shadow.color,
         shadowOpacity: compact ? 0 : c.shadow.opacity,
@@ -274,6 +276,7 @@ export function ListCard(p: ListCardProps) {
       }}
     >
       {edge ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: component.statusEdge, backgroundColor: c.status[edge].fill }} /> : null}
+      {p.selected ? <SelectedCheck /> : null}
       {/* header */}
       <View style={{ flexDirection: "row", gap: space[3], alignItems: "flex-start" }}>
         <Lead lead={p.lead} small={compact} />
@@ -415,13 +418,15 @@ function ListCardRow(p: ListCardProps) {
         paddingVertical: space[2],
         paddingHorizontal: space[3],
         borderRadius: radius.field,
-        backgroundColor: c.surf,
-        borderWidth: p.selected ? component.selectedBorder : component.hairline,
-        borderColor: p.selected ? c.ink : c.bd,
+        // the open one (panel on 1280): «Заливка» + a check, not an ink frame (DS «Выделение выбранного»)
+        backgroundColor: p.selected ? c.surf2 : c.surf,
+        borderWidth: component.hairline,
+        borderColor: p.selected ? "transparent" : c.bd,
         overflow: "hidden",
       }}
     >
       {edge ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: component.statusEdge, backgroundColor: c.status[edge].fill }} /> : null}
+      {p.selected ? <SelectedCheck /> : null}
       <Lead lead={p.lead} small />
       <View style={{ flex: 1.3, minWidth: 0, gap: spaceHalf.hair }}>
         <Txt w="semibold" color={c.ink}>{p.title}</Txt>
@@ -466,9 +471,13 @@ function ListCardRow(p: ListCardProps) {
 /* ---------- grid of cards: rows of equal height, equal gaps, edges on one line ----------
  * Phone 1 column, tablet 2, desktop 3 (layout.gridCols). Every card in a row stretches to the tallest one, so tops,
  * bottoms and the button lines match; an unfinished last row keeps the column width (empty cells). */
+/** a narrow column (the 360 panel beside a list, DS §12.3): every CardGrid inside it is one column, whatever the window's width */
+export const OneColumn = createContext(false);
+
 export function CardGrid({ children, cols }: { children: ReactNode[]; cols?: number }) {
   const { device } = useDevice();
-  const n = cols ?? layout.gridCols[device];
+  const narrow = useContext(OneColumn);
+  const n = narrow ? 1 : (cols ?? layout.gridCols[device]);
   const items = children.filter(Boolean);
   if (n <= 1) return <View style={{ gap: space[2] }}>{items}</View>;
   const rows: ReactNode[][] = [];
@@ -513,8 +522,10 @@ export interface StatusPickerOption {
   form?: boolean;
 }
 
-export function StatusPicker({ visible, onClose, title, options, onPick }: {
+export function StatusPicker({ visible, onExited, onClose, title, options, onPick }: {
   visible: boolean;
+  /** the sheet has left (a sheet mounted by data lets the data go: `useHeldSheet`) */
+  onExited?: () => void;
   onClose: () => void;
   title: string;
   options: StatusPickerOption[];
@@ -523,7 +534,7 @@ export function StatusPicker({ visible, onClose, title, options, onPick }: {
   const { c } = useTheme();
   const { t } = useI18n();
   return (
-    <Sheet visible={visible} onClose={onClose} title={title}>
+    <Sheet visible={visible} onExited={onExited} onClose={onClose} title={title}>
       <View accessibilityRole="radiogroup" style={{ gap: spaceHalf.hair }}>
         {options.map((o) => {
           const row = (

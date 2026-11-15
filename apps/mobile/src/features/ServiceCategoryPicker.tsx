@@ -13,11 +13,23 @@ import { activeCategories, categoryLabel, choosable, nameTaken } from "@/feature
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, FieldGroup, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { StatusNote } from "@/ui/statusNote";
 
 /** "Direction: Plumbing ›" — hidden while the company has no directions; read-only when the only one is already set */
-export function ServiceCategoryRow({ value, onChange, readOnly }: { value?: ID; onChange: (id: ID | undefined) => void; readOnly?: boolean }) {
+export function ServiceCategoryRow({
+  value,
+  onChange,
+  readOnly,
+  bare,
+}: {
+  value?: ID;
+  onChange: (id: ID | undefined) => void;
+  readOnly?: boolean;
+  /** a field of a form: the row straight on the background, no card (DS §11 п.17, #1411); a record's card keeps its card */
+  bare?: boolean;
+}) {
   const { db } = useStore();
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -27,8 +39,9 @@ export function ServiceCategoryRow({ value, onChange, readOnly }: { value?: ID; 
   const options = choosable(list, value);
   const fixed = readOnly || (options.length === 1 && options[0].id === value);
   const label = cur ? categoryLabel(cur, t) : t("dir.none");
+  const Box = bare ? View : Card;
   return (
-    <Card>
+    <Box>
       <ListRow title={t("dir.title")} subtitle={label} onPress={fixed ? undefined : () => setOpen(true)} />
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("dir.title")}>
         {options.map((c) => (
@@ -51,7 +64,7 @@ export function ServiceCategoryRow({ value, onChange, readOnly }: { value?: ID; 
           }}
         />
       </Sheet>
-    </Card>
+    </Box>
   );
 }
 
@@ -90,8 +103,7 @@ export function ServiceCategoryEditor() {
           />
         </Card>
       ) : null}
-      <Card>
-        <SectionTitle title={t("dir.addOwn")} />
+      <FieldGroup title={t("dir.addOwn")}>
         <RowView>
           <View style={{ flex: 1 }}>
             <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} />
@@ -108,14 +120,12 @@ export function ServiceCategoryEditor() {
           />
         </RowView>
         {ownTaken ? (
-          <T v="caption" tone="warn">
-            {`⚠ ${t("dir.taken")}`}
-          </T>
+          <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
         ) : null}
         <T v="caption" tone="mut">
           {t("co.tradesNote")}
         </T>
-      </Card>
+      </FieldGroup>
       {archived.length ? (
         <>
           <SectionTitle title={t("dir.archivedList")} />
@@ -165,12 +175,10 @@ function EditSheet({ c, active, onClose }: { c: ServiceCategory | null; active: 
     onClose();
   };
   return (
-    <Sheet visible onClose={onClose} title={original} dirty={dirty} onSave={save}>
+    <Sheet visible={!!c} onClose={onClose} title={original} dirty={dirty} onSave={save}>
       <TextField type="title" value={name} onChangeText={setName} placeholder={t("dir.ownPlaceholder")} />
       {taken ? (
-        <T v="caption" tone="warn">
-          {`⚠ ${t("dir.taken")}`}
-        </T>
+        <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
       ) : null}
       <T v="caption" tone="mut">
         {t("dir.renameHint")}

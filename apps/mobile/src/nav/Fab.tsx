@@ -2,6 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { madeHere } from "@/features/photoUri";
+import { shrinkPicked } from "@/data/photoShrink";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -28,11 +29,14 @@ export interface FabProps {
 /** the items this screen offers this role, with the actions the screen did not wire left out */
 export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
   const { role, db } = useStore();
-  const core = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
-  if (set !== "home") return core;
+  const all = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
+  // «Работа без сметы» is always the last line, after a module's items too (main-path spec §2.2 п.4)
+  const core = all.filter((it) => it.id !== "job");
+  const tail = all.filter((it) => it.id === "job");
+  if (set !== "home") return [...core, ...tail];
   // the home «＋»: what the company's usable modules add («Замерить здесь», docs/specs/33 П15.2); none — as before
   const mods = placeActions("home", db.company, { role }, undefined, db.moduleData).map((a): FabItem => ({ id: `module.${a.module}.${a.id}`, label: a.labelKey, icon: a.icon, href: a.href }));
-  return [...core, ...mods];
+  return [...core, ...mods, ...tail];
 }
 
 function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
@@ -40,12 +44,14 @@ function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
   const { db, addPhoto } = useStore();
   const toast = useToast();
   const takePhoto = async (visitId: string) => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
     if (!res || res.canceled) return;
     const v = db.visits.find((x) => x.id === visitId);
     if (!v) return;
     const kind = v.step === "working" || v.step === "signed" ? "after" : "before";
-    const uri = res.assets[0]?.uri;
+    // made smaller before it is kept and queued (#642)
+    const uri = await shrinkPicked(res);
+    if (!uri) return;
     madeHere(uri);
     toast.show(t("toast.photo"), addPhoto(v.id, kind, uri));
   };
@@ -80,9 +86,16 @@ export function FabSheet({ visible, onClose, ...p }: FabProps & { visible: boole
             <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
               <Icon name={a.icon} s={size.iconMd} color={c.ink} />
             </View>
-            <T v="body" w="semibold" style={{ flex: 1 }}>
-              {t(a.label)}
-            </T>
+            <View style={{ flex: 1 }}>
+              <T v="body" w="semibold">
+                {t(a.label)}
+              </T>
+              {a.hint ? (
+                <T v="caption" tone="mut">
+                  {t(a.hint)}
+                </T>
+              ) : null}
+            </View>
           </Press>
         ))}
       </View>
@@ -103,7 +116,9 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   const label = one ? t(one.label) : t("nav.create");
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
-  if (placement === "header")
+  if (placement === "header") {
+    // «Главная»'s quick actions are its main action: yellow, one on the screen (DS §5.3, audit №2 14.11, #1395); a list's «＋» is secondary
+    const acc = p.set === "home";
     return (
       <>
         <Press
@@ -113,16 +128,17 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
           accessibilityRole="button"
           accessibilityLabel={label}
           aria-haspopup={one ? undefined : "dialog"}
-          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
+          style={{ flexDirection: "row", alignItems: "center", gap: space[2], height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: acc ? c.acc : c.surf2, borderWidth: acc ? 0 : component.hairline, borderColor: c.bd }}
         >
-          <Icon name="plus" s={size.iconSm} color={c.ink} />
-          <T v="button" numberOfLines={1}>
+          <Icon name="plus" s={size.iconSm} color={acc ? c.onAcc : c.ink} />
+          <T v="button" numberOfLines={1} style={acc ? { color: c.onAcc } : undefined}>
             {label}
           </T>
         </Press>
         {sheet}
       </>
     );
+  }
   return (
     <>
       <View pointerEvents="box-none" style={{ position: "absolute", right, bottom, zIndex: z.fab }}>

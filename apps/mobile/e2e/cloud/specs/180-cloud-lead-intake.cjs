@@ -21,7 +21,7 @@ exports.run = async (h, { seed, admin }) => {
   await h.go("/company/intake");
   await p.getByTestId("intake-readiness").locator("visible=true").first().waitFor({ timeout: 15000 });
   await h.expectText(/Не принимает/, "no IP secret: the top line says the form takes nothing");
-  await h.expectText(/INTAKE_IP_SECRET/, "and names the secret");
+  await h.expectText(/Напишите в поддержку/, "and says what to do");
 
   // the form
   await p.getByRole("button", { name: "Создать форму", exact: true }).locator("visible=true").first().click();

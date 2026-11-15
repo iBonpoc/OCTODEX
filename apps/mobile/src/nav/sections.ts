@@ -171,6 +171,8 @@ export interface FabItem {
   id: FabId | `module.${string}`;
   label: DictKey;
   icon: IconKey;
+  /** one line under the label in the «＋» sheet: what this makes and when (#1094: the estimate and the job look alike) */
+  hint?: DictKey;
   /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
   href?: string;
   act?: "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call" | "message";
@@ -196,17 +198,17 @@ const q = (o: Record<string, string | undefined>) => {
   return s ? `?${s}` : "";
 };
 
-const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
-  lead: { label: "quick.lead", icon: "user" },
-  client: { label: "clients.new", icon: "users" },
-  job: { label: "job3.newJob", icon: "wrench" },
-  estimate: { label: "quick.estimate", icon: "invoice" },
-  expense: { label: "quick.receipt", icon: "wallet" },
-  visit: { label: "sch.title", icon: "calendar" },
+const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey; hint?: DictKey }> = {
+  lead: { label: "path.leadNew", icon: "user" },
+  client: { label: "path.clientNew", icon: "users" },
+  job: { label: "path.jobNew", icon: "wrench", hint: "path.jobHint" },
+  estimate: { label: "path.estimateNew", icon: "invoice", hint: "path.estimateHint" },
+  expense: { label: "path.expenseNew", icon: "wallet" },
+  visit: { label: "path.visitAdd", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },
   planEvent: { label: "plan5.addEvent", icon: "clock" },
   planTimeOff: { label: "plan5.addTimeOff", icon: "sun" },
-  photo: { label: "quick.photo", icon: "camera" },
+  photo: { label: "path.photoAdd", icon: "camera" },
   task: { label: "task.new", icon: "check" },
   call: { label: "w6.call.title", icon: "phone" },
   message: { label: "w6.msg.new", icon: "sms" },
@@ -229,15 +231,16 @@ const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): 
  * Property, «Record a call», «New message» come with waves 3–6. «Lead» from a client — when lead/new takes customerId.
  */
 export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
-  home: [lead, client, job, estimate(OFFICE), expense()],
+  home: [lead, client, estimate(OFFICE), expense(), job],
   // the schedule is the planners' (docs/specs/03 Р7): no «＋» on Plan for the technician
   // wave 5 (#187/#188): an event and a day off open the Plan's own EventSheet; the planners' only (Р7)
   plan: [
-    job,
     { ...lead, roles: OFFICE },
     { id: "planAdd", roles: PLANNERS, act: "planAdd" },
     { id: "planEvent", roles: PLANNERS, act: "planEvent" },
     { id: "planTimeOff", roles: PLANNERS, act: "planTimeOff" },
+    // «Работа без сметы» — the last line of every «＋» (main-path spec §2.2 п.4)
+    job,
   ],
   // wave 6-2: «Записать звонок» first — the sheet asks «к чему» itself
   calls: [{ id: "call", act: "call" }, lead, client],
@@ -246,7 +249,8 @@ export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
   // wave 6: the task form asks «к чему» itself (13 §2.4: nothing loose)
   tasks: [{ id: "task", act: "task" }],
   clients: [client],
-  client: [{ ...job, needs: (c) => !!c.customerId }, estimate(OFFICE, (c) => !!c.customerId)],
+  // #1094: the estimate first — it is what a client's card is opened for; the job is «when already agreed»
+  client: [estimate(OFFICE, (c) => !!c.customerId), { ...job, needs: (c) => !!c.customerId }],
   job: [
     { id: "visit", roles: PLANNERS, needs: (c) => !!c.jobId, href: (c) => `/job/schedule${q({ jobId: c.jobId })}` },
     estimate(OFFICE, (c) => !!c.customerId),

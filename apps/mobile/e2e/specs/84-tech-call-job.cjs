@@ -26,7 +26,7 @@ exports.run = async (h) => {
     return j.title;
   });
   await h.go("/client/c1");
-  await p.getByRole("button", { name: "Позвонить", exact: true }).first().click(); await p.waitForTimeout(500);
+  await p.getByTestId("client-call").locator("visible=true").first().click(); await p.waitForTimeout(500);
   const sheet = h.sheet();
   await h.expectText(/Записать звонок/, "after «Позвонить» — the call sheet");
   const places = p.getByTestId("call-places").locator("visible=true");

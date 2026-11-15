@@ -8,7 +8,7 @@
  * - an inside corner says «отбойник» (a splash guard by itself).
  * Finds things by id / testID; waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -51,39 +51,57 @@ exports.run = async (h) => {
   h.expect(Object.values(c0).sort().join() === "L,R", `one L and one R (${JSON.stringify(c0)})`);
   h.expect((await svg().locator('[id^="face-"]').count()) === 1, "a face line beside the run");
 
-  // a tap on a cap: both swap
+  // a tap on a cap picks; the second one opens its sheet, where the caps swap
   const firstCap = Object.keys(c0)[0];
-  await p.mouse.click(...(await centreOf(svg().locator(`[id="${firstCap}"]`))));
+  const capAt = await centreOf(svg().locator(`[id="${firstCap}"]`));
+  // a SINGLE tap on a cap only picks the gutter now (#1273): nothing flips on the spot
+  await p.mouse.click(...capAt);
+  await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // two frames: what the tap would have done is drawn
+  h.expect(JSON.stringify(await caps()) === JSON.stringify(c0), "a single tap on a cap flips nothing");
+  await pastDoubleTap(p); // the single tap above is a first tap on its own, not the first half of the next pair
+  // the second tap on the same cap: «Конец желоба» — a row there swaps the caps' side (the whole line's face)
+  await p.mouse.click(...capAt);
+  await p.mouse.click(...capAt);
+  await tid("end-sheet").waitFor({ timeout: 5000 });
+  await tid("end-flip").click();
   await waitFor(async () => {
     const c1 = await caps();
     return Object.keys(c0).every((k) => c1[k] && c1[k] !== c0[k]);
-  }, "a tap on a cap: both caps swap L ↔ R");
+  }, "«L ↔ R» in the end's sheet: both caps swap");
+  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
+  await waitFor(async () => (await tid("end-sheet").count()) === 0, "the end sheet closes");
   await h.shot("caps");
 
   // a second gutter from the right end, turning down: a corner, two caps left (the free ends)
   await stroke([x1, y0], [x1, y1]);
   await waitFor(async () => (await svg().locator('[id^="c:"]').count()) === 1, "a corner mark");
   await waitFor(async () => Object.keys(await caps()).length === 2, "the caps where the runs meet are gone");
-  const kindChip = async () => (await chips()).find((t) => /^(наруж\.|внутр\.)/.test(t)) || "";
-  await waitFor(async () => (await kindChip()) !== "", "the corner's chip says its kind");
-  const k0 = await kindChip();
+  // #1275: the chip says only the angle («90°»); the kind is read from the corner's sheet
+  const angleChip = async () => (await chips()).find((t) => /^\d+°$/.test(t)) || "";
+  await waitFor(async () => (await angleChip()) !== "", "the corner's chip says its angle");
+  const openCorner = async () => {
+    // a single tap picks; the sheet is the second tap's (#1273)
+    await p.mouse.click(x1, y0);
+    await p.mouse.click(x1, y0);
+    await tid("corner-sheet").waitFor({ timeout: 5000 });
+    return (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
+  };
+  const closeCorner = async () => {
+    await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
+    await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
+  };
   const capsBefore = await caps();
 
   // a tap on the corner → «Угол» → the other kind
-  await p.mouse.click(x1, y0);
-  await tid("corner-sheet").waitFor({ timeout: 5000 });
-  const other = /^наруж/.test(k0) ? "внутренний" : "наружный";
+  const k0 = await openCorner();
+  const other = k0 === "наружный" ? "внутренний" : "наружный";
   await tid("corner-kind").getByRole("radio", { name: other, exact: true }).click();
   // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
   await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === other), `${other} picked`);
-  await p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
-  await waitFor(async () => (await tid("corner-sheet").count()) === 0, "the sheet closes");
-  await waitFor(async () => {
-    const k1 = await kindChip();
-    return k1 !== "" && k1.split(" ")[0] !== k0.split(" ")[0];
-  }, `the corner is now ${other}`);
-  const k1 = await kindChip();
-  h.expect(/^внутр\./.test(k1) === /отбойник/.test(k1), `an inside corner — with a splash guard, an outside one — without (${k1})`);
+  await closeCorner();
+  h.expect((await angleChip()) !== "", "the angle chip stays");
+  h.expect((await openCorner()) === other, `the corner is now ${other} (read back from its sheet)`);
+  await closeCorner();
   const capsAfter = await caps();
   h.expect(Object.keys(capsBefore).every((k) => capsAfter[k] && capsAfter[k] !== capsBefore[k]), "the caps swap with the corner");
   await h.shot("corner");

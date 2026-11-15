@@ -21,6 +21,12 @@ export interface DrawnRun {
     cornerMethod?: { a?: CornerChoice["method"]; b?: CornerChoice["method"] };
     /** the splash guard of the inside corner at its start (a) / end (b) taken off (founder 09.11: «не всегда нужен») */
     noSplash?: { a?: true; b?: true };
+    /** the join at its start (a) / end (b) was split by the user («Разъединить угол», #933): two end caps, no corner — both runs carry it; the lengths are not touched */
+    openEnds?: { a?: true; b?: true };
+    /** the program puts downspouts on this gutter's chain by itself (#1246): written where an old phone copies it whole (rule 16); a drawing without it from before the feature gets none by an edit */
+    dsAuto?: true;
+    /** how many downspouts the program had put on this gutter the user took off by hand (#1246): the chain wants that many less (a count, not a ban: one removal never removes the rest) */
+    dsAutoOff?: number;
   };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
@@ -32,6 +38,8 @@ export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
   runId: string;
   /** distance from the run's start, inches */
   atIn: number;
+  /** put by the program (spec 33-gutters-ds-auto, #1246), not by hand: it is recounted when the chain changes; moved or edited by hand — it is yours */
+  auto?: true;
 }
 
 export interface CornerChoice {
@@ -45,6 +53,9 @@ export interface Drawing {
   /** per corner id (`c:<runA>:<runB>`): how to make it; default from company settings */
   corners?: Record<string, CornerChoice>;
 }
+
+/** this end of the run was split from its neighbour (openEnds): it is an end cap even where another gutter's end stands */
+export const isOpenEnd = (r: Pick<DrawnRun, "attrs">, e: 0 | 1) => !!r.attrs.openEnds?.[e ? "b" : "a"];
 
 export const SNAP_POINT_IN = 18; // 1.5 ft
 export const SNAP_ANGLE_DEG = 7;
@@ -219,6 +230,74 @@ export interface FoundCorner {
 }
 
 /**
+ * Two gutters of one storey that share BOTH ends (one lies exactly on the other, in either direction) — a duplicate (#1256: a line drawn
+ * over a gutter, from its a to its b, made a second gutter on it; the material and the corners were counted twice). Within `tolIn`.
+ */
+export function sameEnds(a: Pick<DrawnRun, "a" | "b" | "attrs">, b: Pick<DrawnRun, "a" | "b" | "attrs">, tolIn = 1): boolean {
+  if (!sameStory(a, b)) return false;
+  return (dist(a.a, b.a) <= tolIn && dist(a.b, b.b) <= tolIn) || (dist(a.a, b.b) <= tolIn && dist(a.b, b.a) <= tolIn);
+}
+
+/** a line from `a` to `b` on `story` would lie exactly on a gutter that is already there */
+export const wouldDuplicate = (d: Pick<Drawing, "runs">, a: P, b: P, story: number, tolIn = 1): DrawnRun | undefined =>
+  d.runs.find((r) => sameEnds(r, { a, b, attrs: { story } as DrawnRun["attrs"] }, tolIn));
+
+/**
+ * A line `a`→`b` on `story` lies along a gutter that is already there for a stretch (#1318): both its points on that gutter's line
+ * (within `tolIn` across) and the stretches overlap by more than `minIn` — the material would be counted twice. Touching at a point
+ * (a straight join, a gutter growing on from its end) is no overlap. The gutter it lies on, else undefined.
+ */
+export function overlapsRun(d: Pick<Drawing, "runs">, a: P, b: P, story: number, tolIn = 1, minIn = 2): DrawnRun | undefined {
+  return d.runs.find((r) => {
+    if (!sameStory(r, { attrs: { story } as DrawnRun["attrs"] })) return false;
+    const L = dist(r.a, r.b);
+    if (L < 1e-6) return false;
+    const u: P = [(r.b[0] - r.a[0]) / L, (r.b[1] - r.a[1]) / L];
+    const along = (p: P) => (p[0] - r.a[0]) * u[0] + (p[1] - r.a[1]) * u[1];
+    const across = (p: P) => Math.abs(-(p[0] - r.a[0]) * u[1] + (p[1] - r.a[1]) * u[0]);
+    if (across(a) > tolIn || across(b) > tolIn) return false;
+    const lo = Math.max(0, Math.min(along(a), along(b))), hi = Math.min(L, Math.max(along(a), along(b)));
+    return hi - lo > minIn;
+  });
+}
+
+/**
+ * the groups of gutters that lie on each other: none in a sound drawing, but an old one may have them. The one kept is the
+ * one with the smallest id — NOT the first in the array: a saved row moves to the end of it (`putElement`) and a sync reorders it,
+ * so «the first» would change under the user's hands and an edit of the kept gutter would be dropped from the material (#1314 review)
+ */
+export function duplicateRuns(d: Pick<Drawing, "runs">, tolIn = 1): string[][] {
+  const out: string[][] = [];
+  const seen = new Set<string>();
+  d.runs.forEach((r, i) => {
+    if (seen.has(r.id)) return;
+    const same = d.runs.filter((o, j) => j > i && !seen.has(o.id) && sameEnds(r, o, tolIn));
+    if (!same.length) return;
+    const ids = [r.id, ...same.map((o) => o.id)].sort();
+    ids.forEach((id) => seen.add(id));
+    out.push(ids);
+  });
+  return out;
+}
+
+/** the drawing without the later gutters of every duplicate group; their downspouts move to the one kept (the distance from the other end if it runs the other way) */
+export function withoutDuplicates<D extends Pick<Drawing, "runs"> & { downspouts?: DrawnDownspout[] }>(d: D): D {
+  const groups = duplicateRuns(d);
+  if (!groups.length) return d;
+  const keepOf = new Map<string, string>();
+  for (const g of groups) for (const id of g.slice(1)) keepOf.set(id, g[0]!);
+  const byId = new Map(d.runs.map((r) => [r.id, r]));
+  const downspouts = (d.downspouts ?? []).map((s) => {
+    const k = keepOf.get(s.runId);
+    if (!k) return s;
+    const from = byId.get(s.runId)!, to = byId.get(k)!;
+    const reversed = dist(from.a, to.b) <= 1 && dist(from.b, to.a) <= 1;
+    return { ...s, runId: k, atIn: reversed ? Math.max(0, runLengthIn(to) - s.atIn) : s.atIn };
+  });
+  return { ...d, runs: d.runs.filter((r) => !keepOf.has(r.id)), downspouts };
+}
+
+/**
  * Corners from topology: two run ends at the same point (after snapping).
  * Walk the first run towards the meeting point and continue along the second: a turn towards the house is an
  * outside corner, away from the house an inside corner; a turn below 70° (between 20° and 70°) is a bay corner.
@@ -233,10 +312,12 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
       const A = rs[i]!, B = rs[j]!;
       // gutters on different storeys never meet (founder 09.11: a 2nd and a 3rd storey were joined into a corner)
       if (!sameStory(A, B)) continue;
+      if (sameEnds(A, B, tolIn)) continue; // one lies on the other (a duplicate): no corner — the pair would be found twice with one id (#1256)
       for (const ea of [0, 1] as const) {
         for (const eb of [0, 1] as const) {
           const pa = ea ? A.b : A.a, pb = eb ? B.b : B.a;
           if (dist(pa, pb) > tolIn) continue;
+          if (isOpenEnd(A, ea) && isOpenEnd(B, eb)) continue; // split by the user: no corner
           // direction into the point along A, then out of the point along B
           const vin: P = ea ? sub(A.b, A.a) : sub(A.a, A.b);
           const vout: P = eb ? sub(B.a, B.b) : sub(B.b, B.a);
@@ -256,8 +337,8 @@ export function findCorners(d: Pick<Drawing, "runs">, tolIn = 1): FoundCorner[] 
   return out;
 }
 
-/** a length to the nearest 1/8″ (founder 08.11: «8′ 9¼″») */
-export const eighth = (n: number) => Math.round(n * 8) / 8;
+/** a length to the nearest 1/16″ (founder 11.11; 08.11: «8′ 9¼″») */
+export const sixteenth = (n: number) => Math.round(n * 16) / 16;
 
 /** how far the gutter's face stands from its back (the line drawn along the fascia): its size, 5″ → 5″ */
 export const faceOffsetIn = (r: Pick<DrawnRun, "attrs">) => {
@@ -266,9 +347,16 @@ export const faceOffsetIn = (r: Pick<DrawnRun, "attrs">) => {
 };
 
 /**
+ * The angle each piece is cut at a corner (the mitre; #1275): half the turn — (180° − the angle between the walls) / 2: 45° for a right angle,
+ * 22½° for 135°. The angle is taken at the BACK wall (the lines at the wall; the face runs parallel to them, so the angle is the same, only
+ * the lengths differ — `cornerCut`).
+ */
+export const cutAngleDeg = (turnDeg: number): number => turnDeg / 2;
+
+/**
  * The cut of a corner (founder 08.11): for each of its runs, the length along the back (the wall) and along the face.
  * At a corner end the face is longer (outside) or shorter (inside) by offset · tan(turn / 2) — 90° → the offset itself;
- * a cap end adds nothing. Both ends of a run count (a run between two corners). To the nearest 1/8″.
+ * a cap end adds nothing. Both ends of a run count (a run between two corners). To the nearest 1/16″.
  */
 export interface CornerCutRun { id: string; backIn: number; frontIn: number; offsetIn: number }
 export function cornerCut(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">, all: FoundCorner[] = findCorners(d)): { angleDeg: number; runs: CornerCutRun[] } {
@@ -283,7 +371,7 @@ export function cornerCut(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">
       delta += c.outward ? k : -k;
     }
     const back = runLengthIn(r);
-    return { id, backIn: eighth(back), frontIn: eighth(back + delta), offsetIn: off };
+    return { id, backIn: sixteenth(back), frontIn: sixteenth(back + delta), offsetIn: off };
   });
   return { angleDeg: 180 - (here?.turnDeg ?? 90), runs };
 }
@@ -295,9 +383,13 @@ export function runEnds(d: Pick<Drawing, "runs">, corners: FoundCorner[], tolIn 
     res[r.id] = ([0, 1] as const).map((e): RunEnd => {
       const corner = corners.find((c) => c.runs.some((x) => x.id === r.id && x.end === e));
       if (corner) return { kind: "corner", cornerId: corner.id };
+      // «Без заглушки» (#1273) is the person's explicit choice and comes first: also at an end freed from a corner (`openEnds`, #933) —
+      // otherwise the sheet says «no cap» while a cap is drawn and counted (review of #1366)
+      if (r.noCap?.[e]) return { kind: "join" };
+      if (isOpenEnd(r, e)) return { kind: "cap" };
       const p = e ? r.b : r.a;
       const joined = d.runs.some((o) => o.id !== r.id && sameStory(o, r) && (dist(o.a, p) <= tolIn || dist(o.b, p) <= tolIn));
-      if (joined || r.noCap?.[e]) return { kind: "join" };
+      if (joined) return { kind: "join" };
       return { kind: "cap" };
     }) as [RunEnd, RunEnd];
   }
@@ -339,13 +431,15 @@ export function splashOff(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">
   return f.runs.every((end) => !!d.runs.find((r) => r.id === end.id)?.attrs.noSplash?.[end.end ? "b" : "a"]);
 }
 
-export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
+export function toMeasurement(d0: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
+  // an old drawing may have a gutter lying on another: it is counted once (#1256)
+  const d = withoutDuplicates(d0);
   const side = houseSides(d);
   const found = findCorners(d);
   const ends = runEnds(d, found);
   const runs: MeasuredRun[] = d.runs.map((r) => {
     // the corner methods are the drawing's, not the engine's run input
-    const { cornerMethod: _cm, noSplash: _ns, ...attrs } = r.attrs;
+    const { cornerMethod: _cm, noSplash: _ns, openEnds: _oe, dsAuto: _da, dsAutoOff: _dao, ...attrs } = r.attrs;
     return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: side(r), ends: ends[r.id]! };
   });
   const byId = new Map(d.runs.map((r) => [r.id, r]));
@@ -358,7 +452,7 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
     const splashGuard = choice.splashGuard ?? (f.kind === "in" && !splashOff(d, f) ? true : undefined);
     return { id: f.id, kind: f.kind, method: choice.method, ...(splashGuard !== undefined ? { splashGuard } : {}), profile, size, material, gauge, finish, color, story };
   });
-  const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);
+  const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, auto: _auto, ...x }) => x);
   return { runs, corners, downspouts };
 }
 

@@ -57,14 +57,13 @@ exports.run = async (h) => {
   const after = await p.getByLabel(/расписывается|signs here/i).last().locator("path").first().getAttribute("d");
   h.expect(after === fieldD, "«Отмена» keeps the signature in the field");
 
-  // the phone turned to landscape: the pad is upright
+  // the phone turned to landscape while the full screen is open: the pad is upright. (Opened first, then turned: in an
+  // 844-wide window the field itself is wide enough and has no «Развернуть» — the old order skipped this check silently, #800.)
+  await expand.last().click();
+  await p.locator('[data-testid="sig-full"]').first().waitFor({ timeout: 5000 });
   await p.setViewportSize({ width: 844, height: 390 });
   await p.waitForTimeout(300);
-  await expand.last().click().catch(() => {});
-  await p.waitForTimeout(400);
-  if ((await expand.count()) > 0 && (await p.locator('[data-testid="sig-full"]').count()) > 0) {
-    h.expect((await p.locator('[data-testid="sig-full-upright"]').count()) === 1, "landscape window: the canvas is upright");
-    await h.shot("full-landscape");
-  }
+  h.expect((await p.locator('[data-testid="sig-full-upright"]').count()) === 1, "landscape window: the canvas is upright");
+  await h.shot("full-landscape");
   await p.setViewportSize({ width: 390, height: 844 });
 };

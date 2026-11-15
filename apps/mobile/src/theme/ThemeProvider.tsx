@@ -34,6 +34,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
+/** a theme fixed by the system's scheme, before the stored one is read (the boot layer, DS §18.2 «Запуск», #1046):
+ *  the ui works in it, the choice cannot be changed there */
+export function StaticThemeProvider({ name, children }: { name: ThemeName; children: ReactNode }) {
+  const value = useMemo<ThemeCtx>(() => ({ name, c: themes[name], pref: "system", setPref: () => {}, toggle: () => {} }), [name]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
 export function useTheme(): ThemeCtx {
   const v = useContext(Ctx);
   if (!v) throw new Error("useTheme outside ThemeProvider");

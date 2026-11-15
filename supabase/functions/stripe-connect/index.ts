@@ -8,7 +8,8 @@ import { handleConnect, type StripeAnswer, type Target } from "./handler.ts";
 const URL_ = Deno.env.get("SUPABASE_URL")!;
 const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const KEY = Deno.env.get("STRIPE_SECRET_KEY") ?? "";
-const APP_URL = "https://octodex.expo.app";
+// the app's site: Stripe's onboarding comes back here (the same address as WEB_APP_URL in the app, #656)
+const APP_URL = "https://gorix.expo.app";
 // one API version for every call: what the code reads does not change under it
 const STRIPE_VERSION = "2024-06-20";
 const admin = createClient(URL_, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });

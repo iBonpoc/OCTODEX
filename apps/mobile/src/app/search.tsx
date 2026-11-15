@@ -30,11 +30,11 @@ const GROUP: Record<SearchGroup, { label: DictKey; icon: IconKey }> = {
  */
 export default function Search() {
   const { t } = useI18n();
-  const { db, role } = useStore();
+  const { db, role, mode } = useStore();
   const params = useLocalSearchParams<{ q?: string }>();
   const [q, setQ] = useState(params.q ?? "");
   const [open, setOpen] = useState<Partial<Record<SearchGroup, boolean>>>({});
-  const res = useMemo(() => searchAll(db, q, role), [db, q, role]);
+  const res = useMemo(() => searchAll(db, q, role, mode), [db, q, role, mode]);
   const total = hitCount(res);
   // the cursor in the field on arrival (web: after the screen put the focus on its title)
   useFocusEffect(

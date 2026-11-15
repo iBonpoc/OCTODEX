@@ -8,18 +8,20 @@
  * The button: no lines of it anywhere → «Смета»; the measurement changed since (status draft) → «Обновить смета»;
  * nothing changed (ready) → «Открыть смету». No lead and no property → «Сделать заявкой» first (an estimate needs a client).
  */
-import { ENGINE_VERSION, type PartQty } from "@octo/estimating-engine";
+import { ENGINE_VERSION, GUTTER_PARTS_VERSION, type PartQty } from "@octo/estimating-engine";
 import type { DocAttachPage } from "@/features/docPages";
 import { pagesProblem } from "@/features/docPages";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { estimateTitle, newDoc, uid } from "@/features/estimateDoc";
 import { moduleActive, type ModuleEstimateStore } from "../registry";
+import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
 import type { DocLang } from "@/i18n/translate";
-import { gutterData, K, KEY, ownFields, putMeasurement, withGutterData } from "./data";
+import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData } from "./data";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 import type { CatalogItem } from "@/data/types";
+import { type GuardedUndo, NO_UNDO } from "@/data/undo";
 
 const SIGNED = new Set<Estimate["status"]>(["awaiting_countersign", "approved"]);
 
@@ -60,6 +62,30 @@ export function staleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: E
   );
 }
 
+/** `was` is an older parts rule than `now` (GUTTER_PARTS_VERSION, not the core's ENGINE_VERSION: a core change must not mark every estimate) (dotted numbers: 0.1.3 < 0.1.10 < 0.2.0); none or unreadable — not older (an old line has no version: nobody knows, nothing is said) */
+export function engineOlder(was: unknown, now: string = GUTTER_PARTS_VERSION): boolean {
+  if (typeof was !== "string" || !/^\d+(\.\d+)*$/.test(was)) return false;
+  const a = was.split(".").map(Number), b = now.split(".").map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0, y = b[i] ?? 0;
+    if (x !== y) return x < y;
+  }
+  return false;
+}
+
+/** the measurement's estimate was computed by an older engine (#1165): any line of this measurement carries an older version */
+export function engineChangedFor(e: Estimate | undefined, measurementId: string, now: string = GUTTER_PARTS_VERSION): boolean {
+  return !!e?.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, measurementId) && engineOlder(sourceOf(l)?.engineVersion, now)));
+}
+
+/**
+ * #1165: the measurements of this estimate whose lines the engine computed in an older version than now — the estimate is still
+ * theirs (no newer one took over). A hint «расчёт изменился — обновите»; a signed estimate is only shown the hint, never changed.
+ */
+export function engineStaleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: Estimate, now: string = GUTTER_PARTS_VERSION): MeasurementRow[] {
+  return gutterData(db).measurements.filter((m) => hasLinesOf(e, m.id) && estimateOfMeasurement(db, m.id)?.id === e.id && engineChangedFor(e, m.id, now));
+}
+
 /** the client's language for the lines of a measurement's estimate (rule 7): the lead's, else the property's client's */
 export function clientLangOf(db: DB, m: Pick<MeasurementRow, "leadId" | "propertyId">): DocLang {
   const prop = m.propertyId ? db.properties.find((p) => p.id === m.propertyId) : undefined;
@@ -79,7 +105,8 @@ export function estimateAction(db: Pick<DB, "estimates">, m: Pick<MeasurementRow
   if (!m || !hasElements) return { kind: "none" };
   const e = estimateOfMeasurement(db, m.id);
   if (e && SIGNED.has(e.status)) return { kind: "open", estimateId: e.id, signed: true };
-  if (e) return m.status === "ready" ? { kind: "open", estimateId: e.id } : { kind: "update", estimateId: e.id };
+  // an estimate the engine computed in an older version is updated too, though the drawing is as it was (#1165)
+  if (e) return m.status === "ready" && !engineChangedFor(e, m.id) ? { kind: "open", estimateId: e.id } : { kind: "update", estimateId: e.id };
   if (!m.leadId && !m.propertyId) return { kind: "needLead" };
   return { kind: "make" };
 }
@@ -142,9 +169,9 @@ export interface MakeInput {
 }
 
 export type MakeResult =
-  | { ok: true; estimateId: string; undo: () => void; updated: boolean }
+  | { ok: true; estimateId: string; undo: GuardedUndo; updated: boolean }
   /** off: the module is not active (О2); signed: never changed; noClient: no lead or property this person can make an estimate for */
-  | { ok: false; reason: "off" | "signed" | "noClient" };
+  | { ok: false; reason: "off" | "signed" | "noClient" | "notHere" };
 
 /**
  * «Смета» / «Обновить смету»: a revision of the measurement (the server numbers it, T98), the measurement is ready, and
@@ -157,17 +184,25 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   if (!moduleActive(db.company, KEY)) return { ok: false, reason: "off" };
   const e = estimateOfMeasurement(db, x.m.id);
   if (e && SIGNED.has(e.status)) return { ok: false, reason: "signed" };
+  // #1138 (review of #1169 Б1): a NEW estimate only where the person may make one (a tech: a property he works at, the
+  // server's estimates_insert) — asked before anything is written: no revision, no «ready», no client from the lead, no
+  // false «Смета составлена». The property it would be at: the lead's (or its client's), else the measurement's own.
+  if (!e && store.mayMakeEstimateAt) {
+    const lead = x.m.leadId ? db.leads.find((l) => l.id === x.m.leadId) : undefined;
+    const at = lead ? leadEstimatePropertyId(db, lead) : x.m.propertyId ?? undefined;
+    if (!store.mayMakeEstimateAt(at)) return { ok: false, reason: "notHere" };
+  }
   // the client and the property: the estimate's own, else the lead's (made from it when it has none, S3), else the
   // property's — also when the lead is not seen here (a tech on his visit's property; review M8b №6)
   let target: { customerId: string; propertyId: string; undo: () => void; leadId?: string } | null = null;
-  if (e) target = { customerId: e.customerId, propertyId: e.propertyId, undo: () => {}, ...(e.leadId ? { leadId: e.leadId } : {}) };
+  if (e) target = { customerId: e.customerId, propertyId: e.propertyId, undo: NO_UNDO, ...(e.leadId ? { leadId: e.leadId } : {}) };
   if (!target && x.m.leadId && db.leads.some((l) => l.id === x.m.leadId)) {
     const t = store.leadEstimateTarget(x.m.leadId);
     if (t) target = { ...t, leadId: x.m.leadId };
   }
   if (!target && x.m.propertyId) {
     const p = db.properties.find((q) => q.id === x.m.propertyId);
-    if (p) target = { customerId: p.customerId, propertyId: p.id, undo: () => {} };
+    if (p) target = { customerId: p.customerId, propertyId: p.id, undo: NO_UNDO };
   }
   if (!target) return { ok: false, reason: "noClient" };
 
@@ -187,7 +222,7 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
   const row = { ...ownFields(was), status: "ready" as const };
   const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
-  const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))());
+  const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))(), GUTTER_PARTS_VERSION);
   const withLines = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
   // the drawing of this revision goes with the estimate (S6g): the client sees on /p/ and in the PDF what it was counted from
   const doc = x.page ? withMeasurementPage(withLines, x.m.id, x.page) : withLines;
@@ -205,11 +240,8 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
     ok: true,
     estimateId,
     updated: !!e,
-    undo: () => {
-      undoSave();
-      // the measurement is a draft again: «Смета» stays in reach (the revision itself is history, it stays)
-      if (typeof undoReady === "function") (undoReady as () => void)();
-      t.undo();
-    },
+    // the estimate, the measurement a draft again («Смета» stays in reach; the revision itself is history, it stays) and
+    // the lead's new client: all of them go back or none (DS §15.2)
+    undo: undoAll(store, [t.undo, undoReady, undoSave]),
   };
 }

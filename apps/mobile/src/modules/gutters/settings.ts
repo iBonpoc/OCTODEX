@@ -19,6 +19,7 @@ import {
   WOOD_SCREW,
   WOOD_SCREWS,
 } from "@octo/estimating-engine";
+import { isLenFormat, type LenFormat } from "./canvas/format";
 import { COLORS, DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, wallValue, WALLS, type Wall } from "./canvas/attrs";
 
 export type DsShape = (typeof DS_SHAPES)[number];
@@ -68,6 +69,10 @@ export interface Choices {
   wallKitByWall: Record<DsShape, Record<Wall, string>>;
   run: RunDefaults;
   ds: DsDefaults;
+  /** how every length is shown (#1092): feet-inches by default */
+  lenFormat: LenFormat;
+  /** how far the roof stands out past the wall, ft (#932): for the roof / 3D view; kept and shown, the gutter's cut does not use it yet */
+  roofOverhangFt: number;
   /** the company chose a downspout size itself (the key is stored): it stays on a 6″ gutter too (#767) */
   dsSizeSet: boolean;
 }
@@ -163,6 +168,14 @@ function stock(d: Record<string, unknown>, offer: Offer, palette: string[], fall
   return { material, ...(gauge ? { gauge } : {}), finish, ...(color ? { color } : {}) };
 }
 
+/** the roof's overhang past the wall, feet (#932): half-foot steps up to 3, then whole feet to 6; 2 ft until the company says otherwise */
+export const OVERHANG_FT = [0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6] as const;
+export const DEFAULT_OVERHANG_FT = 2;
+export const readOverhangFt = (v: unknown): number => (typeof v === "number" && (OVERHANG_FT as readonly number[]).includes(v) ? v : DEFAULT_OVERHANG_FT);
+
+/** the company's format of lengths (#1092): a stored unknown value is feet-inches */
+export const readLenFormat = (v: unknown): LenFormat => (isLenFormat(v) ? v : "ftin");
+
 /** the settings as the canvas uses them: always complete and valid, whatever was stored */
 export function choicesFor(raw: unknown): Choices {
   const r = obj(raw);
@@ -221,7 +234,7 @@ export function choicesFor(raw: unknown): Choices {
     bottom: one(dr.bottom, offer.bottoms, "extension"),
     wall: one(dr.wall, WALLS, "wood"),
   };
-  return { offer, palette, hangerByMount, wallKitByWall, run, ds, dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
+  return { offer, palette, hangerByMount, wallKitByWall, run, ds, lenFormat: readLenFormat(r.lenFormat), roofOverhangFt: readOverhangFt(r.roofOverhangFt), dsSizeSet: dr.size !== undefined && offer.dsSizes[shape].includes(dr.size as never) };
 }
 
 /** the module's choices: what the canvas offered before the company's settings (M5c) */
@@ -307,11 +320,18 @@ interface NumRule { min: number; max: number; def: number; step: number }
 export const RULE_NUMS = {
   storyFt: { min: 8, max: 20, def: 10, step: 1 },
   hangerSpacingIn: { min: 12, max: 36, def: 24, step: 2 },
-  wastePct: { min: 0, max: 100, def: 5, step: 1 },
+  /** a fixed waste, feet, for EVERY gutter stock (#1355, founder 14.11: «на каждый вид желоба берём 10 фит запас»); 0 — «без запаса» */
+  wasteFt: { min: 0, max: 100, def: 10, step: 1 },
+  /** an INSIDE (and a bay) field-cut corner takes this much gutter, inches. Stays 0–12 until rule 16 step 2: a phone with the old app reads a value above 12 as «out of range» and takes 6 — two devices of one company would buy differently (review of #1381) */
   cutCornerIn: { min: 0, max: 12, def: 6, step: 1 },
+  /** an OUTSIDE field-cut corner (#1355, founder 13.11: «для наружного 14 инчей. Для внутреннего 6 инчей»): 14 does not fit 0–12, hence 0–24 here, in a new field the old app does not read */
+  cutCornerOutIn: { min: 0, max: 24, def: 14, step: 1 },
   runPerDsFt: { min: 30, max: 50, def: 40, step: 1 },
   expansionFt: { min: 40, max: 50, def: 50, step: 1 },
   dsExtensionIn: { min: 0, max: 60, def: 0, step: 6 },
+  /** an automatic downspout stands this far from the end of its chain, inches (#1246); 3 ft by default (#1473, founder 14.11: «не на
+   *  одном футе от края… а на 3 фута»); a company that saved its own value keeps it (read from its settings) */
+  dsEdgeIn: { min: 6, max: 72, def: 36, step: 6 },
 } as const satisfies Record<string, NumRule>;
 export const USE_NUMS = {
   rivets: { min: 0, max: 16, def: 0, step: 1 },
@@ -325,8 +345,9 @@ export interface Rules {
   storyFt: number;
   hangerSpacingIn: number;
   hangerExtra: boolean;
-  wastePct: number;
+  wasteFt: number;
   cutCornerIn: number;
+  cutCornerOutIn: number;
   runPerDsFt: number;
   expansionFt: number;
   expansionPart: boolean;
@@ -334,6 +355,9 @@ export interface Rules {
   dsStickFt: (typeof STICK_FT)[number];
   dsShareOffcuts: boolean;
   dsExtensionIn: number;
+  /** the program puts a downspout on every chain by itself (#1246); one per `runPerDsFt` of chain, `dsEdgeIn` from the end */
+  dsAuto: boolean;
+  dsEdgeIn: number;
   seamless: boolean;
   corner: CornerMethod;
 }
@@ -367,8 +391,10 @@ export function readRules(raw: unknown): Rules {
     storyFt: num(r.storyFt, RULE_NUMS.storyFt),
     hangerSpacingIn: num(r.hangerSpacingIn, RULE_NUMS.hangerSpacingIn),
     hangerExtra: bool(r.hangerExtra, d.hangerAtEnds),
-    wastePct: num(r.wastePct, RULE_NUMS.wastePct),
+    // a company that chose «без запаса» before (the old `wastePct: 0`) keeps it; any other old percent is not read (rule 16): it gets the default 10 ft
+    wasteFt: r.wasteFt === undefined && r.wastePct === 0 ? 0 : num(r.wasteFt, RULE_NUMS.wasteFt),
     cutCornerIn: num(r.cutCornerIn, RULE_NUMS.cutCornerIn),
+    cutCornerOutIn: num(r.cutCornerOutIn, RULE_NUMS.cutCornerOutIn),
     runPerDsFt: num(r.runPerDsFt, RULE_NUMS.runPerDsFt),
     expansionFt: num(r.expansionFt, RULE_NUMS.expansionFt),
     expansionPart: bool(r.expansionPart, d.expansionJointPart),
@@ -376,6 +402,8 @@ export function readRules(raw: unknown): Rules {
     dsStickFt: (STICK_FT as readonly unknown[]).includes(r.dsStickFt) ? (r.dsStickFt as Rules["dsStickFt"]) : 10,
     dsShareOffcuts: bool(r.dsShareOffcuts, d.dsShareOffcuts),
     dsExtensionIn: num(r.dsExtensionIn, RULE_NUMS.dsExtensionIn),
+    dsAuto: bool(r.dsAuto, true),
+    dsEdgeIn: num(r.dsEdgeIn, RULE_NUMS.dsEdgeIn),
     seamless: bool(r.seamless, d.seamless),
     corner: one(r.corner, CORNER_METHODS, "cut"),
   };
@@ -422,8 +450,10 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     storyHeightIn: r.storyFt * 12,
     hangerSpacingIn: Object.fromEntries(Object.keys(DEFAULT_HANGER_KITS).map((id) => [id, r.hangerSpacingIn])),
     hangerAtEnds: r.hangerExtra,
-    wastePct: (r.wastePct / 100).toFixed(2),
+    // a fixed length for every gutter stock; the old percent (`wastePct`) stays in the saved data (rule 16) and is not read: «10 ft, можно менять» is the one rule (founder 14.11)
+    wasteFt: r.wasteFt,
     cutCornerAllowanceIn: r.cutCornerIn,
+    cutCornerOutAllowanceIn: r.cutCornerOutIn,
     maxRunPerDownspoutIn: r.runPerDsFt * 12,
     expansionJointIn: r.expansionFt * 12,
     expansionJointPart: r.expansionPart,

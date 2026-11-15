@@ -49,8 +49,9 @@ exports.run = async (h) => {
   await p.getByTestId("po-qty-0").locator("visible=true").first().locator("input").first().fill("13");
   // two quick taps are one send (review SUP2-б №2)
   const send = p.getByTestId("po-send").locator("visible=true").first().locator('[role="button"]').first();
+  const sendBox = await send.boundingBox();
   await send.click();
-  await send.click({ timeout: 1000 }).catch(() => {});
+  await p.mouse.click(sendBox.x + sendBox.width / 2, sendBox.y + sendBox.height / 2); // the second quick tap on the same spot
   db = await dbWhen((d) => d.purchaseOrders.find((o) => o.id === ord.id)?.status === "sent");
   const sent = db.purchaseOrders.find((o) => o.id === ord.id);
   h.expect(sent.revision === 1 && sent.supplierName === "Home Depot" && sent.lines.length === 3 && sent.lines.some((l) => l.qty === "13"), "sent: revision 1, the supplier's snapshot, the lines as edited");

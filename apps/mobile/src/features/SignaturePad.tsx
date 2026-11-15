@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import { PanResponder, Platform, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { radius, space, component } from "@octo/design-tokens";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton } from "@/ui/controls";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -13,7 +13,7 @@ import { useHideTabBar } from "@/nav/tabBarHide";
 import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
-export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string }) {
+export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent = "visit.signConsent" }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string; /** the line under the pad — what the signature confirms: the visit's completed work by default; the estimate — its own; null — none (#1104 п.5) */ consent?: DictKey | null }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [d, setD] = useState("");
@@ -64,7 +64,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
         style={{
           height: component.mediaH,
           borderRadius: radius.inner,
-          borderWidth: 1,
+          borderWidth: component.hairline,
           borderStyle: "dashed",
           borderColor: c.bd,
           backgroundColor: c.in,
@@ -73,11 +73,12 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
           ...(Platform.OS === "web" ? ({ touchAction: "none" } as object) : null),
         }}
         accessibilityLabel={(label ?? t("visit.signHere"))}
+        testID="signature-pad"
         {...pan.panHandlers}
       >
         {!d ? (
-          <View style={{ position: "absolute", left: 0, right: 0, top: h / 2 - 10, alignItems: "center" }} pointerEvents="none">
-            <T v="caption" tone="mut">
+          <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, alignItems: "center", justifyContent: "center", paddingHorizontal: space[4] }} pointerEvents="none">
+            <T v="caption" tone="mut" center>
               {(label ?? t("visit.signHere"))}
             </T>
           </View>
@@ -86,12 +87,16 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
           <Path d={d} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </View>
-      <T v="caption" tone="mut">
-        {t("visit.signConsent")}
-      </T>
+      {consent ? (
+        <T v="caption" tone="mut">
+          {t(consent)}
+        </T>
+      ) : null}
       <RowView>
         {device === "phone" ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
-        <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
+        <View testID="signature-clear">
+          <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
+        </View>
         <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={disabled || d.length < 20} />
       </RowView>
       <SignatureFullscreen
@@ -116,7 +121,7 @@ export function SignaturePreview({ svg, label }: { svg: string; label: string })
   const { c } = useTheme();
   return (
     <View
-      style={{ height: component.mediaH, borderRadius: radius.inner, borderWidth: 1, borderColor: c.bd, backgroundColor: c.in, overflow: "hidden" }}
+      style={{ height: component.mediaH, borderRadius: radius.inner, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.in, overflow: "hidden" }}
       accessibilityLabel={label}
     >
       {/* the saved path lives in the 400 × 160 box (signaturePath.ts): drawn in that box, left-aligned, never cut */}

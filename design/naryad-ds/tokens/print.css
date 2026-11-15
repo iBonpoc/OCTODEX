@@ -14,6 +14,11 @@
   --print-fs-heading:11;
   --print-fs-body:9.5;
   --print-fs-small:8;
+  /* Смета — договор CA HIC (#1324, docs/specs/41): ни один текст не мельче 10 pt, раздел — от 10 pt bold,
+     статутная фраза (право отказа у подписей) — 12 pt bold (B&P §7159). Вид документа сохраняет свои размеры выше порога. */
+  --print-contract-min:10;
+  --print-contract-heading:10;
+  --print-contract-notice:12;
 
   /* Классический: логотип слева, тонкая линия под шапкой */
   --print-classic-fs-title:18;

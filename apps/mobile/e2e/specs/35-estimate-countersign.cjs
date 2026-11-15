@@ -3,6 +3,7 @@
  * the client page shows each state in the client's language (English here, the app is Russian); revoke; expired link.
  * E2b-2: «Команда» → «Сотрудник» (title, HIS), «Моя подпись», «Требует внимания» → sign with the saved signature.
  */
+const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
 const TOKEN = "demo0handyman0estimate0000000001";
 
 /** copies of the demo estimate e6 with their own id, token and state (the app has one demo estimate with a link) */
@@ -84,11 +85,11 @@ exports.run = async (h) => {
 
   // 4. revoke an unsigned link → the old link does not open
   await h.go("/estimate/e35r");
-  await h.page.getByRole("button", { name: "Отозвать ссылку" }).last().click(); await h.page.waitForTimeout(600);
+  await estAct(h.page, "revoke"); await h.page.waitForTimeout(600);
   await h.go(`/p/${tokenOf("e35r")}`);
   await h.expectText(/This link is no longer valid/, "revoked link: not valid (client's language)");
   await h.go("/estimate/e6");
-  h.expect(!(await h.text()).includes("Отозвать ссылку"), "a signed estimate has no «revoke»");
+  h.expect(!(await estHas(h.page, "revoke")), "a signed estimate has no «revoke»");
 
   // 5. past valid until → only who to call
   await h.go(`/p/${tokenOf("e35x")}`);

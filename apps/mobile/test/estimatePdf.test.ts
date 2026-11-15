@@ -244,6 +244,116 @@ describe("estimate PDF: in the client's language for every app language", () => 
   });
 });
 
+describe("estimate PDF: sections for the client (РС-7b, §5)", () => {
+  const sectioned = (title: string): EstimateDoc => ({
+    ...doc,
+    options: [
+      {
+        id: "o1", name: "Good", recommended: true,
+        sections: [{ id: "R", title }, { id: "RM", kind: "material", parentId: "R" }],
+        lines: [
+          { id: "l1", group: "labor", name: "Install", quantity: "2", unit: "hr", unitPriceCents: 12000, sectionId: "R" },
+          { id: "l2", group: "material", name: "Board", quantity: "3", unit: "ea", unitPriceCents: 1550, sectionId: "RM" },
+          { id: "l3", group: "material", name: "Guards", quantity: "1", unit: "ea", unitPriceCents: 4000, sectionId: "RM", optional: true },
+          { id: "l4", group: "service", name: "Haul away", quantity: "1", unit: "ea", unitPriceCents: 5000 },
+        ],
+      },
+    ],
+  }) as unknown as EstimateDoc;
+  const htmlOf = (d: EstimateDoc, lang: DocLang = "en") => {
+    const { db, e } = dbWith(lang);
+    const e2: Estimate = { ...e, doc: d };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? e2 : x));
+    return estimateHtml(portalFromEstimate(db, e2, "Acme"), { lang });
+  };
+  it("a section, its subsection (named from the dictionary), the subtotal and «Other items»", () => {
+    const h = htmlOf(sectioned("Roof"));
+    expect(h).toContain(">Roof<");
+    expect(h).toContain(">Materials<");
+    expect(h).toContain("Roof subtotal");
+    expect(h).toContain(">Other items<");
+    // $240.00 + $46.50 = $286.50 in Roof (the add-on is not in it); the haul away $50.00 is «Other items»
+    expect(h).toContain("$286.50");
+  });
+  // the founder-side decision 12.11: the add-ons of the PDF
+  const portal = (d: EstimateDoc, over: Partial<Estimate> = {}) => {
+    const { db, e } = dbWith("en");
+    const e2: Estimate = { ...e, doc: d, ...over };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? e2 : x));
+    return portalFromEstimate(db, e2, "Acme");
+  };
+  it("PDF of an unsigned estimate (the company's own): every add-on is there, «(add-on) + $40», and none is in the total", () => {
+    const h = estimateHtml(portal(sectioned("Roof")), { lang: "en" });
+    expect(h).toContain("Guards");
+    expect(h).toContain("(add-on)");
+    expect(h).toContain(">+ $40<");
+    expect(h).toContain("$286.50"); // Roof's subtotal without the add-on
+    expect(h).toContain("$336.50"); // the total: $286.50 + $50.00 — no add-on
+    expect(h).not.toContain("$376.50");
+  });
+  it("PDF of the client's page repeats their choice: the chosen add-on is in the lines and the total, like on the page", () => {
+    const h = estimateHtml(portal(sectioned("Roof")), { lang: "en", choice: { optionId: "o1", addonIds: ["l3"] } });
+    expect(h).toContain("Guards");
+    expect(h).not.toContain(">+ $40<");
+    expect(h).toContain("$326.50"); // Roof now: $286.50 + $40.00
+    expect(h).toContain("$376.50"); // the total
+    // another choice (none): the add-on is an offer again
+    const none = estimateHtml(portal(sectioned("Roof")), { lang: "en", choice: { optionId: "o1", addonIds: [] } });
+    expect(none).toContain(">+ $40<");
+    expect(none).toContain("$336.50");
+  });
+  it("PDF of a signed estimate: only the signed choice — the chosen add-on in, the others not shown", () => {
+    const d = sectioned("Roof");
+    const approval = { optionId: "o1", addonIds: [] as string[], signerName: "Ann", signature: "M0 0", at: "2026-11-06T10:00:00Z", channel: "portal" as const, totalCents: 33650, depositCents: 0 };
+    const unchosen = estimateHtml(portal(d, { status: "approved", approval } as Partial<Estimate>), { lang: "en" });
+    expect(unchosen).not.toContain("Guards");
+    expect(unchosen).toContain("$336.50");
+    const chosen = estimateHtml(portal(d, { status: "approved", approval: { ...approval, addonIds: ["l3"], totalCents: 37650 } } as Partial<Estimate>), { lang: "en" });
+    expect(chosen).toContain("Guards");
+    expect(chosen).toContain("$376.50");
+  });
+  it("the client's language: the dictionary's words follow it, the typed title stays as typed", () => {
+    const h = htmlOf(sectioned("Roof"), "es");
+    expect(h).toContain(">Materiales<");
+    expect(h).toContain(">Otros conceptos<");
+    expect(h).toContain(">Roof<");
+    expect(h).toContain("Subtotal: Roof");
+  });
+  it("a section's title is escaped: markup in it never reaches the page as markup (stored XSS)", () => {
+    const bad = `<img src=x onerror=alert(1)>"&'`;
+    const h = htmlOf(sectioned(bad));
+    expect(h).not.toContain("<img src=x");
+    expect(h).not.toMatch(/<img[^>]*onerror/i);
+    expect(h).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    // the same in the subtotal line, which repeats the title
+    expect(h.split("&lt;img src=x onerror=alert(1)&gt;").length - 1).toBeGreaterThanOrEqual(2);
+  });
+  it("with no sections nothing changes: the lines by kind", () => {
+    const h = estimateHtml(portalFromEstimate(dbWith("en").db, dbWith("en").e, "Acme"), { lang: "en" });
+    expect(h).toContain(">Labor<");
+    expect(h).not.toContain("subtotal");
+  });
+});
+
+describe("estimate PDF: the tax line of the editor (РС-7a, Р6)", () => {
+  it("«Sales tax 8.875%» on the whole amount after the discount, once; the total agrees", () => {
+    const { db, e } = dbWith("en");
+    // $240.00 + $46.50 = $286.50; discount 10 % = $28.65 → $257.85; tax 8.875 % = $22.88 (22.8827…) → total $280.73
+    const taxed: EstimateDoc = { ...doc, settings: { ...doc.settings, discount: { kind: "pct", value: "0.1" } as never, tax: { enabled: true, rateBps: 888, ratePpm: 88750, groups: { service: true, labor: true, material: true } } } };
+    const e2: Estimate = { ...e, doc: taxed };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? e2 : x));
+    const html = estimateHtml(portalFromEstimate(db, e2, "Acme"), { lang: "en" });
+    expect(html).toMatch(/Sales tax 8\.875%/);
+    expect(html).toContain("$22.88");
+    expect(html).toContain("$280.73");
+  });
+  it("the tax off: no tax line", () => {
+    const { db, e } = dbWith("en");
+    const html = estimateHtml(portalFromEstimate(db, e, "Acme"), { lang: "en" });
+    expect(html).not.toMatch(/Sales tax/);
+  });
+});
+
 describe("invoice and receipt: the same header, in the client's language", () => {
   for (const client of DOC_LANGS)
     it(`client ${client}`, () => {
@@ -302,5 +412,21 @@ describe("invoice of a cancelled job (wave 3a, findJob)", () => {
     const ih = invoiceHtml(d, inv, company, { lang: "en" });
     expect(ih).toContain(esc(prop.address));
     expect(ih).toContain(esc(job.title));
+  });
+});
+
+describe("#1219: a rate with three decimals on the client's document", () => {
+  it("8.875 % shows as «8.875%», the tax is $88.75 on $1000 (8.88 % would be $88.80)", () => {
+    const { db, e } = dbWith("en");
+    const ny = {
+      ...doc,
+      options: [{ id: "o1", name: "Good", recommended: true, lines: [{ id: "l1", group: "labor", name: "Install", quantity: "1", unit: "ea", unitPriceCents: 100000 }] }],
+      settings: { ...doc.settings, tax: { enabled: true, rateBps: 888, ratePpm: 88750, groups: { service: true, labor: true, material: true } } },
+    } as unknown as EstimateDoc;
+    const p = portalFromEstimate({ ...db, estimates: db.estimates.map((x) => (x.id === e.id ? { ...x, doc: ny } : x)) }, { ...e, doc: ny }, "Acme");
+    const html = estimateHtml(p, { lang: p.lang });
+    expect(html).toContain("8.875%");
+    expect(html).toContain("$88.75");
+    expect(html).not.toContain("8.88%");
   });
 });

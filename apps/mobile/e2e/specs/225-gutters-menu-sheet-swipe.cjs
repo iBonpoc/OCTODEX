@@ -9,7 +9,7 @@
  *   820/1280: the side panel keeps its own scroll.
  * Finds things by testID / role; waits on what it checks.
  */
-const { skipLength, sheetGone, pressWhenStill, canvasAt } = require("../gutters.cjs");
+const { openProps, skipLength, sheetGone, pressWhenStill, canvasAt } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -96,7 +96,7 @@ exports.run = async (h) => {
   }
 
   // the gutter's sheet: no list of its own; a swipe from its middle closes it
-  await tid("draw-props").getByRole("button").click();
+  await openProps(p);
   await panel().waitFor({ timeout: 5000 });
   await p.waitForTimeout(400);
   { const n = await scrollers(); h.expect(n === 1, `the gutter's sheet: only the sheet's own scroll (${n})`); }

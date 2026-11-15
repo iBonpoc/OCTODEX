@@ -6,6 +6,7 @@
  * 2) the refund sheet: the limit is what the payment brings minus what is on its way; «Комиссия Stripe $1.75 не вернётся»;
  * 3) a tech sees no fee.
  */
+const { rcptAct, rcptHas } = require("../receiptMenu.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/payments");
@@ -30,7 +31,7 @@ exports.run = async (h) => {
   h.expect(/\$30(\.00)?(?!\d)/.test(await onWay.innerText()), "the receipt shows the refund on its way");
   await h.shot("receipt");
 
-  await p.getByTestId("rcpt-refund").locator("visible=true").first().getByRole("button").click();
+  await rcptAct(p, "refund");
   const sheet = h.sheet();
   await sheet.getByTestId("refund-form").waitFor({ timeout: 5000 });
   const st = await sheet.innerText();

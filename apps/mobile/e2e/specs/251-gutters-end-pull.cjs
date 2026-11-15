@@ -57,7 +57,7 @@ exports.run = async (h) => {
   };
   const labelText = async () => (await svg().locator("text").allTextContents()).filter((x) => /′|″/.test(x)).join("|");
   let midLabel = "";
-  const pull = async (at, dx, dy = 0, hold = 500) => {
+  const pull = async (at, dx, dy = 0, hold = 650) => {
     await p.mouse.move(at[0], at[1]);
     await p.mouse.down();
     if (hold) await p.waitForTimeout(hold); // held: longer than the long-press time
@@ -97,6 +97,17 @@ exports.run = async (h) => {
   const before = len(await geom());
   await pull(await capAt(1), -60, 0, 0);
   await waitFor(async () => len((await gutters2())[0]) !== before, "the handle, no hold, along the gutter: pulled");
+  // «Желоб», a long press on the cap, then ACROSS: the end is taken (director 12.11) — it swings, no new gutter (e2e 292 has the angle)
   await pull(await capAt(1), 0, 90);
-  await waitFor(async () => (await count()) === 2, "across: a new gutter from the end");
+  await waitFor(async () => { const g = await gutters2(); return g.length === 1 && Math.abs(g[0].b[1] - g[0].a[1]) > 5; }, "a long press then across with «Желоб»: the end swings, it is still one gutter");
+  await tid("draw-undo").getByRole("button").click();
+  await waitFor(async () => { const g = await gutters2(); return g.length === 1 && Math.abs(g[0].b[1] - g[0].a[1]) < 1; }, "«Назад»: straight again");
+  // «Желоб», the picked gutter's ring, NO hold, ACROSS: a new gutter from the end, as before (#504) — drawing on from an end is what «Желоб» does
+  {
+    const r0 = await capAt(0), r1 = await capAt(1);
+    await p.mouse.click((r0[0] + r1[0]) / 2, (r0[1] + r1[1]) / 2); // pick it (the swing above was undone: it may be let go)
+    await waitFor(async () => (await svg().locator('[id^="handle-cap:"]').count()) === 2, "the gutter is picked: the ring is there");
+  }
+  await pull(await capAt(1), 0, 90, 0);
+  await waitFor(async () => (await count()) === 2, "the ring, no hold, across: a new gutter from the end");
 };

@@ -27,9 +27,14 @@ if ! grep -q '"expo-notifications"' package.json; then
   exit 1
 fi
 
-if [ ! -d ../../node_modules ]; then
-  say "Installing the project (a few minutes, once)"
+# installed then, or the copy was pulled since (#656: a pulled copy with the old modules failed in `expo config`)
+if [ ! -f ../../node_modules/.package-lock.json ] || [ ../../package-lock.json -nt ../../node_modules/.package-lock.json ]; then
+  say "Installing the project (a few minutes)"
   (cd ../.. && npm ci --no-audit --no-fund)
+fi
+if ! npx expo config --json >/dev/null; then
+  echo "The app's config does not load (the lines above say why). Send them to the director; nothing was built."
+  exit 1
 fi
 
 # Sign in with the Apple ID here, not with an API key from the environment.
@@ -42,4 +47,4 @@ $EAS whoami
 say "iPhone build → TestFlight. Answer: Apple account — yes; Apple ID, password, the code from your iPhone; everything else — Enter"
 $EAS build --platform ios --profile testflight --auto-submit-with-profile=testflight
 
-say "Done. TestFlight sends an e-mail in 20–40 minutes; install OCTODEX from the TestFlight app."
+say "Done. TestFlight sends an e-mail in 20–40 minutes; install GoRix from the TestFlight app."

@@ -14,6 +14,7 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { memberLabel } from "@/features/team";
+import { canSeeJob } from "@/features/access";
 
 type Filter = JobStatus | "all";
 /** the lane of «Работы» (spec 31 §13): in the order of the work, «Все» last */
@@ -25,13 +26,14 @@ const COLUMNS: FactKey[] = ["addr", "work", "when", "resp"];
 
 /** All jobs by stage: waiting for a date → scheduled → in progress → done. Each job is a list card (spec 06, PR8). */
 export default function Jobs() {
-  const { db, role } = useStore();
+  const { db, role, mode } = useStore();
   const { t, money, day } = useI18n();
   const { device } = useDevice();
   // the tech never sees amounts (spec 06 §7.6)
   const office = role !== "tech";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
-  const work = db.jobs;
+  // the tech: only jobs with a visit of his (#868; jobs_select in the database)
+  const work = db.jobs.filter((j) => canSeeJob(db, { role, mode, me: db.me }, j.id));
   const inLane = (j: Job, x: Filter) => x === "all" || j.status === x;
   const count = (x: Filter) => work.filter((j) => inLane(j, x)).length;
   // spec 31 §6 п.7, §13: a chip the person picked is kept on this device and wins; until then «Ждут даты» when there are

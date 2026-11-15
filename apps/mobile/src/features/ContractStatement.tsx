@@ -12,6 +12,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 
 export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey } {
   if (i.paidCents >= i.totalCents) return { s: "ok", l: "money.paid" };
@@ -34,6 +35,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
   const [bps, setBps] = useState(5000);
   const [cents, setCents] = useState(0);
   const [title, setTitle] = useState("");
+  const [balanceSent, setBalanceSent] = useState(false);
   const job = db.jobs.find((j) => j.id === jobId);
   if (!job) return null;
   const invoices = db.invoices.filter((i) => i.jobId === jobId).sort((a, b) => (a.sentAt ?? a.dueDate).localeCompare(b.sentAt ?? b.dueDate));
@@ -41,8 +43,17 @@ export function ContractStatement({ jobId }: { jobId: string }) {
   const hasFinal = invoices.some((i) => i.kind === "final");
   const progress = mode === "pct" ? progressAmount(job.amountCents, st.invoiced, bps) : Math.min(cents, st.toInvoice);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
+  // #865: an invoice the store refused (above the contract) says so, with no «Отменить»; a second tap on «Выставить
+  // остаток» before the screen redraws is not a second invoice and does not replace the first one's «Отменить» (rule 5)
+  const issue = (kind: "progress" | "final", amount: number, name: string) => {
+    const undo = store.issueInvoice(jobId, kind, amount, name);
+    if (undo) toast.show(q(t("inv.issued")), undo);
+    else toast.show(t("inv.overContract.screen"));
+    return !!undo;
+  };
 
-  const row = (label: string, v: number, strong?: boolean) => (
+  const row = (label: string, v: number, strong?: boolean, testID?: string) => (
+    <View testID={testID}>
     <RowView style={{ justifyContent: "space-between" }}>
       <T v={strong ? "heading" : "body"} tone={strong ? "ink" : "mut"}>
         {label}
@@ -51,6 +62,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
         {money(v)}
       </T>
     </RowView>
+    </View>
   );
 
   return (
@@ -58,7 +70,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
       <SectionTitle title={t("inv.statement")} />
       <Card>
         {row(t("inv.contract"), st.contract)}
-        {row(t("inv.invoiced"), st.invoiced)}
+        {row(t("inv.invoiced"), st.invoiced, false, "statement-invoiced")}
         {row(t("inv.paid"), st.paid)}
         <Divider />
         {row(t("inv.remaining"), st.remaining, true)}
@@ -89,16 +101,23 @@ export function ContractStatement({ jobId }: { jobId: string }) {
           })}
         </CardGrid>
       ) : null}
+      <VoidInvoiceCards list={(db.voidInvoices ?? []).filter((i) => i.jobId === jobId)} testPrefix="statement" />
       {st.toInvoice > 0 ? (
         <RowView style={{ flexWrap: "wrap" }}>
           {!hasFinal ? (
             <Button
               label={t("inv.billBalance", { amount: money(st.toInvoice) })}
+              testID="statement-bill-balance"
               icon="invoice"
-              onPress={() => toast.show(q(t("inv.issued")), store.issueInvoice(jobId, "final", st.toInvoice, "Final balance"))}
+              disabled={balanceSent}
+              onPress={() => {
+                if (balanceSent) return;
+                setBalanceSent(true);
+                if (!issue("final", st.toInvoice, "Final balance")) setBalanceSent(false);
+              }}
             />
           ) : null}
-          <Button label={t("inv.progress")} icon="plus" variant="secondary" onPress={() => setSheet(true)} />
+          <Button label={t("inv.progress")} testID="statement-progress" icon="plus" variant="secondary" onPress={() => setSheet(true)} />
         </RowView>
       ) : null}
       <Sheet visible={sheet} onClose={() => setSheet(false)} title={t("inv.progress")}>
@@ -124,11 +143,12 @@ export function ContractStatement({ jobId }: { jobId: string }) {
           </RowView>
           <Button
             label={t("inv.issue")}
+            testID="statement-progress-issue"
             icon="check"
             full
             disabled={progress <= 0}
             onPress={() => {
-              toast.show(q(t("inv.issued")), store.issueInvoice(jobId, "progress", progress, title.trim() ? `Progress: ${title.trim()}` : "Progress payment"));
+              issue("progress", progress, title.trim() ? `Progress: ${title.trim()}` : "Progress payment");
               setSheet(false);
               setTitle("");
             }}

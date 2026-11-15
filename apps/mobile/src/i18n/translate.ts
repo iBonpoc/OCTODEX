@@ -18,7 +18,8 @@ export type Params = Record<string, string | number>;
 export function translate(lang: Lang, key: DictKey, params?: Params): string {
   let s = dicts[lang][key] ?? ru[key] ?? key;
   if (params) for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
-  return s;
+  // a value that ends with a dot («ср, 11 нояб.») before the sentence's own dot: one dot, not two (#1104 п.3); «...» stays
+  return s.replace(/(?<!\.)\.\.(?!\.)/g, ".");
 }
 
 /** A translator for a client's language: tFor(docLanguageFor(db, …))("key"). */

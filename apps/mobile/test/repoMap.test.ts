@@ -37,7 +37,7 @@ beforeEach(() => {
     { id: "p2", customer_id: "c2", address_line1: "2 Oak St", address_city: "Pasadena", geo_lat: null, geo_lng: null },
   ];
   rows.jobs = [
-    { id: "j1", property_id: "p1", customer_id: "c1", number: "JOB-0001", title: null, status: "scheduled", description: "Two downspouts", job_type_id: "t2", tax_enabled: true, tax_rate_bps: 1025 },
+    { id: "j1", property_id: "p1", customer_id: "c1", number: "JOB-0001", title: null, status: "scheduled", description: "Two downspouts", job_type_id: "t2", tax_enabled: true, tax_rate_bps: 888, tax_rate_ppm: 88750 },
     { id: "j2", property_id: "p1", customer_id: "c1", number: "JOB-0002", title: "Gutter cleaning", status: "completed" },
     { id: "j3", property_id: "p2", customer_id: "c2", number: "JOB-0003", title: "Cancelled roof", status: "cancelled" },
   ];
@@ -141,7 +141,8 @@ describe("loadCompanyDB — money fields (wave П-2a)", () => {
   });
   it("job: tags and tax", async () => {
     const db = await loadCompanyDB(CO, "u1");
-    expect(db.jobs.find((j) => j.id === "j1")).toMatchObject({ tagIds: ["tag-a", "tag-b"], taxEnabled: true, taxRateBps: 1025 });
+    // #1219: the rate in ppm beside the basis points (8.875 %)
+    expect(db.jobs.find((j) => j.id === "j1")).toMatchObject({ tagIds: ["tag-a", "tag-b"], taxEnabled: true, taxRateBps: 888, taxRatePpm: 88750 });
     expect(db.jobs.find((j) => j.id === "j2")!.tagIds).toEqual([]);
   });
   it("job lines in their order, the line total from the server", async () => {
@@ -244,5 +245,96 @@ describe("loadCompanyDB — «Весь день» of a visit (3b-3, 17-job §11.
     expect(by("v1")).toMatchObject({ allDay: true, durationMin: 1440 });
     expect(by("v2").allDay).toBeUndefined();
     expect(by("v3").allDay).toBeUndefined();
+  });
+});
+
+describe("repo: the invoices of a contract (#865 review З3, З5)", () => {
+  it("an invoice's kind as it is: standalone / recurring stay outside the contract", async () => {
+    rows.invoices = ["deposit", "progress", "final", "standalone", "recurring"].map((kind, i) => ({
+      id: `inv-${kind}`, company_id: CO, customer_id: "c1", job_id: "j1", kind, status: "sent", total_cents: 1000 + i, paid_cents: 0, subtotal_cents: 1000 + i, tax_cents: 0, sent_at: "2026-11-05T10:00:00Z",
+    }));
+    const db = await loadCompanyDB(CO, "u1");
+    expect(Object.fromEntries(db.invoices.map((i) => [i.id, i.kind]))).toEqual({
+      "inv-deposit": "deposit", "inv-progress": "progress", "inv-final": "final", "inv-standalone": "standalone", "inv-recurring": "recurring",
+    });
+  });
+  it("the contract's tax: the client's approval of the job's approved version (approved, customer), its tax a number", async () => {
+    rows.jobs = [...rows.jobs!, { id: "j9", property_id: "p1", customer_id: "c1", number: "JOB-0009", status: "scheduled", estimate_id: "e9", approved_version_id: "v2", contract_total_cents: 109500 }];
+    rows.estimate_approvals = [
+      { estimate_id: "e9", version_id: "v1", decision: "approved", party: "customer", selection: { tax: 1 }, signed_at: "2026-11-06T10:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "approved", party: "contractor", selection: { tax: 2 }, signed_at: "2026-11-07T10:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "declined", party: "customer", selection: { tax: 3 }, signed_at: "2026-11-07T11:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "approved", party: "customer", selection: { tax: "4" }, signed_at: "2026-11-07T12:00:00Z" },
+      { estimate_id: "e9", version_id: "v2", decision: "approved", party: "customer", selection: { tax: 9500 }, signed_at: "2026-11-05T12:00:00Z" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.jobs.find((j) => j.id === "j9")?.contractTaxCents).toBe(9500);
+    expect(db.jobs.find((j) => j.id === "j1")?.contractTaxCents).toBeUndefined();
+  });
+});
+
+describe("repo: a voided invoice (В1-5, #1107)", () => {
+  it("goes apart with its reason; the live list and its sums never see it", async () => {
+    rows.invoices = [
+      { id: "iv-live", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "sent", total_cents: 1000, paid_cents: 0, sent_at: "2026-11-05T10:00:00Z" },
+      { id: "iv-void", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "void", total_cents: 9000, paid_cents: 0, sent_at: "2026-11-05T09:00:00Z", void_reason: "Wrong amount", voided_at: "2026-11-05T09:30:00Z" },
+      { id: "iv-draft", company_id: CO, customer_id: "c1", job_id: "j1", kind: "progress", status: "draft", total_cents: 500, paid_cents: 0 },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id)).toEqual(["iv-live"]);
+    expect(db.voidInvoices).toEqual([expect.objectContaining({ id: "iv-void", status: "void", voidReason: "Wrong amount", voidedAt: "2026-11-05T09:30:00Z", totalCents: 9000 })]);
+  });
+});
+
+describe("repo: a voided deposit does not hide the paid one (В1-5)", () => {
+  it("the estimate's deposit is the live one", async () => {
+    rows.estimates = [{ id: "e7", company_id: CO, customer_id: "c1", property_id: "p1", title: "T", status: "approved" }];
+    rows.jobs = [...rows.jobs!, { id: "j7", property_id: "p1", customer_id: "c1", number: "JOB-0007", status: "scheduled", estimate_id: "e7", contract_total_cents: 100000 }];
+    rows.invoices = [
+      { id: "d-void", company_id: CO, customer_id: "c1", job_id: "j7", kind: "deposit", status: "void", total_cents: 10000, paid_cents: 0, void_reason: "wrong", updated_at: "2026-11-05T09:00:00Z" },
+      { id: "d-live", company_id: CO, customer_id: "c1", job_id: "j7", kind: "deposit", status: "sent", total_cents: 10000, paid_cents: 10000, updated_at: "2026-11-06T10:00:00Z" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.estimates.find((e) => e.id === "e7")?.depositPaidAt).toBe("2026-11-06T10:00:00Z"); // before: the void one was found first — not paid
+  });
+});
+
+describe("repo: an estimate's document is read as it may be counted and shown (normalizeDoc, Р3)", () => {
+  it("a priced line marked hidden comes back visible; a hidden $0 line stays hidden", async () => {
+    rows.estimates = [{ id: "e8", company_id: CO, customer_id: "c1", property_id: "p1", title: "T", status: "draft", current_version_id: "v8" }];
+    rows.estimate_versions = [{
+      id: "v8", estimate_id: "e8", company_id: CO, version_no: 1,
+      calc_inputs: {
+        options: [{ id: "o8", name: "A", lines: [
+          { id: "l1", name: "Priced", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000, clientVisible: false },
+          { id: "l2", name: "Free", group: "material", quantity: "1", unit: "ea", unitPriceCents: 0, clientVisible: false },
+        ] }],
+        settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: { kind: "none" } },
+      },
+    }];
+    const db = await loadCompanyDB(CO, "u1");
+    const lines = db.estimates.find((e) => e.id === "e8")?.doc?.options[0]?.lines ?? [];
+    expect(lines.map((l) => [l.id, l.clientVisible])).toEqual([["l1", undefined], ["l2", false]]);
+  });
+});
+
+describe("loadCompanyDB — a photo the cloud refused (#1431)", () => {
+  it("files.upload_status 'failed' → the photo is marked (the reason only the sending phone knows); others are not", async () => {
+    rows.files = [
+      { id: "f1", kind: "photo", visit_id: "v1", stage: "after", storage_key: "co-1/f1.jpg", created_at: "2026-11-05T10:00:00Z", upload_status: "uploaded" },
+      { id: "f3", kind: "photo", visit_id: "v1", stage: "before", storage_key: null, created_at: "2026-11-05T12:00:00Z", upload_status: "failed" },
+      { id: "f4", kind: "photo", visit_id: "v1", stage: "before", storage_key: null, created_at: "2026-11-05T13:00:00Z", upload_status: "local" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.visits.find((v) => v.id === "v1")!.photos).toEqual([
+      { id: "f1", kind: "after", uri: undefined },
+      { id: "f3", kind: "before", uri: undefined, upload: { failed: "refused", at: "2026-11-05T12:00:00Z" } },
+      { id: "f4", kind: "before", uri: undefined },
+    ]);
+  });
+  it("a server without the column reads the photos as before (rule 16)", async () => {
+    missing.add("files.upload_status");
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.visits.find((v) => v.id === "v1")!.photos).toEqual([{ id: "f1", kind: "after", uri: undefined }]);
   });
 });

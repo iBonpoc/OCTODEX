@@ -48,6 +48,7 @@ exports.run = async (h) => {
     await bar.waitFor();
     // a first-visit hint of the screen is not part of the filters: close it before measuring
     const got = vis(p.getByRole("button", { name: "Понятно", exact: true }));
+    // optional: the first-visit hint of the screen shows once per device — close it only when it is there (#800)
     if (await got.count()) { await got.first().click(); await p.waitForTimeout(300); }
     if (L.noSwitch) h.expect((await vis(p.getByRole("tab", { name: /^(Сметы|Счета)$/ })).count()) === 0, `${L.path}: no switch of sub-lists over the list (spec 31 §7а)`);
 

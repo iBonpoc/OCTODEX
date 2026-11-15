@@ -20,6 +20,8 @@ exports.run = async (h) => {
   if (inv) {
     const name = db.customers.find((c) => c.id === inv.customerId).name;
     const c = people.filter({ hasText: name });
+    // optional: Today shows at most 3 people cards — the debtor's card is only there when he is among them (#800: said so
+    // here instead of a silent skip)
     if (await c.count()) {
       h.expect((await c.count()) === 1, `one card for ${name}`);
       const txt = await c.first().innerText();

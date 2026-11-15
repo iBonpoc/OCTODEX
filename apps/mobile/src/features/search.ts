@@ -11,6 +11,8 @@
  * Custom fields «search by this field» — with wave 7 (custom_fields).
  */
 import type { DB, Person, Role } from "@/data/types";
+import type { Mode } from "@/data/store";
+import { canSeeEstimate } from "@/features/access";
 import { leadPeopleOf, peopleOf } from "@/data/people";
 import { isAssigned } from "./schedule";
 import { isOpenLead } from "./leads";
@@ -76,7 +78,7 @@ function peopleWhy(people: Person[], needle: string, digits: string, mainName: s
 }
 
 /** «Искать везде»: hits by group, open before closed; empty query — nothing. */
-export function searchAll(db: DB, query: string, role: Role): Record<SearchGroup, Hit[]> {
+export function searchAll(db: DB, query: string, role: Role, mode: Mode = "demo"): Record<SearchGroup, Hit[]> {
   const out: Record<SearchGroup, Hit[]> = { clients: [], leads: [], properties: [], jobs: [], estimates: [], invoices: [], payments: [] };
   const needle = query.trim().toLowerCase();
   if (!needle) return out;
@@ -137,7 +139,8 @@ export function searchAll(db: DB, query: string, role: Role): Record<SearchGroup
   }
 
   for (const e of db.estimates) {
-    if (!clientIds.has(e.customerId)) continue;
+    // the tech: only the estimates the server shows him (estimates_select; director's review of #1134)
+    if (!clientIds.has(e.customerId) || !canSeeEstimate(db, { role, mode, me: db.me }, e.id)) continue;
     const w: Why | undefined = why(numberMatches(e.number, needle), "number") ?? why(text && has(e.title, needle), "title") ?? why(text && has(nameOf(e.customerId), needle), "client");
     if (w) out.estimates.push({ group: "estimates", id: e.id, title: e.title, subtitle: nameOf(e.customerId), number: e.number, href: `/estimate/${e.id}`, why: w });
   }

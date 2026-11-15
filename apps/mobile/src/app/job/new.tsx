@@ -1,8 +1,8 @@
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useMemo, useState } from "react";
-import { ScrollView, View } from "react-native";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import * as Haptics from "expo-haptics";
+import { haptics } from "@/ui/haptics";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { ID } from "@/data/types";
@@ -13,9 +13,10 @@ import { canCreateJob, canDateNewJob, servable } from "@/features/newJob";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { NotifySheet, useVisitForm, VisitFormFields } from "@/features/VisitForm";
 import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/controls";
-import { Sheet, useToast } from "@/ui/overlays";
+import { Sheet, useToast, SheetScroll } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { withAfter, type GuardedUndo } from "@/data/undo";
 
 const NEW = "__new";
 
@@ -88,8 +89,8 @@ export default function NewJob() {
   const save = () => {
     if (!ok) return;
     setSaved(true);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    const undos: (() => void)[] = [];
+    haptics.success();
+    const undos: GuardedUndo[] = [];
     let cid = client?.id;
     let pid = newAddress ? undefined : (propertyId as ID);
     if (newClient) {
@@ -106,22 +107,24 @@ export default function NewJob() {
     const job = store.addJob({ customerId: cid, propertyId: pid, title, description, jobTypeId: jobTypeId || undefined, serviceCategoryId: categoryId });
     undos.push(job.undo);
     // «Отменить» takes back everything this form made and leaves the job's screen (it would show an empty job)
-    const undoAll = () => {
-      undos.reverse().forEach((u) => u());
-      setNotifyId(null);
-      setCreatedId(null);
-      setSaved(false);
-      router.replace("/job/new");
-    };
+    // all or nothing (DS §15.2): too late for one part — nothing goes back, the toast says so; only when it went back the
+    // form starts over (made at the toast: the visit's undo joins first)
+    const undoAll = () =>
+      withAfter(store.undoTogether(undos), () => {
+        setNotifyId(null);
+        setCreatedId(null);
+        setSaved(false);
+        router.replace("/job/new");
+      });
     if (dating && when === "date") {
       const visitId = uid();
       undos.push(store.scheduleJob(job.id, { ...f.value, visitId }));
-      toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll);
+      toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll());
       setCreatedId(job.id);
       setNotifyId(visitId);
       return;
     }
-    toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll);
+    toast.show(store.online ? t("job3.new.created") : t("offline.queued"), undoAll());
     router.replace(`/job/${job.id}`);
   };
 
@@ -145,7 +148,8 @@ export default function NewJob() {
           </RowView>
         </Card>
       ) : newClient ? (
-        <Card>
+        // the fields straight on the background, under the group's title (DS §11 п.17, #1411)
+        <FieldGroup under>
           <Labeled label={t("lead.name")}>
             <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
           </Labeled>
@@ -153,10 +157,10 @@ export default function NewJob() {
             <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" icon="phone" />
           </Labeled>
           <Labeled label={t("co.email")}>
-            <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
+            <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="mail" />
           </Labeled>
           <Button label={t("job3.new.pickInstead")} size="sm" variant="ghost" onPress={() => setPicker(true)} />
-        </Card>
+        </FieldGroup>
       ) : (
         <RowView style={{ flexWrap: "wrap" }}>
           <Button label={t("job3.new.pick")} icon="search" variant="secondary" onPress={() => setPicker(true)} />
@@ -166,48 +170,49 @@ export default function NewJob() {
 
       {customerId ? (
         <>
-          <SectionTitle title={t("job3.new.address")} />
+          {newClient ? <SectionTitle title={t("job3.new.address")} /> : null}
           {!newClient ? (
             <ChoiceChips
+              label={t("job3.new.address")}
+              testID="job-new-address"
               items={[...props.map((p) => ({ key: p.id, label: p.address })), { key: NEW, label: t("job3.new.newAddress") }]}
               value={(propertyId ?? "") as string}
               onChange={(k) => setPropertyId(k)}
             />
           ) : null}
           {newAddress ? (
-            <Card>
+            <FieldGroup under>
               <Labeled label={t("co.street")}>
                 <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
               </Labeled>
               <Labeled label={t("co.city")}>
                 <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena, CA 91103" />
               </Labeled>
-            </Card>
+            </FieldGroup>
           ) : null}
         </>
       ) : null}
 
-      <SectionTitle title={t("job3.new.job")} />
-      <Card>
+      <FieldGroup title={t("job3.new.job")}>
         <Labeled label={t("job3.new.title")}>
           <View testID="job-new-title">
             <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("job3.new.titlePh")} />
           </View>
         </Labeled>
         {types.length ? (
-          <Labeled label={t("job3.type")}>
-            <ChoiceChips
-              items={types.map((x) => ({ key: x.id, label: x.name ?? (x.seedKey ? t(`job3.jt.${x.seedKey}` as DictKey) : "") }))}
-              value={jobTypeId}
-              onChange={setJobTypeId}
-            />
-          </Labeled>
+          <ChoiceChips
+            label={t("job3.type")}
+            testID="job-new-type"
+            items={types.map((x) => ({ key: x.id, label: x.name ?? (x.seedKey ? t(`job3.jt.${x.seedKey}` as DictKey) : "") }))}
+            value={jobTypeId}
+            onChange={setJobTypeId}
+          />
         ) : null}
         <Labeled label={t("job3.desc")}>
           <TextField type="note" value={description} onChangeText={setDescription} placeholder={t("job3.desc")} />
         </Labeled>
-      </Card>
-      <ServiceCategoryRow value={categoryId} onChange={setCategoryId} />
+        <ServiceCategoryRow value={categoryId} onChange={setCategoryId} bare />
+      </FieldGroup>
 
       {dating ? (
         <>
@@ -245,7 +250,7 @@ export default function NewJob() {
               setPicker(false);
             }}
           />
-          <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
+          <SheetScroll style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
             {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
             {rows.map((c, i) => {
               const ps = db.properties.filter((p) => p.customerId === c.id);
@@ -264,7 +269,7 @@ export default function NewJob() {
                 </View>
               );
             })}
-          </ScrollView>
+          </SheetScroll>
         </View>
       </Sheet>
       <NotifySheet

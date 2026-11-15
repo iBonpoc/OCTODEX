@@ -94,7 +94,7 @@ exports.run = async (h) => {
   // the office sees the money in the panel, as on the card's screen
   const owes = db.customers.find((c) => db.invoices.some((i) => i.customerId === c.id && i.totalCents > i.paidCents));
   await h.go(`/clients?open=${owes.id}`);
-  await panel(h).getByText("Оплатил всего", { exact: true }).first().waitFor();
+  await panel(h).getByTestId("client-paid").first().waitFor();
   // «Открыть» → the card's own screen
   await p.getByTestId("list-panel-open").locator("visible=true").click();
   await p.waitForURL(new RegExp(`/client/${owes.id}$`));
@@ -107,6 +107,6 @@ exports.run = async (h) => {
   await techCards.first().click();
   await panel(h).waitFor();
   const txt = await panel(h).innerText();
-  h.expect(!/Оплатил всего|Выставлено всего|Не оплачено|\$\d/.test(txt), `technician: no money in the panel (${txt.slice(0, 160)})`);
+  h.expect(!/Оплачено|Выставлено|Не оплачено|\$\d/.test(txt), `technician: no money in the panel (${txt.slice(0, 160)})`);
   await h.shot("panel-tech");
 };

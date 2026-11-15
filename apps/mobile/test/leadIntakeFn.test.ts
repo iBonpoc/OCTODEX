@@ -9,11 +9,11 @@ import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  CONSENT_VERSION, MAX_BODY, MAX_FILL_MS, ipKey, netKey, MIN_ANSWER_MS, MIN_FILL_MS, canonical, cleanPayload, clientIp, handleIntake,
+  CONSENT_VERSION, MAX_BODY, SITE_ORIGIN, MAX_FILL_MS, ipKey, netKey, MIN_ANSWER_MS, MIN_FILL_MS, canonical, cleanPayload, clientIp, handleIntake,
   type IntakeCall, type IntakeDeps, type Req,
 } from "../../../supabase/functions/lead-intake/handler";
 
-const SITE = "https://octodex.expo.app";
+const SITE = "https://gorix.expo.app";
 const FORM = `f${"a".repeat(32)}`;
 const KEY = `gxk_${"b".repeat(64)}`;
 const NOW = 1_800_000_000_000;
@@ -48,11 +48,11 @@ function deps(o: { status?: string; throws?: boolean; captcha?: { success: boole
     formInfo: async (h) => (h === sha(FORM) ? (o.info ?? { company: "Acme Gutters" }) : {}),
     verifyCaptcha: async () => {
       if (o.captcha === "throw") throw new Error("net");
-      return o.captcha ?? { success: true, hostname: "octodex.expo.app", action: "lead" };
+      return o.captcha ?? { success: true, hostname: "gorix.expo.app", action: "lead" };
     },
     sha256: async (s) => sha(s),
     hmac: async (s) => createHmac("sha256", "secret").update(s).digest("hex"),
-    allowedOrigin: (x) => /^https:\/\/octodex(--[a-z0-9-]+)?\.expo\.app$/.test(x),
+    allowedOrigin: (x) => SITE_ORIGIN.test(x),
     ipHeaders: ["cf-connecting-ip"],
     now: () => NOW,
     wait: async (ms) => {
@@ -101,14 +101,18 @@ describe("lead-intake: the page's request", () => {
     expect(k3).not.toBe(k1);
   });
   it("only the app's own origins post; a foreign site or no origin is refused before the database", async () => {
-    for (const origin of ["https://evil.example", "https://octodex.expo.app.evil.com", "http://octodex.expo.app", ""]) {
+    // octodex: the released old name (#656) — a stranger's site now
+    for (const origin of ["https://evil.example", "https://octodex.expo.app", "https://octodex--abc123.expo.app", "https://gorix.expo.app.evil.com", "http://gorix.expo.app", "https://xgorix.expo.app", "https://gorix.app", "https://gorix---x.expo.app", "https://gorix--x-.expo.app", ""]) {
       const { d, calls } = deps();
       const r = await handleIntake(req({ headers: { origin }, body: form() }), d);
       expect(r.status, origin).toBe(403);
       expect(calls).toHaveLength(0);
     }
-    const prev = deps();
-    expect((await handleIntake(req({ headers: { origin: "https://octodex--abc123.expo.app" }, body: form() }), prev.d)).status).toBe(200);
+    // #656: the site is gorix.expo.app — it and its PR previews post
+    for (const origin of ["https://gorix.expo.app", "https://gorix--pr-656.expo.app"]) {
+      const ok = deps();
+      expect((await handleIntake(req({ headers: { origin }, body: form() }), ok.d)).status, origin).toBe(200);
+    }
   });
   it("the trap field refuses; a wrong fill time only says «time» (the database holds it for a person)", async () => {
     const trap = deps();
@@ -125,9 +129,11 @@ describe("lead-intake: the page's request", () => {
       [{}, { captcha: "tok" }, "ok"],
       [{ captcha: { success: false } }, { captcha: "tok" }, "fail"],
       [{ captcha: { success: true, hostname: "evil.example" } }, { captcha: "tok" }, "fail"],
-      [{ captcha: { success: true, hostname: "octodex.expo.app", action: "other" } }, { captcha: "tok" }, "fail"],
+      [{ captcha: { success: true, hostname: "gorix.expo.app", action: "other" } }, { captcha: "tok" }, "fail"],
       [{ captcha: { success: true } }, { captcha: "tok" }, "fail"], // no hostname / action — not ours
-      [{ captcha: { success: true, hostname: "octodex--pr421.expo.app", action: "lead" } }, { captcha: "tok" }, "ok"], // a PR preview
+      [{ captcha: { success: true, hostname: "gorix--pr421.expo.app", action: "lead" } }, { captcha: "tok" }, "ok"], // a PR preview
+      [{ captcha: { success: true, hostname: "octodex.expo.app", action: "lead" } }, { captcha: "tok" }, "fail"], // the released old name (#656)
+      [{ captcha: { success: true, hostname: "gorix.expo.app.evil.com", action: "lead" } }, { captcha: "tok" }, "fail"],
       [{ captcha: "throw" }, { captcha: "tok" }, "fail"],
       [{}, {}, "none"],
     ];

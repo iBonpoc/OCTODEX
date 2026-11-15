@@ -3,7 +3,7 @@
  * - «＋» by screen and role: phone — a floating button bottom-right above the tabs; 820/1280 — «＋» in the header, no floating one;
  * - only what works: Главная — Лид · Клиент · Смета · Расход (tech: Лид · Расход); one item = straight to its screen;
  * - Plan: planners — Работа · Лид · Записать в план · Событие · Выходной; the technician has no «＋» on Plan;
- * - Client: «Смета» tied to the client; Job: «Выезд» to this job; tech visit: Фото · Лид · Расход;
+ * - Client: «Создать смету» (a visible button on the card, #1094); no «＋» on the card (#1343) — «Работа без сметы» is on the «Работы» tab, tied to the client; Job: «Выезд» to this job; tech visit: Фото · Лид · Расход;
  * - «Главная»: the bell with the unread count → /notifications → a card opens its estimate; the profile → My settings.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
@@ -28,6 +28,18 @@ exports.run = async (h) => {
   const closeSheet = async () => {
     await pressEscUntilClosed(p);
   };
+  /** which items the open «＋» sheet has — by testID `fab-<id>` (rule 19: not by the words, they get renamed) */
+  const has = async (...ids) => {
+    const out = [];
+    for (const id of ids) out.push((await sheet().getByTestId(`fab-${id}`).count()) === 1);
+    return out.every(Boolean);
+  };
+  const lacks = async (...ids) => {
+    for (const id of ids) if ((await sheet().getByTestId(`fab-${id}`).count()) !== 0) return false;
+    return true;
+  };
+  /** the top edge of an item: the order in the sheet */
+  const topOf = async (id) => (await sheet().getByTestId(`fab-${id}`).boundingBox()).y;
   const box = async (l) => (await l.boundingBox()) ?? { x: 0, y: 0, width: 0, height: 0 };
 
   await h.go("/today");
@@ -43,12 +55,32 @@ exports.run = async (h) => {
     h.expect(b.x + b.width > w - 40 && b.y + b.height <= tabs.y, `390: bottom-right, above the tabs (${b.x},${b.y} vs tabs ${tabs.y})`);
     h.expect(Math.round(b.height) <= 36, `visible ≤ 36 (${b.height})`);
   }
+  // the «＋» of «Главная» is yellow on every width — the floating one and the header one alike (DS §5.3, audit №2, #1395)
+  const yellow = await plus().evaluate((el) => {
+    const m = getComputedStyle(el.querySelector("div") ?? el).backgroundColor.match(/\d+/g) ?? [];
+    const pick = (e) => getComputedStyle(e).backgroundColor;
+    // the press's own box or its painted child: the one that is not transparent
+    const bg = [el, ...el.querySelectorAll("div")].map(pick).find((x) => x && x !== "rgba(0, 0, 0, 0)" && x !== "transparent") ?? "";
+    const [r, g, bl] = (bg.match(/\d+/g) ?? m).map(Number);
+    return r > 200 && g > 200 && bl < 120;
+  });
+  h.expect(yellow, `${w}: the «＋» of «Главная» is yellow`);
+  if (wide) {
+    // the side menu's «＋ Создать» is on every screen: neutral, so «Главная» has one yellow (DS §3.1 п.3, §5.3, #1395)
+    const menuYellow = await p.getByTestId("side-nav").getByRole("button", { name: "Создать", exact: true }).evaluate((el) =>
+      [el, ...el.querySelectorAll("div")].map((e) => getComputedStyle(e).backgroundColor).some((bg) => {
+        const [r, g, b] = (bg.match(/\d+/g) ?? []).map(Number);
+        return r > 200 && g > 200 && b < 120;
+      }),
+    );
+    h.expect(!menuYellow, `${w}: «Создать» in the side menu is not yellow`);
+  }
 
   // Главная: only what works
   await plus().click();
   let body = await sheetText();
-  for (const it of ["Новый лид", "Новый клиент", "Новая работа", "Смета", "Расход по чеку"]) h.expect(body.includes(it), `Главная «＋» has «${it}»`);
-  for (const it of ["Фото", "Задача", "Голосовая"]) h.expect(!body.includes(it), `Главная «＋» has no «${it}» yet`);
+  h.expect(await has("lead", "client", "estimate", "job", "expense"), "Главная «＋»: lead, client, estimate, job, expense");
+  h.expect(await lacks("photo", "task"), "Главная «＋» has no photo and no task yet");
   await h.shot("home-sheet");
   await sheet().getByTestId("fab-client").click();
   await p.waitForTimeout(700);
@@ -81,25 +113,35 @@ exports.run = async (h) => {
 
   // Clients: one item — straight to the new client form
   await h.go("/clients");
-  h.expect((await p.getByRole("button", { name: "Новый клиент", exact: true }).locator("visible=true").count()) === 1, "Clients: one «＋ Новый клиент»");
+  h.expect((await plus().count()) === 1, "Clients: one «＋» (its only item goes straight to the form)");
   await plus().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/client/edit", `Clients «＋» → /client/edit (${p.url()})`);
 
-  // Client: «Новая работа» and «Смета», both tied to the client
+  // Client (#1094): the card's main action is a visible verb «Создать смету»; the «＋» offers the estimate first,
+  // then «Работа без сметы», each with one line saying what it makes
   await h.go("/client/c1");
-  await plus().click();
-  body = await sheetText();
-  h.expect(body.includes("Новая работа") && body.includes("Смета"), "client «＋»: job and estimate");
-  await sheet().getByTestId("fab-estimate").click();
-  await p.waitForTimeout(700);
-  h.expect(path(h) === "/estimate/new" && new URL(p.url()).searchParams.get("customerId") === "c1", `client «＋» → estimate for c1 (${p.url()})`);
+  const mainBtn = p.getByTestId("client-make-estimate").locator("visible=true");
+  h.expect((await mainBtn.count()) === 1, "client card: one visible «Создать смету» button");
+  await mainBtn.first().click();
+  await p.waitForURL(/\/estimate\/new/, { timeout: 5000 });
+  h.expect(path(h) === "/estimate/new" && new URL(p.url()).searchParams.get("customerId") === "c1", `client card «Создать смету» → estimate for c1 (${p.url()})`);
+  // no «＋» on the client card (prototype v6, founder 14.11, #1343): «Работа без сметы» is «＋» on the «Работы» tab
+  await h.go("/client/c1");
+  await p.getByTestId("client-tabs").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').count()) === 0, "client card: no «＋»");
+  const jobsTab = p.getByTestId("client-tabs-jobs").locator("visible=true").first();
+  await jobsTab.scrollIntoViewIfNeeded();
+  await jobsTab.click();
+  await p.getByTestId("client-new-job").locator("visible=true").first().getByRole("button").click();
+  await p.waitForURL(/\/job\/new/, { timeout: 5000 });
+  h.expect(new URL(p.url()).searchParams.get("customerId") === "c1", `«Работы» → «Работа без сметы» for c1 (${p.url()})`);
 
   // Job: «Запланировать работу» for this job and «Смета»
   await h.go("/job/j1");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Запланировать работу") && body.includes("Смета"), "job «＋»: visit and estimate");
+  h.expect(await has("visit", "estimate"), "job «＋»: visit and estimate");
   await sheet().getByTestId("fab-visit").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/job/schedule" && new URL(p.url()).searchParams.get("jobId") === "j1", `job «＋» → schedule j1 (${p.url()})`);
@@ -108,8 +150,8 @@ exports.run = async (h) => {
   await h.go("/plan");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Новый лид") && body.includes("Записать в план"), "Plan «＋»: lead and «Записать в план»");
-  for (const it of ["Новая работа", "Событие", "Выходной"]) h.expect(body.includes(it), `Plan «＋» has «${it}»`);
+  h.expect(await has("lead", "planAdd"), "Plan «＋»: lead and «Записать в план»");
+  h.expect(await has("job", "planEvent", "planTimeOff"), "Plan «＋»: job, event, day off");
   await sheet().getByTestId("fab-planAdd").click();
   await p.waitForTimeout(600);
   await h.expectText(/Осмотр|осмотр/, "«Записать в план» opens the Plan's sheet");
@@ -134,7 +176,7 @@ exports.run = async (h) => {
   h.expect((await vis("home-bell").count()) === 0, "tech: no bell (client and money notices are the office's)");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Новый лид") && body.includes("Расход по чеку") && !body.includes("Новый клиент") && !body.includes("Смета") && !body.includes("Новая работа"), "tech Главная «＋»: Лид · Расход");
+  h.expect((await has("lead", "expense")) && (await lacks("client", "estimate", "job")), "tech Главная «＋»: Лид · Расход");
   await closeSheet();
   const tdb = await h.db();
   const mine = tdb.visits.find((v) => v.kind !== "inspection" && ((v.assigneeIds ?? []).includes(tdb.me) || v.techId === tdb.me));
@@ -142,7 +184,7 @@ exports.run = async (h) => {
     await h.go(`/visit/${mine.id}`);
     await plus().click();
     body = await sheetText();
-    h.expect(body.includes("Фото") && body.includes("Новый лид") && body.includes("Расход по чеку"), "tech visit «＋»: Фото · Лид · Расход");
+    h.expect(await has("photo", "lead", "expense"), "tech visit «＋»: Фото · Лид · Расход");
     await h.shot("visit-sheet");
     await closeSheet();
   }

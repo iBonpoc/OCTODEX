@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { DB, Expense, Invoice, Payment } from "../src/data/types";
 import { setZone } from "../src/features/zone";
-import { asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
+import { canTakeVisitPayment, paymentRight, asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
 
 const LA = "America/Los_Angeles";
 afterEach(() => setZone(LA));
@@ -143,5 +143,34 @@ describe("the search of «Расходы» (spec 31, one rule)", () => {
     expect(matchExpense(db, x, "petrov")).toBe(true);
     expect(matchExpense(db, x, "zzz")).toBe(false);
     expect(matchExpense(db, { ...x, jobId: null }, "mitch")).toBe(false);
+  });
+});
+
+describe("unit:moneyLists — who takes a payment on an invoice (#868, 13 §4, 17)", () => {
+  it("the office: any part of any invoice", () => {
+    for (const role of ["director", "dispatcher"] as const) {
+      expect(paymentRight(role, { kind: "final" }, { fromEstimate: false })).toBe("any");
+      expect(paymentRight(role, { kind: "deposit" }, { fromEstimate: true, pendingCents: 2500 })).toBe("any");
+    }
+  });
+  it("sales: none on an invoice (the database refuses, T191) — only the whole deposit of a deposit invoice", () => {
+    const est = { fromEstimate: true };
+    expect(paymentRight("sales", { kind: "final" }, est)).toBe("none");
+    expect(paymentRight("sales", { kind: "progress" }, est)).toBe("none");
+    expect(paymentRight("sales", { kind: undefined }, est)).toBe("none");
+    expect(paymentRight("sales", { kind: "deposit" }, est)).toBe("wholeDeposit");
+  });
+  it("sales: a deposit invoice the office made by hand (no estimate) — none (it would be a payment of their own, 42501)", () => {
+    expect(paymentRight("sales", { kind: "deposit" }, { fromEstimate: false })).toBe("none");
+  });
+  it("sales: a payment of the deposit on its way (ACH) — none, never paid twice (review of #1061 Б1)", () => {
+    expect(paymentRight("sales", { kind: "deposit" }, { fromEstimate: true, pendingCents: 2500 })).toBe("none");
+  });
+});
+
+describe("unit:moneyLists — the payment on a visit (#1061 В-2)", () => {
+  it("the office and the tech take it; sales do not (record_visit_payment refuses them, T191)", () => {
+    for (const r of ["director", "dispatcher", "tech"] as const) expect(canTakeVisitPayment(r)).toBe(true);
+    expect(canTakeVisitPayment("sales")).toBe(false);
   });
 });

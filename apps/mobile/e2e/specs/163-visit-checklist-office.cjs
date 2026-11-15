@@ -97,8 +97,15 @@ exports.run = async (h) => {
   await h.shot("dispatcher");
   await pressEscUntilClosed(p);
 
-  // sales and the tech: no editor (the server would refuse their edits)
+  // sales and the tech: no editor (the server would refuse their edits). The tech reads only his own visit (#868,
+  // visits_select — T22): the inspection is made his first, from a page without the app (unassigned, he sees «no access»)
   for (const role of ["sales", "tech"]) {
+    if (role === "tech") {
+      await h.go("/today");
+      const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+      Object.assign(raw.db.visits.find((x) => x.id === ID), { techId: raw.db.me, assigneeIds: [raw.db.me] });
+      await h.seed("octo.db.v5", raw);
+    }
     await p.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
     await h.go(`/visit/${ID}`);
     await h.expectText(/Пунктов: 5/, `${role}: the checklist is read`);

@@ -8,6 +8,7 @@
  * 3) a second advance is refunded as any payment (no invoice owes it again);
  * 4) a tech: no «Зачесть». The server's side — db T135; the demo mutation never runs in the cloud (unit advance).
  */
+const { rcptAct, rcptHas } = require("../receiptMenu.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/payments?p=all");
@@ -60,7 +61,7 @@ exports.run = async (h) => {
 
   // 3) the second advance: refunded as any payment
   await h.go("/receipt/e2e-adv-191");
-  await p.getByTestId("rcpt-refund").locator("visible=true").first().getByRole("button").click();
+  await rcptAct(p, "refund");
   const rs = h.sheet();
   await rs.getByTestId("refund-form").waitFor({ timeout: 5000 });
   await rs.getByRole("textbox").first().fill("10");

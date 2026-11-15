@@ -1,4 +1,4 @@
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { languages, useI18n, type Lang } from "@/i18n";
@@ -7,11 +7,17 @@ import { Button, ChoiceChips, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
+import { canSeeShowcase } from "@/features/showcase/access";
+import { useHapticsEnabled } from "@/ui/haptics";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
 import { PushSettingsSection } from "@/features/PushSettings";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
+import Constants from "expo-constants";
+import { component, space } from "@octo/design-tokens";
+import { BUILD } from "@/config/version";
+import { BrandLogo } from "@/ui/brand";
 
 /**
  * «Настройки приложения» (spec 26; was «Мои настройки», docs/specs/05 §4.1): how the app looks and behaves for me —
@@ -20,11 +26,12 @@ import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
  */
 export default function Settings() {
   const { t, lang, setLang } = useI18n();
-  const { online, setOnline, resetDemo, mode } = useStore();
+  const { online, setOnline, resetDemo, mode, role } = useStore();
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
   const [showDone, setShowDone] = usePlanShowDone();
+  const [hapticsOn, setHapticsOn] = useHapticsEnabled();
   // «Для проверки» (offline, reset) — demo only (docs/specs/13 §2.3)
   return (
     <Screen title={t("nav.mySettings")}>
@@ -46,6 +53,26 @@ export default function Settings() {
         <T v="heading">{t("more.language")}</T>
         <Segmented<Lang> full value={lang} onChange={setLang} items={languages.map((l) => ({ key: l.id, label: l.label }))} />
       </Card>
+      {/* «Дизайн-система» (#1093): the showcase — the owner's (and the demo's) view of every token and component */}
+      {canSeeShowcase(mode, role) ? (
+        <Card>
+          <View testID="settings-design-system">
+            <ListRow title={t("ds.title")} subtitle={t("ds.rowHint")} onPress={() => router.push("/settings/design-system")} />
+          </View>
+        </Card>
+      ) : null}
+      {/* «Вибрация» (DS §15.6, В-20): a setting of this device, on by default; the web has no vibration, so no switch there */}
+      {Platform.OS !== "web" ? (
+        <Card>
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="heading" style={{ flex: 1 }}>
+              {t("haptics.title")}
+            </T>
+            <Toggle label={t("haptics.title")} on={hapticsOn} onChange={setHapticsOn} />
+          </RowView>
+          <T v="caption" tone="mut">{t("haptics.hint")}</T>
+        </Card>
+      ) : null}
       {/* wave 7б-1: personal, the same on every device (docs/specs/03 §12) */}
       <SectionTitle title={t("pref7b.plan")} />
       <Card>
@@ -76,6 +103,14 @@ export default function Settings() {
       <SectionTitle title={t("settings.about")} />
       <Card>
         <View testID="settings-about">
+          {/* GoRix «О приложении» (DS §18.2): the logo, the version and the build — still, no move */}
+          <View testID="about-brand" style={{ alignItems: "center", gap: space[2], paddingVertical: space[4] }}>
+            <BrandLogo width={component.brand.about} />
+            <T v="caption" tone="mut" tabular>
+              {t("brand.about.version", { v: Constants.expoConfig?.version ?? "1.0.0", b: BUILD || "dev" })}
+            </T>
+          </View>
+          <Divider />
           <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
           <Divider />
           <ListRow title={t("legal.privacy.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.privacy) })} onPress={() => router.push(legalHref("privacy"))} />

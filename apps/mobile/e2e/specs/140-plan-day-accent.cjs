@@ -20,6 +20,7 @@ exports.run = async (h) => {
   }, { a: atMinute(today, 14 * 60), b: atMinute(today, 15 * 60) });
   await h.go("/plan");
   const got = p.getByRole("button", { name: "Понятно", exact: true }).locator("visible=true");
+  // optional: the first-visit hint of the screen shows once per device — close it only when it is there (#800)
   if (await got.count()) { await got.first().click(); await p.waitForTimeout(300); }
 
   const assign = p.getByRole("button", { name: "Назначить", exact: true }).locator("visible=true");

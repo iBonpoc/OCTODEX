@@ -5,6 +5,7 @@
  * (the scene rebuilt and redrawn every frame) → 20 taps (select → the first frame after the commit). The thresholds
  * are the founder's: pan p90 ≥ 55 fps, drag ≥ 50, tap < 100 ms, open < 500 ms. Nothing is saved.
  */
+import { APP_NAME } from "@/config/product";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PixelRatio, Platform, View, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
@@ -188,7 +189,7 @@ export default function BenchScreen() {
   };
 
   const word = (ok: boolean) => t(ok ? "mod.gutters.bench.pass" : "mod.gutters.bench.fail");
-  const head = `OCTODEX · ${BUILD} · ${Platform.OS} ${String(Platform.Version)} · ${Math.round(win.width)}×${Math.round(win.height)} @${PixelRatio.get()}`;
+  const head = `${APP_NAME} · ${BUILD} · ${Platform.OS} ${String(Platform.Version)} · ${Math.round(win.width)}×${Math.round(win.height)} @${PixelRatio.get()}`;
   const copy = async () => {
     await Clipboard.setStringAsync(reportText(results, head, word, (k) => t(nameKey[k])));
     toast.show(t("mod.gutters.bench.copied"));

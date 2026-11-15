@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
 import { View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
-import { component, motion, radius, space } from "@octo/design-tokens";
+import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { T } from "./primitives";
 import { barHeight } from "./chartMath";
@@ -65,9 +65,19 @@ function Bar({ col, max, index }: { col: Column; max: number; index: number }) {
   return (
     <View style={{ flex: 1, alignItems: "center", gap: space[1] }}>
       {/* the value line sits above the track in every column (blank where there is no value): equal tracks */}
-      <T v="micro" w="semibold" tabular center numberOfLines={1}>
-        {col.current && col.valueLabel ? col.valueLabel : " "}
-      </T>
+      <View style={{ alignSelf: "stretch", alignItems: "center" }}>
+        <T v="micro" tabular center>
+          {" "}
+        </T>
+        {/* the figure of the current column is wider than its column at a bigger type: it stands over the column, centred, never cut (#1303) */}
+        {col.current && col.valueLabel ? (
+          <View pointerEvents="none" style={{ position: "absolute", top: 0, width: size.hitMin * 2, alignItems: "center" }}>
+            <T v="micro" w="semibold" tabular center>
+              {col.valueLabel}
+            </T>
+          </View>
+        ) : null}
+      </View>
       <View testID="chart-track" style={{ height: h, width: "100%", justifyContent: "flex-end", borderRadius: barRadius, backgroundColor: c.track, overflow: "hidden" }}>
         {height > 0 ? (
           <Animated.View

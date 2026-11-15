@@ -2,24 +2,29 @@
  * A tape measure to pull (founder 09.11: «как рулетка, бегунком проматывать длину»; then his sample «tape pager»: drag
  * with inertia, it settles on the nearest mark under the line, arrows step one mark, the value big above). A strip of
  * marks under a fixed mark in the middle; the finger drags the tape, a flick keeps it running and slowing, then it
- * settles on a mark. The scale is given: 1/8″ marks (inches numbered, feet bold) or millimetres (centimetres numbered,
+ * settles on a mark. The scale is given: 1/16″ marks (inches numbered, feet bold) or millimetres (centimetres numbered,
  * every 10 cm bold). Only the marks in sight are drawn (a 500′ tape is 48 000 marks). PanResponder: the same on the
  * phone, the tablet and the web; VoiceOver and the arrows step one mark. Our own code (the sample's has no licence).
  */
 import { useEffect, useRef, useState } from "react";
 import { PanResponder, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop, Text as SvgText } from "react-native-svg";
-import { drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
+import { component, drawing as dt, font, radius, size, space, spaceHalf } from "@octo/design-tokens";
+import { haptics } from "@/ui/haptics";
+import { settleAt, tickDue } from "./tapeMath";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { useSheetHold } from "@/ui/overlays";
 
-/** px per mark: room for a fraction under each eighth, as on a real tape (founder 09.11) */
-const TICK = space[4];
+/** px per mark (1/16″ or 1 mm): room for a fraction under each eighth, and wide enough for a finger to hit a mark — the tape is stretched over a real one
+ *  (founder 13.11, #1315: «шаг больше… чуть растянутая, ничего страшного»; the token `tapeTick`) */
+const TICK = component.tapeTick;
 /** tall enough for the marks, the fractions under them and the length under the inch, readable (founder 09.11) */
-const H = size.hitMin * 3;
+const H_FULL = size.hitMin * 3;
+/** a short window (a phone of 667 pt with the number keyboard up): the strip is a little lower so the window's buttons stay above the keyboard (#1345) */
+const H_SHORT = size.hitMin * 2.5;
 /** a flick: the share of speed kept per millisecond, and the speed (marks per ms) at which it settles */
 const KEEP_PER_MS = 0.996;
 const STOP = 0.002;
@@ -51,24 +56,30 @@ export const coastEnd = (at: number, speed: number) => (Math.abs(speed) < STOP ?
 export interface Mark { h: number; text?: string; bold?: boolean; /** a fraction under a short mark (⅛ … ⅞), ½ bigger */ frac?: string; big?: boolean }
 export type Scale = (k: number) => Mark;
 
-/**
- * 1/8″: every inch with the whole length «25′ 6″» (founder 09.11: «на рулетке видно 25 фит 6 инчей, потом тонкая
- * настройка»), the feet bold «26′», the eighths between them shorter
- */
-export const EIGHTHS_SCALE: Scale = (k) =>
-  k % 96 === 0
-    ? { h: 0.45, text: k ? `${k / 96}′` : undefined, bold: true }
-    : k % 8 === 0
-      ? { h: 0.45, text: `${Math.floor(k / 96)}′ ${(k / 8) % 12}″` }
-      : { h: k % 4 === 0 ? 0.36 : k % 2 === 0 ? 0.28 : 0.2, frac: EIGHTH[k % 8], big: k % 8 === 4 };
-/** the fractions of an inch as a tape writes them */
+/** the fractions of an inch as a tape writes them: a glyph at an eighth (⅜); the sixteenths between carry none (too narrow) */
 const EIGHTH = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"];
+/** the short marks between two inches, 1/16″ apart: the half longest, then the quarters, the eighths, the sixteenths shortest */
+const short = (k: number): Mark => ({ h: k % 8 === 0 ? 0.36 : k % 4 === 0 ? 0.3 : k % 2 === 0 ? 0.24 : 0.16, ...(k % 2 === 0 ? { frac: EIGHTH[(k % 16) / 2], big: k % 16 === 8 } : {}) });
+/**
+ * 1/16″ (founder 11.11): every inch with the whole length «25′ 6″» (founder 09.11: «на рулетке видно 25 фит 6 инчей,
+ * потом тонкая настройка»), the feet bold «26′», the fractions between them shorter; a mark is 1/16″
+ */
+export const SIXTEENTHS_SCALE: Scale = (k) =>
+  k % 192 === 0
+    ? { h: 0.45, text: k ? `${k / 192}′` : undefined, bold: true }
+    : k % 16 === 0
+      ? { h: 0.45, text: `${Math.floor(k / 192)}′ ${(k / 16) % 12}″` }
+      : short(k);
+/** inches alone: every inch numbered as it is (no feet) */
+export const SIXTEENTHS_SCALE_IN: Scale = (k) => (k % 16 === 0 ? { h: 0.45, text: k ? `${k / 16}″` : undefined, bold: k % 192 === 0 } : short(k));
 /** millimetres: every centimetre with the whole length «102 cm», every 10 cm bold «1.1 m», the millimetres between */
 export const MM_SCALE: Scale = (k) =>
   k % 100 === 0 ? { h: 0.45, text: k ? `${k / 1000} m` : undefined, bold: true } : k % 10 === 0 ? { h: 0.45, text: `${k / 10} cm` } : { h: k % 5 === 0 ? 0.3 : 0.18 };
 
-export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepLabels }: {
-  /** the value in marks (1/8″ or mm) */
+export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepLabels, short }: {
+  /** a short window: the lower strip (`H_SHORT`) */
+  short?: boolean;
+  /** the value in marks (1/16″ or mm) */
   marks: number;
   onMarks: (k: number) => void;
   max: number;
@@ -80,6 +91,7 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
   stepLabels: { less: string; more: string };
 }) {
   const { c } = useTheme();
+  const H = short ? H_SHORT : H_FULL;
   const [w, setW] = useState(0);
   const v = Math.round(marks);
   const now = useRef({ v, onMarks });
@@ -95,9 +107,19 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
     fling.current = null;
   };
   useEffect(() => stop, []);
+  /** when the last tick was given (ms): a mark crossed gives one, a flick over many does not buzz (#1315) */
+  const lastTick = useRef(0);
   const set = (k: number) => {
-    const n = Math.min(max, Math.max(1, Math.round(k)));
-    if (n !== now.current.v) now.current.onMarks(n);
+    const n = settleAt(k, max);
+    if (n !== now.current.v) {
+      const t = Date.now();
+      // every mark crossed is felt in the hand (DS §15.6: the value changes by steps → `selection`)
+      if (tickDue(now.current.v, n, lastTick.current, t)) {
+        haptics.selection();
+        lastTick.current = t;
+      }
+      now.current.onMarks(n);
+    }
     return n;
   };
   /** past an end the tape gives a little (a third of the pull), as a real one does — the sample's edge */
@@ -226,7 +248,7 @@ export function Tape({ marks, onMarks, max, scale, readout, testID, label, stepL
           },
         } as object)}
         // a drag with a mouse must not select the numbers (the web)
-        style={{ height: H, borderRadius: radius.field, overflow: "hidden", backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, ...({ userSelect: "none" } as object) }}
+        style={{ height: H, borderRadius: radius.field, overflow: "hidden", backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, ...({ userSelect: "none" } as object) }}
         {...pan.panHandlers}
       >
         {w > 0 ? (

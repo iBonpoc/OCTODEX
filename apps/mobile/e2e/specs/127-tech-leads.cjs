@@ -63,6 +63,10 @@ exports.run = async (h) => {
     const sheet = await h.text();
     h.expect(!/Ответственный/.test(sheet) && !/Источник/.test(sheet), "no «Ответственный» / «Источник» for the tech");
     await pressEscUntilClosed(p);
+  } else {
+    // the tech's bar has no office groups at all: no button to open them, none standing open in the bar (1280). Found by
+    // #800: this check used to be skipped silently at every width.
+    h.expect((await p.locator('[data-testid^="filter-group-"]').locator("visible=true").count()) === 0, "no filter groups for the tech (neither behind a button nor open in the bar)");
   }
 
   // his lead goes up to «Лиды»
@@ -78,7 +82,8 @@ exports.run = async (h) => {
   await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     const e = raw.db.estimates.find((x) => x.totalCents > 0);
-    raw.db.estimates = [...raw.db.estimates, { ...e, id: "e127", leadId: "l1", title: "E127 water heater", number: "EST-0127" }];
+    // the tech's own (#1138: he sees an estimate he made, or one at a property of his visit — as the server)
+    raw.db.estimates = [...raw.db.estimates, { ...e, id: "e127", leadId: "l1", title: "E127 water heater", number: "EST-0127", createdBy: raw.db.me }];
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
   });
   await h.go("/lead/l1");

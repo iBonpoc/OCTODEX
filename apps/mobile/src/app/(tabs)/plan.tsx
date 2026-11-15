@@ -23,6 +23,7 @@ import { FilterBar } from "@/ui/filterBar";
 import type { FilterGroup } from "@/ui/filterBarRules";
 import { dayLoads, daysFrom, matchPlanItem, matchVisit, planItems, type DayLoad } from "@/features/planFeed";
 import { EventSheet, type EventSheetState } from "@/features/EventForm";
+import { StatusNote } from "@/ui/statusNote";
 
 /** the Feed shows a week from the picked day; the arrows move it by a week */
 const FEED_DAYS = 7;
@@ -202,10 +203,10 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
         <Empty icon="calendar" title={t("plan.empty")} action={onAdd ? <Button label={t("plan.emptyBook")} icon="plus" variant="secondary" onPress={onAdd} /> : undefined} />
       ) : null}
       {canAssign && unassigned.length > 0 ? (
-        <View style={{ gap: space[2] }}>
-          <T v="heading" tone="warn">
+        <View style={{ gap: space[2] }} testID="plan-unassigned">
+          <StatusNote tone="warn" v="heading">
             {t("plan.unassigned")} · {unassigned.length}
-          </T>
+          </StatusNote>
           <Grid>
             {unassigned.map((v) => (
               <View key={v.id} style={{ gap: space[2] }}>

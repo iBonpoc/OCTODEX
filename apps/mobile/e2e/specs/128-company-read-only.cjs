@@ -23,8 +23,8 @@ exports.run = async (h) => {
   await h.expectText(/Только просмотр — менять может директор/, "the note on a section");
   const field = p.getByPlaceholder("Acme Home Services").first();
   const before = await field.inputValue();
-  h.expect(await field.isDisabled().catch(() => false) || !(await field.isEditable()), "the company name field is not editable");
-  await field.click({ force: true }).catch(() => {});
+  h.expect(!(await field.isEditable()), "the company name field is not editable");
+  await field.evaluate((el) => el.focus()); // focus without a click: it never fails on a disabled field
   await p.keyboard.type("XYZ");
   h.expect((await field.inputValue()) === before, `typing changes nothing (${before} → ${await field.inputValue()})`);
   h.expect((await p.getByRole("button", { name: "Сохранить", exact: true }).locator("visible=true").count()) === 0, "no «Сохранить» for the office");

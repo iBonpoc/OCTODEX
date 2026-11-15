@@ -99,7 +99,7 @@ const body = (r: { body: string }) => JSON.parse(r.body);
 describe("stripe-pay: who may call", () => {
   it("only our production site; the CORS answer names it, never «*»", async () => {
     const { d, opened } = deps();
-    for (const origin of [null, "https://evil.example", "https://octodex--pr-12.expo.app", "http://octodex.expo.app"]) {
+    for (const origin of [null, "https://evil.example", "https://octodex.expo.app", "https://octodex--pr-12.expo.app", "http://octodex.expo.app", "https://gorix--pr-12.expo.app", "http://gorix.expo.app", "https://gorix.expo.app.evil.com"]) {
       const r = await handlePay(req({ origin }), d);
       expect(r.status).toBe(403);
       expect(r.headers["Access-Control-Allow-Origin"]).toBeUndefined();
@@ -109,6 +109,20 @@ describe("stripe-pay: who may call", () => {
     expect(pre.status).toBe(204);
     expect(pre.headers["Access-Control-Allow-Origin"]).toBe(SITE);
     expect(pre.headers.Vary).toBe("Origin");
+  });
+  it("#656: gorix.expo.app pays; the released old name octodex is a stranger's site now and is refused", async () => {
+    const { d, opened } = deps();
+    const pre = await handlePay(req({ method: "OPTIONS", origin: "https://gorix.expo.app" }), d);
+    expect(pre.status).toBe(204);
+    expect(pre.headers["Access-Control-Allow-Origin"]).toBe("https://gorix.expo.app");
+    expect((await handlePay(req({ origin: "https://gorix.expo.app" }), d)).status).not.toBe(403);
+    expect(opened).toEqual([[TOKEN, INV]]);
+    const old = deps();
+    const r = await handlePay(req({ origin: "https://octodex.expo.app" }), old.d);
+    expect(r.status).toBe(403);
+    expect(r.headers["Access-Control-Allow-Origin"]).toBeUndefined();
+    expect(old.opened).toEqual([]);
+    expect(ALLOWED_ORIGINS).toEqual(["https://gorix.expo.app"]);
   });
   it("a bad body opens nothing", async () => {
     expect(parseBody(JSON.stringify({ token: TOKEN, invoiceId: INV }))).toEqual({ token: TOKEN, invoiceId: INV });
@@ -338,11 +352,21 @@ describe("stripe-pay: rate limits (spec 35 §4д)", () => {
       expect(logs.join(" ")).not.toContain("203.0.113.7");
     }
   });
-  it("the limits failing let the payment through (a miss keeps its own answer), with a line in the log", async () => {
+  it("a limit that fails: 429 «wait», no intent is made or cancelled (a miss keeps its own answer), with a line in the log", async () => {
     const boom = async () => { throw new Error("db"); };
-    const ok = deps({ rate: boom, invoiceRate: boom });
-    expect((await handlePay(req(), ok.d)).status).toBe(200);
-    expect(ok.logs.join(" ")).toContain("rate limit failed");
+    const byLink = deps({ rate: boom });
+    const r1 = await handlePay(req(), byLink.d);
+    expect(r1.status).toBe(429);
+    expect(body(r1)).toEqual({ error: "rate_limited", retryAfter: 30 });
+    expect(byLink.opened).toEqual([]);
+    expect(byLink.calls).toEqual([]);
+    expect(byLink.logs.join(" ")).toContain("rate limit failed");
+    const byInvoice = deps({ invoiceRate: boom, a: attempt({ stale_intents: ["pi_Old1"] }) });
+    const r2 = await handlePay(req(), byInvoice.d);
+    expect(r2.status).toBe(429);
+    expect(r2.headers["Retry-After"]).toBe("30");
+    expect(byInvoice.calls).toEqual([]);
+    expect(byInvoice.logs.join(" ")).toContain("invoice rate limit failed");
     const miss = deps({ a: unknown(), rateMiss: boom });
     expect(body(await handlePay(req(), miss.d))).toEqual({ error: "nothing_to_pay" });
   });

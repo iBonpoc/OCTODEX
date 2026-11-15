@@ -39,14 +39,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   // S5 → S6: an estimate from the lead, one line, sent
   await h.clickText("Сметы");
   await h.click("Смета");
-  await p.getByRole("button", { name: "Добавить позицию" }).first().click();
-  await p.waitForTimeout(300);
-  await h.sheet().getByPlaceholder(/Начните писать/).fill(LINE);
-  await h.sheet().getByText(/Своя позиция:/).click();
-  await p.waitForTimeout(250);
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill(PRICE);
-  await h.sheet().getByRole("button", { name: "Готово" }).click();
-  await p.waitForTimeout(250);
+  await require("../../estimateLine.cjs").addCustom(h, LINE, PRICE);
   await p.getByRole("button", { name: "Сохранить и отправить" }).click();
   await p.waitForTimeout(700);
   await p.getByRole("button", { name: "Копировать ссылку" }).click();

@@ -14,8 +14,9 @@ import { Button, Segmented, TextField } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow } from "@/ui/surfaces";
-import { linkChoices, relink } from "../data";
+import { linkChoices, relink, undoAll } from "../data";
 import type { Customer, Property } from "@/data/types";
+import { type GuardedUndo } from "@/data/undo";
 
 type Tab = "leads" | "clients";
 
@@ -36,7 +37,7 @@ export function LinkSheet({ visible, onClose, measurementId }: { visible: boolea
     setPhone("");
     setName("");
   };
-  const done = (undo: (() => void) | null, who: string) => {
+  const done = (undo: GuardedUndo | null, who: string) => {
     reset();
     onClose();
     toast.show(t("mod.gutters.link.done", { who }), undo ?? undefined);
@@ -53,7 +54,8 @@ export function LinkSheet({ visible, onClose, measurementId }: { visible: boolea
     const who = name.trim() || phone.trim();
     const r = store.addLead({ name: who, phone: phone.trim(), city: "", sourceId: source, message: "", service: undefined });
     const linked = relink(store, measurementId, { leadId: r.id });
-    done(() => (linked?.(), r.undo()), who);
+    // the lead and the measurement's link to it: both or neither (#1244, DS §15.2)
+    done(undoAll(store, [r.undo, linked]), who);
   };
   return (
     <Sheet visible={visible} onClose={close} title={t("mod.gutters.link.title")}>

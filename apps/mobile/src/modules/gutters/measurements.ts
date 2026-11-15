@@ -8,7 +8,7 @@ import type { DB, Estimate } from "@/data/types";
 import { fromElements } from "./canvas/model";
 import type { MeasurementRow } from "./canvas/model";
 import { gutterData } from "./data";
-import { estimateOfMeasurement, ofMeasurement } from "./estimateLink";
+import { engineChangedFor, estimateOfMeasurement, ofMeasurement } from "./estimateLink";
 import { runLengthIn } from "./geometry";
 
 /**
@@ -31,22 +31,24 @@ export interface MeasurementStateView {
   estimate?: Estimate;
   /** the drawing was changed after its estimate (`estimate`: «Чертёж изменён»; `signed`: «Изменён после подписи», В4) */
   changed: boolean;
+  /** the estimate was computed by an older engine (#1165): «Расчёт изменился — обновите» (a signed one: only said) */
+  engineChanged: boolean;
 }
 
 type StateDB = Pick<DB, "estimates">;
 
 /** the state of one measurement (П25.4); `drawn` — something is drawn (an emptied drawing makes no lines: never «changed») */
 export function measurementState(db: StateDB, m: Pick<MeasurementRow, "id" | "status" | "leadId" | "propertyId">, drawn: boolean): MeasurementStateView {
-  if (!m.leadId && !m.propertyId) return { state: "unlinked", changed: false };
+  if (!m.leadId && !m.propertyId) return { state: "unlinked", changed: false, engineChanged: false };
   const mine = db.estimates.filter((e) => e.doc?.options?.some((o) => o.lines.some((l) => ofMeasurement(l, m.id))));
   // a real edit of the drawing after «Сделать смету» puts the measurement back to draft (canvas/moduleStore.ts) — the same
   // sign `staleMeasurements` reads
   const changed = drawn && m.status === "draft";
   const signed = mine.find((e) => SIGNED.has(e.status));
-  if (signed) return { state: "signed", estimate: signed, changed };
+  if (signed) return { state: "signed", estimate: signed, changed, engineChanged: engineChangedFor(signed, m.id) };
   const e = estimateOfMeasurement(db, m.id);
-  if (e) return { state: "estimate", estimate: e, changed };
-  return { state: "noEstimate", changed: false };
+  if (e) return { state: "estimate", estimate: e, changed, engineChanged: engineChangedFor(e, m.id) };
+  return { state: "noEstimate", changed: false, engineChanged: false };
 }
 
 export interface MeasurementItem {
