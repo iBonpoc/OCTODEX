@@ -45,6 +45,24 @@ exports.run = async (h) => {
   }
   await h.shot("property-lists");
 
+  // the two buttons of an address stand in one row and are not cut, in every language of the app (the review of #1663: «Работа без см…»)
+  for (const lang of ["ru", "en", "es"]) {
+    await h.seed("octo.lang.v1", lang);
+    await h.go("/property/p1");
+    await vis("prop-new-job").first().waitFor({ timeout: 8000 });
+    const cut = await p.evaluate(() =>
+      ["prop-new-estimate", "prop-new-job"].map((id) => {
+        const el = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.offsetParent !== null);
+        const label = el ? [...el.querySelectorAll("*")].filter((n) => n.children.length === 0 && n.textContent.trim()).pop() : null;
+        return label ? label.scrollWidth > label.clientWidth + 1 : "missing";
+      }),
+    );
+    h.expect(cut.every((x) => x === false), `${lang}: the address buttons' words are whole (${cut.join(", ")})`);
+    const [b1, b2] = await Promise.all([vis("prop-new-estimate").first().boundingBox(), vis("prop-new-job").first().boundingBox()]);
+    h.expect(Math.abs(b1.y - b2.y) < 2, `${lang}: the two buttons stand in one row`);
+  }
+  await h.seed("octo.lang.v1", "ru");
+
   // the technician: no new object from a list
   await h.seed("octo.role.v1", "tech");
   await h.go("/client/c2?s=jobs");
