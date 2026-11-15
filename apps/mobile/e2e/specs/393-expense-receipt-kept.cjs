@@ -17,7 +17,7 @@ exports.run = async (h) => {
   const [chooser] = await Promise.all([p.waitForEvent("filechooser"), photo.click()]);
   await chooser.setFiles({ name: "receipt.png", mimeType: "image/png", buffer: PNG });
   await p.locator('img[src^="blob:"]').first().waitFor({ timeout: 8000 }); // the receipt is shown on the form
-  await p.getByPlaceholder("Сумма, $").locator("visible=true").first().fill(AMOUNT);
+  await p.getByTestId("field-amount").locator("input").locator("visible=true").first().fill(AMOUNT);
   await p.getByTestId("expense-save").locator("visible=true").first().click();
 
   // the expense is saved with its receipt's file (it goes to the cloud)
@@ -40,5 +40,10 @@ exports.run = async (h) => {
   await h.go("/money");
   await card().waitFor({ timeout: 8000 });
   h.expect(!/Без чека/.test(await card().innerText()), "the cloud's copy (another phone): the card has its receipt, not «Без чека»");
+  // the check is not empty: an expense without a receipt does say «Без чека»
+  const bare = raw.db.expenses.find((y) => !y.receiptUri && !y.receiptFileId);
+  h.expect(!!bare, "the demo has an expense without a receipt");
+  const bareCard = p.locator('[data-testid="list-card"]').locator("visible=true").filter({ hasText: bare.vendor }).filter({ hasText: /Без чека/ });
+  h.expect((await bareCard.count()) > 0, "an expense without a receipt says «Без чека»");
   await h.shot("receipt-cloud-copy");
 };

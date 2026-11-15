@@ -647,7 +647,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       position: n(r.position), archivedAt: (r.archived_at as string | null) ?? undefined,
     }))
     .sort((a, b) => a.position - b.position);
-  const fileItems: FileItem[] = files.map((f) => ({
+  // #1538: an expense's receipt belongs to its expense, not to the client's / job's files
+  const receiptFiles = new Map(files.filter((f) => f.kind === "receipt").map((f) => [s(f.id), f]));
+  const receiptOf = (id: unknown): Partial<Expense> => {
+    const f = id ? receiptFiles.get(s(id)) : undefined;
+    if (!f) return {};
+    if (f.upload_status === "failed") return { receiptFileId: s(f.id), receiptFailed: "refused" };
+    return f.storage_key ? { receiptFileId: s(f.id) } : {};
+  };
+  const fileItems: FileItem[] = files.filter((f) => f.kind !== "receipt").map((f) => ({
     id: s(f.id), kind: s(f.kind) as FileItem["kind"], jobId: (f.job_id as string | null) ?? undefined, visitId: (f.visit_id as string | null) ?? undefined,
     customerId: (f.customer_id as string | null) ?? undefined, stage: (f.stage as FileItem["stage"] | null) ?? undefined,
     storageKey: (f.storage_key as string | null) ?? undefined, at: s(f.created_at),
@@ -671,8 +679,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     amountCents: n(x.amount_cents),
     at: s(x.created_at),
     memberId: s(x.created_by),
-    // #1538: the receipt is in the cloud (its picture on another phone — with #1080)
-    ...(x.receipt_file_id ? { receiptFileId: s(x.receipt_file_id) } : {}),
+    // #1538: the receipt in the cloud — taken (its picture on another phone with #1080) or refused; one still on its way
+    // to the cloud is not «есть чек» yet (its phone keeps its own copy, keepReceiptLocal)
+    ...receiptOf(x.receipt_file_id),
   }));
 
   return {

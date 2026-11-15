@@ -4260,8 +4260,10 @@ insert into storage.objects (bucket_id, name) values
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 1, 'a tech lists only the files he sees (his own photo), not the office document');
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg'$q$) = 1, 'a tech reads his own photo');
--- pointing storage_key of his own row at the office document opens nothing (the object name decides)
-update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002';
+-- pointing storage_key of his own row at the office document opens nothing (the object name decides); since
+-- 20261115110000 (#1572) the key itself is refused — a row points only at its own object
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002'$q$,
+                 '%its own object%', 'a tech does not point his row at the office document');
 select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$) = 0, 'storage_key does not open someone else''s object');
 -- upload: the app inserts the row, then the object; a repeat upload (upsert) updates it
 insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
@@ -5293,6 +5295,8 @@ select tst.fails_like($q$update public.notifications set company_id = 'cb000000-
   '%company_id is immutable (notifications %', 'notifications keep their company (even for a server function)');
 -- (5) Storage: an object is not renamed into another company (failed before: USING saw A, WITH CHECK saw B)
 :as_owner_b
+-- (since 20261115110000, #1572: an object only for a live files row — the office too)
+insert into public.files (id, company_id, kind) values ('f5900000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'photo');
 insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg');
 select tst.blocked($q$update storage.objects set name = 'c5900000-0000-4000-8000-000000000000/f5900000-0000-4000-8000-000000000001.jpg' where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'$q$,
   'a staff member of two companies does not move a file between them');
@@ -14506,6 +14510,62 @@ select tst.ok(not has_function_privilege('anon', 'app.can_write_file_object(text
               'T212 rule 18: the write check for the app only; the trigger function for nobody');
 \echo 'T212 a recorded file is written by nobody ok'
 
+-- T213 (#1572): a files row points only at its own object; the office too keeps «one row, one object» and writes only
+-- for a live files row (red before 20261115110000)
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
+                 'T213 the author does not point his row at another file of the company');
+select tst.fails_like($q$update public.files set storage_key = 'cb000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
+                 'T213 nor at an object of another company');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/x/../f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
+                 'T213 nor at an odd path');
+select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')$q$, '%set after the upload%',
+                 'T213 a new row does not point at another file either');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg');
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001';
+select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000007.jpg')$q$, '%set after the upload%',
+                      'T213 a new row comes without a key, even its own');
+select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' and upload_status = 'uploaded' from public.files where id = 'f2130000-0000-4000-8000-000000000001'),
+              'T213 the row records its own object (what the app writes)');
+-- a recorded row does not move to another id (it would leave a clean row on the old id to write over)
+select tst.fails_like($q$update public.files set id = 'f2130000-0000-4000-8000-000000000008' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%id is set once%',
+                      'T213 the author does not move his recorded row to another id');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg'), 'T213 the recorded object stays closed');
+-- rename, then a new clean row on the old id: the object stays closed (the rename is refused above)
+select tst.fails($q$insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, 'T213 no second row on a recorded id');
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000005.html' where id = 'f2130000-0000-4000-8000-000000000005'$q$, '%its own object%',
+                      'T213 a key with an extension the bucket does not take is refused');
+select tst.fails_like($q$update public.files set storage_key = upper('ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000005.jpg') where id = 'f2130000-0000-4000-8000-000000000005'$q$, '%its own object%',
+                      'T213 an upper-case key is refused (objects are lower case)');
+:as_owner_a
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000002'$q$, '%its own object%',
+                 'T213 the office does not point a row at another file either');
+-- the office before the mark: one object per row
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000002.jpg');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000002.png')$q$,
+                 'T213 the office does not put a second object of a file (another extension)');
+-- the office: no object without a live row
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-00000000000a.jpg')$q$,
+                 'T213 the office does not write an object without its files row');
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.files set deleted_at = now() where id = 'f2130000-0000-4000-8000-000000000003';
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000003.jpg')$q$,
+                 'T213 nor for a removed row');
+-- the server sets any key (a moved object)
+:as_super
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/moved/f2130000-0000-4000-8000-000000000002.jpg' where id = 'f2130000-0000-4000-8000-000000000002';
+select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/moved/f2130000-0000-4000-8000-000000000002.jpg' from public.files where id = 'f2130000-0000-4000-8000-000000000002'), 'T213 the server''s own key is not refused');
+-- an old build's late «uploaded» with its own key over a server-moved one: ignored (t08), not refused (t09)
+:as_owner_a
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000002.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000002';
+select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/moved/f2130000-0000-4000-8000-000000000002.jpg' from public.files where id = 'f2130000-0000-4000-8000-000000000002'), 'T213 a late key over a moved one is ignored, not refused');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own()', 'EXECUTE'),
+              'T213 rule 18: the trigger function for nobody');
+\echo 'T213 a file row points at its own object ok'
 -- T214 (#1538): an expense's receipt goes to the cloud — a files row of kind 'receipt' tied to the expense; it is read
 -- as its expense is (owner, admin, office, the author; not sales, not another tech); the expense takes only a receipt
 -- of its own (red before 20261115120000)
@@ -14533,6 +14593,26 @@ select tst.fails_like($q$insert into public.expenses (company_id, vendor, amount
 :as_tech_a
 select tst.fails_like($q$update public.expenses set receipt_file_id = 'f2140000-0000-4000-8000-000000000004' where id = 'e2140000-0000-4000-8000-000000000001'$q$, '%receipt of its own%',
                       'T214 the tech does not tie a receipt of another to his expense');
+:as_sales_a
+-- sales change no receipt of another: not its kind (to read it as a photo), not «removed» — even without a WHERE
+update public.files set deleted_at = now() where kind = 'receipt' and created_by <> auth.uid();
+select tst.fails($q$update public.files set kind = 'photo' where id = 'f2140000-0000-4000-8000-000000000004'$q$, 'T214 sales do not turn their own receipt into a photo either');
+-- an object of another's receipt not uploaded yet: sales do not write it; an object without a row: sales do not read it
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+:as_sales_a
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000005.jpg'), 'T214 sales do not write the bytes of another''s receipt');
+:as_super
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-00000000000f.jpg');
+:as_sales_a
+select tst.ok(not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-00000000000f.jpg'), 'T214 sales do not read an object without a files row');
+:as_super
+select tst.ok((select kind = 'receipt' and deleted_at is null from public.files where id = 'f2140000-0000-4000-8000-000000000001'),
+              'T214 the tech''s receipt is untouched by sales (kind, removal)');
+:as_tech_a
+select tst.fails_like($q$update public.files set kind = 'photo' where id = 'f2140000-0000-4000-8000-000000000001'$q$, '%kind and author are set once%',
+                      'T214 the author does not turn his receipt into a photo (others would read it)');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000005.jpg'), 'T214 the author writes the bytes of his own receipt');
 :as_office_a
 select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2140000-0000-4000-8000-000000000001'$q$) = 1
               and app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f2140000-0000-4000-8000-000000000001.jpg'), 'T214 the office reads the receipt');

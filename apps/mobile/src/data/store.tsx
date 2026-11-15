@@ -46,7 +46,7 @@ import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type Void
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
-import { canRetry, keepPhotoLocal, keepReceiptLocal, markPhoto } from "./photoUpload";
+import { canRetry, keepPhotoLocal, keepReceiptLocal, markPhoto, markReceipt } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cacheKey";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -899,6 +899,14 @@ export function StoreProvider({
           // #1431: the cloud refused a photo's file — the photo says so (and why); taken — the mark goes
           if (sent?.photo) {
             const marked = markPhoto(dbRef.current, sent.photo.id, sent.photo.failed, new Date().toISOString());
+            if (marked !== dbRef.current) {
+              dbRef.current = marked;
+              setDb(marked);
+            }
+          }
+          // #1538: an expense's receipt the cloud refused — the card says so; taken — the mark goes
+          if (sent?.receipt) {
+            const marked = markReceipt(dbRef.current, sent.receipt.expenseId, sent.receipt.failed);
             if (marked !== dbRef.current) {
               dbRef.current = marked;
               setDb(marked);

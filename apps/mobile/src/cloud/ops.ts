@@ -564,7 +564,8 @@ export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<
 }
 
 /** what a sent op tells the phone back: a photo's file refused by the cloud, or taken (#1431) */
-export type OpResult = { photo: { id: string; failed: PhotoFail | null } };
+/** what the queue tells the phone back: a visit photo's file taken or refused (#1431); an expense's receipt (#1538) */
+export type OpResult = { photo?: { id: string; failed: PhotoFail | null }; receipt?: { expenseId: string; failed: PhotoFail | null } };
 
 export async function applyOp(op: Op, companyId: string, userId: string): Promise<OpResult | void> {
   const c = companyId;
@@ -1212,7 +1213,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           amount_cents: op.amountCents, idempotency_key: op.id, ...(op.receiptFileId ? { receipt_file_id: op.receiptFileId } : {}),
         }),
       );
-      if (op.receiptFileId && op.receiptUri) await uploadPhoto(c, op.receiptFileId, op.receiptUri);
+      // the phone is told whether the cloud took the receipt (a refusal or a vanished file is shown on the card)
+      if (op.receiptFileId && op.receiptUri) return { receipt: { expenseId: op.id, failed: await uploadPhoto(c, op.receiptFileId, op.receiptUri) } };
       return;
     }
     default:
