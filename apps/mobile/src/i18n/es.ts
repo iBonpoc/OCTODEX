@@ -3163,7 +3163,7 @@ export const es: Dict = {
   "mod.gutters.link.none": "No se encontró a nadie",
   "mod.gutters.link.pickPlace": "Dirección de {name}",
   "mod.gutters.link.done": "Medición vinculada: {who}",
-  "mod.gutters.draw.toLead": "Convertir en solicitud",
+  "mod.gutters.draw.toLead": "Vincular",
   "mod.gutters.draw.selRun": "Canaleta · {len} · p {n}",
   "mod.gutters.draw.selDsKind": "Bajante · {kind} · {size} · p {n}",
   "mod.gutters.draw.selDs": "Bajante · p {n}",

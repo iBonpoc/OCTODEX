@@ -62,7 +62,7 @@ exports.run = async (h) => {
   const mid = idInUrl();
   await waitFor(async () => (await data()).measurements.some((m) => m.id === mid && m.leadId === lead.id && m.propertyId === (lead.propertyId ?? null)), "the measurement is the lead's (and its property's)");
   await tid("draw-lead").waitFor({ timeout: 3000 });
-  h.expect((await tid("draw-to-lead").count()) === 0, "on a lead: no «Сделать заявкой»");
+  h.expect((await tid("draw-to-lead").count()) === 0, "on a lead: no «Привязать»");
   await h.shot("canvas");
 
   // back on the lead: «Открыть замер» opens the same one's card (spec 33 П25.3 В), «Править чертёж» — its drawing
