@@ -87,7 +87,8 @@ exports.run = async (h) => {
   // a downspout; its fittings word → its menu; «Водосток» on it → its menu, no second one
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click((x0 + x1) / 2, y0 + 2);
-  // no menu opens by itself when it is put (#1563): nothing to close
+  await tid("attr-panel").waitFor({ timeout: 5000 });
+  if (!wide) await closeSheet();
   await waitFor(async () => (await svg().locator('[id^="lbl-ds:"]').count()) === 1, "its fittings word");
   await p.mouse.click(...(await centre(svg().locator('[id^="lbl-ds:"]').first())));
   await tid("attr-ds-size").waitFor({ timeout: 5000 });

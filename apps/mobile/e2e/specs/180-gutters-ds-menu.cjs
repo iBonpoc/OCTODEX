@@ -9,7 +9,7 @@
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
-const { openProps, skipLength, canvasAt, openDsMenu } = require("../gutters.cjs");
+const { openProps, skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -67,10 +67,9 @@ exports.run = async (h) => {
   h.expect((await svg().locator('[id^="c:"]').count()) === 0, "a 2nd and a 3rd storey gutter make no corner");
   h.expect((await svg().locator('[id^="cap:"]').count()) === 4, "a cap at each of the four ends");
 
-  // a downspout on the 2nd storey gutter: its menu on two taps on its mark (#1563 — no longer by itself)
+  // a downspout on the 2nd storey gutter: its menu opens by itself
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click(x0 + 2, (y0 + y1) / 2);
-  await openDsMenu(p, [x0 + 2, (y0 + y1) / 2]);
   await panel().waitFor({ timeout: 5000 });
   await tid("attr-ds-size").waitFor({ timeout: 3000 });
   h.expect((await tid("attr-ds-size-value").count()) === 1 && (await tid("attr-color-value").count()) === 1, "size and colour are folded rows");

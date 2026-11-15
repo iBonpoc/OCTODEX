@@ -16,7 +16,7 @@ export function isDoubleTap(after: LastTap | null, now: number, id: string, wind
 
 /** what one tap on the canvas does (#1563): the decision only — DrawScreen does it */
 export type TapDo =
-  /** «Водосток» on a gutter (or the empty place): put a downspout there if it lands on a gutter */
+  /** «Водосток» on a gutter (or the empty place): put a downspout there if it lands on a gutter (its menu opens at once, as before) */
   | { do: "place" }
   /** nothing (the lift of a drag with «Водосток») */
   | { do: "ignore" }
@@ -31,8 +31,9 @@ export type TapDo =
 
 /**
  * One rule for every tool (#1563, founder 14.11: «если выбран даунспот — меню сразу, если жёлоб — надо два раза»): one tap picks, two taps on the
- * same thing open its properties. «Водосток» on a gutter or the empty place puts a downspout (its menu is NOT opened by itself); on a downspout
- * that stands it is the common rule. The lift of a drag with «Водосток» does nothing (as before); with «Желоб» it picks and never counts as
+ * same thing open its properties. «Водосток» on a gutter or the empty place puts a downspout, as before (founder 15.11: «ставится одним
+ * нажатием на жёлоб, как сейчас — оставить»); on a downspout that stands it is the common rule — the one change (founder: «одно нажатие на
+ * уже поставленный водосток его выбирает, свойства — двойным нажатием»). The lift of a drag with «Водосток» does nothing (as before); with «Желоб» it picks and never counts as
  * the first of two. `last` after the tap: what the next tap compares with — none after a placement (the next tap is a first one, never the
  * second of a tap made before the downspout was put: code-reviewer #1582).
  * `key`: the thing under the finger as the double tap compares it (an end, a corner, a gutter, a downspout); "" — nothing. `id`: its element.

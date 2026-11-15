@@ -670,7 +670,9 @@ export default function DrawScreen() {
           haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
-          // no menu by itself any more (#1563, founder 14.11): two taps on it open it, as on anything else
+          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
+          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»)
+          setSheet(true);
         }
         return;
       }

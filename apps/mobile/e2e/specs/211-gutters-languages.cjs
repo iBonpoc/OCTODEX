@@ -5,7 +5,7 @@
  *   its prices — no Cyrillic on the screen (the demo has no Russian names on these screens).
  * Finds things by testID; waits on what it checks.
  */
-const { doubleTap, openProps, skipLength, openDsMenu } = require("../gutters.cjs");
+const { doubleTap, openProps, skipLength } = require("../gutters.cjs");
 
 exports.init = { lang: "en" };
 
@@ -69,7 +69,6 @@ exports.run = async (h) => {
     // a downspout's menu
     await tid("draw-tool-ds").getByRole("button").click();
     await p.mouse.click(x0 + (x1 - x0) * 0.6, y0 + 2);
-    await openDsMenu(p, [x0 + (x1 - x0) * 0.6, y0 + 2]); // two taps on its mark (#1563)
     await tid("attr-panel").waitFor({ timeout: 5000 });
     if (await tid("attr-more").count()) await tid("attr-more").getByRole("button").click();
     await clean("a downspout's menu", lang);

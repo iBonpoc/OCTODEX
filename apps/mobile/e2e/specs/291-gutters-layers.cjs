@@ -35,7 +35,10 @@ exports.run = async (h) => {
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click(run0[0], run0[1]);
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] circle').length >= 1, null, { timeout: 5000 });
-  // no menu opens by itself when it is put (#1563): nothing to close
+  if (!wide) {
+    await pressEscUntilClosed(p); // its menu is a sheet on the phone, the side panel on a wide screen
+    await sheetGone(p);
+  }
   const dsCount = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "downspout" && !e.deletedAt).length, KEY);
   await p.waitForFunction(([k]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "downspout" && !e.deletedAt), [KEY], { timeout: 8000 });
   h.expect((await dsCount()) === 1, "one downspout is in the store");

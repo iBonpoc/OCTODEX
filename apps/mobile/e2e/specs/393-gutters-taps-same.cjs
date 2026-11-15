@@ -1,8 +1,9 @@
 /**
  * e2e 393 — #1563 (founder 14.11: «если у меня выбран даунспот и я нажимаю на даунспот, то открывается сразу меню… если выбран жёлоб,
- * то надо два раза нажать»). One rule for every tool: one tap on a thing picks it, two taps open its properties. A downspout put with
- * «Водосток» does not open its menu by itself any more (on the phone; a wide screen shows what is picked in its side panel, by design).
- * Every view. Finds things by testID; waits on what it checks (no pauses).
+ * то надо два раза нажать»; 15.11, README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить. Меняется только одно: в режиме
+ * „Водосток“ одно нажатие на уже поставленный водосток его выбирает, свойства — двойным нажатием»). A downspout put with «Водосток» opens its
+ * menu at once, as before; a tap on one that stands picks it, two open it — the same as with «Желоб». Every view (a wide screen shows what is
+ * picked in its side panel, by design: the «no menu» checks are the phone's). Finds things by testID; waits on what it checks (no pauses).
  */
 const { skipLength, openDsMenu, pastDoubleTap } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
@@ -37,12 +38,13 @@ exports.run = async (h) => {
   await p.mouse.up();
   await skipLength(p);
 
-  // «Водосток», a tap on the gutter: a downspout is put — and NO menu opens by itself
+  // «Водосток», a tap on the gutter: a downspout is put and its menu opens at once — as before (founder 15.11: «как сейчас — оставить»)
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.4, y);
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => !e.deletedAt && e.kind === "downspout"), KEY, { timeout: 8000 });
   await svg().locator("circle").first().waitFor({ timeout: 5000 });
-  if (!wide) h.expect(!(await panelShown()), "a downspout put with «Водосток»: no menu by itself (a wide screen shows a pick in its side panel)");
+  await tid("attr-panel").waitFor({ timeout: 5000 });
+  await closeMenu();
 
   // «Водосток», ONE tap on the downspout: picked, no menu, no second one on top
   await pastDoubleTap(p);
