@@ -80,7 +80,7 @@ export function companySigned(
   const e = d.estimates.find((x) => x.id === id);
   if (!e || e.status !== "awaiting_countersign" || !canCountersign(d, by.userId)) return d;
   const m = d.members.find((x) => x.id === by.userId)!;
-  const countersign: EstimateCountersign = { userId: m.id, signerName: m.name, signerTitle: m.title?.trim() || by.title || undefined, his: m.hisNumber, signature: by.signature, at: now, method: by.method };
+  const countersign: EstimateCountersign = { userId: m.id, signerName: m.name, signerTitle: m.title?.trim() || undefined,  /* #1599: the profile's title only, as the server — never the one typed with the signature */ his: m.hisNumber, signature: by.signature, at: now, method: by.method };
   const a = e.approval;
   const total = a?.totalCents ?? e.totalCents;
   const deposit = a?.depositCents ?? e.depositCents ?? 0;

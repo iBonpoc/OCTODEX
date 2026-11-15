@@ -107,7 +107,7 @@ const CREATES: Creates = {
   "note.add": (o) => [o.id], "note.update": none, "catalog.save": (o) => [o.item.id], "catalog.remove": none,
   "notice.read": none, "estimate.sign": none, "estimate.countersign": (o) => [o.jobId, o.invoiceId], "estimate.revoke": none,
   "estimate.decline": none, "estimate.reopen": none, "member.signature": (o) => [o.id], "member.update": none,
-  "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id],
+  "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id, ...(o.receiptFileId ? [o.receiptFileId] : [])],
 };
 /**
  * Upserts that do not say whether the object is new: their CREATES lists every id they write. When the op is queued, the
