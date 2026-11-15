@@ -202,7 +202,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
       date: docDay(new Date().toISOString(), company.timezone),
       fmt,
     });
-    saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(html, drawingPdfName(kind, tt, who)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   // «Рабочие чертежи» (#1349): the plan sheets G-1 …, the schedules and the supplier's order — 11 × 17, or the same
@@ -222,7 +222,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     const sheets = kind === "order" ? set.order : set.drawings;
     const problems = kind === "order" ? set.orderProblems : set.problems;
     if (problems.length) toast.show(t("mod.gutters.shop.problems", { n: problems.length }));
-    saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, who), paper), shopFileName(tt, kind, who), shopPagePt(sheets, paper)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveShopPdf(shopHtml(sheets, shopFileName(tt, kind, who), paper), shopFileName(tt, kind, who), shopPagePt(sheets, paper)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   return (
