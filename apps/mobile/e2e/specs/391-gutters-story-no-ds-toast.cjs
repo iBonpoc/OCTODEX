@@ -50,7 +50,7 @@ exports.run = async (h) => {
   for (const want of [2, 3, 4, 1]) {
     await story.click();
     await p.waitForFunction((n) => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes(String(n))), want, { timeout: 5000 });
-    h.expect(/эт 1/.test(await tid("draw-selected").innerText()), `«Эт» → ${want}: the picked gutter still says «эт 1»`);
+    h.expect(!/эт/.test(await tid("draw-selected").innerText()), `«Эт» → ${want}: the picked gutter stays on one storey — no «эт N» in the summary (#1666)`);
     const xs = await runs();
     h.expect(xs.length === 2 && xs.every((e) => Number(e.attrs?.story ?? 1) === 1), `«Эт» → ${want}: the gutters stay on story 1 (${JSON.stringify(xs.map((e) => e.attrs?.story ?? 1))})`);
     h.expect((await els()).filter((e) => e.kind === "downspout").length === 1, `«Эт» → ${want}: still one downspout`);

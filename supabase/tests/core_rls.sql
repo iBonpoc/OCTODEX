@@ -15270,4 +15270,127 @@ select tst.ok(has_function_privilege('authenticated', 'app.hanging_receipts_coun
               'T278 rule 18: the count for the app''s role only');
 \echo 'T278 the queue is never refused, counts are one''s own ok'
 
+-- ---------------------------------------------------------------- T279–T280 (#1696): bytes only while still on what the row is tied to
+-- (red before 20261115200000)
+\set as_tech279 'reset role; set request.jwt.claim.sub = ''a2790000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2790000-0000-4000-8000-000000000001', 'tech279@a.test', '{"full_name":"Ted Taken"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2790000-0000-4000-8000-000000000001', 'tech', 'active');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, status) values
+  ('e2790000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T279', 'T279 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'scheduled');
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f2790000-0000-4000-8000-000000000a01', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', now(), now() + interval '2 hours'),
+  ('f2790000-0000-4000-8000-000000000a02', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', now() - interval '30 days', now() - interval '30 days' + interval '2 hours'),
+  ('f2790000-0000-4000-8000-000000000a03', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', now() + interval '1 day', null);
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f2790000-0000-4000-8000-000000000a01', 'a2790000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f2790000-0000-4000-8000-000000000a02', 'a2790000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f2790000-0000-4000-8000-000000000a03', 'a2790000-0000-4000-8000-000000000001');
+-- his rows, made while he was on them (the queue: the row first, the bytes after)
+:as_tech279
+insert into public.files (id, company_id, kind, visit_id, job_id) values
+  ('f2790000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f2790000-0000-4000-8000-000000000a01', 'e2790000-0000-4000-8000-000000000001'),
+  ('f2790000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f2790000-0000-4000-8000-000000000a02', 'e2790000-0000-4000-8000-000000000001'),
+  ('f2790000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f2790000-0000-4000-8000-000000000a03', 'e2790000-0000-4000-8000-000000000001');
+insert into public.files (id, company_id, kind, job_id) values
+  ('f2790000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e2790000-0000-4000-8000-000000000001');
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category, receipt_file_id, idempotency_key) values
+  ('e2790000-0000-4000-8000-0000000000e4', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', 'T279', 100, 'materials', 'f2790000-0000-4000-8000-000000000004', 'T279-4');
+-- T279: on them — bytes go (a visit 30 days ago too); taken off a visit — none into its photo, also while still on
+-- another visit of the job; taken off the whole job — none into the job's receipt; a removed visit, a suspended member — none
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000001.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000004.jpg'),
+              'T279 on the visit and the job: his photos (a visit 30 days ago too) and the job''s receipt get their bytes');
+:as_super
+update public.visit_assignees set deleted_at = now() where visit_id = 'f2790000-0000-4000-8000-000000000a01' and user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000001.jpg'),
+              'T279 taken off the visit: no bytes into its photo (while still on another visit of the job)');
+select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000001.jpg', auth.uid())$q$,
+                 'T279 the storage refuses the upload');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000004.jpg'),
+              'T279 still on the job (another visit): the job''s receipt still gets its bytes');
+:as_super
+update public.visits set deleted_at = now() where id = 'f2790000-0000-4000-8000-000000000a03';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000003.jpg'),
+              'T279 a removed visit: no bytes into its photo');
+:as_super
+update public.visit_assignees set deleted_at = now() where user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg')
+              and not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000004.jpg'),
+              'T279 taken off the whole job: no bytes into its photos or its receipt (its live expense or not)');
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f2790000-0000-4000-8000-000000000a02' and user_id = 'a2790000-0000-4000-8000-000000000001';
+update public.memberships set status = 'disabled' where user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg'),
+              'T279 disabled: no bytes, even on the visit');
+:as_super
+update public.memberships set status = 'active' where user_id = 'a2790000-0000-4000-8000-000000000001';
+-- a client's row: only while he is on the client (a visit there within 14 days, as files_update right after the bytes);
+-- a measurement's photo: only while he sees the measurement
+set session_replication_role = replica;
+insert into public.files (id, company_id, kind, customer_id, created_by) values
+  ('f2790000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'document', 'c1a00000-0000-0000-0000-000000000001', 'a2790000-0000-4000-8000-000000000001');
+-- the module on for this test (removed again below)
+insert into public.company_modules (company_id, module_key, enabled, trial_ends_at) values ('ca000000-0000-0000-0000-000000000000', 'gutters', true, now() + interval '7 days')
+  on conflict (company_id, module_key) do update set enabled = true, trial_ends_at = now() + interval '7 days';
+insert into public.gutter_measurements (id, company_id, label, created_by) values
+  ('9e279000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T279', 'a0000000-0000-0000-0000-000000000001');
+insert into public.files (id, company_id, kind, measurement_id, created_by) values
+  ('f2790000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e279000-0000-4000-8000-000000000001', 'a2790000-0000-4000-8000-000000000001');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg'),
+              'T279 a client''s row: no bytes when his last visit there is over 14 days ago');
+select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters')
+              and not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'),
+              'T279 a measurement he does not see: no bytes into its photo');
+-- and the same rows when he is on them: a visit to the client today, a measurement of his own
+:as_super
+update public.visits set starts_at = now(), ends_at = now() + interval '2 hours' where id = 'f2790000-0000-4000-8000-000000000a02';
+set session_replication_role = replica;  -- the author is kept by its trigger otherwise
+update public.gutter_measurements set created_by = 'a2790000-0000-4000-8000-000000000001' where id = '9e279000-0000-4000-8000-000000000001';
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech279
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg'),
+              'T279 a client''s row: bytes go with a visit there today');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'),
+              'T279 his own measurement''s photo gets its bytes');
+-- the same photo for the office (it sees the measurement): the check is about him, not the row
+:as_office_a
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'), 'T279 the office writes that photo''s bytes');
+:as_super
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+-- anon: nothing
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg', null)$q$,
+                 'T279 anon writes no bytes');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'app.can_write_file_object(text)', 'EXECUTE'), 'T279 the bytes rule is not anon''s');
+\echo 'T279 bytes only while still on what the row is tied to ok'
+
+-- T280: the office and sales as before; sales' receipt with a job and a live expense gets its bytes; a subcontractor as T263/T264
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f2790000-0000-4000-8000-000000000a01' and user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000003.jpg'),
+              'T280 the office writes any row''s bytes as before');
+:as_sales_a
+insert into public.files (id, company_id, kind, job_id) values
+  ('f2800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e2790000-0000-4000-8000-000000000001'),
+  ('f2800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e2790000-0000-4000-8000-000000000001');
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category, receipt_file_id, idempotency_key) values
+  ('e2800000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', 'T280', 100, 'materials', 'f2800000-0000-4000-8000-000000000001', 'T280-1');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2800000-0000-4000-8000-000000000001.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2800000-0000-4000-8000-000000000002.jpg'),
+              'T280 sales (not on the job): their receipt with a live expense and their photo get their bytes');
+\echo 'T280 the office and sales as before ok'
+
 \echo 'ALL TESTS PASSED'

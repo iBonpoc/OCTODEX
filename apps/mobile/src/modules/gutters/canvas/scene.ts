@@ -13,6 +13,9 @@ import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./la
 export interface View { k: number; ox: number; oy: number }
 export type Story = 1 | 2 | 3 | 4;
 export const storyOf = (n: unknown): Story => (n === 2 || n === 3 ? n : typeof n === "number" && n >= 4 ? 4 : 1);
+/** more than one storey on the drawing: only then «эт N» is written — at a length on the canvas (#1275) and in the
+ *  bottom summary of the picked thing (#1666); with one storey the word tells nothing */
+export const manyStories = (runs: readonly { attrs: { story?: unknown } }[]): boolean => new Set(runs.map((r) => storyOf(r.attrs.story))).size > 1;
 /** the story button: 1 → 2 → 3 → 4 → 1, for the next gutter only (#1608) */
 export const nextStoryOf = (s: Story): Story => ((s % 4) + 1) as Story;
 
