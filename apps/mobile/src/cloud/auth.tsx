@@ -8,6 +8,7 @@ import { supabase } from "./client";
 import { forgetThisPhone } from "@/features/pushNative";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
+import { signOutThenWipe, wipeSignOutIfPending, type SignOutAuth } from "./signOutWipe";
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
 import { closedAnswerCounts, parseClosed, type ClosedCompany } from "@/features/closedCompany";
 
@@ -167,6 +168,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let alive = true;
     void wipeIfPending();
     supabase.auth.getSession().then(async ({ data }) => {
+      // #1633: a sign-out wipe the app did not finish (never of the person signed in now)
+      void wipeSignOutIfPending(data.session?.user.id ?? null);
       if (!alive) return;
       setSession(data.session);
       if (data.session) await afterSession(data.session);
@@ -268,9 +271,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
         // while still signed in: this phone stops getting the person's pushes (never throws, ≤ 8 s; docs/specs/27-push.md)
         await forgetThisPhone();
-        await supabase.auth.signOut();
-        setMemberships([]);
-        clearClosed();
+        // #1633: offline too; the person's company leaves the phone once the session is gone from it
+        await signOutThenWipe(supabase.auth as unknown as SignOutAuth, () => {
+          setMemberships([]);
+          clearClosed();
+        });
       },
       reloadMemberships,
       accountDeleted,
