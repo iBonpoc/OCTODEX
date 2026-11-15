@@ -1131,7 +1131,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     expect(st()[0]).toMatchObject({ fails: 1 });
     expect(st()[0]!.stuck).toBeUndefined();
   });
-  it("a timeout of one op: no «Ошибка синхронизации» with the server's English text — its card tells it (cloud e2e 114)", async () => {
+  it("a timeout of one op: no «Sync error» with the server's English text — its card tells it (cloud e2e 114)", async () => {
     seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
     const r = await start();
     await pass(r);
