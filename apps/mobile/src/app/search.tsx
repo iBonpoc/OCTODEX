@@ -60,6 +60,7 @@ export default function Search() {
     <ListCard
       key={`${h.group}-${h.id}`}
       testID="search-hit"
+      density="compact"
       title={h.title || h.number || "—"}
       when={[h.subtitle, why(h.why)].filter(Boolean).join(" · ")}
       lead={{ kind: "icon", icon: GROUP[h.group].icon }}
