@@ -343,7 +343,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       bad: { fill: statusFill.bad, text: "#FFAAAA", on: statusOn },
       neutral: { fill: "rgba(255,255,255,0.11)", text: "#CDD1DA", on: "#F2F3F5" },
     },
-    drawing: { node: "#F2F3F5", story: ["#7FD4FF", "#FFC46B", "#D59BFF", "#7CEBC6"] },
+    drawing: { node: "#F2F3F5", story: ["#7FD4FF", "#FF8FD0", "#D59BFF", "#7CEBC6"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
   light: {
@@ -377,7 +377,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       bad: { fill: statusFill.bad, text: "#B4232A", on: statusOn },
       neutral: { fill: "rgba(20,22,30,0.09)", text: "#575C68", on: "#15161A" },
     },
-    drawing: { node: "#15161A", story: ["#0B6290", "#8A4F00", "#7A3DB8", "#0B6E50"] },
+    drawing: { node: "#15161A", story: ["#0B6290", "#A0327A", "#7A3DB8", "#0B6E50"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
 };

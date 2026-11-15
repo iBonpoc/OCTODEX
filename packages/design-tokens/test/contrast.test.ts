@@ -31,6 +31,22 @@ function ratio(fg: RGBA, bg: RGBA) {
 }
 
 const names: ThemeName[] = ["dark", "light"];
+/** colour difference ΔE in OKLab × 100 (Björn Ottosson's matrices): ~2 is a just-noticeable step, ≥ 8 reads as another colour */
+function deltaE(a: string, b: string): number {
+  const ok = (c: string) => {
+    const [r, g, bl] = parse(c).slice(0, 3).map((v) => {
+      const x = v / 255;
+      return x <= 0.04045 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
+    }) as [number, number, number];
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * bl);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * bl);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * bl);
+    return [0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s, 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s];
+  };
+  const [x, y] = [ok(a), ok(b)];
+  return 100 * Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+}
+
 describe.each(names)("%s theme contrast (DS rule: text ≥ 4.5:1)", (name) => {
   const c = themes[name];
   const surfaces = { bg: parse(c.bg), card: over(c.surf, c.bg), raised: over(c.surf2, c.bg), field: over(c.in, c.bg) };
@@ -63,6 +79,16 @@ describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт
     });
   }
   it("four different storeys", () => expect(new Set(c.drawing.story.map((x) => x.toLowerCase())).size).toBe(4));
+  // #1628: a storey is told from the alarms on the same canvas (the «Нет водостока» sign is warn) and from the other
+  // storeys by colour — ΔE (OKLab × 100) ≥ 8; storey 2 was #8A4F00 against warn text #944600: ΔE 2.7, one colour to the eye
+  it("storeys stand apart from warn and bad and from each other (ΔE OKLab ≥ 8)", () => {
+    for (const [i, st] of c.drawing.story.entries()) {
+      for (const sn of ["warn", "bad"] as const) {
+        for (const part of ["fill", "text"] as const) expect(deltaE(st, c.status[sn][part]), `story${i + 1} vs ${sn}.${part}`).toBeGreaterThanOrEqual(8);
+      }
+      c.drawing.story.forEach((o, j) => j > i && expect(deltaE(st, o), `story${i + 1} vs story${j + 1}`).toBeGreaterThanOrEqual(8));
+    }
+  });
 });
 
 describe.each(names)("%s tape measure (founder 09.11, #674: the number under the mark on a pill like the main button)", (name) => {
