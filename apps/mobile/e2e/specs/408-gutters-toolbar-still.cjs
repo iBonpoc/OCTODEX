@@ -1,5 +1,5 @@
 /**
- * e2e 407 — #1630 (found on the web while writing e2e 396, 15.11): a tap on the toolbar reached the canvas under it. The summary chip («Дальше: водостоки»,
+ * e2e 408 — #1630 (found on the web while writing e2e 396, 15.11): a tap on the toolbar reached the canvas under it. The summary chip («Дальше: водостоки»,
  * what is picked) sat under the toolbar: it came and went, the toolbar jumped by a chip's height, and the second tap of a double tap
  * on «Водосток» landed on the gutter under it — a downspout and its sheet nobody asked for. Now the toolbar is the lowest, at the
  * very edge; the chip and the hints are above it. Here: the toolbar stays where it is while the chip comes and goes, and a gutter
@@ -25,8 +25,8 @@ exports.run = async (h) => {
   const settled = () => p.waitForFunction(() => {
     const t = [...document.querySelectorAll('[data-testid="draw-toolbar"]')].find((e) => e.offsetParent)?.getBoundingClientRect();
     const now = t ? [t.x, t.y, t.width, t.height].map(Math.round).join(",") : "";
-    const same = !!now && window.__tb407 === now;
-    window.__tb407 = now;
+    const same = !!now && window.__tb408 === now;
+    window.__tb408 = now;
     return same;
   }, null, { timeout: 5000, polling: 150 });
   const box = async (id) => { const r = await tid(id).boundingBox(); return r && [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)].join(","); };
