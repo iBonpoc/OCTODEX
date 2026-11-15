@@ -137,6 +137,7 @@ describe("app tokens mirror the founder's DS css", () => {
     });
     it("surfaces, ink, accent", () => {
       for (const k of ["page", "bg", "ink", "mut", "surf", "surf2", "in", "bd", "track", "ov"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
+      expect(norm(c.bdField)).toBe(norm(v("bd-field", t)));
       expect(norm(c.acc)).toBe(norm(v("acc", t)));
       expect(norm(c.onAcc)).toBe(norm(v("on-acc", t)));
       expect(radius.card).toBe(px("r"));

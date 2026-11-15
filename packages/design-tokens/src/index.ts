@@ -260,7 +260,7 @@ export const component = {
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
 export const breakpoint = { phone: 0, tablet: 820, desktop: 1280 } as const;
-export const layout = { contentMax: 1200, gridCols: { phone: 1, tablet: 2, desktop: 3 } } as const;
+export const layout = { contentMax: 1200, formMax: 560, gridCols: { phone: 1, tablet: 2, desktop: 3 } } as const;
 
 /* ---------- theme.css + status.css ---------- */
 export type ThemeName = "dark" | "light";
@@ -288,6 +288,8 @@ export interface ThemeColors {
   surfSolid: string;
   in: string;
   bd: string;
+  /** the frame of an input field (DS §8.1, #1594): ≥ 3:1 to the screen `bg` (WCAG 1.4.11); `bd` stays for cards and quiet lines */
+  bdField: string;
   track: string;
   ov: string;
   acc: string;
@@ -322,6 +324,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     surfSolid: "#33363C",
     in: "rgba(255,255,255,0.05)",
     bd: "rgba(255,255,255,0.14)",
+    bdField: "rgba(255,255,255,0.38)",
     track: "rgba(255,255,255,0.12)",
     ov: "rgba(38,41,48,0.72)",
     acc: "#FBFF00",
@@ -356,6 +359,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     surfSolid: "#F9F7F5",
     in: "rgba(255,255,255,0.55)",
     bd: "rgba(20,22,30,0.1)",
+    bdField: "rgba(20,22,30,0.5)",
     track: "rgba(20,22,30,0.09)",
     ov: "rgba(250,248,244,0.78)",
     acc: "#FBFF00",
