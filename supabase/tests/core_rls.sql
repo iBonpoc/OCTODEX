@@ -14454,14 +14454,6 @@ select tst.ok((select file_size_limit = 26214400 and not public and allowed_mime
 -- T212 (#1557): a file object, once its files row records the upload, is written by nobody again — the office included
 -- (red before 20261115100000: the office could overwrite it). Before the mark the author repeats the upload (upsert).
 -- An old build's late «failed» after the mark leaves the row «uploaded» (the trigger t08_upload_kept).
-:as_super
--- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
--- test photos of this tech go to the office (a fixture; the rows' own checks are done)
-set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
-update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
-set session_replication_role = origin;
--- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
-select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
 insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg');
@@ -14516,14 +14508,6 @@ select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-00000000000
 update public.files set upload_status = 'failed', storage_key = null where id = 'f2120000-0000-4000-8000-000000000004';
 select tst.ok((select upload_status = 'failed' and storage_key is null from public.files where id = 'f2120000-0000-4000-8000-000000000004'),
               'T212 the server''s own fix of a row is not ignored');
-:as_super
--- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
--- test photos of this tech go to the office (a fixture; the rows' own checks are done)
-set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
-update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
-set session_replication_role = origin;
--- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
-select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 -- a failed upload before the mark is still repeated
 insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
@@ -14543,14 +14527,6 @@ select tst.ok(not has_function_privilege('anon', 'app.can_write_file_object(text
 
 -- T213 (#1572): a files row points only at its own object; the office too keeps «one row, one object» and writes only
 -- for a live files row (red before 20261115110000)
-:as_super
--- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
--- test photos of this tech go to the office (a fixture; the rows' own checks are done)
-set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
-update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
-set session_replication_role = origin;
--- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
-select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
 select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
@@ -14608,14 +14584,6 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own(
 -- T214 (#1538): an expense's receipt goes to the cloud — a files row of kind 'receipt' tied to the expense; it is read
 -- as its expense is (owner, admin, office, the author; not sales, not another tech); the expense takes only a receipt
 -- of its own (red before 20261115120000)
-:as_super
--- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
--- test photos of this tech go to the office (a fixture; the rows' own checks are done)
-set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
-update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
-set session_replication_role = origin;
--- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
-select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt');
 insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
@@ -14854,14 +14822,6 @@ select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'c2430000-000
 \echo 'T243 a closed company stays closed to its creator ok'
 
 -- T244 (#1603): a profile picture is a live photo of the person's own (red before 20261115160000)
-:as_super
--- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
--- test photos of this tech go to the office (a fixture; the rows' own checks are done)
-set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
-update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
-set session_replication_role = origin;
--- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
-select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values
   ('f2440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo'),
@@ -14956,9 +14916,8 @@ select tst.fails($q$insert into public.files (company_id, kind, visit_id) values
 insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
 select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2630000-0000-4000-8000-0000000000b1'$q$) = 1, 'T263 a tech still adds a job photo');
 insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'document', 'e1a00000-0000-0000-0000-000000000001');
--- #1657 (20261115180000): a tech's file stays where it was added — the job of a document is not taken away any more
-select tst.fails_like($q$update public.files set job_id = null where id = 'f2630000-0000-4000-8000-0000000000b2'$q$, '%stays where it was added%',
-                      'T263 a tech adds a document of a job and cannot move it off (#1657, see T272)');
+update public.files set job_id = null where id = 'f2630000-0000-4000-8000-0000000000b2';
+select tst.ok((select job_id is null from public.files where id = 'f2630000-0000-4000-8000-0000000000b2'), 'T263 a tech still adds and moves a document as before');
 :as_super
 -- the visit falls out of the window while the photo waits in the queue: the upload is still recorded
 update public.visits set starts_at = now() - interval '20 days', ends_at = now() - interval '20 days' + interval '3 hours' where id = 'f1a00000-0000-0000-0000-000000000001';
@@ -14990,148 +14949,5 @@ select tst.ok(has_function_privilege('authenticated', 'app.sub_file_ok(text, uui
 select tst.ok(not has_function_privilege('anon', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE')
               and not has_function_privilege('authenticated', 'app.tg_files_sub_attach_fixed()', 'EXECUTE'), 'T263 rule 18');
 \echo 'T263 a subcontractor adds only his visits' photos and his own files ok'
-
--- ---------------------------------------------------------------- T264–T275 (#1656, #1657): file rules for every role
--- (red before 20261115180000)
-\set as_tech264 'reset role; set request.jwt.claim.sub = ''a2640000-0000-4000-8000-000000000001''; set role authenticated;'
-:as_super
-insert into auth.users (id, email, raw_user_meta_data) values ('a2640000-0000-4000-8000-000000000001', 'tech264@a.test', '{"full_name":"Tess Tech"}');
-insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2640000-0000-4000-8000-000000000001', 'tech', 'active');
--- T264: a subcontractor's row added before 20261115170000 with a client gets no bytes; his visit photo does; the office does
-insert into public.visit_assignees (company_id, visit_id, user_id) values
-  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002') on conflict do nothing;
-set session_replication_role = replica;  -- an old row as it was before the rule (no trigger, no policy)
-insert into public.files (id, company_id, kind, customer_id, created_by) values
-  ('f2640000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'c1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002');
-set session_replication_role = origin;
-select public.uuid_generate_v7() is not null as warmed;  -- the role change dropped the cached plans (see T212)
-:as_sub56
-insert into public.files (id, company_id, kind, visit_id, job_id) values
-  ('f2640000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000001');
-select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a1.jpg'),
-              'T264 a subcontractor gets no bytes into his old row of a client');
-select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a2.jpg'),
-              'T264 his visit''s photo gets its bytes');
-select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a1.jpg', auth.uid())$q$,
-                 'T264 the storage refuses the old row''s bytes too');
-:as_office_a
-select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a1.jpg'),
-              'T264 the office still writes the old row''s bytes');
-:as_super
-delete from public.visit_assignees where visit_id = 'f1a00000-0000-0000-0000-000000000001' and user_id = 'a5600000-0000-4000-8000-000000000002';
-\echo 'T264 a subcontractor writes bytes only into a row his rule allows ok'
-
--- T265: at most 3 files with nothing attached for a person outside the office
-:as_tech264
-insert into public.files (id, company_id, kind) values
-  ('f2650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo'),
-  ('f2650000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo'),
-  ('f2650000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
-select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f2650000-%'$q$) = 3, 'T265 three photos with nothing attached');
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%', 'T265 not a fourth');
--- the queue sends one of them again (on conflict do nothing): not a refusal
-insert into public.files (id, company_id, kind) values ('f2650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo') on conflict do nothing;
-select tst.ok(true, 'T265 the queue sends an insert again: nothing new, no refusal');
-\echo 'T265 at most 3 files with nothing attached ok'
-
--- T266: a removed one without bytes frees its place; with bytes it still counts (upload, remove, upload again is no limit)
-update public.files set deleted_at = now() where id = 'f2650000-0000-4000-8000-000000000003';
-insert into public.files (id, company_id, kind) values ('f2650000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'photo');
-select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2650000-0000-4000-8000-000000000004'$q$) = 1, 'T266 a removed one without bytes frees its place');
-update public.files set upload_status = 'uploaded', storage_key = 'ca000000-0000-0000-0000-000000000000/f2650000-0000-4000-8000-000000000004.jpg'
-  where id = 'f2650000-0000-4000-8000-000000000004';
-select tst.ok((select upload_status = 'uploaded' from public.files where id = 'f2650000-0000-4000-8000-000000000004'), 'T266 the queue still marks it uploaded');
-update public.files set deleted_at = now() where id = 'f2650000-0000-4000-8000-000000000004';
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%',
-                      'T266 a removed one with stored bytes still counts');
-\echo 'T266 removed files with bytes count ok'
-
--- T267: bringing a removed one back over the limit is refused
--- (two live and one removed with bytes: the removed one without bytes is not brought back as a fourth)
-select tst.fails_like($q$update public.files set deleted_at = null where id = 'f2650000-0000-4000-8000-000000000003'$q$, '%at most 3%',
-                      'T267 a removed one is not brought back over the limit');
-\echo 'T267 restoring over the limit is refused ok'
-
--- T268: a document, a drawing, a signature with nothing attached — not at all for a person outside the office
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'document')$q$, '%photo or a receipt%', 'T268 not a document with nothing attached');
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'signature')$q$, '%photo or a receipt%', 'T268 not a signature with nothing attached');
-\echo 'T268 a bare document is refused ok'
-
--- T269: a receipt its expense names does not count; one no expense names does
-:as_super
-set session_replication_role = replica;  -- the fixture clears T265–T267's files (the stored mark is kept by t09 otherwise)
-update public.files set deleted_at = now(), upload_status = 'local', storage_key = null where id::text like 'f2650000-%';
-set session_replication_role = origin;
-select public.uuid_generate_v7() is not null as warmed;
-:as_tech264
-insert into public.files (id, company_id, kind) values
-  ('f2690000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt'),
-  ('f2690000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'receipt'),
-  ('f2690000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'receipt');
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt')$q$, '%at most 3%', 'T269 three receipts no expense names: not a fourth');
-:as_super
-insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id) values
-  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T269', 100, 'materials', 'f2690000-0000-4000-8000-000000000001'),
-  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T269', 100, 'materials', 'f2690000-0000-4000-8000-000000000002');
-:as_tech264
-insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'receipt');
-select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2690000-0000-4000-8000-000000000004'$q$) = 1, 'T269 receipts their expenses name do not count');
-\echo 'T269 receipts of expenses do not count ok'
-
--- T270: a visit / job photo is never counted; the office and the server are not limited
-insert into public.files (id, company_id, kind) values ('f2700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo');
-:as_office_a
-insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo' from generate_series(1, 5);
-insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'document');
-select tst.ok(true, 'T270 the office adds files with nothing attached without a limit');
-:as_super
-insert into public.files (id, company_id, kind, created_by) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo', 'a2640000-0000-4000-8000-000000000001' from generate_series(1, 4);
-select tst.ok(true, 'T270 the server is not limited');
-\echo 'T270 the office and the server are not limited ok'
-
--- T271: rule 18 — the count for the trigger only (the app's role), the trigger function for nobody
-select tst.ok(has_function_privilege('authenticated', 'app.bare_files_count(uuid, uuid, uuid)', 'EXECUTE')
-              and not has_function_privilege('anon', 'app.bare_files_count(uuid, uuid, uuid)', 'EXECUTE')
-              and not has_function_privilege('public', 'app.bare_files_count(uuid, uuid, uuid)', 'EXECUTE')
-              and not has_function_privilege('authenticated', 'app.tg_files_bare_limit()', 'EXECUTE'), 'T271 rule 18');
-\echo 'T271 rule 18 ok'
-
--- T272 (#1657): a tech's file stays where it was added: not moved to another job, off its job, onto a client
-:as_super
--- on the job through a visit of it (app.is_job_assignee)
-insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a2640000-0000-4000-8000-000000000001') on conflict do nothing;
-:as_tech264
-insert into public.files (id, company_id, kind, job_id) values ('f2720000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
-select tst.fails_like($q$update public.files set job_id = null where id = 'f2720000-0000-4000-8000-000000000001'$q$, '%stays where it was added%', 'T272 not off its job');
-select tst.fails_like($q$update public.files set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'f2720000-0000-4000-8000-000000000001'$q$, '%stays where it was added%', 'T272 not onto a client');
-select tst.fails_like($q$update public.files set visit_id = 'f1a00000-0000-0000-0000-000000000001' where id = 'f2720000-0000-4000-8000-000000000001'$q$, '%stays where it was added%', 'T272 not onto a visit');
-\echo 'T272 a tech''s file stays where it was added ok'
-
--- T273: what the app changes later still works for him: uploaded, removed
-update public.files set upload_status = 'uploaded', storage_key = 'ca000000-0000-0000-0000-000000000000/f2720000-0000-4000-8000-000000000001.jpg', mime = 'image/jpeg', size = 1
-  where id = 'f2720000-0000-4000-8000-000000000001';
-update public.files set deleted_at = now() where id = 'f2720000-0000-4000-8000-000000000001';
-:as_super
-select tst.ok((select upload_status = 'uploaded' and deleted_at is not null from public.files where id = 'f2720000-0000-4000-8000-000000000001'), 'T273 the queue marks his photo uploaded and removes it');
-\echo 'T273 marking uploaded and removing still work ok'
-
--- T274: the office (sales included, app.is_staff) still moves a file; merge_customers' move (a definer) passes
-insert into public.files (id, company_id, kind, job_id, created_by) values ('f2740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001', 'a2640000-0000-4000-8000-000000000001');
-:as_office_a
-update public.files set job_id = 'e1a00000-0000-0000-0000-000000000002' where id = 'f2740000-0000-4000-8000-000000000001';
-:as_super
-select tst.ok((select job_id = 'e1a00000-0000-0000-0000-000000000002' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 the office moves a file as before');
-select tst.server($q$update public.files set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'f2740000-0000-4000-8000-000000000001'$q$);
-select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 a server function moves a tech''s file (merge_customers)');
-\echo 'T274 the office and the server still move files ok'
-
--- T275: a subcontractor as before (T263 not broken), the old 3+ bare rows of a person stay (only new ones are refused)
-select tst.ok(tst.cnt($q$select 1 from public.files where created_by = 'a2640000-0000-4000-8000-000000000001' and kind = 'photo' and visit_id is null and job_id is null and customer_id is null and deleted_at is null$q$) >= 4,
-              'T275 files with nothing attached added before stay as they are');
-:as_tech264
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%', 'T275 but no new one');
-:as_super
-delete from public.visit_assignees where user_id = 'a2640000-0000-4000-8000-000000000001';
-\echo 'T275 old rows stay, new ones are limited ok'
 
 \echo 'ALL TESTS PASSED'
