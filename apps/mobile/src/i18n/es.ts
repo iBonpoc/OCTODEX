@@ -218,6 +218,7 @@ export const es: Dict = {
   "visit.call": "Llamar",
   "visit.navigate": "Ruta",
   "visit.message": "Mensaje",
+  "visit.bar.expense": "Gasto",
   "profile.name.title": "Nombre",
   "profile.name.label": "Su nombre",
   "profile.name.hint": "Sus compañeros lo ven y la firma de la empresa lo lleva.",

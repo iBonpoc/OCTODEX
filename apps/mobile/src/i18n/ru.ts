@@ -217,6 +217,7 @@ export const ru = {
   "visit.call": "Позвонить",
   "visit.navigate": "Маршрут",
   "visit.message": "Написать",
+  "visit.bar.expense": "Расход",
   "profile.name.title": "Имя",
   "profile.name.label": "Как вас зовут",
   "profile.name.hint": "Имя видят коллеги, оно стоит в подписи компании.",

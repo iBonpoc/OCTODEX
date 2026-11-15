@@ -1,8 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import * as ImagePicker from "expo-image-picker";
-import { madeHere } from "@/features/photoUri";
-import { shrinkPicked } from "@/data/photoShrink";
+import { useVisitPhoto } from "@/features/useVisitPhoto";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -41,21 +39,7 @@ export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
 }
 
 function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
-  const { t } = useI18n();
-  const { db, addPhoto } = useStore();
-  const toast = useToast();
-  const takePhoto = async (visitId: string) => {
-    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 1 }).catch(() => null);
-    if (!res || res.canceled) return;
-    const v = db.visits.find((x) => x.id === visitId);
-    if (!v) return;
-    const kind = v.step === "working" || v.step === "signed" ? "after" : "before";
-    // made smaller before it is kept and queued (#642)
-    const uri = await shrinkPicked(res);
-    if (!uri) return;
-    madeHere(uri);
-    toast.show(t("toast.photo"), addPhoto(v.id, kind, uri));
-  };
+  const takePhoto = useVisitPhoto();
   return (it: FabItem) => {
     if (it.href) router.push(it.href as Href);
     else if (it.act === "photo" && ctx?.visitId) void takePhoto(ctx.visitId);

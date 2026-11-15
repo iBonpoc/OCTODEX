@@ -24,6 +24,8 @@ export const NO_TAB_BAR = [
   "invoice/[id]",
   // a receipt: its next step pinned at the bottom (ActionBar, #1474), as the estimate
   "receipt/[id]",
+  // a visit of the technician: «Расход» and «Фото» pinned at the bottom (ActionBar, #1395 group 3, DS §8.9 «Панель выезда мастера»)
+  "visit/[id]",
   "expense/new",
   // the request page of a company (docs/specs/34): a homeowner without the app — no app menu
   "f/[token]",
@@ -56,7 +58,7 @@ export const WITH_TAB_BAR = [
   // core's lists have it); the full-screen ones (ModuleDef.fullScreen: the canvas) hide it themselves (useHideTabBar in the route)
   "module/[key]/[screen]",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
-  "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visit/[id]", "visits",
+  "reports", "reports/[id]", "search", "settings", "settings/profile", "settings/design-system", "settings/design-system/[section]", "suppliers", "purchase-orders", "tasks", "team", "today", "triage", "visits",
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
@@ -65,7 +67,7 @@ const hidden = new Set<string>(NO_TAB_BAR);
  * founder 08.11, build 373 — they now keep the bar, #1426, so they are never «a form above» at all.)
  */
 // the estimate's card (#1412): no tab bar for its pinned main button, but nothing typed to lose
-export const NOT_A_FORM: readonly string[] = ["estimate/[id]", "invoice/[id]", "receipt/[id]"];
+export const NOT_A_FORM: readonly string[] = ["estimate/[id]", "invoice/[id]", "receipt/[id]", "visit/[id]"];
 const notAForm = new Set<string>(NOT_A_FORM);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */
