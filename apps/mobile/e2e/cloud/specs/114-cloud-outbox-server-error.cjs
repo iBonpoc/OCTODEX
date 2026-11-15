@@ -73,9 +73,9 @@ exports.run = async (h, { seed, admin }) => {
   const cards = async () => (await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0;
   for (let i = 0; i < 40 && !(await cards()); i++) await p.waitForTimeout(500);
   t = await h.text();
-  h.expect(/Не отправлено: сервер отвечает ошибкой/.test(t), "the stuck changes are a section in «Профиль и аккаунт»");
+  h.expect(/Ждёт отправки: откройте изменение и проверьте/.test(t), "the stuck changes are a section in «Профиль и аккаунт»");
   h.expect((await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0, "each is its own card");
-  h.expect(/Ошибка на сервере, не в телефоне/.test(t) && !/canceling statement/.test(t), "our own words on the card, not the server's English text");
+  h.expect(/Причина на сервере, не в телефоне/.test(t) && !/canceling statement/.test(t), "our own words on the card, not the server's English text");
 
   // a lead typed meanwhile does not wait for them (two timeouts in a row read as the whole server for a moment; the
   // lead's answer ends that — then the header names the stuck ones)

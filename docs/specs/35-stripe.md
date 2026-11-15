@@ -59,6 +59,7 @@
 - Edge `stripe-connect` (verify_jwt): `status` — читает аккаунт у Stripe и сохраняет; `start` — один аккаунт на компанию (Idempotency-Key `octodex-connect-<company>`, одни и те же поля без имени), сохранение до 3 раз, затем свежая ссылка `account_links` (только `https://connect.stripe.com/`, возврат на `https://gorix.expo.app/company/payments`). Ключ `sk_test_`/`rk_test_`; живой ключ или `livemode: true` в ответе — «live_refused». Без ключа — «Ещё не настроено».
 - Двери базы: `public.stripe_connect_target`, `public.stripe_account_save` — только service_role (T130).
 - Тесты: T130, unit `stripeConnectFn` (поддельный Stripe), `onlinePay`, e2e 182 (демо).
+- **Стирание компании (спека 50 §5.3, PR 50-5) — открытый вопрос:** счёт Stripe принадлежит подрядчику и остаётся у Stripe; мы удаляем только свою запись о подключении. Нужно ли при стирании отключать связь на стороне Stripe (OAuth deauthorize / отзыв доступа платформы) — **[не проверено]**, проверить до PR 50-5 (ссылка внесена картой пути 15.11, #1556).
 - Долги из ревью 20б: CORS `*` (вход по Bearer, у телефона нет Origin) — сузить до сайта при 20в; лимит частоты `start` на компанию — позже; `stripe_account_sync` сверять `metadata.company_id` — в 20г (вебхук); старая колонка `companies.stripe_account_id` не читается, удалить по правилу 16 отдельным PR.
 
 ## 4а. 20в — оплата с /p/ (миграция 20261109030000, «Деньги и отчёты» №4)
