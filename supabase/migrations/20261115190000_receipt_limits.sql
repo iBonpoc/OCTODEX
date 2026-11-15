@@ -8,7 +8,8 @@
 -- 1 ------------------------------------------------------------------------------------------------
 -- my receipts in the company that no live expense points at (only the caller's own: another person's count is never told)
 --   p_with_bytes — only those with stored bytes (a removed one with bytes too: upload, remove, upload again is no limit)
---   p_since — only those made since then (a row without bytes left by a refused expense ages out)
+--   p_since — only those made or changed since then, by the server's clock (updated_at; created_at comes from the
+--   phone), removed ones too (a row without bytes left by a refused expense ages out)
 create or replace function app.hanging_receipts_count(p_company_id uuid, p_user_id uuid, p_except uuid, p_with_bytes boolean, p_since timestamptz)
 returns integer language sql stable security definer set search_path = '' as $$
   select count(*)::int
@@ -17,8 +18,8 @@ returns integer language sql stable security definer set search_path = '' as $$
      and f.company_id = p_company_id and f.created_by = p_user_id and f.kind = 'receipt'
      and f.id is distinct from p_except
      and (not p_with_bytes or f.storage_key is not null or f.upload_status = 'uploaded')
-     and (p_with_bytes or f.deleted_at is null or f.storage_key is not null or f.upload_status = 'uploaded')
-     and (p_since is null or f.created_at >= p_since)
+     and (p_with_bytes or p_since is not null or f.deleted_at is null or f.storage_key is not null or f.upload_status = 'uploaded')
+     and (p_since is null or greatest(f.created_at, f.updated_at) >= p_since)
      and not exists (select 1 from public.expenses e
                       where e.company_id = f.company_id and e.receipt_file_id = f.id and e.deleted_at is null);
 $$;

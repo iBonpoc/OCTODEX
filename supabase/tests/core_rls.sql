@@ -15159,9 +15159,9 @@ insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000002', 'tech', 'active');
 -- 20 receipts of his with bytes and no expense, made two days ago (out of the rows' day: only the bytes count)
 set session_replication_role = replica;
-insert into public.files (id, company_id, kind, created_by, created_at, storage_key, upload_status)
+insert into public.files (id, company_id, kind, created_by, created_at, updated_at, storage_key, upload_status)
   select ('f2760000-0000-4000-8000-0000000001' || lpad(g::text, 2, '0'))::uuid, 'ca000000-0000-0000-0000-000000000000', 'receipt',
-         'a2760000-0000-4000-8000-000000000001', now() - interval '2 days',
+         'a2760000-0000-4000-8000-000000000001', now() - interval '2 days', now() - interval '2 days',
          'ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-0000000001' || lpad(g::text, 2, '0') || '.jpg', 'uploaded'
     from generate_series(1, 20) g;
 -- the same for sales (sales are not the office for receipts)
@@ -15214,12 +15214,14 @@ select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-00000000000
 set session_replication_role = replica;
 insert into public.files (id, company_id, kind, created_by)
   select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', 'a2760000-0000-4000-8000-000000000001' from generate_series(1, 45);
-insert into public.files (id, company_id, kind, created_by, deleted_at)
-  values ('f2770000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'a2760000-0000-4000-8000-000000000001', now());
+-- removed two days ago (out of the day)
+insert into public.files (id, company_id, kind, created_by, created_at, updated_at, deleted_at)
+  values ('f2770000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'a2760000-0000-4000-8000-000000000001',
+          now() - interval '2 days', now() - interval '2 days', now() - interval '2 days');
 set session_replication_role = origin;
 select public.uuid_generate_v7() is not null as warmed;
 :as_tech276
--- 45 + f…21, f…22 = 47 (the 20 two days old are out of the day); the 48th to the 50th go
+-- 45 + f…21, f…22 = 47 (the 20 and the removed one two days old are out of the day); the 48th to the 50th go
 insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt' from generate_series(1, 3);
 select tst.ok(app.hanging_receipts_count('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000001', null, false, now() - interval '1 day') = 50,
               'T277 the 50th receipt without an expense goes in');
@@ -15227,16 +15229,25 @@ select tst.fails_like($q$insert into public.files (id, company_id, kind) values 
                       '%at most 50%', 'T277 not a 51st');
 select tst.fails_like($q$insert into public.files (id, company_id, kind, job_id) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e1a00000-0000-0000-0000-000000000001')$q$,
                       '%at most 50%', 'T277 tied to a job counts too');
+select tst.fails_like($q$insert into public.files (id, company_id, kind, created_at) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', '2000-01-01')$q$,
+                      '%at most 50%', 'T277 a phone''s old date does not take it out of the day (the server''s clock counts)');
 select tst.fails_like($q$insert into public.files (id, company_id, kind, deleted_at) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', now())$q$,
                       '%at most 50%', 'T277 nor one inserted removed');
 select tst.fails_like($q$update public.files set deleted_at = null where id = 'f2770000-0000-4000-8000-000000000001'$q$,
-                      '%at most 50%', 'T277 nor a removed one brought back');
+                      '%at most 50%', 'T277 nor an old removed one brought back');
 -- the queue sends one again (on conflict do nothing): nothing new, no refusal
 insert into public.files (id, company_id, kind) values ('f2760000-0000-4000-8000-000000000022', 'ca000000-0000-0000-0000-000000000000', 'receipt') on conflict do nothing;
 select tst.ok(true, 'T277 the queue sends an insert again at the limit: no refusal');
 :as_office_a
 insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt' from generate_series(1, 60);
 select tst.ok(true, 'T277 the office is not limited');
+-- removed ones count within the day: insert, remove, insert again is no way round
+:as_super
+update public.files set deleted_at = now() where created_by = 'a2760000-0000-4000-8000-000000000001' and kind = 'receipt' and deleted_at is null
+   and storage_key is null and id::text not like 'f2760000-%';
+:as_tech276
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt')$q$,
+                      '%at most 50%', 'T277 removing them does not make room within the day');
 \echo 'T277 at most 50 receipts without an expense a day ok'
 
 -- T278: the queue of any build (row, expense, bytes; offline, several in a row) is never refused; counts tell only one's own
