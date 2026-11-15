@@ -1024,6 +1024,10 @@ export interface Expense {
   amountCents: number;
   at: string;
   receiptUri?: string;
+  /** #1538: the receipt's files row in the cloud (kind 'receipt') — the receipt is there on every phone and after a reload */
+  receiptFileId?: ID;
+  /** #1538: the cloud did not take the receipt's file (this phone knows why; another phone — «refused») */
+  receiptFailed?: PhotoFail;
   /** who paid; reimbursements later */
   memberId: ID;
 }

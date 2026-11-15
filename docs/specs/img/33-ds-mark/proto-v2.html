@@ -1,0 +1,121 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>33 ds-mark v2</title>
+<!-- Статичный прототип #1585 v2 (выбор основателя 15.11, README исследований §13.2). Цвета/размеры — packages/design-tokens.
+     ?v=mark|select|marks|pulse|save &t=dark|light &w=390|1280 [&f=кадр] [&old=1 — выделение как сейчас] -->
+<style>
+[data-t=dark]{--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf2:rgba(255,255,255,.11);--solid:#33363C;--ov:rgba(38,41,48,.92);--bd:rgba(255,255,255,.14);--acc:#FBFF00;--onacc:#0B0C0F;--warn:#FF8A3D;--warnT:#FFB47E;--s1:#7FD4FF;--s2:#FFC46B;--node:#F2F3F5;--grid:rgba(255,255,255,.06);--grid2:rgba(255,255,255,.11);--scrim:rgba(0,0,0,.42)}
+[data-t=light]{--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--ov:rgba(250,248,244,.94);--bd:rgba(20,22,30,.1);--acc:#FBFF00;--onacc:#0B0C0F;--warn:#FF8A3D;--warnT:#944600;--s1:#0B6290;--s2:#8A4F00;--node:#15161A;--grid:rgba(20,22,30,.05);--grid2:rgba(20,22,30,.1);--scrim:rgba(20,22,30,.25)}
+*{box-sizing:border-box;margin:0}
+body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+.scr{position:relative;width:100vw;height:100vh}
+svg.cv{position:absolute;inset:0;width:100%;height:100%}
+.top{position:absolute;left:12px;right:12px;top:12px;display:flex;gap:8px;align-items:center}
+.pill{height:36px;border-radius:18px;background:var(--surf2);border:1px solid var(--bd);display:flex;align-items:center;padding:0 14px;font-size:15px;font-weight:600;white-space:nowrap}
+.pill.ic{width:36px;padding:0;justify-content:center}.pill.acc{background:var(--acc);color:var(--onacc);border:0;margin-left:auto}
+.ban{position:absolute;left:12px;right:12px;top:60px;border:1px solid var(--warn);border-radius:16px;background:var(--solid);padding:12px 14px}
+.w1280 .ban{left:auto;right:16px;width:440px}
+.ban b{font-size:15px;display:flex;gap:8px;align-items:center}.ban p{font-size:13px;color:var(--mut);margin:4px 0 10px 28px}
+.row{display:flex;gap:8px;margin-left:28px}
+.btn{display:inline-flex;height:36px;padding:0 14px;align-items:center;border-radius:18px;background:var(--surf2);border:1px solid var(--bd);font-size:15px;font-weight:600}
+.btn.pri{background:var(--acc);color:var(--onacc);border:0}
+.tb{position:absolute;left:12px;right:12px;bottom:96px;height:60px;border-radius:20px;background:var(--ov);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around;font-size:11px;color:var(--mut)}
+.w1280 .tb{left:50%;width:560px;transform:translateX(-50%);bottom:70px}
+.tb .c{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px;padding:4px 6px;border-radius:12px}
+.tb .c.on{background:var(--acc);color:var(--onacc)}
+.fld{position:absolute;left:12px;bottom:52px;height:36px;display:flex;align-items:center;gap:8px;font-size:13px;background:var(--surf2);border:1px solid var(--bd);border-radius:18px;padding:0 12px}
+.w1280 .fld{bottom:22px;left:50%;transform:translateX(-50%)}
+.cap{position:absolute;left:12px;bottom:12px;font-size:11.5px;color:var(--mut)}
+.w1280 .cap{left:16px;bottom:22px}
+.lg{position:absolute;background:var(--solid);border:1px solid var(--bd);border-radius:16px;padding:10px 12px;font-size:13px}
+.lg h4{font-size:11.5px;color:var(--mut);font-weight:600;margin:6px 0 4px}
+.lg .r{display:flex;align-items:center;gap:10px;min-height:30px}
+.lg .r svg{flex:none}
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.dlg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(340px,calc(100vw - 32px));background:var(--solid);border:1px solid var(--bd);border-radius:20px;padding:18px}
+.dlg b{display:flex;gap:8px;align-items:center;font-size:17px}.dlg p{font-size:13px;color:var(--mut);margin:8px 0 14px}
+.dlg .row{margin:0;justify-content:flex-end}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:170px;background:var(--solid);border:1px solid var(--warn);border-radius:18px;padding:8px 14px;font-size:13px;display:flex;gap:8px;align-items:center;white-space:nowrap}
+</style></head>
+<body><div class="scr" id="scr"></div>
+<script>
+const q=new URLSearchParams(location.search),V=q.get('v')||'mark',T=q.get('t')||'dark',W=+(q.get('w')||390),OLD=q.get('old')==='1';
+document.body.dataset.t=T;const S=document.getElementById('scr');S.className='scr w'+W;
+const H=W===390?844:800,C=getComputedStyle(document.body),k=n=>C.getPropertyValue('--'+n).trim();
+const ALERT='M12 4l9.5 16h-19zM12 10v4M12 17h.01';
+const ICON={dsRect:"M5 7h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z",dsRectRibbed:"M5 7h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM9 7v10M12 7v10M15 7v10",dsRound:"M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z",dsRoundRibbed:"M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM9 4.6v14.8M12 4v16M15 4.6v14.8",xsK:"M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",xsHalf:"M4 8a8 8 0 0 0 16 0M3 8h3M18 8h3",undo:"M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-4",redo:"M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h4",trash:"M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3"};
+const ic=(d,s=22,col='currentColor',sw=1.8)=>`<svg width="${s}" height="${s}" viewBox="0 0 24 24"><path d="${d}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+let g='';for(let x=0;x<W;x+=24)g+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="${x%96?k('grid'):k('grid2')}"/>`;for(let y=0;y<H;y+=24)g+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="${y%96?k('grid'):k('grid2')}"/>`;
+const ox=W===390?0:400,oy=W===390?0:-30,P=(x,y)=>[x+ox,y+oy];
+// --- marks
+const lbl=(x,y,t,col,anchor='middle',fs=12,fw=600)=>`<text x="${x}" y="${y}" font-size="${fs}" font-weight="${fw}" fill="${col}" text-anchor="${anchor}" paint-order="stroke" stroke="${k('bg')}" stroke-width="4" stroke-linejoin="round">${t}</text>`;
+function run(a,b,col,len,o={}){const [x1,y1]=P(...a),[x2,y2]=P(...b);let s='';
+ if(o.hl)s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('warn')}" stroke-opacity="${o.hl}" stroke-width="${o.hlw||18}" stroke-linecap="round"/>`;
+ if(o.sel){ if(OLD) s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('bg')}" stroke-width="10" stroke-linecap="round"/>`;
+   else s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('ink')}" stroke-width="12" stroke-linecap="round"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('bg')}" stroke-width="8" stroke-linecap="round"/>`;}
+ s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${o.sel?6:4}" stroke-linecap="round"/>`;
+ for(const [x,y] of [[x1,y1],[x2,y2]])s+=`<circle cx="${x}" cy="${y}" r="${o.sel&&!OLD?7:5}" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/>`;
+ const vert=Math.abs(x2-x1)<2,mx=(x1+x2)/2,my=(y1+y2)/2;
+ if(len)s+=lbl(vert?mx+14:mx,vert?my+4:my-12,len,k('ink'),vert?'start':'middle');
+ if(o.no){const w=o.no.length*7+10,nx=vert?mx-w/2-14:mx,ny=vert?my+4:my+26;s+=`<rect x="${nx-w/2}" y="${ny-12}" width="${w}" height="17" rx="4" fill="${o.sel?k('ink'):k('solid')}" stroke="${k('ink')}" stroke-width="1.2"/><text x="${nx}" y="${ny+1}" font-size="11" font-weight="700" fill="${o.sel?k('bg'):k('ink')}" text-anchor="middle">${o.no}</text>`;}
+ return s;}
+// downspout = its shape (#13.2): rect plain / rect ribbed / round plain / round ribbed; D1 inside
+function ds(p,n,col,kind='rectPlain'){const [x,y]=P(...p);let s='';const R=kind.startsWith('round');
+ if(R){s+=`<circle cx="${x}" cy="${y}" r="12" fill="${col}" stroke="${k('bg')}" stroke-width="2"/>`;
+  if(kind==='roundRibbed')for(const a of [-60,-30,0,30,60,120,150,180,210,240])s+=`<line x1="${x+12*Math.cos(a*Math.PI/180)}" y1="${y+12*Math.sin(a*Math.PI/180)}" x2="${x+16*Math.cos(a*Math.PI/180)}" y2="${y+16*Math.sin(a*Math.PI/180)}" stroke="${col}" stroke-width="2"/>`;}
+ else{s+=`<rect x="${x-15}" y="${y-10}" width="30" height="20" rx="3" fill="${col}" stroke="${k('bg')}" stroke-width="2"/>`;
+  if(kind==='rectRibbed')for(const dx of [-9,-3,3,9])s+=`<line x1="${x+dx}" y1="${y-14}" x2="${x+dx}" y2="${y-10}" stroke="${col}" stroke-width="2"/><line x1="${x+dx}" y1="${y+10}" x2="${x+dx}" y2="${y+14}" stroke="${col}" stroke-width="2"/>`;}
+ s+=`<text x="${x}" y="${y+4}" font-size="11" font-weight="700" fill="${k('bg')}" text-anchor="middle">D${n}</text>`;return s;}
+function outlet(p,col){const [x,y]=P(...p),h=9;return `<rect x="${x-h}" y="${y-h}" width="${2*h}" height="${2*h}" rx="2" fill="${k('bg')}" stroke="${col}" stroke-width="2.5"/><path d="M${x-h+3.5} ${y-h+3.5}L${x+h-3.5} ${y+h-3.5}M${x-h+3.5} ${y+h-3.5}L${x+h-3.5} ${y-h+3.5}" stroke="${col}" stroke-width="2"/>`;}
+// chain variants: a — the outlet square with a chain link inside (outlet family: inside = what goes down); b — square-X + «C1» like D1; c — filled square with «C1» (downspout family, the shape of an outlet)
+function chain(p,col,vr,n=1){const [x,y]=P(...p),h=9;
+ if(vr==='a')return `<rect x="${x-h}" y="${y-h}" width="${2*h}" height="${2*h}" rx="2" fill="${k('bg')}" stroke="${col}" stroke-width="2.5"/><rect x="${x-3}" y="${y-6.5}" width="6" height="8" rx="3" fill="none" stroke="${col}" stroke-width="1.8"/><rect x="${x-3}" y="${y-1.5}" width="6" height="8" rx="3" fill="none" stroke="${col}" stroke-width="1.8"/>`;
+ if(vr==='b')return outlet(p,col)+lbl(x+14,y+4,'C'+n,col,'start',11,700);
+ return `<rect x="${x-11}" y="${y-11}" width="22" height="22" rx="2" fill="${col}" stroke="${k('bg')}" stroke-width="2"/><text x="${x}" y="${y+4}" font-size="11" font-weight="700" fill="${k('bg')}" text-anchor="middle">C${n}</text>`;}
+function warnSign(p,dx=0,dy=0){const [x,y]=P(...p);const tx=x+dx,ty=y+dy;return `<g transform="translate(${tx-9},${ty-13}) scale(.75)"><path d="${ALERT}" fill="none" stroke="${k('bg')}" stroke-width="5" stroke-linejoin="round"/><path d="${ALERT}" fill="none" stroke="${k('warnT')}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/></g>`+lbl(tx+12,ty+1,'Нет водостока',k('warnT'),'start',13,700);}
+const S1=k('s1'),S2=k('s2');
+const A1=[40,300],A2=[300,300],A3=[300,470],B1=[60,580],B2=[260,580];
+let scene='',html='';
+const topBar=`<div class="top"><span class="pill ic">‹</span><span class="pill">+ Сделать заявку</span><span class="pill ic">⋯</span><span class="pill acc">Готово</span></div>`;
+const toolbar=(on='ds',dsKind='dsRect',prof='xsK')=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic(ICON[prof])}Желоб</div><div class="c ${on==='ds'?'on':''}">${ic(ICON[dsKind])}Водосток</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${S1};border-radius:10px;padding:1px 6px">Эт 1</span>Этаж</div><div class="c">${ic(ICON.undo)}Назад</div><div class="c">${ic(ICON.redo)}Вперёд</div><div class="c">${ic(ICON.trash)}Удалить</div></div>`;
+const field=`<div class="fld">${ic(ICON.dsRect,18)}<b>Водостоков 1</b><span style="color:var(--mut)">· Дальше: водостоки</span></div>`;
+const banner=`<div class="ban"><b>${ic(ALERT,20,k('warnT'),2)}Не хватает водостока</b><p>Желоб 1 (1-1, 1-2), 35′ 10″: водостоков 0 из 1</p><div class="row"><span class="btn">Поставить водосток</span><span class="btn">Отменить</span></div></div>`;
+const cap=t=>`<div class="cap">${t}</div>`;
+if(V==='mark'||V==='pulse'||V==='save'){
+ const f=+(q.get('f')||0);const base=T==='light'?.4:.25,peak=T==='light'?.7:.55;const hl=V==='pulse'?[base,peak,base,peak,base][f]||base:base,hlw=V==='pulse'?[18,30,18,30,18][f]||18:18;
+ const warn=V!=='save';
+ scene+=run(A1,A2,S1,"21′ 8″",{hl:warn?hl:0,hlw,no:'1-1'})+run(A2,A3,S1,"14′ 2″",{hl:warn?hl:0,hlw,no:'1-2'})+run(B1,B2,S1,"16′ 9″",{no:'2-1'})+(V==='save'&&q.get('k')==='toast'?outlet([B2[0]-40,580],S1):ds([B2[0]-40,580],1,S1));
+ if(warn)scene+=warnSign([170,300],-58,-34);
+ html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}${scene}</svg>`+topBar+(warn?banner:'')+toolbar()+field;
+ if(V==='mark')html+=cap('v2: вариант А + подсветка желоба; номера желобов; D1 — форма водостока');
+ if(V==='pulse')html+=cap('Импульс по нажатию на уведомление: кадр '+f+' из 4 (2 удара)');
+ if(V==='save'){
+   const kind=q.get('k')||'dlg';
+   if(kind==='dlg')html+=`<div class="scrim"></div><div class="dlg"><b>${ic(ALERT,22,k('warnT'),2)}Сохранить без водостока?</b><p>Воде некуда уходить: у желоба 1 (1-1, 1-2) заглушки на обоих концах, а водостока и выпуска нет.</p><div class="row"><span class="btn">Сохранить так</span><span class="btn pri">Поставить водосток</span></div></div>`+cap('Сохранение: две заглушки, нет водостока и выпуска — спросить');
+   else html+=`<div class="toast">${ic(ALERT,18,k('warnT'),2)}Выпуск без водостока: желоб 2-1</div>`+cap('Сохранение: выпуск без водостока — предупреждение, не мешает');
+ }
+}
+if(V==='select'){
+ scene+=run(A1,A2,S1,"21′ 8″",{sel:true,no:'1-1'})+run(A2,A3,S1,"14′ 2″",{no:'1-2'})+run(B1,B2,S1,"16′ 9″",{no:'2-1'})+ds([B2[0]-40,580],1,S1)+ds([A3[0],A3[1]-40],2,S1);
+ html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}${scene}</svg>`+topBar+toolbar('line')+field+cap(OLD?'Выделение как сейчас (было): желоб 1-1 выбран':'Выделение (#1592, стало): контур ink, узлы крупнее; желоб 1-1 выбран');
+}
+if(V==='marks'){
+ const U1=[60,190],U2=[250,190];
+ scene+=run(A1,A2,S1,"21′ 8″",{no:'1-1'})+run(A2,A3,S1,"14′ 2″",{no:'1-2'})+ds([A3[0],A3[1]-40],1,S1,'rectRibbed')+run(U1,U2,S2,"13′ 4″ · эт 2",{no:'2-1'})+outlet([U1[0]+40,190],S2)+run(B1,B2,S1,"16′ 9″",{no:'3-1'})+ds([B2[0]-40,580],2,S1,'roundPlain')+chain([B1[0]+40,580],S1,q.get('c')||'a');
+ const sw=(svg,w=40,h=32)=>`<svg width="${w}" height="${h}" viewBox="${-w/2+ox} ${-h/2+oy} ${w} ${h}">${svg}</svg>`;
+ const at=[0,0];
+ const lg=`<div class="lg" style="${W===390?'left:12px;right:12px;top:620px;bottom:auto;display:none':'right:16px;top:70px;width:330px'}"><h4>Водосток (форма = выбранная, подпись D1)</h4>
+ <div class="r">${sw(ds(at,1,S1,'rectPlain'))}Прямоугольный гладкий</div><div class="r">${sw(ds(at,1,S1,'rectRibbed'))}Прямоугольный ребристый</div><div class="r">${sw(ds(at,1,S1,'roundPlain'))}Круглый гладкий</div><div class="r">${sw(ds(at,1,S1,'roundRibbed'))}Круглый ребристый</div>
+ <h4>Выпуск без водостока</h4><div class="r">${sw(outlet(at,S1))}Выпуск (квадрат с крестом)</div>
+ <h4>Цепь — варианты на выбор</h4><div class="r">${sw(chain(at,S1,'a'))}а) квадрат, внутри звено</div><div class="r">${sw(chain(at,S1,'b'),56)}б) квадрат с крестом + «C1» — рекомендую</div><div class="r">${sw(chain(at,S1,'c'))}в) залитый квадрат «C1»</div></div>`;
+ html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}${scene}</svg>`+topBar+toolbar('ds','dsRectRibbed','xsK')+field+(W===390?'':lg)+cap('Знаки: D1 — форма водостока, ⊠ — выпуск, цепь — вариант '+(q.get('c')||'a'));
+}
+if(V==='legend'){ // 390: the legend sheet opened from «⋯ → Обозначения»
+ const sw=(svg,w=40,h=32)=>`<svg width="${w}" height="${h}" viewBox="${-w/2+ox} ${-h/2+oy} ${w} ${h}">${svg}</svg>`,at=[0,0];
+ html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}</svg>`+topBar+`<div class="scrim"></div><div class="lg" style="left:${W===390?8:W/2-200}px;right:${W===390?8:W/2-200}px;bottom:8px;border-radius:20px 20px 16px 16px;padding:14px 16px"><b style="font-size:17px">Обозначения</b>
+ <h4>Водосток — форма выбранного, подпись D1</h4><div class="r">${sw(ds(at,1,S1,'rectPlain'))}Прямоугольный гладкий</div><div class="r">${sw(ds(at,1,S1,'rectRibbed'))}Прямоугольный ребристый</div><div class="r">${sw(ds(at,1,S1,'roundPlain'))}Круглый гладкий</div><div class="r">${sw(ds(at,1,S1,'roundRibbed'))}Круглый ребристый</div>
+ <h4>Без водостока</h4><div class="r">${sw(outlet(at,S1))}Выпуск</div><div class="r">${sw(chain(at,S1,'a'))}Выпуск с цепью — а</div><div class="r">${sw(chain(at,S1,'b'),56)}Выпуск с цепью — б</div><div class="r">${sw(chain(at,S1,'c'))}Выпуск с цепью — в</div>
+ <h4>Прочее</h4><div class="r">${sw(`<rect x="${ox-14}" y="${oy-8}" width="28" height="16" rx="3" fill="${k('ink')}"/><text x="${ox}" y="${oy+4}" font-size="11" font-weight="700" fill="${k('bg')}" text-anchor="middle">1-2</text>`)}Номер желоба (желоб 1, кусок 2 — как на рабочем листе)</div><div class="r">${ic(ALERT,22,k('warnT'),2)}<span style="color:var(--warnT);font-weight:700">Нет водостока</span>&nbsp;— только в редакторе</div></div>`;
+}
+S.innerHTML=html;
+</script></body></html>
