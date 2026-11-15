@@ -359,3 +359,39 @@ describe("#1570 — a chain short of downspouts (founder 14.11: «удалил �
     expect(shortChains(after, AUTO_DS_SPACING_IN)).toEqual([{ runIds: ["a"], need: 4, have: 3 }]);
   });
 });
+
+describe("#1570 code-reviewer: «Поставить водосток» works whatever made the chain short", () => {
+  it("a downspout put BY HAND taken off (no counter of removed): the chain is short, the button puts one — not the same drawing", () => {
+    const d0 = auto({ runs: [run("a", [0, 0], [240, 0])], downspouts: [] }, none);
+    // the automatic one replaced by a hand-put one (the chain wants 1: one by hand → no automatic one)
+    const hand = { ...d0, downspouts: [ds("h", "a", 100)] };
+    const after = commitAuto(removeElement(hand, "h"), hand, false, O);
+    expect(offOf(after, "a")).toBe(0); // nothing counted: it was not automatic
+    expect(shortChains(after, AUTO_DS_SPACING_IN)).toEqual([{ runIds: ["a"], need: 1, have: 0 }]);
+    const back = refillChain(after, ["a"], O);
+    expect(back).not.toBe(after);
+    expect(shortChains(back, AUTO_DS_SPACING_IN)).toEqual([]);
+    expect(back.downspouts.filter((s) => s.runId === "a" && s.auto)).toHaveLength(1);
+  });
+  it("two short chains: the button puts both (it is given every short chain's gutters)", () => {
+    const d = auto({ runs: [run("a", [0, 0], [240, 0]), run("c", [0, 600], [240, 600])], downspouts: [] }, none);
+    let x = d;
+    for (const s of d.downspouts) x = commitAuto(removeElement(x, s.id), x, false, O);
+    const short = shortChains(x, AUTO_DS_SPACING_IN);
+    expect(short).toHaveLength(2);
+    const back = refillChain(x, short.flatMap((c) => c.runIds), O);
+    expect(shortChains(back, AUTO_DS_SPACING_IN)).toEqual([]);
+    expect(back.downspouts).toHaveLength(2);
+  });
+  it("two stories meeting at a point are two chains: each is counted on its own", () => {
+    const d = auto({ runs: [run("a", [0, 0], [240, 0]), run("b", [240, 0], [240, 200], { story: 2 })], downspouts: [] }, none);
+    expect(d.downspouts).toHaveLength(2);
+    const gone = d.downspouts.find((s) => s.runId === "b")!;
+    const after = commitAuto(removeElement(d, gone.id), d, false, O);
+    expect(shortChains(after, AUTO_DS_SPACING_IN)).toEqual([{ runIds: ["b"], need: 1, have: 0 }]);
+  });
+  it("a gutter of no length is never short (nothing to drain)", () => {
+    const z = { runs: [run("z", [10, 10], [10, 10], { dsAuto: true } as never)], downspouts: [] };
+    expect(shortChains(z, AUTO_DS_SPACING_IN)).toEqual([]);
+  });
+});

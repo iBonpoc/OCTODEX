@@ -3554,6 +3554,7 @@ export const ru = {
   "mod.gutters.draw.dsShort.titleMany": "Не хватает водостоков на {n} линиях",
   "mod.gutters.draw.dsShort.hint": "{run}: водостоков {have} из {need}",
   "mod.gutters.draw.dsShort.action": "Поставить водосток",
+  "mod.gutters.draw.dsShort.actionMany": "Поставить водостоки",
   "mod.gutters.draw.dsShort.run": "Желоб {len}",
   "mod.gutters.draw.dsShort.runStory": "Желоб {len}, этаж {n}",
   "mod.gutters.draw.layersTitle": "Что показывать на чертеже",

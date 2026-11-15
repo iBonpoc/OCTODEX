@@ -1064,7 +1064,8 @@ export default function DrawScreen() {
     const s0 = short[0];
     if (!o || !s0) return;
     // put back as the rule wants: one step of «Назад», no second pass of the automatic downspouts (`placed`)
-    commit(refillChain(cur.current.drawing, s0.runIds, { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }), cur.current.drawing, true);
+    // every short chain at once (code-reviewer #1576: with two short the button fixed only the first, the warning stayed)
+    commit(refillChain(cur.current.drawing, short.flatMap((c) => c.runIds), { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }), cur.current.drawing, true);
   };
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
@@ -1181,7 +1182,7 @@ export default function DrawScreen() {
               need: short[0]!.need,
               have: short[0]!.have,
             })}
-            action={{ label: t("mod.gutters.draw.dsShort.action"), onPress: refill }}
+            action={{ label: short.length > 1 ? t("mod.gutters.draw.dsShort.actionMany") : t("mod.gutters.draw.dsShort.action"), onPress: refill }}
           />
         ) : null}
         {/* the toolbar stuck to the top (founder 09.11): under the header */}

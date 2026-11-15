@@ -3554,6 +3554,7 @@ export const en: Dict = {
   "mod.gutters.draw.dsShort.titleMany": "Downspouts missing on {n} lines",
   "mod.gutters.draw.dsShort.hint": "{run}: downspouts {have} of {need}",
   "mod.gutters.draw.dsShort.action": "Add downspout",
+  "mod.gutters.draw.dsShort.actionMany": "Add downspouts",
   "mod.gutters.draw.dsShort.run": "Gutter {len}",
   "mod.gutters.draw.dsShort.runStory": "Gutter {len}, story {n}",
   "mod.gutters.draw.layersTitle": "What to show on the drawing",

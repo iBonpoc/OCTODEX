@@ -3554,6 +3554,7 @@ export const es: Dict = {
   "mod.gutters.draw.dsShort.titleMany": "Faltan bajantes en {n} líneas",
   "mod.gutters.draw.dsShort.hint": "{run}: bajantes {have} de {need}",
   "mod.gutters.draw.dsShort.action": "Poner bajante",
+  "mod.gutters.draw.dsShort.actionMany": "Poner bajantes",
   "mod.gutters.draw.dsShort.run": "Canaleta {len}",
   "mod.gutters.draw.dsShort.runStory": "Canaleta {len}, piso {n}",
   "mod.gutters.draw.layersTitle": "Qué mostrar en el dibujo",

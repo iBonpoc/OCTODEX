@@ -241,11 +241,16 @@ export function shortChains(d: Drawing, spacingIn: number): ShortChain[] {
   return out;
 }
 
-/** «Поставить водосток» (#1570): the chain forgets the downspouts taken off by hand and gets its automatic ones again, the rest of the drawing as it is */
+/**
+ * «Поставить водосток» (#1570): the chains of these gutters forget the downspouts taken off by hand (if any were counted) and get their automatic
+ * ones again by the rule; the rest of the drawing as it is. A chain short for another reason — a downspout put BY HAND was taken off, which
+ * counts nothing (code-reviewer #1576) — gets its downspout too: the pass is forced, not left to «what the change touched».
+ */
 export function refillChain(d: Drawing, runIds: readonly string[], o: AutoDsOptions): Drawing {
   const set = new Set(runIds);
-  if (!d.runs.some((r) => set.has(r.id) && offOf(r))) return d;
-  const cleared: Drawing = { ...d, runs: d.runs.map((r) => { if (!set.has(r.id) || !offOf(r)) return r; const { dsAutoOff: _o, ...rest } = r.attrs; return { ...r, attrs: rest }; }) };
+  const cleared: Drawing = d.runs.some((r) => set.has(r.id) && offOf(r))
+    ? { ...d, runs: d.runs.map((r) => { if (!set.has(r.id) || !offOf(r)) return r; const { dsAutoOff: _o, ...rest } = r.attrs; return { ...r, attrs: rest }; }) }
+    : d;
   // every chain as the rule wants it (`force`): the other chains keep theirs — their counts of the removed ones still stand, and the
   // downspouts that stand where they belong are not moved
   return autoDownspouts(cleared, o, undefined, true);
