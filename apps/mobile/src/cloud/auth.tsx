@@ -8,7 +8,7 @@ import { supabase } from "./client";
 import { forgetThisPhone } from "@/features/pushNative";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
-import { signOutThenWipe, wipeSignOutIfPending, type SignOutAuth } from "./signOutWipe";
+import { forgetSignOutMark, signOutAndMark, wipeAfterSignOut, wipeSignOutIfPending } from "./signOutWipe";
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
 import { closedAnswerCounts, parseClosed, type ClosedCompany } from "@/features/closedCompany";
 
@@ -66,6 +66,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [accountDeleted, setAccountDeleted] = useState(false);
   const [closedCompanies, setClosedCompanies] = useState<ClosedCompany[]>([]);
   const checkedUid = useRef<string | null>(null);
+  /** #1633: who is signed in by this app's own state (a «signed out» event wipes that person's caches) */
+  const signedUid = useRef<string | null>(null);
   const legalRun = useRef<Promise<void> | null>(null);
   // a slow old answer never overwrites a newer one (review #206 M1): checks and accepts take tickets
   const tickets = useRef(legalTickets()).current;
@@ -171,6 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // #1633: a sign-out wipe the app did not finish (never of the person signed in now)
       void wipeSignOutIfPending(data.session?.user.id ?? null);
       if (!alive) return;
+      if (data.session) signedUid.current = data.session.user.id;
       setSession(data.session);
       if (data.session) await afterSession(data.session);
       setReady(true);
@@ -178,6 +181,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
       const plan = authEventPlan(e, s?.user.id ?? null, checkedUid.current);
       if (!s) {
+        // #1633: the person signed out (this tab, another tab, another device): their company leaves the phone
+        const prev = signedUid.current;
+        signedUid.current = null;
+        if (prev) void wipeAfterSignOut(prev, { signedIn: () => signedUid.current });
         setSession(null);
         checkedUid.current = null;
         gone.forget();
@@ -187,6 +194,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLegalChecked(false);
         return;
       }
+      // the same person signed in again: a wipe of theirs still marked is called off (#1633)
+      if (signedUid.current !== s.user.id) void forgetSignOutMark(s.user.id);
+      signedUid.current = s.user.id;
       setSession(s);
       if (plan === "none") return; // INITIAL_SESSION: the start goes through getSession above
       if (plan === "first") {
@@ -271,8 +281,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
         // while still signed in: this phone stops getting the person's pushes (never throws, ≤ 8 s; docs/specs/27-push.md)
         await forgetThisPhone();
-        // #1633: offline too; the person's company leaves the phone once the session is gone from it
-        await signOutThenWipe(supabase.auth as unknown as SignOutAuth, () => {
+        // #1633: offline too; the «signed out» event then wipes the person's company from the phone
+        await signOutAndMark(supabase.auth, signedUid.current, () => {
           setMemberships([]);
           clearClosed();
         });

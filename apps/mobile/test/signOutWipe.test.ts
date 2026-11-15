@@ -1,15 +1,17 @@
 /**
- * unit:signOutWipe (#1633) — a sign-out leaves no copy of the person's company on the phone; nothing unsent goes.
+ * unit:signOutWipe (#1633) — a sign-out leaves no copy of the person's company on the phone; nothing only the phone
+ * has goes (the outbox, refused changes, drafts, a refused photo or receipt).
  */
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 
-import { SIGNOUT_WIPE_KEY, signOutKeys, signOutThenWipe, wipeAfterSignOut, wipeSignOutIfPending, type WipeStore } from "../src/cloud/signOutWipe";
-import { createWriter, forgetPendingWrites, liveWriters } from "../src/data/persist";
+import { holdsLocalOnly, SIGNOUT_WIPE_KEY, signOutAndMark, signOutKeys, wipeAfterSignOut, wipeSignOutIfPending, forgetSignOutMark, type WipeStore } from "../src/cloud/signOutWipe";
+import { createWriter, liveWriters, type Writer } from "../src/data/persist";
 
 const me = "u1";
-const cache = (who: string) => JSON.stringify({ day: "cloud", db: { me: who } });
+const cache = (who: string, extra: object = {}) => JSON.stringify({ day: "cloud", db: { me: who, visits: [], expenses: [], ...extra } });
+const nobody = { signedIn: () => null, pauseMs: 0 };
 
 function mem(init: Record<string, string>) {
   const m = new Map(Object.entries(init));
@@ -23,8 +25,8 @@ function mem(init: Record<string, string>) {
   return { m, s };
 }
 
-describe("unit:signOutWipe — which keys a sign-out removes (#1633)", () => {
-  it("my caches (every company) and their kept copies go; the outbox, refused changes, drafts, other people's and other keys stay", () => {
+describe("unit:signOutWipe — which keys (#1633)", () => {
+  it("my caches (every company), their copies and the person-less ones to check; the outbox, refused changes, drafts, others' stay", () => {
     const keys = [
       "octo.cloud.v1.c1.u1",
       "octo.cloud.v1.c2.u1",
@@ -35,72 +37,90 @@ describe("unit:signOutWipe — which keys a sign-out removes (#1633)", () => {
       "octo.drafts.v1.c1.u1",
       "octo.broken.octo.cloud.v1.c1.u1.1700000000000",
       "octo.broken.octo.cloud.v1.c1.u2.1700000000000",
+      "octo.broken.octo.cloud.v1.c1.1700000000000",
       "octo.broken.octo.outbox.v1.1700000000000",
       "octo.db.v5",
     ];
     const { mine, legacy } = signOutKeys(keys, me);
     expect(mine.sort()).toEqual(["octo.broken.octo.cloud.v1.c1.u1.1700000000000", "octo.cloud.v1.c1.u1", "octo.cloud.v1.c2.u1"]);
-    expect(legacy).toEqual(["octo.cloud.v1.c1"]);
+    expect(legacy.sort()).toEqual(["octo.broken.octo.cloud.v1.c1.1700000000000", "octo.cloud.v1.c1"]);
+  });
+  it("a refused photo or receipt is what only the phone has", () => {
+    expect(holdsLocalOnly({ db: { visits: [{ photos: [{}] }], expenses: [{}] } })).toBe(false);
+    expect(holdsLocalOnly({ db: { visits: [{ photos: [{ upload: { failed: "big" } }] }] } })).toBe(true);
+    expect(holdsLocalOnly({ db: { expenses: [{ receiptFailed: "type" }] } })).toBe(true);
   });
 });
 
 describe("unit:signOutWipe — the wipe (#1633)", () => {
-  it("removes my caches and my older person-less one; the outbox and the refused changes stay byte for byte", async () => {
+  it("removes my caches, my person-less one and its copy; the outbox and the refused changes stay byte for byte", async () => {
     const outbox = JSON.stringify([{ id: "op1", owner: { userId: me, companyId: "c1" } }]);
     const rejected = JSON.stringify([{ id: "op2", owner: { userId: me, companyId: "c1" } }]);
     const { m, s } = mem({
       "octo.cloud.v1.c1.u1": cache(me),
       "octo.cloud.v1.c9": cache(me),
+      "octo.broken.octo.cloud.v1.c9.1700000000000": cache(me),
       "octo.cloud.v1.c8": cache("u2"),
       "octo.cloud.v1.c1.u2": cache("u2"),
       "octo.outbox.v1": outbox,
       "octo.cloud.v1.rejected": rejected,
       "octo.drafts.v1.c1.u1": "{}",
     });
-    await wipeAfterSignOut(me, s, 0);
+    await wipeAfterSignOut(me, { ...nobody, s });
     expect([...m.keys()].sort()).toEqual(["octo.cloud.v1.c1.u2", "octo.cloud.v1.c8", "octo.cloud.v1.rejected", "octo.drafts.v1.c1.u1", "octo.outbox.v1"]);
     expect(m.get("octo.outbox.v1")).toBe(outbox);
     expect(m.get("octo.cloud.v1.rejected")).toBe(rejected);
     expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
   });
 
-  it("a write of the cache already under way when the session went is removed by the second pass", async () => {
+  it("a cache holding a refused photo or receipt stays («Повторить» needs its file and reason)", async () => {
+    const photo = cache(me, { visits: [{ photos: [{ id: "p1", uri: "file:///p1.jpg", upload: { failed: "big", at: "x" } }] }] });
+    const receipt = cache(me, { expenses: [{ id: "x1", receiptUri: "file:///r.jpg", receiptFailed: "type" }] });
+    const { m, s } = mem({ "octo.cloud.v1.c1.u1": photo, "octo.cloud.v1.c2.u1": receipt, "octo.cloud.v1.c3.u1": cache(me) });
+    await wipeAfterSignOut(me, { ...nobody, s });
+    expect([...m.keys()].sort()).toEqual(["octo.cloud.v1.c1.u1", "octo.cloud.v1.c2.u1"]);
+  });
+
+  it("a write of the cache under way when the session went is removed by a later pass", async () => {
     const { m, s } = mem({ "octo.cloud.v1.c1.u1": cache(me) });
-    const p = wipeAfterSignOut(me, s, 20);
+    const p = wipeAfterSignOut(me, { signedIn: () => null, s, pauseMs: 20 });
     await new Promise((r) => setTimeout(r, 5));
     m.set("octo.cloud.v1.c1.u1", cache(me)); // the store's late write of the old key (persist keyChanged)
     await p;
     expect(m.has("octo.cloud.v1.c1.u1")).toBe(false);
   });
 
-  it("a pending (not yet written) write of my cache is dropped, another key's is written", async () => {
+  it("the wipe drops a pending (not yet written) write of my cache; another key's is written", async () => {
     const put = vi.fn(async () => {});
-    const w1 = createWriter(put, 50, () => 0);
-    const w2 = createWriter(put, 50, () => 0);
-    (liveWriters() as Set<typeof w1>).add(w1);
-    (liveWriters() as Set<typeof w2>).add(w2);
+    const w1: Writer = createWriter(put, 50, () => 0);
+    const w2: Writer = createWriter(put, 50, () => 0);
+    const live = liveWriters() as Set<Writer>;
+    live.add(w1);
+    live.add(w2);
     try {
+      const { s } = mem({ "octo.cloud.v1.c1.u1": cache(me) });
       w1.schedule("octo.cloud.v1.c1.u1", "x");
       w2.schedule("octo.outbox.v1", "y");
-      forgetPendingWrites((k) => k === "octo.cloud.v1.c1.u1");
+      await wipeAfterSignOut(me, { ...nobody, s });
       w1.flush();
       w2.flush();
       expect(put).toHaveBeenCalledTimes(1);
       expect(put).toHaveBeenCalledWith("octo.outbox.v1", "y");
     } finally {
-      (liveWriters() as Set<typeof w1>).delete(w1);
-      (liveWriters() as Set<typeof w2>).delete(w2);
+      live.delete(w1);
+      live.delete(w2);
     }
   });
 
-  it("a wipe that failed is repeated on the next start — never for the person signed in again", async () => {
-    const { m, s } = mem({ "octo.cloud.v1.c1.u1": cache(me), [SIGNOUT_WIPE_KEY]: me });
-    await wipeSignOutIfPending(me, s);
+  it("the same person signed in again during the wipe: it stops, their cache stays, the mark goes", async () => {
+    let who: string | null = null;
+    const { m, s } = mem({ "octo.cloud.v1.c1.u1": cache(me) });
+    const p = wipeAfterSignOut(me, { signedIn: () => who, s, pauseMs: 20 });
+    await new Promise((r) => setTimeout(r, 5));
+    who = me;
+    m.set("octo.cloud.v1.c1.u1", cache(me)); // read again after the sign-in
+    await p;
     expect(m.has("octo.cloud.v1.c1.u1")).toBe(true);
-    expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
-    m.set(SIGNOUT_WIPE_KEY, me);
-    await wipeSignOutIfPending(null, s);
-    expect(m.has("octo.cloud.v1.c1.u1")).toBe(false);
     expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
   });
 
@@ -109,48 +129,78 @@ describe("unit:signOutWipe — the wipe (#1633)", () => {
     s.multiRemove = async () => {
       throw new Error("SQLITE_BUSY");
     };
-    await expect(wipeAfterSignOut(me, s, 0)).resolves.toBeUndefined();
+    await expect(wipeAfterSignOut(me, { ...nobody, s })).resolves.toBeUndefined();
     expect(m.get(SIGNOUT_WIPE_KEY)).toBe(me);
   });
 });
 
+describe("unit:signOutWipe — the mark on the next start (#1633)", () => {
+  it("that person signed in: nothing wiped, the mark goes", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c1.u1": cache(me), [SIGNOUT_WIPE_KEY]: me });
+    await wipeSignOutIfPending(me, s);
+    expect(m.has("octo.cloud.v1.c1.u1")).toBe(true);
+    expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
+  });
+  it("nobody signed in: wiped", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c1.u1": cache(me), [SIGNOUT_WIPE_KEY]: me });
+    await wipeSignOutIfPending(null, s);
+    expect(m.has("octo.cloud.v1.c1.u1")).toBe(false);
+    expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
+  });
+  it("another person signed in: the marked person's caches go, the signed-in person's stay", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c1.u1": cache(me), "octo.cloud.v1.c1.u2": cache("u2"), [SIGNOUT_WIPE_KEY]: me });
+    await wipeSignOutIfPending("u2", s);
+    expect([...m.keys()]).toEqual(["octo.cloud.v1.c1.u2"]);
+  });
+  it("the same person signs in again in the same run: their mark goes, another person's stays", async () => {
+    const { m, s } = mem({ [SIGNOUT_WIPE_KEY]: me });
+    await forgetSignOutMark("u2", s);
+    expect(m.get(SIGNOUT_WIPE_KEY)).toBe(me);
+    await forgetSignOutMark(me, s);
+    expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
+  });
+});
+
 describe("unit:signOutWipe — the sign-out itself (#1633)", () => {
-  const authOf = (opts: { globalFails?: boolean; localKeeps?: boolean }) => {
-    let session: { user: { id: string } } | null = { user: { id: me } };
+  const authOf = (opts: { globalFails?: boolean; rejects?: boolean }) => {
     const calls: string[] = [];
     return {
       calls,
       auth: {
-        getSession: async () => ({ data: { session } }),
-        signOut: async (o?: { scope: "local" }) => {
+        getSession: async () => ({ data: { session: null } }),
+        signOut: async (o?: { scope: "global" | "local" | "others" }) => {
           calls.push(o?.scope ?? "global");
+          if (!o && opts.rejects) throw new Error("boom");
           if (!o && opts.globalFails) return { error: new Error("Failed to fetch") };
-          if (!opts.localKeeps) session = null;
           return { error: null };
         },
       },
     };
   };
-  it("online: signed out, the memberships forgotten, then my caches wiped", async () => {
-    const { auth, calls } = authOf({});
-    const wipe = vi.fn(async () => {});
-    const between = vi.fn();
-    await signOutThenWipe(auth, between, wipe);
-    expect(calls).toEqual(["global"]);
-    expect(between).toHaveBeenCalledTimes(1);
-    expect(wipe).toHaveBeenCalledWith(me);
+  it("the mark is set before the sign-out; then the memberships are forgotten", async () => {
+    const { m, s } = mem({});
+    const order: string[] = [];
+    const { auth } = authOf({});
+    const signOut = auth.signOut;
+    auth.signOut = async (o) => {
+      order.push(m.get(SIGNOUT_WIPE_KEY) === me ? "marked" : "not marked");
+      return signOut(o);
+    };
+    await signOutAndMark(auth, me, () => order.push("between"), s);
+    expect(order).toEqual(["marked", "between"]);
   });
-  it("offline: the global sign-out fails, the phone forgets the session locally, then wipes", async () => {
-    const { auth, calls } = authOf({ globalFails: true });
-    const wipe = vi.fn(async () => {});
-    await signOutThenWipe(auth, () => {}, wipe);
-    expect(calls).toEqual(["global", "local"]);
-    expect(wipe).toHaveBeenCalledWith(me);
+  it("offline the global sign-out fails, or throws: the phone forgets the session locally", async () => {
+    for (const o of [{ globalFails: true }, { rejects: true }]) {
+      const { auth, calls } = authOf(o);
+      const between = vi.fn();
+      await signOutAndMark(auth, me, between, mem({}).s);
+      expect(calls).toEqual(["global", "local"]);
+      expect(between).toHaveBeenCalledTimes(1);
+    }
   });
-  it("the session is still on the phone: nothing is wiped (the person stays signed in with their cache)", async () => {
-    const { auth } = authOf({ globalFails: true, localKeeps: true });
-    const wipe = vi.fn(async () => {});
-    await signOutThenWipe(auth, () => {}, wipe);
-    expect(wipe).not.toHaveBeenCalled();
+  it("nobody signed in by the app: no mark", async () => {
+    const { m, s } = mem({});
+    await signOutAndMark(authOf({}).auth, null, () => {}, s);
+    expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
   });
 });
