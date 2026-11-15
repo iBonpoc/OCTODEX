@@ -14440,10 +14440,14 @@ insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000
 insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg');
 insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg')
   on conflict (bucket_id, name) do update set updated_at = now();
-select tst.ok((select updated_at is not null from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'),
+-- (the statement itself is the check: a refusal raises)
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'$q$) = 1,
               'T212 the author repeats the upload (upsert) before the row records it');
 update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg', upload_status = 'uploaded'
  where id = 'f2120000-0000-4000-8000-000000000001';
+-- an old build's repeat after a lost answer: refused for the author too
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
+                 'T212 the author does not re-upload over his recorded photo (an old build''s repeat)');
 :as_owner_a
 select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'), 'T212 the owner may not write a recorded file');
 select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$,
@@ -14474,6 +14478,18 @@ update public.files set storage_key = null where id = 'f2120000-0000-4000-8000-0
 select tst.ok((select upload_status = 'uploaded' and storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg'
                  from public.files where id = 'f2120000-0000-4000-8000-000000000001'),
               'T212 a late «failed» (or a cleared key) does not undo a recorded upload');
+-- a half-made mark (only the key, by hand): clearing it does not open the object again
+insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'photo');
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000004.jpg' where id = 'f2120000-0000-4000-8000-000000000004';
+update public.files set storage_key = null where id = 'f2120000-0000-4000-8000-000000000004';
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000004.jpg'),
+              'T212 a mark once set is not cleared to write the object again');
+-- the server still fixes a row (a moved or restored object)
+:as_super
+update public.files set upload_status = 'failed', storage_key = null where id = 'f2120000-0000-4000-8000-000000000004';
+select tst.ok((select upload_status = 'failed' and storage_key is null from public.files where id = 'f2120000-0000-4000-8000-000000000004'),
+              'T212 the server''s own fix of a row is not ignored');
+:as_tech_a
 -- a failed upload before the mark is still repeated
 insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
 update public.files set upload_status = 'failed' where id = 'f2120000-0000-4000-8000-000000000003';

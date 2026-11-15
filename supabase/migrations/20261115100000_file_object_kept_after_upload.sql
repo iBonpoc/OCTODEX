@@ -3,6 +3,9 @@
 -- after the mark (the answer of the «uploaded» update was lost) is refused by Storage and then marks the row 'failed':
 -- the trigger below keeps a recorded upload as it is, so the photo stays «uploaded» on every phone (rule 16: old builds
 -- keep working, nothing renamed or dropped).
+-- A lost object behind a recorded row is put back by the server only (service_role bypasses the policies; the trigger
+-- keeps nothing for them). The app always sets storage_key and 'uploaded' together (cloud/ops.ts uploadPhoto); the lock
+-- and the trigger both take either of them as «recorded».
 
 -- 1 ------------------------------------------------------------------------------------------------
 -- the same as 20261107190000, plus the first check: a recorded upload is final for everyone
@@ -40,10 +43,13 @@ grant execute on function app.can_write_file_object(text) to authenticated;
 -- 2 ------------------------------------------------------------------------------------------------
 -- a recorded upload stays recorded: an old build's late «failed» (or any other change of the mark or the key) is
 -- ignored, not refused — a refusal would keep the op in the queue for nothing
+-- (not security definer: current_user is the caller; the server's roles may still fix a row — they bypass the policies
+-- anyway, and a path move must not be silently ignored)
 create or replace function app.tg_files_upload_kept()
-returns trigger language plpgsql security definer set search_path = '' as $$
+returns trigger language plpgsql set search_path = '' as $$
 begin
-  if old.upload_status = 'uploaded' and old.storage_key is not null then
+  -- the same «recorded» as the lock above (either mark): clearing one of them does not open the object again
+  if current_user in ('authenticated', 'anon') and (old.upload_status = 'uploaded' or old.storage_key is not null) then
     new.upload_status := old.upload_status;
     new.storage_key := old.storage_key;
   end if;

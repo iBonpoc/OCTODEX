@@ -11,6 +11,7 @@ const writes: { table: string; op: string; row?: Record<string, unknown>; id?: u
 const storage = { error: null as unknown, uploads: 0 };
 // what a read of a files row answers (#1557: is the upload already recorded?)
 const fileRows = new Map<string, Record<string, unknown>>();
+let readError: unknown = null;
 const ok = { error: null, status: 200 };
 const thenable = (v: unknown) => ({ then: (r: (x: unknown) => unknown, j?: (e: unknown) => unknown) => Promise.resolve(v).then(r, j) });
 vi.mock("../src/cloud/client", () => ({
@@ -18,7 +19,7 @@ vi.mock("../src/cloud/client", () => ({
     from: (table: string) => ({
       update: (row: Record<string, unknown>) => ({ eq: (_c: string, id: unknown) => (writes.push({ table, op: "update", row, id }), thenable(ok)) }),
       upsert: (row: Record<string, unknown>) => (writes.push({ table, op: "upsert", row }), thenable(ok)),
-      select: () => ({ eq: (_c: string, id: string) => ({ maybeSingle: async () => ({ data: fileRows.get(id) ?? null, error: null }) }) }),
+      select: () => ({ eq: (_c: string, id: string) => ({ maybeSingle: async () => (readError ? { data: null, error: readError, status: 0 } : { data: fileRows.get(id) ?? null, error: null, status: 200 }) }) }),
     }),
     storage: {
       from: () => ({
@@ -39,6 +40,7 @@ beforeEach(() => {
   storage.error = null;
   storage.uploads = 0;
   fileRows.clear();
+  readError = null;
   file = { size: 300_000, type: "image/jpeg" };
   vi.stubGlobal("fetch", async () => {
     if (file === "gone") throw new TypeError("Failed to fetch");
@@ -114,6 +116,18 @@ describe("uploadPhoto — a repeat after the upload was recorded (#1557)", () =>
     storage.error = storageError(403, "403", "new row violates row-level security policy");
     fileRows.set("f1", { upload_status: "uploaded", storage_key: "c1/f1.jpg" });
     expect(await uploadPhoto("c1", "f1", "file:///p.jpg")).toBeNull();
+    expect(statusOf()).toEqual([]);
+  });
+  it("the answer was lost, then the file is gone from the phone: the row records it — taken, not «gone»", async () => {
+    file = "gone";
+    fileRows.set("f1", { upload_status: "uploaded", storage_key: "c1/f1.jpg" });
+    expect(await uploadPhoto("c1", "f1", "file:///p.jpg")).toBeNull();
+    expect(statusOf()).toEqual([]);
+  });
+  it("refused and the row cannot be read (no network): throws — the op waits, nothing marked on a guess", async () => {
+    storage.error = storageError(403, "403", "new row violates row-level security policy");
+    readError = { message: "TypeError: Failed to fetch", code: "" };
+    await expect(uploadPhoto("c1", "f1", "file:///p.jpg")).rejects.toBeTruthy();
     expect(statusOf()).toEqual([]);
   });
   it("refused and the row records nothing: still «refused»", async () => {
