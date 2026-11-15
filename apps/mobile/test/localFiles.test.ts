@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 
-import { dropPickedCopy, fileName, inAppDir, namesIn, setMemoryRecords, SWEEP_MIN_AGE_MS, sweepLocalFiles, toSweep, type FoundFile, type SweepDeps } from "../src/data/localFiles";
+import { dropPickedCopy, fileName, inAppDir, keptHere, namesIn, setMemoryRecords, SWEEP_MIN_AGE_MS, sweepLocalFiles, sweepSoon, toSweep, type FoundFile, type SweepDeps } from "../src/data/localFiles";
 
 const C = "file:///var/mobile/Containers/Data/Application/AAAA/Library/Caches";
 const DIRS = [`${C}/ImagePicker/`, `${C}/ImageManipulator/`];
@@ -111,5 +111,47 @@ describe("unit:localFiles — the sweep (#1659)", () => {
     expect(await sweepLocalFiles({ ...d, dirs: () => null }, now)).toBe(0);
     expect(await sweepLocalFiles({ ...d, keys: async () => Promise.reject(new Error("busy")) }, now)).toBe(0);
     expect(await sweepLocalFiles({ ...d, list: () => { throw new Error("no dir"); } }, now)).toBe(0);
+  });
+});
+
+describe("unit:localFiles — review of #1659", () => {
+  const man = (n: string) => `${C}/ImageManipulator/${n}`;
+  const run = async (recs: Record<string, string>, files: string[]) => {
+    const left = new Set(files);
+    const d: SweepDeps = {
+      dirs: () => DIRS,
+      list: (dir) => [...left].filter((u) => u.startsWith(dir)).map((uri) => ({ uri, modified: old })),
+      remove: (u) => void left.delete(u),
+      keys: async () => Object.keys(recs),
+      read: async (k) => recs[k] ?? null,
+    };
+    return { gone: await sweepLocalFiles(d, now), left };
+  };
+  it("plain-string records (the last company, a token, a mark) never call the sweep off; a broken photo record does", async () => {
+    const plain = { "octo.company.v1.u1": "9f1c-company-uuid", "octo.signoutWipe.v1": "u1", "octo.push.token.v1": "ExponentPushToken[x]" };
+    expect((await run(plain, [man("orphan.jpg")])).gone).toBe(1);
+    expect((await run({ ...plain, "octo.outbox.v1": "{broken" }, [man("orphan.jpg")])).gone).toBe(0);
+    expect((await run({ "octo.mod.gutters.place.v1": "not json" }, [man("o.jpg")])).gone).toBe(0); // a module's record: strict
+  });
+  it("a file made in this run (an «Отменить» still up, a form not saved) stays until the next start", async () => {
+    keptHere(man("this-run.jpg"));
+    const { left } = await run({}, [man("this-run.jpg"), man("orphan.jpg")]);
+    expect([...left]).toEqual([man("this-run.jpg")]);
+  });
+  it("a sweep asked while one runs is not lost: it runs right after", async () => {
+    let calls = 0;
+    let finish!: () => void;
+    const first = new Promise<number>((r) => (finish = () => r(0)));
+    const sweep = () => (++calls === 1 ? first : Promise.resolve(0));
+    sweepSoon(0, sweep);
+    await Promise.resolve();
+    await Promise.resolve();
+    sweepSoon(0, sweep);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toBe(1);
+    finish();
+    for (let i = 0; i < 6; i++) await Promise.resolve();
+    expect(calls).toBe(2);
   });
 });

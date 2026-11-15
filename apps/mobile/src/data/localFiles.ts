@@ -45,13 +45,21 @@ export function inAppDir(uri: string, dirs: readonly string[]): boolean {
   });
 }
 
-/** the file names every string in a stored record names (a record that is not JSON: null — whose files is not known) */
-export function namesIn(raw: string): Set<string> | null {
+/** the records that can name a photo file: one of them not readable as JSON calls the sweep off */
+const PHOTO_RECORD = /^octo\.(cloud\.v1\.|broken\.|outbox\.|queue\.|db\.|mod\.|drafts\.)/;
+export const holdsPhotos = (key: string) => PHOTO_RECORD.test(key);
+
+/**
+ * the file names every string in a stored record names. A value that is not JSON (a plain string: the last company, a
+ * token, a mark) is read as that string; null — a record that should be JSON and is not: whose files is not known
+ */
+export function namesIn(raw: string, strict = true): Set<string> | null {
   let v: unknown;
   try {
     v = JSON.parse(raw);
   } catch {
-    return null;
+    if (strict) return null;
+    v = raw;
   }
   const out = new Set<string>();
   const walk = (x: unknown, depth: number): void => {
@@ -90,6 +98,13 @@ export interface SweepDeps {
   log?: (what: string) => void;
 }
 
+/** the photo files made in this run of the app (photoShrink.ts): never swept before the next start */
+const madeThisRun = new Set<string>();
+export function keptHere(uri: string): void {
+  const n = fileName(uri);
+  if (n) madeThisRun.add(n);
+}
+
 /**
  * The records held only in memory now (the store's data and outbox not written yet): their names count too; null — the
  * store could not write to the device: no sweep at all. Set by the store (setMemoryRecords).
@@ -117,7 +132,7 @@ export async function sweepLocalFiles(deps?: SweepDeps, now = Date.now()): Promi
     for (const k of await d.keys()) {
       const raw = await d.read(k);
       if (raw == null) continue;
-      const names = namesIn(raw);
+      const names = namesIn(raw, holdsPhotos(k));
       // a record that is not JSON (a broken one kept for a copy): whose files it names is not known — called off
       if (!names) {
         d.log?.(`photo files: not swept (${k} is not readable)`);
@@ -130,6 +145,8 @@ export async function sweepLocalFiles(deps?: SweepDeps, now = Date.now()): Promi
       if (!names) return 0;
       names.forEach((n) => named.add(n));
     }
+    // made in this run: a photo whose «Отменить» is still up, a receipt picked in a form not saved yet — kept till the next run
+    madeThisRun.forEach((n) => named.add(n));
     const files = dirs.flatMap((dir) => d.list(dir));
     let gone = 0;
     for (const uri of toSweep(files, named, dirs, now)) {
@@ -146,14 +163,24 @@ export async function sweepLocalFiles(deps?: SweepDeps, now = Date.now()): Promi
   }
 }
 
-/** a sweep at a time (the start, a sign-out and a removal may come together) */
+/** a sweep at a time (the start, a sign-out and a removal may come together); one asked meanwhile runs after it */
 let running: Promise<number> | null = null;
-export function sweepSoon(delayMs = 0): void {
-  const go = () => {
-    if (running) return;
-    running = sweepLocalFiles()
+let again = false;
+export function sweepSoon(delayMs = 0, sweep: () => Promise<number> = () => sweepLocalFiles()): void {
+  const go = (): void => {
+    if (running) {
+      again = true;
+      return;
+    }
+    running = sweep()
       .catch(() => 0)
-      .finally(() => (running = null));
+      .finally(() => {
+        running = null;
+        if (again) {
+          again = false;
+          go();
+        }
+      });
   };
   // no timer for «now» (nothing left running after a wipe: the account deletion's own check)
   if (delayMs <= 0) void Promise.resolve().then(go);
