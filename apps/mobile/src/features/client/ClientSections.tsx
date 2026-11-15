@@ -28,6 +28,7 @@ import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { propertyTitle } from "@/features/properties";
 import { mailtoHref } from "@/features/contactLinks";
 import { Button, TextField } from "@/ui/controls";
+import { AddObject } from "@/features/client/AddObject";
 import { FilterBar } from "@/ui/filterBar";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -140,8 +141,10 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
 
     case "jobs":
       return r.jobs.length === 0 ? (
-        <Empty icon="wrench" title={t("client.empty.jobs")} hint={office ? t("client.empty.jobsHint") : undefined} />
+        <Empty icon="wrench" title={t("client.empty.jobs")} hint={office ? t("client.empty.jobsHint") : undefined} action={<AddObject kind="job" customerId={c.id} testID="client-section-new-job" />} />
       ) : (
+        <>
+        <AddObject kind="job" customerId={c.id} testID="client-section-new-job" />
         <CardGrid>
           {r.jobs.map((j) => {
             const v = jobStatusView[j.status];
@@ -161,6 +164,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
             );
           })}
         </CardGrid>
+        </>
       );
 
     case "leads":
@@ -211,6 +215,8 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
           />
         </>
       ) : (
+        <>
+        <AddObject kind="estimate" customerId={c.id} testID="client-section-new-estimate" />
         <CardGrid>
           {r.estimates.map((e) => {
             const v = estView[e.status];
@@ -229,6 +235,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
             );
           })}
         </CardGrid>
+        </>
       );
 
     case "invoices":
