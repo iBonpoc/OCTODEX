@@ -57,7 +57,7 @@ function run(a,b,col,len,o={}){const [x1,y1]=P(...a),[x2,y2]=P(...b);let s='';
  for(const [x,y] of [[x1,y1],[x2,y2]])s+=`<circle cx="${x}" cy="${y}" r="${o.sel&&!OLD?7:5}" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/>`;
  const vert=Math.abs(x2-x1)<2,mx=(x1+x2)/2,my=(y1+y2)/2;
  if(len)s+=lbl(vert?mx+14:mx,vert?my+4:my-12,len,k('ink'),vert?'start':'middle');
- if(o.no){const nx=vert?mx-16:mx,ny=vert?my+4:my+22;const w=o.no.length*7+10;s+=`<rect x="${nx-w/2}" y="${ny-11}" width="${w}" height="16" rx="3" fill="${k('ink')}"/><text x="${nx}" y="${ny+1}" font-size="11" font-weight="700" fill="${k('bg')}" text-anchor="middle">${o.no}</text>`;}
+ if(o.no){const w=o.no.length*7+10,nx=vert?mx-w/2-14:mx,ny=vert?my+4:my+26;s+=`<rect x="${nx-w/2}" y="${ny-12}" width="${w}" height="17" rx="4" fill="${o.sel?k('ink'):k('solid')}" stroke="${k('ink')}" stroke-width="1.2"/><text x="${nx}" y="${ny+1}" font-size="11" font-weight="700" fill="${o.sel?k('bg'):k('ink')}" text-anchor="middle">${o.no}</text>`;}
  return s;}
 // downspout = its shape (#13.2): rect plain / rect ribbed / round plain / round ribbed; D1 inside
 function ds(p,n,col,kind='rectPlain'){const [x,y]=P(...p);let s='';const R=kind.startsWith('round');
@@ -77,21 +77,21 @@ const S1=k('s1'),S2=k('s2');
 const A1=[40,300],A2=[300,300],A3=[300,470],B1=[60,580],B2=[260,580];
 let scene='',html='';
 const topBar=`<div class="top"><span class="pill ic">‹</span><span class="pill">+ Сделать заявку</span><span class="pill ic">⋯</span><span class="pill acc">Готово</span></div>`;
-const toolbar=(on='ds',dsKind='dsRect',prof='xsK')=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic(ICON[prof])}Жёлоб</div><div class="c ${on==='ds'?'on':''}">${ic(ICON[dsKind])}Водосток</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${S1};border-radius:10px;padding:1px 6px">Эт 1</span>Этаж</div><div class="c">${ic(ICON.undo)}Назад</div><div class="c">${ic(ICON.redo)}Вперёд</div><div class="c">${ic(ICON.trash)}Удалить</div></div>`;
+const toolbar=(on='ds',dsKind='dsRect',prof='xsK')=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic(ICON[prof])}Желоб</div><div class="c ${on==='ds'?'on':''}">${ic(ICON[dsKind])}Водосток</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${S1};border-radius:10px;padding:1px 6px">Эт 1</span>Этаж</div><div class="c">${ic(ICON.undo)}Назад</div><div class="c">${ic(ICON.redo)}Вперёд</div><div class="c">${ic(ICON.trash)}Удалить</div></div>`;
 const field=`<div class="fld">${ic(ICON.dsRect,18)}<b>Водостоков 1</b><span style="color:var(--mut)">· Дальше: водостоки</span></div>`;
 const banner=`<div class="ban"><b>${ic(ALERT,20,k('warnT'),2)}Не хватает водостока</b><p>Желоб 1 (1-1, 1-2), 35′ 10″: водостоков 0 из 1</p><div class="row"><span class="btn">Поставить водосток</span><span class="btn">Отменить</span></div></div>`;
 const cap=t=>`<div class="cap">${t}</div>`;
 if(V==='mark'||V==='pulse'||V==='save'){
- const f=+(q.get('f')||0);const hl=V==='pulse'?[0,.55,.25,.55,.25][f]||.25:.25,hlw=V==='pulse'?[18,30,18,30,18][f]||18:18;
+ const f=+(q.get('f')||0);const base=T==='light'?.4:.25,peak=T==='light'?.7:.55;const hl=V==='pulse'?[base,peak,base,peak,base][f]||base:base,hlw=V==='pulse'?[18,30,18,30,18][f]||18:18;
  const warn=V!=='save';
- scene+=run(A1,A2,S1,"21′ 8″",{hl:warn?hl:0,hlw,no:'1-1'})+run(A2,A3,S1,"14′ 2″",{hl:warn?hl:0,hlw,no:'1-2'})+run(B1,B2,S1,"16′ 9″",{no:'2-1'})+ds([B2[0]-40,580],1,S1);
+ scene+=run(A1,A2,S1,"21′ 8″",{hl:warn?hl:0,hlw,no:'1-1'})+run(A2,A3,S1,"14′ 2″",{hl:warn?hl:0,hlw,no:'1-2'})+run(B1,B2,S1,"16′ 9″",{no:'2-1'})+(V==='save'&&q.get('k')==='toast'?outlet([B2[0]-40,580],S1):ds([B2[0]-40,580],1,S1));
  if(warn)scene+=warnSign([170,300],-58,-34);
  html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}${scene}</svg>`+topBar+(warn?banner:'')+toolbar()+field;
  if(V==='mark')html+=cap('v2: вариант А + подсветка желоба; номера желобов; D1 — форма водостока');
  if(V==='pulse')html+=cap('Импульс по нажатию на уведомление: кадр '+f+' из 4 (2 удара)');
  if(V==='save'){
    const kind=q.get('k')||'dlg';
-   if(kind==='dlg')html+=`<div class="scrim"></div><div class="dlg"><b>${ic(ALERT,22,k('warnT'),2)}Воде некуда уходить</b><p>У желоба 1 (1-1, 1-2) заглушки на обоих концах, а водостока и выпуска нет. Сохранить всё равно?</p><div class="row"><span class="btn">Сохранить</span><span class="btn pri">Поставить водосток</span></div></div>`+cap('Сохранение: две заглушки, нет водостока и выпуска — спросить');
+   if(kind==='dlg')html+=`<div class="scrim"></div><div class="dlg"><b>${ic(ALERT,22,k('warnT'),2)}Сохранить без водостока?</b><p>Воде некуда уходить: у желоба 1 (1-1, 1-2) заглушки на обоих концах, а водостока и выпуска нет.</p><div class="row"><span class="btn">Сохранить так</span><span class="btn pri">Поставить водосток</span></div></div>`+cap('Сохранение: две заглушки, нет водостока и выпуска — спросить');
    else html+=`<div class="toast">${ic(ALERT,18,k('warnT'),2)}Выпуск без водостока: желоб 2-1</div>`+cap('Сохранение: выпуск без водостока — предупреждение, не мешает');
  }
 }
@@ -101,13 +101,13 @@ if(V==='select'){
 }
 if(V==='marks'){
  const U1=[60,190],U2=[250,190];
- scene+=run(A1,A2,S1,"21′ 8″",{no:'1-1'})+run(A2,A3,S1,"14′ 2″",{no:'1-2'})+ds([A3[0],A3[1]-40],1,S1,'rectRibbed')+run(U1,U2,S2,"13′ 4″",{no:'2-1'})+outlet([U1[0]+40,190],S2)+run(B1,B2,S1,"16′ 9″",{no:'3-1'})+ds([B2[0]-40,580],2,S1,'roundPlain')+chain([B1[0]+40,580],S1,q.get('c')||'a');
+ scene+=run(A1,A2,S1,"21′ 8″",{no:'1-1'})+run(A2,A3,S1,"14′ 2″",{no:'1-2'})+ds([A3[0],A3[1]-40],1,S1,'rectRibbed')+run(U1,U2,S2,"13′ 4″ · эт 2",{no:'2-1'})+outlet([U1[0]+40,190],S2)+run(B1,B2,S1,"16′ 9″",{no:'3-1'})+ds([B2[0]-40,580],2,S1,'roundPlain')+chain([B1[0]+40,580],S1,q.get('c')||'a');
  const sw=(svg,w=40,h=32)=>`<svg width="${w}" height="${h}" viewBox="${-w/2+ox} ${-h/2+oy} ${w} ${h}">${svg}</svg>`;
  const at=[0,0];
  const lg=`<div class="lg" style="${W===390?'left:12px;right:12px;top:620px;bottom:auto;display:none':'right:16px;top:70px;width:330px'}"><h4>Водосток (форма = выбранная, подпись D1)</h4>
  <div class="r">${sw(ds(at,1,S1,'rectPlain'))}Прямоугольный гладкий</div><div class="r">${sw(ds(at,1,S1,'rectRibbed'))}Прямоугольный ребристый</div><div class="r">${sw(ds(at,1,S1,'roundPlain'))}Круглый гладкий</div><div class="r">${sw(ds(at,1,S1,'roundRibbed'))}Круглый ребристый</div>
  <h4>Выпуск без водостока</h4><div class="r">${sw(outlet(at,S1))}Выпуск (квадрат с крестом)</div>
- <h4>Цепь — варианты на выбор</h4><div class="r">${sw(chain(at,S1,'a'))}а) квадрат выпуска, внутри звено</div><div class="r">${sw(chain(at,S1,'b'),56)}б) квадрат с крестом + «C1»</div><div class="r">${sw(chain(at,S1,'c'))}в) залитый квадрат «C1»</div></div>`;
+ <h4>Цепь — варианты на выбор</h4><div class="r">${sw(chain(at,S1,'a'))}а) квадрат, внутри звено</div><div class="r">${sw(chain(at,S1,'b'),56)}б) квадрат с крестом + «C1» — рекомендую</div><div class="r">${sw(chain(at,S1,'c'))}в) залитый квадрат «C1»</div></div>`;
  html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}${scene}</svg>`+topBar+toolbar('ds','dsRectRibbed','xsK')+field+(W===390?'':lg)+cap('Знаки: D1 — форма водостока, ⊠ — выпуск, цепь — вариант '+(q.get('c')||'a'));
 }
 if(V==='legend'){ // 390: the legend sheet opened from «⋯ → Обозначения»
