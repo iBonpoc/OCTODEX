@@ -1,6 +1,6 @@
 -- #1572: a files row points only at its own object, and an object is written only for a live files row.
 -- (1) a row keeps its id, and storage_key, set by the app, is `<company_id>/<id>.<ext>` of the row itself (cloud/ops.ts uploadPhoto writes
---     exactly that, old builds included; letter case is not held against an old build) — never another file's object.
+--     exactly that, old builds included) — never another file's object; a new row comes without a key.
 --     Rows already stored are not checked again.
 -- (2) «one row, one object» holds for the office too (before: only for the author).
 -- (3) the office writes an object only for a live files row of the same id and company, like the author (the app always
@@ -15,9 +15,14 @@ begin
   if current_user in ('authenticated', 'anon') and tg_op = 'UPDATE' and new.id is distinct from old.id then
     raise exception 'a file''s id is set once' using errcode = '42501';
   end if;
-  if current_user in ('authenticated', 'anon') and new.storage_key is not null
-     and (tg_op = 'INSERT' or new.storage_key is distinct from old.storage_key)
-     and new.storage_key !~* ('^' || new.company_id::text || '/' || new.id::text || '\.[a-z0-9]+$') then
+  -- a new row has no key yet (the app sets it after the upload): a key at birth would close its object for good
+  if current_user in ('authenticated', 'anon') and tg_op = 'INSERT' and new.storage_key is not null then
+    raise exception 'a file''s storage_key is its own object, set after the upload' using errcode = '42501';
+  end if;
+  -- the name rule of app.file_object_parts (20261106100000): lower case, the same extensions
+  if current_user in ('authenticated', 'anon') and tg_op = 'UPDATE' and new.storage_key is not null
+     and new.storage_key is distinct from old.storage_key
+     and new.storage_key !~ ('^' || new.company_id::text || '/' || new.id::text || '\.(jpg|jpeg|png|heic|webp|pdf)$') then
     raise exception 'a file''s storage_key is its own object' using errcode = '42501';
   end if;
   return new;

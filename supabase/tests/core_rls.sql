@@ -14520,16 +14520,25 @@ select tst.fails_like($q$update public.files set storage_key = 'cb000000-0000-00
                  'T213 nor at an object of another company');
 select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/x/../f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
                  'T213 nor at an odd path');
-select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')$q$, '%its own object%',
+select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')$q$, '%set after the upload%',
                  'T213 a new row does not point at another file either');
 insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg');
 update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001';
+select tst.fails_like($q$insert into public.files (id, company_id, kind, storage_key) values ('f2130000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000007.jpg')$q$, '%set after the upload%',
+                      'T213 a new row comes without a key, even its own');
 select tst.ok((select storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' and upload_status = 'uploaded' from public.files where id = 'f2130000-0000-4000-8000-000000000001'),
               'T213 the row records its own object (what the app writes)');
 -- a recorded row does not move to another id (it would leave a clean row on the old id to write over)
 select tst.fails_like($q$update public.files set id = 'f2130000-0000-4000-8000-000000000008' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%id is set once%',
                       'T213 the author does not move his recorded row to another id');
 select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg'), 'T213 the recorded object stays closed');
+-- rename, then a new clean row on the old id: the object stays closed (the rename is refused above)
+select tst.fails($q$insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, 'T213 no second row on a recorded id');
+insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000005.html' where id = 'f2130000-0000-4000-8000-000000000005'$q$, '%its own object%',
+                      'T213 a key with an extension the bucket does not take is refused');
+select tst.fails_like($q$update public.files set storage_key = upper('ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000005.jpg') where id = 'f2130000-0000-4000-8000-000000000005'$q$, '%its own object%',
+                      'T213 an upper-case key is refused (objects are lower case)');
 :as_owner_a
 insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
 select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f2130000-0000-4000-8000-000000000001.jpg' where id = 'f2130000-0000-4000-8000-000000000002'$q$, '%its own object%',
