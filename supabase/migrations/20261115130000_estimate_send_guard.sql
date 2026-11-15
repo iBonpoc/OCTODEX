@@ -26,8 +26,15 @@ begin
   -- #1600: «sent» and the sent version are set only by send_estimate (a definer, it marks the estimate) — never by the
   -- app's own update: what the client signs (portal_accept takes sent_version_id) is the version the office sent
   if current_user in ('authenticated', 'anon') then
-    if tg_op = 'UPDATE' and new.status = 'sent' and old.status is distinct from 'sent' then
-      raise exception 'an estimate is sent by send_estimate' using errcode = '42501';
+    -- the app's own update moves an estimate only back to a draft (cloud/ops.ts «estimate.save» of a sent one);
+    -- «sent» is send_estimate's, «viewed» the client page's, «expired» / «declined» the server's
+    if tg_op = 'UPDATE' and new.status is distinct from old.status and new.status <> 'draft' then
+      raise exception 'an estimate is sent by send_estimate (the app sets only «draft»)' using errcode = '42501';
+    end if;
+    -- a signed estimate (waiting for the company, or approved) changes status only through the server's functions
+    -- (reopen_estimate, decline_countersign): never a quiet «draft» that drops the client's signature
+    if tg_op = 'UPDATE' and new.status is distinct from old.status and old.status in ('awaiting_countersign', 'approved') then
+      raise exception 'a signed estimate is reopened or declined by the server (reopen_estimate / decline_countersign)' using errcode = '42501';
     end if;
     if (tg_op = 'INSERT' and new.sent_version_id is not null)
        or (tg_op = 'UPDATE' and new.sent_version_id is distinct from old.sent_version_id) then
@@ -80,12 +87,14 @@ $$;
 
 -- 2 ------------------------------------------------------------------------------------------------
 -- a version is locked (and its estimate never changed) only by the server's functions: send_estimate, the signatures
--- (definers). The app's own update may not lock a version, unlock it, or move it to another estimate.
+-- (definers). The app may not lock a version, unlock it, give it a «sent» date, or move it to another estimate.
 create or replace function app.tg_version_lock_by_send()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   if current_user in ('authenticated', 'anon')
-     and ((new.locked_at, new.sent_at) is distinct from (old.locked_at, old.sent_at) or new.estimate_id is distinct from old.estimate_id) then
+     and (tg_op = 'INSERT' and new.sent_at is not null
+          or tg_op = 'UPDATE' and ((new.locked_at, new.sent_at) is distinct from (old.locked_at, old.sent_at)
+                                   or new.estimate_id is distinct from old.estimate_id)) then
     raise exception 'a version is locked by send_estimate and stays with its estimate' using errcode = '42501';
   end if;
   return new;
@@ -94,7 +103,7 @@ $$;
 -- rule 18 (T52): a trigger function; nobody calls it
 revoke all on function app.tg_version_lock_by_send() from public, anon, authenticated;
 drop trigger if exists t06_version_lock_by_send on public.estimate_versions;
-create trigger t06_version_lock_by_send before update of locked_at, sent_at, estimate_id on public.estimate_versions
+create trigger t06_version_lock_by_send before insert or update of locked_at, sent_at, estimate_id on public.estimate_versions
   for each row execute function app.tg_version_lock_by_send();
 
 -- 3 ------------------------------------------------------------------------------------------------

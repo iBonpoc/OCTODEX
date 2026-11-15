@@ -3839,8 +3839,13 @@ do $$ begin
   update public.estimates set status = 'expired' where id = '0e440000-0000-4000-8000-000000000001';
   perform set_config('app.signing_estimate', '', true);
 end $$;
+-- #1600: the app sets no status but «draft» — the do-not-service guard is checked on the server's own path
 :as_office_a
-select tst.dns($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'an expired estimate is not revived into «viewed»');
+select tst.fails_like($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, '%the app sets only%',
+                      'the app does not set «viewed»');
+:as_super
+select tst.dns($q$select tst.server($s$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$s$)$q$, 'an expired estimate is not revived into «viewed»');
+:as_office_a
 -- a job of another client at the client's property: «Работы» t14 refuses it first (the address is not a property of
 -- that client, 22023) — still refused; t44 stays the guard for estimates and visits
 do $$ begin
@@ -14605,6 +14610,14 @@ select tst.ok((select status = 'sent' and sent_version_id = 'e2150000-0000-4000-
               'T215 send_estimate sends and locks the version');
 select tst.fails_like($q$update public.estimates set sent_version_id = 'e2150000-0000-4000-8000-0000000000a2' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%set by send_estimate%',
                       'T215 a sent estimate''s version is not swapped for another locked one');
+select tst.fails_like($q$insert into public.estimates (company_id, number, customer_id, property_id, title, sent_version_id) values ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T215 x', 'e2150000-0000-4000-8000-0000000000a1')$q$,
+                      '%set by send_estimate%', 'T215 a new estimate does not come with a sent version');
+select tst.fails_like($q$insert into public.estimate_versions (company_id, estimate_id, version_no, sent_at) values ('ca000000-0000-0000-0000-000000000000', 'e2150000-0000-4000-8000-000000000001', 9, now() - interval '30 days')$q$,
+                      '%locked by send_estimate%', 'T215 a new version does not come with a «sent» date');
+select tst.fails_like($q$update public.estimates set current_version_id = 'e2150000-0000-4000-8000-0000000000a3' where id = 'e2150000-0000-4000-8000-000000000002'$q$, '%version of this estimate%',
+                      'T215 nor at another estimate''s open version');
+select tst.fails_like($q$update public.estimates set status = 'declined' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%the app sets only%',
+                      'T215 the app does not decline by hand (decline_countersign)');
 -- even the server's own update keeps an estimate to its own versions
 :as_super
 select tst.fails_like($q$update public.estimates set sent_version_id = 'e2150000-0000-4000-8000-0000000000a2' where id = 'e2150000-0000-4000-8000-000000000001'$q$, '%version of this estimate%',
@@ -14654,10 +14667,13 @@ update public.users set full_name = '' where id = 'a0000000-0000-0000-0000-00000
 do $$
 declare e uuid := split_part(current_setting('tst.t216_2'), ',', 1)::uuid;
 begin
-  perform tst.ok(public.countersign_estimate(e, null, (select id from public.member_signatures where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000' and revoked_at is null)) = 'approved', 'T216 signed');
+  perform tst.ok(public.countersign_estimate(e, 'M7 7 L8 8') = 'approved', 'T216 signed with a drawn signature');
   perform tst.ok((select signer_name = (select email from public.users where id = 'a0000000-0000-0000-0000-000000000001')
                     from public.estimate_approvals where estimate_id = e and party = 'contractor'),
                  'T216 no full name: the account''s email');
+  perform tst.ok((select name = (select email from public.users where id = 'a0000000-0000-0000-0000-000000000001')
+                    from public.member_signatures where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000' and revoked_at is null),
+                 'T216 the drawn signature is saved under the account''s name too');
 end $$;
 :as_super
 update public.users set full_name = 'Owner A' where id = 'a0000000-0000-0000-0000-000000000001' and full_name = '';
@@ -14681,11 +14697,23 @@ end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin perform public.portal_accept(split_part(current_setting('tst.t217'), ',', 3), split_part(current_setting('tst.t217'), ',', 2)::uuid, null, 'T217 Client', 'M0 0 L4 4', true); end $$;
 :as_sub56
+-- (the public path refuses him earlier — he does not read the estimate, and can_sign_contracts excludes him; the
+-- membership check in countersign_estimate is the third line of defence, #1601)
 select tst.fails(format($q$select public.countersign_estimate(%L, 'M1 1 L2 2')$q$, split_part(current_setting('tst.t217'), ',', 1)),
                  'T217 a subcontractor does not sign for the company');
 :as_super
 select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = split_part(current_setting('tst.t217'), ',', 1)::uuid),
               'T217 the estimate still waits for the company');
+-- a waiting client signature is not dropped by a quiet «draft» from the app (reopen_estimate is the way)
+:as_sales_a
+select tst.fails(format($q$update public.estimates set status = 'draft' where id = %L$q$, split_part(current_setting('tst.t217'), ',', 1)),
+                 'T217 the app does not turn a signed estimate back into a draft');
+:as_owner_a
+select tst.fails_like(format($q$update public.estimates set status = 'draft' where id = %L$q$, split_part(current_setting('tst.t217'), ',', 1)),
+                      '%reopened or declined by the server%', 'T217 not even the owner, by hand');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = split_part(current_setting('tst.t217'), ',', 1)::uuid),
+              'T217 the client''s signature still waits for the company');
 \echo 'T217 only an employee signs for the company ok'
 
 \echo 'ALL TESTS PASSED'
