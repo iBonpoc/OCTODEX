@@ -39,6 +39,7 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
       fabOn={calls ? { call: record } : undefined}
       title={t(calls ? "nav.calls" : "nav.messages")}
       subtitle={t(calls ? "nav.calls.hint" : "nav.messages.hint")}
+      help={t(calls ? "help.calls" : "help.messages")}
     >
       {calls && all.length ? (
         <FilterBar<CallFilter>

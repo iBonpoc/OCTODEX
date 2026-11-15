@@ -674,9 +674,10 @@ export function Screen({
                 </T>
               </RowView>
             ) : null}
-            {right || headerFab ? (
+            {right || headerFab || help ? (
               <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-                {/* DS §12.2, Б4: «＋» then «⋯» — «⋯» is always the last on the right (#1474) */}
+                {/* DS §12.2, Б4: «?» · «＋» · «⋯» — «?» first on the right (#1648), «⋯» always the last (#1474) */}
+                {help ? <HelpButton title={title} text={help} /> : null}
                 {headerFab}
                 {right}
               </RowView>
@@ -699,42 +700,50 @@ export function Screen({
                 {title}
               </T>
             </View>
-            {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
         </>
       ) : (
         /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б).
            The screen's actions wrap under the title when the row is too narrow (Plan at 390), never squeeze it. */
+        <>
+          {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — a row above the title, the title
+              stays where it is on the tabs (DS §12.2, #1648; was a round button that pushed the title to the right) */}
+          {backMore ? (
+            <Press
+              testID="back-more"
+              onPress={toMore}
+              visibleHeight={component.dockBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t("nav.more")}
+              containerStyle={{ alignSelf: "flex-start" }}
+            >
+              <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2] }}>
+                <Icon name="chevronLeft" color={c.ink} />
+                <T v="body" w="medium" numberOfLines={1}>
+                  {t("nav.more")}
+                </T>
+              </RowView>
+            </Press>
+          ) : null}
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — no ☰ any more (variant Б) */}
-            {backMore ? (
-              <Press
-                testID="back-more"
-                onPress={toMore}
-                visibleHeight={component.dockBtn}
-                accessibilityRole="button"
-                accessibilityLabel={t("nav.more")}
-                style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
-              >
-                <Icon name="chevronLeft" s={size.iconMd} color={c.ink} />
-              </Press>
-            ) : null}
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="display" numberOfLines={1}>
                 {title}
               </T>
             </View>
-            {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
-          {right || headerFab || home ? (
+          {right || headerFab || home || help ? (
             <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
+              {/* DS §12.2: «?» · «＋» · «⋯» — «?» first on the right (#1648) */}
+              {help ? <HelpButton title={title} text={help} /> : null}
               {headerFab}
               {right}
               {home ? <HomeHeader /> : null}
             </RowView>
           ) : null}
         </RowView>
+        </>
       )}
       {subtitle ? (
         <T v="body" tone="mut">

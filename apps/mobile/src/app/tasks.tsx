@@ -66,6 +66,7 @@ export default function Tasks() {
   return (
     <Screen
       title={t("task.title")}
+      help={t("help.tasks")}
       subtitle={t("w6.task.progress", { n: progress.total, pct: progress.pct })}
       fab="tasks"
       fabOn={{ task: newTask }}
