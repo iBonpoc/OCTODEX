@@ -46,8 +46,9 @@ grant execute on function app.can_write_file_object(text) to authenticated;
 
 -- 2 ------------------------------------------------------------------------------------------------
 -- #1656: files with nothing attached (no visit, job, client or measurement) cost the company's storage. A person outside
--- the office keeps at most 3 of them (a profile picture and a spare): a photo, or a receipt no expense names yet (the app
--- inserts a receipt and then its expense — one at a time). A removed one still counts while its bytes are stored (the
+-- the office keeps at most 3 such photos (a profile picture and a spare). A receipt is not counted: the queue inserts its
+-- row and then its expense (cloud/ops.ts expense.add), and an expense that keeps failing while the queue goes on would
+-- leave several receipts waiting — the 4th would be refused and lost (the director's review; receipts: #1694). A removed one still counts while its bytes are stored (the
 -- bytes stay: upload, remove, upload again would be no limit). A document, a drawing or a signature with nothing
 -- attached — not at all (the app never makes one). The office (app.is_staff) and the server are not limited.
 -- the count of the person's such files in the company (security definer: whatever the caller's read rule; only a number)
@@ -60,8 +61,7 @@ returns integer language sql stable security definer set search_path = '' as $$
      and f.company_id = p_company_id and f.created_by = p_user_id and f.id is distinct from p_except
      and f.visit_id is null and f.job_id is null and f.customer_id is null and f.measurement_id is null
      and (f.deleted_at is null or f.storage_key is not null or f.upload_status = 'uploaded')
-     and (f.kind = 'photo'
-          or (f.kind = 'receipt' and not exists (select 1 from public.expenses e where e.company_id = f.company_id and e.receipt_file_id = f.id)));
+     and f.kind = 'photo';
 $$;
 revoke all on function app.bare_files_count(uuid, uuid, uuid) from public, anon, authenticated;
 -- called from the trigger below, which runs as the caller (current_user tells the app's roles from the server)
@@ -94,6 +94,8 @@ begin
   if new.kind not in ('photo', 'receipt') then
     raise exception 'a file with nothing attached is a photo or a receipt' using errcode = 'P0001';
   end if;
+  -- a receipt waits for its expense (see above): never refused here
+  if new.kind = 'receipt' then return new; end if;
   -- two inserts at once never both see the room for one
   perform pg_advisory_xact_lock(hashtext('bare_files:' || new.company_id::text || ':' || v_uid::text));
   if app.bare_files_count(new.company_id, v_uid, new.id) >= 3 then

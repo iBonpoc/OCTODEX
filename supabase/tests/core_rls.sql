@@ -15062,26 +15062,26 @@ select tst.fails_like($q$insert into public.files (id, company_id, kind) values 
 select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'signature')$q$, '%photo or a receipt%', 'T268 not a signature with nothing attached');
 \echo 'T268 a bare document is refused ok'
 
--- T269: a receipt its expense names does not count; one no expense names does
+-- T269: receipts are never refused by the limit — five taken offline in a row arrive, also when their expenses come late
+-- (the queue: the receipt's row, then its expense — cloud/ops.ts expense.add; an expense failing for a while lets the
+-- next receipts in first)
 :as_super
 set session_replication_role = replica;  -- the fixture clears T265–T267's files (the stored mark is kept by t09 otherwise)
 update public.files set deleted_at = now(), upload_status = 'local', storage_key = null where id::text like 'f2650000-%';
 set session_replication_role = origin;
 select public.uuid_generate_v7() is not null as warmed;
 :as_tech264
-insert into public.files (id, company_id, kind) values
-  ('f2690000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt'),
-  ('f2690000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'receipt'),
-  ('f2690000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'receipt');
-select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt')$q$, '%at most 3%', 'T269 three receipts no expense names: not a fourth');
-:as_super
-insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id) values
-  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T269', 100, 'materials', 'f2690000-0000-4000-8000-000000000001'),
-  (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T269', 100, 'materials', 'f2690000-0000-4000-8000-000000000002');
-:as_tech264
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'receipt');
 insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'receipt');
-select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2690000-0000-4000-8000-000000000004'$q$) = 1, 'T269 receipts their expenses name do not count');
-\echo 'T269 receipts of expenses do not count ok'
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
+  select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T269', 100, 'materials', id, id::text
+    from public.files where id::text like 'f2690000-%';
+select tst.ok(tst.cnt($q$select 1 from public.expenses where vendor = 'T269' and receipt_file_id::text like 'f2690000-%'$q$) = 5,
+              'T269 five receipts taken offline arrive with their expenses, the expenses coming after all the receipts');
+\echo 'T269 receipts are never refused by the limit ok'
 
 -- T270: a visit / job photo is never counted; the office and the server are not limited
 insert into public.files (id, company_id, kind) values ('f2700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo');
