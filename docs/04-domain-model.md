@@ -60,7 +60,7 @@
 | brand | json: logo, цвета, подпись | нет | Для документов и портала |
 | default_client_locale | `en` / `es` / `ru` (В11) | да | Язык документов и сообщений клиентам по умолчанию (`en`); отдельно от языка интерфейса `User.locale` (владелец работает на русском, клиенты читают на английском). `Contact.preferred_language` перекрывает (из анализа внешней CRM) |
 | public_slug | text, unique | да | Адрес публичной страницы `octo.app/p/bonpoc-gutters` |
-| trade_modules | ← Entitlement | | Включённые модули |
+| trade_modules | ← CompanyPlan | | Включённые модули |
 | stripe_account_id | text | нет | Stripe Connect |
 | numbering | json | да | Префиксы и счётчики документов |
 | tax_settings | json | да | (v0.3) `default_tax_profile_id` → TaxProfile (ровно один профиль по умолчанию), `default_purchase_tax_rate_id` → TaxRate (налог при покупке, если у поставщика не задан; заглушка «LA area 10.25% — проверить»). Поля v0.2 `default_enabled`, `default_tax_rate_id`, `default_taxable_scope`, `deposit_tax_mode` **переехали в TaxProfile** (§6) |
@@ -781,12 +781,14 @@
 
 Помощник вызывает те же операции API с правами пользователя. Тексты из документов и сообщений клиентов для него только данные, а не команды. Навигация по словарю на устройстве AiAction не создаёт.
 
-### Entitlement / UsageCounter — тарифы и лимиты
-`Entitlement`: `company_id`, `plan (starter / pro)`, `modules[] (gutters, roofing)`, `seats`, `limits` (`ai_actions`, `ai_daily_cap` = 200, `sms_segments`), `status` (§9), `trial_ends_at`, `paused_until`, `pause_count_year`, `packs[]` (тип, объём, период), `is_group_discount bool` (2-я компания $30), `billing_source (stripe / app_store / manual_beta)`, `stripe_customer_id`, `stripe_subscription_id`. Логины субподрядчиков (`subcontractor`) — см. `00-decisions-for-founder.md` (рекомендация: не занимают платное место).
+### CompanyPlan / UsageCounter — тарифы и лимиты
+> Сущность называется **`CompanyPlan`** (таблица `company_plans`, спека 44 §3); прежнее имя «Entitlement» не используется. Поля и статусы ниже — старая редакция; действующие — спека 44 §3, §8.
+
+`CompanyPlan`: `company_id`, `plan (starter / pro)`, `modules[] (gutters, roofing)`, `seats`, `limits` (`ai_actions`, `ai_daily_cap` = 200, `sms_segments`), `status` (§9), `trial_ends_at`, `paused_until`, `pause_count_year`, `packs[]` (тип, объём, период), `is_group_discount bool` (2-я компания $30), `billing_source (stripe / app_store / manual_beta)`, `stripe_customer_id`, `stripe_subscription_id`. Логины субподрядчиков (`subcontractor`) — см. `00-decisions-for-founder.md` (рекомендация: не занимают платное место).
 `UsageCounter`: `company_id`, `period`, `ai_actions_used`, `ai_actions_today` + `ai_day` (суточный потолок), `sms_segments_used`, `sms_segments_inbound` (себестоимость), `emails_sent`, `ai_cost_cents`.
 
 ### DataExport (новая)
-`company_id`, `requested_by`, `scope` (сущности), `format` (v0.3: `csv` / `xlsx` / `pdf_zip` / `zip`), `filter json` (v0.3), `status (queued → building → ready / failed / expired)`, `file_id`, `expires_at` (7 дней; после отмены подписки экспорт доступен 90 дней). До 5,000 строк / 500 PDF — сразу, больше — фоновой задачей (PRD 04 §7.7.6).
+`company_id`, `requested_by`, `scope` (сущности), `format` (v0.3: `csv` / `xlsx` / `pdf_zip` / `zip`), `filter json` (v0.3), `status (queued → running → ready / failed / expired)`, `file_id`, `expires_at` (7 дней; после отмены подписки экспорт доступен 90 дней). До 5,000 строк / 500 PDF — сразу, больше — фоновой задачей (PRD 04 §7.7.6).
 
 ### File
 `storage_key`, `mime`, `size`, `kind (photo / receipt / signature / drawing / document)`, `subject_type/id`, `job_id`, `visit_id`, `stage` (`before` / `during` / `after` / `other`), `client_visible bool` (по умолчанию true для before/after), `public_gallery bool` (публикация в витрине разрешена владельцем), `taken_at`, `geo`, `uploaded_offline bool`, `upload_status` (`local` / `uploading` / `uploaded` / `failed`).
@@ -889,7 +891,7 @@ draft → sent → confirmed → partially_received → received
 ### ScheduledMessage
 `scheduled → sent` / `skipped` (нет канала) / `cancelled` (событие-стоп).
 
-### Entitlement (подписка)
+### CompanyPlan (подписка)
 `trialing → active ⇄ past_due → cancelled`; `active → paused → active`. `past_due`: 7 дней полного доступа, затем только чтение (оплаты клиентов по порталу работают всегда).
 
 ### SupportTicket
@@ -1038,7 +1040,7 @@ erDiagram
 
 | PRD | Внесено | Не внесено / как решено |
 |---|---|---|
-| 01 Аккаунты | Entitlement (status, trial, pause, packs, Stripe ids, group discount), UsageCounter (emails, ai_today/ai_day, sms inbound), Company (phone, email, primary_trade, service_area, onboarding_state), Membership (invite, suspended_at), CompanyGroupMember, DataExport | — |
+| 01 Аккаунты | CompanyPlan (status, trial, pause, packs, Stripe ids, group discount), UsageCounter (emails, ai_today/ai_day, sms inbound), Company (phone, email, primary_trade, service_area, onboarding_state), Membership (invite, suspended_at), CompanyGroupMember, DataExport | — |
 | 02 Лиды | Lead (parse_status, raw_file_id, inbound_message_id, duplicate_of, existing_customer, first_response_kind, referred_from_visit_id, next_step_due_at), enum lost_reason, LeadSource (default_cost, is_active, sender_patterns, deep_link), Company (inbound address, assignee, alert min, business_hours) | — |
 | 03 Клиенты | Customer (merged_into, anonymized_at, dns_reason), Contact (is_primary, is_active), PropertyContact, Property (шифрование gate_code, fire_zone_source/checked_at), Address.unit, Activity (note-поля, pinned, visibility), Task (completed_*, automation_key) | Индексы поиска (trigram, match_key) — архитектура Фазы 3 |
 | 04 Каталог | CatalogItem (pricing_mode, markup_bps, is_active, seed_*), Assembly (constants, version, status, test_cases), AssemblyComponent (item_selector, position), SupplierItem (valid_to, unit, pack_size), Supplier (is_active, branches), PriceListImport (file_kind, cancelled, applied_*, ai_action_id, summary) | `min_margin_bps` — в `Company.estimate_settings` (общее с 05) |
@@ -1052,7 +1054,7 @@ erDiagram
 | 12 Портал | PortalAccess (contact, document, open_count, locale), EstimateApproval.locale, **Warranty**, PublicProfile (services price_from, testimonials, google_review_url, hide_street_address, translations), AvailabilityRule, BookingRequest, File.public_gallery | `Referral.code` на клиента → `Customer.referral_code` (+ clicks); Referral — запись на каждого приведённого. PortalAccess расширен `audience = subcontractor` |
 | 13 Коммуникации | **MessageTemplate**, **AutomationSetting**, **ScheduledMessage**, **Campaign** (Запуск) + Lead.campaign_id, Contact (consent-поля), Company (sms_number, a2p, referral_reward), Message (segments, cost, template/automation key, idempotency, sent_via), ReviewRequest (invoice_id, reminder), Referral (status, reward_*) | `Company.google_review_url` → только в PublicProfile (дубль с 12) |
 | 14 Отчёты | MarketingSpend (company_id, kind, expense_id, created_by), Expense.lead_source_id, Job.attributed_source_id | Job.completed_at — дубль с 07; дневные агрегаты — архитектура Фазы 3 |
-| 15 AI | AiAction (channel, locale, transcript, context, tier, plan, resolved_entities, assumptions, parent, idempotency, row_versions, undo_*, error_code, counted, pending_offline), Entitlement.limits.ai_daily_cap, Expense.ai_action_id | UsageCounter ai_today/ai_day — дубль с 01; EstimateLineItem — дубль с 05 |
+| 15 AI | AiAction (channel, locale, transcript, context, tier, plan, resolved_entities, assumptions, parent, idempotency, row_versions, undo_*, error_code, counted, pending_offline), CompanyPlan.limits.ai_daily_cap, Expense.ai_action_id | UsageCounter ai_today/ai_day — дубль с 01; EstimateLineItem — дубль с 05 |
 | 16 Офлайн | Поля синхронизации (§0), **SyncOperation**, **Device**, **SyncConflict**, EstimateApproval (offline, server_decision, rejection_reason), File.upload_status, Property.offline_imagery_ready_at | Payment.offline_created — дубль с 09 |
 | 17 Поддержка | §8a: PlatformRole, KbArticle, SupportTicket, SupportMessage, SupportAccessGrant; AuditLog.actor_type `support` | — |
 | 18 Проверочные примеры денег | CustomerCredit, CreditApplication, Payment.return_reason, Invoice (void_reason/by/at), Refund (allocation, platform_fee_refunded_cents), Job (cancel_reason, cancelled_at), Expense.transferred_from_job_id | Предлагалось в v0.3 — внесено сразу в v0.2. `needs_review` — флаг Payment (как в PRD 09), а не статус; `returned` — уже статус |

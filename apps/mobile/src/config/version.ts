@@ -5,3 +5,8 @@
  * (scripts/setBuild.cjs). test/buildNumber.test.ts is red when a PR changes it.
  */
 export const BUILD = 0;
+/**
+ * The moment the build was made (ISO UTC), written by the same script as BUILD (#1506): the header shows it on the web and in a native
+ * build before its first update. Always "" in the repository (a local build shows no date); test/buildNumber.test.ts guards it.
+ */
+export const BUILT_AT = "";
