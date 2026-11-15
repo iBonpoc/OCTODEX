@@ -71,7 +71,7 @@ export default function ReceiptScreen() {
     </RowView>
   );
   // #1474 (DS §7.3, §8.9, Б4; as the estimate #1412): one main button and «⋯» with the rest — no row of five pills
-  const pdf = () => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+  const pdf = () => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch(() => toast.show(t("err.pdfSave")));
   const sms = cust?.phone ? () => void openSms(cust.phone, msg.text).catch(() => {}) : undefined;
   const email = cust?.email ? () => void openEmail(cust.email!, msg.subject, msg.text).catch(() => {}) : undefined;
   const send = sms ?? email;

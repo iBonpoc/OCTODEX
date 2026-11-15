@@ -80,7 +80,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
     setRemind(false);
   };
   const pdf = () =>
-    saveEstimatePdf(invoiceHtml(db, inv, company, { lang: docLanguageFor(db, { customerId: inv.customerId }) }), `Invoice ${inv.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(invoiceHtml(db, inv, company, { lang: docLanguageFor(db, { customerId: inv.customerId }) }), `Invoice ${inv.number ?? ""}`.trim()).catch(() => toast.show(t("err.pdfSave")));
 
   // #1412/#1474: one main button — take the payment — and «⋯» with the rest; no row of pills under the card
   const takePay = () => {

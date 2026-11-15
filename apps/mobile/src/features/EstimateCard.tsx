@@ -86,9 +86,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
     if (!checked && pdfIssues && (issueCount(pdfIssues) > 0 || notes.length > 0)) return setPdfOpen(true);
     setPdfOpen(false);
     const p = portalFromEstimate(db, e, store.companyName ?? APP_NAME);
-    saveEstimatePdf(estimateHtml(p, { lang: p.lang }), estimateFileName(p)).catch((err) =>
-      toast.show(t("portal.error", { msg: String(err?.message ?? err) })),
-    );
+    saveEstimatePdf(estimateHtml(p, { lang: p.lang }), estimateFileName(p)).catch(() => toast.show(t("err.pdfSave")));
   };
 
   // #1412: one main button (the next step) and «⋯» with the rest in Б4's order (Изменить, PDF, the rest; the dangerous last; «…» where a
@@ -438,8 +436,8 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
       if (how === "copy") await copyText(url);
       setForce(false);
       toast.show(how === "copy" ? t("ue.linkCopied") : t("est.sentToast", { name: customer?.name ?? "" }), e.status === "draft" ? undo : undefined);
-    } catch (err) {
-      toast.show(t("portal.error", { msg: String((err as Error)?.message ?? err) }));
+    } catch {
+      toast.show(t("err.linkSend"));
     }
   };
   return (
