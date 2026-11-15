@@ -14567,4 +14567,32 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own(
               'T213 rule 18: the trigger function for nobody');
 \echo 'T213 a file row points at its own object ok'
 
+-- T245 (#1631): the team's notes about a client, a property, a job — a tech of the work reads and adds them; a
+-- subcontractor on the same visit does neither (red before 20261115150000)
+:as_super
+insert into public.visit_assignees (company_id, visit_id, user_id)
+  values ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002') on conflict do nothing;
+:as_owner_a
+insert into public.notes (id, company_id, subject_type, subject_id, body, visibility) values
+  ('a2450000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'T245 client note', 'team'),
+  ('a2450000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'property', 'd1a00000-0000-0000-0000-000000000001', 'T245 house note', 'team'),
+  ('a2450000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'job', 'e1a00000-0000-0000-0000-000000000001', 'T245 job note', 'team');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.notes where id::text like 'a2450000-%'$q$) = 3, 'T245 the tech on the visit reads the client, house and job notes');
+insert into public.notes (company_id, subject_type, subject_id, body, visibility)
+  values ('ca000000-0000-0000-0000-000000000000', 'job', 'e1a00000-0000-0000-0000-000000000001', 'T245 tech adds', 'team');
+:as_sub56
+select tst.ok(app.is_visit_assignee('f1a00000-0000-0000-0000-000000000001'), 'T245 the subcontractor is on the visit');
+select tst.ok(tst.cnt($q$select 1 from public.notes where subject_id in ('c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000001')$q$) = 0,
+              'T245 the subcontractor reads none of the team''s notes');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body, visibility) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'x', 'team')$q$,
+                 'T245 the subcontractor adds no note to the client');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body, visibility) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd1a00000-0000-0000-0000-000000000001', 'x', 'team')$q$,
+                 'T245 nor to the house');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body, visibility) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e1a00000-0000-0000-0000-000000000001', 'x', 'team')$q$,
+                 'T245 nor to the job');
+:as_super
+delete from public.visit_assignees where visit_id = 'f1a00000-0000-0000-0000-000000000001' and user_id = 'a5600000-0000-4000-8000-000000000002';
+\echo 'T245 the team''s notes are not a subcontractor''s ok'
+
 \echo 'ALL TESTS PASSED'
