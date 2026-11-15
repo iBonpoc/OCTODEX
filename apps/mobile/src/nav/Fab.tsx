@@ -10,7 +10,8 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { fabItems, type FabCtx, type FabItem, type FabSet } from "./sections";
+import { fabItems, LIST_FABS, type FabCtx, type FabItem, type FabSet } from "./sections";
+import type { DictKey } from "@/i18n/ru";
 import { placeActions } from "@/modules/registry";
 
 /**
@@ -113,7 +114,8 @@ export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps 
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
   const one = items.length === 1 ? items[0]! : undefined;
-  const label = one ? t(one.label) : t("nav.create");
+  // a list's button names its object: «＋ Клиент», not «Создать» (DS §12.2, #1395); «Главная» keeps its own words
+  const label = LIST_FABS.includes(p.set) ? t(`fab.list.${p.set}` as DictKey) : one ? t(one.label) : t("nav.create");
   const press = () => (one ? run(one) : setOpen(true));
   const sheet = one ? null : <FabSheet {...p} visible={open} onClose={() => setOpen(false)} />;
   if (placement === "header") {

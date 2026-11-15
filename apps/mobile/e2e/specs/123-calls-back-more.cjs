@@ -30,11 +30,11 @@ exports.run = async (h) => {
     await h.go("/tasks");
     await p.evaluate(() => document.querySelectorAll("*").forEach((el) => el.scrollHeight > el.clientHeight + 4 && (el.scrollTop = el.scrollHeight)));
     await p.waitForTimeout(500);
-    const fab = await box(p.getByTestId("fab").locator("visible=true"));
+    // nothing floats on a list (DS §5.3, #1395): «＋ Новая задача» is in the header; the last card ends above the bar
+    h.expect((await p.getByTestId("fab").locator("visible=true").count()) === 0, "no floating «＋» on Tasks");
     const bar = await box(p.getByTestId("tab-bar").locator("visible=true"));
-    h.expect(fab.y + fab.height <= bar.y + 1, `«＋» above the bar (${fab.y + fab.height} vs ${bar.y})`);
     const last = await box(p.locator('[data-testid^="task-"]:visible').last());
-    h.expect(last.y + last.height <= fab.y + 1, `the last card ends above «＋» (${last.y + last.height} vs ${fab.y})`);
+    h.expect(last.y + last.height <= bar.y + 1, `the last card ends above the bar (${last.y + last.height} vs ${bar.y})`);
     await h.shot("tasks-fab");
     // the toast «Отменить» on a section outside the tabs: above the bar, not on it (it was hidden before — no bar here)
     await h.go("/tasks");

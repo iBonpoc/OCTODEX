@@ -64,6 +64,12 @@ export const en: Dict = {
   "nav.mySettings": "App settings",
   "nav.menu": "Menu",
   "nav.create": "Create",
+  // #1395: the short object in a list's header «＋ <object>» (DS §12.2)
+  "fab.list.clients": "Client",
+  "fab.list.tasks": "Task",
+  "fab.list.plan": "Schedule",
+  "fab.list.calls": "Call",
+  "fab.list.messages": "Message",
   "nav.group.work": "Work",
   "nav.group.docs": "Documents",
   "nav.group.money": "Money",

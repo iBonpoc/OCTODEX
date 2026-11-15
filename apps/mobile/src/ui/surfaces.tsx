@@ -18,7 +18,7 @@ import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { SearchEntry } from "@/nav/SearchEntry";
-import type { FabCtx, FabItem, FabSet } from "@/nav/sections";
+import { LIST_FABS, type FabCtx, type FabItem, type FabSet } from "@/nav/sections";
 import { badgeState } from "@/data/syncLink";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
@@ -612,8 +612,10 @@ export function Screen({
     }, [pathname]),
   );
   /** 820/1280: the screen's «＋» sits in its header, no floating button (13 v2 §2.5) */
-  const headerFab = fab && wide ? <Fab placement="header" set={fab} ctx={fabCtx} on={fabOn} /> : null;
-  const floatFab = !!fab && !wide;
+  // a list's «＋ <object>» is in the header on every width (#1395, DS §5.3); only «Главная»'s yellow «＋» floats on the phone
+  const fabInHeader = !!fab && (wide || LIST_FABS.includes(fab));
+  const headerFab = fabInHeader ? <Fab placement="header" set={fab!} ctx={fabCtx} on={fabOn} /> : null;
+  const floatFab = !!fab && !fabInHeader;
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
             {pinned && up ? (

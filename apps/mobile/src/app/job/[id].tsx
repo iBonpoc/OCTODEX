@@ -35,6 +35,7 @@ import { visitStatus } from "@/features/visits";
 import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
@@ -162,6 +163,8 @@ export default function JobScreen() {
   const moreItems = [
     ...(next && !enRouteShown ? [{ key: "enRoute", label: t("job3.more.enRoute"), icon: "navigate" as const, testID: "job-act-enRoute" }] : []),
     ...(payTo && mainStep?.key !== "pay" ? [{ key: "pay", label: t("job3.more.pay"), icon: "dollar" as const, testID: "job-act-pay" }] : []),
+    // the estimate for this job's client and address: the card has no «＋» any more (#1395) — it is named here
+    ...(servable && c && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate") ? [{ key: "estimate", label: t("path.estimateNew"), icon: "invoice" as const, testID: "job-act-estimate" }] : []),
     { key: "note", label: t("job3.more.note"), icon: "note" as const, testID: "job-act-note" },
     ...(next ? [{ key: "file", label: t("job3.more.file"), icon: "camera" as const, testID: "job-act-file" }] : []),
   ];
@@ -427,7 +430,7 @@ export default function JobScreen() {
   );
 
   return (
-    <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")} fab="job" fabCtx={servable ? { jobId: j.id, customerId: c?.id, propertyId: p?.id } : {}}>
+    <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")}>
       <RelatedBlock of={{ type: "job", id: j.id }} />
       {/* #1474: one next step for the whole card, above the tabs (DS §7.3, §12.3); the rest — in «⋯» */}
       {mainStep ? (
@@ -468,6 +471,7 @@ export default function JobScreen() {
           setMoreAt(null);
           if (k === "enRoute") enRoute();
           else if (k === "pay" && payTo) router.push(payTo as never);
+          else if (k === "estimate" && c) router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`);
           else if (k === "note") {
             setFocusNote(true);
             setTab("history");

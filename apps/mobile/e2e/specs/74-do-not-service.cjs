@@ -10,7 +10,7 @@ const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const plus = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
   // the client card has no «＋» (#1343): what makes something new there is «Создать смету» and «＋» on the «Работы» tab
   const make = () => p.locator('[data-testid="client-make-estimate"]:visible');
   const newJob = async () => {
@@ -39,7 +39,7 @@ exports.run = async (h) => {
   h.expect((await make().count()) === 0 && (await newJob()) === 0, "a «do not service» client: no «Создать смету», no new job");
   await h.shot("client");
   await h.go("/client/c3?s=estimates");
-  h.expect((await plus().count()) === 0, "no «＋» on the client's lists either");
+  h.expect((await plus().count()) + (await p.getByTestId("client-section-new-estimate").locator("visible=true").count()) === 0, "no «＋» and no new estimate on the client's lists either");
 
   // the estimate: not sent again
   await h.go("/estimate/e6");

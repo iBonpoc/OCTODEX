@@ -5,21 +5,20 @@
  */
 exports.run = async (h) => {
   const p = h.page;
-  const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  // no «＋» on a property card on any width (#1395): «Смета» and «Работа без сметы» are the card's own buttons
+  const anyFab = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
+  const vis = (id) => p.getByTestId(id).locator("visible=true");
   await h.go("/property/p1");
   const db0 = await h.db();
   const prop = db0.properties.find((x) => x.id === "p1");
-  h.expect((await plus().count()) === 1, "the property has «＋»");
-  h.expect((await p.getByRole("button", { name: "Новая смета", exact: true }).count()) === 0, "no own «Новая смета» button (it is in «＋»)");
+  h.expect((await anyFab().count()) === 0, "the property card has no «＋»");
+  h.expect((await vis("prop-new-estimate").count()) === 1 && (await vis("prop-new-job").count()) === 1, "its own «Создать смету» and «Работа без сметы» are on the card");
   h.expect((await p.getByRole("button", { name: "Записать на оценку", exact: true }).count()) === 1, "«Записать на оценку» stays on the card (its next step, #1474)");
-  await plus().click(); await p.waitForTimeout(400);
-  await h.shot("plus");
-  await p.getByText("Работа без сметы", { exact: true }).last().click(); await p.waitForTimeout(600);
+  await h.shot("buttons");
+  await vis("prop-new-job").click(); await p.waitForTimeout(600);
   h.expect(p.url().includes(`/job/new`) && p.url().includes(`customerId=${prop.customerId}`) && p.url().includes("propertyId=p1"), `«Новая работа» is tied to the client and the property (${p.url()})`);
   await h.go("/property/p1");
-  await plus().click(); await p.waitForTimeout(400);
-  await p.getByText("Создать смету", { exact: true }).last().click(); await p.waitForTimeout(600);
+  await vis("prop-new-estimate").click(); await p.waitForTimeout(600);
   h.expect(p.url().includes("/estimate/new") && p.url().includes("propertyId=p1"), `«Смета» is tied to the property (${p.url()})`);
 
   // «do not service»: nothing new for this property
@@ -31,11 +30,11 @@ exports.run = async (h) => {
   }, prop.customerId);
   await h.go("/property/p1");
   await h.expectText(new RegExp(prop.address.split(",")[0]), "the property opens");
-  h.expect((await plus().count()) === 0, "no «＋» for a «do not service» client");
+  h.expect((await vis("prop-new-estimate").count()) + (await vis("prop-new-job").count()) === 0, "no new estimate or job for a «do not service» client");
   h.expect((await p.getByRole("button", { name: "Записать на оценку", exact: true }).count()) === 0, "no «Записать на оценку» either");
   await h.shot("no-service");
   await h.go("/property/p1?s=jobs");
-  h.expect((await plus().count()) === 0, "no «＋» on the property's lists either");
+  h.expect((await vis("property-section-new-job").count()) + (await anyFab().count()) === 0, "nothing new on the property's lists either");
 
   // the technician: no «＋» on a property
   await p.evaluate((cid) => {
@@ -46,6 +45,6 @@ exports.run = async (h) => {
     localStorage.setItem("octo.role.v1", JSON.stringify("tech"));
   }, prop.customerId);
   await h.go("/property/p1");
-  h.expect((await plus().count()) === 0, "the technician: no «＋»");
+  h.expect((await vis("prop-new-estimate").count()) + (await vis("prop-new-job").count()) + (await anyFab().count()) === 0, "the technician: nothing new on a property");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };

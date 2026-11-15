@@ -36,7 +36,7 @@ import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, 
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
-import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, PROFILE_ICON, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import type { GutterProfile } from "@octo/estimating-engine";
@@ -57,7 +57,7 @@ import { LinkSheet } from "./LinkSheet";
 import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
@@ -368,14 +368,12 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (made: Drawing, prev = cur.current.drawing, placed = false, quiet = false) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false) => {
       // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
       const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: dsFor(cur.current.ch, cur.current.newDef), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
       // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
-      // not when the gutter only went to another story by the story button (#1569, founder 14.11: «переключал этажи 1 → 4 → 1 — высветило
-      // „водостоков стало пять“, не понял почему»): the corner split on story 2 and joined again on 1 — the count is what it was
-      if (!quiet && next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
         announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
       }
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
@@ -885,11 +883,9 @@ export default function DrawScreen() {
     // «Отменить» puts back what was deleted and keeps what was drawn since
     toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing, true))); // put back as it was: no recount (#1264)
   };
-  const nextStory = () => {
-    const n = ((story % 4) + 1) as Story;
-    setStoryN(n);
-    if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n), drawing, false, true); // quiet: #1569
-  };
+  // «Эт» only switches the story the next gutter is drawn on; what is picked stays where it is (#1608, founder 15.11, README §12 п.19).
+  // A gutter goes to another story by its own properties (the «Этаж» row), not by this button
+  const nextStory = () => setStoryN(nextStoryOf(story));
   /** how far the toolbar is dragged by its grip, px */
   const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
   /** the toolbar is being dragged by its grip: it stands out and says where to let go (founder 09.11) */
