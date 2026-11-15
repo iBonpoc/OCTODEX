@@ -85,7 +85,7 @@ type Value = {
   queue: { label: string }[];
   addPhoto: (v: string, k: "before" | "after", photo?: Picked) => () => void;
   retryPhoto: (v: string, p: string) => () => void;
-  preparePhotoAgain: (ref: { visitId: string; photoId: string } | { expenseId: string }) => void;
+  preparePhotoAgain: (ref: { visitId?: string; photoId: string } | { expenseId: string }) => void;
   addExpense: (x: object, receipt?: Picked) => () => void;
 };
 type P = { children: null };

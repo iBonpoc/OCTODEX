@@ -30,7 +30,7 @@ exports.run = async (h) => {
       .catch(() => h.expect(false, what));
 
   await h.go("/today");
-  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
+  await h.seed("octo.role.v1", "tech");
   const db = await h.db();
   const v0 = db.visits.find((v) => v.techId === db.me && v.step === "scheduled" && !v.photos.length);
   h.expect(!!v0, "a visit of mine without photos");
