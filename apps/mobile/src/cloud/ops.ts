@@ -485,6 +485,12 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
  * The storage's «no» marks the photo failed and says why (#1431): null — taken. No network or the server's «not now»
  * throws: the op stays in the queue and the upload is tried again (upsert: true).
  */
+/** the files row already records its upload (#1557); a read that fails throws — the op waits, nothing marked on a guess */
+async function uploadRecorded(fileId: string): Promise<boolean> {
+  const { data } = await read(supabase.from("files").select("upload_status, storage_key").eq("id", fileId).maybeSingle());
+  return data?.upload_status === "uploaded" && !!data?.storage_key;
+}
+
 export async function uploadPhoto(companyId: string, fileId: string, uri: string): Promise<PhotoFail | null> {
   const failed = async (why: PhotoFail) => {
     await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
@@ -508,6 +514,9 @@ export async function uploadPhoto(companyId: string, fileId: string, uri: string
   } catch (e) {
     // only a refusal marks the photo failed
     if (classify(e) !== "refusal" || storageNotNow(e)) throw e;
+    // #1557: a stored file is written by nobody again — a repeat after a lost answer is refused although the row already
+    // records this upload: then it is taken, not «not uploaded»
+    if (await uploadRecorded(fileId)) return null;
     return failed(photoFailOf(e));
   }
 }
