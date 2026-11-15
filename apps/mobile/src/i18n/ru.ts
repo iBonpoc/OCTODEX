@@ -3166,6 +3166,8 @@ export const ru = {
   "mod.gutters.draw.toLead": "Привязать",
   "mod.gutters.draw.selRun": "Желоб · {len} · эт {n}",
   "mod.gutters.draw.selDsKind": "Водосток · {kind} · {size} · эт {n}",
+  "mod.gutters.draw.selRunOne": "Желоб · {len}",
+  "mod.gutters.draw.selDsKindOne": "Водосток · {kind} · {size}",
   "mod.gutters.draw.selDs": "Водосток · эт {n}",
   "mod.gutters.attr.props": "Свойства",
   "mod.gutters.attr.run": "Желоб",
