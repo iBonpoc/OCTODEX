@@ -1,8 +1,8 @@
 # 43 (приложение). Все действия интерфейса → команда помощника или «нельзя»
 
-Снято по `origin/main` 25973da (15.11.2026) **[код]**: мутации стора `apps/mobile/src/data/store.tsx` и прямые вызовы `src/cloud/*` из экранов. Это исходный список для сторожа покрытия (спека 43 §5); после волны И0 правдой становится реестр `src/commands/`, а этот файл — история.
+Снято по `origin/main` 25973da, ссылки на строки сверены с 0740f35 (15.11.2026) **[код]**: мутации стора `apps/mobile/src/data/store.tsx` и прямые вызовы `src/cloud/*` из экранов. Это исходный список для сторожа покрытия (спека 43 §5); после волны И0 правдой становится реестр `src/commands/`, а этот файл — история.
 
-Уровни: `read` / `undo` (сразу + «Отменить»; **только четыре**: заметка, тег клиента, своя задача, черновик сметы — по ревью безопасности, спека §3.2) / `confirm` (карточка) / `strict` (деньги, клиенту, удаление — карточка с точными данными, не пакетом, не после чужого текста). **Нельзя** — помощник даёт только кнопку перехода на экран.
+Уровни: `read` / `undo` (сразу + «Отменить»; **только четыре**: заметка, тег клиента, своя задача, черновик сметы — по ревью безопасности, спека §3.2) / `confirm` (карточка) / `strict` (деньги, клиенту, удаление — карточка с точными данными, не пакетом, не после чужого текста). `screen` — помощник открывает обычный экран с заполненными полями, последнее нажатие делает человек (спека §3.2–§3.3). **Нельзя** — только служебное. Правило: всё с деньгами, отправкой клиенту или удалением — `strict` или `screen` (сторож Т9а).
 
 ## 0. Что выяснилось и меняет спеку
 
@@ -25,17 +25,17 @@
 | Объединить дубли | `mergeCustomers` | `client.merge` | strict (удаляет запись) |
 | «Не дубль» | `markNotDuplicate` | `client.notDuplicate` | confirm |
 | Объект: добавить, доступ, код ворот, контакты | `saveProperty`, `setGateCode`, `updateProperty` | `property.save`, `property.gate` | confirm (код ворот — только кто видит `canSeeGateCode`) |
-| Импорт из файла (`app/client/import.tsx`) | облако, мимо стора | **нельзя** | массовая запись по файлу; экран показывает отчёт, помощник — кнопку перехода |
-| Отменить импорт (`app/client/imports.tsx:61`) | облако, мимо стора | **нельзя** | массовое удаление |
-| Позвонить / написать / маршрут | открывает телефон, потом `logCall`/`logMessage` | `client.call`, `client.message` | confirm (открывает приложение телефона) |
-| Заметка: добавить / закрепить / удалить | `addNote`, `updateNote` | `note.add`, `note.pin`, `note.delete` | undo / confirm / confirm |
+| Импорт из файла (`app/client/import.tsx`) | облако, мимо стора | **screen** | массовая запись по файлу; помощник открывает импорт, файл и «Импорт» — человек |
+| Отменить импорт (`app/client/imports.tsx:61`) | облако, мимо стора | **screen** | массовое удаление — только рукой на экране истории импорта |
+| Позвонить / написать / маршрут | открывает телефон, потом `logCall`/`logMessage` | `client.call`, `client.message` | strict (открывает Сообщения/Почту/звонок с шаблоном; отправляет человек) |
+| Заметка: добавить / закрепить / удалить | `addNote`, `updateNote` | `note.add`, `note.pin`, `note.delete` | undo / confirm / strict |
 
 ## 2. Лиды
 
 | Действие | Функция | Команда | Уровень |
 |---|---|---|---|
 | Новый лид | `addLead` | `lead.create` | confirm |
-| Позвонить / SMS / письмо, ответить, напомнить про смету | `touchLead`, `markReminded` | `lead.contact` | confirm (открывает приложение телефона) |
+| Позвонить / SMS / письмо, ответить, напомнить про смету | `touchLead`, `markReminded` | `lead.contact` | strict (открывает Сообщения/Почту/звонок с шаблоном; отправляет человек) |
 | Итог звонка | `callResult` | `lead.callResult` | confirm |
 | Напомнить мне через… | `saveTask` | `task.save` | undo |
 | Записать на осмотр | `bookLead` | `lead.book` | confirm |
@@ -46,7 +46,7 @@
 | Поля лида, люди, интерес, назначить | `updateLead`, `saveLeadPeople`, `setLeadInterest`, `assignLead` | `lead.update`, `lead.people`, `lead.interest`, `lead.assign` | confirm |
 | Стоимость лида | `setLeadCost` | `lead.cost` | strict (деньги компании; не для мастера) |
 | Новый источник | `saveSource` | `source.create` | confirm |
-| Веб-форма (`app/f/[token].tsx`) | `lead-intake`, мимо стора | **нельзя** | это вход клиента, не действие пользователя |
+| Веб-форма (`app/f/[token].tsx`) | `lead-intake`, мимо стора | не действие пользователя | это вход клиента; помощник его только читает (чужой текст, спека §8.3) |
 
 ## 3. Сметы
 
@@ -55,17 +55,17 @@
 | Сохранить смету / черновик по прошлым | `saveEstimate` (+`saveCatalogItem` для новых строк) | `estimate.draft`, `estimate.update` | undo (новый черновик) / confirm (изменить существующую) |
 | Найти похожие прошлые | чтение | `estimate.findSimilar` | read |
 | Шаблон: сохранить, копировать, переименовать, архив | `saveEstimateTemplate` | `estimateTemplate.save` | confirm |
-| Отправить: SMS / почта / ссылка | `saveEstimate` + `sendEstimate`, затем приложение телефона | `estimate.send` | strict (ссылка клиенту; само сообщение отправляет человек) |
-| PDF | файл | `estimate.pdf` | confirm (открывает «Поделиться») |
+| Отправить: SMS / почта / ссылка | `saveEstimate` + `sendEstimate`, затем приложение телефона | `estimate.send` | **screen** — `sendEstimate` включает `/p/` до нажатия в Сообщениях [код: `features/EstimateCard.tsx:433`], а подпись компании ставится при отправке (README §9 п.11); помощник открывает шторку отправки (спека §3.4) |
+| PDF | файл | `estimate.pdf` | strict (документ уходит наружу через «Поделиться») |
 | Отозвать ссылку | `revokeEstimateLink` | `estimate.revokeLink` | strict |
 | Категория услуги | `setEstimateCategory` | `estimate.category` | confirm |
-| Подпись клиента на телефоне | `signEstimate` | **нельзя** | подпись — рукой клиента |
-| Принять на месте (вариант + подпись) | `approveEstimate` | **нельзя** | подпись клиента; создаёт работу и счёт на аванс |
-| Подписать от компании | `countersignEstimate` | **нельзя** | подпись — рукой человека |
+| Подпись клиента на телефоне | `signEstimate` | **screen** | подпись — рукой клиента |
+| Принять на месте (вариант + подпись) | `approveEstimate` | **screen** | подпись клиента; создаёт работу и счёт на аванс |
+| Подписать от компании | `countersignEstimate` | **screen** | подпись — рукой человека |
 | Не подписывать — изменить / отказать | `reopenEstimate`, `declineCountersign` | `estimate.reopen`, `estimate.decline` | confirm / strict |
 | Записать аванс | `payDeposit` | `estimate.deposit` | strict |
-| Моя подпись | `saveMySignature` | **нельзя** | подпись |
-| Портал клиента: принять, оплатить (`app/p/[token].tsx`) | мимо стора | **нельзя** | это экран клиента |
+| Моя подпись | `saveMySignature` | **screen** | подпись |
+| Портал клиента: принять, оплатить (`app/p/[token].tsx`) | мимо стора | не действие пользователя | это экран клиента |
 
 ## 4. Счета и оплаты
 
@@ -73,12 +73,12 @@
 |---|---|---|---|
 | Записать оплату | `recordPayment` | `payment.record` | strict |
 | Напомнить SMS / почтой | приложение телефона + `remindInvoice` | `invoice.remind` | strict (сообщение отправляет человек) |
-| PDF счёта | файл | `invoice.pdf` | confirm |
+| PDF счёта, «Поделиться» (`features/invoice/InvoiceCard.tsx:83`) | файл, лист «Поделиться» | `invoice.pdf` | strict (документ уходит наружу) |
 | Аннулировать (причина) | `voidInvoice` (без «Отменить») | `invoice.void` | strict |
 | Выставить счёт (остаток, этап) | `issueInvoice` | `invoice.issue` | strict |
-| Возврат (`app/receipt/[id].tsx:196`) | `stripe-refund` / `refund_record`, мимо стора | **нельзя** | деньги уходят наружу необратимо |
-| Зачесть аванс в счёт | `advance_apply`, мимо стора | **нельзя** в первой версии | нужна сеть, нет «Отменить»; позже — strict «только при сети» |
-| Квитанция: отправить / PDF | приложение телефона | `receipt.send` | strict |
+| Возврат (`app/receipt/[id].tsx:196`) | `stripe-refund` / `refund_record`, мимо стора | **screen** | деньги уходят наружу необратимо; помощник открывает квитанцию со шторкой возврата и суммой |
+| Зачесть аванс в счёт | `advance_apply`, мимо стора | **screen** | нужна сеть, нет «Отменить» |
+| Квитанция `/receipt/:id`: SMS / почта / PDF (`app/receipt/[id].tsx:74-76,86`) | приложение телефона | `receipt.send`, `receipt.pdf` | strict |
 | Расход (и скан чека) | `addExpense` | `expense.add` | strict |
 | Кто должен, сколько заработал за период | чтение, движок `reports.ts` | `report.run`, `money.owed` | read (только `canOpen(role,"/reports")`) |
 
@@ -92,20 +92,20 @@
 | Строки работы, налог | `saveJobLine`, `removeJobLine`, `setJobTax` | `jobLine.save`, `jobLine.remove`, `job.tax` | strict (сумма договора) |
 | Тип, теги, категория | `setJobType`, `setJobTags`, `setJobCategory` | `job.type`, `job.tags`, `job.category` | confirm |
 | Заказать материалы | `makeJobOrders` | `job.orders` | confirm |
-| «В пути»: SMS клиенту (`app/job/[id].tsx:111`) | только приложение SMS | `visit.onMyWay` | confirm (сообщение отправляет человек) |
+| «В пути»: SMS клиенту (`app/job/[id].tsx:111`) | только приложение SMS | `visit.onMyWay` | strict (открывает SMS с шаблоном; отправляет человек) |
 | Шаг выезда: в пути / на месте / работа / готово | `advanceVisit` | `visit.step` | confirm (см. §0 п.6) |
-| Фото до/после | `addPhoto`, `removePhoto`, `retryPhoto` | `photo.add` (из чата), `photo.remove` | confirm / confirm |
-| Чек-лист: отметить, пропустить, добавить, переставить, из шаблона, удалить | `toggleCheck`, `skipItems`, `addVisitItem`, `moveVisitItem`, `addVisitTemplate`, `editVisitItem`, `removeVisitItem`, `attachItemPhoto` | `checklist.*` | confirm (удалить — confirm) |
-| Подпись клиента на выезде | `signVisit` | **нельзя** | подпись |
+| Фото до/после | `addPhoto`, `removePhoto`, `retryPhoto` | `photo.add` (из чата), `photo.remove` | confirm / strict |
+| Чек-лист: отметить, пропустить, добавить, переставить, из шаблона, удалить | `toggleCheck`, `skipItems`, `addVisitItem`, `moveVisitItem`, `addVisitTemplate`, `editVisitItem`, `removeVisitItem`, `attachItemPhoto` | `checklist.*` | confirm (удалить пункт — strict) |
+| Подпись клиента на выезде | `signVisit` | **screen** | подпись |
 | Оплата на выезде | `payVisit` | `visit.pay` | strict |
 | Смета с осмотра | `leadEstimateTarget` | часть `estimate.draft` | confirm |
-| Предупредить клиента | `markNotified`, `logMessage` | `visit.notify` | confirm (открывает приложение телефона) |
+| Предупредить клиента | `markNotified`, `logMessage` | `visit.notify` | strict (открывает Сообщения/Почту/звонок с шаблоном; отправляет человек) |
 | Перенести, назначить | `rescheduleVisit`, `assignVisit` | `visit.reschedule`, `visit.assign` | confirm |
 | Отменить выезд | `cancelVisit` | `visit.cancel` | strict |
 | Осмотр на объекте | `addInspection` | `visit.inspection` | confirm |
-| Событие календаря: сохранить / удалить | `saveCalendarEvent`, `removeCalendarEvent` | `event.save`, `event.remove` | confirm |
+| Событие календаря: сохранить / удалить | `saveCalendarEvent`, `removeCalendarEvent` | `event.save`, `event.remove` | confirm / strict |
 | Пропущенное просмотрено | `reviewVisitMissed` | `visit.reviewMissed` | confirm |
-| Геолокация, точки | `setLocationConsent`, `recordVisitPoint` | **нельзя** | согласие человека; точки пишет приложение само |
+| Геолокация, точки | `setLocationConsent`, `recordVisitPoint` | **screen** (согласие) / не действие (точки) | согласие даёт человек; точки пишет приложение само |
 | Расписание на день / неделю | чтение | `schedule.read` | read |
 
 ## 6. Задачи, звонки, сообщения
@@ -115,7 +115,7 @@
 | Задача: новая, сделана | `saveTask` | `task.save` | undo |
 | Записать звонок | `logCall` | `call.log` | confirm |
 | Сообщение | приложение телефона + `logMessage` | `message.send` | strict (отправляет человек) |
-| Уведомления прочитаны | `readNotices` | **нельзя** | служебное, без «Отменить» |
+| Уведомления прочитаны | `readNotices` | не действие | служебное, без «Отменить» |
 
 ## 7. Каталог, поставщики, заказы
 
@@ -131,14 +131,14 @@
 
 | Действие | Функция | Команда | Уровень |
 |---|---|---|---|
-| Пригласить, повторить, отозвать, отключить (`app/team.tsx`) | в демо — стор (`inviteMember`, `revokeInvite`, `setMemberDisabled`), в облаке — `cloud/team.ts` мимо стора (`app/team.tsx:62,71,304`) | **нельзя** | права людей |
-| Сотрудник: должность, номер, право подписи | `updateMember` | **нельзя** | права людей (право подписи) |
+| Пригласить, повторить, отозвать, отключить (`app/team.tsx`) | в демо — стор (`inviteMember`, `revokeInvite`, `setMemberDisabled`), в облаке — `cloud/team.ts` мимо стора (`app/team.tsx:62,71,304`) | **screen** | права людей; в т. ч. «Поделиться ссылкой приглашения» (`app/team.tsx:176,184`) и «Отправить ещё раз» (`resendInvitation`, `:226`) |
+| Сотрудник: должность, номер, право подписи | `updateMember` | **screen** | права людей (право подписи) |
 | Профиль компании, контакты, лицензии, часы, пояс, настройки лидов | `saveCompany`, `saveContact`, `removeContact`, `saveLicense`, `removeLicense` | `company.save`, `company.contact`, `company.license` | confirm (удалить — strict) |
-| Модули: включить, выключить, настройки | `enableModule`, `disableModule`, `saveModuleSettings` | **нельзя** | меняет весь вид компании; выключение удаляет данные модуля |
+| Модули: включить, выключить, настройки | `enableModule`, `disableModule`, `saveModuleSettings` | **screen** | меняет весь вид компании; выключение удаляет данные модуля |
 | Чек-листы компании, шаблоны | `setVisitSettings`, `saveChecklistTemplate` | `checklistTemplate.save` | confirm |
 | Категории услуг | `saveServiceCategory` | `serviceCategory.save` | confirm |
-| Онлайн-оплата Stripe | облако | **нельзя** | деньги, внешний счёт |
-| Заявки с сайта: формы, ключи, принять/отказать | облако | **нельзя** | ключи доступа; приём чужого текста |
+| Онлайн-оплата Stripe | облако | **screen** | деньги, внешний счёт |
+| Заявки с сайта: формы, ключи, принять/отказать | облако | **screen** | ключи доступа; приём чужого текста |
 | Уведомления, свои настройки | `setPushKind`, `setPrefs`, `register_push_device` | `prefs.set` (только свои настройки) | confirm |
 | Демо: офлайн, сброс; роль; очередь: повтор / выбросить; закрытая компания | `setOnline`, `resetDemo`, `setRole`, `retryOp`, `discardOp`, `dismissRejected`, `dropUnsentIn` | **нельзя** | служебные; «выбросить» теряет данные |
 | Выгрузка CSV | файл | `report.export` | strict (выгрузка клиентов наружу) |
@@ -147,20 +147,31 @@
 
 | Действие | Функция | Команда | Уровень |
 |---|---|---|---|
-| Рисунок (жесты на холсте) | `moduleOp` | **нельзя** | рисует рука; помощник не рисует |
+| Рисунок (жесты на холсте) | `moduleOp` | **screen** | рисует рука; помощник открывает замер |
 | Привязать / отвязать замер, новый лид из замера | `relink`, `addLead` | `gutters.link` | confirm |
 | Удалить замер | `removeMeasurement` | `gutters.removeMeasurement` | strict |
 | Копия замера, точность | `duplicateMeasurement`, `setAccuracy` | `gutters.duplicate`, `gutters.accuracy` | confirm |
-| Фото замера | `addPhoto`/`removePhoto` модуля | `gutters.photo` | confirm |
+| Фото замера | `addPhoto`/`removePhoto` модуля | `gutters.photo` | confirm (удалить — strict) |
 | Сделать / обновить смету по замеру | `makeEstimate` (`estimateLink.ts:181`) | `gutters.estimate` | confirm |
 | PDF рисунка, цеховой PDF | файлы | `gutters.pdf` | confirm |
-| Настройки и цены модуля | `saveModuleSettings`, `saveCatalogItems` | **нельзя** в первой версии | правка цен пачкой |
+| Настройки и цены модуля | `saveModuleSettings`, `saveCatalogItems` | **screen** | правка цен пачкой |
 
 Команды модуля живут в модуле (`src/modules/gutters/commands`, зона (в)) и регистрируются, только когда модуль включён — ядро о гаттерах не знает (правило планирования CLAUDE.md).
 
+## 9а. Пропущенные в первой редакции (аудит №2)
+
+| Действие | Функция | Команда | Уровень |
+|---|---|---|---|
+| Условия сметы: подставить по умолчанию, при смене клиента (`estimateTerms`, `estimateTermsOnClientChange`) | чтение / часть сохранения сметы | часть `estimate.draft` | как `estimate.draft` (не отдельная команда) |
+| Смета PDF (`features/EstimateCard.tsx:89`) | файл | `estimate.pdf` | strict (документ уходит наружу) |
+| PDF рисунка и цеховой PDF Gutters | файлы | `gutters.pdf` | strict (документ уходит наружу) |
+| Выгрузка CSV отчёта | файл | `report.export` | strict |
+| Вызовы `useAuth` из экранов: вход, код, пароль, регистрация, согласие с условиями (`cloud/legal.ts:8`), создание компании, принятие приглашения, выход, забыть устройство | `cloud/auth.tsx` | — | **screen** (§10 ниже) |
+| Регистрация push-устройства (`features/pushNative.ts:70`) | RPC | — | не действие (делает приложение) |
+
 ## 10. Учётная запись
 
-Вход, регистрация, согласие с условиями, создание компании, принятие приглашения, выход, удаление учётной записи и передача владения — **нельзя** (решения человека о себе; Apple 5.1.1(v)).
+Вход, регистрация, согласие с условиями, создание компании, принятие приглашения, выход, удаление учётной записи и передача владения — **screen**: помощник может открыть экран, но делает это человек (решения человека о себе; Apple 5.1.1(v)). До входа помощника нет вовсе — нет согласия и учётной записи.
 
 ## 11. Итог
 
@@ -169,7 +180,8 @@
 | Мутаций стора с вызовом из интерфейса | ~115 (+4 без экрана, +7 служебных) |
 | Действий мимо стора | 15 групп |
 | Решение «команда» | ~95 команд (read 8, undo 4: заметка, тег, задача, черновик сметы; confirm ~55; strict ~28) |
-| Решение «нельзя» | ~35 действий, причина у каждого |
+| Решение `screen` (открыть экран, жмёт человек) | ~25 действий, причина у каждого |
+| Решение «нельзя» и «не действие пользователя» | ~12 (служебные, вход клиента, портал) |
 
 Цифры приблизительные (±5): точный счёт даст сторож И0 по типу интерфейса стора (`StoreCtx`, 150 членов).
 
