@@ -59,7 +59,7 @@ import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, fres
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
-import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
+import { removedUnsent, unsentIn as unsentInOf, withoutUnsentIn, type RemovedUnsent } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
@@ -271,6 +271,8 @@ interface StoreCtx {
   unsentIn: (companyId: ID) => number;
   /** false — one of them is being sent right now: nothing removed */
   dropUnsentIn: (companyId: ID) => boolean;
+  /** #1669: the companies I was removed from (the server confirmed) that still have my changes on this phone, with how many */
+  unsentRemoved: RemovedUnsent[];
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -1377,6 +1379,10 @@ export function StoreProvider({
   // stay on the phone until «Убрать»); no confirmed answer yet — every one counts, as before
   const activeIds = auth.membershipsFor && auth.membershipsFor === auth.userId ? new Set(auth.memberships.map((m) => m.companyId)) : null;
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null, activeIds ? (c) => activeIds.has(c) : undefined) : 0;
+  // (the tests' auth stand-ins have no closedCompanies: an empty list then)
+  const closedIds = new Set((auth.closedCompanies ?? []).map((c) => c.companyId));
+  const unsentRemoved = mode === "cloud" ? removedUnsent(outbox, who?.userId ?? null, activeIds, closedIds) : [];
+  const removedKey = unsentRemoved.map((r) => `${r.companyId}:${r.n}`).join(",");
   const stuckOps: StuckOp[] =
     mode === "cloud"
       ? mineOf(outbox, who)
@@ -1631,6 +1637,7 @@ export function StoreProvider({
       dismissRejected,
       unsentIn: unsentInCompany,
       dropUnsentIn,
+      unsentRemoved,
       refresh,
       loading,
       setOnline: (v) => {
@@ -3006,7 +3013,7 @@ export function StoreProvider({
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : NO_UNDO),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, removedKey, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],
   );
 
   // nothing is written while a state is not loaded: the screen only reads again (A-01)

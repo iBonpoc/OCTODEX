@@ -21,6 +21,7 @@ import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
 import { NameAsk } from "@/nav/NameAsk";
+import { RemovedCompanyNotice } from "@/nav/RemovedCompanyNotice";
 import { BootRoot, useBootDone } from "@/features/boot";
 
 function Shell() {
@@ -47,6 +48,8 @@ function Shell() {
               <ClosedCompanyNotice />
               {/* #1606: once, a sign-in by code made an account without a name */}
               <NameAsk />
+              {/* #1669: removed from a company — its unsent changes are still here */}
+              <RemovedCompanyNotice />
             </View>
           </View>
         </NavMenuProvider>
