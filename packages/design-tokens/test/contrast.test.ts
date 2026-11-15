@@ -79,7 +79,7 @@ describe.each(names)("%s input frame (DS §8.1, #1594: ≥ 3:1 to the screen, WC
 
 describe.each(names)("%s solid glass (DS §6.4, #1467: the tab bar's fallback panel hides the content)", (name) => {
   const c = themes[name];
-  it("ovSolid is opaque and `ov` laid over `bg` is not the content's tone: ink and mut on it ≥ 4.5:1", () => {
+  it("ovSolid is opaque; ink and mut on it ≥ 4.5:1", () => {
     expect(parse(c.ovSolid)[3]).toBe(1);
     expect(ratio(parse(c.ink), parse(c.ovSolid))).toBeGreaterThanOrEqual(4.5);
     expect(ratio(parse(c.mut), parse(c.ovSolid))).toBeGreaterThanOrEqual(4.5);
