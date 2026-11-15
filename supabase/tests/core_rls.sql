@@ -15344,13 +15344,24 @@ insert into public.files (id, company_id, kind, measurement_id, created_by) valu
   ('f2790000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e279000-0000-4000-8000-000000000001', 'a2790000-0000-4000-8000-000000000001');
 set session_replication_role = origin;
 select public.uuid_generate_v7() is not null as warmed;
-update public.visits set starts_at = now() - interval '30 days' where id = 'f2790000-0000-4000-8000-000000000a02';
 :as_tech279
 select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg'),
               'T279 a client''s row: no bytes when his last visit there is over 14 days ago');
 select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters')
               and not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'),
               'T279 a measurement he does not see: no bytes into its photo');
+-- and the same rows when he is on them: a visit to the client today, a measurement of his own
+:as_super
+update public.visits set starts_at = now(), ends_at = now() + interval '2 hours' where id = 'f2790000-0000-4000-8000-000000000a02';
+set session_replication_role = replica;  -- the author is kept by its trigger otherwise
+update public.gutter_measurements set created_by = 'a2790000-0000-4000-8000-000000000001' where id = '9e279000-0000-4000-8000-000000000001';
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech279
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg'),
+              'T279 a client''s row: bytes go with a visit there today');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'),
+              'T279 his own measurement''s photo gets its bytes');
 -- the same photo for the office (it sees the measurement): the check is about him, not the row
 :as_office_a
 select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'), 'T279 the office writes that photo''s bytes');
