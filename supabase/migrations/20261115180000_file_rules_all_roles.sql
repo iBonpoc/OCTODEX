@@ -31,7 +31,10 @@ begin
                          or (f.kind <> 'receipt' and app.is_staff(f.company_id))
                          or (app.is_member(f.company_id) and f.created_by = auth.uid()
                              and (not app.has_role(f.company_id, array['subcontractor'])
-                                  or app.sub_file_ok(f.kind, f.customer_id, f.job_id, f.visit_id, f.measurement_id, false)))))
+                                  or app.sub_file_ok(f.kind, f.customer_id, f.job_id, f.visit_id, f.measurement_id, false))
+                             -- a row with nothing attached made before the limit (#1656): bytes only within it
+                             and (f.visit_id is not null or f.job_id is not null or f.customer_id is not null or f.measurement_id is not null
+                                  or app.bare_files_count(f.company_id, auth.uid(), f.id) < 3))))
          -- one row, one object: no second object of the same file under another extension (the office too)
          and not exists (select 1 from storage.objects o
                           where o.bucket_id = 'files' and o.name <> p_name
@@ -48,11 +51,13 @@ grant execute on function app.can_write_file_object(text) to authenticated;
 -- bytes stay: upload, remove, upload again would be no limit). A document, a drawing or a signature with nothing
 -- attached — not at all (the app never makes one). The office (app.is_staff) and the server are not limited.
 -- the count of the person's such files in the company (security definer: whatever the caller's read rule; only a number)
+-- (only the caller's own: another person's count is never told — p_user_id must be the caller)
 create or replace function app.bare_files_count(p_company_id uuid, p_user_id uuid, p_except uuid)
 returns integer language sql stable security definer set search_path = '' as $$
   select count(*)::int
     from public.files f
-   where f.company_id = p_company_id and f.created_by = p_user_id and f.id is distinct from p_except
+   where p_user_id = auth.uid()
+     and f.company_id = p_company_id and f.created_by = p_user_id and f.id is distinct from p_except
      and f.visit_id is null and f.job_id is null and f.customer_id is null and f.measurement_id is null
      and (f.deleted_at is null or f.storage_key is not null or f.upload_status = 'uploaded')
      and (f.kind = 'photo'
@@ -67,7 +72,7 @@ create or replace function app.tg_files_bare_limit()
 returns trigger language plpgsql set search_path = '' as $$
 declare v_uid uuid := auth.uid();
 begin
-  if current_user not in ('authenticated', 'anon') or v_uid is null then return new; end if;
+  if current_user not in ('authenticated', 'anon') then return new; end if;
   -- still tied to something, or removed: nothing to limit
   if new.visit_id is not null or new.job_id is not null or new.customer_id is not null or new.measurement_id is not null
      or new.deleted_at is not null then
@@ -82,6 +87,10 @@ begin
   if tg_op = 'INSERT' and exists (select 1 from public.files f where f.id = new.id) then return new; end if;
   -- the office (sales included) — not limited; a suspended member is not staff either (has_role needs active)
   if app.is_staff(new.company_id) then return new; end if;
+  -- the app's role with no person behind it: not counted for anyone — refused
+  if v_uid is null then
+    raise exception 'at most 3 files with nothing attached' using errcode = 'P0001';
+  end if;
   if new.kind not in ('photo', 'receipt') then
     raise exception 'a file with nothing attached is a photo or a receipt' using errcode = 'P0001';
   end if;

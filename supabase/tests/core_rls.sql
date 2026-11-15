@@ -14989,7 +14989,7 @@ select tst.ok(has_function_privilege('authenticated', 'app.sub_file_ok(text, uui
               and not has_function_privilege('public', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE'), 'T263 rule 18: the policy''s helper for the app only');
 select tst.ok(not has_function_privilege('anon', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE')
               and not has_function_privilege('authenticated', 'app.tg_files_sub_attach_fixed()', 'EXECUTE'), 'T263 rule 18');
-\echo 'T263 a subcontractor adds only his visits' photos and his own files ok'
+\echo 'T263 a subcontractor adds only his visits photos and his own files ok'
 
 -- ---------------------------------------------------------------- T264–T275 (#1656, #1657): file rules for every role
 -- (red before 20261115180000)
@@ -15029,6 +15029,11 @@ insert into public.files (id, company_id, kind) values
   ('f2650000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f2650000-%'$q$) = 3, 'T265 three photos with nothing attached');
 select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%', 'T265 not a fourth');
+select tst.fails_like($q$insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo' from generate_series(1, 2)$q$, '%at most 3%',
+                      'T265 nor several in one insert');
+select tst.ok(app.bare_files_count('ca000000-0000-0000-0000-000000000000', 'a2640000-0000-4000-8000-000000000001', null) = 3
+              and app.bare_files_count('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', null) = 0,
+              'T265 the count tells the caller only his own');
 -- the queue sends one of them again (on conflict do nothing): not a refusal
 insert into public.files (id, company_id, kind) values ('f2650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo') on conflict do nothing;
 select tst.ok(true, 'T265 the queue sends an insert again: nothing new, no refusal');
@@ -15121,6 +15126,10 @@ insert into public.files (id, company_id, kind, job_id, created_by) values ('f27
 update public.files set job_id = 'e1a00000-0000-0000-0000-000000000002' where id = 'f2740000-0000-4000-8000-000000000001';
 :as_super
 select tst.ok((select job_id = 'e1a00000-0000-0000-0000-000000000002' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 the office moves a file as before');
+:as_sales_a
+update public.files set job_id = 'e1a00000-0000-0000-0000-000000000001' where id = 'f2740000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select job_id = 'e1a00000-0000-0000-0000-000000000001' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 sales (staff) move a file too');
 select tst.server($q$update public.files set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'f2740000-0000-4000-8000-000000000001'$q$);
 select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 a server function moves a tech''s file (merge_customers)');
 \echo 'T274 the office and the server still move files ok'
@@ -15130,6 +15139,9 @@ select tst.ok(tst.cnt($q$select 1 from public.files where created_by = 'a2640000
               'T275 files with nothing attached added before stay as they are');
 :as_tech264
 select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%', 'T275 but no new one');
+-- an old row with nothing attached and no bytes, made before the limit: its bytes are not written while 3 others count
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2700000-0000-4000-8000-000000000009.jpg'),
+              'T275 no bytes into an old bare row over the limit');
 :as_super
 delete from public.visit_assignees where user_id = 'a2640000-0000-4000-8000-000000000001';
 \echo 'T275 old rows stay, new ones are limited ok'
