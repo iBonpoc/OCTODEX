@@ -8,13 +8,20 @@ const { pressEscUntilClosed } = require("../sheet.cjs");
 exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
-  const plus = () => p.locator(wide ? '[data-testid="fab-header"]:visible' : '[data-testid="fab"]:visible');
+  const anyFab = () => p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible');
+  // the job's estimate is a named item of «⋯» (no «＋» on a card, #1395)
+  const estimateInMore = async () => {
+    await p.getByTestId("job-more").locator("visible=true").first().getByRole("button").click();
+    await p.locator('[data-testid^="job-act-"]:visible').first().waitFor({ timeout: 3000 });
+    const n = await p.getByTestId("job-act-estimate").locator("visible=true").count();
+    return n;
+  };
   const patch = (fn) => p.evaluate(fn);
 
   // an ordinary job: «＋» and «Ещё один выезд» / «Запланировать работу» are there
   await h.go("/job/j3");
   await h.expectText(/Drywall patch/, "the job opens");
-  h.expect((await plus().count()) === 1, "an ordinary job has «＋»");
+  h.expect((await anyFab().count()) === 0 && (await estimateInMore()) === 1, "an ordinary job: no «＋», «Создать смету» in «⋯»");
   h.expect((await p.getByRole("button", { name: /^(Ещё один выезд|Запланировать работу)$/ }).count()) >= 1, "an ordinary job can be planned");
 
   // Linda (c3) becomes «Не обслуживаем»
@@ -28,7 +35,7 @@ exports.run = async (h) => {
   await h.expectText(/новых выездов и смет нет/, "the job says the client is not served");
   await h.expectText(/Назначенный выезд можно доделать или перенести/, "and that the set visit is finished as usual");
   h.expect((await p.getByRole("button", { name: /^(Ещё один выезд|Запланировать работу)$/ }).count()) === 0, "no new visit from the job");
-  h.expect((await plus().count()) === 0, "no «＋» (visit / estimate) on the job");
+  h.expect((await anyFab().count()) === 0 && (await estimateInMore()) === 0, "no new estimate on the job");
   await h.shot("job");
   await h.go("/job/schedule?jobId=j3");
   await h.expectText(/новых выездов и смет нет/, "/job/schedule refuses");

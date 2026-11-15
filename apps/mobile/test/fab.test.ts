@@ -54,11 +54,11 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
   it("Объект: the same «＋» as the client, tied to the client and this property (20 §6-4, S17 / S5)", () => {
     const ctx = { customerId: "c1", propertyId: "p1" };
     expect(fabItems("client", "director", ctx).map((i) => i.href)).toEqual(["/estimate/new?customerId=c1&propertyId=p1", "/job/new?customerId=c1&propertyId=p1"]);
-    // the screen declares it only for a client that may be served (both of its screens: the card and a row's list)
-    const src = fs.readFileSync(path.join(APP, "property/[id].tsx"), "utf8");
-    expect(src.match(/fab=\{servable \? "client" : undefined\}/g)?.length).toBe(2);
-    expect(src.match(/fabCtx=\{\{ customerId: p\.customerId, propertyId: p\.id \}\}/g)?.length).toBe(2);
-    expect(src).toMatch(/const servable = canServe\(db, p\.customerId\)/);
+    // #1395: the screens no longer pass it to a floating/header «＋» — the card names its own buttons («Смета», «Работа без сметы»); the set stays
+    // as the one rule for who may make what (the client card's buttons read it)
+    for (const f of ["client/[id].tsx", "property/[id].tsx", "job/[id].tsx"]) expect(fs.readFileSync(path.join(APP, f), "utf8"), f).not.toMatch(/\bfab=/);
+    const add = fs.readFileSync(path.join(APP, "../features/client/AddObject.tsx"), "utf8");
+    expect(add).toMatch(/role === "tech" \|\| !canServe\(db, customerId\)/);
   });
   it("Работа: planners — Выезд · Смета (client and property); tech — Расход", () => {
     const items = fabItems("job", "director", FULL);
