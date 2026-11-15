@@ -1,0 +1,97 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>33 ds-mark prototype</title>
+<!-- Статичный прототип #1585 (этап 0). Значения — из packages/design-tokens (themes.*, drawing.*, status.warn), новые — помечены NEW.
+     ?v=A|B|C|outlet|pulse  &t=dark|light  &w=390|1280 -->
+<style>
+:root{--r-card:16px}
+[data-t=dark]{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;--bd:rgba(255,255,255,.14);--acc:#FBFF00;--onacc:#0B0C0F;--warn:#FF8A3D;--warnT:#FFB47E;--warnOn:#0B0C0F;--s1:#7FD4FF;--s2:#FFC46B;--node:#F2F3F5;--grid:rgba(255,255,255,.06);--grid2:rgba(255,255,255,.11)}
+[data-t=light]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--bd:rgba(20,22,30,.1);--acc:#FBFF00;--onacc:#0B0C0F;--warn:#FF8A3D;--warnT:#944600;--warnOn:#0B0C0F;--s1:#0B6290;--s2:#8A4F00;--node:#15161A;--grid:rgba(20,22,30,.05);--grid2:rgba(20,22,30,.1)}
+*{box-sizing:border-box;margin:0}
+body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+.scr{position:relative;width:100vw;height:100vh;background:var(--bg)}
+svg.cv{position:absolute;inset:0;width:100%;height:100%}
+.top{position:absolute;left:12px;right:12px;top:12px;display:flex;gap:8px;align-items:center}
+.pill{height:36px;border-radius:18px;background:var(--surf2);border:1px solid var(--bd);display:flex;align-items:center;padding:0 14px;font-size:15px;font-weight:600;white-space:nowrap}
+.pill.ic{width:36px;padding:0;justify-content:center}
+.pill.acc{background:var(--acc);color:var(--onacc);border:0;margin-left:auto}
+.ban{position:absolute;left:12px;right:12px;top:60px;border:1px solid var(--warn);border-radius:var(--r-card);background:var(--solid);padding:12px 14px}
+.w1280 .ban{left:auto;right:16px;width:420px;top:60px}
+.ban b{font-size:15px;display:flex;gap:8px;align-items:center}
+.ban p{font-size:13px;color:var(--mut);margin:4px 0 10px 28px}
+.ban .btn{margin-left:28px;display:inline-flex;height:36px;padding:0 14px;align-items:center;border-radius:18px;background:var(--surf2);border:1px solid var(--bd);font-size:15px;font-weight:600}
+.tb{position:absolute;left:12px;right:12px;bottom:70px;height:56px;border-radius:20px;background:var(--surf2);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around;font-size:13px;color:var(--mut)}
+.w1280 .tb{left:50%;width:520px;transform:translateX(-50%)}
+.cap{position:absolute;left:12px;bottom:18px;font-size:13px;color:var(--mut);background:var(--surf2);border:1px solid var(--bd);border-radius:18px;padding:8px 12px;max-width:calc(100vw - 24px)}
+.lg{position:absolute;right:16px;bottom:150px;width:300px;background:var(--solid);border:1px solid var(--bd);border-radius:var(--r-card);padding:12px 14px;font-size:13px}
+.w390 .lg{left:12px;right:12px;width:auto;bottom:140px}
+.lg h4{font-size:13px;color:var(--mut);font-weight:600;margin-bottom:6px}
+.lg div{display:flex;align-items:center;gap:10px;min-height:30px}
+</style></head>
+<body><div class="scr" id="scr"></div>
+<script>
+const q=new URLSearchParams(location.search),V=q.get('v')||'B',T=q.get('t')||'dark',W=+(q.get('w')||390);
+document.body.dataset.t=T;const S=document.getElementById('scr');S.className='scr w'+W;
+const H=W===390?844:800, C=getComputedStyle(document.body);
+const k=(n)=>C.getPropertyValue('--'+n).trim();
+// tokens: drawing.runW 4, runWSel 6, dsR 7, nodeR 5, labelGap 4; DS_MARK_R = 12
+const runW=4,dsMR=12,FS=11;
+const ALERT='M12 4l9.5 16h-19zM12 10v4M12 17h.01';
+let g='';
+// grid
+for(let x=0;x<W;x+=24)g+=`<line x1="${x}" y1="0" x2="${x}" y2="${H}" stroke="${x%96?k('grid'):k('grid2')}"/>`;
+for(let y=0;y<H;y+=24)g+=`<line x1="0" y1="${y}" x2="${W}" y2="${y}" stroke="${y%96?k('grid'):k('grid2')}"/>`;
+const ox=W===390?0:380, oy=W===390?0:-20;
+const P=(x,y)=>[x+ox,y+oy];
+function run(a,b,col,len,sel){const [x1,y1]=P(...a),[x2,y2]=P(...b);let s='';
+ if(sel)s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('bg')}" stroke-width="${6+4}" stroke-linecap="round"/>`;
+ s+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="${sel?6:runW}" stroke-linecap="round"/>`;
+ s+=`<circle cx="${x1}" cy="${y1}" r="5" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/><circle cx="${x2}" cy="${y2}" r="5" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/>`;
+ if(len){const mx=(x1+x2)/2,my=(y1+y2)/2;const vert=Math.abs(x2-x1)<2;s+=`<text x="${vert?mx-12:mx}" y="${vert?my:my-12}" font-size="12" fill="${k('ink')}" text-anchor="${vert?'end':'middle'}" font-weight="600">${len}</text>`;}
+ return s;}
+function ds(p,n,col){const [x,y]=P(...p);return `<circle cx="${x}" cy="${y}" r="${dsMR}" fill="${col}" stroke="${k('bg')}" stroke-width="2"/><text x="${x}" y="${y+FS*.35}" font-size="${FS}" font-weight="700" fill="${k('bg')}" text-anchor="middle">D${n}</text>`;}
+function outlet(p,col,kind,to){const [x,y]=P(...p),h=8;let s=`<rect x="${x-h}" y="${y-h}" width="${2*h}" height="${2*h}" rx="2" fill="${k('bg')}" stroke="${col}" stroke-width="2.5"/><path d="M${x-h+3} ${y-h+3}L${x+h-3} ${y+h-3}M${x-h+3} ${y+h-3}L${x+h-3} ${y-h+3}" stroke="${col}" stroke-width="2"/>`;
+ if(kind==='to'){const [tx,ty]=P(...to);s=`<path d="M${x} ${y+h+2}L${tx} ${ty-8}" stroke="${col}" stroke-width="2" stroke-dasharray="5 4"/><path d="M${tx-5} ${ty-13}L${tx} ${ty-6}L${tx+5} ${ty-13}" fill="none" stroke="${col}" stroke-width="2"/>`+s;}
+ if(kind==='chain'){for(let i=0;i<3;i++){s+=`<ellipse cx="${x}" cy="${y+h+7+i*9}" rx="3.5" ry="5" fill="none" stroke="${col}" stroke-width="2"/>`;}}
+ return s;}
+function ghost(p,pulse){const [x,y]=P(...p),r=dsMR;let s='';
+ if(pulse){s+=`<circle cx="${x}" cy="${y}" r="${r*pulse}" fill="none" stroke="${k('warnT')}" stroke-width="3" opacity="${1.9-pulse}"/>`;}
+ s+=`<circle cx="${x}" cy="${y}" r="${r}" fill="${k('bg')}" stroke="${k('warnT')}" stroke-width="2.5" stroke-dasharray="4 3"/>`;
+ s+=`<g transform="translate(${x-8},${y-8.5}) scale(.67)"><path d="${ALERT}" fill="none" stroke="${k('warnT')}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/></g>`;return s;}
+function chip(p,txt,dx=16,dy=-30){const [x,y]=P(...p);const w=txt.length*6.6+34;return `<g transform="translate(${x+dx},${y+dy})"><rect width="${w}" height="24" rx="12" fill="${k('warn')}"/><g transform="translate(7,3.5) scale(.7)"><path d="${ALERT}" fill="none" stroke="${k('warnOn')}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/></g><text x="27" y="16.5" font-size="12" font-weight="700" fill="${k('warnOn')}">${txt}</text></g>`;}
+const S1=k('s1');
+// scene: chain A (L: top 228ft? horizontal + vertical) short; run B with D1
+const A1=[40,300],A2=[300,300],A3=[300,470], B1=[60,560],B2=[260,560];
+let scene='';
+const sel = q.get('sel')==='1';
+if(V==='C'){ // dashed warn casing along the chain
+ for(const [a,b] of [[A1,A2],[A2,A3]]){const [x1,y1]=P(...a),[x2,y2]=P(...b);scene+=`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('warn')}" stroke-width="14" stroke-linecap="round" stroke-dasharray="10 8" opacity=".9"/><line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${k('bg')}" stroke-width="8" stroke-linecap="round"/>`;}
+}
+scene+=run(A1,A2,S1,"21′ 8″",sel)+run(A2,A3,S1,"14′ 2″",false)+run(B1,B2,S1,"16′ 9″",false)+ds([B2[0]-36,560],1,S1);
+const spot=[A3[0],A3[1]-36];
+if(V==='A') scene+=chip([170,300],'Нет водостока',-48,16);
+if(V==='B'||V==='C') scene+=ghost(spot)+chip(spot,'Нет водостока',-128,-12);
+if(V==='pulse'){const f=+(q.get('f')||1.5);scene+=ghost(spot,f)+chip(spot,'Нет водостока',-128,-12);}
+if(V==='outlet'){
+ scene=run(A1,A2,S1,"21′ 8″")+run(A2,A3,S1,"14′ 2″")+run(B1,B2,S1,"16′ 9″")+ds([A3[0],A3[1]-36],1,S1)+ds([B2[0]-36,560],2,S1);
+ // upper storey run draining into A via outlet
+ const U1=[90,190],U2=[250,190];scene+=run(U1,U2,k('s2'),"13′ 4″")+outlet([U1[0]+36,190],k('s2'),'to',[U1[0]+36,300]);
+ scene+=outlet([A1[0]+190,300],S1,'chain');
+}
+let html=`<svg class="cv" viewBox="0 0 ${W} ${H}">${g}${scene}</svg>`;
+html+=`<div class="top"><span class="pill ic">‹</span><span class="pill">+ Сделать заявку</span><span class="pill ic">⋯</span><span class="pill acc">Готово</span></div>`;
+if(V!=='outlet') html+=`<div class="ban"><b><svg width="20" height="20" viewBox="0 0 24 24"><path d="${ALERT}" fill="none" stroke="${k('warnT')}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>Не хватает водостока</b><p>Желоб 35′ 10″: водостоков 0 из 1</p><span class="btn">Поставить водосток</span></div>`;
+html+=`<div class="tb"><span>Желоб</span><span>Водосток</span><span>Эт 1</span><span>↶</span><span>↷</span><span>🗑</span></div>`;
+const caps={A:'Вариант А — значок-плашка у середины желоба',B:'Вариант Б — «призрак» водостока на месте, где он встанет',C:'Вариант В — пунктирный контур цепи + «призрак»',pulse:'Импульс после нажатия на плашку: кадр '+(q.get('f')||''),outlet:'Выпуск на холсте: D1 — водосток с выпуском; ⊠ — выпуск без водостока'};
+if(V==='outlet'){
+ const sq=(kind)=>`<svg width="28" height="34" viewBox="-14 -12 28 34">${outlet([-(ox),-(oy)],k('s1'),kind,[-(ox),20-oy]).replace(/NaN/g,'0')}</svg>`;
+ html+=`<div class="lg"><h4>Обозначения</h4>
+ <div><svg width="28" height="28" viewBox="-14 -14 28 28">${ds([-ox,-oy],1,k('s1'))}</svg>Водосток (с выпуском)</div>
+ <div><svg width="28" height="28" viewBox="-14 -14 28 28">${outlet([-ox,-oy],k('s1'))}</svg>Выпуск без водостока</div>
+ <div><svg width="28" height="34" viewBox="-14 -12 28 34">${outlet([-ox,-oy],k('s1'),'to',[-ox,20-oy])}</svg>Выпуск в другой желоб</div>
+ <div><svg width="28" height="40" viewBox="-14 -12 28 40">${outlet([-ox,-oy],k('s1'),'chain')}</svg>Выпуск с цепью</div>
+ <div><svg width="28" height="28" viewBox="-14 -14 28 28">${ghost([-ox,-oy])}</svg>Не хватает водостока (только в редакторе)</div></div>`;
+}
+html+=`<div class="cap">${caps[V]}${sel?' · желоб выбран':''}</div>`;
+S.innerHTML=html;
+</script></body></html>
