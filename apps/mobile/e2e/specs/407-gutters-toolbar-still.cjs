@@ -1,5 +1,5 @@
 /**
- * e2e 397 — #1630 (found by e2e 396, 15.11): a tap on the toolbar reached the canvas under it. The summary chip («Дальше: водостоки»,
+ * e2e 407 — #1630 (found by e2e 396, 15.11): a tap on the toolbar reached the canvas under it. The summary chip («Дальше: водостоки»,
  * what is picked) sat under the toolbar: it came and went, the toolbar jumped by a chip's height, and the second tap of a double tap
  * on «Водосток» landed on the gutter under it — a downspout and its sheet nobody asked for. Now the toolbar is the lowest, at the
  * very edge; the chip and the hints are above it. Here: the toolbar stays where it is while the chip comes and goes, and a gutter
