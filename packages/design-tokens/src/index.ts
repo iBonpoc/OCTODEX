@@ -292,6 +292,8 @@ export interface ThemeColors {
   bdField: string;
   track: string;
   ov: string;
+  /** `ov` without the transparency: the glass of a floating layer where the glass must not show the content (the tab bar's fallback panel, DS §6.4; «Reduce transparency», #1467) */
+  ovSolid: string;
   acc: string;
   onAcc: string;
   scrim: string;
@@ -327,6 +329,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     bdField: "rgba(255,255,255,0.38)",
     track: "rgba(255,255,255,0.12)",
     ov: "rgba(38,41,48,0.72)",
+    ovSolid: "#262930",
     acc: "#FBFF00",
     onAcc: "#0B0C0F",
     scrim: "rgba(0,0,0,0.42)",
@@ -362,6 +365,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
     bdField: "rgba(20,22,30,0.5)",
     track: "rgba(20,22,30,0.09)",
     ov: "rgba(250,248,244,0.78)",
+    ovSolid: "#FAF8F4",
     acc: "#FBFF00",
     onAcc: "#0B0C0F",
     scrim: "rgba(20,22,30,0.25)",

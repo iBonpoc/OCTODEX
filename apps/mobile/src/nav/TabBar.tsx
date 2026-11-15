@@ -220,7 +220,7 @@ function NavPill({ current: sectionNow, onGo, onGoHref, path }: { current: Secti
 function Surface({ liquid, scheme, style, children }: { liquid: boolean; scheme: "light" | "dark"; style: object; children: ReactNode }) {
   if (!liquid) {
     return (
-      <Glass strong style={style}>
+      <Glass strong solid style={style}>
         {children}
       </Glass>
     );

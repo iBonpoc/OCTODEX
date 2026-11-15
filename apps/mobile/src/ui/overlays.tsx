@@ -28,8 +28,10 @@ import type { GuardedUndo } from "@/data/undo";
 export const ALL_ORIENTATIONS: ("portrait" | "portrait-upside-down" | "landscape")[] = ["portrait", "portrait-upside-down", "landscape"];
 
 /* ---------- Glass panel (overlay background --ov + blur --blurov) ---------- */
-export function Glass({ children, style, strong, testID }: { children: ReactNode; style?: object; strong?: boolean; testID?: string }) {
+export function Glass({ children, style, strong, solid, testID }: { children: ReactNode; style?: object; strong?: boolean; solid?: boolean; testID?: string }) {
   const { c } = useTheme();
+  // solid: no blur, `ovSolid` — a layer that sits over scrolling text must not show it through (the tab bar, #1467)
+  if (solid) return <View testID={testID} style={[{ overflow: "hidden", backgroundColor: c.ovSolid, borderColor: c.bd, borderWidth: 1 }, style]}>{children}</View>;
   return (
     <View testID={testID} style={[{ overflow: "hidden", backgroundColor: c.ov, borderColor: c.bd, borderWidth: 1 }, style]}>
       <BlurView intensity={strong ? c.blurOverlay * 3 : c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
