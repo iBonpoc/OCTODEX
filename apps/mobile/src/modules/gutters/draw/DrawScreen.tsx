@@ -984,6 +984,10 @@ export default function DrawScreen() {
   }, [selected]);
   /** two taps on «Желоб» / «Водосток» in the toolbar: the properties of new ones (#1563 PR B); one tap picks the tool, as before */
   const toolTap = useRef<LastTap | null>(null);
+  /** a tool was just picked: the layout under the toolbar waits for the window of a second tap (the toolbar does not move under it) */
+  const [toolFresh, setToolFresh] = useState(false);
+  const freshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (freshTimer.current) clearTimeout(freshTimer.current); }, []);
   const toolPress = (tl: Tool) => {
     const now = Date.now();
     if (isDoubleTap(toolTap.current, now, tl, motion.doubleTapMs)) {
@@ -993,6 +997,9 @@ export default function DrawScreen() {
       return;
     }
     toolTap.current = { at: now, id: tl };
+    setToolFresh(true);
+    if (freshTimer.current) clearTimeout(freshTimer.current);
+    freshTimer.current = setTimeout(() => setToolFresh(false), motion.doubleTapMs + motion.durFast);
     pick(tl);
   };
   const pick = (tl: Tool) => {
@@ -1117,9 +1124,10 @@ export default function DrawScreen() {
   // the summary chip: the parts are the engine's (rule 8) from the drawing as it is when the finger rests — not on every frame of a drag
   const calmDrawing = useDeferredValue(drawing);
   const parts = useMemo(() => (calmDrawing.runs.length ? computeGutterParts(toMeasurement(calmDrawing, { method: rules.corner }), rules.over).parts : []), [calmDrawing, rules]);
-  // «Дальше: водостоки» stays when «Водосток» is picked (#1563 PR B): the row going away moved the whole toolbar down by its height under the
-  // finger — the second of two taps on the tool landed on the canvas. Hidden only while a line is being drawn
-  const summary0 = summaryOf(drawing, parts, selText ? { text: selText, dsIcon: selDsIcon } : null, !!ghost);
+  // «Дальше: водостоки» goes when «Водосток» is picked (the user is doing it) — but only once the window of a double tap is over (#1563 PR B):
+  // the row going away at once moved the whole toolbar down by its height under the finger, and the second of two taps on the tool landed
+  // on the canvas
+  const summary0 = summaryOf(drawing, parts, selText ? { text: selText, dsIcon: selDsIcon } : null, (tool === "ds" && !toolFresh) || !!ghost);
   // a module that is off still says what is picked (as the old row did); the hint and the totals are for a drawing that is saved
   const summary = canSave || summary0?.kind === "selected" ? summary0 : null;
   const summaryA11y = !summary ? "" : summary.kind === "selected" ? summary.text : summary.kind === "nextDs" ? t("mod.gutters.draw.nextDs") : t("mod.gutters.draw.summaryA11y", { g: summary.gutterFt, d: summary.dsCount, p: summary.pipeFt });

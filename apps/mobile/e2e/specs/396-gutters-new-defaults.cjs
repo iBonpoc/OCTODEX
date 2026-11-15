@@ -26,8 +26,7 @@ exports.run = async (h) => {
     const b = await tid(`draw-tool-${tool}`).boundingBox();
     // the toolbar does not move when a tool is picked (the first of the two taps): the second lands on the same cell
     await tid(`draw-tool-${tool}`).getByRole("button").click();
-    await pastDoubleTap(p);
-    const b1 = await tid(`draw-tool-${tool}`).boundingBox();
+    const b1 = await tid(`draw-tool-${tool}`).boundingBox(); // inside the window of a second tap: where the second tap goes
     h.expect(Math.abs(b1.y - b.y) < 1 && Math.abs(b1.x - b.x) < 1, `picking «${tool}» does not move the toolbar (${Math.round(b.y)} → ${Math.round(b1.y)})`);
     await doubleTapUntil(p, b.x + b.width / 2, b.y + b.height / 2, { fn: () => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), arg: null }, `two taps on «${tool}»: its new ones' properties`);
   };
@@ -125,8 +124,8 @@ exports.run = async (h) => {
   h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Для новых желобов» still brown (${await chosen("attr-color")})`);
   // «Сбросить»: white again (as in the company's settings)
   await tid("draw-new-defaults-reset").getByRole("button").click();
-  await p.waitForFunction(() => !/Коричнев/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
-  h.expect((await tid("draw-new-defaults-reset").count()) === 0, "nothing of its own: no reset");
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
+  h.expect((await chosen("attr-color")) === "Белый", `«Сбросить»: the company's colour again (${await chosen("attr-color")})`);
   await closeNew();
   // a gutter drawn now is white again (between the two that are there after the reload fitted them to the screen)
   const before = (await runs()).length;
