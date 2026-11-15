@@ -7,14 +7,13 @@
 exports.run = async (h) => {
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true");
-  const wipe = (what) =>
-    p.evaluate((k) => {
-      const s = JSON.parse(localStorage.getItem("octo.db.v5"));
-      if (k === "customers") s.db.customers = [];
-      if (k === "activities") s.db.activities = [];
-      localStorage.setItem("octo.db.v5", JSON.stringify(s));
-      localStorage.setItem("octo.role.v1", JSON.stringify("director"));
-    }, what);
+  // emptied from a page without the app (h.seed): the running app would write its own state back on pagehide
+  const wipe = async (what) => {
+    const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+    raw.db[what] = [];
+    await h.seed("octo.db.v5", raw);
+    await h.seed("octo.role.v1", "director");
+  };
 
   await h.go("/today");
   await wipe("customers");
