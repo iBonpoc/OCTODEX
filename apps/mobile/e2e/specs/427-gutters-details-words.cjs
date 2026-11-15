@@ -1,0 +1,46 @@
+/**
+ * e2e 427 — «Подробно» в просмотре замера говорит словами, без нулей и кодов (#814, аудит Q-04). Every view.
+ * - a gutter and a downspout (by default no elbows and no offsets): its line has no «колен 0 · офсетов 0» (it was there);
+ *   its size reads «2"×3"» (as on the canvas), not «2x3»;
+ * - the parts are words: no row is a code (`snake_case`, `coil.…`, `dsstick.…`), none is «0».
+ * Finds things by testID; waits on what it checks.
+ */
+const { skipLength, closeDsMenu, openView, pressWhenStill, canvasAt } = require("../gutters.cjs");
+
+exports.run = async (h) => {
+  const p = h.page;
+  const tid = (id) => p.getByTestId(id).locator("visible=true");
+
+  await h.go("/company/modules");
+  await tid("module-gutters-enable").getByRole("button").click();
+  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await h.go("/module/gutters/draw");
+  await tid("draw-surface").waitFor({ timeout: 8000 });
+  const b = await p.getByTestId("draw-surface").boundingBox();
+  const y = b.y + b.height * 0.4, x0 = b.x + b.width * 0.2, x1 = b.x + b.width * 0.6;
+  await canvasAt(p, x0, y);
+  await p.mouse.move(x0, y);
+  await p.mouse.down();
+  for (let i = 1; i <= 10; i++) await p.mouse.move(x0 + ((x1 - x0) * i) / 10, y);
+  await p.mouse.up();
+  await skipLength(p);
+  await tid("draw-tool-ds").getByRole("button").click();
+  await p.mouse.click((x0 + x1) / 2, y);
+  await closeDsMenu(p);
+  await tid("draw-done").waitFor({ timeout: 8000 });
+
+  await openView(p);
+  await tid("view-svg").waitFor({ timeout: 5000 });
+  await pressWhenStill(tid("view-details").getByRole("button"));
+  await tid("view-ds-1").waitFor({ timeout: 5000 });
+
+  const ds = (await tid("view-ds-1").innerText()).replace(/\s+/g, " ");
+  h.expect(!/офсетов 0|колен 0/.test(ds), `no zero row beside the downspout (${ds})`);
+  h.expect(/\d["″]×\d["″]/.test(ds) && !/\dx\d/.test(ds), `the size reads «2"×3"» as on the canvas (${ds})`);
+
+  const rows = (await tid("view-parts").locator("xpath=..").innerText()).split("\n").map((s) => s.trim()).filter(Boolean);
+  h.expect(rows.length > 2, `the parts are listed (${rows.length})`);
+  const codes = rows.filter((r) => /\b[a-z]+_[a-z_]+\b|\bcoil\.|\bdsstick\./.test(r));
+  h.expect(codes.length === 0, `no part is a code (${codes.join(" | ")})`);
+  await h.shot("details");
+};
