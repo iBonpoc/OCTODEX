@@ -850,12 +850,7 @@ export default function DrawScreen() {
     if (!selected) return;
     const before = drawing;
     commit(removeElement(drawing, selected));
-    // a downspout taken off and its gutter is short now (#1570): that gutter is picked — it shows on the drawing which one the warning means
-    // (founder 14.11: «что значит, нет подсветки жёлоба?»)
-    const o = cur.current.autoDs;
-    const goneDs = drawing.downspouts.find((x) => x.id === selected);
-    const shortOne = goneDs && o && canSave ? shortChains(cur.current.drawing, o.spacingIn).find((c) => c.runIds.includes(goneDs.runId)) : undefined;
-    setSelected(shortOne ? goneDs!.runId : null);
+    setSelected(null);
     const gone = selected;
     // «Отменить» puts back what was deleted and keeps what was drawn since
     toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing, true))); // put back as it was: no recount (#1264)
