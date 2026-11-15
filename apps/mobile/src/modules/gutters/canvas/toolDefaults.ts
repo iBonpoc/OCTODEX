@@ -48,10 +48,23 @@ export function prune(map: DefaultsMap, live: ReadonlySet<string>): DefaultsMap 
   return keep.length === Object.keys(map).length ? map : Object.fromEntries(keep);
 }
 
-/** one measurement's entry set (empty — removed) */
+/** anything set (an empty entry is not kept) */
+export const hasAny = (nd: NewDefaults | undefined): boolean => !!(nd && (nd.run || nd.ds));
+
+/** one measurement's entry set (empty — removed); the same map back when nothing changes (no write) */
 export function putDefaults(map: DefaultsMap, id: string, nd: NewDefaults): DefaultsMap {
+  if (JSON.stringify(map[id] ?? null) === JSON.stringify(hasAny(nd) ? nd : null)) return map;
   const { [id]: _was, ...rest } = map;
-  return nd.run || nd.ds ? { ...rest, [id]: nd } : rest;
+  return hasAny(nd) ? { ...rest, [id]: nd } : rest;
+}
+
+/**
+ * The measurement became known (opened, or a new one first saved) and its entry was read: what the screen uses now. A choice made on the
+ * screen before (a new drawing, or while the read went on) is newer than the stored one — it wins and is written (code-reviewer #1563 PR B:
+ * it was lost); nothing chosen — the stored one.
+ */
+export function adopt(local: NewDefaults, stored: NewDefaults | undefined): { nd: NewDefaults; write: boolean } {
+  return hasAny(local) ? { nd: local, write: true } : { nd: stored ?? {}, write: false };
 }
 
 export const NEW_DEFAULTS_KEY = "octo.mod.gutters.newDefaults.v1";
@@ -67,3 +80,27 @@ export async function loadDefaults(): Promise<DefaultsMap> {
 }
 
 export const saveDefaults = (map: DefaultsMap) => AsyncStorage.setItem(NEW_DEFAULTS_KEY, JSON.stringify(map)).catch(() => {});
+
+/**
+ * Every change of the stored map goes through one queue and re-reads the map first (code-reviewer #1563 PR B): two drawing screens open (a
+ * link to another measurement, two tabs on the web) never write over each other's entries with an old copy.
+ */
+let queue: Promise<unknown> = Promise.resolve();
+function change(f: (map: DefaultsMap) => DefaultsMap): Promise<void> {
+  const run = queue.then(async () => {
+    const map = await loadDefaults();
+    const next = f(map);
+    if (next !== map) await saveDefaults(next);
+  });
+  queue = run.catch(() => {});
+  return run;
+}
+
+/** one measurement's entry written (empty — removed) */
+export const storeDefaults = (id: string, nd: NewDefaults) => change((map) => putDefaults(map, id, nd));
+
+/** the entries of measurements that are gone dropped — only when the phone's data is loaded (`live` is then the whole list), the open one kept */
+export const pruneStored = (live: ReadonlySet<string>) => change((map) => prune(map, live));
+
+/** one measurement's entry, as stored now (after the writes queued before) */
+export const readDefaults = (id: string): Promise<NewDefaults | undefined> => queue.then(() => loadDefaults()).then((map) => map[id]);

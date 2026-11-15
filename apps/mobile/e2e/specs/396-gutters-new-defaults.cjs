@@ -1,8 +1,8 @@
 /**
  * e2e 396 — #1563 PR B (founder 14.11: «на таб-баре, когда нажимаю два раза на этот [желоб] или на даунспот — свойства»; spec
- * 33-gutters-canvas-ui «Двойное нажатие на инструмент»). Two taps on «Желоб» in the toolbar open «Новые желоба»; a colour picked there is the
+ * 33-gutters-canvas-ui «Двойное нажатие на инструмент»). Two taps on «Желоб» in the toolbar open «Для новых желобов»; a colour picked there is the
  * colour of every NEW gutter of this drawing, the gutter drawn before keeps its own; after a reload it is still there (kept on this phone);
- * «Как в настройках компании» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
+ * «Сбросить» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
  */
 const { skipLength, pastDoubleTap, doubleTapUntil } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
@@ -39,6 +39,27 @@ exports.run = async (h) => {
     }
     await p.waitForFunction(() => ![...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), null, { timeout: 5000 });
   };
+  const dsOf = async () => (await els()).filter((e) => e.kind === "downspout");
+  const waitDs = (n) => p.waitForFunction(([k, want]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "downspout").length === want, [KEY, n], { timeout: 8000 });
+  /** a downspout's menu (it opens by itself when one is put) closed */
+  const closeAttrs = async () => {
+    await tid("attr-panel").waitFor({ timeout: 5000 });
+    if (wide) await tid("draw-panel-close").getByRole("button").click();
+    else {
+      await pressEscUntilClosed(p);
+      await sheetGone(p);
+    }
+  };
+  /** «Водосток» picked, a tap on the gutter drawn at `y` (a share of the surface) */
+  const putDs = async (y, n) => {
+    await pastDoubleTap(p);
+    await tid("draw-tool-ds").getByRole("button").click();
+    await pastDoubleTap(p);
+    const b = await p.getByTestId("draw-surface").boundingBox();
+    await p.mouse.click(b.x + b.width * 0.35, b.y + b.height * y);
+    await waitDs(n);
+    await closeAttrs();
+  };
   const stroke = async (y) => {
     const b = await p.getByTestId("draw-surface").boundingBox();
     const a = [b.x + b.width * 0.15, b.y + b.height * y], z = [b.x + b.width * 0.55, b.y + b.height * y];
@@ -62,7 +83,7 @@ exports.run = async (h) => {
   const first = (await runs())[0];
   h.expect(first.attrs.color === "white", `the first gutter: the company's colour (${first.attrs.color})`);
 
-  // two taps on «Желоб»: «Новые желоба»; brown there
+  // two taps on «Желоб»: «Для новых желобов»; brown there
   await openNew("line");
   h.expect((await tid("attr-length").count()) === 0 && (await tid("attr-story").count()) === 0, "no length and no story among the new gutters' rows");
   await choose("attr-color", "Коричневый");
@@ -78,20 +99,47 @@ exports.run = async (h) => {
   h.expect(second.attrs.color === "brown", `the new gutter: brown (${second.attrs.color})`);
   h.expect(two.find((r) => r.id === first.id).attrs.color === "white", "the gutter drawn before: still white");
 
-  // «Водосток» (before the reload: the reload fits the drawing to the screen and a gutter may lie under the toolbar — #1630): two taps — «Новые водостоки», its own rows
+  // «Водосток» (before the reload: the reload fits the drawing to the screen and a gutter may lie under the toolbar — #1630)
+  // a downspout put before: the company's size
+  await putDs(0.25, 1);
+  const dsBefore = (await dsOf())[0];
+  // two taps — «Для новых водостоков», its own rows; 3×4 there
   await openNew("ds");
   await tid("attr-ds-size").waitFor({ timeout: 5000 });
-  h.expect(/Новые водостоки/.test(await tid("draw-new-defaults").innerText()), "«Новые водостоки»");
+  await choose("attr-ds-size", "3×4");
+  await p.waitForFunction(() => /3×4/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
+  // the title: the phone's sheet has it in its header (with «✕»), wider the column has it on top
+  const title = wide ? await tid("draw-new-defaults").innerText() : await tid("sheet-title").innerText();
+  h.expect(/Для новых водостоков/.test(title), `«Для новых водостоков» (${JSON.stringify(title.slice(0, 60))})`);
+  if (!wide) h.expect((await tid("sheet-close").count()) === 1, "the phone's sheet has its «✕»");
   await closeNew();
+  // a new downspout is 3×4; the one put before keeps the company's size
+  await putDs(0.6, 2);
+  const dsNew = (await dsOf()).find((x) => x.id !== dsBefore.id);
+  h.expect(dsNew.attrs.size === "3x4", `the new downspout: 3×4 (${dsNew.attrs.size})`);
+  h.expect((await dsOf()).find((x) => x.id === dsBefore.id).attrs.size === dsBefore.attrs.size && dsBefore.attrs.size !== "3x4", `the downspout put before: still ${dsBefore.attrs.size}`);
   // after a reload (the same measurement): still brown for new ones (kept on this phone)
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await openNew("line");
-  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Новые желоба» still brown (${await chosen("attr-color")})`);
-  // «Как в настройках компании»: white again
+  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Для новых желобов» still brown (${await chosen("attr-color")})`);
+  // «Сбросить»: white again (as in the company's settings)
   await tid("draw-new-defaults-reset").getByRole("button").click();
   await p.waitForFunction(() => !/Коричнев/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
   h.expect((await tid("draw-new-defaults-reset").count()) === 0, "nothing of its own: no reset");
+  await closeNew();
+  // a gutter drawn now is white again (between the two that are there after the reload fitted them to the screen)
+  const before = (await runs()).length;
+  await stroke(0.45);
+  await waitRuns(before + 1);
+  const newest = (await runs()).find((r) => r.id !== first.id && r.id !== second.id);
+  h.expect(newest.attrs.color === "white", `after «Сбросить»: a new gutter is white again (${newest.attrs.color})`);
+  // «Для новых водостоков» after the reload: still 3×4; «Сбросить» — the company's size
+  await openNew("ds");
+  h.expect(/3×4/.test(await chosen("attr-ds-size")), `after a reload: «Для новых водостоков» still 3×4 (${await chosen("attr-ds-size")})`);
+  await tid("draw-new-defaults-reset").getByRole("button").click();
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
+  h.expect(!/3×4/.test(await chosen("attr-ds-size")), "«Сбросить»: the company's size again");
   await closeNew();
 
   // one tap on a tool still just picks it (no properties)

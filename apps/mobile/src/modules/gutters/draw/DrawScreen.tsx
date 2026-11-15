@@ -32,7 +32,7 @@ import { useHideTabBar } from "@/nav/tabBarHide";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
-import { dsFor, loadDefaults, patchDs, patchRun, prune, putDefaults, resetKind, runFor, saveDefaults, type DefaultsMap, type NewDefaults } from "../canvas/toolDefaults";
+import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
@@ -832,19 +832,28 @@ export default function DrawScreen() {
     </>
   );
   // «Новые желоба» / «Новые водостоки» (#1563 PR B): the rows of a gutter's / downspout's properties, for the new ones of this drawing
-  const newBody = !newSheet ? null : (
+  const newTitle = newSheet === "line" ? t("mod.gutters.draw.newDefaults.runs") : t("mod.gutters.draw.newDefaults.ds");
+  const newOwn = newSheet === "line" ? newDef.run : newDef.ds;
+  /** the title (wider: in the column; the phone's sheet has it in its own header with «✕»), «Сбросить», and what it is for — on top, before
+   *  the rows: otherwise the column looks like the picked gutter's own properties (design-reviewer #1563 PR B) */
+  const newBody = (titled: boolean) => !newSheet ? null : (
     <View testID="draw-new-defaults" style={{ gap: space[4] }}>
+      <View style={{ gap: space[1] }}>
+        <RowView style={{ alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
+          {titled ? <T v="heading" w="semibold">{newTitle}</T> : <View />}
+          {newOwn ? (
+            <View testID="draw-new-defaults-reset">
+              <Button label={t("mod.gutters.draw.newDefaults.reset")} variant="ghost" size="sm" onPress={() => setNewDef((x) => resetKind(x, newSheet === "line" ? "run" : "ds"))} />
+            </View>
+          ) : null}
+        </RowView>
+        <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
+      </View>
       {newSheet === "line" ? (
         <RunAttrsView forNew run={{ id: "new-run", a: [0, 0], b: [0, 0], attrs: runFor(ch, story, newDef) }} onAttrs={(p) => setNewDef((x) => patchRun(ch, x, p))} onLength={() => {}} ch={ch} compact={!wide} />
       ) : (
         <DsAttrsView forNew ds={{ ...dsFor(ch, newDef), id: "new-ds", runId: "", atIn: 0 }} onAttrs={(p) => setNewDef((x) => patchDs(ch, x, p))} ch={ch} compact={!wide} run={runFor(ch, story, newDef)} />
       )}
-      <T v="caption" tone="mut">{t("mod.gutters.draw.newDefaults.hint")}</T>
-      {(newSheet === "line" ? newDef.run : newDef.ds) ? (
-        <View testID="draw-new-defaults-reset" style={{ alignSelf: "flex-start" }}>
-          <Button label={t("mod.gutters.draw.newDefaults.reset")} variant="ghost" size="sm" onPress={() => setNewDef((x) => resetKind(x, newSheet === "line" ? "run" : "ds"))} />
-        </View>
-      ) : null}
     </View>
   );
   /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
@@ -937,34 +946,38 @@ export default function DrawScreen() {
     if (!layers.ds) setLayers((x) => ({ ...x, ds: true }));
     commit(next, cur.current.drawing, true);
   };
-  // the properties of new objects of this drawing, kept on this phone per measurement (#1563 PR B, option Б): read when the measurement is
-  // known — what was set before it was first saved is kept; the entries of measurements that are gone are pruned then (not at the delete,
-  // which has «Отменить»)
-  const defMap = useRef<DefaultsMap | null>(null);
+  // the properties of new objects of this drawing, kept on this phone per measurement (#1563 PR B, option Б; canvas/toolDefaults.ts): read
+  // when the measurement is known — a choice made before (a new drawing, or during the read) wins and is written (`adopt`); every write
+  // re-reads the stored map in one queue; the entries of measurements that are gone are pruned once the phone's data is loaded (not at the
+  // delete, which has «Отменить»)
   const mId = m?.id ?? null;
+  /** the measurement whose entry the screen holds now (read and adopted): writes go only after that */
+  const adopted = useRef<string | null>(null);
   useEffect(() => {
-    if (!mId || defMap.current) return;
+    if (!mId || adopted.current === mId) return;
     let on = true;
-    void loadDefaults().then((map) => {
+    void readDefaults(mId).then((stored) => {
       if (!on) return;
-      const live = new Set([mId, ...gutterData(store.db).measurements.map((x) => x.id)]);
-      const kept = prune(map, live);
-      defMap.current = kept;
-      if (kept !== map) void saveDefaults(kept);
-      setNewDef((was) => kept[mId] ?? was);
+      const r = adopt(cur.current.newDef, stored);
+      adopted.current = mId;
+      setNewDef(r.nd);
+      if (r.write) void storeDefaults(mId, r.nd);
     });
     return () => {
       on = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mId]);
   useEffect(() => {
-    if (!mId || !defMap.current) return;
-    const next = putDefaults(defMap.current, mId, newDef);
-    if (next === defMap.current) return;
-    defMap.current = next;
-    void saveDefaults(next);
+    if (!mId || adopted.current !== mId) return;
+    void storeDefaults(mId, newDef);
   }, [mId, newDef]);
+  // the entries of measurements that are gone: once the phone's data is loaded (not before — the list would be short, review #1563 PR B)
+  const pruned = useRef(false);
+  useEffect(() => {
+    if (pruned.current || store.loading || !mId) return;
+    pruned.current = true;
+    void pruneStored(new Set([mId, ...gutterData(store.db).measurements.map((x) => x.id)]));
+  }, [store.loading, store.db, mId]);
   // a pick on the canvas shows its own properties: «новые» close (wider the column shows one thing at a time)
   useEffect(() => {
     if (selected) setNewSheet(null);
@@ -1357,12 +1370,12 @@ export default function DrawScreen() {
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
       {wide ? (
         <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd, gap: space[2] }}>
-          {newBody ? (
+          {newSheet ? (
             <>
               <RowView style={{ justifyContent: "flex-end" }}>
                 <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setNewSheet(null)} /></View>
               </RowView>
-              <AttrBody>{newBody}</AttrBody>
+              <AttrBody>{newBody(true)}</AttrBody>
             </>
           ) : attrs ? (
             <>
@@ -1384,8 +1397,8 @@ export default function DrawScreen() {
       <Sheet visible={!wide && sheet && !!attrs && !newSheet} onClose={() => setSheet(false)}>
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
-      <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)}>
-        <AttrBody inSheet>{newBody}</AttrBody>
+      <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>
+        <AttrBody inSheet>{newBody(false)}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />

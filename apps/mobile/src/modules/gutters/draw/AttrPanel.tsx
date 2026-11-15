@@ -436,10 +436,11 @@ export function RunAttrsView({
   const kits = withCurrent(hangerKitsFor(a.profile, ch), a.hanger);
   return (
     <>
-      <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
-        <T v="heading" w="semibold">{forNew ? t("mod.gutters.draw.newDefaults.runs") : `${t(k("run"))} · ${fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}`}</T>
+      {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
+      {forNew ? null : <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+        <T v="heading" w="semibold">{`${t(k("run"))} · ${fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}`}</T>
         {/* no «рулетка / нарисовано» per line any more: how the drawing was measured is one choice (П20.16) */}
-      </RowView>
+      </RowView>}
       {compact ? (
         <>
       {forNew ? null : <Pick label={t(k("story"))} testID="attr-story" items={(["1", "2", "3", "4"] as const).map((n) => ({ key: n, label: t("mod.gutters.story", { n }) }))} value={String(storyOf(a.story)) as "1"} onChange={(n) => onAttrs({ story: Number(n) })} />}
@@ -534,7 +535,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact, run, fo
   const wallKits = withCurrent(wallKitsFor(ds.shape, w.wall, ch), w.kit);
   return (
     <>
-      <T v="heading" w="semibold">{forNew ? t("mod.gutters.draw.newDefaults.ds") : t(k("ds"))}</T>
+      {forNew ? null : <T v="heading" w="semibold">{t(k("ds"))}</T>}
       {compact ? (
         <>
       <Select fit label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
