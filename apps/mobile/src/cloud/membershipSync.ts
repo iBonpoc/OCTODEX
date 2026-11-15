@@ -30,15 +30,22 @@ export function orderMemberships(list: readonly Membership[], preferred: string 
 export const sameMemberships = (a: readonly Membership[], b: readonly Membership[]): boolean =>
   a.length === b.length && a.every((m, i) => m.companyId === b[i].companyId && m.role === b[i].role && m.companyName === b[i].companyName);
 
-/** the server's memberships rows → the app's; anything broken is left out. null — not an answer (not a list) */
+const ROLES: readonly string[] = ["owner", "admin", "office", "sales", "tech", "subcontractor"];
+/**
+ * the server's memberships rows → the app's. null — not an answer: not a list, or a row that is broken (no company, a
+ * role this build does not know) — a list with a row left out would read as «removed» and wipe that company's cache
+ * (security-check of #1674: such an answer is not confirmed)
+ */
 export function parseMemberships(rows: unknown): Membership[] | null {
   if (!Array.isArray(rows)) return null;
-  return rows.flatMap((r) => {
+  const out: Membership[] = [];
+  for (const r of rows) {
     const m = r as { company_id?: unknown; role?: unknown; companies?: { name?: unknown } | { name?: unknown }[] | null };
-    if (typeof m?.company_id !== "string" || typeof m.role !== "string") return [];
+    if (typeof m?.company_id !== "string" || !m.company_id || typeof m.role !== "string" || !ROLES.includes(m.role)) return null;
     const c = Array.isArray(m.companies) ? m.companies[0] : m.companies;
-    return [{ companyId: m.company_id, role: m.role as DbRole, companyName: typeof c?.name === "string" ? c.name : "" }];
-  });
+    out.push({ companyId: m.company_id, role: m.role as DbRole, companyName: typeof c?.name === "string" ? c.name : "" });
+  }
+  return out;
 }
 
 /** how the app shows a server role (repo.ts appRoles): owner and admin are both «director» */
