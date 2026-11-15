@@ -10,9 +10,12 @@ describe("the story button (#1608)", () => {
   });
   it("does not move the picked gutter to another story", () => {
     const src = readFileSync(join(__dirname, "../src/modules/gutters/draw/DrawScreen.tsx"), "utf8");
-    const body = src.slice(src.indexOf("const nextStory = "), src.indexOf("\n", src.indexOf("const nextStory = ")));
+    const body = /const nextStory = ([^;]*);/.exec(src)?.[1] ?? "";
     expect(body).toContain("setStoryN(nextStoryOf(story))");
-    expect(body).not.toMatch(/commit|setStory\(|selected/);
+    expect(body).not.toMatch(/commit|setStory\(|selected|drawing/);
+    // the button's cell calls that handler and nothing else
+    expect(src).toMatch(/testID="draw-story"[^\n]*onPress=\{nextStory\}/);
+    // the move of a gutter to another story is not imported by the screen any more: only its properties change the story
     expect(src).not.toMatch(/\bsetStory\b(?!N)/);
   });
 });
