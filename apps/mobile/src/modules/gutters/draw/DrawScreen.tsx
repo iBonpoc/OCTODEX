@@ -1239,7 +1239,6 @@ export default function DrawScreen() {
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
         ) : null}
-        {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
         <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         {/* the summary chip (#1274, founder 12.11: «строки выбора нет — маленькая полупрозрачная плашка-сводка в нижнем углу», over the drawing, no row of its own):
             what is picked, else «Дальше: водостоки», else the totals; a tap opens the measurement's «Просмотр» (the materials and the sum) */}
@@ -1284,6 +1283,9 @@ export default function DrawScreen() {
         ) : null}
         {flat ? tools : null}
         </View>
+        {/* the toolbar is the lowest, at the very edge (#1630): the summary chip and the hints above it come and go without moving
+            it — a toolbar that jumps under the finger sends the next tap to the canvas (a downspout put by a double tap on «Водосток») */}
+        {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
       </View>
 
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
