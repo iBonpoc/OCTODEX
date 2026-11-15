@@ -24,9 +24,13 @@ export function parseAsked(raw: string | null): string[] {
   }
 }
 
-/** ask now: signed in with a company, no name, not asked before */
-export const nameDue = (p: { userId: string | null; name: string | undefined | null; asked: string[] | null }): boolean =>
-  !!p.userId && p.asked !== null && !p.asked.includes(p.userId) && needsName(p.name);
+/**
+ * ask now: signed in with a company, no name, not asked before. `name` undefined — I am not in the team list at all (a fresh
+ * cache on a new phone, after a sign-out: the list is empty until the company loads) — is «not known», never «no name»:
+ * asking then would write over a real name (the review of #1692).
+ */
+export const nameDue = (p: { userId: string | null; name: string | undefined; asked: string[] | null }): boolean =>
+  !!p.userId && p.asked !== null && !p.asked.includes(p.userId) && p.name !== undefined && needsName(p.name);
 
 /** the name as the server keeps it and as the screen shows it at once: control characters out, runs of spaces into one, cut */
 export const cleanName = (s: string | undefined | null): string => cleanText(s ?? "", 120).replace(/\s+/g, " ").trim();

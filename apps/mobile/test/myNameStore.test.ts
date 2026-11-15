@@ -187,6 +187,10 @@ describe("unit:myName — when the name is asked", () => {
     expect(nameDue({ userId: "u1", name: "dana@example.com", asked: null })).toBe(false); // the device list is not read yet
     expect(nameDue({ userId: null, name: "", asked: [] })).toBe(false);
     expect(nameDue({ userId: "u1", name: "Dana", asked: [] })).toBe(false);
+    // the team list is empty (a fresh cache, the company not loaded yet): I am not in it — not known, never «no name»
+    expect(nameDue({ userId: "u1", name: undefined, asked: [] })).toBe(false);
+    // in the list with an empty name — asked
+    expect(nameDue({ userId: "u1", name: "", asked: [] })).toBe(true);
     expect(parseAsked('["u1","u2"]')).toEqual(["u1", "u2"]);
     expect(parseAsked("not json")).toEqual([]);
     expect(parseAsked(null)).toEqual([]);
