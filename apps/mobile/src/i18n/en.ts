@@ -3161,7 +3161,7 @@ export const en: Dict = {
   "mod.gutters.link.none": "Nobody found",
   "mod.gutters.link.pickPlace": "Address of {name}",
   "mod.gutters.link.done": "Measurement linked: {who}",
-  "mod.gutters.draw.toLead": "Make it a lead",
+  "mod.gutters.draw.toLead": "Link",
   "mod.gutters.draw.selRun": "Gutter · {len} · st {n}",
   "mod.gutters.draw.selDsKind": "Downspout · {kind} · {size} · st {n}",
   "mod.gutters.draw.selDs": "Downspout · st {n}",

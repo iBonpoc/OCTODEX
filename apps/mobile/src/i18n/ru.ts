@@ -3161,7 +3161,7 @@ export const ru = {
   "mod.gutters.link.none": "Никого не нашли",
   "mod.gutters.link.pickPlace": "Адрес клиента {name}",
   "mod.gutters.link.done": "Замер привязан: {who}",
-  "mod.gutters.draw.toLead": "Сделать заявкой",
+  "mod.gutters.draw.toLead": "Привязать",
   "mod.gutters.draw.selRun": "Желоб · {len} · эт {n}",
   "mod.gutters.draw.selDsKind": "Водосток · {kind} · {size} · эт {n}",
   "mod.gutters.draw.selDs": "Водосток · эт {n}",
