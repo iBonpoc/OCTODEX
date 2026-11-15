@@ -1,4 +1,6 @@
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { InvoiceCardBody } from "@/features/invoice/InvoiceCard";
@@ -6,8 +8,6 @@ import { Empty, Screen } from "@/ui/surfaces";
 import { canSeeInvoice } from "@/features/access";
 import { VoidInvoiceBody } from "@/features/invoice/VoidInvoice";
 import { useDevice } from "@/theme/ThemeProvider";
-import { View } from "react-native";
-import { component, space } from "@octo/design-tokens";
 
 /** Invoice: amount, paid, balance; take a payment (any part); receipts; send / PDF (body — features/invoice/InvoiceCard). */
 export default function InvoiceScreen() {
