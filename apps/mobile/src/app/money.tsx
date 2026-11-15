@@ -39,15 +39,17 @@ export default function Money() {
   const expenseCard = (x: Expense) => {
     const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
     const client = job ? db.customers.find((c) => c.id === db.properties.find((p) => p.id === job.propertyId)?.customerId) : undefined;
+    // a receipt on this phone, or in the cloud (#1538: after a reload and on another phone)
+    const hasReceipt = !!(x.receiptUri || x.receiptFileId);
     return (
       <ListCard
         key={x.id}
         title={x.vendor}
         when={day(x.at)}
-        lead={{ kind: "icon", icon: x.receiptUri ? "camera" : "dollar" }}
+        lead={{ kind: "icon", icon: hasReceipt ? "camera" : "dollar" }}
         value={`−${money(x.amountCents)}`}
         // category first, «no receipt» as a grey tag: not a status (map §5 has no expense status)
-        tags={[t(`exp.cat.${x.category}`), ...(x.receiptUri ? [] : [t("card.tag.noReceipt")])]}
+        tags={[t(`exp.cat.${x.category}`), ...(hasReceipt ? [] : [t("card.tag.noReceipt")])]}
         facts={{ work: job ? [job.title, client?.name].filter(Boolean).join(" · ") : t("card.noJob"), by: memberName(db, x.memberId, t) }}
         density={device === "desktop" ? "row" : "rich"}
         columns={EXP_COLUMNS}

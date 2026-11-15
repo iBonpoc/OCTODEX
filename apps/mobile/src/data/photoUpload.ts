@@ -82,6 +82,24 @@ export function keepPhotoLocal(next: DB, prev: DB): DB {
   return changed ? { ...next, visits } : next;
 }
 
+/**
+ * #1538: the company read again — an expense's receipt keeps its file on this phone (the server knows only the files
+ * row). An expense the phone did not have, or without a receipt here, is as the server says.
+ */
+export function keepReceiptLocal(next: DB, prev: DB): DB {
+  const local = new Map<string, string>();
+  for (const x of prev.expenses ?? []) if (x.receiptUri) local.set(x.id, x.receiptUri);
+  if (!local.size || !next.expenses?.length) return next;
+  let changed = false;
+  const expenses = next.expenses.map((x) => {
+    const uri = local.get(x.id);
+    if (!uri || x.receiptUri) return x;
+    changed = true;
+    return { ...x, receiptUri: uri };
+  });
+  return changed ? { ...next, expenses } : next;
+}
+
 /** every photo the cloud did not take, with its visit (newest refusal first) */
 export function failedPhotos(db: DB): { visitId: string; photo: Photo & { upload: NonNullable<Photo["upload"]> } }[] {
   const out: { visitId: string; photo: Photo & { upload: NonNullable<Photo["upload"]> } }[] = [];

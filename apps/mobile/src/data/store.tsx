@@ -46,7 +46,7 @@ import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type Void
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
-import { canRetry, keepPhotoLocal, markPhoto } from "./photoUpload";
+import { canRetry, keepPhotoLocal, keepReceiptLocal, markPhoto } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cacheKey";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -790,7 +790,7 @@ export function StoreProvider({
       if (!pendingLive()) {
         // spec 36: the history read on open stays (the full read has none)
         // #1431: a photo's file on this phone and why the cloud refused it — only the phone knows them
-        setDb(keepPhotoLocal(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current), dbRef.current));
+        setDb(keepReceiptLocal(keepPhotoLocal(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current), dbRef.current), dbRef.current));
         // the whole company read again: every module's settings are the server's now
         settingsStale.current.clear();
       }
@@ -2048,10 +2048,13 @@ export function StoreProvider({
       },
       addExpense: (x) => {
         const id = uid();
+        // #1538: a receipt goes to the cloud with the expense (its own files row)
+        const receiptFileId = x.receiptUri ? uid() : undefined;
+        const receipt = receiptFileId ? { receiptFileId, receiptUri: x.receiptUri } : {};
         return mutate(
           "expense.add",
-          (d) => ({ ...d, expenses: [{ ...x, id, at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])] }),
-          { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents },
+          (d) => ({ ...d, expenses: [{ ...x, ...receipt, id, at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])] }),
+          { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...receipt },
         );
       },
       payInvoice: (id, method) => {

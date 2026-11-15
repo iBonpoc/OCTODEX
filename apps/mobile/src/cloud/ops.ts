@@ -293,7 +293,8 @@ export type Op =
       dueDate?: string;
     }
   | { k: "invoice.pay"; invoiceId: string; paymentId: string; customerId: string; amountCents: number; method: PaymentMethod }
-  | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number };
+  /** #1538: receiptFileId + receiptUri — the receipt's files row, then its bytes (an older op has neither: as before) */
+  | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number; receiptFileId?: string; receiptUri?: string };
 
 export interface OutboxItem {
   id: string;
@@ -1200,13 +1201,20 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           amount_cents: op.amountCents, status: "succeeded", idempotency_key: op.paymentId, received_by: userId,
         }),
       );
-    case "expense.add":
-      return run(
+    case "expense.add": {
+      // #1538: the receipt's row first (the expense points at it), then the expense, then the bytes — as a visit's photo
+      // (a refusal marks the file «failed», no network repeats the op; every step is idempotent)
+      if (op.receiptFileId)
+        await run(ins("files", { id: op.receiptFileId, company_id: c, kind: "receipt", job_id: realJob(op.jobId), taken_at: new Date().toISOString() }));
+      await run(
         ins("expenses", {
           id: op.id, company_id: c, job_id: realJob(op.jobId), vendor: op.vendor, category: expenseCategoryToDb[op.category],
-          amount_cents: op.amountCents, idempotency_key: op.id,
+          amount_cents: op.amountCents, idempotency_key: op.id, ...(op.receiptFileId ? { receipt_file_id: op.receiptFileId } : {}),
         }),
       );
+      if (op.receiptFileId && op.receiptUri) await uploadPhoto(c, op.receiptFileId, op.receiptUri);
+      return;
+    }
     default:
       // an op this build does not know (a newer build queued it) is never «sent»: it stays in the outbox (A-19, #784)
       throw unknownOp((op as { k?: unknown }).k);

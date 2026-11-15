@@ -671,6 +671,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     amountCents: n(x.amount_cents),
     at: s(x.created_at),
     memberId: s(x.created_by),
+    // #1538: the receipt is in the cloud (its picture on another phone — with #1080)
+    ...(x.receipt_file_id ? { receiptFileId: s(x.receipt_file_id) } : {}),
   }));
 
   return {
