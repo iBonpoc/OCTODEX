@@ -49,7 +49,7 @@ export default function ClientScreen() {
   // a row's own list: the same address with ?s=<row>
   if (isClientSection(s) && rows.includes(s))
     return (
-      <Screen title={t(`client.row.${s}` as DictKey)} subtitle={c.name} back={back} fab={canServe(db, c.id) ? "client" : undefined} fabCtx={{ customerId: c.id }}>
+      <Screen title={t(`client.row.${s}` as DictKey)} subtitle={c.name} back={back}>
         <ClientSection c={c} s={s} />
       </Screen>
     );
