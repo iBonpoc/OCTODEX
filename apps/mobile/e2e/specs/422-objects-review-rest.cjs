@@ -44,4 +44,10 @@ exports.run = async (h) => {
   await h.go("/job/j2");
   await tid("job-screen").waitFor({ timeout: 8000 });
   h.expect((await vis("job-rel-new-estimate").count()) === 0, "the technician: no «Создать смету» in «Связано»");
+  // …nor in a client's or an address's list (the header slot stays empty on every width)
+  for (const [path, id] of [["/client/c2?s=jobs", "client-section-new-job"], ["/property/p2?s=estimates", "property-section-new-estimate"]]) {
+    await h.go(path);
+    await h.expectText(/Работы|Сметы/, `${path}: the list is open`);
+    h.expect((await vis(id).count()) === 0, `${path}: the technician has no «＋» in a list`);
+  }
 };
