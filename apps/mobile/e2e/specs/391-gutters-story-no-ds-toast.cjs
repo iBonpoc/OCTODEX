@@ -1,11 +1,12 @@
 /**
- * e2e 391 — #1569 (founder 14.11, iPhone: «переключал этажи с первого на четвёртый, потом снова первый — высветило уведомление
- * „водостоков стало пять“. Я не понял, что это за уведомление и почему»). A corner of two short gutters has one automatic downspout;
- * the gutter just drawn stays picked, and the story button moves it 1 → 2 → 3 → 4 → 1 — on 2 the corner splits by story (its own
- * downspout), back on 1 it joins again (one goes). The end is what was there before: no toast «Водостоков стало N» about it.
+ * e2e 391 — #1608 (founder 15.11, README §12 п.19: «Эт» только переключает этаж рисования, нарисованное не трогает), before it #1569
+ * (founder 14.11: «переключал этажи 1 → 4 → 1 — высветило „водостоков стало пять“, не понял почему»). A corner of two short gutters
+ * has one automatic downspout; the gutter just drawn stays picked, and the story button goes 1 → 2 → 3 → 4 → 1: the picked gutter stays
+ * on story 1, nothing is redrawn, no downspout comes or goes, no toast. The properties' «Этаж» row moves it (and «Назад» back);
+ * a gutter drawn after that, with the button on 2, is on story 2.
  * Every view. Finds things by testID / stored elements; waits on what it checks (no pauses).
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, sheetGone, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.autoDs = true; // about the automatic downspouts (the runner switches them off for the others)
@@ -42,17 +43,40 @@ exports.run = async (h) => {
   await waitStored((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run").length === 2, KEY, "two gutters");
   await dsCount(1, "a corner of two gutters has ONE downspout");
 
-  // the story button four times: the picked gutter (the one just drawn) goes 1 → 2 → 3 → 4 → 1
+  // the story button four times with the gutter just drawn picked: the button says the story, the gutters stay on story 1
+  h.expect((await tid("draw-selected").count()) === 1, "the gutter just drawn is picked");
   const story = tid("draw-story").getByRole("button");
+  const runs = () => els().then((xs) => xs.filter((e) => e.kind === "run"));
   for (const want of [2, 3, 4, 1]) {
     await story.click();
-    await waitStored(([k, s]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => !e.deletedAt && e.kind === "run" && Number(e.attrs?.story ?? 1) === s), [KEY, want], `a gutter is on story ${want}`);
+    await p.waitForFunction((n) => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes(String(n))), want, { timeout: 5000 });
+    h.expect(/эт 1/.test(await tid("draw-selected").innerText()), `«Эт» → ${want}: the picked gutter still says «эт 1»`);
+    const xs = await runs();
+    h.expect(xs.length === 2 && xs.every((e) => Number(e.attrs?.story ?? 1) === 1), `«Эт» → ${want}: the gutters stay on story 1 (${JSON.stringify(xs.map((e) => e.attrs?.story ?? 1))})`);
+    h.expect((await els()).filter((e) => e.kind === "downspout").length === 1, `«Эт» → ${want}: still one downspout`);
   }
-  // back where it started: both gutters on story 1, one chain, one downspout…
-  await waitStored((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run").every((e) => Number(e.attrs?.story ?? 1) === 1), KEY, "both gutters back on story 1");
-  await dsCount(1, "back on one story: one downspout again");
-  // …and no toast about a count of downspouts the person never asked about (the toast shows with the edit, in the same render)
+  // nothing was edited: no toast about a count of downspouts, and «Назад» has nothing of the story button's to take back
   const toasts = await p.getByTestId("toast-text").locator("visible=true").allInnerTexts();
-  h.expect(!toasts.some((x) => /Водостоков|downspouts|bajantes/i.test(x)), `no toast «Водостоков стало N» after moving a gutter between stories (${JSON.stringify(toasts)})`);
+  h.expect(!toasts.some((x) => /Водостоков|downspouts|bajantes/i.test(x)), `no toast «Водостоков стало N» after the story button (${JSON.stringify(toasts)})`);
   await h.shot("story-back");
+
+  // a gutter goes to another story by its properties (the «Этаж» row): the picked one → 2, the button follows; «Назад» takes it back
+  await openProps(p);
+  await tid("attr-story").getByRole("radio", { name: "эт 2", exact: true }).click();
+  await waitStored((k) => { const r = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run"); return r.filter((e) => Number(e.attrs?.story ?? 1) === 2).length === 1 && r.filter((e) => Number(e.attrs?.story ?? 1) === 1).length === 1; }, KEY, "the properties moved the picked gutter to story 2");
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes("2")), null, { timeout: 5000 });
+  if ((p.viewportSize()?.width ?? 0) <= 390) {
+    await p.getByRole("button", { name: "Закрыть", exact: true }).last().click({ position: { x: 10, y: 10 } });
+    await sheetGone(p);
+  }
+  await tid("draw-undo").getByRole("button").click();
+  await waitStored((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run").every((e) => Number(e.attrs?.story ?? 1) === 1), KEY, "«Назад»: both gutters back on story 1");
+  await dsCount(1, "back on one story: one downspout");
+
+  // the button stays on 2 — it is for what comes next: a new gutter well apart is on story 2, the two first ones stay on 1
+  h.expect(/2/.test(await tid("draw-story").innerText()), "the story button says 2");
+  const y2 = b.y + b.height * 0.75;
+  await stroke([b.x + b.width * 0.15, y2], [b.x + b.width * 0.45, y2]);
+  await waitStored((k) => { const r = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run"); return r.length === 3 && r.filter((e) => Number(e.attrs?.story ?? 1) === 2).length === 1 && r.filter((e) => Number(e.attrs?.story ?? 1) === 1).length === 2; }, KEY, "the new gutter on story 2, the first two on story 1");
+  await h.shot("new-on-2");
 };

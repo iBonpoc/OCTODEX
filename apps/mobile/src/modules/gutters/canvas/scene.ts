@@ -13,6 +13,8 @@ import { labelWidth, layoutLabels, type LabelWant, type PlacedLabel } from "./la
 export interface View { k: number; ox: number; oy: number }
 export type Story = 1 | 2 | 3 | 4;
 export const storyOf = (n: unknown): Story => (n === 2 || n === 3 ? n : typeof n === "number" && n >= 4 ? 4 : 1);
+/** the story button: 1 → 2 → 3 → 4 → 1, for the next gutter only (#1608) */
+export const nextStoryOf = (s: Story): Story => ((s % 4) + 1) as Story;
 
 export const toScreen = (v: View, p: P): [number, number] => [p[0] * v.k + v.ox, -p[1] * v.k + v.oy];
 export const toPlan = (v: View, s: [number, number]): P => [(s[0] - v.ox) / v.k, -(s[1] - v.oy) / v.k];
