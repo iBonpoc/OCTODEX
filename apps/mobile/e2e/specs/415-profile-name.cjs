@@ -24,11 +24,11 @@ exports.run = async (h) => {
   await vis("profile-name-save").first().waitFor({ timeout: 5000 });
   await h.shot("profile-name");
   await vis("profile-name-save").first().click();
-  for (let i = 0; i < 40; i++) {
-    const d = await h.db();
-    if (d.members.find((m) => m.id === d.me)?.name === "Dana Whitfield") break;
-    await p.waitForTimeout(150);
-  }
+  const myNameIs = (n) => p.waitForFunction((want) => {
+    const db = JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db;
+    return db?.members?.find((m) => m.id === db.me)?.name === want;
+  }, n, { timeout: 6000 });
+  await myNameIs("Dana Whitfield");
   const d1 = await h.db();
   const me1 = d1.members.find((m) => m.id === d1.me);
   h.expect(me1.name === "Dana Whitfield", `my name is saved (${me1.name})`);
@@ -38,11 +38,7 @@ exports.run = async (h) => {
 
   // «Отменить» on the toast
   await vis("toast-undo").first().click();
-  for (let i = 0; i < 40; i++) {
-    const d = await h.db();
-    if (d.members.find((m) => m.id === d.me)?.name === me0.name) break;
-    await p.waitForTimeout(150);
-  }
+  await myNameIs(me0.name);
   const d2 = await h.db();
   h.expect(d2.members.find((m) => m.id === d2.me)?.name === me0.name, "«Отменить» brings the old name back");
 };

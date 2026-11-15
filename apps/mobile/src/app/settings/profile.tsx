@@ -45,7 +45,7 @@ export default function Profile() {
     <Screen title={t("fix.settings.profile")}>
       {db.members.some((m) => m.id === db.me) ? (
         <FieldGroup title={t("profile.name.title")} testID="profile-name-group">
-          <TextField label={t("profile.name.label")} value={shown} onChangeText={setName} onSubmit={changed ? saveName : undefined} testID="profile-name" />
+          <TextField type="name" label={t("profile.name.label")} value={shown} onChangeText={setName} onSubmit={changed ? saveName : undefined} testID="profile-name" />
           <T v="caption" tone="mut">
             {t("profile.name.hint")}
           </T>
