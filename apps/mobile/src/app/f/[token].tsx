@@ -11,7 +11,7 @@ import {
 import { Button, ChoiceChips, TextField, Toggle } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Card, CardList, Empty, FieldGroup, RowView, Screen } from "@/ui/surfaces";
 
 /**
  * The request page of a company (step 16, docs/specs/34-lead-intake.md §3): opened from the contractor's site, Google
@@ -126,8 +126,7 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
           <T v="heading">{form.company}</T>
           <T v="body" tone="mut">{t("intake.intro", { company: form.company })}</T>
         </Card>
-        <Card>
-          <View style={{ gap: space[3] }}>
+        <FieldGroup testID="intake-fields">
             <View testID="intake-name"><TextField type="name" value={f.name} onChangeText={set("name")} placeholder={t("intake.name")} label={t("intake.name")} /></View>
             <View testID="intake-phone"><TextField type="phone" value={f.phone} onChangeText={set("phone")} placeholder={t("intake.phone")} label={t("intake.phone")} /></View>
             <View testID="intake-email"><TextField type="email" value={f.email} onChangeText={set("email")} placeholder={t("intake.email")} label={t("intake.email")} /></View>
@@ -153,8 +152,7 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
             <View style={{ display: "none" }} aria-hidden importantForAccessibility="no-hide-descendants">
               <View testID="intake-website"><TextField type="text" value={f.website} onChangeText={set("website")} label={t("intake.hp")} /></View>
             </View>
-          </View>
-        </Card>
+        </FieldGroup>
         {form.smsConsent ? (
           <Card>
             {/* the consent text is on the screen, next to its switch, off by default (TCPA: clear and separate) */}

@@ -9,7 +9,7 @@ import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Card, Screen } from "@/ui/surfaces";
+import { FieldGroup, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 type Mode = "code" | "password" | "signup";
@@ -64,8 +64,7 @@ export default function SignIn() {
 
   return (
     <Screen title={t("auth.title")} back={back}>
-      <Card>
-        <View style={{ gap: space[3] }}>
+      <FieldGroup under testID="auth-fields">
           <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="mail" />
           <LegalAgree on={agreed} onChange={setAgreed} />
           {mode === "code" ? (
@@ -111,8 +110,7 @@ export default function SignIn() {
           {err ? (
             <StatusNote tone="bad">{err}</StatusNote>
           ) : null}
-        </View>
-      </Card>
+      </FieldGroup>
       <View style={{ gap: space[2] }}>
         {mode !== "code" ? <Button label={t("auth.useCode")} variant="ghost" onPress={() => setMode("code")} /> : null}
         {mode === "code" ? <Button label={t("auth.usePassword")} variant="ghost" onPress={() => setMode("password")} /> : null}
