@@ -62,11 +62,25 @@ describe("the time of a scene at the extreme scales (the speed bench's idea, in 
   const big: Drawing = { runs: Array.from({ length: 60 }, (_, i) => ({ id: `r${i}`, a: [i * 100, 0] as P, b: [i * 100 + 90, 400] as P, attrs })), downspouts: [] };
   const lim = zoomLimits(big.runs.flatMap((r) => [r.a, r.b]), vp, 32, sizes.hitMin);
   const opts = (view: View) => ({ view, viewport: vp, fontSize: 14, padX: 4, gap: 4, dsPad: 7, dsText: (n: number) => `D${n}`, storyText: (n: number) => `эт ${n}` });
-  it("a scene (runs, labels) at kMin and at kMax is built in well under a frame's budget × 10 on this machine", () => {
-    for (const k of [lim.kMin, lim.kMax]) {
+  // machine-independent (#1680): not a clock threshold (it flaked on a loaded GitHub runner — 214 ms > 160 in #1674) but
+  // the extreme scales against the fitted view on the same machine, in the same run. Each is warmed once, then the best of
+  // 5 (a slow moment of the machine only adds time, the best is the work itself). Today the nearest is ~9× the fitted
+  // (#1681 — the lines indexed off the screen too); #1281's hang was a grid of millions of lines — hundreds of times
+  const best = (view: View) => {
+    buildScene(big, opts(view));
+    let t = Infinity;
+    for (let i = 0; i < 5; i++) {
       const t0 = performance.now();
-      buildScene(big, opts({ k, ox: vp.w / 2, oy: vp.h / 2 }));
-      expect(performance.now() - t0).toBeLessThan(160); // a frame is 16 ms on a phone; the device's own bench is the founder's (the browser here is not a phone)
+      buildScene(big, opts(view));
+      t = Math.min(t, performance.now() - t0);
+    }
+    return t;
+  };
+  it("a scene (runs, labels) at kMin and at kMax costs at most 25× the fitted view's on the same machine", () => {
+    const fit = best(fitView(big.runs.flatMap((r) => [r.a, r.b]), vp, 32));
+    for (const k of [lim.kMin, lim.kMax]) {
+      const t = best({ k, ox: vp.w / 2, oy: vp.h / 2 });
+      expect(t, `k=${k}: ${t.toFixed(1)} ms vs fitted ${fit.toFixed(1)} ms`).toBeLessThan(fit * 25 + 1);
     }
   });
 });

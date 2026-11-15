@@ -44,10 +44,10 @@ exports.run = async (h) => {
   // «Фото»: the picker, the photo stays on the visit
   const [chooser] = await Promise.all([p.waitForEvent("filechooser"), pho.click()]);
   await chooser.setFiles({ name: "p.png", mimeType: "image/png", buffer: PNG });
-  for (let i = 0; i < 40; i++) {
-    if (((await h.db()).visits.find((v) => v.id === mine.id)?.photos?.length ?? 0) === 1) break;
-    await p.waitForTimeout(150);
-  }
+  await p.waitForFunction((id) => {
+    const db = JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db;
+    return (db?.visits?.find((v) => v.id === id)?.photos?.length ?? 0) === 1;
+  }, mine.id, { timeout: 10000 });
   h.expect(((await h.db()).visits.find((v) => v.id === mine.id)?.photos?.length ?? 0) === 1, "«Фото»: the photo is kept on the visit");
 
   // «⋯»: «Лид»; no estimate on a plain visit

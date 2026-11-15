@@ -8,7 +8,7 @@ import { Button } from "@/ui/controls";
  * «＋ <object>» in a section of a client's or a property's card (DS §5.3, §12.2; #1395): the card has no floating «＋», so the list of
  * jobs or estimates names its own button. Office only; none for «не обслуживаем» (S4 / S5 / S17).
  */
-export function AddObject({ kind, customerId, propertyId, testID, full }: { kind: "job" | "estimate"; customerId: string; propertyId?: string; testID: string; full?: boolean }) {
+export function AddObject({ kind, customerId, propertyId, testID, full, short }: { kind: "job" | "estimate"; customerId: string; propertyId?: string; testID: string; full?: boolean; short?: boolean }) {
   const { t } = useI18n();
   const { db, role } = useStore();
   if (role === "tech" || !canServe(db, customerId)) return null;
@@ -16,7 +16,7 @@ export function AddObject({ kind, customerId, propertyId, testID, full }: { kind
   return (
     <Button
       testID={testID}
-      label={t(kind === "job" ? "path.jobNew" : "path.estimateNew")}
+      label={t(short ? (kind === "job" ? "fab.obj.job" : "fab.obj.estimate") : kind === "job" ? "path.jobNew" : "path.estimateNew")}
       icon="plus"
       variant="secondary"
       full={full}
