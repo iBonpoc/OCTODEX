@@ -1,6 +1,6 @@
 # Доска руководителя
 
-Руководитель: «Главный чат с управлением агентами» №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), с 11.11.2026 ~06:20 UTC. Прежние — №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
+Руководитель: «Главный чат с управлением агентами» №9 (`session_015CqH687aYpUm4g8RYH2mco`), с 15.11.2026 ~06:05 UTC (открыт аудитом №2). Прежние — №8 (`session_015CqH67dLvVBU9EZg9nRT4P`), №7 (`session_015CqH6A3Nqxoz61qLQ1Rtwd`), №6 (`session_015CqH68XVUZYbUeZtamvLEE`), №5 (`session_015CqH6AYWnjNhg5RZy2re5D`), архив. Чат аудита (личный чат основателя, проверяет этапы) — №2 `session_015CqH69kqSBDGCrDMube5oe` (с 11.11.2026; №1 `session_015CqH65zYaCaecNrBxcPr1v` — архив).
 
 Здесь только живое: кто чем занят, очередь вливания, номера. Что осталось сделать — **только Issues** (правило 21). Старые памятки — `docs/ai/BOARD-archive.md`; журнал — `docs/ai/LOG.md`.
 
