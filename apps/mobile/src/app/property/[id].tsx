@@ -129,9 +129,10 @@ export default function PropertyScreen() {
       ) : null}
       {/* the card has no «＋» (#1395): «Смета» and «Работа без сметы» for this client and this address are named here */}
       {office && servable ? (
-        <View testID="prop-add" style={{ flexDirection: wide ? "row" : "column", gap: space[2], alignSelf: wide ? "flex-start" : "stretch" }}>
-          <AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" />
-          <AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" />
+        <View testID="prop-add" style={{ flexDirection: "row", gap: space[2], alignSelf: wide ? "flex-start" : "stretch" }}>
+          {/* two equal halves on the phone, one row (the review of #1395) */}
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" full={!wide} /></View>
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" full={!wide} /></View>
         </View>
       ) : null}
 
