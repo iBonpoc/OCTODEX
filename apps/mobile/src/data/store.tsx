@@ -1318,7 +1318,8 @@ export function StoreProvider({
   // stay on the phone until «Убрать»); no confirmed answer yet — every one counts, as before
   const activeIds = auth.membershipsFor && auth.membershipsFor === auth.userId ? new Set(auth.memberships.map((m) => m.companyId)) : null;
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null, activeIds ? (c) => activeIds.has(c) : undefined) : 0;
-  const closedIds = new Set(auth.closedCompanies.map((c) => c.companyId));
+  // (the tests' auth stand-ins have no closedCompanies: an empty list then)
+  const closedIds = new Set((auth.closedCompanies ?? []).map((c) => c.companyId));
   const unsentRemoved = mode === "cloud" ? removedUnsent(outbox, who?.userId ?? null, activeIds, closedIds) : [];
   const removedKey = unsentRemoved.map((r) => `${r.companyId}:${r.n}`).join(",");
   const stuckOps: StuckOp[] =
