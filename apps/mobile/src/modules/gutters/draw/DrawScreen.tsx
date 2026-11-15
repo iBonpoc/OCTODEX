@@ -56,7 +56,7 @@ import { LinkSheet } from "./LinkSheet";
 import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
@@ -745,11 +745,13 @@ export default function DrawScreen() {
 
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
+  // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
+  const many = manyStories(drawing.runs);
   const selText = !sel
     ? null
     : "a" in sel
-      ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
-      : t("mod.gutters.draw.selDsKind", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
+      ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
+      : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
   const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 

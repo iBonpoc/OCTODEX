@@ -81,7 +81,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await count("line")) === 1, "one run drawn");
   // one storey: the label is the length alone (no «· эт 1», founder 12.11, #1275)
   await waitFor(async () => (await labels()).some((t) => /^\d+(′|″)/.test(t) && !/эт/.test(t)), "its label: the length alone (one storey)");
-  h.expect(/Желоб · .* · эт 1/.test(await tid("draw-selected").innerText()), "the new run is picked");
+  h.expect(/^Желоб · [^·]+$/.test((await tid("draw-selected").innerText()).trim()), "the new run is picked: «Желоб · <length>», no «эт 1» with one storey (#1666)");
   h.expect((await tid("draw-empty").count()) === 0, "the empty hint is gone");
 
   // a second run from near its end: sticks to it → a corner, more $
@@ -112,7 +112,7 @@ exports.run = async (h) => {
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
   await waitFor(async () => /2/.test(await tid("draw-story").innerText()), "the story button says 2");
-  h.expect(/эт 1/.test(await tid("draw-selected").innerText()), "the picked run stays on storey 1");
+  h.expect(!/эт/.test(await tid("draw-selected").innerText()), "the picked run stays on storey 1: still one storey, no «эт N» in the summary (#1666)");
   h.expect(!(await labels()).some((t) => / · эт \d$/.test(t)), "one storey on the drawing: no «эт N» on the lengths");
   const after = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   h.expect(after.size === 1 && before.size === 1, `the picked run keeps its colour (${[...before]} → ${[...after]})`);
