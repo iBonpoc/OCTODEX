@@ -362,12 +362,14 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (made: Drawing, prev = cur.current.drawing, placed = false) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false, quiet = false) => {
       // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
       const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
       // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
-      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+      // not when the gutter only went to another story by the story button (#1569, founder 14.11: «переключал этажи 1 → 4 → 1 — высветило
+      // „водостоков стало пять“, не понял почему»): the corner split on story 2 and joined again on 1 — the count is what it was
+      if (!quiet && next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
         announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
       }
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
@@ -855,7 +857,7 @@ export default function DrawScreen() {
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;
     setStoryN(n);
-    if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n));
+    if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n), drawing, false, true); // quiet: #1569
   };
   /** how far the toolbar is dragged by its grip, px */
   const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
