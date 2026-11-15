@@ -218,7 +218,7 @@ describe("E2b-2: my saved signature, the right to sign", () => {
 });
 
 describe("security-check #98: the title on the contract, who edits an employee", () => {
-  it("the profile title wins over the one typed with the saved signature; that one only when the profile has none", () => {
+  it("the profile title wins over the one typed with the saved signature; with none in the profile — no title (#1599)", () => {
     const { d, id } = withEstimate();
     const s1 = sign(d, id);
     const withTitle = { ...s1, members: s1.members.map((m) => (m.id === s1.me ? { ...m, title: "Technician" } : m)) };
@@ -226,7 +226,8 @@ describe("security-check #98: the title on the contract, who edits an employee",
     expect(a.estimates.find((x) => x.id === id)!.countersign!.signerTitle).toBe("Technician");
     const noTitle = { ...s1, members: s1.members.map((m) => (m.id === s1.me ? { ...m, title: undefined } : m)) };
     const b = companySigned(noTitle, id, { userId: s1.me, signature: "M1 1", method: "saved", title: "President" }, IDS, NOW);
-    expect(b.estimates.find((x) => x.id === id)!.countersign!.signerTitle).toBe("President");
+    // #1599: no title in the profile — none, never the one typed with the signature (as the server)
+    expect(b.estimates.find((x) => x.id === id)!.countersign!.signerTitle).toBeUndefined();
   });
   it("title and HIS: the director (owner / admin), not a tech or the office (the store checks before applying)", () => {
     const d = makeSeed();
