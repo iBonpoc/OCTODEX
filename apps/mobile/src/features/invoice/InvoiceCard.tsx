@@ -41,7 +41,7 @@ const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
  * Where the card's actions stand (#1474, DS §7.3, §8.9, Б4; as the estimate, #1412): `more` — «⋯» with the other actions, `main` —
  * «Принять оплату» at the top of the content (from 820, the panel), `mainBar` — the same for the pinned bar on a phone, `body` — the rest.
  */
-export type InvoiceFrame = (parts: { more: ReactNode; bar: ReactNode | null; body: ReactNode }) => ReactElement;
+export type InvoiceFrame = (parts: { more: ReactNode; bar: ReactNode | null; body: ReactNode; head: ReactNode; summary: ReactNode; rest: ReactNode }) => ReactElement;
 
 /**
  * `inline` — the buttons stand in the content, right after the money (from 820, the panel; the default); off — they go to the pinned
@@ -116,7 +116,9 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
     ...(balance > 0 && cust?.email ? [{ key: "email", label: t("ue.sendEmail"), icon: "send" as const, testID: "invoice-act-email", onPress: () => void openEmail(cust.email!, msg().subject, msg().text).catch(() => {}) }] : []),
   ];
   const more = <VoidInvoiceMenu inv={inv} items={items} />;
-  const body = (
+  // the card's three parts (#1495 Б): `head` — what next and the parents; `summary` — status, money, the main action (the side column
+  // 360 from 1100, DS §12.3); `rest` — receipts and the sheets
+  const head = (
     <>
       {/* #1495 (DS §12.3 п.2): what is now and what next, one line under the title */}
       <View testID="invoice-next">
@@ -129,6 +131,10 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
       </View>
       {/* «Связано» (13 §2.7, 15-flows §2): job, estimate, client — the parents of the invoice */}
       <RelatedBlock of={{ type: "invoice", id: inv.id }} />
+    </>
+  );
+  const summary = (
+    <>
       <Card status={chip.s}>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="heading" style={{ flex: 1 }}>
@@ -182,8 +188,10 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
           {remindButton(false)}
         </RowView>
       ) : null}
-
-
+    </>
+  );
+  const rest = (
+    <>
       <SectionTitle title={t("rcpt.list")} right={pays.length ? <T v="caption" tone="mut">{pays.length}</T> : undefined} />
       {pays.length ? (
         <CardGrid>
@@ -245,9 +253,16 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
       </Sheet>
     </>
   );
+  const body = (
+    <>
+      {head}
+      {summary}
+      {rest}
+    </>
+  );
   const barMain = inline ? null : payButton(true);
   const bar = barMain || (!inline && canRemind) ? <ActionBar testID="invoice-actionbar" main={barMain ?? remindButton(true)} second={barMain ? remindButton(true) : undefined} /> : null;
-  if (frame) return frame({ more, bar, body });
+  if (frame) return frame({ more, bar, body, head, summary, rest });
   return (
     <>
       <RowView style={{ justifyContent: "flex-end" }}>{more}</RowView>

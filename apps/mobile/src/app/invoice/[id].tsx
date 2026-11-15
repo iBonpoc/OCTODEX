@@ -6,13 +6,15 @@ import { Empty, Screen } from "@/ui/surfaces";
 import { canSeeInvoice } from "@/features/access";
 import { VoidInvoiceBody } from "@/features/invoice/VoidInvoice";
 import { useDevice } from "@/theme/ThemeProvider";
+import { View } from "react-native";
+import { component, space } from "@octo/design-tokens";
 
 /** Invoice: amount, paid, balance; take a payment (any part); receipts; send / PDF (body — features/invoice/InvoiceCard). */
 export default function InvoiceScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { db, role, mode } = useStore();
   const { t } = useI18n();
-  const { wide } = useDevice();
+  const { wide, device } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/money"));
   // В1-5: a voided invoice opens too — marked, with its reason, outside every sum
   const live = db.invoices.find((i) => i.id === id);
@@ -43,11 +45,25 @@ export default function InvoiceScreen() {
     <InvoiceCardBody
       inv={live}
       inline={wide}
-      frame={({ more, bar, body }) => (
-        <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more} footer={bar ?? undefined}>
-          {body}
-        </Screen>
-      )}
+      frame={({ more, bar, body, head, summary, rest }) =>
+        device === "desktop" ? (
+          // desktop (DS §12.3 «Десктоп», #1495 Б): the receipts on the left, the summary — status, money, the main action — in the
+          // side column 360 on the right, as on the client's card (#1416)
+          <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more}>
+            {head}
+            <View style={{ flexDirection: "row-reverse", alignItems: "flex-start", gap: space[6] }}>
+              <View testID="invoice-side" style={{ width: component.panelW, gap: space[3] }}>
+                {summary}
+              </View>
+              <View style={{ flex: 1, minWidth: 0, gap: space[3] }}>{rest}</View>
+            </View>
+          </Screen>
+        ) : (
+          <Screen testID="invoice-screen" title={title} back={back} subtitle={cust?.name} right={more} footer={bar ?? undefined}>
+            {body}
+          </Screen>
+        )
+      }
     />
   );
 }
