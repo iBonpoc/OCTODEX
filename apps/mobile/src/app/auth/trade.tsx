@@ -9,7 +9,7 @@ import { TRADES } from "@/features/companySetup";
 import { pickTrades, tradeMatches } from "@/features/firstSteps";
 import { Button, MultiChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Card, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, FieldGroup, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 type Trade = (typeof TRADES)[number];
@@ -50,8 +50,7 @@ export default function TradeStep() {
             </T>
           )}
         </Card>
-        <Card>
-          <SectionTitle title={t("trade.other")} />
+        <FieldGroup title={t("trade.other")} testID="trade-own">
           <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} />
           {ownTaken ? (
             <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
@@ -59,7 +58,7 @@ export default function TradeStep() {
           <T v="caption" tone="mut">
             {t("co.tradesNote")}
           </T>
-        </Card>
+        </FieldGroup>
         <Button label={t("first.trade.next")} icon="check" full disabled={!picked.length && (!ownName || ownTaken)} onPress={save} />
         <Button label={t("co.skip")} variant="ghost" full onPress={next} />
       </View>
