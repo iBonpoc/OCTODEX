@@ -3166,6 +3166,8 @@ export const es: Dict = {
   "mod.gutters.draw.toLead": "Vincular",
   "mod.gutters.draw.selRun": "Canaleta · {len} · p {n}",
   "mod.gutters.draw.selDsKind": "Bajante · {kind} · {size} · p {n}",
+  "mod.gutters.draw.selRunOne": "Canaleta · {len}",
+  "mod.gutters.draw.selDsKindOne": "Bajante · {kind} · {size}",
   "mod.gutters.draw.selDs": "Bajante · p {n}",
   "mod.gutters.attr.props": "Detalles",
   "mod.gutters.attr.run": "Canaleta",
