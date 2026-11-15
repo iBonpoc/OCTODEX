@@ -44,6 +44,8 @@ export function classify(e: unknown): Failure {
   const msg = e instanceof Error ? e.message : String(e ?? "");
   return NETWORK.test(msg) ? "network" : "refusal";
 }
+/** #1633 A2: the server's «no rights» (42501) — not a module that is off (its own card) */
+export const isAccessDenied = (e: unknown) => String(field(e, "code") ?? "") === "42501" && !isModuleInactive(e);
 /** the hint of a refused module.op whose module is not active on the server (cloud/ops.ts; spec 33 П21.1) */
 export const MODULE_INACTIVE = "module_inactive";
 export const isModuleInactive = (e: unknown) => field(e, "hint") === MODULE_INACTIVE;

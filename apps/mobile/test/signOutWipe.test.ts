@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@react-native-async-storage/async-storage", () => ({ default: {} }));
 
-import { holdsLocalOnly, SIGNOUT_WIPE_KEY, signOutAndMark, signOutKeys, wipeAfterSignOut, wipeSignOutIfPending, forgetSignOutMark, type WipeStore } from "../src/cloud/signOutWipe";
+import { holdsLocalOnly, SIGNOUT_WIPE_KEY, signOutAndMark, signOutKeys, wipeAfterSignOut, wipeLeftCompanies, wipeSignOutIfPending, forgetSignOutMark, type WipeStore } from "../src/cloud/signOutWipe";
 import { createWriter, liveWriters, type Writer } from "../src/data/persist";
 
 const me = "u1";
@@ -202,5 +202,56 @@ describe("unit:signOutWipe — the sign-out itself (#1633)", () => {
     const { m, s } = mem({});
     await signOutAndMark(authOf({}).auth, null, () => {}, s);
     expect(m.has(SIGNOUT_WIPE_KEY)).toBe(false);
+  });
+});
+
+describe("unit:signOutWipe — the companies the person is no longer in (#1633 A2)", () => {
+  const signedMe = { signedIn: () => me, pauseMs: 0 };
+  const active = (...ids: string[]) => () => new Set(ids);
+  it("read from the device: a company left while the app was closed goes (cache, copy, my person-less one); the active ones stay", async () => {
+    const { m, s } = mem({
+      "octo.cloud.v1.c1.u1": cache(me), // still in
+      "octo.cloud.v1.c2.u1": cache(me), // removed
+      "octo.broken.octo.cloud.v1.c2.u1.1700000000000": cache(me),
+      "octo.cloud.v1.c3": cache(me), // an older person-less one of a company left
+      "octo.cloud.v1.c4": cache("u2"), // someone else's person-less one: whose is not mine
+      "octo.cloud.v1.c2.u2": cache("u2"), // another person in that company
+      "octo.cloud.v1.c1": cache(me), // my person-less one of a company I am still in: the store adopts it
+      "octo.outbox.v1": "[]",
+      "octo.cloud.v1.rejected": "[]",
+    });
+    await wipeLeftCompanies(me, { ...signedMe, active: active("c1"), s });
+    expect([...m.keys()].sort()).toEqual(["octo.cloud.v1.c1", "octo.cloud.v1.c1.u1", "octo.cloud.v1.c2.u2", "octo.cloud.v1.c4", "octo.cloud.v1.rejected", "octo.outbox.v1"]);
+  });
+  it("a cache holding a refused photo or receipt stays", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c2.u1": cache(me, { expenses: [{ receiptFailed: "x" }] }) });
+    await wipeLeftCompanies(me, { ...signedMe, active: active(), s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(true);
+  });
+  it("the store's last write of the company just left (after the first pass) goes too", async () => {
+    const { m, s } = mem({});
+    const getAllKeys = s.getAllKeys;
+    let n = 0;
+    s.getAllKeys = async () => {
+      if (n++ === 1) m.set("octo.cloud.v1.c2.u1", cache(me)); // landed between the passes
+      return getAllKeys();
+    };
+    await wipeLeftCompanies(me, { ...signedMe, active: active("c1"), s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(false);
+  });
+  it("back in the company meanwhile, or another person signed in: nothing of it goes", async () => {
+    const { m, s } = mem({ "octo.cloud.v1.c2.u1": cache(me) });
+    const now = new Set<string>();
+    const getAllKeys = s.getAllKeys;
+    s.getAllKeys = async () => (now.add("c2"), getAllKeys()); // the newest answer has it again
+    await wipeLeftCompanies(me, { ...signedMe, active: () => now, s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(true);
+    await wipeLeftCompanies(me, { signedIn: () => "u2", pauseMs: 0, active: active(), s });
+    expect(m.has("octo.cloud.v1.c2.u1")).toBe(true);
+  });
+  it("a device that refuses never throws", async () => {
+    const { s } = mem({});
+    s.getAllKeys = async () => Promise.reject(new Error("SQLITE_BUSY"));
+    await expect(wipeLeftCompanies(me, { ...signedMe, active: active(), s })).resolves.toBeUndefined();
   });
 });
