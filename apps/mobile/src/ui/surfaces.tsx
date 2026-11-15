@@ -3,7 +3,7 @@ import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
-import { setFooterInset } from "./footerInset";
+import { scrollBottom, setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
@@ -852,10 +852,11 @@ export function Screen({
         <View style={{ flex: 1 }}>
         {scroll ? (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
+            {/* from 820 the end of the page scrolls out from under the toast (the toast lane, DS §15.2, #1701) */}
             <ScrollView
               ref={scrollRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : scrollBottom(navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), navInsets.wide, safe.bottom), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
               // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
               // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.
