@@ -339,6 +339,8 @@ interface StoreCtx {
   /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
    *  through the offline queue — rule 6) */
   setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
+  /** #1606: my own name — at once in the team list, then to public.users.full_name through the queue; undo brings the old one back */
+  setMyName: (name: string) => Undo;
   /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the trial) or off; nothing of the
    *  module is deleted by «off». Locally at once, then module_enable / module_disable through the queue (rule 6). */
   enableModule: (key: string) => Undo;
@@ -1916,6 +1918,13 @@ export function StoreProvider({
       setPrefs: (patch) => {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
+      },
+      setMyName: (name) => {
+        const me = dbRef.current.me;
+        // an empty name is never written: it stays as it is
+        const clean = name.trim().replace(/\s+/g, " ") || (dbRef.current.members.find((m) => m.id === me)?.name ?? "");
+        const init = clean.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
+        return mutate("me.name", (d) => ({ ...d, members: d.members.map((m) => (m.id === me ? { ...m, name: clean, initials: init } : m)) }), { k: "me.name", name: clean });
       },
       setPushKind: (kind, enabled) =>
         mutate("me.pushKind", (d) => ({ ...d, pushPrefs: { ...d.pushPrefs, [kind]: enabled } }), { k: "me.pushKind", kind, enabled }),
