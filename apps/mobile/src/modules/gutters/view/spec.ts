@@ -8,6 +8,7 @@
 import type { PartQty } from "@octo/estimating-engine";
 import { cornerCut, findCorners, type Drawing, type FoundCorner } from "../geometry";
 import { storyOf, type Story } from "../canvas/scene";
+import { elbowCounts } from "../canvas/attrs";
 
 export interface SpecRun {
   n: number;
@@ -33,9 +34,10 @@ export interface SpecDs {
   story: Story;
   shape: string;
   size: string;
-  /** all elbows, of every style */
-  elbows: number;
-  offsets: number;
+  /** elbows by style, the engine's way: unset — its default (3 of the shape's first style, «AAA» on the canvas; #1747) */
+  elbows: { style: string; qty: number }[];
+  /** offsets by length, inches */
+  offsets: { lengthIn: number; qty: number }[];
 }
 export interface MeasureSpec {
   runs: SpecRun[];
@@ -44,8 +46,6 @@ export interface MeasureSpec {
   /** the materials to bring (labour is the estimate's business), as the engine counted them */
   parts: PartQty[];
 }
-
-const sum = (xs: readonly { qty: number }[] | undefined) => (xs ?? []).reduce((s, x) => s + (Number.isFinite(x.qty) ? x.qty : 0), 0);
 
 export function measureSpec(d: Drawing, parts: readonly PartQty[]): MeasureSpec {
   const all = findCorners(d);
@@ -74,8 +74,8 @@ export function measureSpec(d: Drawing, parts: readonly PartQty[]): MeasureSpec 
     story: storyOf(d.runs.find((r) => r.id === s.runId)?.attrs.story),
     shape: String(s.shape),
     size: String(s.size),
-    elbows: sum(s.elbows),
-    offsets: sum(s.offsets),
+    elbows: Object.entries(elbowCounts(s)).filter(([, q]) => q > 0).map(([style, qty]) => ({ style, qty })),
+    offsets: (s.offsets ?? []).filter((o) => Number.isFinite(o.qty) && o.qty > 0).map((o) => ({ lengthIn: o.lengthIn, qty: o.qty })),
   }));
   return { runs, corners, ds, parts: parts.filter((p) => p.kind === "material" && Number(p.qty) > 0) };
 }
