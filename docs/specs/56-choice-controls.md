@@ -319,7 +319,7 @@
 | 5 | работа и выезд: фильтр истории, `job/new`, `VisitForm`, `visits`, `VisitChecklist` и задачи → `DoneCircle`, `NotesBlock`, `sheets`, FAB | ~15 |
 | 6 | остальное: компания, `team`, `settings`, `profile`, каталог §3а.4, `suppliers`, `expense/new`, `purchase-order`, `LegalAgree`, `auth/trade`, `plan`, `DatePick` / `PlanParts`, открытая карточка 1280 (e2e 430); удалить `MultiChips`, `SelectedCheck`, `ChoiceChips` | ~32 |
 | Ш | шапки шторок — только после ответа §11.4; `testID` e2e | ~100 шторок |
-| G | после 1а (нужны `OptionRow`, `OptionTile`, `ToggleRow`, `FracKeys`), **Gutters №23** (№22 в архиве, 16.11): `modules/gutters/draw/**` (`EndSheet`, `CornerSheet`, `AttrPanel` ×12, `DrawScreen`, `FracPicker` → `FracKeys`), `SettingsScreen` ×16, `view/CardHead`; начинает после влития 1а и приёмки спеки; прототип v5 (#1757) сверен со спекой 56 (порог 12, вкл `ink`, угол — 2 `OptionRow`) | ~34 |
+| G | после 1а (нужны `OptionRow`, `OptionTile`, `ToggleRow`, `FracKeys`), **Gutters №23** (№22 в архиве, 16.11): `modules/gutters/draw/**` (`EndSheet`, `CornerSheet`, `AttrPanel` ×12, `DrawScreen`, `FracPicker` → `FracKeys`), `SettingsScreen` ×16, `view/CardHead`; начинает после влития 1а и приёмки спеки; прототип v5 (#1757) сверен со спекой 56 (порог 12, вкл `acc` (решение основателя 16.11), угол — три плитки `OptionTile`) | ~34 |
 
 ## 11. Вопросы основателю (о продукте)
 
