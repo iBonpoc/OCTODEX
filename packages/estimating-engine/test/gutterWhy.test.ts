@@ -1,0 +1,161 @@
+/**
+ * «Ничего молча» (spec 33-gutters-consumption §2.13, founder 16.11: «всё, что считается молча, должно как-то отображаться»):
+ * every part the engine derives itself carries `why` (a rule of the closed list, its numbers, the setting); a part of the
+ * drawing carries none. The gutter stock line carries its inches by where they come from (`coilBreakdown`, §2.12).
+ * Nothing here changes a quantity (the parts version stays).
+ */
+import { describe, expect, it } from "vitest";
+import { computeGutterParts, GUTTER_PARTS_VERSION, WHY_RULES, type MeasuredDownspout, type MeasuredRun, type MeasurementInput, type PartQty, type PartWhy } from "../src/gutterParts.js";
+
+const run = (o: Partial<MeasuredRun> & { id: string; lengthIn: number }): MeasuredRun => ({
+  profile: "k", size: "6", material: "alu_032", color: "white", story: 1, hanger: "hidden",
+  ends: [{ kind: "cap" }, { kind: "cap" }], houseSide: "R", ...o,
+});
+const ds = (o: Partial<MeasuredDownspout> & { id: string; runId: string }): MeasuredDownspout => ({
+  shape: "rect", size: "3x4", material: "alu", color: "white", bottom: { kind: "extension" }, elbows: [{ style: "A", qty: 3 }], ...o,
+});
+
+/**
+ * What a person draws or picks (spec §2.13 «с чертежа»): these come with no `why`. Explicit — a new derived part that is not
+ * here and has no `why` fails the guard below.
+ */
+const FROM_DRAWING = new Set([
+  "miter", "strip_miter", "elbow", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen",
+  "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "lower_roof", "wye", "rain_chain", "rain_chain_adapter",
+]);
+const fromDrawing = (p: PartQty) => p.use === "estimate" || FROM_DRAWING.has(p.attrs.part ?? "");
+
+/** a job with every kind of derived part the engine has today */
+const rich = (): MeasurementInput => ({
+  runs: [
+    run({ id: "a", lengthIn: 480, ends: [{ kind: "cap" }, { kind: "corner", cornerId: "c1" }], guardsIn: 240, guardType: "micromesh" }),
+    run({ id: "b", lengthIn: 1300, ends: [{ kind: "corner", cornerId: "c1" }, { kind: "corner", cornerId: "c2" }], wedges: true }),
+    run({ id: "c", lengthIn: 240, ends: [{ kind: "corner", cornerId: "c2" }, { kind: "cap" }], material: "copper", color: undefined, profile: "half_round" }),
+  ],
+  corners: [
+    { id: "c1", kind: "out", method: "cut", profile: "k", size: "6", material: "alu_032", color: "white", story: 1 },
+    { id: "c2", kind: "in", method: "strip", profile: "k", size: "6", material: "alu_032", color: "white", story: 1, splashGuard: true },
+  ],
+  downspouts: [
+    ds({ id: "d1", runId: "a" }),
+    ds({ id: "d2", runId: "b", wall: "stucco" }),
+    ds({ id: "d3", runId: "b", shape: "round", size: "3", elbows: undefined, wall: "wood" }),
+    ds({ id: "d4", runId: "c", shape: "round", size: "3", material: "copper", color: undefined, endOutlet: "end" }),
+  ],
+  wyes: [{ id: "y", dsIds: ["d1", "d2"] }],
+  chains: [{ id: "ch", runId: "a", story: 1 }],
+});
+const RULE_SETS = [undefined, { expansionJointPart: true, seamless: false }, { dsJoin: "screw" as const, wallKitByWall: { rect: { wood: "coil_strap" } } }];
+
+describe("every derived part says why (§2.13)", () => {
+  for (const over of RULE_SETS) {
+    it(`a rich job${over ? ` with ${JSON.stringify(over)}` : ""}: no part the engine added is silent`, () => {
+      const { parts } = computeGutterParts(rich(), over as never);
+      const silent = parts.filter((p) => !fromDrawing(p) && !p.why && !p.coilBreakdown).map((p) => p.key);
+      expect(silent).toEqual([]);
+      // the drawing's own parts say nothing
+      expect(parts.filter((p) => fromDrawing(p) && p.why).map((p) => p.key)).toEqual([]);
+    });
+  }
+  it("every reason is a rule of the closed list, its numbers are numbers or words, and it is never in attrs", () => {
+    for (const over of RULE_SETS) {
+      for (const p of computeGutterParts(rich(), over as never).parts) {
+        const all = p.why ? [p.why, ...(p.why.also ?? [])] : [];
+        for (const w of all) {
+          expect(WHY_RULES, p.key).toContain(w.rule);
+          for (const v of Object.values(w.params)) expect(["number", "string"], p.key).toContain(typeof v);
+        }
+        expect(Object.keys(p.attrs).some((k) => k === "why" || k === "coilBreakdown"), p.key).toBe(false);
+      }
+    }
+  });
+  it("the reasons cover what the job has: hangers, screws, anchors, straps, rivets, sealant, solder, paint, sticks, outlets, caps, guards", () => {
+    const rules = new Set(computeGutterParts(rich()).parts.flatMap((p) => (p.why ? [p.why, ...(p.why.also ?? [])] : [])).map((w) => w.rule));
+    for (const r of ["hangers_spacing", "kit_screws", "kit_anchors", "kit_per_hanger", "ds_straps_per_ds", "rivets_per_joints", "sealant_points", "solder_points", "flux_per_solder", "touch_up_per_color", "ds_sticks", "outlet_per_ds", "endcap_free_end", "guard_pieces", "splash_guard_inside", "coil_reserve", "corner_allowance"])
+      expect(rules, r).toContain(r);
+  });
+  it("nothing counted changes: the parts version stays (the reasons are words, not numbers of the estimate)", () => {
+    expect(GUTTER_PARTS_VERSION).toBe("3");
+  });
+});
+
+describe("the numbers of a reason", () => {
+  const one = (i: MeasurementInput, key: string, over?: object) => computeGutterParts(i, over as never).parts.find((p) => p.key === key)!;
+  it("hangers: the drawn length, the spacing, one at each end; two runs of one hanger add their length and hangers, the spacing stays", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 }), run({ id: "2", lengthIn: 120 })], corners: [], downspouts: [] };
+    const h = computeGutterParts(i).parts.find((p) => p.attrs.part === "hanger")!;
+    expect(h.why).toMatchObject({ rule: "hangers_spacing", params: { lengthIn: 360, spacingIn: 24, atEnds: 1, hangers: 17 } });
+    expect(Number(h.qty)).toBe(h.why!.params.hangers);
+    expect(h.why!.also).toBeUndefined();
+  });
+  it("sealant: the points by joint kind make the tubes", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1" })] };
+    const s = computeGutterParts(i).parts.find((p) => p.attrs.part === "sealant")!;
+    const w = s.why!;
+    expect(w.rule).toBe("sealant_points");
+    expect(w.params.endcaps).toBe(2);
+    expect(w.params.outlets).toBe(1);
+    expect(Number(s.qty)).toBe(Math.ceil(Number(w.params.points) / Number(w.params.perTube)));
+    expect(w.params.tubes).toBe(Number(s.qty));
+  });
+  it("rivets: the joints by kind and their rate; the sum is the line", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1" })] };
+    const r = computeGutterParts(i).parts.find((p) => p.attrs.part === "rivet")!;
+    expect(r.why!.rule).toBe("rivets_per_joints");
+    expect(r.why!.params.rivets).toBe(Number(r.qty));
+  });
+  it("one screw line from two rules (the downspout's straps and the guard pieces): one line, both reasons, the screws add up to it", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240, guardsIn: 240, guardType: "micromesh" })], corners: [], downspouts: [ds({ id: "d", runId: "1" })] };
+    const sc = computeGutterParts(i).parts.find((p) => p.key === "screw.8x05" || (p.attrs.part === "screw" && p.attrs.screw === "8x0.5"))!;
+    const all = [sc.why!, ...(sc.why!.also ?? [])];
+    expect(all.length).toBeGreaterThan(1);
+    expect(all.reduce((n, w) => n + Number(w.params.screws ?? 0), 0)).toBe(Number(sc.qty));
+  });
+  it("downspout sticks: the downspouts, their length, the stick, offcuts shared", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "a", runId: "1" }), ds({ id: "b", runId: "1" })] };
+    const st = computeGutterParts(i).parts.find((p) => p.key.startsWith("dsstick."))!;
+    expect(st.why).toMatchObject({ rule: "ds_sticks", params: { downspouts: 2, stickIn: 120, shared: 1, sticks: Number(st.qty) } });
+  });
+  it("straps cut from coil: the straps, inches a strap, the feet", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1" })] };
+    const f = one(i, computeGutterParts(i, { wallKitByWall: { rect: { wood: "coil_strap" } } } as never).parts.find((p) => p.attrs.part === "flat_coil")!.key, { wallKitByWall: { rect: { wood: "coil_strap" } } });
+    expect(f.why).toMatchObject({ rule: "flat_coil_straps", params: { perStrapIn: 16, ft: Number(f.qty) } });
+  });
+});
+
+describe("the gutter stock line: drawn + corners + reserve (§2.12)", () => {
+  const job = (corner?: "out" | "in"): MeasurementInput => ({
+    runs: [run({ id: "1", lengthIn: 264, ends: [{ kind: "cap" }, corner ? { kind: "corner", cornerId: "c" } : { kind: "cap" }] })],
+    corners: corner ? [{ id: "c", kind: corner, method: "cut", profile: "k", size: "6", material: "alu_032", color: "white", story: 1 }] : [],
+    downspouts: [],
+  });
+  const coil = (i: MeasurementInput, over?: object) => computeGutterParts(i, over as never).parts.find((p) => p.key.startsWith("coil."))!;
+  it("one run of 22 ft and an outside corner: 264 + 14 + the reserve; the sum before rounding up is the line", () => {
+    const c = coil(job("out"));
+    expect(c.coilBreakdown).toEqual({ drawnIn: 264, cornersIn: 14, wasteIn: 120 });
+    const sum = c.coilBreakdown!.drawnIn + c.coilBreakdown!.cornersIn + c.coilBreakdown!.wasteIn;
+    expect(Number(c.qty)).toBe(Math.ceil(sum / 12));
+    expect(c.why).toMatchObject({ rule: "coil_reserve", params: { runs: 1, reserveFt: 10 }, also: [{ rule: "corner_allowance", params: { outCount: 1, outIn: 14, inCount: 0 } }] });
+  });
+  it("the spec's case (reserve 3 ft — the company's number until PR-1 makes it the default): 264 / 14 / 36 → 314″ → 27 ft", () => {
+    const c = coil(job("out"), { wasteFt: 3 });
+    expect(c.coilBreakdown).toEqual({ drawnIn: 264, cornersIn: 14, wasteIn: 36 });
+    expect(c.qty).toBe("27");
+  });
+  it("an inside corner: the inside allowance (6″ today; the spec's 7″ comes with PR-1); no corner: no corner reason", () => {
+    expect(coil(job("in")).coilBreakdown!.cornersIn).toBe(6);
+    const none = coil(job());
+    expect(none.coilBreakdown!.cornersIn).toBe(0);
+    expect(none.why!.also).toBeUndefined();
+  });
+  it("sections: the same breakdown on the section line", () => {
+    const s = computeGutterParts(job("out"), { seamless: false } as never).parts.find((p) => p.key.startsWith("section."))!;
+    expect(s.coilBreakdown).toEqual({ drawnIn: 264, cornersIn: 14, wasteIn: 120 });
+  });
+  it("two runs of one stock: their lengths add, two runs", () => {
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 264 }), run({ id: "2", lengthIn: 120 })], corners: [], downspouts: [] };
+    const c = coil(i);
+    expect(c.coilBreakdown!.drawnIn).toBe(384);
+    expect((c.why as PartWhy).params.runs).toBe(2);
+  });
+});
