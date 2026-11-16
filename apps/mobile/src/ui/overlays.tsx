@@ -1,6 +1,6 @@
 import type { ComponentProps } from "react";
 import { toastArmed, toastExpires, toastIdFor } from "./toastArm";
-import { toastBottom, useFooterInset, wideToastBottom } from "./footerInset";
+import { toastBottom, useFooterInset, useToastRight, wideToastBottom } from "./footerInset";
 import { menuListHeight, menuScrollTo } from "./menuLayout";
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ScreenScrollCtx } from "./requiredForm";
@@ -829,6 +829,8 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const bar = useFooterInset();
+  // a panel the screen keeps at its right edge (from 820): the toast is centred in the rest (#1895)
+  const side = useToastRight();
   if (!item) return null;
   // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»), on every width (DS §15.2; a
   // module's full-screen canvas gives the height of its bottom bar the same way — #1819: from 820 the toast lay on it too)
@@ -839,7 +841,7 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
       entering={reduce ? undefined : SlideInDown.duration(motion.durBase)}
       exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
       pointerEvents="box-none"
-      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]), bottom, alignItems: "center", zIndex: 100 }}
+      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]) + side, bottom, alignItems: "center", zIndex: 100 }}
       accessibilityLiveRegion="polite"
     >
       <Glass

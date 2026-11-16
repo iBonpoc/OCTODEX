@@ -6,7 +6,7 @@
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button leaves the picked run
  *   on its storey (#1608: «Эт» is for what is drawn next); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
  * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Свойства on the phone — «Выбрать» is gone, #687 — Эт 1 / Этаж, Назад, Вперёд);
- *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «D1» on the canvas;
+ *   a picked tool says what to do («Установите downspout — нажмите на gutter») until it is used; a downspout is «D1» on the canvas;
  *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
  * - П20.9: after the first gutter «Дальше: поставьте водостоки» + «Водосток» turns the tool on;
  * - the toolbar goes bottom → under the right hand → under the left → bottom (from «Ещё»);
@@ -56,7 +56,7 @@ exports.run = async (h) => {
   h.expect(/Модуль не подключён — рисунок не сохранится/.test(await tid("draw-not-saved").innerText()), "off: says nothing will be saved");
   await tid("draw-empty").waitFor({ timeout: 3000 });
   // no «roof» on an empty grid (founder 16.11, #1819: «Про какую крышу он говорит?»)
-  h.expect(/по сетке/.test(await tid("draw-empty").innerText()) && !/крыш/.test(await tid("draw-empty").innerText()), `the empty canvas speaks of the grid, not a roof (${await tid("draw-empty").innerText()})`); // i18n-old: ok — checks the old word is gone
+  h.expect(/Нарисуйте gutter/.test(await tid("draw-empty").innerText()) && !/крыш|желоб/.test(await tid("draw-empty").innerText()), `the empty canvas: «Нарисуйте gutter», no roof, no «желоб» (founder 16.11) (${await tid("draw-empty").innerText()})`); // i18n-old: ok — checks the old word is gone
   h.expect((await tid("draw-money").count()) === 0 && (await tid("draw-total").count()) === 0, "no total under the drawing (#700)");
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the canvas");
   await h.shot("empty");
@@ -96,7 +96,7 @@ exports.run = async (h) => {
   h.expect((await tid("draw-next").count()) === 0, "off: no «what next» — no estimate comes of it");
   await tid("draw-tool-ds").getByRole("button").click();
   await tid("draw-hint").waitFor({ timeout: 3000 });
-  h.expect(/Нажмите на желоб, где водосток/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
+  h.expect(/Установите downspout — нажмите на gutter/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
   await h.shot("hint");
   await p.mouse.click((x0 + x1) / 2, y + 3);
   await closeDsMenu(p);

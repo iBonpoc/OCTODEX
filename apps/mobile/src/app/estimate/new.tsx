@@ -1064,7 +1064,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
           ...[...db.catalog]
             .filter((x) => !(picker !== null && typeof picker === "object" && "replace" in picker) || x.kind !== "kit")
             .sort((a, b) => a.name.localeCompare(b.name))
-            .map((x) => ({ key: x.id, label: x.name, subtitle: `${t(kindLabel(x.kind))} · ${money(itemPrice(x, db.catalog))} / ${x.unit}${x.placeholder ? ` · ${t("cat.placeholder")}` : ""}` })),
+            .map((x) => ({ key: x.id, label: x.name, subtitle: `${t(kindLabel(x.kind))} · ${money(itemPrice(x, db.catalog))} / ${x.unit}` })),
         ]}
         value={null}
         onSelect={(k) => (k === "__clear__" && typeof picker === "object" && picker && "replace" in picker ? clearRow(picker.replace) : fromCatalog(k))}
