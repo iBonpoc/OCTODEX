@@ -34,7 +34,7 @@ export interface SpecDs {
   story: Story;
   shape: string;
   size: string;
-  /** elbows by style, the engine's way: unset — its default (3 of the shape's first style, «AAA» on the canvas; #1747) */
+  /** elbows by style, the engine's way: unset — its default by kind (#1747, #1776: a plain rectangular one none, a corrugated one 3 × A «AAA», a round one 3 × 45°) */
   elbows: { style: string; qty: number }[];
   /** offsets by length, inches */
   offsets: { lengthIn: number; qty: number }[];

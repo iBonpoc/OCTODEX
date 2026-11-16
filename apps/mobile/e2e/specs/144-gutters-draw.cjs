@@ -55,6 +55,8 @@ exports.run = async (h) => {
   await tid("draw-not-saved").waitFor({ timeout: 5000 });
   h.expect(/Модуль не подключён — рисунок не сохранится/.test(await tid("draw-not-saved").innerText()), "off: says nothing will be saved");
   await tid("draw-empty").waitFor({ timeout: 3000 });
+  // no «roof» on an empty grid (founder 16.11, #1819: «Про какую крышу он говорит?»)
+  h.expect(/по сетке/.test(await tid("draw-empty").innerText()) && !/крыш/.test(await tid("draw-empty").innerText()), `the empty canvas speaks of the grid, not a roof (${await tid("draw-empty").innerText()})`); // i18n-old: ok — checks the old word is gone
   h.expect((await tid("draw-money").count()) === 0 && (await tid("draw-total").count()) === 0, "no total under the drawing (#700)");
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the canvas");
   await h.shot("empty");

@@ -29,6 +29,8 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
+import { goTo } from "@/nav/go";
+import { setFooterInset } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
@@ -1052,10 +1054,20 @@ export default function DrawScreen() {
     else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
     else {
       const undo = removeMeasurement(store, m.id);
-      back();
+      flush();
+      // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
+      // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
+      goTo(moduleHref("gutters", "list"));
       toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
     }
   };
+  // the toast stands above what lies at the bottom of the canvas — the hints, the chips and the toolbar (#1819: «Замер удалён ·
+  // Отменить» lay on the toolbar); the same lane the pinned action bar gives (ui/footerInset), gone with the screen
+  const [barH, setBarH] = useState(0);
+  useEffect(() => {
+    setFooterInset(barH);
+    return () => setFooterInset(0);
+  }, [barH]);
   const back = () => {
     flush();
     if (router.canGoBack()) router.back();
@@ -1314,7 +1326,7 @@ export default function DrawScreen() {
           }}
         />
       ) : null}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+      <View pointerEvents="box-none" onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
         {/* the toolbar keeps its place (#1630): below the chip and the hints when at the bottom; beside them, at its own edge, when on a side
             or when the phone lies on its side — the chip coming and going never moves it under the finger */}
         <View pointerEvents="box-none" style={row ? { flexDirection: "row", alignItems: "flex-end", gap: space[2] } : { gap: space[2] }}>

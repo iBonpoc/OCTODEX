@@ -7,7 +7,7 @@ vi.mock("react-native", () => ({ Platform: { OS: "web" }, Linking: {}, Share: {}
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 import { computeGutterParts, ENGINE_VERSION, type MeasuredRun, type MeasurementInput, type PartQty } from "@octo/estimating-engine";
-import { DS_SHAPES, ELBOW_STYLES, DEFAULT_ELBOWS, elbowsOf } from "../src/modules/gutters/canvas/attrs";
+import { DS_KINDS, ELBOW_STYLES, elbowCounts } from "../src/modules/gutters/canvas/attrs";
 import type { CatalogItem } from "../src/data/types";
 import { optionTotals, newDoc } from "../src/features/estimateDoc";
 import { linesFromParts, resyncLines } from "../src/modules/gutters/estimate";
@@ -23,16 +23,18 @@ const job = (shape: "rect" | "round"): MeasurementInput => ({
 const elbows = (ps: readonly PartQty[]) => ps.filter((p) => p.attrs.part === "elbow");
 
 describe("the panel and the engine say the same default (#871)", () => {
-  it("what a downspout with no elbows of its own shows is what the engine counts: style and number", () => {
-    for (const shape of DS_SHAPES) {
-      const shown = elbowsOf({ shape, elbows: undefined });
-      const counted = elbows(computeGutterParts(job(shape)).parts);
-      expect(counted).toHaveLength(1);
-      expect(counted[0]!.attrs.style).toBe(shown.style);
-      expect(Number(counted[0]!.qty)).toBe(shown.qty);
-      expect(shown.style).toBe(ELBOW_STYLES[shape][0]);
-      expect(shown.qty).toBe(DEFAULT_ELBOWS);
+  it("what a downspout with no elbows of its own shows is what the engine counts, for every kind (#1776: by kind)", () => {
+    for (const k of DS_KINDS) {
+      const ds = { ...job(k.shape).downspouts[0]!, dsStyle: k.style };
+      const shown = Object.entries(elbowCounts({ shape: k.shape, dsStyle: k.style })).filter(([, q]) => q > 0);
+      const counted = elbows(computeGutterParts({ ...job(k.shape), downspouts: [ds] }).parts).map((p) => [String(p.attrs.style), Number(p.qty)]);
+      expect(counted, k.key).toEqual(shown);
     }
+    // the founder's numbers (16.11): plain rectangular none, corrugated 3 × A; round ones 3 × 45° as before (#871)
+    expect(elbowCounts({ shape: "rect" })).toEqual({ A: 0, B: 0 });
+    expect(elbowCounts({ shape: "rect", dsStyle: "corrugated" })).toEqual({ A: 3, B: 0 });
+    expect(elbowCounts({ shape: "round" })).toMatchObject({ "45": 3 });
+    expect(elbowCounts({ shape: "round", dsStyle: "corrugated" })).toMatchObject({ "45": 3 });
   });
   it("the engine's round default is a style a round downspout offers", () => {
     expect(ELBOW_STYLES.round).toContain(String(elbows(computeGutterParts(job("round")).parts)[0]!.attrs.style));
@@ -101,7 +103,8 @@ describe("the money of the 45° elbow (#871, rule 15)", () => {
     expect(sum(elbowLines(both))).toBe(3 * 1500);
   });
   it("the old «A» price is for a round 45° default only: a rectangular elbow and other round styles do not borrow it", () => {
-    const rectElbow = computeGutterParts(job("rect")).parts.find((p) => p.attrs.part === "elbow")!;
+    const ribbed = job("rect"); // a corrugated one: its 3 × A by default (a plain one has none since #1776)
+    const rectElbow = computeGutterParts({ ...ribbed, downspouts: [{ ...ribbed.downspouts[0]!, dsStyle: "corrugated" }] }).parts.find((p) => p.attrs.part === "elbow")!;
     const roundA = { ...elbow, attrs: { ...elbow.attrs, style: "A" } };
     const round75 = { ...elbow, attrs: { ...elbow.attrs, style: "75" } };
     expect(findItem([item("iA", elbow, 1234, "A")], rectElbow)).toBeUndefined();
