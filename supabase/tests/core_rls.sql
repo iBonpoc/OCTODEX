@@ -15759,6 +15759,40 @@ select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"532100
 select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":2},{"id":"53210000-0000-4000-8000-0000000000b2","received":1}]');
 :as_super
 select tst.ok(pg_temp.t321_rows() = 1, 'T321 a repeat, more, a tick back and again — still one receipt row for the line');
+-- an item without a pack size (the pack is the unit), a line without a cost row, an item without its costs row
+:as_owner_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53210000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 no pack, no costs', 'ea', 900),
+  ('53210000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 no line cost', 'ea', 900);
+insert into public.purchase_orders (id, company_id, supplier_id) values
+  ('53210000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000a1');
+insert into public.purchase_order_lines (id, company_id, po_id, position, catalog_item_id, name, qty, unit) values
+  ('53210000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000002', 0, '53210000-0000-4000-8000-0000000000c2', 'T321 c2', 1, 'ea'),
+  ('53210000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000002', 1, '53210000-0000-4000-8000-0000000000c3', 'T321 c3', 1, 'ea');
+insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values
+  ('53210000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 777);
+update public.purchase_orders set status = 'sent' where id = '53210000-0000-4000-8000-000000000002';
+select public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":1},{"id":"53210000-0000-4000-8000-0000000000b4","received":1}]');
+:as_super
+select tst.ok((select count(*) = 1 and min(unit_cost_cents) = 777 and bool_and(vendor_tax_bps is null) from public.catalog_cost_history
+                where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c2'),
+  'T321 no pack size — the pack''s price as is; no costs row of the item — the tax is empty');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c3'$q$) = 0,
+  'T321 a line without a cost row writes no history');
+-- the item's supplier changed in the same transaction keeps the receipt's own (the order's) supplier
+:as_owner_a
+insert into public.suppliers (id, company_id, name) values ('53210000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T321 Other (test)');
+select public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":0}]');
+:as_super
+delete from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b3';
+:as_owner_a
+do $t$ begin
+  perform public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":1}]');
+  update public.catalog_items set supplier_id = '53210000-0000-4000-8000-0000000000a2' where id = '53210000-0000-4000-8000-0000000000c2';
+end $t$;
+:as_super
+select tst.ok((select supplier_id = '53210000-0000-4000-8000-0000000000a1' from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b3'),
+  'T321 a receipt keeps the order''s supplier when the item''s supplier changes in the same transaction');
 -- the app never writes the source or the line itself
 :as_office_a
 select tst.fails($q$insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, po_line_id) values

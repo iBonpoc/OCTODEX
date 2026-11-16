@@ -99,11 +99,12 @@ export function supplierName(db: DB, it: CatalogItem): string | undefined {
   return supplierOf(db, it.supplierId)?.name ?? (it.vendor?.trim() || undefined);
 }
 
-/** the history of one item (newest first), or of every item of a supplier; at most `limit` */
+/** the history of one item (newest first), or of a supplier: its items' rows and every row bought from it (an order's
+ *  receipt is the ORDER's supplier, who need not be the item's main one — #1836 review); at most `limit` */
 export function historyOf(db: DB, where: { itemId?: string; supplierId?: string }, limit: number): CostHistoryEntry[] {
   const items = where.supplierId ? new Set(itemsOfSupplier(db, where.supplierId).map((x) => x.id)) : null;
   return (db.costHistory ?? [])
-    .filter((h) => (where.itemId ? h.itemId === where.itemId : items ? items.has(h.itemId) : false))
+    .filter((h) => (where.itemId ? h.itemId === where.itemId : items ? items.has(h.itemId) || h.supplierId === where.supplierId : false))
     .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
     .slice(0, limit);
 }

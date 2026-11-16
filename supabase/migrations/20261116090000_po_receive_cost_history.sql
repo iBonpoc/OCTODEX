@@ -12,6 +12,9 @@
 -- What does NOT change: the item's own cost (catalog_item_costs) — whether a receipt updates it is the founder's question
 -- В8 (#1832); until the answer, only the history.
 -- Rule 16: a new nullable column and a new value of a check — old phones neither read nor write them.
+-- Kept on purpose (review #1893): the FIRST receipt of a line is its price (a tick taken back and put again after the
+-- office changed the line's cost writes nothing new); the cost per unit divides by the item's pack size at receipt time
+-- (a pack size changed between the order and the receipt is not followed — the order line keeps no pack size yet).
 
 alter table public.catalog_cost_history add column if not exists po_line_id uuid;
 alter table public.catalog_cost_history drop constraint if exists catalog_cost_history_source_check;
@@ -96,3 +99,15 @@ end;
 $$;
 revoke all on function public.po_receive(uuid, jsonb, bigint) from public, anon;
 grant execute on function public.po_receive(uuid, jsonb, bigint) to authenticated;
+
+-- a change of the item's supplier in the same transaction re-labels this transaction's history rows (t96, SUP1) — but a
+-- receipt row is the ORDER's supplier and keeps it (review #1893 №4)
+create or replace function app.tg_cost_history_supplier()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  update public.catalog_cost_history h set supplier_id = new.supplier_id
+   where h.company_id = new.company_id and h.item_id = new.id and h.at = now() and h.source <> 'receipt';
+  return null;
+end;
+$$;
+revoke all on function app.tg_cost_history_supplier() from public, anon, authenticated;
