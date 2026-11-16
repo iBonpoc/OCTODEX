@@ -4,8 +4,10 @@ import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
-import { T } from "@/ui/primitives";
-import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
+import { Icon, T } from "@/ui/primitives";
+import { Card, FieldGroup, ListRow, SectionTitle } from "@/ui/surfaces";
+import { useTheme } from "@/theme/ThemeProvider";
+import { component, size } from "@octo/design-tokens";
 import { SECTIONS } from "./registry";
 import { StatusNote } from "@/ui/statusNote";
 import { ViewTabs } from "@/ui/viewTabs";
@@ -31,6 +33,7 @@ type VTab = string;
 /** Selectors (DS §9): one of 5–12 in a form row — SelectField with the menu at the row. */
 export function SelectorsSection() {
   const { t } = useI18n();
+  const { c } = useTheme();
   const s = SECTIONS.find((x) => x.id === "selectors")!;
   const [unit, setUnit] = useState<Unit | null>("ft");
   const [none, setNone] = useState<Unit | null>(null);
@@ -92,6 +95,7 @@ export function SelectorsSection() {
           value={multi}
           onChange={setMulti}
           items={(["roofing", "hvac", "painting", "cleaning", "flooring"] as const).map((k) => ({ key: k, label: t(`trade.${k}` as DictKey) }))}
+          footer={<ListRow title={t("first.trade.addOwn")} left={<Icon name="plus" s={size.iconSm} color={c.ink} />} chevron={false} minHeight={component.rowOption} onPress={() => {}} />}
         />
       </Card>
       <FieldGroup title={t("ds.req.title")}>
