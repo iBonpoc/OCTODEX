@@ -15466,6 +15466,18 @@ select tst.ok((select assigned_to = 'a2810000-0000-4000-8000-000000000001' from 
 update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c01';
 select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
               'T282 the server is not limited');
+-- not only the office: a tech and sales who may change a lead do not give it to a subcontractor either (the trigger reads
+-- the team as the caller — every member sees the team, so the check holds for them)
+:as_tech281
+select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
+                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+-- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
+select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
+              'T282 nor a task on it (a tech''s task stays his)');
+:as_sales_a
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, assigned_to) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 s', '+13235552823', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 sales do not give a new lead to a subcontractor');
 \echo 'T282 a subcontractor makes no lead and gets none ok'
 
 -- T283: the bin — he neither lists nor brings back a lead or a lead's task of his
