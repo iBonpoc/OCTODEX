@@ -6835,11 +6835,11 @@ select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.as
 update public.leads set assigned_to = 'a8400000-0000-4000-8000-000000000001' where id = '18400000-0000-4000-8000-000000000003';
 select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a8400000-0000-4000-8000-000000000001'),
           'T84 a subcontractor gets no lead push');
--- a lead given to the subcontractor at once: no push to him (the people of the flow still get it)
-:as_office_a
+-- a lead given to the subcontractor at once: no push to him (the people of the flow still get it). Since #1637 the app
+-- cannot give a lead to a subcontractor (T282); a lead the server gives him still sends him nothing
+:as_super
 insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
   ('18400000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Sub', '+13235558405', 'a8400000-0000-4000-8000-000000000001');
-:as_super
 select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a8400000-0000-4000-8000-000000000001')
           and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a0000000-0000-0000-0000-000000000001'),
           'T84 a lead given to the subcontractor at once: nothing to him, the owner still hears');
@@ -15392,5 +15392,112 @@ select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2
               and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2800000-0000-4000-8000-000000000002.jpg'),
               'T280 sales (not on the job): their receipt with a live expense and their photo get their bytes');
 \echo 'T280 the office and sales as before ok'
+
+-- ---------------------------------------------------------------- T281–T284 (#1637): a subcontractor has no leads
+-- (red before 20261116010000)
+\set as_tech281 'reset role; set request.jwt.claim.sub = ''a2810000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2810000-0000-4000-8000-000000000001', 'tech281@a.test', '{"full_name":"Tina Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000001', 'tech', 'active');
+-- as the rows were before the rule: a lead given to the subcontractor, one he made, a task on it for him, a contact, a
+-- call; a lead of the tech's; a removed lead and a removed lead's task of the subcontractor's in the bin
+set session_replication_role = replica;
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by) values
+  ('a2810000-0000-4000-8000-000000000c01', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Given', '+13235552811', 'a5600000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000001'),
+  ('a2810000-0000-4000-8000-000000000c02', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Made', '+13235552812', null, 'a5600000-0000-4000-8000-000000000002'),
+  ('a2810000-0000-4000-8000-000000000c03', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Tech', '+13235552813', 'a2810000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000001');
+insert into public.leads (id, company_id, source_id, contact_name, phone, created_by, deleted_at) values
+  ('a2810000-0000-4000-8000-000000000c04', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Binned', '+13235552814', 'a5600000-0000-4000-8000-000000000002', now());
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, created_by) values
+  ('a2810000-0000-4000-8000-000000000d01', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T281 call +13235552811', 'a5600000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000001');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by, deleted_at) values
+  ('a2810000-0000-4000-8000-000000000d02', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T281 binned task', 'a5600000-0000-4000-8000-000000000002', now());
+insert into public.lead_contacts (company_id, lead_id, name, phone) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000c01', 'T281 Spouse', '+13235552815');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'call', 'out');
+insert into public.trash_entries (company_id, kind, object_id, deleted_by, deleted_at) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c04', 'a5600000-0000-4000-8000-000000000002', now()),
+  ('ca000000-0000-0000-0000-000000000000', 'task', 'a2810000-0000-4000-8000-000000000d02', 'a5600000-0000-4000-8000-000000000002', now());
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+
+-- T281: the subcontractor sees none of it — the lead given to him (left given, director 16.11), the one he made, their
+-- task, contact and call — and changes none
+:as_sub56
+select tst.ok(tst.cnt($q$select 1 from public.leads where id::text like 'a2810000-%'$q$) = 0, 'T281 a subcontractor sees no lead, also one given to him or made by him');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id::text like 'a2810000-%'$q$) = 0, 'T281 nor a lead''s task given to him');
+select tst.ok(tst.cnt($q$select 1 from public.lead_contacts where name = 'T281 Spouse'$q$) = 0
+              and tst.cnt($q$select 1 from public.activities where subject_id = 'a2810000-0000-4000-8000-000000000c01'$q$) = 0,
+              'T281 nor its contacts and calls');
+update public.leads set contact_name = 'x' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.tasks set title = 'x' where id = 'a2810000-0000-4000-8000-000000000d01';
+:as_super
+select tst.ok((select contact_name = 'T281 Given' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01')
+              and (select title = 'T281 call +13235552811' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
+              'T281 he changes neither the lead nor its task');
+\echo 'T281 a subcontractor sees no lead ok'
+
+-- T282: he makes no lead, no lead's task, no call or contact on one; a lead or a lead's task is not given to him
+:as_sub56
+select tst.fails($q$insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 x', '+13235552821')$q$,
+                 'T282 a subcontractor makes no lead');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title, assignee_id) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T282', auth.uid())$q$,
+                 'T282 nor a task on a lead');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'call', 'out')$q$,
+                 'T282 nor a call on a lead');
+select tst.fails($q$insert into public.lead_contacts (company_id, lead_id, name) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000c01', 'T282')$q$,
+                 'T282 nor a contact of a lead');
+:as_office_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
+                      '%not given to a subcontractor%', 'T282 the office does not give a lead to a subcontractor');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, assigned_to) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 y', '+13235552822', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 nor a new one');
+select tst.fails_like($q$insert into public.tasks (company_id, subject_type, subject_id, title, assignee_id) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 nor a lead''s task');
+-- the old lead still given to him is edited as before (the assignee unchanged)
+update public.leads set contact_name = 'T281 Given (edited)' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.tasks set title = 'T281 call back' where id = 'a2810000-0000-4000-8000-000000000d01';
+select tst.ok((select contact_name = 'T281 Given (edited)' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01')
+              and (select title = 'T281 call back' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
+              'T282 the office edits an old lead given to him and its task, the assignee unchanged');
+update public.leads set assigned_to = 'a2810000-0000-4000-8000-000000000001' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where false;
+select tst.ok((select assigned_to = 'a2810000-0000-4000-8000-000000000001' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
+              'T282 the office gives it to a tech');
+:as_super
+update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c01';
+select tst.ok(true, 'T282 the server is not limited');
+\echo 'T282 a subcontractor makes no lead and gets none ok'
+
+-- T283: the bin — he neither lists nor brings back a lead or a lead's task of his
+:as_sub56
+select tst.ok(tst.cnt($q$select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id::text like 'a2810000-%' and label is not null$q$) = 0,
+              'T283 the bin tells him neither his lead''s name nor his lead''s task''s title');
+select tst.ok(coalesce((select bool_and(not ok) from public.trash_restore('lead', array['a2810000-0000-4000-8000-000000000c04']::uuid[])), true)
+              and coalesce((select bool_and(not ok) from public.trash_restore('task', array['a2810000-0000-4000-8000-000000000d02']::uuid[])), true),
+              'T283 nor brings them back');
+:as_super
+select tst.ok((select deleted_at is not null from public.leads where id = 'a2810000-0000-4000-8000-000000000c04')
+              and (select deleted_at is not null from public.tasks where id = 'a2810000-0000-4000-8000-000000000d02'),
+              'T283 they stay in the bin');
+\echo 'T283 the bin holds no lead for a subcontractor ok'
+
+-- T284: a tech and the office as before; a tech made a subcontractor loses his leads at once
+:as_tech281
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a2810000-0000-4000-8000-000000000c03'$q$) = 1, 'T284 a tech sees the lead given to him');
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a2840000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T284 Own', '+13235552841');
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a2840000-0000-4000-8000-000000000001'$q$) = 1, 'T284 a tech makes a lead');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.leads where id::text like 'a2810000-%' and deleted_at is null$q$) = 3, 'T284 the office sees every lead, the subcontractor''s too');
+:as_super
+update public.memberships set role = 'subcontractor' where user_id = 'a2810000-0000-4000-8000-000000000001';
+:as_tech281
+select tst.ok(tst.cnt($q$select 1 from public.leads where id in ('a2810000-0000-4000-8000-000000000c03', 'a2840000-0000-4000-8000-000000000001')$q$) = 0,
+              'T284 made a subcontractor: his leads are no longer his to see');
+:as_super
+update public.memberships set role = 'tech' where user_id = 'a2810000-0000-4000-8000-000000000001';
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_lead_assignee_not_sub()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_lead_task_not_sub()', 'EXECUTE'),
+              'T284 rule 18: the trigger functions are nobody''s');
+\echo 'T284 a tech and the office as before ok'
 
 \echo 'ALL TESTS PASSED'
