@@ -19,10 +19,11 @@ const run = (id: string, a: P, b: P, x: Partial<typeof stock> = {}): DrawnRun =>
 /** an L of two gutters, three downspouts the same and one round corrugated with offsets */
 const d: Drawing = {
   runs: [run("a", [0, 0], [400, 0]), run("b", [400, 0], [400, 300])],
+  // corrugated: a plain rectangular one has no elbows by default (#1776)
   downspouts: [
-    { ...DEFAULT_DS_ATTRS, id: "d1", runId: "a", atIn: 60 },
-    { ...DEFAULT_DS_ATTRS, id: "d2", runId: "a", atIn: 200 },
-    { ...DEFAULT_DS_ATTRS, id: "d3", runId: "a", atIn: 340 },
+    { ...DEFAULT_DS_ATTRS, id: "d1", runId: "a", atIn: 60, dsStyle: "corrugated" },
+    { ...DEFAULT_DS_ATTRS, id: "d2", runId: "a", atIn: 200, dsStyle: "corrugated" },
+    { ...DEFAULT_DS_ATTRS, id: "d3", runId: "a", atIn: 340, dsStyle: "corrugated" },
     { ...DEFAULT_DS_ATTRS, id: "d4", runId: "b", atIn: 150, shape: "round", size: "3", dsStyle: "corrugated", offsets: [{ lengthIn: 2, qty: 1 }] },
   ],
 };
