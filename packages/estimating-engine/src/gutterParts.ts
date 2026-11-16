@@ -211,8 +211,10 @@ export interface GutterRules {
   touchUpPaint: boolean;
   /** end caps of these profiles come left and right */
   sidedCapProfiles: string[];
-  /** elbows of a downspout without its own (a rectangular one: A, B) */
+  /** elbows of a corrugated rectangular downspout without its own (A, B): founder 16.11 «у ребристого 3 штуки A» (#1776) */
   defaultElbows: { style: string; qty: number }[];
+  /** …of a plain (smooth) rectangular one: founder 16.11 «у прямого водостока стандартно колен 0» — it is bent on site (#1776) */
+  defaultElbowsPlain: { style: string; qty: number }[];
   /** …of a round one (45°…90°; «A» is not a round elbow, #871): not set — as many 45° as `defaultElbows` has elbows */
   defaultElbowsRound?: { style: string; qty: number }[];
   /** offsets sold ready-made; others are marked custom */
@@ -257,6 +259,7 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   touchUpPaint: true,
   sidedCapProfiles: ["k", "fascia"],
   defaultElbows: [{ style: "A", qty: 3 }],
+  defaultElbowsPlain: [],
   stdOffsetsIn: [1, 2, 4],
   maxRunPerDownspoutIn: 480,
   expansionJointIn: 600,
@@ -460,7 +463,17 @@ export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
  * (a part, its quantity, an elbow rule — as #871 did). Not for a change in the core's money (a line, a discount): that is
  * `ENGINE_VERSION`, and it must not mark every estimate as «расчёт изменился». Estimates remember it in their lines.
  */
-export const GUTTER_PARTS_VERSION = "3"; // 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+export const GUTTER_PARTS_VERSION = "4"; // 4: a plain rectangular downspout has no elbows by default, a corrugated one 3 × A, #1776; 3: the waste is a fixed 10 ft for every gutter stock by default, #1355; 2: waste 10% by default and a separate allowance for an outside corner (14″), #1355
+
+/**
+ * The elbows a downspout gets when it has none of its own (#1776, founder 16.11): a rectangular plain one — none (bent on
+ * site), a corrugated one — 3 × A; a round one — as many 45° as the corrugated default has (as before, #871; round ones
+ * wait for the founder's word). The app reads its default from here: one rule, not two copies.
+ */
+export function defaultElbowsFor(ds: Pick<MeasuredDownspout, "shape" | "dsStyle">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound"> = DEFAULT_GUTTER_RULES): { style: string; qty: number }[] {
+  if (ds.shape === "round") return rules.defaultElbowsRound ?? [{ style: "45", qty: rules.defaultElbows.reduce((n, x) => n + Math.max(0, x.qty), 0) }];
+  return ds.dsStyle === "corrugated" ? rules.defaultElbows : rules.defaultElbowsPlain;
+}
 
 export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
   const rules = resolveGutterRules(over);
@@ -666,8 +679,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
 
     // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above
     let pieces = Math.ceil(lenIn / rules.dsStickIn);
-    const byDefault = ds.shape === "round" ? rules.defaultElbowsRound ?? [{ style: "45", qty: rules.defaultElbows.reduce((n, x) => n + Math.max(0, x.qty), 0) }] : rules.defaultElbows;
-    for (const e of ds.elbows ?? byDefault) {
+    for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) {
       if (e.qty <= 0) continue;
       pieces += e.qty;
       acc.add({ key: `elbow.${e.style}.${dsKey}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { ...dsAttrs, part: "elbow", style: e.style } }, e.qty);
