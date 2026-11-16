@@ -7,7 +7,7 @@
  * Changing a choice another one depends on (profile → size and hanger kit, material → gauge and finish, shape →
  * size and elbows, mount → the default kit, wall → the default wall kit) fixes the dependent fields in the same step.
  */
-import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultHangerKit, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
+import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultElbowsFor, defaultHangerKit, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
 import { DENOM, MM_OF, MM_PER_IN, type LenUnit } from "./format";
@@ -67,8 +67,6 @@ export type DsKind = (typeof DS_KINDS)[number];
 export const dsKindOf = (shape: string, style?: string): DsKind => DS_KINDS.find((x) => x.shape === shape && x.style === (style ?? "plain")) ?? DS_KINDS[0];
 /** elbow styles by shape; rect A/B, round by angle */
 export const ELBOW_STYLES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["A", "B"], round: ["45", "60", "75", "90"] };
-/** without `elbows` the engine counts 3 × A (П18.10) */
-export const DEFAULT_ELBOWS = 3;
 export const DS_BOTTOMS: readonly DsBottomKind[] = ["extension", "splash_block", "flex", "drain", "lower_roof", "none"];
 export const WALLS = ["wood", "stucco", "brick"] as const;
 export type Wall = (typeof WALLS)[number];
@@ -204,24 +202,19 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
   return same(a, n) ? a : n;
 }
 
-/** elbows as the panel shows them: one style and a count (the engine's default 3 × A / 3 × 45° when unset) */
-export function elbowsOf(a: Pick<DsAttrs, "shape" | "elbows">): { style: string; qty: number } {
-  const shape = a.shape === "round" ? "round" : "rect";
-  const e = a.elbows?.[0];
-  return e ? { style: e.style, qty: a.elbows!.reduce((s, x) => s + x.qty, 0) } : { style: ELBOW_STYLES[shape][0]!, qty: DEFAULT_ELBOWS };
-}
-
-/** elbows by style (founder 08.11: «A 2 шт, B 1 шт»): every style of the shape, 0 where none; unset — the engine's default */
-export function elbowCounts(a: Pick<DsAttrs, "shape" | "elbows">): Record<string, number> {
+/**
+ * elbows by style (founder 08.11: «A 2 шт, B 1 шт»): every style of the shape, 0 where none. Unset — the engine's default by kind
+ * (`defaultElbowsFor`, #1776): a plain rectangular one none, a corrugated one 3 × A, a round one 3 × 45°
+ */
+export function elbowCounts(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows">): Record<string, number> {
   const shape = a.shape === "round" ? "round" : "rect";
   const out: Record<string, number> = Object.fromEntries(ELBOW_STYLES[shape].map((s) => [s, 0]));
-  if (!a.elbows) out[ELBOW_STYLES[shape][0]!] = DEFAULT_ELBOWS;
-  else for (const e of a.elbows) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
+  for (const e of a.elbows ?? defaultElbowsFor({ shape, ...(a.dsStyle ? { dsStyle: a.dsStyle } : {}) })) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
   return out;
 }
 
 /** one style's count changed: the list the engine reads (styles with 0 left out; all 0 — one style at 0, not the default) */
-export function withElbowQty(a: Pick<DsAttrs, "shape" | "elbows">, style: string, qty: number): NonNullable<DsAttrs["elbows"]> {
+export function withElbowQty(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows">, style: string, qty: number): NonNullable<DsAttrs["elbows"]> {
   const n = { ...elbowCounts(a), [style]: Math.max(0, Math.round(qty)) };
   const list = Object.entries(n).filter(([, q]) => q > 0).map(([s, q]) => ({ style: s, qty: q }));
   return list.length ? list : [{ style, qty: 0 }];
@@ -235,7 +228,7 @@ const sup = (n: number) => String(n).split("").map((d) => SUP[Number(d)] ?? d).j
  * (A 2 + B 1 → «AAB»); round ones by angle with the count small on top («45°²»); an offset — «O» and its inches small
  * on top («O⁴»), one per piece. Nothing — "".
  */
-export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string {
+export function dsCode(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "offsets">): string {
   const counts = elbowCounts(a);
   const round = a.shape === "round";
   let s = "";
