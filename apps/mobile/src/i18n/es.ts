@@ -1036,6 +1036,9 @@ export const es: Dict = {
   "first.trade.search": "Buscar oficio",
   "first.trade.none": "No se encontró nada: escriba el suyo abajo",
   "first.trade.next": "Continuar",
+  // forms: the main button is never pale — what is missing (#1728, Экраны)
+  "form.need.trade": "Elija un oficio o escriba el suyo",
+  "form.need.invite": "Escriba un nombre y un email",
   "ue.noCslb": "Sin licencia CSLB vigente. En California su número es obligatorio — añádala en Empresa → Licencias.",
   "lead.st.estimate": "Presupuesto enviado",
   "lead.st.won": "Cliente",
