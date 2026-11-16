@@ -4335,12 +4335,11 @@ export const es: Dict = {
   // people.switch.* — the company switcher (spec 42 S34, §14, #1673)
   "people.switch.title": "Empresas",
   "people.switch.open": "Cambiar de empresa: {name}",
-  "people.switch.current": "Actual",
   "people.switch.unsent": "{n} sin enviar",
   "people.switch.create": "Crear una empresa",
   "people.switch.sending": "Enviando cambios…",
   "people.switch.leftTitle": "Cambios sin enviar en «{name}»",
-  "people.switch.leftBody": "{n} cambios en «{name}» aún no se enviaron. Se enviarán cuando vuelvas a «{name}».",
+  "people.switch.leftBody": "Cambios sin enviar en «{name}»: {n}. Se enviarán cuando vuelvas a «{name}».",
   "people.switch.go": "Cambiar",
   "people.switch.stay": "Quedarme",
   "people.switch.now": "Estás en «{name}»",

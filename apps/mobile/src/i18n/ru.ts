@@ -4335,12 +4335,11 @@ export const ru = {
   // people.switch.* — the company switcher (spec 42 S34, §14, #1673)
   "people.switch.title": "Компании",
   "people.switch.open": "Сменить компанию: {name}",
-  "people.switch.current": "Сейчас",
   "people.switch.unsent": "не отправлено {n}",
   "people.switch.create": "Создать компанию",
   "people.switch.sending": "Отправляем изменения…",
   "people.switch.leftTitle": "В «{name}» есть неотправленное",
-  "people.switch.leftBody": "В «{name}» {n} изм. не отправлены. Они отправятся, когда вы вернётесь в «{name}».",
+  "people.switch.leftBody": "Изменений в «{name}» не отправлено: {n}. Они отправятся, когда вы вернётесь в «{name}».",
   "people.switch.go": "Перейти",
   "people.switch.stay": "Остаться",
   "people.switch.now": "Вы в «{name}»",

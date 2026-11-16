@@ -18,8 +18,9 @@ import { useI18n } from "@/i18n";
 import { companyOf, pushTarget, refresh, routeNow, safeRoute } from "./push";
 
 type Tapped = { route: string; company: string | null };
-/** a push's screen across the remount a company switch makes (this component mounts again, its state is gone) */
-let carried: Tapped | null = null;
+/** a push's screen across the remount a company switch makes (this component mounts again, its state is gone); the
+ *  person's own — another person signed in meanwhile never gets it */
+let carried: (Tapped & { uid: string }) | null = null;
 import { appVersion, nativePushDeps, notifications } from "./pushNative";
 
 export function PushBridge() {
@@ -33,7 +34,7 @@ export function PushBridge() {
   const [pending, setPending] = useState<Tapped | null>(() => {
     const c = carried;
     carried = null;
-    return c;
+    return c && c.uid === auth.session?.user?.id ? { route: c.route, company: null } : null;
   });
 
   useEffect(() => {
@@ -51,11 +52,12 @@ export function PushBridge() {
   const confirmed = !!uid && auth.membershipsFor === uid;
   useEffect(() => {
     if (routeNow({ route: pending?.route ?? null, navReady, authReady, signedIn: !!uid, storeReady: !loading }) !== "open" || !pending) return;
-    if (pending.company && !confirmed) return;
+    // only a push of another company waits for the confirmed memberships (offline, its own company's opens as before)
+    if (pending.company && pending.company !== auth.company?.companyId && !confirmed) return;
     setPending(null);
     const to = pushTarget({ route: pending.route, company: pending.company, active: auth.company?.companyId ?? null, companies: auth.memberships.map((m) => m.companyId) });
     if (to.kind === "switch") {
-      carried = { route: to.route, company: null };
+      carried = uid ? { route: to.route, company: null, uid } : null;
       if (auth.switchCompany(to.company, { why: "push" })) return;
       carried = null;
       return void router.push("/notifications" as never);

@@ -103,7 +103,11 @@ export function CompanySheetHost() {
   const [left, setLeft] = useState<Left | null>(null);
   const list = held.value ?? [];
   const current = auth.company;
+  // each choice and each closing takes a ticket: a send that ends after the sheet was closed or another company was
+  // chosen switches nothing (code-review of (г) №1)
+  const ticket = useRef(0);
   const close = () => {
+    ticket.current += 1;
     setSheet(false);
     setLeft(null);
     setSending(false);
@@ -111,13 +115,15 @@ export function CompanySheetHost() {
   // the other company: closed sheets and windows, Главная, then the switch (the app mounts again: spec 42 §12.2 Б-3)
   const go = (to: Membership) => {
     close();
-    router.replace("/");
-    auth.switchCompany(to.companyId);
+    // only a company still among the memberships; then Главная (the app mounts again with it)
+    if (auth.switchCompany(to.companyId)) router.replace("/");
   };
   const choose = async (to: Membership) => {
     if (!current || to.companyId === current.companyId) return close();
+    const mine = ++ticket.current;
     setSending(true);
     const n = await store.sendBeforeSwitch(10_000);
+    if (mine !== ticket.current) return;
     setSending(false);
     if (n > 0) return setLeft({ to, from: current, n });
     go(to);

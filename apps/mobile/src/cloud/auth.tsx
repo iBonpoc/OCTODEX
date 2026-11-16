@@ -379,6 +379,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // the memberships kept from before the remount are this person's only
       if (boot && boot.uid !== data.session?.user.id) {
         memCache = null;
+        lastSwitch = null;
+        setSwitchedState(null);
         setMems([]);
       }
       if (data.session) signedUid.current = data.session.user.id;
