@@ -794,7 +794,6 @@ export const en: Dict = {
   "cat.attributes": "Properties: {list}",
   "cat.placeholder": "test price",
   "cat.empty": "Nothing here yet",
-  "cat.need": "Enter a name and a price",
   "more.catalog": "Services & materials catalog",
   "ue.demoLink": "Demo mode: data lives only on this phone, so the link opens here. After signing in to a company the link works for the client.",
   "notice.viewedChip": "Opened",
@@ -1037,7 +1036,6 @@ export const en: Dict = {
   "first.trade.none": "Nothing found — type your own below",
   "first.trade.next": "Continue",
   // forms: the main button is never pale — what is missing (#1728, Экраны)
-  "form.need.trade": "Pick a trade or type your own",
   "form.need.invite": "Enter a name and an email",
   "ue.noCslb": "No valid CSLB license. In California its number is required on estimates and contracts — add it in Company → Licenses.",
   "lead.st.estimate": "Estimate sent",
@@ -1436,6 +1434,11 @@ export const en: Dict = {
   "form.req.source": "Choose a source",
   "form.req.amount": "Enter the amount",
   "form.req.supName": "Enter a name",
+  // PR-3c (#1728): what a form still misses, under the field itself (DS §11 п.3)
+  "form.req.itemName": "Enter a name",
+  "form.req.cost": "Enter the supplier's price",
+  "form.req.components": "Add at least one item",
+  "form.req.trade": "Pick a trade or type your own",
   "lead.nextTask": "Next step",
   "lead.noAccess": "Another person works this lead",
   "lead.notFound": "Lead not found",

@@ -793,7 +793,6 @@ export const ru = {
   "cat.attributes": "Свойства: {list}",
   "cat.placeholder": "тестовая цена",
   "cat.empty": "Пока пусто",
-  "cat.need": "Укажите название и цену",
   "more.catalog": "Каталог услуг и материалов",
   "ue.demoLink": "Демо-режим: данные только на этом телефоне, поэтому ссылка откроется здесь же. После входа в компанию ссылка работает у клиента.",
   "notice.viewedChip": "Открыта",
@@ -1036,7 +1035,6 @@ export const ru = {
   "first.trade.none": "Ничего не нашлось — впишите своё ниже",
   "first.trade.next": "Продолжить",
   // forms: the main button is never pale — what is missing (#1728, Экраны)
-  "form.need.trade": "Выберите направление или впишите своё",
   "form.need.invite": "Укажите имя и email",
   "ue.noCslb": "Нет действующей лицензии CSLB. В Калифорнии её номер обязателен в смете и договоре — добавьте в «Компания → Лицензии».",
   "lead.st.estimate": "Смета отправлена",
@@ -1435,6 +1433,11 @@ export const ru = {
   "form.req.source": "Выберите источник",
   "form.req.amount": "Укажите сумму",
   "form.req.supName": "Укажите название",
+  // PR-3c (#1728): what a form still misses, under the field itself (DS §11 п.3)
+  "form.req.itemName": "Укажите название",
+  "form.req.cost": "Укажите цену поставщика",
+  "form.req.components": "Добавьте хотя бы одну позицию",
+  "form.req.trade": "Выберите направление или впишите своё",
   "lead.nextTask": "Следующий шаг",
   "lead.noAccess": "Этот лид ведёт другой человек",
   "lead.notFound": "Лид не найден",

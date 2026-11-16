@@ -11,6 +11,8 @@ import { Button, MultiChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
+import { FieldError, useRequiredForm } from "@/ui/requiredForm";
+import { useTheme } from "@/theme/ThemeProvider";
 
 type Trade = (typeof TRADES)[number];
 
@@ -33,28 +35,51 @@ export default function TradeStep() {
   const ownTaken = !!ownName && nameTaken(list, ownName, undefined, t);
   /** something to save: a trade picked, or an own one that is not taken */
   const ready = picked.length > 0 || (!!ownName && !ownTaken);
-  const [need, setNeed] = useState(false);
+  /** «Продолжить» is never pale: with nothing chosen the words stand under the directions, the scroll goes to them (DS §11 п.3) */
+  const form = useRequiredForm();
+  const tradeField = form.field("trade");
+  const { c } = useTheme();
   const next = () => router.replace("/company/profile?wizard=1");
   const save = () => {
     const add = pickTrades(picked, ownTaken ? "" : ownName);
     for (const c of add) store.saveServiceCategory(c);
     next();
   };
+  const submit = () => form.submit(ready ? [] : [{ id: "trade", text: t("form.req.trade") }], save);
   return (
-    <Screen title={t("first.trade.title")} subtitle={t("first.trade.hint")}>
+    <Screen form title={t("first.trade.title")} subtitle={t("first.trade.hint")}>
       <View testID="trade-step" style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("first.trade.search")} icon="search" />
-        <Card>
-          {shown.length ? (
-            <MultiChips<Trade> value={picked} onChange={setPicked} items={shown.map((k) => ({ key: k, label: label(k) }))} />
-          ) : (
-            <T v="caption" tone="mut">
-              {t("first.trade.none")}
-            </T>
-          )}
-        </Card>
+        {/* the directions are the field: the card's own frame turns status.bad, the words under it (not a second frame around it) */}
+        <View ref={tradeField.anchorRef} collapsable={false} testID={tradeField.testID} style={{ gap: space[1] }}>
+          <Card style={tradeField.error ? { borderColor: c.status.bad.fill } : undefined}>
+            {shown.length ? (
+              <MultiChips<Trade>
+                value={picked}
+                onChange={(v) => {
+                  setPicked(v);
+                  if (v.length) form.field("trade").clear();
+                }}
+                items={shown.map((k) => ({ key: k, label: label(k) }))}
+              />
+            ) : (
+              <T v="caption" tone="mut">
+                {t("first.trade.none")}
+              </T>
+            )}
+          </Card>
+          <FieldError text={tradeField.error} testID={`${tradeField.testID}-error`} />
+        </View>
         <FieldGroup title={t("trade.other")} testID="trade-own">
-          <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} />
+          <TextField
+            type="title"
+            value={own}
+            onChangeText={(v) => {
+              setOwn(v);
+              if (v.trim() && !nameTaken(list, v.trim(), undefined, t)) form.field("trade").clear();
+            }}
+            placeholder={t("dir.ownPlaceholder")}
+          />
           {ownTaken ? (
             <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
           ) : null}
@@ -62,9 +87,8 @@ export default function TradeStep() {
             {t("co.tradesNote")}
           </T>
         </FieldGroup>
-        {/* the main button is always there to press (DS §11 п.3, #1728): with nothing chosen it says what is missing */}
-        {need && !ready ? <StatusNote tone="warn">{t("form.need.trade")}</StatusNote> : null}
-        <Button label={t("first.trade.next")} icon="check" full onPress={() => (ready ? save() : setNeed(true))} />
+        {/* the main button is always there to press (DS §11 п.3, #1728): with nothing chosen the words stand under the directions */}
+        <Button label={t("first.trade.next")} icon="check" full testID="trade-next" onPress={submit} />
         <Button label={t("co.skip")} variant="ghost" full onPress={next} />
       </View>
     </Screen>

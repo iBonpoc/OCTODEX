@@ -794,7 +794,6 @@ export const es: Dict = {
   "cat.attributes": "Propiedades: {list}",
   "cat.placeholder": "precio de prueba",
   "cat.empty": "Aún vacío",
-  "cat.need": "Indique nombre y precio",
   "more.catalog": "Catálogo de servicios y materiales",
   "ue.demoLink": "Modo demo: los datos están solo en este teléfono, el enlace se abre aquí. Al entrar en una empresa, el enlace funciona para el cliente.",
   "notice.viewedChip": "Abierto",
@@ -1037,7 +1036,6 @@ export const es: Dict = {
   "first.trade.none": "No se encontró nada: escriba el suyo abajo",
   "first.trade.next": "Continuar",
   // forms: the main button is never pale — what is missing (#1728, Экраны)
-  "form.need.trade": "Elija un oficio o escriba el suyo",
   "form.need.invite": "Escriba un nombre y un email",
   "ue.noCslb": "Sin licencia CSLB vigente. En California su número es obligatorio — añádala en Empresa → Licencias.",
   "lead.st.estimate": "Presupuesto enviado",
@@ -1436,6 +1434,11 @@ export const es: Dict = {
   "form.req.source": "Elija una fuente",
   "form.req.amount": "Ingrese el monto",
   "form.req.supName": "Ingrese un nombre",
+  // PR-3c (#1728): what a form still misses, under the field itself (DS §11 п.3)
+  "form.req.itemName": "Ingrese un nombre",
+  "form.req.cost": "Ingrese el precio del proveedor",
+  "form.req.components": "Agregue al menos un artículo",
+  "form.req.trade": "Elija un oficio o escriba el suyo",
   "lead.nextTask": "Siguiente paso",
   "lead.noAccess": "Otra persona atiende este cliente",
   "lead.notFound": "No encontrado",
