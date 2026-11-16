@@ -33,7 +33,8 @@ import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMe
 import { CardHead } from "./CardHead";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
-import { listPreview, partName, partQty } from "../prices";
+import { dsLine, listPreview, partName, partQty } from "../prices";
+import { dsSizeText } from "./shop/job";
 import { readLenFormat, readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
 import { measureSpec } from "./spec";
@@ -354,8 +355,8 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             {spec.ds.map((d) => (
               <View key={d.id} testID={`view-ds-${d.n}`}>
                 <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-                  <T v="body" w="semibold">{`${t("mod.gutters.ds", { n: d.n })} · ${t("mod.gutters.story", { n: d.story })} · ${d.size}`}</T>
-                  <T v="caption" tone="mut">{t("mod.gutters.view.dsLine", { e: d.elbows, o: d.offsets })}</T>
+                  <T v="body" w="semibold">{`${t("mod.gutters.ds", { n: d.n })} · ${t("mod.gutters.story", { n: d.story })} · ${dsSizeText(d.size)}`}</T>
+                  {dsLine(t, d) ? <View testID={`view-ds-line-${d.n}`}><T v="caption" tone="mut">{dsLine(t, d)}</T></View> : null}
                 </RowView>
               </View>
             ))}

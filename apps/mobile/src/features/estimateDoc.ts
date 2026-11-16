@@ -316,6 +316,34 @@ export function shownQty(q: CustomLine["quantity"]): string {
   }
 }
 
+/** a length in feet as a US contractor writes it on the drawing, to 1/16″: 40.4167 → «40′ 5″», 8.7656 → «8′ 9 3/16″»,
+ *  0.75 → «9″», 12 → «12′» (founder 11.11, G-15, #1733: «показывать как на чертеже, без округления; допустимо до 1/16″»).
+ *  The same notation as the drawing of a trade module; the core does not import a module, so it has its own. */
+const EIGHTHS = ["", "⅛", "¼", "⅜", "½", "⅝", "¾", "⅞"] as const;
+export function feetInches(feet: number): string {
+  const e = Math.max(0, Math.round(feet * 12 * 16));
+  const n = Math.floor(e / 16);
+  const k = e % 16;
+  const ft = Math.floor(n / 12);
+  const i = n % 12;
+  const frac = k % 2 === 0 ? (EIGHTHS[k / 2] ?? "") : `${k}/16`;
+  const ins = !i && !k ? "" : !frac ? String(i) : !i ? frac : frac.length === 1 ? `${i}${frac}` : `${i} ${frac}`;
+  if (ft === 0) return `${ins || "0"}″`;
+  return ins ? `${ft}′ ${ins}″` : `${ft}′`;
+}
+
+/** the unit of a length a client reads as feet-inches (the drawing's unit; «LF», «sq ft» and the rest stay as typed) */
+export const isFeetUnit = (unit: string | undefined) => unit === "ft";
+
+/** A line's quantity with its unit for the client's documents (the /p/ page, the PDF, the estimate shown to the client):
+ *  a length in feet as feet-inches to 1/16″ — «40′ 5″» (#1733), every other unit — the number and the unit («3 ea»).
+ *  Only how it is shown: the quantity counted stays shownQty's. */
+export function shownQtyUnit(q: CustomLine["quantity"], unit: string | undefined): string {
+  const n = shownQty(q);
+  if (isFeetUnit(unit) && n.trim() !== "" && Number.isFinite(Number(n)) && Number(n) >= 0) return feetInches(Number(n));
+  return unit ? `${n} ${unit}` : n;
+}
+
 /** quantity is a plain decimal zero ("0", "-0", "0.", "00", "0.00", " .0 ") — the same pattern as the server's app.client_doc
  *  (migration 20261108170000), so the demo page, the PDF and the real /p/ agree; a blank, broken or "0e5" quantity is not */
 const ZERO_QTY = /^\s*[+-]?(0+(\.0*)?|\.0+)\s*$/;

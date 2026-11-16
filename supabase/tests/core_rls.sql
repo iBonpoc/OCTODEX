@@ -6835,11 +6835,11 @@ select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.as
 update public.leads set assigned_to = 'a8400000-0000-4000-8000-000000000001' where id = '18400000-0000-4000-8000-000000000003';
 select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a8400000-0000-4000-8000-000000000001'),
           'T84 a subcontractor gets no lead push');
--- a lead given to the subcontractor at once: no push to him (the people of the flow still get it)
-:as_office_a
+-- a lead given to the subcontractor at once: no push to him (the people of the flow still get it). Since #1637 the app
+-- cannot give a lead to a subcontractor (T282); a lead the server gives him still sends him nothing
+:as_super
 insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
   ('18400000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Sub', '+13235558405', 'a8400000-0000-4000-8000-000000000001');
-:as_super
 select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a8400000-0000-4000-8000-000000000001')
           and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a0000000-0000-0000-0000-000000000001'),
           'T84 a lead given to the subcontractor at once: nothing to him, the owner still hears');
@@ -9148,6 +9148,17 @@ update public.estimate_line_items set quantity = 1 where id = 'a1070000-0000-400
 -- security-check С3: a member cannot make a version that is locked from the start
 select tst.fails_like($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, locked_at)
   values ('a1070000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 7, now())$q$, '%cannot be locked%', 'T107 a version born locked');
+-- #817 (founder 11.11, G-15): a gutter's length in feet to four places — 40′ 5″ = 40.4167 ft (it was 40.42) — at $12.34:
+-- the server keeps all four places and its cents are the engine's (jobLines.test.ts «#817»): floor(40.4167 × 1234 + 0.5) = 49874
+update public.estimate_versions set calc_inputs = jsonb_set(jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"40.4167"'), '{options,0,lines,0,unitPriceCents}', '1234') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 40.4167, unit_price_cents = 1234 where id = 'a1070000-0000-4000-8000-0000000000b1';
+select tst.ok((select quantity = 40.4167 and line_total_cents = 49874 from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b1'), 'T107 #817 40.4167 ft × $12.34 → $498.74, the engine''s cents');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 #817 four places: the document and the lines match');
+:as_office_a
+-- put the line back as the document had it (quantity 1, $100.00): the blocks below change only the quantity
+update public.estimate_versions set calc_inputs = jsonb_set(jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1"'), '{options,0,lines,0,unitPriceCents}', '10000') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1, unit_price_cents = 10000 where id = 'a1070000-0000-4000-8000-0000000000b1';
 -- a quantity with 5 decimals: both sides count the stored 1.2346 (the engine too, custom.test.ts) → $123.46
 update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1.23455"') where id = 'a1070000-0000-4000-8000-000000000002';
 update public.estimate_line_items set quantity = 1.23455 where id = 'a1070000-0000-4000-8000-0000000000b1';
@@ -15392,5 +15403,261 @@ select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2
               and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2800000-0000-4000-8000-000000000002.jpg'),
               'T280 sales (not on the job): their receipt with a live expense and their photo get their bytes');
 \echo 'T280 the office and sales as before ok'
+
+-- ---------------------------------------------------------------- T281–T284 (#1637): a subcontractor has no leads
+-- (red before 20261116010000)
+\set as_tech281 'reset role; set request.jwt.claim.sub = ''a2810000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2810000-0000-4000-8000-000000000001', 'tech281@a.test', '{"full_name":"Tina Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000001', 'tech', 'active');
+-- as the rows were before the rule: a lead given to the subcontractor, one he made, a task on it for him, a contact, a
+-- call; a lead of the tech's; a removed lead and a removed lead's task of the subcontractor's in the bin
+set session_replication_role = replica;
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by) values
+  ('a2810000-0000-4000-8000-000000000c01', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Given', '+13235552811', 'a5600000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000001'),
+  ('a2810000-0000-4000-8000-000000000c02', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Made', '+13235552812', null, 'a5600000-0000-4000-8000-000000000002'),
+  ('a2810000-0000-4000-8000-000000000c03', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Tech', '+13235552813', 'a2810000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000001');
+insert into public.leads (id, company_id, source_id, contact_name, phone, created_by, deleted_at) values
+  ('a2810000-0000-4000-8000-000000000c04', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Binned', '+13235552814', 'a5600000-0000-4000-8000-000000000002', now());
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, created_by) values
+  ('a2810000-0000-4000-8000-000000000d01', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T281 call +13235552811', 'a5600000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000001');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by, deleted_at) values
+  ('a2810000-0000-4000-8000-000000000d02', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T281 binned task', 'a5600000-0000-4000-8000-000000000002', now());
+insert into public.lead_contacts (company_id, lead_id, name, phone) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000c01', 'T281 Spouse', '+13235552815');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'call', 'out');
+insert into public.trash_entries (company_id, kind, object_id, deleted_by, deleted_at) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c04', 'a5600000-0000-4000-8000-000000000002', now()),
+  ('ca000000-0000-0000-0000-000000000000', 'task', 'a2810000-0000-4000-8000-000000000d02', 'a5600000-0000-4000-8000-000000000002', now());
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+
+-- T281: the subcontractor sees none of it — the lead given to him (left given, director 16.11), the one he made, their
+-- task, contact and call — and changes none
+:as_sub56
+select tst.ok(tst.cnt($q$select 1 from public.leads where id::text like 'a2810000-%'$q$) = 0, 'T281 a subcontractor sees no lead, also one given to him or made by him');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id::text like 'a2810000-%'$q$) = 0, 'T281 nor a lead''s task given to him');
+select tst.ok(tst.cnt($q$select 1 from public.lead_contacts where name = 'T281 Spouse'$q$) = 0
+              and tst.cnt($q$select 1 from public.activities where subject_id = 'a2810000-0000-4000-8000-000000000c01'$q$) = 0,
+              'T281 nor its contacts and calls');
+update public.leads set contact_name = 'x' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.tasks set title = 'x' where id = 'a2810000-0000-4000-8000-000000000d01';
+:as_super
+select tst.ok((select contact_name = 'T281 Given' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01')
+              and (select title = 'T281 call +13235552811' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
+              'T281 he changes neither the lead nor its task');
+\echo 'T281 a subcontractor sees no lead ok'
+
+-- T282: he makes no lead, no lead's task, no call or contact on one; a lead or a lead's task is not given to him
+:as_sub56
+select tst.fails($q$insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 x', '+13235552821')$q$,
+                 'T282 a subcontractor makes no lead');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title, assignee_id) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T282', auth.uid())$q$,
+                 'T282 nor a task on a lead');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'call', 'out')$q$,
+                 'T282 nor a call on a lead');
+select tst.fails($q$insert into public.lead_contacts (company_id, lead_id, name) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000c01', 'T282')$q$,
+                 'T282 nor a contact of a lead');
+:as_office_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
+                      '%not given to a subcontractor%', 'T282 the office does not give a lead to a subcontractor');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, assigned_to) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 y', '+13235552822', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 nor a new one');
+select tst.fails_like($q$insert into public.tasks (company_id, subject_type, subject_id, title, assignee_id) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 nor a lead''s task');
+-- the old lead still given to him is edited as before (the assignee unchanged)
+update public.leads set contact_name = 'T281 Given (edited)' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.tasks set title = 'T281 call back' where id = 'a2810000-0000-4000-8000-000000000d01';
+select tst.ok((select contact_name = 'T281 Given (edited)' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01')
+              and (select title = 'T281 call back' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
+              'T282 the office edits an old lead given to him and its task, the assignee unchanged');
+update public.leads set assigned_to = 'a2810000-0000-4000-8000-000000000001' where id = 'a2810000-0000-4000-8000-000000000c01';
+select tst.ok((select assigned_to = 'a2810000-0000-4000-8000-000000000001' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
+              'T282 the office gives it to a tech');
+:as_super
+update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c01';
+select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
+              'T282 the server is not limited');
+-- not only the office: a tech and sales who may change a lead do not give it to a subcontractor either (the trigger reads
+-- the team as the caller — every member sees the team, so the check holds for them)
+:as_tech281
+select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
+                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+-- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
+select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
+              'T282 nor a task on it (a tech''s task stays his)');
+:as_sales_a
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, assigned_to) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 s', '+13235552823', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 sales do not give a new lead to a subcontractor');
+\echo 'T282 a subcontractor makes no lead and gets none ok'
+
+-- T283: the bin — he neither lists nor brings back a lead or a lead's task of his
+:as_sub56
+select tst.ok(tst.cnt($q$select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id::text like 'a2810000-%' and label is not null$q$) = 0,
+              'T283 the bin tells him neither his lead''s name nor his lead''s task''s title');
+select tst.ok(coalesce((select bool_and(not ok) from public.trash_restore('lead', array['a2810000-0000-4000-8000-000000000c04']::uuid[])), true)
+              and coalesce((select bool_and(not ok) from public.trash_restore('task', array['a2810000-0000-4000-8000-000000000d02']::uuid[])), true),
+              'T283 nor brings them back');
+:as_super
+select tst.ok((select deleted_at is not null from public.leads where id = 'a2810000-0000-4000-8000-000000000c04')
+              and (select deleted_at is not null from public.tasks where id = 'a2810000-0000-4000-8000-000000000d02'),
+              'T283 they stay in the bin');
+-- his task on a property is his as before: he removes it, sees it in the bin with its title, brings it back
+:as_super
+set session_replication_role = replica;
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by) values
+  ('a2830000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'property', 'd1a00000-0000-0000-0000-000000000001', 'T283 gate', 'a5600000-0000-4000-8000-000000000002');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_sub56
+update public.tasks set deleted_at = now() where id = 'a2830000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a2830000-0000-4000-8000-000000000001' and label = 'T283 gate'$q$) = 1,
+              'T283 his task on a property: removed, in the bin with its title');
+select tst.ok((select bool_and(ok) from public.trash_restore('task', array['a2830000-0000-4000-8000-000000000001']::uuid[])), 'T283 … and brought back');
+\echo 'T283 the bin holds no lead for a subcontractor ok'
+
+-- T284: a tech and the office as before; a tech made a subcontractor loses his leads at once
+:as_tech281
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a2810000-0000-4000-8000-000000000c03'$q$) = 1, 'T284 a tech sees the lead given to him');
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a2840000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T284 Own', '+13235552841');
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a2840000-0000-4000-8000-000000000001'$q$) = 1, 'T284 a tech makes a lead');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.leads where id::text like 'a2810000-%' and deleted_at is null$q$) = 3, 'T284 the office sees every lead, the subcontractor''s too');
+:as_super
+update public.memberships set role = 'subcontractor' where user_id = 'a2810000-0000-4000-8000-000000000001';
+:as_tech281
+select tst.ok(tst.cnt($q$select 1 from public.leads where id in ('a2810000-0000-4000-8000-000000000c03', 'a2840000-0000-4000-8000-000000000001')$q$) = 0,
+              'T284 made a subcontractor: his leads are no longer his to see');
+:as_super
+update public.memberships set role = 'tech' where user_id = 'a2810000-0000-4000-8000-000000000001';
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_lead_assignee_not_sub()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_lead_task_not_sub()', 'EXECUTE'),
+              'T284 rule 18: the trigger functions are nobody''s');
+\echo 'T284 a tech and the office as before ok'
+
+-- ---------------------------------------------------------------- T285–T289 (spec 42 §14, #1673): the company a person works in
+-- Pat is office in A; B invites him as admin. users.last_active_company_id — only a company he is active in (red before
+-- 20261116013000); a push says whose company it is (red before 20261116013100).
+\set as_pat285 'reset role; set request.jwt.claim.sub = ''a2850000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2850000-0000-4000-8000-000000000001', 'pat285@a.test', '{"full_name":"Pat Two"}');
+select tst.agree('a2850000-0000-4000-8000-000000000001');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'office', 'active');
+-- his own third company, closed below (no triggers: a fixture, not a sign-up)
+set session_replication_role = replica;
+insert into public.companies (id, name) values ('cc285000-0000-4000-8000-000000000000', 'Pat Closed Co');
+insert into public.memberships (company_id, user_id, role, status) values ('cc285000-0000-4000-8000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'owner', 'active');
+set session_replication_role = origin;
+
+-- T285: the guard — his own active company yes; another company, switched off, removed, closed — 42501; null yes
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'ca000000-0000-0000-0000-000000000000',
+              'T285 his own active company is written');
+select tst.fails_like($q$update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company he is not in is refused');
+update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') is null, 'T285 null is written');
+:as_super
+set session_replication_role = replica;  -- a fixture: closed as delete_account would
+update public.companies set closed_at = now() where id = 'cc285000-0000-4000-8000-000000000000';
+set session_replication_role = origin;
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'cc285000-0000-4000-8000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a closed company is refused');
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+update public.users set full_name = 'Pat T.' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select full_name from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'Pat T.',
+              'T285 switched off in A with A still written: his name still changes (only a change of the company is checked)');
+:as_super
+update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company where he is switched off is refused');
+:as_super
+update public.memberships set status = 'active', deleted_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company he was removed from is refused');
+-- the check is of the row's person, whoever writes (the database owner, a definer function): no way round it
+:as_super
+select tst.fails_like($q$update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 the database owner cannot write a company that is not his either');
+update public.memberships set deleted_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+\echo 'T285 last_active_company_id: only an open company the person is active in ok'
+
+-- T286: another person's company field is never changed through someone else; switching a person off leaves it (the
+-- phone checks it against the memberships it reads, spec 42 §14.8 С6)
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.blocked($q$update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001'$q$, 'T286 the owner of A does not write Pat''s company field');
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'disabled'); end $$;
+select tst.ok((select status from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001') = 'disabled',
+              'T286 set_member_status switches him off with A still written (the guard checks only a change)');
+:as_super
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'ca000000-0000-0000-0000-000000000000',
+              'T286 and his field is left as it was');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
+\echo 'T286 another person''s field and set_member_status ok'
+
+-- T287: accept_invitation still makes the new company the last one (the guard lets it: the membership is in first)
+:as_owner_b
+select public.invite_member('cb000000-0000-0000-0000-000000000000', 'pat285@a.test', 'admin', 'Pat Two') ->> 'token' as t287_token \gset
+:as_pat285
+select tst.ok((public.accept_invitation(:'t287_token') ->> 'company_id') = 'cb000000-0000-0000-0000-000000000000', 'T287 Pat joins B');
+:as_super
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'cb000000-0000-0000-0000-000000000000',
+              'T287 the company he just joined is his last one on the server');
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select count(*) from public.memberships where user_id = 'a2850000-0000-4000-8000-000000000001' and status = 'active' and deleted_at is null) = 3,
+              'T287 he switches back to A: active in A, B (and the closed one — not offered by the app)');
+\echo 'T287 accept_invitation and the last company ok'
+
+-- T288: push_claim says whose company the row is, its name and how many open companies the person is active in
+:as_super
+delete from public.push_outbox;
+insert into public.push_devices (id, user_id, expo_token, platform, lang) values
+  ('d2850000-0000-4000-8000-000000000001', 'a2850000-0000-4000-8000-000000000001', 'ExponentPushToken[t285-pat]', 'ios', 'en');
+insert into public.push_outbox (company_id, user_id, kind, route) values
+  ('cb000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'payment.received', '/notifications');
+create temp table t288_claim (v jsonb);
+grant select, insert on t288_claim to service_role;
+reset role; set role service_role;
+insert into t288_claim select public.push_claim(100);
+:as_super
+select tst.ok((select jsonb_array_length(v) = 1 and v -> 0 ->> 'company' = 'cb000000-0000-0000-0000-000000000000'
+                      and v -> 0 ->> 'company_name' = 'Rival Roofing' and (v -> 0 ->> 'companies')::int = 2 from t288_claim),
+              'T288 the row carries its own company, the company''s name and two open companies (the closed one does not count)');
+select tst.ok(not (select v::text ~ '(Pat|Bonpoc|\$|total|customer)' from t288_claim), 'T288 nothing of the other company, no names or sums');
+reset role; set role authenticated;
+select tst.fails('select public.push_claim(100)', 'T288 push_claim is the service''s only');
+:as_super
+delete from public.push_outbox where user_id = 'a2850000-0000-4000-8000-000000000001';
+delete from public.push_devices where user_id = 'a2850000-0000-4000-8000-000000000001';
+\echo 'T288 push_claim names the company ok'
+
+-- T289: a person in A and B never ties B's records to A's (the composite keys): a client of A in a B job — refused;
+-- switched off in A, B's last company does not open A
+:as_pat285
+select tst.fails($q$insert into public.jobs (company_id, number, title, customer_id, property_id, status) values
+  ('cb000000-0000-0000-0000-000000000000', 'T289', 'T289 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'scheduled')$q$,
+  'T289 a B job with A''s client is refused');
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) > 0, 'T289 office in A: sees A''s clients');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'disabled'); end $$;
+:as_pat285
+update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0
+              and tst.cnt($q$select 1 from public.jobs where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0,
+              'T289 switched off in A: nothing of A, whatever his last company');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
+\echo 'T289 two companies stay apart ok'
 
 \echo 'ALL TESTS PASSED'

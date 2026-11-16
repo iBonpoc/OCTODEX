@@ -212,6 +212,22 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
  * A part's name when the price list has no item for it (PricesScreen «создать», the estimate's line with «нет цены»):
  * `t` — the app's translator on the page, the CLIENT's language for an estimate line (rule 7). Pure.
  */
+/**
+ * A downspout's elbows by style and offsets by length (#1747, founder 16.11: «должно быть указано, какое: Elbow A, Elbow B
+ * или offset 1, 2, 4»): «A ×3», «A ×2 · B ×1 · офсет 2″ ×1»; a round pipe's elbow by its angle «45° ×2». Nothing at all — ""
+ * (#814: no «колен 0»). The elbows come as the engine counts them — unset is its default (measureSpec, elbowCounts).
+ */
+export function dsLine(
+  t: (key: DictKey, params?: Record<string, string | number>) => string,
+  d: { shape?: string; elbows: readonly { style: string; qty: number }[]; offsets: readonly { lengthIn: number; qty: number }[] },
+): string {
+  const round = d.shape === "round";
+  return [
+    ...d.elbows.filter((e) => e.qty > 0).map((e) => t("mod.gutters.view.dsElbow", { style: round ? `${e.style}°` : e.style, n: e.qty })),
+    ...d.offsets.filter((o) => o.qty > 0).map((o) => t("mod.gutters.view.dsOffset", { len: `${o.lengthIn}″`, n: o.qty })),
+  ].join(" · ");
+}
+
 export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty, fmt: LenFormat = "ftin"): string {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
@@ -229,7 +245,7 @@ export function partName(t: (key: DictKey, params?: Record<string, string | numb
 }
 
 /** the dictionary group of an enum property's words: «k» is «K-style», «painted» is «Painted» */
-const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal: "m", color: "c", finish: "f", shape: "sh" };
+const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal: "m", color: "c", finish: "f", shape: "sh", hanger: "k", dsStyle: "st" };
 /** a property in inches (a coil's blank, a section's length): feet-inches-sixteenths, as on the drawing */
 const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
 
@@ -242,7 +258,17 @@ function attrText(t: (key: DictKey, params?: Record<string, string | number>) =>
     const n = Number(v);
     return Number.isFinite(n) ? fmtLen(n, fmt) : v;
   }
-  if (key === "size" || key === "gutterSize") return /^\d+(\.\d+)?$/.test(v) ? `${v}″` : v;
+  // a screw «10x1.5» as the trade writes it (#1747): «#10 × 1½″» — the gauge, then the length as on the drawing
+  if (key === "screw") {
+    const m = /^(\d+)x(\d+(?:\.\d+)?)$/i.exec(v);
+    return m ? `#${m[1]} × ${fmtLen(Number(m[2]), fmt)}` : v;
+  }
+  if (key === "size" || key === "gutterSize") {
+    if (/^\d+(\.\d+)?$/.test(v)) return `${v}″`;
+    // a downspout's «2x3» as on its line (#1747): 2"×3"
+    if (/^\d+(\.\d+)?x\d+(\.\d+)?$/i.test(v)) return v.split(/x/i).map((p) => `${p}"`).join("×");
+    return v;
+  }
   const group = key === "buy" ? "buy" : ATTR_WORDS[key];
   if (!group) return v;
   const k = (key === "buy" ? `mod.gutters.pr.buy.${v}` : `mod.gutters.attr.${group}.${v}`) as DictKey;
