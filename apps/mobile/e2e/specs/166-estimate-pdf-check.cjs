@@ -73,7 +73,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => !!window.__pdf, null, { timeout: 5000 });
   const pdf = await pdfMade();
   h.expect(/Gutter 5in K/.test(pdf), "the PDF has the estimate");
-  h.expect(!/Тестовая цена|Test price|Precio de prueba|Из замера|From measurement/.test(pdf), "no module marks in the PDF");
+  h.expect(!/Тестовая цена|Test price|Precio de prueba|Из замера|From measurement/.test(pdf), "no module marks in the PDF"); // i18n-old: ok — the old words must be absent
   h.expect((await tid("pdf-check").count()) === 0, "the check closed with the PDF");
 
   // sent, not signed: the same check
