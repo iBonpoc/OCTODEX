@@ -148,6 +148,27 @@ h1{font-size:var(--fs-display);margin:0}
 .progress{height:6px;border-radius:9px;background:var(--surf2);overflow:hidden}
 .progress i{display:block;height:100%;width:62%;background:var(--ink)}
 .chev{color:var(--mut)}
+
+/* ред. 2 (design-reviewer): строки действий в одной карточке, миниатюра, ширина 820 */
+.acts{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);overflow:hidden}
+.arow{display:grid;grid-template-columns:auto 1fr auto;gap:0 var(--s3);align-items:center;padding:var(--s2) 0 var(--s2) var(--s4);min-height:64px;cursor:pointer;border-top:1px solid var(--bd)}
+.arow:first-child{border-top:0}
+.arow[aria-checked="true"]{background:var(--surf2)}
+.arow > svg{width:20px;height:20px;color:var(--mut)}
+.arow .tx{display:grid;gap:2px}.arow .tx b{font-weight:600}.arow .tx span{font-size:var(--fs-caption);color:var(--mut)}
+.arow .end{display:flex;align-items:center}
+.arow .more{width:var(--hit);height:var(--hit);display:grid;place-items:center;color:var(--mut);background:none;border:0;cursor:pointer}
+.arow[aria-checked="true"] .box{border-color:var(--ink);background:var(--surf2)}
+.arow[aria-checked="true"] .box svg{opacity:1}
+.thumb{width:56px;height:72px;border-radius:var(--rf);border:1px solid var(--bd);background:repeating-linear-gradient(180deg,var(--surf2) 0 6px,var(--in) 6px 9px);flex:none}
+.docrow{display:flex;gap:var(--s3);align-items:center}
+.link{background:none;border:0;padding:0;min-height:var(--hit);font-weight:600;text-decoration:underline;cursor:pointer;color:var(--ink)}
+.panel .two{display:grid;grid-template-columns:1fr 1fr;gap:var(--s2)}
+.dev.w820{width:820px;max-width:none;height:700px}
+.stage{overflow-x:auto;max-width:100%}
+.w820 .body{justify-items:center}
+.w820 .colmax{width:100%;max-width:560px;display:grid;gap:var(--s3)}
+.lst{display:grid;gap:2px;font-size:var(--fs-caption);color:var(--mut)}
 </style>
 </head>
 <body>
@@ -174,7 +195,7 @@ h1{font-size:var(--fs-display);margin:0}
 <div class="wrap">
   <header>
     <h1>Документ поставщика → «Что сделать»</h1>
-    <p class="lede">Прототип спеки 53 §8а.10: один распознаватель чеков, прайсов и счетов поставщика. Снимок системным сканером документов (края, выравнивание, несколько страниц) или PDF/документ → распознавание → один экран «Что сделать». На нём можно выбрать несколько действий сразу; без «Готово» ничего не пишется. Данные вымышлены, числа тестовые.</p>
+    <p class="lede">Прототип спеки 53 §8а.10 (редакция 2 — после независимого дизайн-ревью). Один распознаватель чеков, прайсов и счетов поставщика: снимок системным сканером документов или PDF/документ → распознавание → «Что сделать» (несколько действий за раз) → возврат туда, откуда пришли, с тостом «Вернуть». Данные вымышлены, числа тестовые.</p>
   </header>
   <div class="bar">
     <span class="lbl">Тема</span>
@@ -184,101 +205,128 @@ h1{font-size:var(--fs-display);margin:0}
     </div>
   </div>
   <div class="cols">
-    <!-- 1. Вход -->
     <section class="col" aria-labelledby="s1">
       <h2 id="s1">1. Вход: «＋ Документ»</h2>
-      <p>Один вход из «Расходов», «Каталога», карточки поставщика и «Цен» модуля. Камера — системный сканер документов (iOS VisionKit, Android ML Kit Document Scanner): находит края, выравнивает, снимает несколько страниц.</p>
+      <p>Кнопки — в закреплённой панели (DS §8.9): «Снять документ» — главная, системный сканер документов (края, выравнивание, несколько страниц).</p>
       <div class="dev" id="scr-pick">
         <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Каталог</div><div class="ttl">Документ поставщика</div></div></div>
         <div class="body">
-          <div class="cap"><svg class="i"><use href="#i-receipt"/></svg><div><b style="color:var(--ink)">Чек, прайс или счёт поставщика</b><br>Распознаем строки и цены. Что с ними делать — выберете дальше.</div></div>
-          <div class="pickers">
-            <button class="btn primary full bar" type="button"><svg class="i"><use href="#i-camera"/></svg>Снять документ</button>
-            <button class="btn full bar" type="button"><svg class="i"><use href="#i-image"/></svg>Выбрать из фото</button>
-            <button class="btn full bar" type="button"><svg class="i"><use href="#i-file"/></svg>Выбрать файл (PDF, документ, таблица)</button>
-          </div>
-          <div class="note" style="color:var(--mut)"><svg class="i"><use href="#i-lock"/></svg><span>Снимок уходит на распознавание. Мы его не храним, сервис распознавания — не дольше 30 дней и не учится на нём. На чеке магазина могут быть ваше имя и последние цифры карты — мы их не сохраняем. Подробнее</span></div>
+          <div class="card docrow"><svg class="i" style="width:28px;height:28px;color:var(--mut)"><use href="#i-receipt"/></svg><div><b>Чек, прайс или счёт поставщика</b><div class="sub">Распознаем строки и цены, а что с ними делать — выберете дальше.</div></div></div>
+          <div class="note" style="color:var(--mut)"><svg class="i"><use href="#i-lock"/></svg><span>Мы снимок не храним, сервис распознавания — до 30 дней. <button class="link" type="button">Что уходит на распознавание</button></span></div>
+        </div>
+        <div class="panel">
+          <button class="btn primary full bar" type="button"><svg class="i"><use href="#i-camera"/></svg>Снять документ</button>
+          <div class="two"><button class="btn bar" type="button"><svg class="i"><use href="#i-image"/></svg>Фото</button><button class="btn bar" type="button"><svg class="i"><use href="#i-file"/></svg>Файл</button></div>
         </div>
       </div>
     </section>
-    <!-- 2. Распознавание -->
     <section class="col" aria-labelledby="s2">
       <h2 id="s2">2. Распознавание</h2>
-      <p>Около 5 секунд на страницу. Без сети снимок ждёт («Документ ждёт сети · 1»), распознаётся сам, когда сеть вернётся.</p>
+      <p>Миниатюра снятого и «Переснять». Без сети — «Документ ждёт сети · 1», распознается сам.</p>
       <div class="dev" id="scr-wait">
         <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Каталог</div><div class="ttl">Документ поставщика</div></div></div>
         <div class="body">
-          <div class="card" style="display:grid;gap:var(--s3)">
-            <b>Распознаём документ · страница 1 из 2</b>
-            <div class="progress" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><i></i></div>
-            <div class="sub">Можно уйти с экрана — пришлём уведомление «Документ распознан — проверьте».</div>
-          </div>
+          <div class="card docrow"><div class="thumb" role="img" aria-label="Снимок, 2 страницы"></div><div style="display:grid;gap:var(--s2);flex:1"><b>Распознаём · страница 1 из 2</b><div class="progress" role="progressbar" aria-valuenow="62" aria-valuemin="0" aria-valuemax="100"><i></i></div><div class="sub">Можно уйти — пришлём «Документ распознан — проверьте».</div></div></div>
+          <button class="link" type="button" style="justify-self:start">Переснять</button>
         </div>
       </div>
     </section>
-    <!-- 3. Что сделать -->
     <section class="col" aria-labelledby="s3">
       <h2 id="s3">3. «Что сделать»</h2>
-      <p>Шапка документа, затем действия-флажки. Предлагаются только подходящие: в чеке АЗС нет «Цен» и «Позиций». Цифры кнопки «Готово» называют, что будет записано.</p>
+      <p>Действия — строками одной карточки (меню выбора, правило 12). Строки с деталями — «›». Кнопка называет, что запишет; ничего не отмечено — подсказка.</p>
       <div class="dev" id="scr-act">
         <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Документ поставщика</div><div class="ttl">Что сделать</div></div></div>
         <div class="body">
-          <div class="card doc">
-            <div class="row"><b>ABC Supply</b><span class="sub">Чек · 11/14/2026</span></div>
-            <div class="row"><span class="sub">14 строк · налог $31.20</span><b>Итого $412.80</b></div>
-          </div>
-          <div class="list" id="acts"></div>
+          <div class="card docrow"><div class="thumb" role="img" aria-label="Снимок чека — открыть крупно"></div><div class="doc" style="flex:1"><div class="row"><b>ABC Supply</b><span class="sub">Чек · 11/14/2026</span></div><div class="sub">есть в справочнике · 14 строк · налог $31.20</div><div class="row"><span></span><b>Итого $412.80</b></div></div></div>
+          <div class="acts" id="acts"></div>
         </div>
         <div class="panel">
-          <div class="sum" id="act-sum">Будет записано: расход, 9 цен</div>
-          <button class="btn primary full bar" type="button" id="act-go">Готово</button>
+          <div class="note warn" id="act-hint" hidden><svg class="i"><use href="#i-alert"/></svg><span>Отметьте, что сделать с документом</span></div>
+          <button class="btn primary full bar" type="button" id="act-go">Записать расход и 9 цен</button>
+        </div>
+        <div class="scrim" id="it-scrim" hidden></div>
+        <div class="sheet" id="it-sheet" role="dialog" aria-label="Позиции в каталог" hidden>
+          <div class="grab"></div>
+          <div class="sh-head"><div class="ttl" style="font-size:var(--fs-heading)">Добавить в каталог</div><button class="iconbtn" type="button" aria-label="Закрыть" onclick="closeItems()"><svg class="i"><use href="#i-close"/></svg></button></div>
+          <div class="acts" id="items"></div>
+          <div class="fld"><label for="imk">Наценка для новых, %</label><input class="input" id="imk" inputmode="decimal" value="30"></div>
+          <button class="btn primary full bar" type="button" onclick="closeItems()">Выбрать</button>
         </div>
       </div>
     </section>
-    <!-- 4. Итог -->
     <section class="col" aria-labelledby="s4">
-      <h2 id="s4">4. Итог</h2>
-      <p>Одна операция по документу: поставщик → позиции → цены → расход. Один тост «Отменить» на всё. Позже — «Отменить всё по документу» в истории (30 дней).</p>
+      <h2 id="s4">4. После «Записать»</h2>
+      <p>Возврат туда, откуда пришли (здесь — «Каталог»), и один тост на всё: «Записано: расход, 9 цен · Вернуть». Позже — «Отменить всё по документу» в истории.</p>
       <div class="dev" id="scr-done">
-        <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Документ поставщика</div><div class="ttl">Готово</div></div></div>
+        <div class="top"><div><div class="ttl">Каталог</div></div></div>
         <div class="body">
-          <div class="card" style="display:grid;gap:var(--s2)">
-            <div class="done-h"><svg class="i"><use href="#i-check"/></svg><div class="ttl" style="font-size:var(--fs-heading)">Записано</div></div>
-            <div>Расход $412.80 · ABC Supply</div>
-            <div>Цены обновлены: 9</div>
-          </div>
-          <button class="btn full bar" type="button">Открыть расход</button>
+          <div class="pcard"><div><b>Гаттер · 5″ · K-style · белый</b></div><div class="v">$3.12 / ft</div><svg class="i"><use href="#i-chev"/></svg></div>
+          <div class="pcard"><div><b>Водосток · 2×3 · белый</b></div><div class="v">$2.57 / ft</div><svg class="i"><use href="#i-chev"/></svg></div>
+          <div class="pcard"><div><b>Крюк · скрытый · 5″</b></div><div class="v">$1.37 / ea</div><svg class="i"><use href="#i-chev"/></svg></div>
         </div>
-        <div class="toast" role="status"><span>Записано: расход, 9 цен</span><button type="button"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="50.3" stroke-dashoffset="18" transform="rotate(-90 10 10)"/></svg>Отменить</button></div>
-        <div class="panel"><button class="btn primary full bar" type="button">Готово</button></div>
+        <div class="toast" role="status"><span>Записано: расход, 9 цен</span><button type="button"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="50.3" stroke-dashoffset="18" transform="rotate(-90 10 10)"/></svg>Вернуть</button></div>
       </div>
     </section>
   </div>
+  <section class="col" aria-labelledby="s5">
+    <h2 id="s5">5. «Что сделать» на 820</h2>
+    <p>Колонка формы до formMax по центру; кнопка — в конце колонки, не в панели (DS §8.9: от 820 панели нет).</p>
+    <div class="stage"><div class="dev w820" id="scr-act820">
+      <div class="top"><button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button><div><div class="sub">Документ поставщика</div><div class="ttl">Что сделать</div></div></div>
+      <div class="body"><div class="colmax">
+        <div class="card docrow"><div class="thumb"></div><div class="doc" style="flex:1"><div class="row"><b>ABC Supply</b><span class="sub">Чек · 11/14/2026</span></div><div class="sub">есть в справочнике · 14 строк · налог $31.20</div><div class="row"><span></span><b>Итого $412.80</b></div></div></div>
+        <div class="acts" id="acts820"></div>
+        <div class="sum" style="font-weight:600">Будет записано: расход, 9 цен</div>
+        <button class="btn primary bar" type="button" style="justify-self:end;padding:0 var(--s6)">Записать расход и 9 цен</button>
+      </div></div>
+    </div></div>
+  </section>
 </div>
 <script>
 const ACTS = [
   { id: "exp", icon: "receipt", title: "Записать расход", sub: "$412.80 · материалы · работа «Smith — гаттеры»", on: true },
-  { id: "price", icon: "tag", title: "Обновить цены поставщика", sub: "9 совпали с каталогом · 2 «Проверьте» — откроется «было → стало»", on: true, n: 9 },
-  { id: "sup", icon: "truck", title: "Добавить поставщика", sub: "«ABC Supply» уже есть в справочнике", disabled: true },
-  { id: "items", icon: "box", title: "Добавить позиции в каталог", sub: "3 строки нет в каталоге — выберите, какие", on: false, n: 0 },
+  { id: "price", icon: "tag", title: "Обновить цены поставщика", sub: "9 совпали · 2 «Проверьте»", on: true, more: true },
+  { id: "items", icon: "box", title: "Добавить позиции в каталог", sub: "Нет в каталоге: 3 · выбрано 0", on: false, more: true },
 ];
+const ITEMS = [{ n: "Leaf guard mesh 4'", p: "$6.10 / ea", on: false }, { n: "Gutter sealant 10oz", p: "$7.40 / ea", on: false }, { n: "Rivet #42 painted, bag 100", p: "$5.63 / bag", on: false }];
 const ic = (n) => `<svg class="i"><use href="#i-${n}"/></svg>`;
-function render() {
-  const box = document.getElementById("acts");
-  box.innerHTML = ACTS.map((a) => `<div class="act" role="checkbox" tabindex="0" aria-checked="${!!a.on}" ${a.disabled ? 'aria-disabled="true"' : ""} data-id="${a.id}">
-    ${ic(a.icon)}<div class="tx"><b>${a.title}</b><span>${a.sub}</span></div>
-    <div class="ck"><span class="box">${a.disabled ? "" : ic("check")}</span></div></div>`).join("");
-  box.querySelectorAll(".act").forEach((el) => {
-    const a = ACTS.find((x) => x.id === el.dataset.id);
-    const t = () => { if (a.disabled) return; a.on = !a.on; render(); };
-    el.onclick = t; el.onkeydown = (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); t(); } };
-  });
+const rowHtml = (a) => `<div class="arow" role="checkbox" tabindex="0" aria-checked="${!!a.on}" data-id="${a.id}">
+  ${ic(a.icon)}<div class="tx"><b>${a.title}</b><span>${a.sub}</span></div>
+  <div class="end">${a.more ? `<button class="more" type="button" aria-label="Подробнее: ${a.title}" data-more="${a.id}">${ic("chev")}</button>` : ""}<div class="ck"><span class="box">${ic("check")}</span></div></div></div>`;
+function label() {
+  const n = ITEMS.filter((x) => x.on).length;
   const parts = [];
   if (ACTS[0].on) parts.push("расход");
   if (ACTS[1].on) parts.push("9 цен");
-  if (ACTS[3].on) parts.push("позиции — выбрать");
-  document.getElementById("act-sum").textContent = parts.length ? "Будет записано: " + parts.join(", ") : "Выберите, что сделать";
+  if (ACTS[2].on && n) parts.push(n + " позиции");
+  return parts;
 }
+function render() {
+  ACTS[2].sub = `Нет в каталоге: 3 · выбрано ${ITEMS.filter((x) => x.on).length}`;
+  for (const id of ["acts", "acts820"]) {
+    const box = document.getElementById(id);
+    box.innerHTML = ACTS.map(rowHtml).join("");
+    box.querySelectorAll(".arow").forEach((el) => {
+      const a = ACTS.find((x) => x.id === el.dataset.id);
+      el.onclick = (e) => {
+        if (e.target.closest("[data-more]")) return a.id === "items" ? openItems() : null;
+        if (a.id === "items" && !a.on && !ITEMS.some((x) => x.on)) return openItems();
+        a.on = !a.on; render();
+      };
+    });
+  }
+  const parts = label();
+  const go = document.getElementById("act-go");
+  go.textContent = parts.length ? "Записать " + parts.join(" и ").replace(" и ", parts.length > 2 ? ", " : " и ") : "Записать";
+  go.onclick = () => { document.getElementById("act-hint").hidden = !!parts.length; };
+}
+function openItems() {
+  document.getElementById("it-scrim").hidden = false; document.getElementById("it-sheet").hidden = false;
+  const box = document.getElementById("items");
+  box.innerHTML = ITEMS.map((x, i) => `<div class="arow" role="checkbox" tabindex="0" aria-checked="${x.on}" data-i="${i}"><span></span><div class="tx"><b>${x.n}</b><span>${x.p}</span></div><div class="end"><div class="ck"><span class="box">${ic("check")}</span></div></div></div>`).join("");
+  box.querySelectorAll(".arow").forEach((el) => el.onclick = () => { const x = ITEMS[+el.dataset.i]; x.on = !x.on; openItems(); });
+}
+function closeItems() { document.getElementById("it-scrim").hidden = true; document.getElementById("it-sheet").hidden = true; ACTS[2].on = ITEMS.some((x) => x.on); render(); }
 document.querySelectorAll("[data-theme-btn]").forEach((b) => b.onclick = () => {
   document.documentElement.dataset.theme = b.dataset.themeBtn;
   document.querySelectorAll("[data-theme-btn]").forEach((x) => x.setAttribute("aria-pressed", x === b));
