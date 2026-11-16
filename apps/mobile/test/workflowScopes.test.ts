@@ -48,8 +48,11 @@ describe("workflows: where the keys may go", () => {
     }
   });
 
-  it("a workflow that runs on a pull request restores no npm cache", () => {
-    for (const [f, s] of Object.entries(wf)) if (onPullRequest(s)) expect(s, f).not.toMatch(/cache: npm/);
+  it("the npm cache only where no key is near: checks and cloud (the cache of a PR is read by its branch only); never next to a key", () => {
+    for (const [f, s] of Object.entries(wf)) {
+      if (/cache: npm/.test(s) && (secretsOf(s).length || /environment:/.test(s))) expect.fail(`${f}: npm cache next to a key`);
+      if (!["checks.yml", "cloud.yml", "expo-patches.yml"].includes(f)) expect(s, f).not.toMatch(/cache: npm/);
+    }
   });
 
   it("no name of a branch or a title from the event is pasted into a script", () => {
