@@ -123,7 +123,8 @@ describe("unit:suppliers — history", () => {
       ],
     } as DB;
     expect(historyOf(db, { supplierId: "s1" }, 5).map((h) => h.id)).toEqual(["r", "a"]);
-    expect(historyOf(db, { supplierId: "s2" }, 5).map((h) => h.id)).toEqual(["o"]);
+    // the item's main supplier keeps seeing all of its item's rows, as before
+    expect(historyOf(db, { supplierId: "s2" }, 5).map((h) => h.id)).toEqual(["o", "r"]);
   });
 });
 
