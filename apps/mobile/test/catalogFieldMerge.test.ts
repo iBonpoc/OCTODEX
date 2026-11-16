@@ -145,6 +145,13 @@ describe("unit:catalogFieldMerge — to the server", () => {
     await applyOp({ k: "catalog.save", item: { ...base, name: "v" }, costs: {}, fields: ["__proto__", "toString", "row_version", "company_id", "deleted_at", "name"] }, "co", "u");
     expect(server.updates).toEqual([{ name: "v" }]);
   });
+  it("a refused direction (23503) drops the direction alone: the barcode changed in the same save is kept", async () => {
+    server.row = { id: "i1" };
+    server.updateErrors.push({ code: "23503", message: 'violates foreign key constraint "catalog_items_service_category_fk"' });
+    await applyOp({ k: "catalog.save", item: { ...base, barcode: "0456", serviceCategoryId: "sc-new" }, costs: {}, fields: ["barcode", "service_category_id"] }, "co", "u");
+    expect(server.updates).toEqual([{ barcode: "0456", service_category_id: "sc-new" }, { barcode: "0456" }]);
+    expect(server.row).toMatchObject({ barcode: "0456" });
+  });
   it("another refusal stays the op's", async () => {
     server.row = { id: "i1" };
     server.updateErrors.push({ code: "23514", message: "new row violates check constraint" });

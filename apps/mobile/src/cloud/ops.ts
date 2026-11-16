@@ -1090,17 +1090,25 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       let r: { error: { message: string; code?: string; hint?: string } | null; status?: number; data?: unknown } | null = null;
       if (op.fields && !op.onlyNew) {
         const cols = catalogItemCols(it);
-        const pick = (withCard: boolean): Record<string, unknown> => ({
-          ...Object.fromEntries(op.fields!.filter((f) => own(cols, f) && (withCard || !own(card, f))).map((f) => [f, cols[f]])),
+        /** the changed columns, but those named in `drop` */
+        const pick = (drop: readonly string[] = []): Record<string, unknown> => ({
+          ...Object.fromEntries(op.fields!.filter((f) => own(cols, f) && !drop.includes(f)).map((f) => [f, cols[f]])),
           ...costCols,
         });
         const update = (row: Record<string, unknown>) => supabase.from("catalog_items").update(row).eq("id", it.id).eq("company_id", c).select("id");
-        let row = pick(true);
+        let row = pick();
         if (!Object.keys(row).length) return; // nothing changed: nothing written
         r = await update(row);
-        // the card's fields never cost the save (as the upsert below): a refused direction, a server before the migration
-        if ((r.error?.code === "23503" && /service_category/.test(r.error.message ?? "")) || r.error?.code === "PGRST204") {
-          row = pick(false);
+        // the card's fields never cost the save (as the upsert below): a refused direction — without it alone; a server
+        // before the migration (no such column) — without the card's fields
+        const refused =
+          r.error?.code === "23503" && "service_category_id" in row && /service_category/.test(r.error.message ?? "")
+            ? ["service_category_id"]
+            : r.error?.code === "PGRST204"
+              ? Object.keys(card)
+              : null;
+        if (refused) {
+          row = pick(refused);
           // only the card's fields changed and the server takes none of them: nothing else to write
           if (!Object.keys(row).length) return;
           r = await update(row);
