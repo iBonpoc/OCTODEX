@@ -1,7 +1,8 @@
 /**
  * e2e 216 — вкладка «Замеры» (основатель 09.11: «делай»; docs/specs/33-gutters-canvas.md П20.24). Every view.
  * - the module off: no «Замеры» — not in the bottom tabs (phone), not in the side menu (820/1280);
- * - on: «Замеры» is there (before «Ещё» on the phone), the core's tabs stay; pressed → the list, lit as the current one.
+ * - on: «Замеры» is there (on the phone in the place of «План», which goes to «Ещё» — founder 16.11, #1487; e2e 434);
+ *   pressed → the list, lit as the current one.
  * Finds things by testID; waits on what it checks.
  */
 exports.run = async (h) => {
@@ -26,9 +27,9 @@ exports.run = async (h) => {
   await waitFor(async () => (await item().count()) === 1, "on: «Замеры» is there");
   if (!wide) {
     const ids = await tid("tab-bar").locator('[data-testid^="tab-"]').evaluateAll((xs) => xs.map((x) => x.getAttribute("data-testid")));
-    h.expect(JSON.stringify(ids) === JSON.stringify(["tab-home", "tab-plan", "tab-messages", "tab-clients", "tab-module-gutters-list", "tab-more"]), `the core's tabs stay, «Замеры» before «Ещё» (${ids.join(", ")})`);
+    h.expect(JSON.stringify(ids) === JSON.stringify(["tab-home", "tab-module-gutters-list", "tab-messages", "tab-clients", "tab-more"]), `five tabs, «Замеры» in the place of «План» (${ids.join(", ")})`);
   }
-  // six tabs at 390: no name cut short, in RU, EN, ES («Сообщения» → «Чаты» under the tab; the director 09.11)
+  // five tabs at 390: no name cut short, in RU, EN, ES (#1487: one word «Сообщения» under the tab and in the menu)
   if (!wide) {
     for (const lang of ["ru", "en", "es"]) {
       if (lang !== "ru") {
@@ -36,7 +37,7 @@ exports.run = async (h) => {
         await p.reload();
         await tid("tab-bar").waitFor({ timeout: 8000 });
       }
-      await waitFor(async () => (await tid("tab-bar").locator('[data-testid^="tab-"]').count()) === 6, `${lang}: six tabs`);
+      await waitFor(async () => (await tid("tab-bar").locator('[data-testid^="tab-"]').count()) === 5, `${lang}: five tabs`);
       const cut = await tid("tab-bar").evaluate((bar) =>
         [...bar.querySelectorAll('[data-testid^="tab-"] div[dir="auto"], [data-testid^="tab-"] [class*="Text"]')]
           .filter((t) => t.textContent && t.scrollWidth > t.clientWidth + 1)
