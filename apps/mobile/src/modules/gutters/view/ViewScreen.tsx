@@ -352,7 +352,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         {details && spec.ds.length ? (
           <Card style={{ gap: space[2], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.ds")}</T>
-            {/* DS §8.14 (#1766): «D1» and its kind, the pipe's length on the right; the elbows, offsets and foot below — what
+            {/* DS §8.14 (#1766): «D1» and its kind, the downspout's length on the right (founder 16.11: «водосток», never «труба»); the elbows, offsets and foot below — what
                 the estimate counts for it; the same downspouts are one row «D1–D3 · 3 шт» */}
             {foldDs(spec.ds).map(({ ns, d }, i) => {
               const what = [sizeText(d.size), d.dsStyle ? word(`mod.gutters.attr.st.${d.dsStyle}`, d.dsStyle) : null, d.color ? word(`mod.gutters.attr.c.${d.color}`, d.color) : null, spec.manyStories ? t("mod.gutters.story", { n: d.story }) : null].filter(Boolean).join(" · ");

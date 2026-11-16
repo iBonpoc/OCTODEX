@@ -72,7 +72,7 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
     ? crew
       ? `<h2>${esc(t("mod.gutters.view.ds"))}</h2><table>${foldDs(spec.ds)
           .map(({ ns, d }) => {
-            // the same downspouts are one row (#1766): «D1–D3 · 3 ea», the pipe's length the estimate counts
+            // the same downspouts are one row (#1766): «D1–D3 · 3 ea», the downspout's length the estimate counts
             const name = ns.length > 1 ? t("mod.gutters.view.dsMany", { list: dsNumbers(t, ns), n: ns.length }) : dsNumbers(t, ns);
             const what = [sizeText(d.size), d.dsStyle ? word(t, `mod.gutters.attr.st.${d.dsStyle}`, d.dsStyle) : "", d.color ? word(t, `mod.gutters.attr.c.${d.color}`, d.color) : "", story ? t("mod.gutters.story", { n: d.story }) : ""].filter(Boolean).join(" · ");
             const how = [dsLine(t, d), d.bottom !== "none" ? word(t, `mod.gutters.attr.b.${d.bottom}`, d.bottom) : ""].filter(Boolean).join(" · ");

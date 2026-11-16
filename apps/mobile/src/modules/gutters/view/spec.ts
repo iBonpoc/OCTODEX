@@ -47,7 +47,7 @@ export interface SpecDs {
   color?: string;
   /** what is at its foot: extension, splash block… ("none" — nothing) */
   bottom: string;
-  /** the pipe's length the engine counts for it (#1766: the fact, not only the drawing's numbers), inches */
+  /** the downspout's length the engine counts for it (#1766: the fact, not only the drawing's numbers), inches */
   lengthIn: number;
 }
 export interface MeasureSpec {

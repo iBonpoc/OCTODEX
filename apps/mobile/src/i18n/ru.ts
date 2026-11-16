@@ -3734,7 +3734,7 @@ export const ru = {
   "mod.gutters.shop.miter": "угол {deg}° ({kind})",
   "mod.gutters.shop.fromTo": "{a} — {b}",
   "mod.gutters.shop.loc": "Уч. {s}, {d} от конца",
-  "mod.gutters.shop.dsNote": "Отступ — отрезок трубы между верхними коленами (от желоба к стене). Места по эскизу — сверить на объекте.",
+  "mod.gutters.shop.dsNote": "Отступ — отрезок водостока между верхними коленами (от желоба к стене). Места по эскизу — сверить на объекте.",
   "mod.gutters.shop.miterRow": "угол {deg}° ({kind}) — режется на месте",
   "mod.gutters.shop.b.planTag": "Метка {tag} на плане",
   "mod.gutters.shop.b.cut": "Рез {deg}° с каждой стороны",

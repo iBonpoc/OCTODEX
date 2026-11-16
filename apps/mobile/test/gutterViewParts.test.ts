@@ -90,6 +90,9 @@ describe("#1766 a part's name and properties in words (DS §8.14)", () => {
         for (const p of computeGutterParts(m).parts.filter((x) => x.kind === "material")) {
           const v = partView(tFor(lang), p, "ftin", { side: true });
           // a bare latin word is a code only in Russian (in English and Spanish «open», «abierta» are words)
+          // founder 16.11: «водосток», never «труба» (pipe / tubo) — on the screen and in the PDF; «Pipe cleat» is a
+          // product's trade name (as «Hinged hook»), the word of the canvas's wall-fastener choice too
+          for (const x of [v.title, ...v.props]) expect(x.replace(/Pipe cleat/, ""), `${lang} ${p.key}: «${x}»`).not.toMatch(/труб|pipe|tubo/i);
           for (const x of [v.title, ...v.props]) expect(x, `${lang} ${p.key}: «${x}»`).not.toMatch(lang === "ru" ? /_|^[a-z]+$|^\.\d|\d+x\d+|^\d+(\.\d+)?$/ : /_|^\.\d|\d+x\d+|^\d+(\.\d+)?$/);
         }
   });

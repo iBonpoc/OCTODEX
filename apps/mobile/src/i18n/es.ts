@@ -3408,7 +3408,7 @@ export const es: Dict = {
   "mod.gutters.pr.p.extension": "Extensión",
   "mod.gutters.pr.p.splash_block": "Bloque salpicadero",
   "mod.gutters.pr.p.flex": "Extensión flexible",
-  "mod.gutters.pr.p.drain": "Tubo de drenaje",
+  "mod.gutters.pr.p.drain": "Conexión al drenaje",
   "mod.gutters.pr.p.drain_adapter": "Adaptador de drenaje",
   "mod.gutters.pr.p.splash_pan": "Bandeja salpicadero",
   "mod.gutters.pr.p.sealant": "Sellador",

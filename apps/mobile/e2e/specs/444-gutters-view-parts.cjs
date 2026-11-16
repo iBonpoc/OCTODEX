@@ -4,7 +4,7 @@
  * - no twin rows: the end caps are «левая» and «правая», the coil to buy is «Бесшовный рулон … · купить», the
  *   downspout's sticks are «Водосток, хлыст 10′» — never two equal names with equal properties in a group;
  * - no code: no «.027», «hidden», «plain», «2x3», «2"×3"», «42» alone;
- * - three equal downspouts are one row «D1–D3 · 3 шт» with the pipe's length; one storey — no «эт N»;
+ * - three equal downspouts are one row «D1–D3 · 3 шт» with the downspout's length; one storey — no «эт N»;
  * - on 820 and 1280 the list is no wider than layout.formMax (560).
  * Finds things by testID; waits on what it checks.
  */
@@ -45,13 +45,15 @@ exports.run = async (h) => {
   await pressWhenStill(tid("view-details").getByRole("button"));
   await tid("view-parts").waitFor({ timeout: 5000 });
 
-  // the downspouts: one row for the three, with the pipe's length; one storey — no storey word
+  // the downspouts: one row for the three, with the downspout's length; one storey — no storey word
   await tid("view-ds-1").waitFor({ timeout: 5000 });
   const ds = (await tid("view-ds-1").innerText()).replace(/\s+/g, " ");
   h.expect(/D1–D3/.test(ds) && /3 шт/.test(ds), `three equal downspouts are one row «D1–D3 · 3 шт» (${ds})`);
   h.expect((await tid("view-ds-2").count()) === 0, "D2 is folded into D1–D3");
-  h.expect(/\d+′/.test(await tid("view-ds-1-qty").innerText()), "the pipe's length on the right");
+  h.expect(/\d+′/.test(await tid("view-ds-1-qty").innerText()), "the downspout's length on the right");
   h.expect(!/эт \d/.test(ds), `one storey: no «эт N» (${ds})`);
+  // founder 16.11: «труба» is never said — only «водосток»
+  h.expect(!/труб/i.test(await tid("view-screen").innerText()), "no «труба» on the screen");
   h.expect(/2×3″/.test(ds) && !/2x3|2"/.test(ds), `the size «2×3″» (${ds})`);
 
   // the parts: the quantity is one line, as tall as the name's line
