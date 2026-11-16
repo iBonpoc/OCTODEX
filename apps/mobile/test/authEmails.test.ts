@@ -22,6 +22,10 @@ describe("auth emails", () => {
       expect(html).toContain("{{ .Token }}");
       expect(html).not.toMatch(/ConfirmationURL|TokenHash|RedirectTo|SiteURL|href=/);
       expect(html).not.toMatch(/OCTODEX|Supabase/i);
+      // the words say the real life of the code (otp_expiry, docs/specs/52 Р3)
+      const expiry = Number(/\notp_expiry = (\d+)/.exec(config)?.[1]);
+      expect(expiry).toBe(600);
+      expect(html).toContain(`expires in ${expiry / 60} minutes`);
     });
   }
   it("confirmations stay on (accept_invitation trusts email_confirmed_at; the code confirms the address)", () => {
