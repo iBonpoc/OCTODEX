@@ -72,13 +72,13 @@ describe("design system: components", () => {
     "modules/gutters/draw/InputWindow.tsx": 1,
     "nav/NavMenu.tsx": 1,
   };
-  const countIn = (rel: string, src: string, re: RegExp) => (src.match(re) || []).length;
+  const countIn = (src: string, re: RegExp) => (src.match(re) || []).length;
   it("rule 29: no own Modal outside src/ui (sheets and windows — Sheet / InputDialog of src/ui); the old ones only go down", () => {
     const now: Record<string, number> = {};
     for (const f of outsideUi) {
       const src = readFileSync(f, "utf8");
       if (!/import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*"react-native"/.test(src)) continue;
-      const n = countIn(relative(ROOT, f), src, /<Modal\b/g);
+      const n = countIn(src, /<Modal\b/g);
       if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
     }
     const over = Object.entries(now).filter(([k, n]) => n > (RULE29_MODAL[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${RULE29_MODAL[k] ?? 0}`);
