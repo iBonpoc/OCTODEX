@@ -3591,7 +3591,7 @@ export const es: Dict = {
   "mod.gutters.view.dsElbow": "{style} × {n}",
   "mod.gutters.view.dsOffset": "desvío {len} × {n}",
   "mod.gutters.view.dsElbows": "codos {list}",
-  "mod.gutters.view.buy": "comprar",
+  "mod.gutters.view.buy": "solo pedido",
   "mod.gutters.view.grp.gutter": "Canaleta",
   "mod.gutters.view.grp.ds": "Bajante",
   "mod.gutters.view.grp.fix": "Fijaciones y consumibles",

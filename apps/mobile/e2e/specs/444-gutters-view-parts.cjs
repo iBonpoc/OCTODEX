@@ -1,7 +1,7 @@
 /**
  * e2e 444 — «Просмотр замера»: «Детали» и «Водостоки» как их читает человек (#1766, DS 1.16.0 §8.14). Every view.
  * - the quantity is one line in its own column (was «49′ / 9″», «1 / шт» on 390);
- * - no twin rows: the end caps are «левая» and «правая», the coil to buy is «Бесшовный рулон … · купить», the
+ * - no twin rows: the end caps are «левая» and «правая», the coil is «Бесшовный рулон … · только закупка» (not in the client's estimate), the
  *   downspout's sticks are «Водосток, хлыст 10′» — never two equal names with equal properties in a group;
  * - no code: no «.027», «hidden», «plain», «2x3», «2"×3"», «42» alone;
  * - three equal downspouts are one row «D1–D3 · 3 шт» with the downspout's length; one storey — no «эт N»;
@@ -84,7 +84,12 @@ exports.run = async (h) => {
   }
   const all = (await card.innerText()).replace(/\s+/g, " ");
   h.expect(/Заглушка, левая/.test(all) && /Заглушка, правая/.test(all), "the end caps by side");
-  h.expect(/Бесшовный рулон[^·]*·[^]*?купить/.test(all), "the coil to buy says «купить»");
+  // DS §8.14: «только закупка» — exactly the parts that are not in the client's estimate (the coil, the sticks, rivets,
+  // screws, paint); a part both priced and bought (a hanger, a strap, sealant) has no mark
+  h.expect(/Бесшовный рулон[^·]*·[^]*?только закупка/.test(all), "the coil says «только закупка»");
+  const marked = (await card.innerText()).split("\n").filter((l) => /только закупка/.test(l)).length;
+  h.expect(marked >= 3, `«только закупка» on the supplier-only parts (${marked})`);
+  h.expect(!/Удлинение/.test(all), "one word: «Удлинитель»"); // i18n-old: ok — it checks the old word is gone
   h.expect(/Водосток, хлыст/.test(all), "the downspout's sticks are named as sticks");
   const codes = all.match(/(^|[\s·])\.\d+|\bhidden\b|\bplain\b|\b\d+x\d+\b|\d"|· 42( |$)/g);
   h.expect(!codes, `no code in the parts (${codes})`);

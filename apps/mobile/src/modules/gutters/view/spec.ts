@@ -159,7 +159,9 @@ export const GROUP_OF: Record<GutterSection, PartGroup["key"] | null> = {
 
 /**
  * «Состав замера» (#1766, DS §8.14): the parts in three groups; each row a name in one line, the properties in the
- * human order, the quantity on its own; what is to buy says «купить»; the same rows are one (their quantities add up);
+ * human order, the quantity on its own; a part that is NOT in the client's estimate — the supplier's order only (`use:
+ * "purchase"`: the coil, the sticks, rivets, screws, paint) — says «только закупка», every other part is both in the
+ * estimate and bought and has no mark (DS §8.14); the same rows are one (their quantities add up);
  * a property every row of a group has is said once, under the group's title (only when the group has 2+ rows).
  */
 export function partGroups(t: Tr, parts: readonly PartQty[], fmt: LenFormat = "ftin"): PartGroup[] {

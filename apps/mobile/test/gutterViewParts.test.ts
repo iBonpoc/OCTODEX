@@ -108,7 +108,7 @@ describe("#1766 a part's name and properties in words (DS §8.14)", () => {
 
 describe("#1766 «Состав замера»: three groups, no twin rows", () => {
   for (const lang of LANGS) {
-    it(`${lang}: gutter · downspout · fasteners and supplies; one row per thing; «купить» on what is only bought`, () => {
+    it(`${lang}: gutter · downspout · fasteners and supplies; one row per thing; «только закупка» on exactly the parts not in the client's estimate`, () => {
       const t = tFor(lang);
       const spec = measureSpec(d, parts);
       const gs = partGroups(t, spec.parts);
@@ -125,6 +125,9 @@ describe("#1766 «Состав замера»: three groups, no twin rows", () =
       const coil = gs[0]!.rows.find((r) => r.key.startsWith("coil."))!;
       expect(coil.props).toContain(buy);
       expect(gs[0]!.rows.find((r) => r.key.startsWith("gutter."))!.props).not.toContain(buy);
+      // one rule (DS §8.14): the mark is on a row iff its part is the supplier's order only (use: "purchase")
+      const byKey = new Map(spec.parts.map((p) => [p.key, p]));
+      for (const g of gs) for (const r of g.rows) expect(r.props.includes(buy), `${lang} ${r.key}`).toBe(byKey.get(r.key)!.use === "purchase");
     });
   }
   it("every section the engine has belongs to a group (a new one must be placed, not fall into «Крепёж» by itself)", () => {
