@@ -57,6 +57,8 @@ export function NoticesSection() {
           <T v="heading">{t("ds.banner.title")}</T>
           <T v="caption" tone="mut">{t("ds.banner.hint")}</T>
           <Banner tone="warn" testID="showcase-banner-warn" title={t("ds.banner.warnTitle")} hint={t("ds.banner.warnHint")} action={{ label: t("ds.banner.warnBtn"), onPress: () => setPressed(t("ds.banner.warnBtn")) }} />
+          {/* #1912 (DS §15.3а): the strip a ready over-the-air update shows under every header */}
+          <Banner tone="info" testID="showcase-update-bar" title={t("upd.ready.title")} hint={t("upd.ready.hint")} action={{ label: t("upd.apply"), onPress: () => setPressed(t("upd.apply")) }} />
           {infoShown ? (
             <Banner tone="info" testID="showcase-banner-info" title={t("ds.banner.infoTitle")} hint={t("ds.banner.infoHint")} onClose={() => setInfoShown(false)} />
           ) : (

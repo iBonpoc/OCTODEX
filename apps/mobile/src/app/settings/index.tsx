@@ -12,6 +12,7 @@ import { useHapticsEnabled } from "@/ui/haptics";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
 import { PushSettingsSection } from "@/features/PushSettings";
+import { UpdateRow } from "@/features/UpdateRow";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 import Constants from "expo-constants";
@@ -110,6 +111,7 @@ export default function Settings() {
               {t("brand.about.version", { v: Constants.expoConfig?.version ?? "1.0.0", b: BUILD || "dev" })}
             </T>
           </View>
+          <UpdateRow />
           <Divider />
           <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
           <Divider />

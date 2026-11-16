@@ -4444,6 +4444,17 @@ export const ru = {
   "price.quick.needPrice": "Укажите цену",
   "price.quick.saved": "Цена сохранена",
   "price.quick.open": "Открыть позицию",
+  "upd.ready.title": "Доступна новая версия",
+  "upd.ready.hint": "Нажмите «Обновить»: приложение перезапустится. Изменения не пропадут.",
+  "upd.apply": "Обновить",
+  "upd.applying": "Обновляем…",
+  "upd.needsBuild.title": "Нужна новая версия из TestFlight/App Store",
+  "upd.needsBuild.hint": "Эта версия приложения слишком старая для новых обновлений. Установите свежую сборку.",
+  "upd.row.title": "Версия · Проверить обновление",
+  "upd.row.unknown": "Нажмите, чтобы проверить",
+  "upd.row.checking": "Проверяем…",
+  "upd.row.latest": "Установлена последняя версия",
+  "upd.row.ready": "Доступна новая версия — нажмите, чтобы обновить",
 } as const;
 
 export type DictKey = keyof typeof ru;
