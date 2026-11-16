@@ -19,8 +19,8 @@ import type { DrawnRun, Drawing, P } from "../src/modules/gutters/geometry";
 const attrs = { profile: "k" as const, size: "5", material: "aluminum", color: "white", story: 1, hanger: "hidden" as const };
 const r = (id: string, a: P, b: P): DrawnRun => ({ id, a, b, attrs });
 const d: Drawing = { runs: [r("a", [0, 120], [240, 120]), r("b", [240, 120], [240, 0])], downspouts: [] };
-const page = (lang: "en" | "es", rough = true) =>
-  sheetPage(pageIdOf("m1"), tFor(lang)("mod.gutters.pdf.title"), blueprint(d, tFor(lang), { company: "Test Gutters LLC", address: "12 Oak St", date: "11/10/2026", rough }));
+const page = (lang: "en" | "es", address = "12 Oak St") =>
+  sheetPage(pageIdOf("m1"), tFor(lang)("mod.gutters.pdf.title"), blueprint(d, tFor(lang), { company: "Test Gutters LLC", address, date: "11/10/2026", rough: false }));
 const other: DocAttachPage = { id: "other:1", title: "Another module", w: 10, h: 10, items: [] };
 
 describe("unit:gutterEstimatePage — the drawing in the estimate", () => {
@@ -34,9 +34,9 @@ describe("unit:gutterEstimatePage — the drawing in the estimate", () => {
   });
   it("«Перенести изменения»: this measurement's page is replaced, another's stays", () => {
     const first: EstimateDoc = { ...newDoc(), pages: [other, page("en")] };
-    const next = withMeasurementPage(first, "m1", page("en", false));
+    const next = withMeasurementPage(first, "m1", page("en", "99 New St"));
     expect(next.pages!.map((p) => p.id)).toEqual(["other:1", "gutters:m1"]);
-    expect(next.pages![1]!.items.some((x) => x.t === "x" && x.s === tFor("en")("mod.gutters.sheet.tape"))).toBe(true);
+    expect(next.pages![1]!.items.some((x) => x.t === "x" && x.s === "99 New St")).toBe(true);
   });
   it("in the client's language (rule 7): a Spanish client gets Spanish words", () => {
     const p = withMeasurementPage(newDoc(), "m1", page("es")).pages![0]!;

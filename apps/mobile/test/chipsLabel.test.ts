@@ -62,7 +62,8 @@ describe("ChoiceChips name their field (#1095)", () => {
     expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
-    expect(all).toBeGreaterThan(80);
+    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); the parser still sees every chip
+    expect(all).toBeGreaterThan(75);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
   });
 });
