@@ -21,9 +21,9 @@ alter table public.catalog_cost_history add constraint catalog_cost_history_sour
 create unique index if not exists catalog_cost_history_receipt_once on public.catalog_cost_history (company_id, po_line_id)
   where source = 'receipt' and po_line_id is not null;
 
-revoke all on public.catalog_cost_history from anon;
--- the column is the server's: nobody writes it from the app (the history is written by triggers and po_receive only)
-revoke insert (po_line_id), update (po_line_id) on public.catalog_cost_history from authenticated;
+-- grants unchanged: authenticated has only select on catalog_cost_history (20261110000000_suppliers.sql:169-170), so the
+-- app writes no history row at all — a «receipt» row or a taken po_line_id comes only from po_receive (security definer);
+-- T321 checks an insert from the app is refused
 
 create or replace function public.po_receive(p_po_id uuid, p_lines jsonb, p_row_version bigint default null)
 returns text language plpgsql security definer set search_path = '' as $$
