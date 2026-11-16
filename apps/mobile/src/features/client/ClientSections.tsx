@@ -256,7 +256,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                   title={inv.title || findJob(db, inv.jobId)?.title || inv.number || ""}
                   when={[inv.number, inv.title ? findJob(db, inv.jobId)?.title : null].filter(Boolean).join(" · ") || undefined}
                   value={money(inv.totalCents)}
-                  status={{ tone: ic.s, label: t(ic.l) }}
+                  status={{ tone: ic.s, label: t(ic.l, ic.p) }}
                   onPress={() => router.push(`/invoice/${inv.id}`)}
                 />
               );

@@ -9,7 +9,7 @@
  * - the toolbar dropped at the top → it stands at the top.
  * Finds things by testID / id; waits on what it checks.
  */
-const { openProps, savedOnce, skipLength, sheetGone } = require("../gutters.cjs");
+const { openProps, savedOnce, skipLength, sheetGone, openDsMenu } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -93,10 +93,14 @@ exports.run = async (h) => {
   await p.mouse.click(...(await centre(svg().locator('[id^="lbl-ds:"]').first())));
   await tid("attr-ds-size").waitFor({ timeout: 5000 });
   if (!wide) await closeSheet();
+  // «Водосток» on a downspout: one tap picks it, two open it (#1563 — as with any tool), never a second one on top
   await p.mouse.click(...(await centre(svg().locator("circle").first())));
+  // (the phone: no sheet; a wide screen shows what is picked in its side panel, by design)
+  await waitFor(async () => (await svg().locator("circle").count()) === 1 && (wide || (await tid("attr-panel").count()) === 0), "one tap: picked, no menu on the phone, no second downspout");
+  await openDsMenu(p);
   await tid("attr-ds-size").waitFor({ timeout: 5000 });
   await p.waitForTimeout(400);
-  h.expect((await svg().locator("circle").count()) === 1, "«Водосток» on a downspout opens it — no second one");
+  h.expect((await svg().locator("circle").count()) === 1, "«Водосток» on a downspout opens it on two taps — no second one");
   await waitFor(async () => (await els()).filter((e) => e.kind === "downspout").length === 1, "one downspout in the store");
   if (!wide) await closeSheet();
 
