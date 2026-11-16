@@ -15,7 +15,7 @@ import { SIG_BOX, fitSignature } from "./signaturePath";
 import type { DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import type { PortalData } from "@/cloud/portal";
-import { optionTotals, shownQtyUnit, withAddons } from "./estimateDoc";
+import { isFeetUnit, optionTotals, shownQtyUnit, withAddons } from "./estimateDoc";
 import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf";
 import { pagesHtml } from "./docPages";
 import { clientRows } from "./clientLayout";
@@ -51,7 +51,7 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
         const l = act[i]!;
         return `<tr class="${[l.optional && !l.selected ? "opt" : "", depth ? "d1" : ""].filter(Boolean).join(" ")}"><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
           l.description ? `<div class="mut">${esc(l.description)}</div>` : ""
-        }</td><td class="r">${esc(shownQtyUnit(l.quantity, l.unit))}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${l.optional && !l.selected ? "+ " : ""}${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
+        }</td><td class="r">${esc(shownQtyUnit(l.quantity, l.unit))}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}${isFeetUnit(l.unit) ? `/${esc(l.unit)}` : ""}</td>` : ""}<td class="r">${l.optional && !l.selected ? "+ " : ""}${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
       };
       // sections (when the option has them) with their lines, subsections and subtotals, then «Other items»; else the lines by kind.
       // Every word a person typed (a section's title, a line's name) goes through esc(); the dictionary's words are the client's language.

@@ -38,6 +38,7 @@ describe("shownQtyUnit — the quantity with its unit for the client", () => {
     for (const f of ["EstimateView.tsx", "estimatePdf.ts"]) {
       const src = readFileSync(join(__dirname, "../src/features", f), "utf8");
       expect(src, f).toMatch(/shownQtyUnit\(l\.quantity, l\.unit\)/);
+      expect(src, f).toMatch(/isFeetUnit\(l\.unit\)/);
       expect(src, f).not.toMatch(/shownQty\(l\.quantity\)\}? \$?\{?l\.unit/);
     }
   });
