@@ -135,8 +135,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
   <div class="top">GoRix v1.0.0 · 1923</div>
   <div class="back"><svg class="ic"><use href="#i-back"/></svg>Настройки</div>
   <div class="hd"><h2>Цены и прайс</h2><span class="qm">?</span><span class="sp"></span><span class="b36 round" aria-label="Поиск"><svg class="ic"><use href="#i-search"/></svg></span></div>
-  <div class="sysrow"><span class="k">Система</span><span class="v">K 5″ · Aluminum 0.027″ · 2×3 Plain</span><svg class="ic s"><use href="#i-down"/></svg></div>
-  <div class="note" style="margin:4px 20px 0">Система последнего замера</div>
+  <div class="sysrow" style="height:auto;min-height:56px;padding:6px 12px"><span style="flex:1;display:flex;flex-direction:column"><span class="k">Система · последнего замера</span><span class="v" style="white-space:normal">K 5″ · Aluminum 0.027″ · Painted<br>Downspout 2×3 Plain</span></span><svg class="ic s"><use href="#i-down"/></svg></div>
 </template>
 <template id="p-list">
    <div class="sect">Желоб</div>
@@ -224,11 +223,10 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
     </div>
    </div>
   </div>
-  <div class="menu" style="right:16px;top:372px;width:250px">
-   <div class="mi"><svg class="ic ck"><use href="#i-check"/></svg>K 5″<span class="r st warn">7</span></div>
-   <div class="mi"><span class="ck"></span>K 6″<span class="r st warn">12</span></div>
-   <div class="mi"><span class="ck"></span>Fascia 6″<span class="r st ok"><svg class="ic s"><use href="#i-ok"/></svg></span></div>
-   <div class="hdm">Число — деталей без цены</div>
+  <div class="menu" style="right:16px;top:372px;width:300px">
+   <div class="mi"><svg class="ic ck"><use href="#i-check"/></svg>K 5″<span class="r st warn"><svg class="ic s"><use href="#i-warn"/></svg>нет цены: 7</span></div>
+   <div class="mi"><span class="ck"></span>K 6″<span class="r st warn"><svg class="ic s"><use href="#i-warn"/></svg>нет цены: 12</span></div>
+   <div class="mi"><span class="ck"></span>Fascia 6″<span class="r st ok"><svg class="ic s"><use href="#i-ok"/></svg>все цены</span></div>
    <div class="mi">Изменить «Что ставим»…</div>
   </div>
  </div>
@@ -262,10 +260,10 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
   <div class="body" style="padding-top:10px">
    <div class="note">Во всех системах из «Что ставим»</div>
    <div class="list">
-    <div class="lc"><span class="k">Elbow A 2×3<small>Plain · Aluminum</small></span><span class="v">$3.90 <span class="u">/ ea</span></span></div>
-    <div class="lc"><span class="k">Elbow B 2×3<small>Plain · Aluminum</small></span><span class="v">$3.90 <span class="u">/ ea</span></span></div>
-    <div class="lc"><span class="k">Elbow A 3×4<small>Corrugated · Aluminum</small></span><span class="v">$5.20 <span class="u">/ ea</span></span></div>
-    <div class="lc"><span class="k">Elbow 45° Round 3″<small>Copper<br><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow A 2×3<small>Plain · Aluminum 0.027″</small></span><span class="v">$3.90 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow B 2×3<small>Plain · Aluminum 0.027″</small></span><span class="v">$3.90 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow A 3×4<small>Corrugated · Aluminum 0.032″</small></span><span class="v">$5.20 <span class="u">/ ea</span></span></div>
+    <div class="lc"><span class="k">Elbow 45° Round 3″<small>Steel 26 ga<br><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
    </div>
   </div>
  </div>
@@ -280,10 +278,10 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
    <div class="note" style="font-size:15px">Цвет больше не влияет на цену. Один раз сведём цены цветов одной детали в одну — дальше она будет общей.</div>
    <div class="sect">Разные цены у цветов: 2</div>
    <div class="grp">
-    <div class="row"><span class="k">Box Miter, outside<small>White $14.00 · Brown $12.00</small></span><span class="v" style="color:var(--ink)">$14.00<svg class="ic s"><use href="#i-down"/></svg></span></div>
-    <div class="row"><span class="k">5″ K-Style Gutter<small>White $6.40 · Black $6.80 · Brown $6.40</small></span><span class="v" style="color:var(--ink)">$6.40<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    <div class="row"><span class="k">Box Miter, outside<small>White $14.00 · Brown $12.00<br>Предложена $14.00 — её меняли последней (12.11)</small></span><span class="v" style="color:var(--ink)">$14.00<svg class="ic s"><use href="#i-down"/></svg></span></div>
+    <div class="row"><span class="k">5″ K-Style Gutter<small>White $6.40 · Black $6.80 · Brown $6.40<br>Предложена $6.40 — у двух цветов из трёх</small></span><span class="v" style="color:var(--ink)">$6.40<svg class="ic s"><use href="#i-down"/></svg></span></div>
    </div>
-   <div class="note">По умолчанию — цена, которую меняли последней. Нажмите, чтобы выбрать другую.</div>
+   <div class="note">Цену выбираете вы: у каждой детали написано, почему предложена эта. Нажмите, чтобы выбрать другую.</div>
    <div class="sect">Уже одна цена: 18 деталей</div>
    <div class="grp"><div class="row"><span class="k">End Cap, Slip Joint, Outlet 2×3 и ещё 15</span><span class="v"><svg class="ic"><use href="#i-chev"/></svg></span></div></div>
    <div class="btnw acc">Сделать одну цену</div>
@@ -398,9 +396,10 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
     <div class="row"><span class="k">Запас, один участок</span><span class="stp"><b>−</b><span>3 ft</span><b>+</b></span></div>
     <div class="row"><span class="k">Запас, два и больше</span><span class="stp"><b>−</b><span>6 ft</span><b>+</b></span></div>
    </div>
+   <div class="sect">Дом <span class="qm">?</span></div>
+   <div class="grp"><div class="row"><span class="k">Высота этажа<small>Для длины водостока и цены работы по этажам</small></span><span class="stp"><b>−</b><span>10 ft</span><b>+</b></span></div></div>
    <div class="sect">Водосток <span class="qm">?</span></div>
    <div class="grp">
-    <div class="row"><span class="k">Высота этажа</span><span class="stp"><b>−</b><span>10 ft</span><b>+</b></span></div>
     <div class="row"><span class="k">Длина хлыста</span><span class="v">10 ft<svg class="ic s"><use href="#i-down"/></svg></span></div>
     <div class="row"><span class="k">Обрезки в другой водосток</span><span class="tog on"></span></div>
     <div class="row"><span class="k">Добавлять водосток автоматически</span><span class="tog"></span></div>
@@ -423,12 +422,13 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
     <span class="sysrow" style="margin:0;width:200px"><span class="k">Водосток</span><span class="v">2×3 Plain</span><svg class="ic s"><use href="#i-down"/></svg></span>
     <span class="fchip on">Все · 42</span><span class="fchip">Без цены · 7</span>
    </div>
-   <div class="body" style="padding-top:12px;max-width:836px">
-    <div class="banner warn"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="acts"><span class="b36">Создать 7 с тестовой ценой</span></div></div></div>
-    <div class="sect">Низ водостока</div>
-    <div class="list"><div class="lc sel"><span class="k">Downspout Extension 2×3</span><span class="v">$9.00 <span class="u">/ ea</span></span></div><div class="lc"><span class="k">Splash Block</span><span class="v">$11.00 <span class="u">/ ea</span></span></div></div>
+   <div class="body" style="padding-top:12px;max-width:640px">
+    <div class="banner warn" style="align-items:center"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div></div><span class="b36">Создать 7 с тестовой ценой</span></div>
+    <div style="display:flex;padding:0 14px;font-size:13px;color:var(--mut)"><span style="flex:1">Деталь</span><span>Цена</span></div>
     <div class="sect">Желоб</div>
     <div class="list"><div class="lc"><span class="k">5″ K-Style Gutter<small>Painted · 3 цвета</small></span><span class="v">$6.40 <span class="u">/ ft</span></span></div></div>
+    <div class="sect">Низ водостока</div>
+    <div class="list"><div class="lc sel"><span class="k">Downspout Extension 2×3</span><span class="v">$9.00 <span class="u">/ ea</span></span></div><div class="lc"><span class="k">Splash Block</span><span class="v">$11.00 <span class="u">/ ea</span></span></div></div>
    </div>
   </div>
   <div class="panel">
