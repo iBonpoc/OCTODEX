@@ -1,10 +1,11 @@
 /**
  * e2e 444 — «Просмотр замера»: «Детали» и «Водостоки» как их читает человек (#1766, DS 1.16.0 §8.14). Every view.
  * - the quantity is one line in its own column (was «49′ / 9″», «1 / шт» on 390);
- * - no twin rows: the end caps are «левая» and «правая», the coil is «Бесшовный рулон … · только закупка» (not in the client's estimate), the
- *   downspout's sticks are «Водосток, хлыст 10′» — never two equal names with equal properties in a group;
- * - no code: no «.027», «hidden», «plain», «2x3», «2"×3"», «42» alone;
- * - three equal downspouts are one row «D1–D3 · 3 шт» with the downspout's length; one storey — no «эт N»;
+ * - the names are the supplier's (#1800, founder 16.11): English trade words even in the Russian app — «End Cap – Left / Right»,
+ *   «Coil 11⅞″ · для заказа» (not on the client's estimate), the downspout's sticks on its own row («куски по 10′: 2»);
+ *   never two equal names with equal properties in a group;
+ * - no code: no «.027», «hidden», «plain», «2x3», «2"×3"», «42» alone; the size reads «2″ × 3″»;
+ * - three equal downspouts are one row of their kind «D1–D3 · 3 шт» with the total length; one storey — no «эт N»;
  * - on 820 and 1280 the list is no wider than layout.formMax (560).
  * Finds things by testID; waits on what it checks.
  */
@@ -36,6 +37,8 @@ exports.run = async (h) => {
     await tid("draw-tool-ds").getByRole("button").click();
     await canvasAt(p, x0 + (x1 - x0) * f, y);
     await p.mouse.click(x0 + (x1 - x0) * f, y);
+    // the downspout's panel may come late on a loaded machine: wait for it, then close it (closeDsMenu gives up after 2 s)
+    await tid("attr-panel").first().waitFor({ timeout: 8000 }).catch(() => {});
     await closeDsMenu(p);
   }
   await tid("draw-done").waitFor({ timeout: 8000 });
@@ -54,7 +57,7 @@ exports.run = async (h) => {
   h.expect(!/эт \d/.test(ds), `one storey: no «эт N» (${ds})`);
   // founder 16.11: «труба» is never said — only «водосток»
   h.expect(!/труб/i.test(await tid("view-screen").innerText()), "no «труба» on the screen");
-  h.expect(/2×3″/.test(ds) && !/2x3|2"/.test(ds), `the size «2×3″» (${ds})`);
+  h.expect(/2″ × 3″/.test(ds) && !/2x3|2"/.test(ds), `the size «2″ × 3″» (${ds})`);
 
   // the parts: the quantity is one line, as tall as the name's line
   const card = tid("view-parts").locator("xpath=..");
@@ -83,14 +86,20 @@ exports.run = async (h) => {
     h.expect(new Set(texts).size === texts.length, `${g}: no twin rows (${texts.join(" / ")})`);
   }
   const all = (await card.innerText()).replace(/\s+/g, " ");
-  h.expect(/Заглушка, левая/.test(all) && /Заглушка, правая/.test(all), "the end caps by side");
-  // DS §8.14: «только закупка» — exactly the parts that are not in the client's estimate (the coil, the sticks, rivets,
-  // screws, paint); a part both priced and bought (a hanger, a strap, sealant) has no mark
-  h.expect(/Бесшовный рулон[^·]*·[^]*?только закупка/.test(all), "the coil says «только закупка»");
-  const marked = (await card.innerText()).split("\n").filter((l) => /только закупка/.test(l)).length;
-  h.expect(marked >= 3, `«только закупка» on the supplier-only parts (${marked})`);
-  h.expect(!/Удлинение/.test(all), "one word: «Удлинитель»"); // i18n-old: ok — it checks the old word is gone
-  h.expect(/Водосток, хлыст/.test(all), "the downspout's sticks are named as sticks");
+  h.expect(/End Cap – Left/.test(all) && /End Cap – Right/.test(all), "the end caps by side");
+  // DS §8.14: «для заказа» — exactly the parts that are not in the client's estimate (the coil, rivets, screws, paint);
+  // a part both priced and bought (a hanger, a strap, sealant) has no mark
+  h.expect(/Coil [^·]*·[^]*?для заказа/.test(all), "the coil says «для заказа»");
+  const marked = (await card.innerText()).split("\n").filter((l) => /для заказа/.test(l)).length;
+  h.expect(marked >= 3, `«для заказа» on the supplier-only parts (${marked})`);
+  h.expect(/куски по 10′: \d/.test(all), "the downspout's sticks are said on its row");
+  // #1800: a part's name is the supplier's — no Russian word in a name
+  const titles = card.locator('[data-testid$="-title"]').locator("visible=true");
+  for (let i = 0; i < (await titles.count()); i++) {
+    const tt = await titles.nth(i).innerText();
+    h.expect(!/[А-Яа-яЁё]/.test(tt), `a part's name is the supplier's English one (${tt})`);
+  }
+  await tid("view-parts-help").waitFor({ timeout: 5000 });
   const codes = all.match(/(^|[\s·])\.\d+|\bhidden\b|\bplain\b|\b\d+x\d+\b|\d"|· 42( |$)/g);
   h.expect(!codes, `no code in the parts (${codes})`);
 

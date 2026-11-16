@@ -21,7 +21,7 @@ import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
-import { Menu, useToast } from "@/ui/overlays";
+import { HelpButton, Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { NotFound } from "@/ui/emptyStates";
 import { blueprint, sheetPage } from "./blueprint";
@@ -33,10 +33,10 @@ import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, ofMe
 import { CardHead } from "./CardHead";
 import { MeasurePhotos } from "../draw/Photos";
 import { toMeasurement } from "../geometry";
-import { dsLine, listPreview, partName, sizeText } from "../prices";
+import { dsLine, listPreview, PART_WORDS, partName, partQty, partView, sizeText } from "../prices";
 import { readLenFormat, readRules, toRulesOverride } from "../settings";
 import { LinkSheet } from "../draw/LinkSheet";
-import { dsNumbers, foldDs, measureSpec, partGroups } from "./spec";
+import { dsNumbers, dsTotals, measureSpec, partGroups } from "./spec";
 import { drawingPdfHtml, drawingPdfName } from "./drawingPdf";
 import { shopFileName, shopHtml, shopJob, shopPagePt, shopSheets, type ShopPaper } from "./shop";
 import { saveShopPdf } from "./shop/savePdf";
@@ -327,7 +327,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <View key={r.id} testID={`view-run-${r.n}`} style={{ gap: space[1] }}>
                 <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
                   <T v="body" w="semibold">{t("mod.gutters.draw.cutRun", { n: r.n })}</T>
-                  <T v="caption" tone="mut">{[spec.manyStories ? t("mod.gutters.story", { n: r.story }) : null, `${word(`mod.gutters.attr.p.${r.profile}`, r.profile)} ${sizeText(r.size)}`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
+                  <T v="caption" tone="mut">{[spec.manyStories ? t("mod.gutters.story", { n: r.story }) : null, `${sizeText(r.size)} ${word(`mod.gutters.pr.prof.${r.profile}`, r.profile)}`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
                 </RowView>
                 <T v="body">{t("mod.gutters.view.runLine", { back: fmtLen(r.backIn, fmt), front: fmtLen(r.frontIn, fmt) })}</T>
               </View>
@@ -352,20 +352,24 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         {details && spec.ds.length ? (
           <Card style={{ gap: space[2], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
             <T v="heading" w="semibold">{t("mod.gutters.view.ds")}</T>
-            {/* DS §8.14 (#1766): «D1» and its kind, the downspout's length on the right (founder 16.11: «водосток», never «труба»); the elbows, offsets and foot below — what
-                the estimate counts for it; the same downspouts are one row «D1–D3 · 3 шт» */}
-            {foldDs(spec.ds).map(({ ns, d }, i) => {
-              const what = [sizeText(d.size), d.dsStyle ? word(`mod.gutters.attr.st.${d.dsStyle}`, d.dsStyle) : null, d.color ? word(`mod.gutters.attr.c.${d.color}`, d.color) : null, spec.manyStories ? t("mod.gutters.story", { n: d.story }) : null].filter(Boolean).join(" · ");
-              const how = [dsLine(t, d), d.bottom !== "none" ? word(`mod.gutters.attr.b.${d.bottom}`, d.bottom) : null].filter(Boolean).join(" · ");
+            {/* #1800 (founder 16.11: «водостоки — общее количество»): one row per kind of downspout — the supplier's name,
+                the total length on the right, how many; below, the elbows by style, the offsets and what is at the feet */}
+            {dsTotals(spec.ds).map((g, i) => {
+              const v = partView(t, { key: "ds", kind: "material", attrs: { shape: g.shape, size: g.size, ...(g.dsStyle ? { dsStyle: g.dsStyle } : {}), ...(g.material ? { material: g.material } : {}), ...(g.color ? { color: g.color } : {}) } }, fmt);
+              const how = [
+                dsLine(t, { shape: g.shape, elbows: g.elbows, offsets: g.offsets }),
+                ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(`mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`),
+              ].filter(Boolean).join(" · ");
+              const n0 = g.ns[0]!;
               return (
-                <View key={d.id} testID={`view-ds-${d.n}`} style={{ gap: space[2] }}>
+                <View key={g.key} testID={`view-ds-${n0}`} style={{ gap: space[2] }}>
                   {i ? <Divider /> : null}
                   <PartLine
-                    title={ns.length > 1 ? t("mod.gutters.view.dsMany", { list: dsNumbers(t, ns), n: ns.length }) : dsNumbers(t, ns)}
-                    props={[what]}
-                    more={how ? <View testID={`view-ds-line-${d.n}`}><T v="caption" tone="mut" numberOfLines={2}>{how}</T></View> : null}
-                    qty={ns.length > 1 ? t("mod.gutters.view.dsEach", { len: fmtLen(d.lengthIn, fmt) }) : fmtLen(d.lengthIn, fmt)}
-                    testID={`view-ds-${d.n}`}
+                    title={v.title}
+                    props={[...v.props, `${dsNumbers(t, g.ns)} · ${partQty(t, { qty: String(g.ns.length), unit: "ea" }, fmt)}`]}
+                    more={how ? <View testID={`view-ds-line-${n0}`}><T v="caption" tone="mut" numberOfLines={2}>{how}</T></View> : null}
+                    qty={fmtLen(g.lengthIn, fmt)}
+                    testID={`view-ds-${n0}`}
                   />
                 </View>
               );
@@ -375,11 +379,18 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
         {details && spec.parts.length ? (
           <Card style={{ gap: space[5], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
-            <View testID="view-parts"><T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T></View>
+            <View testID="view-parts"><RowView style={{ justifyContent: "space-between", alignItems: "center", gap: space[2] }}>
+              <T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T>
+              {/* «для заказа» (#1800: «что значит „только закупка“?») — the one «?» of the list says it */}
+              <HelpButton title={t("mod.gutters.view.buy")} text={t("mod.gutters.view.buyHelp")} testID="view-parts-help" />
+            </RowView></View>
             {/* DS §8.14 (#1766): three groups, a name in one line, the properties below, the quantity on its own column */}
             {partGroups(t, spec.parts, fmt).map((g) => (
               <View key={g.key} testID={`view-parts-${g.key}`} style={{ gap: space[2] }}>
-                <T v="caption" tone="mut">{[g.title, ...g.common].join(" · ")}</T>
+                <RowView style={{ justifyContent: "space-between", alignItems: "center", gap: space[2] }}>
+                  <T v="caption" tone="mut">{g.title}</T>
+                  <HelpButton title={g.title} text={g.help} testID={`view-parts-${g.key}-help`} />
+                </RowView>
                 {g.rows.map((r, i) => (
                   <View key={r.key} testID={`view-part-${r.key}`} style={{ gap: space[2] }}>
                     {i ? <Divider /> : null}

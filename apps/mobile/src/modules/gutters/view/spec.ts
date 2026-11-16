@@ -10,7 +10,7 @@ import type { DictKey } from "@/i18n";
 import { cornerCut, findCorners, toMeasurement, type Drawing, type FoundCorner } from "../geometry";
 import { manyStories, storyOf, type Story } from "../canvas/scene";
 import { elbowCounts } from "../canvas/attrs";
-import type { LenFormat } from "../canvas/format";
+import { fmtLen, type LenFormat } from "../canvas/format";
 import { partQty, partView } from "../prices";
 
 export interface SpecRun {
@@ -121,29 +121,56 @@ export function dsNumbers(t: Tr, ns: readonly number[]): string {
   return run ? `${name(ns[0]!)}–${name(ns[ns.length - 1]!)}` : ns.map(name).join(", ");
 }
 
-/** downspouts that are the same in every fact (kind, size, colour, length, elbows, offsets, foot, storey) are one row */
-export function foldDs(ds: readonly SpecDs[]): { ns: number[]; d: SpecDs }[] {
-  const out = new Map<string, { ns: number[]; d: SpecDs }>();
+/** one kind of downspout on the drawing (#1800, founder 16.11: «водостоки — общее количество»): the total length, how many,
+ *  the elbows by style and the offsets by length summed over them, what is at their feet */
+export interface DsKindTotal {
+  key: string;
+  ns: number[];
+  shape: string;
+  size: string;
+  dsStyle?: string;
+  material?: string;
+  color?: string;
+  lengthIn: number;
+  elbows: { style: string; qty: number }[];
+  offsets: { lengthIn: number; qty: number }[];
+  bottoms: { kind: string; qty: number }[];
+}
+export function dsTotals(ds: readonly SpecDs[]): DsKindTotal[] {
+  const out = new Map<string, DsKindTotal>();
+  const add = <T extends { qty: number }>(list: T[], same: (x: T) => boolean, x: T) => {
+    const had = list.find(same);
+    if (had) had.qty += x.qty;
+    else list.push({ ...x });
+  };
   for (const d of ds) {
-    const { n: _n, id: _id, ...facts } = d;
-    const key = JSON.stringify(facts);
-    const g = out.get(key);
-    if (g) g.ns.push(d.n);
-    else out.set(key, { ns: [d.n], d });
+    const key = [d.shape, d.size, d.dsStyle ?? "", d.material ?? "", d.color ?? ""].join("|");
+    const g = out.get(key) ?? { key, ns: [], shape: d.shape, size: d.size, ...(d.dsStyle ? { dsStyle: d.dsStyle } : {}), ...(d.material ? { material: d.material } : {}), ...(d.color ? { color: d.color } : {}), lengthIn: 0, elbows: [], offsets: [], bottoms: [] };
+    out.set(key, g);
+    g.ns.push(d.n);
+    g.lengthIn += d.lengthIn;
+    for (const e of d.elbows) add(g.elbows, (x) => x.style === e.style, { style: e.style, qty: e.qty });
+    for (const o of d.offsets) add(g.offsets, (x) => x.lengthIn === o.lengthIn, { lengthIn: o.lengthIn, qty: o.qty });
+    if (d.bottom !== "none") add(g.bottoms, (x) => x.kind === d.bottom, { kind: d.bottom, qty: 1 });
   }
   return [...out.values()];
 }
+
 
 export interface PartRow {
   key: string;
   title: string;
   props: string[];
   qty: string;
+  /** the supplier's order only, not on the client's estimate: «для заказа» with its «?» */
+  buy?: boolean;
 }
 export interface PartGroup {
   key: "gutter" | "ds" | "fix";
   title: string;
-  /** a property every row of the group has: said once, under the group's title */
+  /** what the group is and how it is counted: the «?» beside its title */
+  help: string;
+  /** a property every row of the group has, said once under its title — none since #1800 (each row says all) */
   common: string[];
   rows: PartRow[];
 }
@@ -158,18 +185,34 @@ export const GROUP_OF: Record<GutterSection, PartGroup["key"] | null> = {
 };
 
 /**
- * «Состав замера» (#1766, DS §8.14): the parts in three groups; each row a name in one line, the properties in the
- * human order, the quantity on its own; a part that is NOT in the client's estimate — the supplier's order only (`use:
- * "purchase"`: the coil, the sticks, rivets, screws, paint) — says «только закупка», every other part is both in the
- * estimate and bought and has no mark (DS §8.14); the same rows are one (their quantities add up);
- * a property every row of a group has is said once, under the group's title (only when the group has 2+ rows).
+ * «Состав замера» (#1766, #1800, DS §8.14): the parts in three groups; each row a name in one line (the supplier's), the
+ * properties in the human order, the quantity on its own. A part that is NOT in the client's estimate — the supplier's
+ * order only (`use: "purchase"`: the coil, rivets, screws, paint) — says «для заказа». The downspout's sticks to buy are
+ * not a second «Downspout» row: they are its «2 × 10′ lengths». The same rows are one (their quantities add up, in the
+ * engine's decimals). Each row says all its properties (founder 16.11: the caption of a group repeated them, unclear).
  */
 export function partGroups(t: Tr, parts: readonly PartQty[], fmt: LenFormat = "ftin"): PartGroup[] {
+  // the sticks of each downspout kind: «2 × 10′ lengths» on that kind's row (key — its properties without the stick)
+  const stickKey = (a: Record<string, string>) => JSON.stringify(Object.entries(a).filter(([k]) => k !== "stickIn" && k !== "part").sort());
+  const sticks = new Map<string, { n: Dec; stickIn: string }>();
+  for (const p of parts) if (p.attrs.stickIn && p.section === "downspouts") {
+    const key = stickKey(p.attrs);
+    const had = sticks.get(key);
+    sticks.set(key, { n: had ? had.n.add(dec(p.qty)) : dec(p.qty), stickIn: p.attrs.stickIn });
+  }
+  const pipes = new Set(parts.filter((p) => !p.attrs.stickIn && p.section === "downspouts" && !p.attrs.part).map((p) => stickKey(p.attrs)));
   const groups = new Map<PartGroup["key"], { rows: Map<string, PartRow & { n: Dec; unit: PartQty["unit"] }> }>();
   for (const p of parts) {
+    // a stick whose downspout row is here: said on that row
+    if (p.attrs.stickIn && pipes.has(stickKey(p.attrs))) continue;
     const g = GROUP_OF[p.section] ?? "fix";
     const v = partView(t, p, fmt, { side: true });
-    const props = p.use === "purchase" ? [...v.props, t("mod.gutters.view.buy")] : v.props;
+    const st = !p.attrs.stickIn && p.section === "downspouts" && !p.attrs.part ? sticks.get(stickKey(p.attrs)) : undefined;
+    const props = [
+      ...v.props,
+      ...(st ? [t("mod.gutters.view.sticks", { n: st.n.toString(), len: fmtLen(Number(st.stickIn), fmt) })] : []),
+      ...(p.use === "purchase" ? [t("mod.gutters.view.buy")] : []),
+    ];
     const key = [v.title, ...props, p.unit].join("|");
     const bucket = groups.get(g) ?? { rows: new Map() };
     groups.set(g, bucket);
@@ -177,19 +220,16 @@ export function partGroups(t: Tr, parts: readonly PartQty[], fmt: LenFormat = "f
     // the quantities add up in the engine's decimals (no float sum)
     const n = dec(p.qty);
     if (had) had.n = had.n.add(n);
-    else bucket.rows.set(key, { key: p.key, title: v.title, props, qty: "", n, unit: p.unit });
+    else bucket.rows.set(key, { key: p.key, title: v.title, props, qty: "", n, unit: p.unit, buy: p.use === "purchase" });
   }
   const order: PartGroup["key"][] = ["gutter", "ds", "fix"];
   return order
     .filter((k) => groups.has(k))
-    .map((k) => {
-      const rows = [...groups.get(k)!.rows.values()].map(({ n, unit, ...r }) => ({ ...r, qty: partQty(t, { qty: n.toString(), unit }, fmt) }));
-      const common = rows.length > 1 ? rows[0]!.props.filter((x) => x !== t("mod.gutters.view.buy") && rows.every((r) => r.props.includes(x))) : [];
-      return {
-        key: k,
-        title: t(`mod.gutters.view.grp.${k}` as DictKey),
-        common,
-        rows: rows.map((r) => ({ ...r, props: r.props.filter((x) => !common.includes(x)) })),
-      };
-    });
+    .map((k) => ({
+      key: k,
+      title: t(`mod.gutters.view.grp.${k}` as DictKey),
+      help: t(`mod.gutters.view.grpHelp.${k}` as DictKey),
+      common: [],
+      rows: [...groups.get(k)!.rows.values()].map(({ n, unit, ...r }) => ({ ...r, qty: partQty(t, { qty: n.toString(), unit }, fmt) })),
+    }));
 }

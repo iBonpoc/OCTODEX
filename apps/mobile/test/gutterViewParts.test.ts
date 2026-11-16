@@ -10,7 +10,7 @@ import type { DrawnRun, Drawing, P } from "../src/modules/gutters/geometry";
 import { toMeasurement } from "../src/modules/gutters/geometry";
 import { DEFAULT_DS_ATTRS } from "../src/modules/gutters/canvas/model";
 import { partName, partView, sampleJob, sizeText } from "../src/modules/gutters/prices";
-import { dsNumbers, foldDs, GROUP_OF, measureSpec, partGroups } from "../src/modules/gutters/view/spec";
+import { dsNumbers, dsTotals, GROUP_OF, measureSpec, partGroups } from "../src/modules/gutters/view/spec";
 import { linesFromParts, resyncLines } from "../src/modules/gutters/estimate";
 
 const LANGS = ["ru", "en", "es"] as const;
@@ -32,33 +32,38 @@ const sectional = computeGutterParts(toMeasurement(d), { seamless: false }).part
 /** a code a person must never read: snake_case, a bare word in latin lower case, «.027», «2x3», a bare number */
 const RAW = /^[a-z][a-z_]*$|^\.\d|\d+x\d+|^\d+(\.\d+)?$/;
 
-describe("#1766 a part's name and properties in words (DS §8.14)", () => {
-  it("thickness «0.027″», rivet «№42» / «#42», elbow «тип A», size «2×3″», gutter «K 5″» — never a code", () => {
+describe("#1766 #1800 a part's name — the supplier's, the same in Russian — and its properties in words", () => {
+  it("the supplier's names: «5″ K-Style Gutter», «2″ × 3″ A Elbow 75°», «Pop Rivet #42», «Outlet 2″ × 3″» — never a code", () => {
     const ru = tFor("ru");
     const en = tFor("en");
-    const rivet = parts.find((p) => p.attrs.part === "rivet")!;
-    expect(partView(ru, rivet).props).toContain("№42");
-    expect(partView(en, rivet).props).toContain("#42");
-    const gutter = parts.find((p) => p.key.startsWith("gutter."))!;
-    expect(partView(ru, gutter).props).toEqual(expect.arrayContaining(["K 5″", "0.027″"]));
-    const elbow = parts.find((p) => p.attrs.part === "elbow" && p.attrs.shape === "rect")!;
-    expect(partView(ru, elbow).title).toBe("Колено, тип A");
-    expect(partView(en, elbow).title).toBe("Elbow, type A");
-    expect(partView(ru, elbow).props).toContain("2×3″");
-    const round = parts.find((p) => p.attrs.part === "elbow" && p.attrs.shape === "round")!;
-    expect(partView(ru, round).title).toMatch(/^Колено, \d+°$/);
-    expect(sizeText("2x3")).toBe("2×3″");
+    const one = (pred: (p: PartQty) => boolean) => parts.find(pred)!;
+    expect(partView(ru, one((p) => p.attrs.part === "rivet")).title).toBe("Pop Rivet #42");
+    expect(partView(ru, one((p) => p.key.startsWith("gutter."))).title).toBe("5″ K-Style Gutter");
+    expect(partView(ru, one((p) => p.key.startsWith("gutter."))).props).toEqual(expect.arrayContaining(["0.027″"]));
+    expect(partView(en, one((p) => p.attrs.part === "elbow" && p.attrs.shape === "rect")).title).toBe("2″ × 3″ A Elbow 75°");
+    expect(partView(ru, one((p) => p.attrs.part === "elbow" && p.attrs.shape === "round")).title).toMatch(/^3″ Round Elbow \d+°$/);
+    // an outlet is its size only (founder 16.11)
+    const outlet = partView(ru, one((p) => p.attrs.part === "outlet" && p.attrs.shape !== "round"));
+    expect(outlet).toEqual({ title: "Outlet 2″ × 3″", props: [] });
+    expect(sizeText("2x3")).toBe("2″ × 3″");
     expect(sizeText("3")).toBe("3″");
   });
-  it("the twins have their own names: the coil to buy, the downspout's sticks, the left and right end caps", () => {
+  it("no «окрашенный»: a painted part says its colour only; bare metal says «Без покраски»", () => {
+    for (const p of parts.filter((x) => x.kind === "material")) expect(partView(tFor("ru"), p).props.join(" ")).not.toMatch(/Окрашенн/);
+  });
+  it("the twins have their own names: the coil, the left and right end caps (with the gutter's style), the sections", () => {
     const ru = tFor("ru");
-    expect(partView(ru, parts.find((p) => p.attrs.buy === "coil")!).title).toMatch(/^Бесшовный рулон \d+′? ?\d*[⅛¼⅜½⅝¾⅞]?″$/);
-    expect(partView(ru, parts.find((p) => p.attrs.stickIn)!).title).toBe("Водосток, хлыст 10′");
+    expect(partView(ru, parts.find((p) => p.attrs.buy === "coil")!).title).toMatch(/^Coil \d+′? ?\d*[⅛¼⅜½⅝¾⅞]?″$/);
     const caps = parts.filter((p) => p.attrs.part === "end_cap").map((p) => partView(ru, p, "ftin", { side: true }).title);
-    expect(caps.sort()).toEqual(["Заглушка, левая", "Заглушка, правая"]);
+    expect(caps.sort()).toEqual(["5″ K-Style End Cap – Left", "5″ K-Style End Cap – Right"]);
     // the estimate and the price list have one item for both: no side in the line's name
     expect(new Set(parts.filter((p) => p.attrs.part === "end_cap").map((p) => partName(ru, p))).size).toBe(1);
-    expect(partView(ru, sectional.find((p) => p.attrs.buy === "section")!).title).toBe("Желоб, секции 10′");
+    expect(partView(ru, sectional.find((p) => p.attrs.buy === "section")!).title).toMatch(/^5″ K-Style Gutter · /);
+  });
+  it("a part's name in Russian is the English one (#1800): RU = EN for every name, the properties may differ", () => {
+    for (const p of [...parts, ...sectional].filter((x) => x.kind === "material")) {
+      expect(partView(tFor("ru"), p, "ftin", { side: true }).title, p.key).toBe(partView(tFor("en"), p, "ftin", { side: true }).title);
+    }
   });
   it("every property of every part — seamless and sectional, rect and round — is a word or a number with its unit, in ru / en / es", () => {
     for (const lang of LANGS) {
@@ -92,16 +97,15 @@ describe("#1766 a part's name and properties in words (DS §8.14)", () => {
           // a bare latin word is a code only in Russian (in English and Spanish «open», «abierta» are words)
           // founder 16.11: «водосток», never «труба» (pipe / tubo) — on the screen and in the PDF; «Pipe cleat» is a
           // product's trade name (as «Hinged hook»), the word of the canvas's wall-fastener choice too
-          for (const x of [v.title, ...v.props]) expect(x.replace(/Pipe cleat/, ""), `${lang} ${p.key}: «${x}»`).not.toMatch(/труб|pipe|tubo/i);
+          for (const x of [v.title, ...v.props]) expect(x.replace(/Pipe cleat/i, ""), `${lang} ${p.key}: «${x}»`).not.toMatch(/труб|pipe|tubo/i);
           for (const x of [v.title, ...v.props]) expect(x, `${lang} ${p.key}: «${x}»`).not.toMatch(lang === "ru" ? /_|^[a-z]+$|^\.\d|\d+x\d+|^\d+(\.\d+)?$/ : /_|^\.\d|\d+x\d+|^\d+(\.\d+)?$/);
         }
   });
-  it("the human order: size and profile first, then the metal and its thickness, then the colour and finish", () => {
+  it("the human order: the metal and its thickness, then the colour", () => {
     const v = partView(tFor("en"), parts.find((p) => p.attrs.part === "rivet")!);
-    const at = (s: string) => v.props.findIndex((x) => x.includes(s));
+    const at = (x: string) => v.props.findIndex((y) => y.includes(x));
     expect(at("Aluminum")).toBeLessThan(at("White"));
     const g = partView(tFor("en"), parts.find((p) => p.key.startsWith("gutter."))!).props;
-    expect(g[0]).toMatch(/^K(-style)? 5″$/);
     expect(g.indexOf("0.027″")).toBeLessThan(g.indexOf("White"));
   });
 });
@@ -133,11 +137,12 @@ describe("#1766 «Состав замера»: three groups, no twin rows", () =
   it("every section the engine has belongs to a group (a new one must be placed, not fall into «Крепёж» by itself)", () => {
     expect(Object.keys(GROUP_OF).sort()).toEqual([...GUTTER_SECTIONS].sort());
   });
-  it("a property every row of a group has is said once, in the group's caption", () => {
-    const t = tFor("ru");
-    const g = partGroups(t, measureSpec(d, parts).parts)[0]!;
-    expect(g.common).toEqual(expect.arrayContaining(["K 5″", "Белый"]));
-    for (const r of g.rows) for (const c of g.common) expect(r.props).not.toContain(c);
+  it("each row says all its properties (#1800: the caption repeated them, unclear); the downspout's sticks are on its row", () => {
+    const g = partGroups(tFor("ru"), measureSpec(d, parts).parts);
+    for (const x of g) expect(x.common).toEqual([]);
+    const ds = g.find((x) => x.key === "ds")!;
+    expect(ds.rows.some((r) => r.title.includes("Downspout") && r.props.some((y) => /куски по 10′: \d/.test(y)))).toBe(true);
+    expect(ds.rows.filter((r) => /Downspout$/.test(r.title)).length).toBe(new Set(ds.rows.filter((r) => /Downspout$/.test(r.title)).map((r) => r.title)).size);
   });
   it("the same rows add up in the engine's decimals", () => {
     const p = (qty: string): PartQty => ({ key: `x${qty}`, section: "consumables", qty, unit: "ea", use: "both", kind: "material", attrs: { part: "sealant" } });
@@ -148,14 +153,17 @@ describe("#1766 «Состав замера»: three groups, no twin rows", () =
   });
 });
 
-describe("#1766 «Водостоки»: what the estimate counts, the same ones folded", () => {
+describe("#1766 #1800 «Водостоки»: what the estimate counts, by kind", () => {
   it("each downspout's pipe length is the engine's (storey × storey height + extension); D1–D3 are one row", () => {
     const rules = resolveGutterRules();
     const spec = measureSpec(d, parts);
     expect(spec.ds.every((x) => x.lengthIn === rules.storyHeightIn + rules.dsExtensionIn)).toBe(true);
     expect(spec.ds[3]).toMatchObject({ shape: "round", dsStyle: "corrugated", offsets: [{ lengthIn: 2, qty: 1 }], bottom: "extension" });
-    const folded = foldDs(spec.ds);
-    expect(folded.map((f) => f.ns)).toEqual([[1, 2, 3], [4]]);
+    // #1800: the downspouts by kind — the total length, how many, the elbows summed
+    const totals = dsTotals(spec.ds);
+    expect(totals.map((x) => x.ns)).toEqual([[1, 2, 3], [4]]);
+    expect(totals[0]!.lengthIn).toBe(3 * (rules.storyHeightIn + rules.dsExtensionIn));
+    expect(totals[0]!.elbows).toEqual([{ style: "A", qty: 9 }]);
     const t = tFor("ru");
     expect(dsNumbers(t, [1, 2, 3])).toBe("D1–D3");
     expect(dsNumbers(t, [1, 4])).toBe("D1, D4");

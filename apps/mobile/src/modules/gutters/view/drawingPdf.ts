@@ -14,8 +14,8 @@ import { fmtLen, type LenFormat } from "../canvas/format";
 import type { Drawing } from "../geometry";
 import { blueprint } from "./blueprint";
 import { sheetSvg } from "@/features/docPages";
-import { dsLine, sizeText } from "../prices";
-import { dsNumbers, foldDs, partGroups, type MeasureSpec } from "./spec";
+import { dsLine, PART_WORDS, partQty, partView, sizeText } from "../prices";
+import { dsNumbers, dsTotals, partGroups, type MeasureSpec } from "./spec";
 
 type Tr = (key: DictKey, params?: Record<string, string | number>) => string;
 
@@ -54,7 +54,7 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
   const th = (k: DictKey) => `<th>${esc(t(k))}</th>`;
   // «эт N» only when the drawing has more than one storey (#1275, #1766)
   const story = spec.manyStories;
-  const gutterOf = (r: MeasureSpec["runs"][number]) => `${word(t, `mod.gutters.attr.p.${r.profile}`, r.profile)} ${esc(sizeText(r.size))}`;
+  const gutterOf = (r: MeasureSpec["runs"][number]) => `${esc(sizeText(r.size))} ${word(t, `mod.gutters.pr.prof.${r.profile}`, r.profile)}`;
   const runs = spec.runs
     .map(
       (r) =>
@@ -70,13 +70,14 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
     : "";
   const ds = spec.ds.length
     ? crew
-      ? `<h2>${esc(t("mod.gutters.view.ds"))}</h2><table>${foldDs(spec.ds)
-          .map(({ ns, d }) => {
-            // the same downspouts are one row (#1766): «D1–D3 · 3 ea», the downspout's length the estimate counts
-            const name = ns.length > 1 ? t("mod.gutters.view.dsMany", { list: dsNumbers(t, ns), n: ns.length }) : dsNumbers(t, ns);
-            const what = [sizeText(d.size), d.dsStyle ? word(t, `mod.gutters.attr.st.${d.dsStyle}`, d.dsStyle) : "", d.color ? word(t, `mod.gutters.attr.c.${d.color}`, d.color) : "", story ? t("mod.gutters.story", { n: d.story }) : ""].filter(Boolean).join(" · ");
-            const how = [dsLine(t, d), d.bottom !== "none" ? word(t, `mod.gutters.attr.b.${d.bottom}`, d.bottom) : ""].filter(Boolean).join(" · ");
-            return `<tr><td><b>${esc(name)}</b></td><td>${esc(what)}</td><td>${esc(how)}</td><td class="r">${esc(ns.length > 1 ? t("mod.gutters.view.dsEach", { len: len(d.lengthIn) }) : len(d.lengthIn))}</td></tr>`;
+      ? `<h2>${esc(t("mod.gutters.view.ds"))}</h2><table>${dsTotals(spec.ds)
+          .map((g) => {
+            // #1800 (founder 16.11: «водостоки — общее количество»): one row per kind — the supplier's name, which D's and
+            // how many, the elbows, offsets and feet summed, the total length
+            const v = partView(t, { key: "ds", kind: "material", attrs: { shape: g.shape, size: g.size, ...(g.dsStyle ? { dsStyle: g.dsStyle } : {}), ...(g.material ? { material: g.material } : {}), ...(g.color ? { color: g.color } : {}) } }, fmt);
+            const what = [...v.props, `${dsNumbers(t, g.ns)} · ${partQty(t, { qty: String(g.ns.length), unit: "ea" }, fmt)}`].join(" · ");
+            const how = [dsLine(t, { shape: g.shape, elbows: g.elbows, offsets: g.offsets }), ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(t, `mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`)].filter(Boolean).join(" · ");
+            return `<tr><td><b>${esc(v.title)}</b><br>${esc(what)}</td><td>${esc(how)}</td><td class="r">${esc(len(g.lengthIn))}</td></tr>`;
           })
           .join("")}</table>`
       : `<p>${esc(t("mod.gutters.pdf.dsCount", { n: spec.ds.length }))}</p>`

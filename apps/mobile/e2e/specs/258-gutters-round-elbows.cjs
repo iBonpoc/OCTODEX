@@ -49,13 +49,13 @@ exports.run = async (h) => {
     { timeout: 10000 },
   );
   const html = await p.evaluate(() => window.__pdf);
-  // the elbow lines (#1766: a row is «<b>name</b><br>properties | qty»): the rectangular one by its type «тип A», the round
-  // one by its angle «45°» — never «A»
+  // the elbow lines (#1766, #1800: a row is «<b>the supplier's name</b><br>properties | qty»): the rectangular one by its
+  // style «A Elbow 75°», the round one by its angle «Round Elbow 45°» — never «A»
   const rows = [...html.matchAll(/<td><b>([^<]*)<\/b>(?:<br>([^<]*))?<\/td><td class="r">([^<]*)<\/td>/g)]
-    .filter((m) => /(тип|type|tipo) A$|45°$/.test(m[1]))
+    .filter((m) => /Elbow \d+°$/.test(m[1]))
     .map((m) => `${m[1]} · ${m[2] || ""} = ${m[3]}`);
   h.expect(rows.length === 2, "two elbow lines (a rectangular one and a round one): " + rows.join(" | "));
-  h.expect(rows.some((r) => /(тип|type|tipo) A · [^=]*×[^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A — " + rows.join(" | "));
-  h.expect(rows.some((r) => /45° · [^=]*(round|Круглый)[^=]*= 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
+  h.expect(rows.some((r) => /^\d″ × \d″ A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
+  h.expect(rows.some((r) => /^\d″ Round Elbow 45° · [^=]*= 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };
