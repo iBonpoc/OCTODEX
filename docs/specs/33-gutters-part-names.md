@@ -142,3 +142,33 @@
 - **Рулона/полосы из рулона нет** (нет «Coil» / «Flat Coil» / «Strap from coil»). Есть только «Snap Strap» как часть крюков #40/#41.
 - **Герметик** — «Gutter Mastic - 5 oz. Tube», краска — «Touch Up Paint - 12 oz. Can», сетка — «Round Wire Strainer», воронка — «Funnel» (K) / «Funnels» (HR), тройник — «"Y" Funnel». Торговые марки: «Flex-A-Spout»/«Flex-A-Spout®», «Metco», «FreedomGray®», «Regal», «Rival».
 - **Опечатки поставщика** (сохранены как напечатано): «availibility» (сноска K), «High Glass White» (K №41; на HR — «High Gloss»).
+
+## 5. Второй источник: прайс поставщика основателя (16.11.2026, через аудит)
+
+Имя поставщика и цены в репозиторий не вносятся (правило 9). Названия — дословно, как в прайсе. Торговые марки одного поставщика («GT …», «Leaf Exterminator», «Leaf ProBlaster», «BOSS», «Speed Master») в названия детали **не** идут: каталог компании общий, марка — только в позиции прайса компании.
+
+| Что | Как в прайсе (дословно) | Наш код |
+|---|---|---|
+| Заглушки K 5″ | «5” K ends (OG)», «25L / 25R» | end_cap (side L/R) |
+| Заглушка fascia | «Straight Face End Cap» | end_cap (profile fascia) |
+| Заглушки HR | «HR endcaps» | end_cap (profile half_round) |
+| Углы | «Bay Miter», «Strip Miter», «Box miters» | miter (bay), strip_miter, miter |
+| Выпуски | «round outlets 2 3/8”, 2 ¾”», «2x3 rectangle», «3x4 rectangle», «3” HR outlets» | outlet (размер) |
+| Сетка на выпуск | «3” round wire strainers» | outlet_screen |
+| Клин | «gutter wedge 5”/6”» | wedge |
+| Воронка | «leader head 2x3 / 3x4 / 3” round» | conductor_head |
+| Отбойник | «Splash block, concrete 12x24» | splash_block |
+| Пайка | «Solder 50/50 tri-bar» | solder |
+| Герметик | «Geocel 3300» (марка) → «Gutter Sealant» | sealant |
+| Краска | «Touch up paint» | touch_up_paint |
+| Водосток | «2x3x10 corrugated / smooth», «3x10 round», «3x4x10» | downspout (stickIn 120) |
+| Колена | «2x3 A or B», «3” round» | elbow |
+| Крепления желоба | «… HANGER 5"/6" U-CHANNEL NO CLIP / W/CLIP», «… S2», «SPEED SCREW», «HEAVY DUTY SCREW W/CLIP», «HALF-ROUND ALUM .060 W/WEDGE», «T-bar hangar straps», spikes, ferrule | k.hidden_noscrew / k.hidden_clip / k.hidden_boss / k.hidden_speed / k.hidden_hd / k.hr_* / k.tbar_strap / spike, ferrule |
+| Крепёж | «#42 rivet, mill / painted», «#8 x ½ screw», «#10 x 1” screw», «#10 x 1½ / 2” …», «3/16 x 7/8 … anchor», «¼ x 1 … anchor» | rivet, screw (8x0.5, 10x1, 10x1.5, 10x2), anchor |
+| Защита | «Leaf Exterminator», «… Stainless Steel Mesh», «… EZ Lock», «… EZ HR Deluxe 6.5”» | guard (вид — без марки: micro-mesh, screen, lock-in screen) |
+
+## 6. Третий источник: ресёрч аудита (Amerimax, двуязычные инструкции)
+
+- EN: Hidden Hanger with Screw; Downspout Band; Left / Right End Cap; Outside / Inside Box Miter 90°, Strip Miter; Slip Joint Connector; A (front) / B (side) Elbow 75°; End with Drop; Drop Outlet 2x3 / 3x4 (wide flange), narrow flange 2x3, oval 2x3 / 3x4; Wire Strainer; Leader Head; Gutter Wedge; Zip Screw #8 x 1/2" (металл к металлу); Gutter Screw #10 x 1-1/2" (крепление к доске); Pop Rivet 1/8" #42.
+- ES: «canaleta» везде (не «canalón»); bajante; tapa terminal izquierda / derecha; codo frontal «A» / lateral «B»; banda para bajante; filtro contra hojas. Без устойчивого испанского — английское слово: strip miter, offset, wedge, leader head, reducer, wye, eave box.
+- Выпуски, которых нет в коде: oval 2x3 / 3x4, round 2-3/8″ / 2-3/4″ / 3-3/8″, narrow flange 2x3.
