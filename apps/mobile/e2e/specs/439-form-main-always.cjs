@@ -2,7 +2,7 @@
  * e2e 439 — the main button of a form is never pale (DS §11 п.3, #1728), the director, every view, by testID and words:
  * - «Чем вы занимаетесь?» (/auth/trade): «Продолжить» with nothing chosen is there to press, says «Выберите направление или
  *   впишите своё» and stays on the step;
- * - a new catalog item: «Сохранить» without a name is there to press, «Укажите название» under the name (not at the button — e2e 441), saves nothing;
+ * - a new catalog item: «Сохранить» without a name is there to press, «Укажите название» under the name (not at the button — e2e 445), saves nothing;
  * - «Команда» → «Пригласить»: «Отправить приглашение» with a broken email says «Укажите имя и email», invites no one;
  *   a person's sheet: «Сохранить» with nothing changed is there to press and just closes the sheet.
  * «There to press» = not disabled and not dimmed (opacity 1) — a pale main button read ≈2:1 in the light theme.
@@ -35,7 +35,7 @@ exports.run = async (h) => {
   const save = vis(p.getByTestId("catalog-save").getByRole("button"));
   await live(save, "«Сохранить» of the catalog");
   await save.click();
-  // what is missing stands under the field itself (DS §11 п.3, PR-3c; the details — e2e 441)
+  // what is missing stands under the field itself (DS §11 п.3, PR-3c; the details — e2e 445)
   await vis(p.getByTestId("field-name-error")).waitFor({ timeout: 4000 });
   h.expect(/Укажите название/.test(await vis(p.getByTestId("field-name-error")).innerText()), "the words say what is missing");
   h.expect((await h.db()).catalog.length === n0, "nothing saved");

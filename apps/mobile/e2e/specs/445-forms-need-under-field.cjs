@@ -1,11 +1,13 @@
 /**
- * e2e 441 — what a form still misses stands under the field itself, and the screen scrolls to it (DS §11 п.3–4, #1728 PR-3c),
+ * e2e 445 — what a form still misses stands under the field itself, and the screen scrolls to it (DS §11 п.3–4, #1728 PR-3c),
  * the director, every view, by testID:
  * - «Чем вы занимаетесь?» (/auth/trade): «Продолжить» with nothing chosen — «Выберите направление или впишите своё» under the
  *   directions (`field-trade-error`), the directions in view, the step stays; a direction picked — the words go;
  * - a new catalog item: «Сохранить» from the bottom of the page — «Укажите название» under the name, the name in view, nothing saved;
  *   a material — under the name AND under the supplier's price at once; a kit — under «Добавить позицию»;
- *   no general warning at the button any more (`catalog-need`).
+ *   no general warning at the button any more (`catalog-need`);
+ * - both forms stand in the form column (`<Screen form>`, DS §12.3): a field is at most 560 wide and still fills the phone
+ *   (the column of the other forms — e2e 440).
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -18,11 +20,18 @@ exports.run = async (h) => {
     const box = await vis(id).boundingBox();
     return err.y > box.y + 10 && err.y - (box.y + box.height) <= 12 && Math.abs(err.x - box.x) <= 2;
   };
+  /** the form column: the field is as wide as the column — at most 560, the whole phone */
+  const column = async (id, what) => {
+    const w = (await vis(id).boundingBox()).width;
+    h.expect(w <= 560.5, `${what}: the column is at most 560 wide (${w})`);
+    h.expect(w >= Math.min(h.layout.width - 40, 340) - 1, `${what}: the column still fills the phone (${w})`);
+  };
   const toBottom = () => p.evaluate(() => document.querySelectorAll("*").forEach((e) => { if (e.scrollHeight > e.clientHeight + 4) e.scrollTop = e.scrollHeight; }));
 
   // the trade step
   await h.go("/auth/trade");
   await vis("trade-step").waitFor({ timeout: 8000 });
+  await column("field-trade", "/auth/trade");
   await toBottom();
   await vis("trade-next").click();
   await vis("field-trade-error").waitFor({ timeout: 4000 });
@@ -36,8 +45,9 @@ exports.run = async (h) => {
   await p.getByTestId("field-trade-error").locator("visible=true").first().waitFor({ state: "hidden", timeout: 4000 });
 
   // a new service: no name
-  await h.go("/catalog/new-item-441");
+  await h.go("/catalog/new-item-445");
   await vis("catalog-save").waitFor({ timeout: 8000 });
+  await column("field-name", "/catalog/[id]");
   const n0 = (await h.db()).catalog.length;
   await toBottom();
   await vis("catalog-save").getByRole("button").click();
@@ -49,11 +59,11 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("catalog-need").count()) === 0, "no general warning at the button");
   h.expect((await h.db()).catalog.length === n0, "nothing saved");
   await h.shot("catalog-name");
-  await vis("field-name").locator("input").fill("Gutter cleaning 441");
+  await vis("field-name").locator("input").fill("Gutter cleaning 445");
   await p.getByTestId("field-name-error").locator("visible=true").first().waitFor({ state: "hidden", timeout: 4000 });
 
   // a material: the name and the supplier's price, at once
-  await h.go("/catalog/new-mat-441?kind=material");
+  await h.go("/catalog/new-mat-445?kind=material");
   await vis("catalog-save").waitFor({ timeout: 8000 });
   await vis("catalog-save").getByRole("button").click();
   await vis("field-name-error").waitFor({ timeout: 4000 });
@@ -64,9 +74,9 @@ exports.run = async (h) => {
   await h.shot("catalog-material");
 
   // a kit: at least one component
-  await h.go("/catalog/new-kit-441?kind=kit");
+  await h.go("/catalog/new-kit-445?kind=kit");
   await vis("catalog-save").waitFor({ timeout: 8000 });
-  await vis("field-name").locator("input").fill("Kit 441");
+  await vis("field-name").locator("input").fill("Kit 445");
   await vis("catalog-save").getByRole("button").click();
   await vis("field-components-error").waitFor({ timeout: 4000 });
   h.expect(/Добавьте хотя бы одну позицию/.test(await vis("field-components-error").innerText()), "the words under «Добавить позицию»");
