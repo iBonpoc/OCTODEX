@@ -1,10 +1,12 @@
 const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * «Бригады сейчас» on «Сегодня» as list cards (step 10а, PR10a), every view (3 widths × 2 themes).
- * - a tech on a visit: name, «Выездов сегодня: N», the visit's status in words, the client of the visit «now», call / SMS;
+ * - a tech on a visit: name, «N выездов сегодня», the visit's status in words, the client of the visit «now», call / SMS;
  * - the card opens the current visit; a tech with nothing started opens «План»;
  * - assignees through assigneeIds (#105); no «…».
  */
+// «3 выезда сегодня» (#1427: a counted phrase through Intl.PluralRules, not «Выездов сегодня: 3»)
+const visitsToday = (n) => `${n} ${({ one: "выезд", few: "выезда", many: "выездов" })[new Intl.PluralRules("ru-RU").select(n)] ?? "выезда"} сегодня`;
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -30,7 +32,7 @@ exports.run = async (h) => {
   const n = db.visits.filter((v) => dayKey(v.start) === today && assigned(v, tech.id)).length;
   const prop = db.properties.find((x) => x.id === db.jobs.find((j) => j.id === visit.jobId)?.propertyId) ?? db.properties.find((x) => x.id === visit.propertyId);
   const client = prop && db.customers.find((c) => c.id === prop.customerId);
-  for (const s of [tech.name, `Выездов сегодня: ${n}`, "Идёт работа", client?.name].filter(Boolean)) h.expect(txt.includes(s), `crew card shows «${s}»: ${txt.slice(0, 220)}`);
+  for (const s of [tech.name, visitsToday(n), "Идёт работа", client?.name].filter(Boolean)) h.expect(txt.includes(s), `crew card shows «${s}»: ${txt.slice(0, 220)}`);
   if (tech.phone) h.expect((await card.getByRole("button", { name: /Позвонить/ }).count()) > 0, "call button for the tech");
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on the screen");
   await h.shot("crews");

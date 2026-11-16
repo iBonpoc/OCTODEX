@@ -168,7 +168,7 @@ export default function Today() {
     if (animate) shown.value = withTiming(1, { duration: motion.durSlow, easing: Easing.bezier(...motion.easeOut) });
   }, [animate, shown]);
   const appearStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * space[2] }] }));
-  const { t, day, time } = useI18n();
+  const { t, tn, day, time } = useI18n();
   const { db, role, rejectedOps } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   // the company's day and zone are part of the key: left open overnight (useTick re-renders), the numbers move to
@@ -280,7 +280,7 @@ export default function Today() {
                   key={m.id}
                   testID="crew-card"
                   title={m.name}
-                  when={t("visits.count", { n: vs.length })}
+                  when={tn("visits.today", vs.length)}
                   lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
                   // read only: the visit's own status (its steps move on the visit screen)
                   status={st ? { tone: st.status, label: t(st.label) } : { tone: "neutral", label: t("plan.free") }}

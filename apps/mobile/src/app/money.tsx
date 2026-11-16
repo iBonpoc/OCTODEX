@@ -8,13 +8,13 @@ import type { Expense, Invoice, PaymentMethod } from "@/data/types";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
-import { useI18n } from "@/i18n";
+import { useI18n, type Lang } from "@/i18n";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
-import { dayKeyIn, getZone, zonedFormat } from "@/features/zone";
+import { dayKeyIn, formatDayKey } from "@/features/zone";
 import { memberName } from "@/features/team";
 import { matchExpense } from "@/features/moneyLists";
 
@@ -22,11 +22,15 @@ import { matchExpense } from "@/features/moneyLists";
 const EXP_COLUMNS: FactKey[] = ["work", "by"];
 /** the month of an expense on the company's calendar (П4b), not the UTC month of its moment */
 const monthKey = (iso: string) => dayKeyIn(iso).slice(0, 7);
-const monthOf = (iso: string) => zonedFormat(getZone(), { month: "long", year: "numeric" }).format(new Date(iso));
+/** the month's name in the app's language, as «План» and the date picker write it (#1427 041: not «November 2026» in RU) */
+const monthOf = (key: string, lang: Lang) => {
+  const s = formatDayKey(`${key}-01`, { month: "long", year: "numeric" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+};
 
 /** Owner's money view: overdue → awaiting → paid. Manual payments now, Stripe in wave 4. */
 export default function Money() {
-  const { t, money, day } = useI18n();
+  const { t, money, day, lang } = useI18n();
   const { db } = useStore();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -75,7 +79,7 @@ export default function Money() {
           {shown.length === 0 ? <Empty icon="search" title={t("card.emptyFilter")} /> : null}
           {months.map(([m, xs]) => (
             <View key={m} style={{ gap: space[2] }}>
-              <T v="caption" w="semibold" tone="mut">{`${monthOf(xs[0]!.at)} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>
+              <T v="caption" w="semibold" tone="mut">{`${monthOf(m, lang)} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>
               {device === "tablet" ? <CardGrid>{xs.map(expenseCard)}</CardGrid> : <CardList>{xs.map(expenseCard)}</CardList>}
             </View>
           ))}

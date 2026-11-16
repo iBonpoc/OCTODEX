@@ -359,7 +359,7 @@ function LineRowView(p: LineRowProps) {
               if (isHidden(l)) return spend !== null ? t("est2.row.sumSpend", { total: money(0), spend: money(spend) }) : t("est.row.sum", { total: money(0) });
               return t("est.row.sum", { total: money(figures.total) });
             })()}
-            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${figures.marginPct} %` : ""}` : ""}
+            {!isHidden(l) && figures.profit !== null && !p.clientScreen ? ` · ${t("est.row.profit", { profit: money(figures.profit) })}${figures.marginPct !== null ? ` · ${String(figures.marginPct).replace(/^-/, "−")} %` : ""}` : ""}
             {l.optional ? ` · ${t("est2.row.optionalNote")}` : ""}
           </T>
           {!isHidden(l) && !p.clientScreen && figures.profit !== null && figures.profit < 0 ? (

@@ -20,6 +20,7 @@ import { CardGrid, ListCard } from "@/ui/listCard";
 import { router } from "expo-router";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { findJob } from "@/data/jobs";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
 /** an action of the invoice's «⋯» besides «Аннулировать» (#1474: the card's row of pills moved here) */
 export interface InvoiceMoreItem {
@@ -118,7 +119,7 @@ export function VoidInvoiceBody({ inv }: { inv: Invoice }) {
       <Card status="neutral">
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="heading" style={{ flex: 1 }}>
-            {inv.title || t(`inv.kind.${inv.kind ?? "final"}` as DictKey)}
+            {invoiceTitle(inv, t)}
           </T>
           <View testID="invoice-void-status">
             <StatusChip status="neutral" label={t("inv.void.status")} />
@@ -167,7 +168,7 @@ export function VoidInvoiceCards({ list, testPrefix }: { list: Invoice[]; testPr
             density="compact"
             testID={`${testPrefix}-void-${i.id}`}
             lead={{ kind: "icon", icon: "invoice" }}
-            title={i.title || t(`inv.kind.${i.kind ?? "final"}` as DictKey)}
+            title={invoiceTitle(i, t)}
             when={[i.number, i.voidReason].filter(Boolean).join(" · ") || undefined}
             value={money(i.totalCents)}
             status={{ tone: "neutral", label: t("inv.void.status") }}

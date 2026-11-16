@@ -72,6 +72,11 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   const st = estimateStatusView(e.status);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
+  const facts = [
+    e.depositCents ? t("est.deposit", { amount: money(e.depositCents) }) : null,
+    e.sentAt ? `${t("st.sent")} ${day(e.sentAt)}` : null,
+    universal ? t("ue.nOptions", { n: e.doc.options.length }) : null,
+  ].filter(Boolean);
   const tplHeld = useHeldSheet(universal && tplOpen ? e : null); // the sheet goes out before it is unmounted (#1163)
   // the office: the margin, or why it is not counted (debt 5); who may not see costs (a tech, sales without view_costs —
   // the server's app.can_view_costs, db.costsVisible) never sees it: their lines come without costs (review PR-A №1)
@@ -161,19 +166,10 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
               <StatusChip status="warn" soft label={t("est.marginMissing", { n: margin.lines })} />
             </View>
           ) : null}
-          {e.depositCents ? (
+          {/* the facts joined by «·» between them, not before the first one (#1427 031) */}
+          {facts.length ? (
             <T v="caption" tone="mut">
-              · {t("est.deposit", { amount: money(e.depositCents) })}
-            </T>
-          ) : null}
-          {e.sentAt ? (
-            <T v="caption" tone="mut">
-              · {t("st.sent")} {day(e.sentAt)}
-            </T>
-          ) : null}
-          {universal ? (
-            <T v="caption" tone="mut">
-              · {t("ue.nOptions", { n: e.doc.options.length })}
+              {facts.join(" · ")}
             </T>
           ) : null}
         </RowView>

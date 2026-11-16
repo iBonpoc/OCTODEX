@@ -79,7 +79,7 @@ exports.run = async (h) => {
   await p.getByTestId("chk-missing").last().waitFor();
   await p.getByTestId("chk-skip").last().click();
   await h.clickText("Наличные");
-  await h.click("Записать оплату");
+  await h.click("Принять оплату");
   db = await h.db();
   v = db.visits.find((x) => x.id === id);
   h.expect(v.step === "paid" && v.payment && v.payment.method === "cash", "paid in cash");
