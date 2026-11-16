@@ -10,7 +10,7 @@
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
-import { contractStatement } from "@octo/estimating-engine";
+import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
 import type { DB, Invoice, Payment } from "@/data/types";
 import type { DictKey } from "@/i18n";
@@ -152,7 +152,7 @@ ${job && st && inv.kind !== "deposit" ? `<tr><td>${esc(t("inv.contract"))}: ${es
 ${inv.kind === "final" ? prior.map((i) => `<tr><td class="mut">${esc(t("inv.less"))} ${esc(i.number ?? "")} ${esc(i.title ?? "")}</td><td class="r mut">−${money(i.totalCents)}</td></tr>`).join("") : ""}
 <tr class="tot"><td>${esc(t("inv.amount"))}</td><td class="r">${money(inv.totalCents)}</td></tr>
 ${pays.map((p) => `<tr><td class="mut">${esc(t("inv.paymentOn", { date: day(p.at) }))} · ${esc(t(`pay.${p.method}` as DictKey))}${p.receiptNumber ? ` · ${esc(p.receiptNumber)}` : ""}</td><td class="r mut">−${money(p.amountCents)}</td></tr>`).join("")}
-<tr class="tot"><td>${esc(t("inv.balance"))}</td><td class="r">${money(Math.max(0, inv.totalCents - inv.paidCents))}</td></tr>
+<tr class="tot"><td>${esc(t("inv.balance"))}</td><td class="r">${money(invoiceOwes(inv))}</td></tr>
 </table>
 ${inv.paidCents >= inv.totalCents ? `<p class="ok">✓ ${esc(t("inv.paidInFull"))}</p>` : ""}
 ${payInstructions(db, t)}`;
