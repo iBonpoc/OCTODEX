@@ -4,8 +4,8 @@
 <!-- Прототип окон модуля Gutters (этап 0, задание руководителя №13, 16.11). Значения — токены «Наряда» (packages/design-tokens):
      светлая тема, кнопки 36 / зона 44, поля и строки 44, радиусы card 16 / field 12, шрифт 15/13/11.5. ?f=ds|run|corner|canvas|link|draft|tab &t=light|dark -->
 <style>
-[data-t=light]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--bd:rgba(20,22,30,.1);--track:rgba(20,22,30,.09);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#0B6290;--s2:#8A4F00;--node:#15161A;--grid:rgba(20,22,30,.05);--grid2:rgba(20,22,30,.1);--scrim:rgba(20,22,30,.25);--warnT:#944600;--okT:#176428;--infoT:#3647C4;--sh:0 1px 3px rgba(60,50,40,.12)}
-[data-t=dark]{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;--bd:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#7FD4FF;--s2:#FFC46B;--node:#F2F3F5;--grid:rgba(255,255,255,.06);--grid2:rgba(255,255,255,.11);--scrim:rgba(0,0,0,.42);--warnT:#FFB47E;--okT:#9CF0A8;--infoT:#C2CCFF;--sh:0 1px 3px rgba(0,0,0,.4)}
+[data-t=light]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--bd:rgba(20,22,30,.1);--track:rgba(20,22,30,.09);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#0B6290;--s2:#8A4F00;--node:#15161A;--grid:rgba(20,22,30,.05);--grid2:rgba(20,22,30,.1);--scrim:rgba(20,22,30,.25);--warnT:#944600;--okT:#176428;--infoT:#3647C4;--sh:0 1px 3px rgba(60,50,40,.12);--badT:#B4232A}
+[data-t=dark]{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;--bd:rgba(255,255,255,.14);--track:rgba(255,255,255,.12);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#7FD4FF;--s2:#FFC46B;--node:#F2F3F5;--grid:rgba(255,255,255,.06);--grid2:rgba(255,255,255,.11);--scrim:rgba(0,0,0,.42);--warnT:#FFB47E;--okT:#9CF0A8;--infoT:#C2CCFF;--sh:0 1px 3px rgba(0,0,0,.4);--badT:#FFAAAA}
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--ink);width:390px;font-size:15px;line-height:1.35}
 .scr{position:relative;width:390px;min-height:844px;overflow:hidden}
@@ -56,18 +56,18 @@ svg.cv{position:absolute;left:0;top:0;width:390px;height:844px}
 .row .stack small{font-size:13px;color:var(--mut)}
 .stp{display:flex;align-items:center;gap:0}
 .stp b{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);background:var(--surf2);display:flex;align-items:center;justify-content:center;font-weight:500;color:var(--ink);font-size:18px}.stp b.off{color:var(--track);background:transparent}.stp i{font-style:normal;width:56px;text-align:center;font-weight:600;font-size:17px;font-variant-numeric:tabular-nums}
-.row.del{color:#B4232A;justify-content:center;font-weight:600}
+.row.del{color:var(--badT);font-weight:600}.row.del small{color:var(--mut);font-weight:400}
 .tb2{position:absolute;left:12px;right:12px;bottom:92px;height:60px;border-radius:24px;background:var(--solid);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around}
 .tb2 .c{width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;color:var(--ink)}.tb2 .c.on{background:var(--ink);color:var(--bg);box-shadow:var(--sh)}
 .tile.h36{flex-direction:row;min-height:44px;gap:8px;font-size:15px}.tile.h36 svg{width:20px;height:20px}
 .lc{display:flex;gap:12px;align-items:flex-start}.lc .av{width:40px;height:40px;border-radius:20px;border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;flex:none}
 .tog{width:44px;height:26px;border-radius:13px;background:var(--track);position:relative}
-.tog::after{content:"";position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:11px;background:#fff;box-shadow:var(--sh)}
+.tog::after{content:"";position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:11px;background:var(--ink);box-shadow:var(--sh)}.tog.on::after{background:var(--onacc)}
 .tog.on{background:var(--acc)}.tog.on::after{left:20px}
 .note{font-size:13px;color:var(--mut);margin:6px 4px 0}
 .ph{border:1.5px dashed var(--bd);border-radius:12px;padding:12px;font-size:13px;color:var(--mut)}
 .foot{padding:8px 16px 28px;border-top:1px solid var(--bd);display:flex;gap:8px}
-.btnw{flex:1;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;background:var(--surf2);border:1px solid var(--bd)}
+.btnw{flex:1;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;background:var(--surf2);border:1px solid var(--bd)}
 .btnw.acc{background:var(--acc);color:var(--onacc);border:0}
 .inp{height:44px;border-radius:12px;border:1px solid var(--bd);background:var(--surf);display:flex;align-items:center;padding:0 12px;gap:8px;font-size:15px}
 .inp.focus{border-color:var(--ink);border-width:2px}
@@ -95,10 +95,10 @@ table.cut td{text-align:right;padding:6px 0;border-top:1px solid var(--bd)}
 .qm{display:inline-flex;width:18px;height:18px;border-radius:9px;border:1.5px solid var(--mut);color:var(--mut);font-size:11px;font-weight:700;align-items:center;justify-content:center;margin-left:6px;vertical-align:middle;flex:none}
 .wait{display:inline-block;font-size:11px;font-weight:600;color:var(--infoT);border:1px solid var(--bd);border-radius:8px;padding:1px 6px;margin-left:6px;vertical-align:middle;text-transform:none;letter-spacing:0}
 .sw{display:flex;gap:10px;overflow:hidden}.sw div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11.5px;color:var(--mut);min-width:52px}
-.sw i{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);display:block;position:relative}.sw .on i{outline:2px solid var(--ink);outline-offset:2px}.sw .on{color:var(--ink);font-weight:600}
+.sw i{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);display:block;position:relative}.sw .on i{}.sw .on{color:var(--ink);font-weight:600}
 .dd{display:inline-flex;align-items:center;gap:2px;height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--bd);background:var(--surf2);font-weight:600;font-size:15px}
-.menu{position:absolute;background:var(--solid);border:1px solid var(--bd);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);width:150px;z-index:4;overflow:hidden}
-.menu div{height:44px;display:flex;align-items:center;padding:0 14px;gap:8px;font-size:15px}.menu div+div{border-top:1px solid var(--bd)}
+.menu{position:absolute;background:var(--solid);border:1px solid var(--bd);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);width:240px;z-index:4;overflow:hidden}
+.menu div{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;gap:8px;font-size:15px}.menu div+div{border-top:1px solid var(--bd)}
 .opt{display:flex;align-items:center;gap:10px;min-height:52px;padding:6px 14px}.opt+.opt{border-top:1px solid var(--bd)}.opt .stack{flex:1;display:flex;flex-direction:column}.opt small{font-size:13px;color:var(--mut)}
 .disabled{opacity:.45}
 </style></head>
@@ -115,6 +115,8 @@ const chk=`<svg class="chk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" f
 const tile=(icon,label,on,cls='')=>`<div class="tile ${cls} ${on?'on':''}">${ic(icon,26)}<span>${label}</span>${on?chk:''}</div>`;
 const row=(key,val,opts={})=>`<div class="row ${opts.sub?'sub':''}">${opts.icon?ic(opts.icon,20,k('mut')):''}${opts.sub?`<div class="stack"><span>${key}</span><small>${opts.sub}</small></div>`:`<span class="k">${key}</span>`}${opts.ctrl??`<span class="v">${val}${ic('cr',16)}</span>`}</div>`;
 const qm='<span class="qm">?</span>',wait='<span class="wait">ждёт ресёрча</span>';
+const fin=(v,u,w=88)=>`<div class="inp" style="width:${w}px;justify-content:space-between"><span>${v}</span><span style="color:var(--mut)">${u}</span></div>`;
+const frac=on=>`<div style="display:flex;gap:6px;margin-top:8px">${['0','⅛','¼','⅜','½','⅝','¾','⅞'].map(x=>`<span class="chip" style="height:32px;min-width:34px;justify-content:center;font-size:15px;${x===on?'background:var(--surf2);box-shadow:var(--sh);color:var(--ink)':'color:var(--mut)'}">${x}</span>`).join('')}</div>`;
 const dd=v=>`<span class="dd">${v}${ic('cd',14)}</span>`;
 const stp=n=>`<span class="stp"><b class="${n?'':'off'}">−</b><i>${n}</i><b>+</b></span>`;
 const seg=(items,on)=>`<div class="seg">${items.map((x,i)=>`<span class="${i===on?'on':''}">${x}</span>`).join('')}</div>`;
@@ -130,29 +132,29 @@ const sheet=(title,sub,body,foot='')=>`<div class="sheet static"><div class="gra
 let H='';
 if(F==='ds'||F==='ds-copper'||F==='ds-deg'){
  const cu=F==='ds-copper';
- const swatch=(c,n,on)=>`<div class="${on?'on':''}"><i style="background:${c}"></i>${n}</div>`;
+ const swatch=(c,n,on)=>`<div class="${on?'on':''}"><i style="background:${c}">${on?'<svg style="position:absolute;right:-4px;top:-4px;width:16px;height:16px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="'+k('ink')+'"/><path d="'+P.check+'" fill="none" stroke="'+k('bg')+'" stroke-width="2.6" stroke-linecap="round"/></svg>':''}</i>${n}</div>`;
  const elb=(n,v,q)=>row(n,'',{ctrl:`${dd(v)}<span style="width:8px"></span>${stp(q)}`});
  H=sheet('Водосток','D1 · желоб 1-2',`
  <div><div class="lbl">Форма${qm}</div><div class="tiles c4">${tile('dsRect','Прямой',!cu)}${tile('dsRectRibbed','Прямой<br>ребристый')}${tile('dsRound','Круглый',cu)}${tile('dsRoundRibbed','Круглый<br>ребристый')}</div><div class="note">Рёбра — вдоль трубы; на значке — вид в разрезе.</div></div>
  <div><div class="lbl">Размер${wait}</div>${seg(cu?['3″','4″']:['2×3','3×4','4×5'],1)}</div>
  <div><div class="lbl">Материал${wait}</div>${seg(['Алюминий','Сталь','Медь'],cu?2:0)}</div>
- <div class="${cu?'disabled':''}"><div class="lbl">Цвет</div>${cu?`<div class="note" style="margin:0 4px 8px">Медь не красят — цвет не выбирается.</div>`:''}<div class="sw">${swatch(k('surf2'),'Как у желоба',!cu)}${swatch('#FFFFFF','White')}${swatch('#E9E2D0','Almond')}${swatch('#6B4A2E','Brown')}${swatch('#8A8D8F','Gray')}</div></div>
- <div><div class="lbl">Где на желобе${qm}</div>${seg(['От левой заглушки','От правой'],0)}<div style="display:flex;gap:8px;align-items:center;margin-top:8px"><div class="inp" style="width:72px">3</div><span style="color:var(--mut)">ft</span><div class="inp" style="width:72px">0</div><span style="color:var(--mut)">in</span></div></div>
- <div><div class="lbl">Куда уходит вода${qm}</div><div class="tiles c3" style="grid-template-columns:repeat(3,1fr)">${tile('down','По трубе<br>вниз',true)}${tile('chain','По цепи')}${tile('toGut','В другой<br>желоб')}</div></div>
- <div><div class="lbl">Колена и офсеты${qm}</div><div class="grp">${elb('Колено A','75°',2)}${elb('Колено B','75°',1)}${elb('Офсет A','2″',0)}${elb('Офсет B','2″',0)}</div><div class="note">Нажмите на градус или размер, чтобы сменить. Стандарт — 75°.</div></div>
+ <div><div class="lbl">Цвет</div>${cu?`<div class="note" style="margin:0 4px 8px">Медь не красят — цвет не выбирается.</div>`:''}<div class="sw ${cu?'disabled':''}">${swatch('#FFFFFF','Как у желоба<br>(White)',!cu)}${swatch('#FFFFFF','White')}${swatch('#E9E2D0','Almond')}${swatch('#6B4A2E','Brown')}${swatch('#8A8D8F','Gray')}</div></div>
+ <div><div class="lbl">Где на желобе${qm}</div>${seg(['От левой заглушки','От правой'],0)}<div style="display:flex;gap:8px;align-items:center;margin-top:8px">${fin('3','ft')}${fin('0','in')}</div></div>
+ <div><div class="lbl">Куда уходит вода${qm}</div><div class="tiles c3" style="grid-template-columns:repeat(3,1fr)">${tile('down','По трубе<br>вниз',true)}${tile('chain','По цепи')}${tile('toGut','В другой<br>желоб')}</div><div class="grp" style="margin-top:8px">${row('Длина трубы'+qm,'По этажу · 10′')}</div></div>
+ <div><div class="lbl">Колена и офсеты${qm}</div><div class="grp">${elb('Колено A','75°',2)}${elb('Колено B','75°',1)}${elb('Офсет A','2″',0)}${elb('Офсет B','2″',0)}</div></div>
  <div class="grp">${row('Низ трубы'+qm,'Ничего')}${row('Отвод в бочку'+qm,'',{ctrl:'<span class="tog"></span>'})}${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
- <div class="grp"><div class="row del">Удалить водосток, оставить выпуск</div><div class="row del">Удалить водосток и выпуск</div></div>`)+(F==='ds-deg'?`<div class="menu" style="left:140px;top:842px"><div>30°</div><div>45°</div><div>60°</div><div style="font-weight:600">75° ${ic('check',16)}</div><div>90°</div></div>`:'')+cap(cu?'Стало v2: медь — цвет выключен сам':F==='ds-deg'?'Стало v2: градус колена — выбор по нажатию на «75°»':'Стало v2: окно водостока');
+ <div class="grp"><div class="row del sub"><div class="stack"><span>Удалить водосток, оставить выпуск</span><small>Вода будет уходить в выпуск без трубы</small></div></div><div class="row del sub"><div class="stack"><span>Удалить водосток и выпуск</span><small>Убрать совсем; «Отменить» 5 с</small></div></div></div>`)+(F==='ds-deg'?`<div class="menu" style="left:110px;top:842px"><div>30°</div><div>45°</div><div>60°</div><div style="font-weight:600">75° ${ic('check',16)}</div><div>90°</div></div>`:'')+cap(cu?'Стало v2: медь — цвет выключен сам':F==='ds-deg'?'Стало v2: градус колена — выбор по нажатию на «75°»':'Стало v2: окно водостока');
 }
 if(F==='ds-bottom'){
  const o=(t,d,on)=>`<div class="opt"><div class="stack"><span>${t}</span><small>${d}</small></div>${on?ic('check',20):''}</div>`;
- H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36 round">${ic('cl',18)}</span><h2>Низ трубы</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">Что ставим у земли, куда выходит вода из трубы.</div><div class="grp">${o('Ничего','труба заканчивается коленом',true)}${o('Удлинитель','кусок трубы, отводит воду от стены')}${o('Splash block','бетонный или пластиковый лоток под коленом')}${o('Гибкий рукав','гофрированный, складывается')}${o('В землю','переходник в дренажную трубу')}${o('На нижнюю крышу','вода стекает на крышу ниже')}</div></div></div>`+cap('Стало v2: «Низ трубы» — список с пояснениями, по умолчанию «Ничего»');
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Низ трубы</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">Что ставим у земли, куда выходит вода из трубы.</div><div class="grp">${o('Ничего','труба заканчивается коленом',true)}${o('Удлинитель','кусок трубы, отводит воду от стены')}${o('Splash block','бетонный или пластиковый лоток под коленом')}${o('Гибкий рукав','гофрированный, складывается')}${o('В землю','переходник в дренажную трубу')}${o('На нижнюю крышу','вода стекает на крышу ниже')}</div></div></div>`+cap('Стало v2: «Низ трубы» — список с пояснениями, по умолчанию «Ничего»');
 }
 if(F==='run'){
- H=sheet('Желоб','1-1 · 21′ 8″',`
- <div><div class="lbl">Профиль${wait}</div><div class="tiles c5">${tile('xsK','K',true)}${tile('xsHalf','Полукр.')}${tile('xsFascia','Fascia')}${tile('xsBox','Box')}${tile('xsEuro','Euro')}</div><div class="note">Значки нарисуем по сечениям после ресёрча.</div></div>
+ H=sheet('Желоб','1-1 · 21′ 8½″',`
+ <div><div class="lbl">Профиль${wait}</div><div class="tiles c5">${tile('xsK','K',true)}${tile('xsHalf','Полу-<br>круглый')}${tile('xsFascia','Fascia')}${tile('xsBox','Box')}${tile('xsEuro','Euro')}</div><div class="note">Значки нарисуем по сечениям после ресёрча.</div></div>
  <div><div class="lbl">Размер</div>${seg(['5″','6″','7″'],0)}</div>
  <div><div class="lbl">Этаж</div>${seg(['1','2','3','4'],0)}</div>
- <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center"><div class="inp" style="width:64px">21</div><span style="color:var(--mut)">ft</span><div class="inp" style="width:56px">8</div><span style="color:var(--mut)">in</span>${dd('½')}<span class="sp"></span><span class="b36">Шкала</span></div><div class="note">Нарисовано 21′ 4″. «Шкала» — прокрутите длину пальцем.</div></div>
+ <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin('21','ft')}${fin('8','in')}<span class="sp"></span><span class="b36">Шкала</span></div>${frac('½')}<div class="note">На рисунке 21′ 4″, введено 21′ 8½″ — в расчёт идёт введённое.</div></div>
  <div class="grp">${row('Цвет','White')}${row('Материал'+wait,'Алюминий · .027')}</div>
  <div><div class="lbl">Крепление</div><div class="grp">${row('К чему крепится'+qm,'Доска (fascia)')}${row('Кронштейны','Hidden hanger')}</div></div>
  <div class="grp">${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
@@ -161,20 +163,21 @@ if(F==='run'){
 if(F==='corner'||F==='corner-in'){
  const inner=F==='corner-in';
  const sk=`<svg viewBox="0 0 300 200" style="width:100%;height:170px"><rect x="40" y="40" width="190" height="22" fill="${k('surf2')}"/><rect x="208" y="40" width="22" height="150" fill="${k('surf2')}"/><path d="M40 62H208V190" fill="none" stroke="${k('ink')}" stroke-width="3"/><path d="M40 40H230V190" fill="none" stroke="${k('ink')}" stroke-width="2" stroke-dasharray="5 4"/><path d="M208 62L230 40" stroke="${k('ink')}" stroke-width="2.5"/><path d="M190 62A18 18 0 0 0 208 80" fill="none" stroke="${k('mut')}" stroke-width="1.5" stroke-dasharray="6 3 1 3"/><text x="180" y="96" font-size="12" font-weight="600" fill="${k('ink')}">90°</text><text x="120" y="30" font-size="12" fill="${k('ink')}" text-anchor="middle">лицевая 24′ 4″</text><text x="120" y="80" font-size="12" fill="${k('mut')}" text-anchor="middle">стена 23′ 11″</text></svg>`;
+ const skIn=`<svg viewBox="0 0 300 200" style="width:100%;height:170px"><rect x="40" y="62" width="168" height="22" fill="${k('surf2')}"/><rect x="186" y="62" width="22" height="128" fill="${k('surf2')}"/><path d="M40 62H208V190" fill="none" stroke="${k('ink')}" stroke-width="3"/><path d="M40 84H186V190" fill="none" stroke="${k('ink')}" stroke-width="2" stroke-dasharray="5 4"/><path d="M208 62L186 84" stroke="${k('ink')}" stroke-width="2.5"/><text x="120" y="50" font-size="12" fill="${k('mut')}" text-anchor="middle">стена 23′ 11″</text><text x="110" y="104" font-size="12" fill="${k('ink')}" text-anchor="middle">лицевая 23′ 6″</text><text x="222" y="60" font-size="12" font-weight="600" fill="${k('ink')}">90°</text></svg>`;
  const cut=(n,w,f)=>`<div class="grp" style="padding:10px 14px"><div style="font-weight:600;font-size:13px">Желоб ${n}</div><table class="cut"><tr><th>По стене</th><th>По лицу</th><th>Рез</th></tr><tr><td style="text-align:left">${w}</td><td><b>${f}</b></td><td>45°</td></tr></table></div>`;
  const segI=(on)=>`<div class="seg">${[['cornerOut','Наружный'],['cornerIn','Внутренний']].map(([i,t],j)=>`<span class="${j===on?'on':''}" style="gap:6px">${ic(i,16)}${t}</span>`).join('')}</div>`;
  H=sheet('Угол','1-1 / 1-2',`
  <div>${segI(inner?1:0)}<div class="note">Сменится сторона всей линии</div></div>
- ${sk}
+ ${inner?skIn:sk}
  <div><div class="lbl">Как делаем угол${qm}</div>${seg(['Готовый','Резать','Полоса'],1)}</div>
- <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${cut('1-1','23′ 11″','24′ 4″')}${cut('1-2','25′ 11″','26′ 4″')}</div></div>
+ <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${inner?cut('1-1','23′ 11″','23′ 6″')+cut('1-2','25′ 11″','25′ 6″'):cut('1-1','23′ 11″','24′ 4″')+cut('1-2','25′ 11″','26′ 4″')}</div></div>
  <div class="grp">${inner?row('Брызговик на угол'+qm,'',{ctrl:'<span class="tog on"></span>'}):''}${row('Угол не 90°? Измерить'+qm,'',{icon:'pencil'})}</div>
  <div class="grp"><div class="row del">Разъединить угол</div></div>`)+cap(inner?'Стало v2: внутренний угол — есть брызговик':'Стало v2: наружный угол — брызговика нет; вид — сегментом DS; «замер примерный» убран');
 }
 if(F==='corner-tri'){
  const fig=`<svg viewBox="0 0 320 230" style="width:100%;height:220px"><path d="M40 40H280M40 40V210" stroke="${k('ink')}" stroke-width="4" stroke-linecap="round"/><text x="30" y="30" font-size="12" fill="${k('mut')}" text-anchor="end">угол</text><circle cx="40" cy="40" r="5" fill="${k('ink')}"/><circle cx="200" cy="40" r="6" fill="${k('bg')}" stroke="${k('ink')}" stroke-width="2.5"/><circle cx="40" cy="170" r="6" fill="${k('bg')}" stroke="${k('ink')}" stroke-width="2.5"/><path d="M200 40L40 170" stroke="${k('ink')}" stroke-width="2" stroke-dasharray="6 4"/><text x="120" y="62" font-size="15" font-weight="700" fill="${k('ink')}">A</text><text x="52" y="110" font-size="15" font-weight="700" fill="${k('ink')}">B</text><text x="130" y="122" font-size="15" font-weight="700" fill="${k('ink')}">C</text><text x="140" y="26" font-size="12" fill="${k('mut')}" text-anchor="middle">по одной стене</text><text x="52" y="200" font-size="12" fill="${k('mut')}">по другой</text><text x="150" y="150" font-size="12" fill="${k('mut')}">между метками</text></svg>`;
- const f3=(n,v='5',w='0')=>`<div style="display:flex;gap:8px;align-items:center"><b style="width:18px">${n}</b><div class="inp" style="width:64px">${v}</div><span style="color:var(--mut)">ft</span><div class="inp" style="width:56px">${w}</div><span style="color:var(--mut)">in</span></div>`;
- H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36 round">${ic('cl',18)}</span><h2>Измерить угол</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body">
+ const f3=(n,v='5',w='0')=>`<div style="display:flex;gap:8px;align-items:center"><b style="width:18px">${n}</b>${fin(v,'ft')}${fin(w,'in')}</div>`;
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Измерить угол</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body">
  <div class="note" style="margin:0">Отмерьте от угла по одной стене (A) и по другой (B), поставьте метки и измерьте расстояние между ними (C). Угол посчитаем сами.</div>${fig}
  <div style="display:flex;flex-direction:column;gap:8px">${f3('A')}${f3('B')}${f3('C','7','1')}</div></div><div class="foot"><span class="btnw acc">Посчитать угол</span></div></div>`+cap('Стало v2: «Угол по замеру» — со схемой A, B, C');
 }
@@ -197,8 +200,8 @@ if(F==='tab'){
  const ch=(col,i,txt)=>`<span><span class="chip" style="color:${col}">${i} ${txt}</span></span>`;
  H=`<div class="scr" style="background:linear-gradient(160deg,rgba(124,224,138,.25),var(--bg) 35%,var(--bg) 70%,rgba(255,160,60,.18))"><div class="top"><div class="crumb">GoRix v1.0.0 · 1736 · вс, 15 нояб. 5:14 PM</div>
  <div class="ttl"><h1>Gutters</h1><span class="q">?</span></div>
- <div style="display:flex;gap:8px"><div class="inp" style="flex:1">${ic('search',18,k('mut'))}<span class="ph2">Поиск</span></div><span class="b36 acc" style="height:44px;border-radius:22px">${ic('plus',18)}Новый замер</span></div>
- <div style="display:flex;gap:8px;margin-top:10px;overflow:hidden">${['Все · 4','Черновики · 2','Без сметы · 1','Смета · 1','Подписана'].map((x,i)=>`<span class="chip" style="height:32px;padding:0 12px;font-size:13px;white-space:nowrap;flex:none;${i===0?'background:var(--surf2);box-shadow:var(--sh);color:var(--ink)':'color:var(--mut)'}">${x}</span>`).join('')}</div>
+ <div style="display:flex;gap:8px"><div class="inp" style="flex:1">${ic('search',18,k('mut'))}<span class="ph2">Поиск</span></div><span class="b36 acc" style="align-self:center">${ic('plus',18)}Новый замер</span></div>
+ <div style="display:flex;gap:8px;margin-top:10px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent)">${['Все · 4','Черновики · 2','Без сметы · 1','Смета · 1','Подписана'].map((x,i)=>`<span class="chip" style="height:32px;padding:0 12px;font-size:13px;white-space:nowrap;flex:none;${i===0?'background:var(--surf2);box-shadow:var(--sh);color:var(--ink)':'color:var(--mut)'}">${x}</span>`).join('')}</div>
  <div class="secH"><b>Черновики</b><span>2</span></div>
  <div style="display:flex;flex-direction:column;gap:8px">${card('pencil','Дом на Maple, задний двор','вчера',ch(k('mut'),'▢','Черновик'),'Желобов: 3 · 62 ft · водостоков: 2')}${card('pencil','Без названия','15 нояб.',ch(k('mut'),'▢','Черновик'),'Желобов: 2 · 50 ft · водостоков: 3')}</div>
  <div class="secH"><b>Привязанные к клиентам и лидам</b><span>2</span></div>
