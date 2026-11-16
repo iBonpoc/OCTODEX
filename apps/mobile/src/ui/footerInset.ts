@@ -22,6 +22,27 @@ export const useFooterInset = (): number =>
     () => 0,
   );
 
+/**
+ * What a screen keeps at its right edge over its whole height (a full-screen canvas's side panel of properties, from 820): the toast
+ * stands centred in the rest, never on it (#1895). 0 — nothing; the screen sets it and puts it back to 0 when it goes.
+ */
+let right = 0;
+const rightListeners = new Set<() => void>();
+export function setToastRight(r: number): void {
+  if (r === right) return;
+  right = r;
+  rightListeners.forEach((l) => l());
+}
+export const useToastRight = (): number =>
+  useSyncExternalStore(
+    (l) => {
+      rightListeners.add(l);
+      return () => rightListeners.delete(l);
+    },
+    () => right,
+    () => 0,
+  );
+
 /** where the bottom of the toast stands: its usual place, or above the pinned bar when there is one */
 export const toastBottom = (usual: number, bar: number, gap: number): number => (bar > 0 ? Math.max(usual, bar + gap) : usual);
 
