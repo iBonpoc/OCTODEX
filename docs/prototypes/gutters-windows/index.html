@@ -143,7 +143,7 @@ if(F==='ds'||F==='ds-copper'||F==='ds-deg'||F==='ds-plain'){
  <div><div class="lbl">Где на желобе${qm}</div>${seg(['От левой заглушки','От правой'],0)}<div style="display:flex;gap:8px;align-items:center;margin-top:8px">${fin('3','ft')}${fin('0','in')}</div></div>
  <div><div class="lbl">Куда уходит вода${qm}</div><div class="tiles c3" style="grid-template-columns:repeat(3,1fr)">${tile('down','Водосток',true)}${tile('chain','Цепь')}${tile('toGut','В другой<br>желоб')}</div><div class="grp" style="margin-top:8px">${row('Длина водостока'+qm,'По этажу · 10′')}</div></div>
  <div><div class="lbl">Колена и офсеты${qm}</div>${cu?'':`<div style="margin-bottom:8px">${seg(['Гнём по месту','Готовые'],pl?0:1)}</div>`}<div class="grp">${cu?elb('Колено','75°',0)+elb('Офсет','2″',0):pl?elb('Колено A','75°',2)+elb('Колено B','75°',1)+elb('Офсет A','2″',0)+elb('Офсет B','2″',0):elb('Колено A','75°',3)+elb('Колено B','75°',0)+elb('Офсет A','2″',0)+elb('Офсет B','2″',0)}</div>${pl?'<div class="note">Из самого водостока: в закупку не идут. В смету — +6″ длины водостока на колено и работа за колено (настройка компании).</div>':''}</div>
- <div class="grp">${row('Низ водостока'+qm,'Ничего')}${row('Редкие детали'+qm,'Нет')}${row('Сито в выпуск (strainer)'+qm,'',{ctrl:'<span class="tog on"></span>'})}${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
+ <div class="grp">${row('Низ водостока'+qm,'Ничего')}${row('Редкие детали'+qm,'Нет')}${row('Сито в выпуск (strainer)'+qm,'',{ctrl:'<span class="tog on"></span>'})}${row('Снять старый водосток'+qm,'',{ctrl:'<span class="tog"></span>'})}${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
  <div class="grp"><div class="row del sub">${ic('trash',20,k('badT'))}<div class="stack"><span>Удалить водосток, оставить выпуск</span><small>Останется только выпуск в желобе; «Отменить» 5 с</small></div></div><div class="row del sub">${ic('trash',20,k('badT'))}<div class="stack"><span>Удалить водосток и выпуск</span><small>Убрать совсем; «Отменить» 5 с</small></div></div></div>`)+(F==='ds-deg'?`<div class="menu" style="left:110px;top:842px"><div>30°</div><div>45°</div><div>60°</div><div style="font-weight:600">75° ${ic('check',16)}</div><div>90°</div></div>`:'')+cap(pl?'Стало v4: гладкий — колена гнут по месту из водостока':cu?'Стало v3: круглый медный — одно «Колено» и один «Офсет», цвет выключен':F==='ds-deg'?'Стало v2: градус колена — выбор по нажатию на «75°»':'Стало v3: окно водостока (прямой ребристый: по умолчанию 3 колена A)');
 }
 if(F==='ds-color'){
@@ -176,10 +176,11 @@ if(F==='run'){
  <div><div class="lbl">Этаж${qm}</div>${seg(['1','2','3','4'],0)}</div>
  <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin('21','ft')}${fin('8','in')}<span class="sp"></span><span class="b36">Шкала</span></div>${frac('½')}<div class="note">На рисунке 21′ 4″, введено 21′ 8½″ — в расчёт идёт введённое.</div></div>
  <div class="grp">${row('Цвет','',{ctrl:`<span class="v"><i style="width:18px;height:18px;border-radius:9px;background:#FFFFFF;border:1px solid var(--bd);display:inline-block"></i>White${ic('cd',16)}</span>`})}${row('Материал'+qm,'Алюминий · .027')}</div>
- <div><div class="lbl">Защита от листьев (gutter guard)${qm}</div>${seg(['Нет','Сетка','Микросетка','Защёлка'],2)}<div class="grp" style="margin-top:8px">${row('Сколько закрыть','Весь желоб · 21′ 8½″')}</div></div>
+ <div><div class="lbl">Защита от листьев (gutter guard)${qm}</div><div class="grp">${row('Вид','Микросетка')}${row('Сколько закрыть','Весь желоб · 21′ 8½″')}</div><div class="note">Список: Нет · Микросетка · Перфорированный · На защёлке · Откидная · Сетка на раме · Козырёк. Пены и ёршиков нет.</div></div>
+ <div><div class="lbl">Демонтаж${qm}</div><div class="grp">${row('Снять старый желоб','',{ctrl:'<span class="tog on"></span>'})}${row('Была защита — снять','',{ctrl:'<span class="tog"></span>'})}</div></div>
  <div><div class="lbl">Крепление</div><div class="grp">${row('Крепится к'+qm,'Доске (fascia)')}${row('Кронштейны','Hidden hanger')}</div></div>
  <div class="grp">${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
- <div class="grp"><div class="row del">${ic('trash',20,k('badT'))}Удалить желоб</div></div>`)+cap('Стало v2: окно желоба. Дробь у длины; «Шкала» вместо «Рулетка»; «К чему крепится» с «?»');
+ <div class="grp"><div class="row del">${ic('trash',20,k('badT'))}Удалить желоб</div></div>`)+cap('Стало v3: окно желоба. Защита — список профессиональных видов; демонтаж старого');
 }
 if(F==='corner'||F==='corner-in'){
  const inner=F==='corner-in';
