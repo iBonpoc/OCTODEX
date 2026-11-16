@@ -15479,6 +15479,18 @@ select tst.ok(coalesce((select bool_and(not ok) from public.trash_restore('lead'
 select tst.ok((select deleted_at is not null from public.leads where id = 'a2810000-0000-4000-8000-000000000c04')
               and (select deleted_at is not null from public.tasks where id = 'a2810000-0000-4000-8000-000000000d02'),
               'T283 they stay in the bin');
+-- his task on a property is his as before: he removes it, sees it in the bin with its title, brings it back
+:as_super
+set session_replication_role = replica;
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by) values
+  ('a2830000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'property', 'd1a00000-0000-0000-0000-000000000001', 'T283 gate', 'a5600000-0000-4000-8000-000000000002');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_sub56
+update public.tasks set deleted_at = now() where id = 'a2830000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a2830000-0000-4000-8000-000000000001' and label = 'T283 gate'$q$) = 1,
+              'T283 his task on a property: removed, in the bin with its title');
+select tst.ok((select bool_and(ok) from public.trash_restore('task', array['a2830000-0000-4000-8000-000000000001']::uuid[])), 'T283 … and brought back');
 \echo 'T283 the bin holds no lead for a subcontractor ok'
 
 -- T284: a tech and the office as before; a tech made a subcontractor loses his leads at once
