@@ -26,7 +26,11 @@ export function SupplierTaxAsk({ ask, supplier, unit, visible, onClose, onExited
           <View testID="sup-tax-ask-with">
             <ListRow
               title={t("sup.taxAsk.with")}
-              subtitle={t("sup.taxAsk.withHint", { net: money(ask.netCents), price: per(ask.priceWithTax) })}
+              subtitle={
+                ask.priceWithTax === ask.priceNow
+                  ? t("sup.taxAsk.withHint", { net: money(ask.netCents), price: per(ask.priceWithTax) })
+                  : t("sup.taxAsk.withHintCent", { net: money(ask.netCents), price: per(ask.priceWithTax), from: per(ask.priceNow) })
+              }
               onPress={() => onAnswer("withTax")}
               lines={2}
             />

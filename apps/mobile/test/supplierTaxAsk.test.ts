@@ -51,7 +51,7 @@ describe("unit:supplierTaxAsk — #1835", () => {
   });
   it("asked only when it matters: no question for a second picking, a supplier tax of 0, no cost, a tax of its own, not a material", () => {
     const base = fromLine();
-    expect(supplierTaxAsk({ ...base, supplierId: "s1" }, s8)).toBeNull(); // a supplier before: picked again — no question
+    expect(supplierTaxAsk({ ...base, supplierId: "s1", vendorTaxBps: 800 }, s8)).toBeNull(); // a supplier with its tax before — no question
     expect(supplierTaxAsk(pickSupplier(base, s8, "withTax"), s8)).toBeNull(); // after the answer: never again
     expect(supplierTaxAsk(base, { ...s8, taxBps: 0 })).toBeNull();
     expect(supplierTaxAsk(base, { ...s8, taxBps: undefined })).toBeNull();
@@ -59,5 +59,21 @@ describe("unit:supplierTaxAsk — #1835", () => {
     expect(supplierTaxAsk({ ...base, costCents: 0 }, s8)).toBeNull();
     expect(supplierTaxAsk({ ...base, vendorTaxBps: 950 }, s8)).toBeNull();
     expect(supplierTaxAsk({ ...base, kind: "labor" }, s8)).toBeNull();
+  });
+  it("review #1904 №1: a supplier with no tax before, then one with 8 % — still asked (the tax would double silently)", () => {
+    expect(supplierTaxAsk({ ...fromLine(), supplierId: "s0", vendorTaxBps: 0 }, s8)).not.toBeNull();
+    expect(supplierTaxAsk({ ...fromLine(), supplierId: "", vendorTaxBps: 0 }, s8)).not.toBeNull();
+  });
+  it("review #1904 №2: «Да» changes only the cost the question named — a cost changed meanwhile is not touched", () => {
+    const it0 = fromLine();
+    const asked = supplierTaxAsk(it0, s8)!;
+    expect(pickSupplier(it0, s8, "withTax", asked).costCents).toBe(10000);
+    expect(pickSupplier({ ...it0, costCents: 9000 }, s8, "withTax", asked).costCents).toBe(9000);
+  });
+  it("closing without an answer changes nothing: the item is only changed by an answer (no default)", () => {
+    const it0 = fromLine();
+    // the screen calls pickSupplier only with an answer; without one the item stays as it was
+    expect(supplierTaxAsk(it0, s8)).not.toBeNull();
+    expect(it0.supplierId).toBeUndefined();
   });
 });

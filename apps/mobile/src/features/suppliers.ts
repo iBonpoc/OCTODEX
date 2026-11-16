@@ -83,12 +83,13 @@ export function itemsOfSupplier(db: DB, supplierId: string): CatalogItem[] {
  * into the item's supplier tax when the supplier has one (the engine counts from the item's own — new estimate lines
  * follow, old ones keep their snapshot). null — no supplier: the link goes, `vendor` stays as typed before.
  */
-export function pickSupplier(it: CatalogItem, s: Supplier | null, answer?: TaxAnswer): CatalogItem {
+export function pickSupplier(it: CatalogItem, s: Supplier | null, answer?: TaxAnswer, asked?: Pick<SupplierTaxAsk, "costCents" | "netCents">): CatalogItem {
   // "" = cleared (the save sends null); never-set stays absent
   if (!s) return it.supplierId ? { ...it, supplierId: "", supplierSku: it.supplierSku === undefined ? undefined : "" } : it;
-  const ask = supplierTaxAsk(it, s);
-  // «Да, с налогом»: the cost typed was with the supplier's tax — kept without it, so the client's price stays (#1835)
-  const cost = ask && answer === "withTax" ? { costCents: ask.netCents } : {};
+  // «Да, с налогом»: the cost typed was with the supplier's tax — kept without it, so the client's price stays (#1835). Only
+  // for the cost the question named (the prices it showed are the ones saved — review #1904 №2)
+  const ask = asked ?? supplierTaxAsk(it, s);
+  const cost = ask && answer === "withTax" && it.costCents === ask.costCents ? { costCents: ask.netCents } : {};
   return { ...it, supplierId: s.id, vendor: s.name, ...(s.taxBps !== undefined ? { vendorTaxBps: s.taxBps } : {}), ...cost };
 }
 
@@ -110,12 +111,13 @@ export interface SupplierTaxAsk {
  * #1835 (the audit's variant Б, 16.11): a material's cost was typed with no supplier — it may already have the supplier's
  * tax in it («Сохранить в каталог» puts the line's cost, which is with the tax). Picking a supplier with a tax would add the
  * tax a second time (100 → 108 → 140.40 became 116.64 / 151.63). So it is asked ONCE, and only when it matters: a material
- * with a cost, no supplier and no tax of its own before, the supplier's tax above 0. No default: closing the question attaches nothing.
+ * with a cost and no tax on it yet (with or without a supplier before), the supplier's tax above 0. No default: closing the question attaches nothing.
  */
 export function supplierTaxAsk(it: CatalogItem, s: Supplier): SupplierTaxAsk | null {
   const tax = s.taxBps ?? 0;
-  // a tax of its own already on the item: its cost is clearly without it — nothing to ask
-  if (it.kind !== "material" || !(it.costCents && it.costCents > 0) || it.supplierId || tax <= 0 || (it.vendorTaxBps ?? 0) > 0) return null;
+  // a tax already on the item: its cost is clearly without it — nothing to ask. No tax on it — whether it had a supplier
+  // (a supplier with no tax, then another with 8 %) or none — the cost may have the tax in it (review #1904 №1)
+  if (it.kind !== "material" || !(it.costCents && it.costCents > 0) || tax <= 0 || (it.vendorTaxBps ?? 0) > 0) return null;
   const markup = it.markupBps ?? 0;
   const net = costWithoutTax(it.costCents, tax);
   return {
