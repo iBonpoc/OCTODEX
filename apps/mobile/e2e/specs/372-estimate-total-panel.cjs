@@ -33,7 +33,7 @@ exports.run = async (h) => {
   // an add-on «на выбор клиента»: $500
   await tid("est-add-new").getByRole("button").click();
   const b = (await vis('[data-testid^="est-collapse-"]').first().getAttribute("data-testid")).replace("est-collapse-", "");
-  await vis(`[data-testid="est-name-${b}"] input`).first().fill("Gutter guards (тестовые)");
+  await vis(`[data-testid="est-name-${b}"] input`).first().fill("Gutter guards (тестовые)"); // i18n-old: ok — a name the person types, not the dictionary's
   await vis(`[data-testid="est-price-${b}"] input`).first().fill("500");
   await vis(`[data-testid="est-cost-${b}"] input`).first().fill("200");
   await tid(`est-more-${b}`).click();

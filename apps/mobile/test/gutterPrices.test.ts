@@ -186,12 +186,13 @@ describe("#814 the details in words", () => {
     expect(codes.size).toBeGreaterThan(20);
     expect([...codes].filter((c) => !PART_WORDS.has(c)), "add the part to PART_WORDS and mod.gutters.pr.p.<code> in ru/en/es").toEqual([]);
   });
-  it("a downspout's line (#1747): elbows by style, offsets by length; only what it has — nothing at all is \"\"", () => {
-    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 3 }], offsets: [] })).toBe('mod.gutters.view.dsElbow{"style":"A","n":3}');
+  it("a downspout's line (#1747, #1766): «колена» once, elbows by style, offsets by length; only what it has — nothing at all is \"\"", () => {
+    const el = (style: string, n: number) => `mod.gutters.view.dsElbow{"style":"${style}","n":${n}}`;
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 3 }], offsets: [] })).toBe(`mod.gutters.view.dsElbows${JSON.stringify({ list: el("A 75°", 3) })}`);
     expect(dsLine(t as never, { elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }] })).toBe(
-      'mod.gutters.view.dsElbow{"style":"A","n":2} · mod.gutters.view.dsElbow{"style":"B","n":1} · mod.gutters.view.dsOffset{"len":"2″","n":1}',
+      `mod.gutters.view.dsElbows${JSON.stringify({ list: `${el("A 75°", 2)}, ${el("B 75°", 1)}` })} · mod.gutters.view.dsOffset{"len":"2″","n":1}`,
     );
-    expect(dsLine(t as never, { shape: "round", elbows: [{ style: "45", qty: 2 }], offsets: [] })).toBe('mod.gutters.view.dsElbow{"style":"45°","n":2}');
+    expect(dsLine(t as never, { shape: "round", elbows: [{ style: "45", qty: 2 }], offsets: [] })).toBe(`mod.gutters.view.dsElbows${JSON.stringify({ list: el("45°", 2) })}`);
     expect(dsLine(t as never, { elbows: [{ style: "A", qty: 0 }], offsets: [] })).toBe("");
   });
 });

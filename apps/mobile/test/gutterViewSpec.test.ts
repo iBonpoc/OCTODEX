@@ -57,6 +57,6 @@ describe("measureSpec", () => {
     expect(parts.some((p) => p.kind === "labor")).toBe(true);
   });
   it("an empty drawing: nothing", () => {
-    expect(measureSpec({ runs: [], downspouts: [] }, [])).toEqual({ runs: [], corners: [], ds: [], parts: [] });
+    expect(measureSpec({ runs: [], downspouts: [] }, [])).toEqual({ runs: [], corners: [], ds: [], parts: [], manyStories: false });
   });
 });

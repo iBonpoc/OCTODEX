@@ -55,3 +55,10 @@ export function quickPack(it: Pick<CatalogItem, "unit" | "purchaseUnit" | "packS
   const n = it.packSize?.trim();
   return { buy, unit: it.unit, ...(n && Number(n) > 0 ? { n } : {}) };
 }
+
+/**
+ * The key of the price sheet's body (#1826, money: the sheet kept what was typed for the previous item and «Сохранить»
+ * wrote it to the next one): a new opening OR another item → a fresh form. Each opening of the sheet and each item has its
+ * own key, so the typed cost, markup and price never carry over.
+ */
+export const quickSheetKey = (opening: number, item: { id: string } | null | undefined): string => `${opening}:${item?.id ?? ""}`;
