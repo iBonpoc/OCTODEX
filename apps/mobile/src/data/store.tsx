@@ -15,7 +15,7 @@ import { useAuth, type DbRole } from "@/cloud/auth";
 import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
@@ -565,6 +565,12 @@ const costsOf = (doc: EstimateDoc): Record<string, number> =>
 
 /** `readError`: the screen shown when the device did not give back what it keeps (A-01) — from the root layout, so the
  *  store imports no UI; without it nothing is shown (tests) */
+/** spec 53-0: an item already on the phone is saved by field (PRD 04 §9) — the columns this save changed; a new one whole */
+function withFields(prev: CatalogItem | undefined, it: CatalogItem): { fields?: string[] } {
+  const fields = catalogItemChange(prev, it);
+  return fields ? { fields } : {};
+}
+
 export function StoreProvider({
   children,
   readError,
@@ -1509,7 +1515,7 @@ export function StoreProvider({
       return mutate(
         "catalog.save",
         (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
-        { k: "catalog.save", item: to, costs: catalogCostChange(from, to) },
+        { k: "catalog.save", item: to, costs: catalogCostChange(from, to), ...withFields(from, to) },
       );
     };
     const at = new Date().toISOString();
@@ -2638,7 +2644,7 @@ export function StoreProvider({
             ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
             ...(priceHist.length ? { priceHistory: [...priceHist, ...(d.priceHistory ?? [])] } : {}),
           }),
-          { k: "catalog.save", item: itemForSave(it), costs },
+          { k: "catalog.save", item: itemForSave(it), costs, ...withFields(prev, it) },
         );
       },
       saveSupplier: (x0) => {
@@ -2795,7 +2801,7 @@ export function StoreProvider({
             }),
             onlyNew
               ? { k: "catalog.save", item: itemForSave(it), onlyNew: true, costs: catalogCostChange(undefined, it) }
-              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it) },
+              : { k: "catalog.save", item: itemForSave(it), costs: catalogCostChange(prev, it), ...withFields(prev, it) },
           );
         });
         // all of them or none (DS §15.2)
