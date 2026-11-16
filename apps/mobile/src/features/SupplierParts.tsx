@@ -64,7 +64,7 @@ export function SupplierPicker({
 
 const SOURCE: Record<string, DictKey> = {
   manual: "sup.src.manual", initial: "sup.src.initial", import_file: "sup.src.import_file",
-  ai_scan: "sup.src.ai_scan", shelf_tag: "sup.src.shelf_tag", module: "sup.src.module",
+  ai_scan: "sup.src.ai_scan", shelf_tag: "sup.src.shelf_tag", module: "sup.src.module", receipt: "sup.src.receipt",
 };
 
 /** «История цен»: the cost with the supplier's tax, when, from whom; newest first */

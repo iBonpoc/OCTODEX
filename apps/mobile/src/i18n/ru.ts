@@ -4252,6 +4252,7 @@ export const ru = {
   "sup.src.ai_scan": "скан прайса",
   "sup.src.shelf_tag": "ценник",
   "sup.src.module": "модуль",
+  "sup.src.receipt": "приёмка заказа",
   // spec 37: purchase orders (SUP2-б)
   "nav.purchaseOrders": "Заказы поставщикам",
   "po.title": "Заказы поставщикам",
