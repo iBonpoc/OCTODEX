@@ -13,7 +13,6 @@
 const { sheetGone } = require("../sheet.cjs");
 const { undo } = require("../estimateLine.cjs");
 const KEY = "octo.db.v5";
-const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
 exports.run = async (h) => {
   const p = h.page;
@@ -35,8 +34,7 @@ exports.run = async (h) => {
   let taps = 0;
   const tap = async (loc) => { taps++; await loc.click(); };
 
-  await h.go("/today");
-  await setRole(h, "director");
+  await h.seed("octo.role.v1", "director");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
   await waitDb((db) => !!db.company?.modules?.gutters?.trialEndsAt, "trial on");
@@ -102,8 +100,7 @@ exports.run = async (h) => {
   h.expect((await byAttrs((a) => a.work === "install" && a.story === "1")).priceCents === before, "«Не сохранять» keeps the price");
 
   // a tech reads only: no sheet
-  await h.go("/today");
-  await setRole(h, "tech");
+  await h.seed("octo.role.v1", "tech");
   await h.go("/module/gutters/prices");
   await tid("gpr-screen").waitFor({ timeout: 5000 });
   await tid("gpr-ro").waitFor({ timeout: 5000 });

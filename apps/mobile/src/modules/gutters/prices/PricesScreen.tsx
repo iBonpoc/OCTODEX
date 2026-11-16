@@ -29,6 +29,7 @@ import { CardList, ListRow, Screen } from "@/ui/surfaces";
 import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
+import { useHeldSheet } from "@/ui/heldSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -52,7 +53,8 @@ export default function GutterPricesScreen() {
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
   /** spec 53 §6.3 (53-1): the price of a found item in a sheet — two taps (a kit keeps the full editor) */
   const [quickId, setQuickId] = useState<string | null>(null);
-  const quickItem = quickId ? catalog.find((x) => x.id === quickId) ?? null : null;
+  // held while the sheet goes out (DS Б1, #1163); an item deleted meanwhile (another phone) — the sheet goes out
+  const quick = useHeldSheet(quickId ? catalog.find((x) => x.id === quickId) ?? null : null);
 
   /** the item's name in the app's language at the moment it is made: company data from then on (the owner renames it) */
   const nameOf = (p: PartQty): string => partName(t, p);
@@ -174,7 +176,7 @@ export default function GutterPricesScreen() {
         </View>
       </View>
 
-      <QuickPriceSheet item={quickItem} onClose={() => setQuickId(null)} />
+      <QuickPriceSheet key={quick.opening} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
       <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>

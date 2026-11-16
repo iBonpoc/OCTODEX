@@ -4,34 +4,36 @@
  * a service and who does not see costs: the client price. Saved by the store's own item save (by field, wave 53-0),
  * with «Отменить». The rules are pure in features/quickPrice.ts. A kit is never priced here (the full editor).
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { Labeled, MoneyField, PctField } from "@/features/fields";
+import { formatBps } from "@/ui/numberInput";
 import { Button } from "@/ui/controls";
+import { NumberField } from "@/ui/numberField";
 import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { StatusNote } from "@/ui/statusNote";
 import { quickAsksCost, quickChanged, quickNeed, quickNoMarkup, quickPack, quickPriceItem, type QuickPriceInput } from "./quickPrice";
 
-const pctText = (bps: number) => `${bps / 100}%`;
+/** a rate as the US writes it (rule 7: numbers en-US in every language) */
+const pctText = (bps: number) => `${formatBps(bps)}%`;
 
-export function QuickPriceSheet({ item, onClose }: { item: CatalogItem | null; onClose: () => void }) {
+/**
+ * `item` — the item while the sheet is open and the last one while it goes out (the owner holds it: `useHeldSheet`, DS Б1
+ * #1163); `visible` — open; `onExited` — it has left. The owner keys it by the opening, so each opening starts fresh.
+ */
+export function QuickPriceSheet({ item, visible, onClose, onExited }: { item: CatalogItem | null; visible: boolean; onClose: () => void; onExited: () => void }) {
   const store = useStore();
   const { t, money } = useI18n();
   const toast = useToast();
   const [input, setInput] = useState<QuickPriceInput>({});
   /** «Сохранить» was pressed with something missing: the hint under the field (the button is never pale, DS §11 п.3) */
   const [need, setNeed] = useState(false);
-  useEffect(() => {
-    setInput({});
-    setNeed(false);
-  }, [item?.id]);
-  if (!item) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
+  if (!item) return null;
 
   const noCosts = store.db.costsVisible === false;
   const asksCost = quickAsksCost(item, noCosts);
@@ -54,32 +56,49 @@ export function QuickPriceSheet({ item, onClose }: { item: CatalogItem | null; o
 
   return (
     <Sheet
-      visible
+      visible={visible}
       onClose={onClose}
-      title={item.name}
+      onExited={onExited}
+      title={t("price.quick.title")}
       dirty={changed}
       onSave={missing ? undefined : save}
       footer={
-        <View testID="qp-save">
-          <Button label={t("ue.save")} icon="check" full onPress={save} />
+        <View style={{ gap: space[1] }}>
+          <View testID="qp-save">
+            <Button label={t("price.quick.save")} icon="check" full onPress={save} />
+          </View>
+          {/* the full editor; once something is typed it is saved here first (no way to lose it unasked) */}
+          {changed ? null : (
+            <View testID="qp-open">
+              <Button
+                label={t("price.quick.open")}
+                variant="ghost"
+                full
+                onPress={() => {
+                  onClose();
+                  router.push(`/catalog/${item.id}`);
+                }}
+              />
+            </View>
+          )}
         </View>
       }
     >
       <View testID="qp-sheet" style={{ gap: space[3] }}>
+        {/* the item's whole name: its properties are what tells one price from the next (design review 53-1) */}
+        <View testID="qp-name">
+          <T v="heading">{item.name}</T>
+        </View>
         {item.placeholder ? <StatusNote tone="warn" testID="qp-test">{t("price.quick.test")}</StatusNote> : null}
         {asksCost ? (
           <>
             <View style={{ flexDirection: "row", gap: space[3] }}>
-              <Labeled label={t("price.quick.cost", { unit })} flex={3}>
-                <View testID="qp-cost">
-                  <MoneyField cents={input.costCents ?? item.costCents ?? 0} onChange={(c) => set({ costCents: c })} />
-                </View>
-              </Labeled>
-              <Labeled label={t("price.quick.markup")} flex={2}>
-                <View testID="qp-markup">
-                  <PctField bps={input.markupBps ?? item.markupBps ?? 0} onChange={(b) => set({ markupBps: b })} />
-                </View>
-              </Labeled>
+              <View style={{ flex: 3 }} testID="qp-cost">
+                <NumberField kind="money" label={t("price.quick.cost", { unit })} unitWord={t("est.row.dollars")} cents={input.costCents ?? item.costCents ?? 0} onChange={(c) => set({ costCents: c })} />
+              </View>
+              <View style={{ flex: 2 }} testID="qp-markup">
+                <NumberField kind="percent" label={t("price.quick.markup")} bps={input.markupBps ?? item.markupBps ?? 0} onChange={(b) => set({ markupBps: b })} />
+              </View>
             </View>
             {pack ? (
               <View testID="qp-pack">
@@ -96,31 +115,20 @@ export function QuickPriceSheet({ item, onClose }: { item: CatalogItem | null; o
               </T>
               <T v="body" w="semibold">{`${money(next.priceCents)} / ${unit}`}</T>
             </View>
-            {quickNoMarkup(item, input, noCosts) ? <StatusNote tone="warn" testID="qp-nomarkup">{t("price.quick.noMarkup")}</StatusNote> : null}
+            {/* a hint, not a problem (design review 53-1): no status colour */}
+            {quickNoMarkup(item, input, noCosts) ? (
+              <View testID="qp-nomarkup">
+                <T v="caption" tone="mut">{t("price.quick.noMarkup")}</T>
+              </View>
+            ) : null}
           </>
         ) : (
           <>
-            <Labeled label={t("price.quick.price", { unit })}>
-              <View testID="qp-price">
-                <MoneyField cents={input.priceCents ?? item.priceCents} onChange={(c) => set({ priceCents: c })} />
-              </View>
-            </Labeled>
+            <View testID="qp-price">
+              <NumberField kind="money" label={t("price.quick.price", { unit })} unitWord={t("est.row.dollars")} cents={input.priceCents ?? item.priceCents} onChange={(c) => set({ priceCents: c })} />
+            </View>
             {need && missing === "price" ? <StatusNote tone="warn" testID="qp-need">{t("price.quick.needPrice")}</StatusNote> : null}
           </>
-        )}
-        {/* the full editor; once something is typed it is saved here first (no way to lose it unasked) */}
-        {changed ? null : (
-          <View testID="qp-open">
-            <Button
-              label={t("price.quick.open")}
-              variant="ghost"
-              full
-              onPress={() => {
-                onClose();
-                router.push(`/catalog/${item.id}`);
-              }}
-            />
-          </View>
         )}
       </View>
     </Sheet>
