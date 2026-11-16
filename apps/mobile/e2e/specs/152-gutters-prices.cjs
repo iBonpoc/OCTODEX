@@ -3,7 +3,7 @@
  * - director, the trial on: «Компания → Модули → Gutters → Цены и прайс» → the page; every labor line and part «not in the
  *   price list»; the settings page has its way here too;
  * - «Привязать»: an own labor item without properties gets the properties of «install, story 4» — found, its price;
- * - «Создать с тестовой ценой» on one row: one item, marked test;
+ * - «Создать позицию» on one row: one item, its data marked placeholder (no mark shown, #1873);
  * - «Создать позиции сразу»: all the missing ones, each a TEST price (placeholder), «Отменить» takes them back; again → made;
  *   a second press is not offered, the catalog has no duplicates (one item per id and per properties);
  * - the $ on «Просмотр замера» (#700): with every item at a real price — no «тестовые цены», and the $ follows the install price;

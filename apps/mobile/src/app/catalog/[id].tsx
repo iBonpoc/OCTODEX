@@ -11,7 +11,7 @@ import { countsFromCost, editClean, editOk, editPrice } from "@/features/catalog
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
 import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
-import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { StatusNote } from "@/ui/statusNote";
@@ -86,7 +86,6 @@ export default function CatalogItemScreen() {
           <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
         </View>
         <TextField type="unit" value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder={t("cat.unit")} />
-        {found?.placeholder ? <StatusChip status="warn" label={t("cat.placeholder")} /> : null}
         {/* properties a trade module set (docs/specs/33 П16): read here, changed in the module */}
         {it.attributes && Object.keys(it.attributes).length ? (
           <View testID="catalog-attributes">
