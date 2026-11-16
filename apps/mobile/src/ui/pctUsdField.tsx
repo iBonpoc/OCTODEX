@@ -55,7 +55,8 @@ export function PctUsdField({
   const { c } = useTheme();
   const { wide } = useDevice();
   const ro = useReadOnly();
-  const h = size.fieldPhone;
+  // level with the field: 44 on a phone, the field's 34 from 820 (the tap zone stays 44 — `minWidth: size.hitMin`, Press hit slop)
+  const h = wide ? component.field.h : component.field.phone;
   const pad = component.segmented.pad;
   const units: { key: PctUsdUnit; sign: string; word: string }[] = [
     { key: "pct", sign: "%", word: t("ui.pctUsd.pct") },

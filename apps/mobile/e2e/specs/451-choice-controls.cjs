@@ -95,7 +95,9 @@ exports.run = async (h) => {
 
   // PctUsdField: the unit, the switch size, «/ hr» in dollars, the $ → % question
   const seg = await box("showcase-pct-usd-unit");
-  h.expect(seg.height >= 44, `PctUsdField: the switch is 44 high (${seg.height})`);
+  const fld = await box("showcase-pct-usd-field");
+  h.expect(Math.abs(seg.height - fld.height) <= 2 && Math.abs(seg.y + seg.height - (fld.y + fld.height)) <= 2, `PctUsdField: the switch is level with the field (${seg.height} vs ${fld.height})`);
+  if (h.layout.width < 820) h.expect(seg.height >= 44, `PctUsdField: on a phone the switch is 44 high (${seg.height})`);
   for (const u of ["pct", "usd"]) {
     const b = await box(`showcase-pct-usd-unit-${u}`);
     h.expect(b.width >= 44, `PctUsdField: «${u}» ≥ 44 wide (${b.width})`);
