@@ -8,7 +8,7 @@ import { activeLines, ppmToPctText, taxRatePpm, type CustomOption } from "@octo/
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { optionTotals, shownQty, withAddons } from "./estimateDoc";
+import { isFeetUnit, optionTotals, shownQtyUnit, withAddons } from "./estimateDoc";
 import { clientRows } from "./clientLayout";
 import { DocPagesView } from "./DocPagesView";
 import { StatusChip, Toggle } from "@/ui/controls";
@@ -121,7 +121,8 @@ export function EstimateView({
                   <T v="body">{l.name}</T>
                   <T v="caption" tone="mut" tabular>
                     {l.optional ? `${t("portal.addons")} · ` : ""}
-                    {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
+                    {/* a length in feet as on the drawing — «40′ 5″ × $12.00/ft» (#1733) */}
+                    {shownQtyUnit(l.quantity, l.unit)} × {money(l.unitPriceCents)}{isFeetUnit(l.unit) ? `/${l.unit}` : ""}
                   </T>
                 </View>
                 <T v="body" tabular>
