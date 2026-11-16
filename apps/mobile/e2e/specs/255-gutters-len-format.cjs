@@ -86,7 +86,7 @@ exports.run = async (h) => {
   const client = await printed("view-pdf-client");
   h.expect(/\d+ mm/.test(client) && !/\d′/.test(client.slice(client.indexOf("<table"))), "PDF for the client: mm");
   const crew = await printed("view-pdf-crew");
-  const body = crew.slice(crew.indexOf("Желоба"));
+  const body = crew.slice(crew.indexOf("<h2>Gutters"));
   h.expect(/\d+ mm/.test(body) && !/\d′/.test(body), "PDF for the crew: mm in the walls, corners and parts");
 
   // back to feet-inches: one setting, one place
