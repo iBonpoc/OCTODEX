@@ -38,7 +38,11 @@ describe("measureSpec", () => {
   });
   it("downspouts: number, storey of its gutter, elbows and offsets counted", () => {
     const s = measureSpec(house(), []);
-    expect(s.ds[0]).toMatchObject({ n: 1, story: 1, elbows: 3, offsets: 1 });
+    expect(s.ds[0]).toMatchObject({ n: 1, story: 1, elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }] });
+  });
+  it("#1747: a downspout with no elbows set — the engine's default 3×A (the canvas «AAA», the estimate counts three), not 0", () => {
+    const s = measureSpec(house(), []);
+    expect(s.ds[1]).toMatchObject({ n: 2, elbows: [{ style: "A", qty: 3 }], offsets: [] });
     expect(s.ds[1]).toMatchObject({ n: 2, story: 2 });
   });
   it("parts: only materials with a quantity — labour is the estimate's", () => {
