@@ -3116,7 +3116,7 @@ export const es: Dict = {
   "mod.gutters.list.emptyHint": "Dibuje las canaletas: todo se guarda solo, también un borrador sin cliente.",
   "mod.gutters.list.help": "Todas las mediciones de este teléfono, también los borradores sin cliente, las nuevas arriba. Toque una para ver el dibujo, las piezas y el estimado.",
   "mod.gutters.list.action": "Mediciones",
-  "mod.gutters.list.tab": "Medidas",
+  "mod.gutters.list.tab": "Gutters",
   "mod.gutters.list.lead": "Lead: {name}",
   "mod.gutters.list.search": "Cliente, lead, dirección, teléfono",
   "mod.gutters.list.f.all": "Todas",

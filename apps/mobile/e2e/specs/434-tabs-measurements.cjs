@@ -1,9 +1,10 @@
 /**
- * e2e 434 — «Замеры» in the place of «План» (founder 16.11, #1487: «давай план уберём и сделаем замеры»; DS §5.3, 1.15.7),
+ * e2e 434 — the module's tab «Gutters» in the place of «План» (founder 16.11, #1487: «давай план уберём и сделаем замеры»;
+ * the tab is named by the module, not translated — «Gutters», founder 16.11; DS §5.3, 1.15.7),
  * the director, every view, by testID:
  * - the module off: the phone's five tabs are Главная · План · Сообщения · Клиенты · Ещё; no «План» tile in «Ещё»;
- * - Gutters on: still five tabs — Главная · Замеры · Сообщения · Клиенты · Ещё; «План» is a tile in «Ещё» and opens the Plan,
- *   which lights «Ещё»; on 820/1280 the side menu keeps «План» and has «Замеры»;
+ * - Gutters on: still five tabs — Главная · Gutters · Сообщения · Клиенты · Ещё; «План» is a tile in «Ещё» and opens the Plan,
+ *   which lights «Ещё»; on 820/1280 the side menu keeps «План» and has «Gutters»;
  * - one word for the messages: the tab and the side menu both say «Сообщения» (no «Чаты» anywhere);
  * - the demo strip says «на этом устройстве» (an iPad or a computer is not a phone).
  */
@@ -35,14 +36,15 @@ exports.run = async (h) => {
   await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
   await h.go("/today");
   if (wide) {
-    await tid("side-module-gutters-list").first().waitFor({ timeout: 8000 }); // on: «Замеры» in the side menu
+    await tid("side-module-gutters-list").first().waitFor({ timeout: 8000 }); // on: «Gutters» in the side menu
     h.expect((await tid("side-plan").count()) === 1, "on: «План» stays in the side menu");
     await h.shot("side");
     return;
   }
-  await tid("tab-module-gutters-list").first().waitFor({ timeout: 8000 }); // on: «Замеры» is a tab
+  await tid("tab-module-gutters-list").first().waitFor({ timeout: 8000 }); // on: the module's tab
+  h.expect((await tid("tab-module-gutters-list").first().innerText()).trim() === "Gutters", "the module's tab is named «Gutters» (not «Замеры»)");
   const on = await tabIds();
-  h.expect(JSON.stringify(on) === JSON.stringify(["tab-home", "tab-module-gutters-list", "tab-messages", "tab-clients", "tab-more"]), `on: five tabs, «Замеры» in the place of «План» (${on.join(", ")})`);
+  h.expect(JSON.stringify(on) === JSON.stringify(["tab-home", "tab-module-gutters-list", "tab-messages", "tab-clients", "tab-more"]), `on: five tabs, «Gutters» in the place of «План» (${on.join(", ")})`);
   await h.shot("tabs");
   // «План» went to «Ещё»: its tile opens the Plan, and the Plan lights «Ещё»
   await tid("tab-more").first().click();

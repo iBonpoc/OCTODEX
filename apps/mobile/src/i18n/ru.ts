@@ -3116,7 +3116,7 @@ export const ru = {
   "mod.gutters.list.emptyHint": "Нарисуйте желоба — всё сохраняется само, черновик без клиента тоже.",
   "mod.gutters.list.help": "Все замеры на этом телефоне, черновики без клиента тоже, новые сверху. Нажмите на замер — чертёж, детали и смета из замера.",
   "mod.gutters.list.action": "Замеры",
-  "mod.gutters.list.tab": "Замеры",
+  "mod.gutters.list.tab": "Gutters",
   "mod.gutters.list.lead": "Лид: {name}",
   "mod.gutters.list.search": "Клиент, лид, адрес, телефон",
   "mod.gutters.list.f.all": "Все",

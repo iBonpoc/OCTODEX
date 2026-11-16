@@ -3116,7 +3116,7 @@ export const en: Dict = {
   "mod.gutters.list.emptyHint": "Draw the gutters — everything saves by itself, a draft without a client too.",
   "mod.gutters.list.help": "Every measurement on this phone, drafts without a client too, newest first. Tap one for its drawing, parts and the estimate from it.",
   "mod.gutters.list.action": "Measurements",
-  "mod.gutters.list.tab": "Measures",
+  "mod.gutters.list.tab": "Gutters",
   "mod.gutters.list.lead": "Lead: {name}",
   "mod.gutters.list.search": "Client, lead, address, phone",
   "mod.gutters.list.f.all": "All",
