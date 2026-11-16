@@ -1,7 +1,8 @@
 /**
  * e2e 422 — the rest of the review of the objects' cards (#1664, #1395 group 2), as the director, every view, by testID:
- * - a job with no estimate names «Создать смету» in «Связано» under the header (in reach of the thumb, not only in «⋯»); a job
+ * - a job with no estimate offers «＋ Смета» on its «Деньги» tab (founder 16.11, #1844: not in «Связано» under the header); a job
  *   that has an estimate does not; the technician does not see it; it opens a new estimate for the job's client and address;
+ * - «Связано» names the client and the address without the words «Клиент» / «Объект» (icon + name; the word stays for the screen reader);
  * - the list of a client's or an address's jobs and estimates: on a phone «＋ …» stands over the list, from 820 in the header on the right
  *   (never over the grid on the left).
  */
@@ -11,17 +12,31 @@ exports.run = async (h) => {
   const vis = (id) => p.getByTestId(id).locator("visible=true");
   const tid = (id) => vis(id).first();
 
+  /** the job's «Деньги» tab (the tab is there for who sees the money) */
+  const money = async () => {
+    await tid("job-screen").waitFor({ timeout: 8000 });
+    if (await vis("job-tab-money").count()) await tid("job-tab-money").click();
+  };
+
   // 1) j2 has no estimate
   await h.go("/job/j2");
   await tid("job-screen").waitFor({ timeout: 8000 });
+  // «Связано»: icon + name, no «Клиент» / «Объект»; and no «Создать смету» there any more
+  for (const k of ["customer", "property"]) {
+    const text = (await tid(`related-${k}`).innerText()).trim();
+    h.expect(!/^(Клиент|Объект)\b/.test(text), `«Связано»: ${k} without the word (${text})`);
+    h.expect(/^(Связано|Related)/.test((await tid(`related-${k}`).getAttribute("aria-label")) || ""), `«Связано»: ${k} keeps its word for the screen reader`);
+  }
+  h.expect((await vis("job-rel-new-estimate").count()) === 0, "«Создать смету» is not under the header");
+  await money();
   await tid("job-rel-new-estimate").waitFor({ timeout: 8000 });
   await h.shot("job-j2");
   await tid("job-rel-new-estimate").click();
   await p.waitForURL(/\/estimate\/new\?customerId=c2&propertyId=p2/, { timeout: 8000 });
   // j1 has one
   await h.go("/job/j1");
-  await tid("job-screen").waitFor({ timeout: 8000 });
-  h.expect((await vis("job-rel-new-estimate").count()) === 0, "a job with an estimate: no «Создать смету» in «Связано»");
+  await money();
+  h.expect((await vis("job-rel-new-estimate").count()) === 0, "a job with an estimate: no «＋ Смета»");
 
   // 2) the lists
   for (const [path, id] of [
@@ -42,8 +57,8 @@ exports.run = async (h) => {
   // 3) the technician: no such action
   await h.seed("octo.role.v1", "tech");
   await h.go("/job/j2");
-  await tid("job-screen").waitFor({ timeout: 8000 });
-  h.expect((await vis("job-rel-new-estimate").count()) === 0, "the technician: no «Создать смету» in «Связано»");
+  await money();
+  h.expect((await vis("job-rel-new-estimate").count()) === 0, "the technician: no «＋ Смета»");
   // …nor in a client's or an address's list (the header slot stays empty on every width)
   for (const [path, id] of [["/client/c2?s=jobs", "client-section-new-job"], ["/property/p2?s=estimates", "property-section-new-estimate"]]) {
     await h.go(path);
@@ -54,13 +69,14 @@ exports.run = async (h) => {
   // 4) «не обслуживаем» (Linda, c3: job j3 with no estimate, address p3): neither the chip nor the list buttons (any role of the office)
   await h.seed("octo.role.v1", "director");
   await h.go("/job/j3");
+  await money();
   await tid("job-rel-new-estimate").waitFor({ timeout: 8000 });
   const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
   raw.db.customers.find((c) => c.id === "c3").status = "do_not_service";
   await h.seed("octo.db.v5", raw);
   await h.go("/job/j3");
-  await tid("job-screen").waitFor({ timeout: 8000 });
-  h.expect((await vis("job-rel-new-estimate").count()) === 0, "«не обслуживаем»: no «Создать смету» in «Связано»");
+  await money();
+  h.expect((await vis("job-rel-new-estimate").count()) === 0, "«не обслуживаем»: no «＋ Смета»");
   for (const [path, id] of [["/client/c3?s=jobs", "client-section-new-job"], ["/property/p3?s=jobs", "property-section-new-job"]]) {
     await h.go(path);
     await h.expectText(/Работы/, `${path}: the list is open`);
