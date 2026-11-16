@@ -31,7 +31,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
+import { tapRule, type LastTap } from "../canvas/doubleTap";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
@@ -651,17 +651,17 @@ export default function DrawScreen() {
         setSheet(true);
         return;
       }
-      // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
-      // in a tap on the web)
-      const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
-      if (tl === "ds" && onDs?.kind === "ds" && !liftTap.current) {
-        setSelected(onDs.id);
-        setSheet(true); // its menu (founder 09.11)
-        return;
-      }
-      // …nor a tap that puts a downspout (the downspout tool drags ends and corners now)
-      if (tl === "ds" && liftTap.current) return;
-      if (tl === "ds") {
+      // what is under the finger; a tap on a downspout that is there never puts a second one on top — with any tool it is the common rule
+      // (#1563, founder 14.11: «если выбран даунспот — меню сразу, если жёлоб — надо два раза»): one tap picks, two open its properties
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
+      const found = h?.kind === "end" ? findCorners(d) : [];
+      const corner = h?.kind === "end" ? found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end)) : undefined;
+      const key = !h ? "" : corner ? `corner:${corner.id}` : h.kind === "end" ? `end:${h.id}:${h.end}` : h.id;
+      // the decision is `tapRule` (canvas/doubleTap.ts, unit-tested): one tap picks, two open — the same for every tool
+      const tapped = tapRule({ tool: tl, onDs: h?.kind === "ds", lift: liftTap.current, key, id: h ? h.id : null, last: lastTap.current, now: Date.now(), windowMs: motion.doubleTapMs });
+      lastTap.current = tapped.last;
+      if (tapped.act.do === "ignore") return;
+      if (tapped.act.do === "place") {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch), cur.current.ch);
         if (next !== d) {
@@ -669,33 +669,28 @@ export default function DrawScreen() {
           haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
-          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open
+          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
+          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»)
           setSheet(true);
         }
         return;
       }
-      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (h) setHint(null);
       // a tap picks AT ONCE and never waits for a second one (spec 33 §3, #1273); what used to happen on the spot — the corner's sheet on an end,
       // the flip of a cap — is the second tap's (a double tap on the same object inside `doubleTapMs`) or a row of its sheet
-      const found = h?.kind === "end" ? findCorners(d) : [];
-      const corner = h?.kind === "end" ? found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end)) : undefined;
       // a free end: not a corner, not butted to another gutter — and one with «без заглушки» stays one (its sheet brings the cap back)
       const freeEnd = h?.kind === "end" && !corner && (!!d.runs.find((r) => r.id === h.id)?.noCap?.[h.end] || runEnds(d, found)[h.id]?.[h.end]?.kind !== "join");
-      const key = !h ? "" : corner ? `corner:${corner.id}` : h.kind === "end" ? `end:${h.id}:${h.end}` : h.id;
-      const now = Date.now();
-      const dbl = !liftTap.current && isDoubleTap(lastTap.current, now, key, motion.doubleTapMs);
-      lastTap.current = dbl || liftTap.current ? null : { at: now, id: key };
-      if (!dbl) {
+      if (tapped.act.do === "pick") {
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
         return;
       }
       haptics.light();
-      if (!h) {
-        if (tl === "line" && cur.current.size.w) setView(fit(d, cur.current.size)); // two taps on the empty place: the whole drawing
+      if (tapped.act.do === "fit") {
+        if (cur.current.size.w) setView(fit(d, cur.current.size)); // two taps on the empty place: the whole drawing
         return;
       }
+      if (tapped.act.do === "none" || !h) return;
       setSelected(h.id);
       if (!cur.current.canSave && h.kind === "end") return;
       // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
