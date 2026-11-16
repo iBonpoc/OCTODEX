@@ -14,7 +14,7 @@ const { signIn, waitRows } = require("../signIn.cjs");
 const { helpers } = require("../../h.cjs");
 
 const LINE = "Nightly test line (тестовые)";
-const PRICE = "1850"; // test price
+const PRICE = "1850"; // a sample price (rule 9)
 
 exports.run = async (h, { seed, admin, browser, BASE }) => {
   const p = h.page;

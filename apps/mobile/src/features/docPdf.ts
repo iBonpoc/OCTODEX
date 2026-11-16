@@ -10,7 +10,7 @@
 import { APP_NAME } from "@/config/product";
 import { findJob } from "@/data/jobs";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
-import { contractStatement } from "@octo/estimating-engine";
+import { contractStatement, invoiceOwes } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
 import type { DB, Invoice, Payment } from "@/data/types";
 import type { DictKey } from "@/i18n";
@@ -152,7 +152,7 @@ ${job && st && inv.kind !== "deposit" ? `<tr><td>${esc(t("inv.contract"))}: ${es
 ${inv.kind === "final" ? prior.map((i) => `<tr><td class="mut">${esc(t("inv.less"))} ${esc(i.number ?? "")} ${esc(i.title ?? "")}</td><td class="r mut">−${money(i.totalCents)}</td></tr>`).join("") : ""}
 <tr class="tot"><td>${esc(t("inv.amount"))}</td><td class="r">${money(inv.totalCents)}</td></tr>
 ${pays.map((p) => `<tr><td class="mut">${esc(t("inv.paymentOn", { date: day(p.at) }))} · ${esc(t(`pay.${p.method}` as DictKey))}${p.receiptNumber ? ` · ${esc(p.receiptNumber)}` : ""}</td><td class="r mut">−${money(p.amountCents)}</td></tr>`).join("")}
-<tr class="tot"><td>${esc(t("inv.balance"))}</td><td class="r">${money(Math.max(0, inv.totalCents - inv.paidCents))}</td></tr>
+<tr class="tot"><td>${esc(t("inv.balance"))}</td><td class="r">${money(invoiceOwes(inv))}</td></tr>
 </table>
 ${inv.paidCents >= inv.totalCents ? `<p class="ok">✓ ${esc(t("inv.paidInFull"))}</p>` : ""}
 ${payInstructions(db, t)}`;
@@ -179,7 +179,7 @@ export function receiptHtml(db: DB, p: Payment, company: PortalData["company"], 
   const day = docDay;
   const inv = db.invoices.find((i) => i.id === p.invoiceId);
   const cust = db.customers.find((c) => c.id === p.customerId);
-  const balance = inv ? Math.max(0, inv.totalCents - inv.paidCents) : 0;
+  const balance = inv ? invoiceOwes(inv) : 0;
   const body = `
 <table style="margin-top:10pt">
 <tr><td>${esc(t("rcpt.receivedFrom"))}</td><td class="r">${esc(cust?.name ?? "")}</td></tr>
@@ -199,7 +199,7 @@ export function invoiceMessage(db: DB, inv: Invoice, company: PortalData["compan
   const t = tFor(lang);
   const p = db.company?.payment;
   const how = [p?.zelle ? `Zelle ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean).join(", ");
-  const balance = Math.max(0, inv.totalCents - inv.paidCents);
+  const balance = invoiceOwes(inv);
   return {
     text: t("inv.sendText", { company: company.name, number: inv.number ?? "", amount: docMoney(balance), date: docDay(inv.dueDate), how: how || "—" }),
     subject: `${t("inv.title")} ${inv.number ?? ""}`.trim(),

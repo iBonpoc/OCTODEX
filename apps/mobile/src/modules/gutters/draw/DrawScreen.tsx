@@ -30,7 +30,7 @@ import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { goTo } from "@/nav/go";
-import { setFooterInset } from "@/ui/footerInset";
+import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
@@ -1068,6 +1068,11 @@ export default function DrawScreen() {
     setFooterInset(barH);
     return () => setFooterInset(0);
   }, [barH]);
+  // from 820 the side panel of properties stands at the right over the whole height: the toast is centred in the canvas, not on it (#1895)
+  useEffect(() => {
+    setToastRight(panelSide);
+    return () => setToastRight(0);
+  }, [panelSide]);
   const back = () => {
     flush();
     if (router.canGoBack()) router.back();
@@ -1231,7 +1236,9 @@ export default function DrawScreen() {
           </View>
           {mPhotos && !wide && !flat && canSave ? (
             <View testID="draw-photos-open">
-              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
+              {/* the same round plate as «⋯» (IconButton: dockBtn, surf2, a hairline border; founder 16.11, #1752: «фотоаппарат не в единой
+                  системе»); with photos the count stands in it and the plate grows into a pill */}
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={photoN ? `${t("mod.gutters.photo.open")} · ${photoN}` : t("mod.gutters.photo.open")} visibleHeight={component.dockBtn} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1], height: component.dockBtn, minWidth: component.dockBtn, paddingHorizontal: photoN ? space[3] : 0, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}>
                 <Icon name="camera" s={sizes.iconMd} color={c.ink} />
                 {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
               </Press>
@@ -1243,7 +1250,8 @@ export default function DrawScreen() {
             </View>
           ) : null}
           {inStore ? (
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
+            // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (

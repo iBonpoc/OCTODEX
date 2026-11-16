@@ -89,7 +89,6 @@ export function QuickPriceSheet({ item, visible, onClose, onExited }: { item: Ca
         <View testID="qp-name">
           <T v="heading">{item.name}</T>
         </View>
-        {item.placeholder ? <StatusNote tone="warn" testID="qp-test">{t("price.quick.test")}</StatusNote> : null}
         {asksCost ? (
           <>
             <View style={{ flexDirection: "row", gap: space[3] }}>

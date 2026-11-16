@@ -67,6 +67,8 @@ export const PART_WORDS = new Set([
   "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
   "rivet", "touch_up_paint", "flux", "solder", "strip_miter", "wedge", "guard",
   "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
+  // a downspout's wall fasteners: the kit is named by its part (#1805: they were shown as codes)
+  "sickle_hook", "u_bracket", "conductor_bracket", "brick_hook", "brick_hook_hd", "conductor_band", "hinged_hook", "pipe_cleat",
 ]);
 export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
@@ -212,40 +214,166 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
   return { ...r, test: test || r.listed < client };
 }
 
-/**
- * A part's name when the price list has no item for it (PricesScreen «создать», the estimate's line with «нет цены»):
- * `t` — the app's translator on the page, the CLIENT's language for an estimate line (rule 7). Pure.
- */
+type Tr = (key: DictKey, params?: Record<string, string | number>) => string;
+
 /**
  * A downspout's elbows by style and offsets by length (#1747, founder 16.11: «должно быть указано, какое: Elbow A, Elbow B
- * или offset 1, 2, 4»): «A ×3», «A ×2 · B ×1 · офсет 2″ ×1»; a round pipe's elbow by its angle «45° ×2». Nothing at all — ""
- * (#814: no «колен 0»). The elbows come as the engine counts them — unset is its default (measureSpec, elbowCounts).
+ * или offset 1, 2, 4»; #1766: one word and one «×» on the screen): «колена A × 2, B × 1 · офсет 2″ × 1»; a round pipe's
+ * elbows by their angle «колена 45° × 2». Nothing at all — "" (#814: no «колен 0»). The elbows come as the engine counts
+ * them — unset is its default (measureSpec, elbowCounts).
  */
-export function dsLine(
-  t: (key: DictKey, params?: Record<string, string | number>) => string,
-  d: { shape?: string; elbows: readonly { style: string; qty: number }[]; offsets: readonly { lengthIn: number; qty: number }[] },
-): string {
+export function dsLine(t: Tr, d: { shape?: string; elbows: readonly { style: string; qty: number }[]; offsets: readonly { lengthIn: number; qty: number }[] }): string {
   const round = d.shape === "round";
+  // a rectangular elbow by its style and the trade's angle «A 75°» (#1800); a round one by its angle «45°»
+  const el = d.elbows.filter((e) => e.qty > 0).map((e) => t("mod.gutters.view.dsElbow", { style: round || /^\d+$/.test(e.style) ? `${e.style}°` : `${e.style} ${ELBOW_DEFAULT_DEG}°`, n: e.qty }));
   return [
-    ...d.elbows.filter((e) => e.qty > 0).map((e) => t("mod.gutters.view.dsElbow", { style: round ? `${e.style}°` : e.style, n: e.qty })),
+    ...(el.length ? [t("mod.gutters.view.dsElbows", { list: el.join(", ") })] : []),
     ...d.offsets.filter((o) => o.qty > 0).map((o) => t("mod.gutters.view.dsOffset", { len: `${o.lengthIn}″`, n: o.qty })),
   ].join(" · ");
 }
 
-export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty, fmt: LenFormat = "ftin"): string {
+/**
+ * The order a person reads a part's properties in (DS §8.14, #1766): size and profile → material and thickness → colour
+ * and finish → the rest. A key not listed goes last, in its own order.
+ */
+const HUMAN_ORDER = ["profile", "gutterSize", "size", "shape", "dsStyle", "hanger", "guard", "blankIn", "lengthIn", "stickIn", "material", "metal", "gauge", "color", "finish", "screw", "rivet"];
+const humanRank = (k: string) => {
+  const i = HUMAN_ORDER.indexOf(k);
+  return i < 0 ? HUMAN_ORDER.length : i;
+};
+
+/** a part as a person reads it (#1766, DS §8.14): its name in one line and its properties in the human order */
+export interface PartView {
+  /** «Колено, тип A», «Заглушка, левая», «Бесшовный рулон 11⅞″», «Водосток, хлыст 10′» */
+  title: string;
+  /** «K 5″», «Алюминий», «0.027″», «Белый» — each a word or a number with its unit, never a code */
+  props: string[];
+}
+
+/**
+ * A part's name and properties (#1766). `side` — the end cap's left / right goes into the name (the view lists them as
+ * two rows; the estimate and the price list have one item for both, `matchAttrs` drops it). `t` — the document's
+ * translator (rule 7: the client's language for an estimate line).
+ */
+export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt: LenFormat = "ftin", opts: { side?: boolean } = {}): PartView {
   const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
   if (p.kind === "labor") {
     const w = p.attrs.work ?? "";
     const word = WORK_WORDS.has(w) ? t(k(`w.${w}`)) : w;
-    return p.attrs.story ? `${word} · ${t("mod.gutters.story", { n: p.attrs.story })}` : word;
+    return { title: word, props: p.attrs.story ? [t("mod.gutters.story", { n: p.attrs.story })] : [] };
   }
   const { part, ...rest } = matchAttrs(p);
-  const word = part && PART_WORDS.has(part) ? t(k(`p.${part}`)) : part ?? p.key;
-  const line = Object.keys(rest)
-    .sort((x, y) => x.localeCompare(y))
-    .map((key) => attrText(t, key, rest[key]!, fmt))
-    .join(" · ");
-  return line ? `${word} · ${line}` : word;
+  // #1800 (founder 16.11): a part is named as the supplier names it — English trade words, the same in the Russian app
+  // (`mod.gutters.pr.*` RU = EN; a guard checks it); its properties stay in the app's language
+  const word = partWord(t, part, p.key);
+  const used = new Set<string>(["custom", "finish"]);
+  /** a property said first, before the rest (the coil: its gutter «5″ K-Style»; a hanger: its profile) */
+  let lead = "";
+  const say = (key: string, v: string | undefined) => (v === undefined ? "" : attrText(t, key, v, fmt, rest.shape));
+  const word1 = (key: string) => {
+    const w = t(k(key));
+    return w === k(key) ? "" : w;
+  };
+  // the gutter's stock in front: «5″ K-Style» — the size and the profile (an outlet: the downspout's size only)
+  const stock = rest.profile ? [say("size", rest.gutterSize ?? rest.size), word1(`prof.${rest.profile}`) || say("profile", rest.profile)].filter(Boolean).join(" ") : "";
+  const dsKind = () => word1(`dsKind.${rest.shape === "round" ? "round" : "rect"}${rest.dsStyle === "corrugated" ? "Corrugated" : rest.dsStyle === "plain" ? "Plain" : ""}`);
+  const dsSize = say("size", rest.size);
+  // the name in the language's order: «5″ K-Style Gutter» / «Canaleta K-Style 5″»
+  const named = (size: string, kind: string, w = word) => t(k("named"), { size, kind, word: w }).replace(/[ \t\n]+/g, " ").trim();
+  const roundWord = rest.shape === "round" ? word1("dsKind.round") : "";
+  const stockKind = rest.profile ? word1(`prof.${rest.profile}`) || say("profile", rest.profile) : "";
+  const stockSize = say("size", rest.gutterSize ?? rest.size);
+  let title = word;
+  const take = (...keys: string[]) => keys.forEach((x) => used.add(x));
+  if (rest.buy === "coil") {
+    // the coil to buy: «Coil 11⅞″» — not a second «Gutter»
+    title = [word1("buy.coil"), say("blankIn", rest.blankIn)].filter(Boolean).join(" ");
+    take("buy", "blankIn", "gutterSize", "profile", "size");
+    lead = stock;
+  } else if (rest.buy === "section") {
+    title = `${named(stockSize, stockKind)} · ${t(k("sectionOf"), { len: say("lengthIn", rest.lengthIn) })}`;
+    take("buy", "lengthIn", "profile", "size");
+  } else if (part === "gutter") {
+    title = named(stockSize, stockKind);
+    take("profile", "size");
+  } else if (part === "downspout") {
+    // «2″ × 3″ Plain Square Downspout»; the sticks to buy are this row's «2 × 10′ lengths» (partGroups)
+    title = named(dsSize, dsKind());
+    // a stick to buy keeps its length «10′» (the price list and the supplier order tell it from the foot)
+    take("size", "shape", "dsStyle");
+  } else if (part === "end_cap" || part === "miter" || part === "strip_miter" || part === "slip_joint" || part === "end_outlet" && !rest.shape) {
+    // «5″ K-Style End Cap – Left», «5″ K-Style Box Miter – Outside»
+    const side = opts.side && part === "end_cap" && (p.attrs.side === "L" || p.attrs.side === "R") ? word1(`side.${p.attrs.side}`) : "";
+    const corner = part === "miter" && rest.corner ? word1(`corner.${rest.corner}`) : "";
+    title = [named(stockSize, stockKind), side || corner].filter(Boolean).join(" – ");
+    take("profile", "size", "corner");
+  } else if (part === "outlet" || part === "end_outlet") {
+    // an outlet is its size only (founder 16.11): «Outlet 2″ × 3″», «Outlet 3″ Round»
+    title = [word, dsSize, roundWord].filter(Boolean).join(" ");
+    take("profile", "size", "gutterSize", "shape", "material", "metal", "gauge", "color", "dsStyle");
+  } else if (part === "elbow") {
+    // «2″ × 3″ A Elbow 75°»; a round one by its angle: «3″ Round Elbow 45°»
+    const round = rest.shape === "round" || /^\d+$/.test(rest.style ?? "");
+    title = named(dsSize, "", round ? t(k("elbowRound"), { deg: `${rest.angle ?? rest.style ?? ""}°` }) : t(k("elbowOf"), { style: rest.style ?? "", deg: `${rest.angle ?? ELBOW_DEFAULT_DEG}°` }));
+    take("size", "shape", "style", "angle");
+  } else if (part === "hanger" && rest.hanger) {
+    // «5″ Hidden Hanger with Screw»
+    title = named(say("size", rest.size), "", word1(`k.${rest.hanger}`) || say("hanger", rest.hanger));
+    take("hanger", "size", "profile");
+    lead = stockKind;
+  } else if (part === "screw" && rest.screw) {
+    // «#10 × 1½″ Hanger Screw» (for the hangers; founder 16.11: not «Gutter Screw») / «#8 × ½″ Zip Screw» (metal to metal)
+    // the metal-to-metal screw is the #8 (the downspout's and the guards'); any other is the company's screw for the hangers
+    const fascia = !/^8x/i.test(rest.screw);
+    title = `${say("screw", rest.screw)} ${word1(fascia ? "screw.fascia" : "screw.zip")}`;
+    take("screw");
+    // what it is for (founder 16.11: «саморез №10 для чего?») — in the app's language
+    lead = t(fascia ? "mod.gutters.view.screwFor.fascia" : "mod.gutters.view.screwFor.zip");
+  } else if (part === "rivet" && rest.rivet) {
+    // no colour for a rivet (founder 16.11: «не надо цвет выбирать… всё равно их красят»)
+    title = t(k("rivetOf"), { n: rest.rivet });
+    take("rivet", "color");
+  } else if (part === "offset" && rest.lengthIn) {
+    title = `${named(dsSize, roundWord)} ${say("lengthIn", rest.lengthIn)}`;
+    take("size", "lengthIn", "shape");
+  } else if (rest.shape && rest.size) {
+    // a downspout's part by its size: «2″ × 3″ Downspout Band», «3″ Hinged Downspout Hook»
+    title = named(dsSize, roundWord);
+    take("size", "shape");
+  } else if (rest.profile) {
+    // a gutter's part by its stock: «5″ K-Style Gutter Guard»
+    title = named(stockSize, stockKind);
+    take("profile", "size");
+  }
+  // «2″ × 3″» already says it is square; «Round» is a word only for a round one (and only where the title has not said it)
+  if (rest.shape !== "round" || used.has("shape")) used.add("shape");
+  // the finish is said only when it is bare metal (founder 16.11: no «окрашенный»; «mill» — no colour)
+  const props = Object.keys(rest)
+    .filter((x) => !used.has(x))
+    .sort((x, y) => humanRank(x) - humanRank(y) || x.localeCompare(y))
+    .map((key) => say(key, rest[key]))
+    .filter(Boolean);
+  if (rest.finish === "mill" && !used.has("material")) props.push(say("finish", "mill"));
+  return { title: title.replace(/[ \t\n]+/g, " ").trim(), props: lead ? [lead, ...props] : props };
+}
+
+/** a rectangular elbow's angle when the drawing does not say: the trade's standard (Style A / B are 75°) */
+const ELBOW_DEFAULT_DEG = 75;
+
+/** a part's word: the parts' dictionary (the supplier's name, RU = EN), else its code — a guard keeps every engine part in PART_WORDS */
+function partWord(t: Tr, part: string | undefined, key: string): string {
+  if (part && PART_WORDS.has(part)) return t(`mod.gutters.pr.p.${part}` as DictKey);
+  return part ?? key;
+}
+
+/**
+ * A part's name in one line — the title and the properties — when the price list has no item for it (PricesScreen
+ * «создать», the estimate's line with «нет цены»), the schedules and the PDF: `t` — the app's translator on the page, the
+ * CLIENT's language for an estimate line (rule 7). Pure.
+ */
+export function partName(t: Tr, p: PartQty, fmt: LenFormat = "ftin"): string {
+  const v = partView(t, p, fmt);
+  return [v.title, ...v.props].join(" · ");
 }
 
 /** the dictionary group of an enum property's words: «k» is «K-style», «painted» is «Painted» */
@@ -253,11 +381,21 @@ const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal:
 /** a property in inches (a coil's blank, a section's length): feet-inches-sixteenths, as on the drawing */
 const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
 
+/** a cross-section as DS §4.5 writes it (founder 16.11: «2 инча на 3 инча»): «2″ × 3″» — inches on each side, «×» held to them
+ * by no-break spaces (never broken over two lines); a round one «3″» */
+export const sizeText = (v: string) => {
+  if (/^\d+(\.\d+)?$/.test(v)) return `${v}″`;
+  const m = /^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/i.exec(v);
+  if (m) return `${m[1]}″\u00a0×\u00a0${m[2]}″`;
+  return v;
+};
+
 /**
- * A property's value for a person (#1090): a word where the dictionary has one (the company's own colour stays as it is),
- * ″ after a size, feet-inches for a length — never «11.875» or a bare code. `t` — the document's translator (rule 7).
+ * A property's value for a person (#1090, #1766): a word where the dictionary has one (the company's own colour stays as
+ * it is), ″ after a size, feet-inches for a length, «0.027″» for a thickness, «№42» for a rivet — never «11.875», «.027»
+ * or a bare code. `t` — the document's translator (rule 7). `shape` — a round downspout's elbow is its angle.
  */
-function attrText(t: (key: DictKey, params?: Record<string, string | number>) => string, key: string, v: string, fmt: LenFormat): string {
+function attrText(t: Tr, key: string, v: string, fmt: LenFormat, shape?: string): string {
   if (ATTR_IN.has(key)) {
     const n = Number(v);
     return Number.isFinite(n) ? fmtLen(n, fmt) : v;
@@ -267,14 +405,30 @@ function attrText(t: (key: DictKey, params?: Record<string, string | number>) =>
     const m = /^(\d+)x(\d+(?:\.\d+)?)$/i.exec(v);
     return m ? `#${m[1]} × ${fmtLen(Number(m[2]), fmt)}` : v;
   }
-  if (key === "size" || key === "gutterSize") {
-    if (/^\d+(\.\d+)?$/.test(v)) return `${v}″`;
-    // a downspout's «2x3» as on its line (#1747): 2"×3"
-    if (/^\d+(\.\d+)?x\d+(\.\d+)?$/i.test(v)) return v.split(/x/i).map((p) => `${p}"`).join("×");
-    return v;
+  // a size: of the part, of the gutter (an outlet), of a drain pipe; a reducer's «to» — «на 2″ × 3″»
+  if (key === "size" || key === "gutterSize" || key === "pipe") return sizeText(v);
+  if (key === "to") return t("mod.gutters.pr.toSize", { s: sizeText(v) });
+  // a bolt «10-24x0.75»: «#10-24 × ¾″»
+  if (key === "bolt") {
+    const m = /^(\d+-\d+)x(\d+(?:\.\d+)?)$/i.exec(v);
+    return m ? `#${m[1]} × ${fmtLen(Number(m[2]), fmt)}` : v;
   }
+  // the metal's thickness (#1766): «.027» → «0.027″», «26ga» → «26 ga», «16oz» → «16 oz»
+  if (key === "gauge") {
+    if (/^0?\.\d+$/.test(v)) return `${v.startsWith(".") ? "0" : ""}${v}″`;
+    const m = /^(\d+)\s*(ga|oz)$/i.exec(v);
+    return m ? `${m[1]} ${m[2]!.toLowerCase()}` : v;
+  }
+  // a rivet's or a shank's number «42» (#1766): «№42» / «#42»
+  if (key === "rivet" || key === "shank") return /^\d+$/.test(v) ? t("mod.gutters.pr.numberOf", { n: v }) : v;
+  // an elbow's style: a rectangular one by its type «тип A», a round one by its angle «45°»
+  if (key === "style") return shape === "round" || /^\d+$/.test(v) ? `${v}°` : t("mod.gutters.pr.typeOf", { s: v });
   const group = key === "buy" ? "buy" : ATTR_WORDS[key];
-  if (!group) return v;
+  if (!group) {
+    // a value with a word of its own (#1766): a guard «micromesh», an eave box «open», an anchor «masonry»
+    const vk = `mod.gutters.pr.v.${key}.${v}` as DictKey;
+    return t(vk) === vk ? v : t(vk);
+  }
   const k = (key === "buy" ? `mod.gutters.pr.buy.${v}` : `mod.gutters.attr.${group}.${v}`) as DictKey;
   const w = t(k);
   return w === k ? v : w;

@@ -7,7 +7,7 @@ const { expectOneAccent } = require("../accent.cjs");
  */
 exports.run = async (h) => {
   const p = h.page;
-  // the client's sections are view tabs (#1343, DS §9 А1п): a tab shows its list in place; «Люди» is a row on «Обзор»
+  // the client's sections are view tabs (#1343, DS §9 А1п): a tab shows its list in place; «Контакты» is a row on «Обзор»
   // by the tabs' keys (CHECKS §9: a test finds by testID, not by words)
   const row = async (name) => {
     if (name === "people") await p.getByTestId("client-people").locator("visible=true").first().getByRole("button").first().click();
@@ -27,8 +27,8 @@ exports.run = async (h) => {
   await h.expectText(/CLT-0001/, "client number in the header");
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
   await h.expectText(/Долг[\s\S]*\$0[\s\S]*Оплачено[\s\S]*\$582\b/, "owes / paid (one word each, #1417)");
-  await h.expectText(/Контакты[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
-  await h.expectText(/Люди[\s\S]*Tom Mitchell/, "the spouse in the row «Люди»");
+  await h.expectText(/Контакты клиента[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
+  await h.expectText(/Контакты клиента[\s\S]*Контакты[\s\S]*Tom Mitchell/, "the spouse in the row «Контакты»");
   await h.expectText(/Выставлено/, "invoiced");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
@@ -78,7 +78,7 @@ exports.run = async (h) => {
   // People: + Phone is a button; the new phone of the spouse is saved and shown
   await h.go("/client/c1");
   await row("people");
-  await p.getByRole("button", { name: "Люди", exact: true }).last().click();
+  await p.getByRole("button", { name: "Контакты", exact: true }).last().click();
   await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Телефон", exact: true }).last().click();
   await h.sheet().getByPlaceholder("Телефон").last().fill("6265550199");
