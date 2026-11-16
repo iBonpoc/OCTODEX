@@ -132,16 +132,16 @@ const hdr=`<div class="hdr"><span class="b36 round">${ic('cl',20)}</span><span c
 const toolbar=(on)=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic('xsK')}Gutter</div><div class="c ${on==='ds'?'on':''}">${ic('dsRect')}Downspout</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${k('s1')};border-radius:10px;padding:0 6px">Эт 1</span>Этаж</div><div class="c">${ic('undo')}Назад</div><div class="c">${ic('redo')}Вперёд</div><div class="c">${ic('trash')}Удалить</div></div>`;
 const field=`<div class="fld">${ic('dsRect',18)}<b>Downspouts 1</b><span style="color:var(--mut)">· 35′ 10″ gutter</span></div>`;
 const cap=t=>`<div class="cap">${t}</div>`;
-const sheet=(title,sub,body,foot='')=>`<div class="sheet static"><div class="grab"></div><div class="sh"><h2>${title}${qm}${sub?` <span class="sub">${sub}</span>`:''}</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body">${body}</div>${foot}</div>`;
+const sheet=(title,sub,body,foot='',save=true)=>`<div class="sheet static"><div class="grab"></div><div class="sh">${save?`<span class="b36 round" aria-label="Закрыть">${ic('close',18)}</span>`:''}<h2>${title}${qm}${sub?` <span class="sub">${sub}</span>`:''}</h2>${save?`<span class="b36 acc">Сохранить</span>`:`<span class="b36 round" aria-label="Закрыть">${ic('close',18)}</span>`}</div><div class="body">${body}</div>${foot}</div>`;
 let H='';
 if(F==='ds'||F==='ds-copper'||F==='ds-deg'||F==='ds-plain'){
  const cu=F==='ds-copper',pl=F==='ds-plain';
  const swatch=(c,n,on)=>`<div class="${on?'on':''}"><i style="background:${c}">${on?'<svg style="position:absolute;right:-4px;top:-4px;width:16px;height:16px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="'+k('ink')+'"/><path d="'+P.check+'" fill="none" stroke="'+k('bg')+'" stroke-width="2.6" stroke-linecap="round"/></svg>':''}</i>${n}</div>`;
  const elb=(n,v,q)=>row(n,'',{ctrl:`${dd(v)}<span style="width:8px"></span>${stp(q)}`});
  H=sheet('Downspout','D1 · gutter 1-2',`
- <div class="grp">${sel('Форма'+qm,cu?'Круглый':pl?'Прямой':'Прямой ребристый',cu?'dsRound':pl?'dsRect':'dsRectRibbed')}${sel('Размер'+qm,cu?'4″':'3×4″')}</div>${cu||pl?'':'<div class="note dz">Меню: Прямой · Прямой ребристый · Круглый · Круглый ребристый — значок разреза слева в строке. Без умолчания: выбирается на объекте.</div>'}
+ <div class="grp">${F==='ds'?sel('Форма'+qm,'<span style="color:var(--mut)">Выберите</span>','dsRect')+sel('Размер'+qm,'<span style="color:var(--mut)">Выберите</span>'):sel('Форма'+qm,cu?'Круглый':pl?'Прямой':'Прямой ребристый',cu?'dsRound':pl?'dsRect':'dsRectRibbed')+sel('Размер'+qm,cu?'4″':'3×4″')}</div>${cu||pl?'':'<div class="note dz">Меню: Прямой · Прямой ребристый · Круглый · Круглый ребристый — значок разреза слева в строке. Без умолчания (основатель 16.11): форма, размер и цвет пустые — «Выберите», пока не выбраны на объекте; «последний выбранный» не подставляется.</div>'}
  <div class="grp">${row('Материал'+qm,cu?'Медь':'Алюминий')}</div>
- <div class="grp ${cu?'disabled':''}">${row('Цвет','',{ctrl:`<span class="v"><i style="width:18px;height:18px;border-radius:9px;background:#FFFFFF;border:1px solid var(--bd);display:inline-block"></i>${cu?'—':'Как у gutter (High Gloss White)'}${ic('cr',16)}</span>`})}</div>${cu?`<div class="note" style="margin-top:-8px">Медь, цинк и нержавейку не красят — цвет не выбирается.</div>`:''}
+ <div class="grp ${cu?'disabled':''}">${row('Цвет','',{ctrl:`<span class="v"><i style="width:18px;height:18px;border-radius:9px;background:#FFFFFF;border:1px solid var(--bd);display:inline-block"></i>${cu?'—':F==='ds'?'<span style="color:var(--mut)">Выберите</span>':'Как у gutter (High Gloss White)'}${ic('cr',16)}</span>`})}</div>${cu?`<div class="note" style="margin-top:-8px">Медь, цинк и нержавейку не красят — цвет не выбирается.</div>`:''}
  ${cu?`<div class="grp">${row('Пайка меди'+qm,'7 позиций',{sub:'добавится в смету сама: припой, флюс, заклёпки…',icon:'note'})}</div>`:''}
  <div><div class="grp">${sel('Отсчёт места'+qm,'От левого end cap')}${row('Расстояние','',{ctrl:`<span style="display:flex;gap:8px">${fin('3','ft',76)}${fin('0','in',76)}</span>`})}</div></div>
  <div><div class="grp">${sel('Куда уходит вода'+qm,'Downspout')}${row('Длина downspout'+qm,'По этажу · 10′')}</div><div class="note dz">Меню: Downspout · Rain chain · В другой gutter. Без значков (основатель 16.11).</div></div>
@@ -195,7 +195,7 @@ if(F==='corner'||F==='corner-in'){
  <div><div class="grp">${sel('Как делаем угол'+qm,'Резать')}</div><div class="note">Прибавка на этот угол: <b>${inner?'+7″':'+14″'}</b> — уже в закупке рулона, отдельно не добавляйте. Запас рулона: 1 линия +3 ft, 2 и больше +6 ft (настройки).</div></div>
  <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${inner?cut('1-1','23′ 11″','23′ 6″')+cut('1-2','25′ 11″','25′ 6″'):cut('1-1','23′ 11″','24′ 4″')+cut('1-2','25′ 11″','26′ 4″')}</div></div>
  <div class="grp">${inner?row('Брызговик на угол'+qm,'',{ctrl:'<span class="tog on"></span>'}):''}${row('Измерить угол'+qm,'',{icon:'pencil'})}</div>
- <div class="grp"><div class="row del">Разъединить угол</div></div>`)+cap(inner?'Стало v5: внутренний угол — вид и способ строками с меню; прибавка +7″ видна':'Стало v5: наружный угол — вид и способ строками с меню; прибавка +14″ видна');
+ <div class="grp"><div class="row del">Разъединить угол</div></div>`,'',false)+cap(inner?'Стало v5: внутренний угол — вид и способ строками с меню; прибавка +7″ видна':'Стало v5: наружный угол — вид и способ строками с меню; прибавка +14″ видна');
 }
 if(F==='corner-tri'){
  const fig=`<svg viewBox="0 0 340 300" style="width:100%;height:290px">
@@ -227,7 +227,7 @@ if(F==='link'||F==='draft'){
  ${draft?`<div><div class="lbl">Название черновика</div><div class="inp focus">Дом на Maple, задний двор<span class="sp"></span>${ic('close',16,k('mut'))}</div><div class="note">Видно в списке «Черновики» на вкладке Gutters. Привязать к лиду или клиенту можно потом.</div></div>`
  :`<div class="inp">${ic('search',18,k('mut'))}<span class="ph2">Имя, телефон или адрес</span></div>
   <div class="grp">${row('Maria Lopez','',{icon:'user',sub:'412 Oak St · лид от 14 нояб.',ctrl:ic('check',20,k('ink'))})}${row('John Carter','',{icon:'user',sub:'88 Pine Ave · лид от 12 нояб.',ctrl:''})}${row('Kevin Brooks','',{icon:'user',sub:'лид от 10 нояб.',ctrl:''})}</div><div class="grp">${row('Новый лид','',{icon:'plus',sub:'По телефону и имени'})}</div>`}`,
- `<div class="foot"><span class="btnw acc">${draft?'Сохранить черновик':'Привязать к Maria Lopez'}</span></div>`)+cap(draft?'Стало: «Привязать» → «Черновик»: поле названия, сохраняется':'Стало: «Привязать» — три вкладки: лиды, клиенты, черновик');
+ `<div class="foot"><span class="btnw acc">${draft?'Сохранить черновик':'Привязать к Maria Lopez'}</span></div>`,false)+cap(draft?'Стало: «Привязать» → «Черновик»: поле названия, сохраняется':'Стало: «Привязать» — три вкладки: лиды, клиенты, черновик');
 }
 if(F==='tab'){
  const card=(icon,t,date,chip,line)=>`<div class="card"><div class="lc"><span class="av">${ic(icon,20)}</span><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="t"><span>${t}</span><span class="m">${date}</span></div>${chip}<div class="m">${line}</div></div></div></div>`;
