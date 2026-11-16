@@ -91,12 +91,21 @@ function writtenQty(lines: readonly { source?: unknown }[], measurementId: strin
  * the same `linesFromParts` («как будет»; prices are not part of it — a price change is not the engine's).
  */
 export function linesNowOf(db: Partial<Pick<DB, "moduleData" | "company">>, measurementId: string): Map<string, string> {
-  const d = fromElements(gutterData(db).elements.filter((x) => x.measurementId === measurementId));
-  if (!d.runs.length) return new Map();
+  const all = gutterData(db).elements;
   const settings = db.company?.modules?.gutters?.settings;
-  const parts = computeGutterParts(toMeasurement(d, { method: readRules(settings).corner }), toRulesOverride(settings)).parts;
-  return writtenQty(linesFromParts(parts, [], () => "", () => "", undefined, measurementId), measurementId);
+  // the list of measurements asks this for every old draft on every render: one count per drawing and settings (review of #1776)
+  let memo = nowMemo.get(all);
+  if (!memo || memo.settings !== settings) nowMemo.set(all, (memo = { settings, byM: new Map() }));
+  const hit = memo.byM.get(measurementId);
+  if (hit) return hit;
+  const d = fromElements(all.filter((x) => x.measurementId === measurementId));
+  const out = d.runs.length
+    ? writtenQty(linesFromParts(computeGutterParts(toMeasurement(d, { method: readRules(settings).corner }), toRulesOverride(settings)).parts, [], () => "", () => "", undefined, measurementId), measurementId)
+    : new Map<string, string>();
+  memo.byM.set(measurementId, out);
+  return out;
 }
+const nowMemo = new WeakMap<readonly ElementRow[], { settings: unknown; byM: Map<string, Map<string, string>> }>();
 
 const sameQty = (a: Map<string, string>, b: Map<string, string>) => a.size === b.size && [...a].every(([k, q]) => b.has(k) && Number(b.get(k)) === Number(q));
 
@@ -104,13 +113,15 @@ const sameQty = (a: Map<string, string>, b: Map<string, string>) => a.size === b
  * «Расчёт изменился — обновите» (#1165): the measurement's lines in this estimate were computed by an older engine AND
  * «Обновить» would change them now (#1776, director №13 16.11: a rule that changes nothing here says nothing — a corrugated
  * downspout, a round one, elbows set by hand). Only a DRAFT is told: a sent estimate stays as it went to the client, a
- * signed one is never changed. Without `db` the drawing is not read: an older engine alone says it (a draft).
+ * signed one is never changed. An emptied drawing says nothing («Обновить» makes no lines of it, as `staleMeasurements`).
+ * Without the module's data (`db` without `moduleData`) the drawing can not be read: an older engine alone says it (a draft).
  */
 export function engineChangedFor(e: Estimate | undefined, measurementId: string, now: string = GUTTER_PARTS_VERSION, db?: Partial<Pick<DB, "moduleData" | "company">>): boolean {
   if (!e || e.status !== "draft") return false;
   const opts = (e.doc?.options ?? []).filter((o) => o.lines.some((l) => ofMeasurement(l, measurementId) && engineOlder(sourceOf(l)?.engineVersion, now)));
   if (!opts.length) return false;
-  if (!db) return true;
+  if (!db || !("moduleData" in db)) return true;
+  if (!gutterData(db).elements.some((x) => x.measurementId === measurementId && x.kind === "run")) return false;
   const willBe = linesNowOf(db, measurementId);
   return opts.some((o) => !sameQty(writtenQty(o.lines, measurementId), willBe));
 }

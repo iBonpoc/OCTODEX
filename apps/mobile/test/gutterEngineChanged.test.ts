@@ -90,7 +90,7 @@ describe("an estimate of an older engine", () => {
   });
   it("engineStaleMeasurements: the estimate is still the measurement's, the version older (a newer estimate took over → not this one's)", () => {
     const e = old("0.0.1");
-    const db = { estimates: [e], moduleData: { gutters: { measurements: [{ id: M, status: "ready" }], elements: [] } } } as never;
+    const db = { estimates: [e], moduleData: { gutters: { measurements: [{ id: M, status: "ready" }], elements: [{ id: "x", measurementId: M, kind: "run", geom: { a: [0, 0], b: [120, 0] }, attrs: {} }] } } } as never;
     expect(engineStaleMeasurements(db, e).map((x) => x.id)).toEqual([M]);
     expect(engineStaleMeasurements(db, e, "0.0.1")).toEqual([]); // the same engine: nothing
   });
@@ -169,5 +169,31 @@ describe("#1776: the engine's note only where «Обновить» changes the l
     expect(engineChangedFor(e, M, ENGINE_VERSION, db(d, e))).toBe(false);
     expect(estimateAction(db(d, e), m, true)).toEqual({ kind: "open", estimateId: "e1" });
     expect(e.doc!.options[0]!.lines.some((l) => (l as ModuleLine).source?.key.includes("part=elbow") && (l as ModuleLine).source?.qty === "3")).toBe(true);
+  });
+  it("an emptied drawing: nothing said («Обновить» makes no lines of it, as the drawing's own note)", () => {
+    const e = estimate(v3({}));
+    const empty = { estimates: [e], moduleData: { gutters: { measurements: [{ id: M, status: "ready" }], elements: [] } } } as never;
+    expect(engineChangedFor(e, M, ENGINE_VERSION, empty)).toBe(false);
+    expect(engineStaleMeasurements(empty, e)).toEqual([]);
+  });
+  it("the company's own rules: an estimate counted with them, the same rules now — nothing said; the engine's defaults are not used", () => {
+    const settings = { rules: { corner: "strip", wastePct: 15 } };
+    const d = drawing({ dsStyle: "corrugated" });
+    const parts = computeGutterParts(toMeasurement(d as never, { method: readRules(settings).corner }), toRulesOverride(settings)).parts;
+    const e = estimate(linesFromParts(parts, catalog, name, uid, "rev1", M, "2026-11-12T10:00:00Z", "3") as ModuleLine[]);
+    const withCo = { estimates: [e], company: { modules: { gutters: { settings } } }, moduleData: { gutters: { measurements: [{ id: M, status: "ready" }], elements: toElements(d as never, M) } } } as never;
+    expect(engineChangedFor(e, M, ENGINE_VERSION, withCo)).toBe(false);
+  });
+  it("two options: told when one of them would change; a line kept by hand («gone») and «3» vs «3.0000» are not changes", () => {
+    const d = drawing({ dsStyle: "corrugated" });
+    const same = linesOf(d, "3");
+    const differ = v3({});
+    const two = { ...estimate(same), doc: { ...estimate(same).doc!, options: [{ id: "o1", name: "A", lines: same }, { id: "o2", name: "B", lines: differ }] } } as unknown as Estimate;
+    expect(engineChangedFor(two, M, ENGINE_VERSION, db(d, two))).toBe(true);
+    const both = { ...two, doc: { ...two.doc!, options: [{ id: "o1", name: "A", lines: same }, { id: "o2", name: "B", lines: same }] } } as unknown as Estimate;
+    expect(engineChangedFor(both, M, ENGINE_VERSION, db(d, both))).toBe(false);
+    const fmt = same.map((l) => ({ ...l, source: { ...l.source!, qty: Number(l.source!.qty).toFixed(4) } })) as ModuleLine[];
+    const gone = [...fmt, { ...fmt[0]!, id: "kept", source: { ...fmt[0]!.source!, key: "ea|part=old", gone: true as const } }] as ModuleLine[];
+    expect(engineChangedFor(estimate(gone), M, ENGINE_VERSION, db(d, estimate(gone)))).toBe(false);
   });
 });

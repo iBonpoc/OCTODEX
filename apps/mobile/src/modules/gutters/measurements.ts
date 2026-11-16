@@ -70,7 +70,7 @@ export interface MeasurementItem {
   view: MeasurementStateView;
 }
 
-type ListDB = Pick<DB, "moduleData" | "leads" | "properties" | "customers" | "estimates">;
+type ListDB = Pick<DB, "moduleData" | "leads" | "properties" | "customers" | "estimates"> & Partial<Pick<DB, "company">>;
 
 export function measurementList(db: ListDB): MeasurementItem[] {
   const g = gutterData(db);
