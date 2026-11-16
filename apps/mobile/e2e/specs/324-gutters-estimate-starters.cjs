@@ -36,9 +36,9 @@ exports.run = async (h) => {
   // «Шаблоны смет»: three starters of the module
   await h.go("/estimate/templates");
   for (const k of ["clean", "guards", "replace"]) await tid(`est-starter-gutters-${k}`).waitFor({ timeout: 8000 });
-  h.expect(/Чистка желобов/.test(await tid("est-starter-gutters-clean").innerText()), "«Чистка желобов»");
+  h.expect(/Чистка gutters/.test(await tid("est-starter-gutters-clean").innerText()), "«Чистка gutters»");
   h.expect(/Только guards/.test(await tid("est-starter-gutters-guards").innerText()), "«Только guards»");
-  h.expect(/Замена желобов/.test(await tid("est-starter-gutters-replace").innerText()), "«Замена желобов»");
+  h.expect(/Замена gutters/.test(await tid("est-starter-gutters-replace").innerText()), "«Замена gutters»");
   await h.shot("starters");
 
   // «Отменить» on the toast of the add (#1336): the template goes and the starter is offered again. The toast ignores a tap in its first

@@ -237,7 +237,7 @@ describe("shop drawings: the check before saving", () => {
   it("a text's width is counted from Arial's metrics: Latin, Russian, the drawing's signs", () => {
     expect(textW("44'-6\"", 0.716)).toBeCloseTo((556 * 3 + 191 + 333 + 355) / 1000, 3);
     expect(textW("Ж", 0.716, true)).toBeGreaterThan(0.8);
-    expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План водостоков");
+    expect(tFor("ru")("mod.gutters.shop.planTitle")).toBe("План gutters");
   });
 });
 

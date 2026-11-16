@@ -26,7 +26,7 @@ import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIA
 import { fmtLen, LEN_FORMATS } from "../canvas/format";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, DEFAULT_OVERHANG_FT, notSavedKey, OVERHANG_FT, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, PALETTE_NAMES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
@@ -332,10 +332,10 @@ export default function GutterSettingsScreen() {
                 <T v="caption" tone="mut">{t(k("paletteFrom"))}</T>
                 <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
                   <View testID="gset-palette-berger">
-                    <Button label={t(k("palBerger"), { n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
+                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.berger, n: PALETTES.berger.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.berger])} />
                   </View>
                   <View testID="gset-palette-sp">
-                    <Button label={t(k("palSP"), { n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
+                    <Button label={t(k("palOf"), { name: PALETTE_NAMES.servicePartners, n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
                   </View>
                   <View testID="gset-palette-module">
                     <Button label={t(k("palModule"))} size="sm" variant="ghost" onPress={() => setPalette(undefined)} />
