@@ -268,7 +268,7 @@
 | `kit_anchors` | wall, units, perUnit, anchors | Anchors |
 | `hangers_spacing` | runs, lengthIn, spacingIn, atEnds, hangers | Hangers |
 | `kit_per_hanger` | part, hangers, per | Wedges, ferrules, spikes, circles, bolts |
-| `ds_straps_per_ds` | downspouts, lengthIn, everyIn, straps (крепление на каждые everyIn длины водостока, не меньше одного) | D/S straps |
+| `ds_straps_per_ds` | downspouts, lengthIn, everyIn, straps — **до PR-2**: код считает по длине (шаг `dsFastenerSpacingIn`); правило основателя §2.14 п.7 — 2 на водосток (Н1 «Хомутов на водосток»), тогда params — downspouts, perDs, straps | D/S straps |
 | `flat_coil_straps` | straps, perStrapIn, ft | Flat coil (хомуты из рулона) |
 | `touch_up_per_color` | color | Touch-up paint |
 | `corner_allowance` | outCount, outIn, inCount, inIn | Corner allowance |
