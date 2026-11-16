@@ -169,3 +169,37 @@ describe("unit:catalogCardStore — РС-10", () => {
     expect((valueOf(r).db.priceHistory ?? []).filter((h) => h.itemId === "00000000-0000-4000-8000-0000000005b9")).toEqual([]);
   });
 });
+
+describe("unit:catalogCardStore — spec 53-0, saved by field", () => {
+  /** the queue sends one op at a time: answer each and let the next go */
+  const drain = async (n: number) => {
+    for (let i = 0; i < n; i++) {
+      await tick();
+      server.sends.forEach((x) => x.d.resolve());
+      await settle();
+    }
+  };
+  const sent = () => server.sends.filter((x) => x.op.k === "catalog.save").map((x) => x.op as unknown as { item: CatalogItem; fields?: string[]; onlyNew?: true });
+  it("an item there: the op carries only the columns this save changed; a new item — none (written whole)", async () => {
+    const r = await signedIn();
+    valueOf(r).saveCatalogItem({ ...itemOf(r), name: "Bracket 2 (test)" });
+    valueOf(r).saveCatalogItem({ id: "00000000-0000-4000-8000-0000000005c1", kind: "service", name: "Visit (test)", unit: "ea", priceCents: 100 });
+    await drain(2);
+    const [a, b] = sent();
+    expect(a!.fields).toEqual(["name"]);
+    expect("fields" in b!).toBe(false);
+  });
+  it("a batch save and a supplier's tax: by field too; a batch of new ones (onlyNew) — whole", async () => {
+    const r = await signedIn({ suppliers: [{ id: SUP, name: "ABC Supply (test)", active: true, taxBps: 1025 }] });
+    valueOf(r).saveCatalogItems([{ ...itemOf(r), priceCents: 777 }]);
+    valueOf(r).applySupplierTax(SUP);
+    valueOf(r).saveCatalogItems([{ ...itemOf(r), id: "00000000-0000-4000-8000-0000000005c2" }], { onlyNew: true });
+    await drain(3);
+    const ops = sent();
+    expect(ops[0]!.fields).toEqual(["unit_price_cents"]);
+    // the tax is a cost (catalogCostChange), not an item column
+    expect(ops[1]!.fields).toEqual([]);
+    expect(ops[2]!.onlyNew).toBe(true);
+    expect("fields" in ops[2]!).toBe(false);
+  }, 15000);
+});
