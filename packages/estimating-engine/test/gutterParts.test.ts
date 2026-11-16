@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveGutterRules, computeGutterParts, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
+import { resolveGutterRules, computeGutterParts, defaultElbowsFor, sizeGutterRun, pitchFactor, downspoutLengthIn, downspoutSticks, purchaseQty, DEFAULT_GUTTER_RULES, type MeasuredRun, type MeasuredDownspout, type MeasurementInput, type PartQty } from "../src/gutterParts.js";
 
 /** docs/specs/33-gutters-module.md §9 S5g — parts from a measurement, lengths in inches. */
 
@@ -7,8 +7,10 @@ const run = (o: Partial<MeasuredRun> & { id: string; lengthIn: number }): Measur
   profile: "k", size: "6", material: "alu_032", color: "white", story: 1, hanger: "hidden",
   ends: [{ kind: "cap" }, { kind: "cap" }], houseSide: "R", ...o,
 });
+// a rectangular one comes with its 3 × A given (the cases below count with them; since #1776 a plain one has none by default —
+// the default itself is tested with `elbows: undefined`)
 const ds = (o: Partial<MeasuredDownspout> & { id: string; runId: string }): MeasuredDownspout => ({
-  shape: "rect", size: "3x4", material: "alu", color: "white", bottom: { kind: "extension" }, ...o,
+  shape: "rect", size: "3x4", material: "alu", color: "white", bottom: { kind: "extension" }, ...(o.shape === "round" ? {} : { elbows: [{ style: "A", qty: 3 }] }), ...o,
 });
 const q = (parts: PartQty[], key: string) => parts.find((p) => p.key === key)?.qty;
 const keys = (parts: PartQty[]) => parts.map((p) => p.key);
@@ -575,24 +577,45 @@ describe("consumable rules a company can change", () => {
   });
 });
 
-describe("elbows by default follow the shape (#871, X-07)", () => {
-  const job = (shape: "rect" | "round", extra: Partial<MeasuredDownspout> = {}): MeasurementInput => ({
+describe("elbows by default follow the shape (#871, X-07) and the style (#1776)", () => {
+  // `job("rect")` is a plain one, `job("ribbed")` a corrugated one; neither has elbows of its own unless `extra` gives them
+  const job = (shape: "rect" | "ribbed" | "round", extra: Partial<MeasuredDownspout> = {}): MeasurementInput => ({
     runs: [run({ id: "1", lengthIn: 240 })],
     corners: [],
-    downspouts: [ds({ id: "d", runId: "1", ...(shape === "round" ? { shape: "round", size: "3" } : {}), ...extra })],
+    downspouts: [ds({ id: "d", runId: "1", elbows: undefined, ...(shape === "round" ? { shape: "round", size: "3" } : shape === "ribbed" ? { dsStyle: "corrugated" } : {}), ...extra })],
   });
   const elbowKeys = (i: MeasurementInput, rules?: Parameters<typeof computeGutterParts>[1]) => computeGutterParts(i, rules).parts.filter((p) => p.attrs.part === "elbow").map((p) => `${p.key}=${p.qty}`);
   it("round without elbows: 3 × 45°, no «A» anywhere", () => {
     expect(elbowKeys(job("round"))).toEqual(["elbow.45.round.3.alu.white=3"]);
     expect(keys(computeGutterParts(job("round")).parts).some((k) => k.startsWith("elbow.A.round"))).toBe(false);
   });
-  it("rectangular without elbows: 3 × A as before", () => {
-    expect(elbowKeys(job("rect"))).toEqual(["elbow.A.rect.3x4.alu.white=3"]);
+  it("a plain rectangular one without elbows: none (founder 16.11: «у прямого водостока стандартно колен 0», #1776)", () => {
+    expect(elbowKeys(job("rect"))).toEqual([]);
+    expect(elbowKeys(job("rect", { dsStyle: "plain" }))).toEqual([]);
+  });
+  it("a corrugated rectangular one without elbows: 3 × A («у ребристого 3 штуки A»)", () => {
+    expect(elbowKeys(job("ribbed"))).toEqual(["elbow.A.rect.3x4.corrugated.alu.white=3"]);
+  });
+  it("a plain one without elbows has fewer downspout joints: the rivets count only the pieces that are there", () => {
+    const rivets = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "rivet").reduce((n, p) => n + Number(p.qty), 0);
+    const plain = computeGutterParts(job("rect")).parts, given = computeGutterParts(job("rect", { elbows: [{ style: "A", qty: 3 }] })).parts;
+    expect(rivets(given)).toBeGreaterThan(rivets(plain));
+  });
+  it("defaultElbowsFor: one rule for the engine and the app", () => {
+    expect(defaultElbowsFor({ shape: "rect" })).toEqual([]);
+    expect(defaultElbowsFor({ shape: "rect", dsStyle: "plain" })).toEqual([]);
+    expect(defaultElbowsFor({ shape: "rect", dsStyle: "corrugated" })).toEqual([{ style: "A", qty: 3 }]);
+    expect(defaultElbowsFor({ shape: "round" })).toEqual([{ style: "45", qty: 3 }]);
+    expect(defaultElbowsFor({ shape: "round", dsStyle: "corrugated" })).toEqual([{ style: "45", qty: 3 }]);
   });
   it("the company's number of elbows carries to the round one, the style is 45°", () => {
     expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.45.round.3.alu.white=5"]);
     expect(elbowKeys(job("round"), { defaultElbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }] })).toEqual(["elbow.45.round.3.alu.white=3"]);
-    expect(elbowKeys(job("rect"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.A.rect.3x4.alu.white=5"]);
+    expect(elbowKeys(job("ribbed"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual(["elbow.A.rect.3x4.corrugated.alu.white=5"]);
+    // the corrugated default is not the plain one's
+    expect(elbowKeys(job("rect"), { defaultElbows: [{ style: "A", qty: 5 }] })).toEqual([]);
+    // a company may give plain ones a default of their own
+    expect(elbowKeys(job("rect"), { defaultElbowsPlain: [{ style: "B", qty: 1 }] })).toEqual(["elbow.B.rect.3x4.alu.white=1"]);
   });
   it("a round default of its own wins; zero elbows is none", () => {
     expect(elbowKeys(job("round"), { defaultElbowsRound: [{ style: "90", qty: 2 }] })).toEqual(["elbow.90.round.3.alu.white=2"]);
@@ -600,14 +623,17 @@ describe("elbows by default follow the shape (#871, X-07)", () => {
   });
   it("elbows given by the drawing are not touched (rect A/B, round 75/90)", () => {
     expect(elbowKeys(job("rect", { elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }] }))).toEqual(["elbow.A.rect.3x4.alu.white=2", "elbow.B.rect.3x4.alu.white=1"]);
+    // a plain one with elbows given keeps them; a corrugated one with none given («0») keeps none
+    expect(elbowKeys(job("rect", { elbows: [{ style: "A", qty: 3 }] }))).toEqual(["elbow.A.rect.3x4.alu.white=3"]);
+    expect(elbowKeys(job("ribbed", { elbows: [{ style: "A", qty: 0 }] }))).toEqual([]);
     expect(elbowKeys(job("round", { elbows: [{ style: "75", qty: 2 }, { style: "90", qty: 1 }] }))).toEqual(["elbow.75.round.3.alu.white=2", "elbow.90.round.3.alu.white=1"]);
   });
   it("mixed shapes on one job: each has its own", () => {
-    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 }), run({ id: "2", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "a", runId: "1" }), ds({ id: "b", runId: "2", shape: "round", size: "3" })] };
-    expect(elbowKeys(i).sort()).toEqual(["elbow.45.round.3.alu.white=3", "elbow.A.rect.3x4.alu.white=3"]);
+    const i: MeasurementInput = { runs: [run({ id: "1", lengthIn: 240 }), run({ id: "2", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "a", runId: "1", elbows: undefined }), ds({ id: "b", runId: "2", shape: "round", size: "3" }), ds({ id: "c", runId: "2", elbows: undefined, dsStyle: "corrugated" })] };
+    expect(elbowKeys(i).sort()).toEqual(["elbow.45.round.3.alu.white=3", "elbow.A.rect.3x4.corrugated.alu.white=3"]);
   });
-  it("the joints count the 45° elbows as pieces, like the A ones (the same number of joints)", () => {
-    const a = computeGutterParts(job("rect")).parts, b = computeGutterParts(job("round")).parts;
+  it("the joints count the 45° elbows as pieces, like the A ones of a corrugated one (the same number of joints)", () => {
+    const a = computeGutterParts(job("ribbed")).parts, b = computeGutterParts(job("round")).parts;
     const rivets = (ps: PartQty[]) => ps.filter((p) => p.attrs.part === "rivet").map((p) => p.qty).join();
     expect(rivets(b)).toBe(rivets(a));
   });

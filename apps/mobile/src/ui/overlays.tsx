@@ -793,8 +793,9 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
   const reduce = useReducedMotion();
   const bar = useFooterInset();
   if (!item) return null;
-  // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»)
-  const bottom = wide ? wideToastBottom(insets.bottom) : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4], bar, space[3]);
+  // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»), on every width (DS §15.2; a
+  // module's full-screen canvas gives the height of its bottom bar the same way — #1819: from 820 the toast lay on it too)
+  const bottom = wide ? toastBottom(wideToastBottom(insets.bottom), bar, space[3]) : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4], bar, space[3]);
   return (
     <Animated.View
       key={item.id}
