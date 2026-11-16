@@ -34,6 +34,16 @@ exports.run = async (h) => {
   h.expect(!!fit, "the name button has its word");
   h.expect(fit.text === "Привязать", `the name button says «Привязать» (${fit.text})`);
   h.expect(!fit.cut, `the word is whole, not cut with «…» (${fit.text})`);
+  // #1752 (founder 16.11: «фотоаппарат не в единой системе», «Готово другого размера»): the header's buttons are one height (DS §19а: 36),
+  // the camera a plate as «⋯», not a bare icon
+  const plate = (id) => p.getByTestId(id).locator("visible=true").first().evaluate((root) => {
+    const el = [root, ...root.querySelectorAll("*")].find((e) => { const cs = getComputedStyle(e); return cs.backgroundColor !== "rgba(0, 0, 0, 0)" && cs.backgroundColor !== "transparent" && parseFloat(cs.borderTopLeftRadius) >= 8; });
+    return el ? Math.round(el.getBoundingClientRect().height) : 0;
+  });
+  await tid("draw-done").waitFor({ timeout: 6000 });
+  const heights = { who: await plate("draw-who"), done: await plate("draw-done"), ...((await tid("draw-photos-open").count()) ? { photos: await plate("draw-photos-open") } : {}) };
+  h.expect(Object.values(heights).every((x) => x === 36), `the header's buttons are 36 high, each on its plate (${JSON.stringify(heights)})`);
+  if (h.layout.width <= 390) h.expect("photos" in heights, "the phone has the camera in the header");
   await h.shot("header");
 
   await tid("draw-to-lead").getByRole("button").click();
