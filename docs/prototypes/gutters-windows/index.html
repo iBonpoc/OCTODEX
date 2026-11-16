@@ -64,11 +64,11 @@ svg.cv{position:absolute;left:0;top:0;width:390px;height:844px}
 .tog{width:42px;height:24px;border-radius:12px;background:var(--track);position:relative}
 .tog::after{content:"";position:absolute;left:2px;top:2px;width:20px;height:20px;border-radius:10px;background:var(--solid);box-shadow:var(--sh)}.tog.on::after{background:var(--bg)}
 .tog.on{background:var(--ink)}.tog.on::after{left:20px}
-@media (max-width:819px){body[data-f="run"] .cv,body[data-f="run-new"] .cv,body[data-f="run-new-err"] .cv,body[data-f="run-unsaved"] .cv{transform:translateY(-230px)}}
+@media (max-width:819px){body[data-f="run"] .cv,body[data-f="run-unsaved"] .cv{transform:translateY(-230px)}body[data-f="run-new"] .cv,body[data-f="run-new-err"] .cv{transform:translateY(-340px)}}
 @media (min-width:820px){body[data-f^="run"] .scrim{display:none}}
 @media (max-width:819px){.sheet.static.pinned{position:absolute!important;left:0!important;right:0!important;bottom:34px!important;top:96px;margin:0!important;display:flex;flex-direction:column;overflow:hidden}.sheet.static.pinned .body{flex:1;overflow:auto}.sheet.static.pinned .body>*{flex-shrink:0}}
 .qm::before{content:"";position:absolute;inset:-13px}
-@media (min-width:820px){.sheet.static{height:calc(100vh - 32px)!important;min-height:0!important;display:flex;flex-direction:column;overflow:hidden}.sheet.static .body{flex:1;overflow:auto}.sheet.static .body>*{flex-shrink:0}.sheet.static .foot{padding-bottom:12px}}
+@media (min-width:820px){.sheet.static{height:calc(min(100vh, 844px) - 32px)!important;min-height:0!important;display:flex;flex-direction:column;overflow:hidden}.sheet.static .body{flex:1;overflow:auto}.sheet.static .body>*{flex-shrink:0}.sheet.static .foot{padding-bottom:12px}}
 .note.dz{border:1px dashed var(--bd);border-radius:8px;padding:6px 8px;font-style:italic}
 @media (min-width:820px){body{width:auto}.scr{width:100%}.sheet.static{position:absolute!important;left:auto!important;right:0!important;top:0!important;bottom:auto!important;width:360px;margin:0!important;border-radius:0;min-height:844px;box-shadow:-8px 0 30px rgba(0,0,0,.12)}.sheet.static .grab{display:none}}
 .note{font-size:13px;color:var(--mut);margin:6px 4px 0}
@@ -187,8 +187,8 @@ if(F==='run'||F==='run-new'||F==='run-unsaved'||F==='run-new-err'||F==='run-firs
  // an error under its own field: 6 under the field, 16 to the next (DS §11 п.2–3)
  const errLine=t=>`<div style="display:flex;gap:6px;align-items:center;color:var(--badT);font-size:13px;padding:0 14px 8px">${ic('alert',16,k('badT'))}${t}</div>`;
  // a field-menu row (SelectField): its own error under it when it is empty and «Сохранить» was pressed
- const fld=(label,val,empty,msg,icon)=>sel(label,empty?pick:val,icon)+(err&&empty?errLine(msg):'');
- const grp=(html,anyEmpty)=>`<div class="grp" style="${anyEmpty&&err?bad:fieldBd}">${html}</div>`;
+ const fld=(label,val,empty,msg,icon)=>err&&empty?`<div style="${bad};border-radius:12px;margin:2px">${sel(label,pick,icon)}${errLine(msg)}</div>`:sel(label,empty?pick:val,icon);
+ const grp=(html)=>`<div class="grp" style="${fieldBd}">${html}</div>`;
  const mini=(k2,v,e,fl)=>`<div style="flex:${fl||1};min-width:0;display:flex;flex-direction:column;gap:2px;padding:8px 10px;${e&&err?bad+';border-radius:12px':''}"><small style="color:var(--mut);font-size:13px">${k2}</small><span style="display:flex;align-items:center;gap:8px;color:var(--ink)">${v}${ic('cd',14)}</span></div>`;
  // DS §3.4 п.3: materialSwatch 20, flex:none, space[2] to the name
  const sw='<i style="flex:none;width:20px;height:20px;border-radius:10px;background:#D9DACF;border:1px solid var(--bdField);display:inline-block"></i>';
