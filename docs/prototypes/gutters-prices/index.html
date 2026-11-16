@@ -149,7 +149,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
     <div class="lc"><span class="k">Box Miter, outside</span><span class="v">$14.00 <span class="u">/ ea</span></span></div>
     <div class="lc"><span class="k">Box Miter, inside<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
    </div>
-   <div class="sect">Выпуски<span class="n st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены: 1</span></div>
+   <div class="sect">Outlets<span class="n st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены: 1</span></div>
    <div class="list">
     <div class="lc"><span class="k">Outlet 2×3</span><span class="v">$4.50 <span class="u">/ ea</span></span></div>
     <div class="lc"><span class="k">End Section with Outlet, 5″ × 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div>
@@ -164,11 +164,11 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
 <template id="t-tab">
  <div class="scr">
   <div class="top">GoRix v1.0.0 · 1923</div>
-  <div class="hd"><h1>Замеры</h1><span class="sp"></span>
+  <div class="hd"><h1>Gutters</h1><span class="sp"></span>
    <span class="stub"><span class="b36 round" aria-label="Настройки Gutters"><svg class="ic"><use href="#i-gear"/></svg></span></span>
    <span class="b36 round"><svg class="ic"><use href="#i-plus"/></svg></span></div>
   <div class="stubnote">место входа — по правилу #1920</div>
-  <div class="sub">Gutters</div>
+  
   <div class="empty"><div class="tile" style="width:52px;height:52px;border-radius:26px"><svg class="ic"><use href="#i-clip"/></svg></div><b>Замеров пока нет</b><span class="note">Нарисуйте gutters — всё сохраняется само, черновик без клиента тоже.</span><span class="b36 acc"><svg class="ic"><use href="#i-plus"/></svg>Новый замер</span></div>
   <slot data-p="p-tabs"></slot>
  </div>
@@ -177,7 +177,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
 <template id="t-hub">
  <div class="scr">
   <div class="top">GoRix v1.0.0 · 1923</div>
-  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Замеры</div>
+  <div class="back"><svg class="ic"><use href="#i-back"/></svg>Gutters</div>
   <div class="hd"><h2>Настройки Gutters</h2><span class="qm">?</span></div>
   <div class="body">
    <div class="grp">
@@ -200,7 +200,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
   <slot data-p="p-pricehd"></slot>
   <div class="fbar"><span class="fchip on">Все · 42</span><span class="fchip">Без цены · 7</span></div>
   <div class="body" style="padding-top:10px">
-   <div class="banner warn"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div><div class="acts"><span class="b36">Создать 7 с тестовой ценой</span></div></div></div>
+   <div class="banner warn"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div><div class="acts"><span class="b36">Создать 7 с примерной ценой</span></div></div></div>
    <slot data-p="p-list"></slot>
   </div>
  </div>
@@ -239,7 +239,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
   <div class="body" style="padding-top:10px">
    <div class="sect">Corners & End Caps</div>
    <div class="list"><div class="lc"><span class="k">Box Miter, inside<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div></div>
-   <div class="sect">Выпуски</div>
+   <div class="sect">Outlets</div>
    <div class="list"><div class="lc"><span class="k">End Section with Outlet, 5″ × 2×3<small><span class="st warn"><svg class="ic s"><use href="#i-warn"/></svg>Нет цены</span></small></span><span class="v">— <span class="u">/ ea</span></span></div></div>
    <div class="sect">Adapters</div>
    <div class="list">
@@ -301,7 +301,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
     <div class="fl"><label>Себестоимость за штуку</label><div class="inp">$ 6.00</div></div>
     <div class="fl"><label>Наценка</label><div class="inp">50<span class="u">%</span></div></div>
     <div class="total"><span>Цена клиенту</span><b>$9.00 / ea</b></div>
-    <div class="note">Цвета: White, Brown, Black — цена одна на все цвета. Цены в прототипе тестовые.</div>
+    <div class="note">Цвета: White, Brown, Black — цена одна на все цвета. Цены в прототипе — образцы.</div>
     <div class="btnw acc">Сохранить цену</div>
     <div class="btnw ghost">Открыть в прайсе</div>
    </div>
@@ -423,7 +423,7 @@ body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;backgrou
     <span class="fchip on">Все · 42</span><span class="fchip">Без цены · 7</span>
    </div>
    <div class="body" style="padding-top:12px;max-width:640px">
-    <div class="banner warn" style="align-items:center"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div></div><span class="b36">Создать 7 с тестовой ценой</span></div>
+    <div class="banner warn" style="align-items:center"><span class="st warn"><svg class="ic"><use href="#i-warn"/></svg></span><div style="flex:1"><div class="t">Нет цены: 7 из 42</div><div class="m">Без цены деталь идёт в смету за $0 с пометкой «нет цены».</div></div><span class="b36">Создать 7 с примерной ценой</span></div>
     <div style="display:flex;padding:0 14px;font-size:13px;color:var(--mut)"><span style="flex:1">Деталь</span><span>Цена</span></div>
     <div class="sect">Gutter</div>
     <div class="list"><div class="lc"><span class="k">5″ K-Style Gutter<small>Painted · 3 цвета</small></span><span class="v">$6.40 <span class="u">/ ft</span></span></div></div>
