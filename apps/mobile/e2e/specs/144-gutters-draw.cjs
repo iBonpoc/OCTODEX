@@ -183,6 +183,8 @@ exports.run = async (h) => {
   await h.shot("next");
   await tid("draw-next").click(); // the hint is the chip: a tap puts the downspout tool on
   await tid("draw-hint").waitFor({ timeout: 3000 });
+  // it goes once the window of a second tap on the tool is over (#1563 PR B: the toolbar does not move under the second tap)
+  await p.waitForFunction(() => !document.querySelector('[data-testid="draw-next"]'), null, { timeout: 3000 });
   h.expect((await tid("draw-next").count()) === 0, "the downspout tool is on: no «what next» line");
   await p.mouse.click(b2.x + b2.width * 0.47, yy + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout");
