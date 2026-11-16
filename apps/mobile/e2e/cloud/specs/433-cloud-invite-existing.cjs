@@ -1,0 +1,65 @@
+/**
+ * e2e 433 (cloud) — a person already in company A accepts an invitation to company B (spec 42 S28(в), §14, #1673).
+ * The bug it guards (#1673): after the invitation the app stayed in A and there was no way into B. Now B opens at once,
+ * the toast «Вас добавили в «B»» has «Отменить» back to A; the server keeps B as the last company (accept_invitation).
+ * The owner of B invites through the API (the person's own password sign-in for b1); the data is this run's own.
+ */
+const { execFileSync } = require("node:child_process");
+const { signIn } = require("../signIn.cjs");
+
+exports.run = async (h, { seed }) => {
+  const p = h.page;
+  const a1 = seed.users.a1;
+  const b1 = seed.users.b1;
+  const A = a1.companyId;
+  const B = b1.companyId;
+  const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SERVICE_ROLE_KEY;
+  if (!process.env.DB_URL) throw new Error("433: set DB_URL (supabase status -o env)");
+  const call = async (method, path, body, token = KEY) => {
+    const r = await fetch(`${seed.url}${path}`, {
+      method,
+      headers: { apikey: token === KEY ? KEY : seed.anonKey, authorization: `Bearer ${token}`, "content-type": "application/json", prefer: "return=representation" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const text = await r.text();
+    if (!r.ok) throw new Error(`${method} ${path}: ${r.status} ${text.slice(0, 300)}`);
+    return text ? JSON.parse(text) : null;
+  };
+  const sql = (q) => execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c", q], { stdio: ["ignore", "ignore", "inherit"] });
+  const value = (q) => execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-At", "-c", q], { encoding: "utf8" }).trim();
+  const until = async (fn, what, timeout = 20000) => {
+    const t0 = Date.now();
+    while (Date.now() - t0 < timeout) {
+      if (await fn()) return true;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    throw new Error(`433: never ${what}`);
+  };
+  const lineText = () => p.getByTestId("company-switch").locator("visible=true").first().innerText().catch(() => "");
+  const run = Date.now().toString(36);
+
+  const email = `join433-${run}@example.test`;
+  const pat = await call("POST", "/auth/v1/admin/users", { email, password: a1.password, email_confirm: true, user_metadata: { full_name: "Nightly Join 433" } });
+  sql(`insert into public.memberships (company_id, user_id, role, status) values ('${A}', '${pat.id}', 'office', 'active');`);
+
+  // the owner of B invites the person (her own session, as the app would)
+  const owner = await call("POST", "/auth/v1/token?grant_type=password", { email: b1.email, password: b1.password }, seed.anonKey);
+  const inv = await call("POST", "/rest/v1/rpc/invite_member", { p_company_id: B, p_email: email, p_role: "tech", p_name: "Nightly Join 433" }, owner.access_token);
+  const token = inv.token;
+  h.expect(typeof token === "string" && token.length > 20, "an invitation link");
+
+  await signIn(h, { ...a1, email, userId: pat.id });
+  await h.go("/");
+  await h.go(`/auth/invite?token=${token}`);
+  await until(async () => (await h.text()).includes(`Вас добавили в «${b1.company}»`), "the toast «Вас добавили в «B»»", 15000);
+  await h.shot("joined-b");
+  h.expect((await lineText()).includes(b1.company), `B is open with the toast (${await lineText()})`);
+  // accept_invitation wrote B on the server already
+  h.expect(value(`select coalesce(last_active_company_id::text, '') from public.users where id = '${pat.id}'`) === B, "B as the last company on the server");
+
+  // «Отменить» in the toast (while it is on): back to A — on the phone and on the server
+  await p.getByTestId("toast-undo").locator("visible=true").first().click();
+  await until(async () => (await lineText()).includes(a1.company), "back in A after «Отменить»");
+  await until(() => value(`select coalesce(last_active_company_id::text, '') from public.users where id = '${pat.id}'`) === A, "A as the last company on the server again");
+  await h.shot("back-in-a");
+};

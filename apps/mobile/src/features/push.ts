@@ -38,6 +38,27 @@ export function safeRoute(data: unknown): string | null {
   return typeof r === "string" && r.length <= 200 && ROUTE.test(r) ? r : null;
 }
 
+const COMPANY = new RegExp(`^${UUID}$`);
+/** spec 42 S27 (#1673): whose company the push is from (`data.company`, a uuid); anything else — none */
+export function companyOf(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const c = (data as { company?: unknown }).company;
+  return typeof c === "string" && COMPANY.test(c) ? c : null;
+}
+
+/**
+ * spec 42 S27: where a tapped push goes, once the memberships are confirmed. The push's company is only a hint
+ * (security-check С5): it is opened only when it is one of the person's companies now. The active one, or a push
+ * without a company (an older server) — the route here; another of theirs — switch, then the route; not theirs (left,
+ * switched off, a forged push) — «Уведомления», the company stays.
+ */
+export type PushTarget = { kind: "open"; route: string } | { kind: "switch"; company: string; route: string };
+export function pushTarget(p: { route: string; company: string | null; active: string | null; companies: readonly string[] }): PushTarget {
+  if (!p.company || p.company === p.active) return { kind: "open", route: p.route };
+  if (p.companies.includes(p.company)) return { kind: "switch", company: p.company, route: p.route };
+  return { kind: "open", route: "/notifications" };
+}
+
 /** A tapped push waits until it can really open (review #278): the root navigator is mounted (a push before it —
  *  «navigate before mounting the Root Layout»), the session is restored, the person is signed in (else the route guard
  *  sends them to sign-in and the link is lost — it waits and opens after the sign-in) and the store has loaded. */

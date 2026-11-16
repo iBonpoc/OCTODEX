@@ -4332,6 +4332,28 @@ export const ru = {
   "photoUp.retry": "Повторить",
   "photoUp.retried": "Отправляем фото ещё раз",
   "photoUp.a11y": "не загрузилось",
+  // people.switch.* — the company switcher (spec 42 S34, §14, #1673)
+  "people.switch.title": "Компании",
+  "people.switch.open": "Сменить компанию: {name}",
+  "people.switch.current": "Сейчас",
+  "people.switch.unsent": "не отправлено {n}",
+  "people.switch.create": "Создать компанию",
+  "people.switch.sending": "Отправляем изменения…",
+  "people.switch.leftTitle": "В «{name}» есть неотправленное",
+  "people.switch.leftBody": "В «{name}» {n} изм. не отправлены. Они отправятся, когда вы вернётесь в «{name}».",
+  "people.switch.go": "Перейти",
+  "people.switch.stay": "Остаться",
+  "people.switch.now": "Вы в «{name}»",
+  "people.switch.joined": "Вас добавили в «{name}»",
+  "people.switch.created": "Компания «{name}» создана",
+  "people.switch.waitTitle": "Данные «{name}» загрузятся, когда будет сеть",
+  "people.switch.waitBody": "На этом телефоне «{name}» ещё не открывали. Подключитесь к сети или вернитесь в другую компанию.",
+  "people.switch.role.owner": "владелец",
+  "people.switch.role.admin": "администратор",
+  "people.switch.role.office": "офис",
+  "people.switch.role.sales": "продажи",
+  "people.switch.role.tech": "мастер",
+  "people.switch.role.subcontractor": "субподрядчик",
 } as const;
 
 export type DictKey = keyof typeof ru;

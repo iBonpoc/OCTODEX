@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/cloud/auth";
 import { peekInviteKey } from "@/features/team";
@@ -18,14 +18,18 @@ import { StatusNote } from "@/ui/statusNote";
 export default function CompanySetup() {
   const { t } = useI18n();
   const auth = useAuth();
+  // spec 42 S32 (#1673): «＋ Создать компанию» in the switcher — a second company of a person who has one
+  const { new: second } = useLocalSearchParams<{ new?: string }>();
+  const another = second === "1" && !!auth.company;
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    if (auth.company && !busy) router.replace("/");
-  }, [auth.company, busy]);
+    if (auth.company && !busy && !another) router.replace("/");
+  }, [auth.company, busy, another]);
   // a person who came by an invitation link joins that company instead of creating one (7-2, S21)
   useEffect(() => {
+    if (another) return;
     AsyncStorage.getItem(peekInviteKey).then((v) => v && router.replace("/auth/invite")).catch(() => {});
   }, []);
   return (

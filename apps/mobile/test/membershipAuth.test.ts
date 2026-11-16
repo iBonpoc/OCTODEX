@@ -60,7 +60,7 @@ vi.mock("@/features/pushNative", () => ({ forgetThisPhone: async () => {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://x" }));
 
 import { render, settle, type Root } from "./support/miniReact";
-import { AuthProvider } from "../src/cloud/auth";
+import { AuthProvider, forgetAuthMemory } from "../src/cloud/auth";
 import { lastCompanyKey } from "../src/cloud/membershipSync";
 
 type V = { createCompany: (name: string) => Promise<string | null>; switchCompany: (id: string) => boolean; switched: { to: { companyId: string }; back: { companyId: string } | null; why: string } | null; accessDenied: () => void; membershipCheckedAt: number | null; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: (prefer?: string, why?: "joined" | "created") => Promise<unknown> };
@@ -85,6 +85,7 @@ beforeEach(() => {
   srv.filters.length = 0;
   srv.tables.length = 0;
   srv.updates.length = 0;
+  forgetAuthMemory();
 });
 
 describe("unit:membershipAuth — «read again» on a refusal (#1633 A2)", () => {
@@ -291,5 +292,34 @@ describe("unit:companySwitch — the company switcher in the sign-in (spec 42 S3
   it("one company: the server is not asked (nothing to choose)", async () => {
     await start({ data: [row("c1")], error: null });
     expect(srv.tables).not.toContain("users");
+  });
+});
+
+describe("unit:companySwitch — a switch mounts the app again (e2e 432 found the providers remount)", () => {
+  it("a provider mounted again keeps the chosen company and the notice — without the network too", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1"), row("c2")], error: null });
+    valueOf(r).switchCompany("c2");
+    await settle();
+    r.unmount();
+    // the remount: the memberships read fails (no network) — the company chosen stays, «Вы в «B»» is still to say
+    const again = render(AuthProvider as (p: P) => unknown, { children: null });
+    await settle();
+    expect(valueOf(again).company?.companyId).toBe("c2");
+    expect(valueOf(again).switched).toMatchObject({ to: { companyId: "c2" }, why: "switch" });
+    lastOf("memberships").resolve({ data: null, error: { message: "Failed to fetch" } });
+    await settle();
+    expect(valueOf(again).company?.companyId).toBe("c2");
+    again.unmount();
+  });
+  it("another person signed in: the kept memberships are not theirs — dropped", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1"), row("c2")], error: null });
+    r.unmount();
+    srv.uid = "u2";
+    const other = render(AuthProvider as (p: P) => unknown, { children: null });
+    await settle();
+    expect(valueOf(other).memberships).toEqual([]);
+    other.unmount();
   });
 });

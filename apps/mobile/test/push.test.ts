@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { disable, enable, refresh, routeNow, safeRoute, stateOf, supportOf, type Permission, type PushDeps } from "../src/features/push";
+import { companyOf, disable, enable, pushTarget, refresh, routeNow, safeRoute, stateOf, supportOf, type Permission, type PushDeps } from "../src/features/push";
 
 function fake(o: { perm?: Permission; after?: Permission; token?: string | Error; registerErr?: string | null; saved?: string | null } = {}) {
   const log: string[] = [];
@@ -161,5 +161,28 @@ describe("push — the token never reaches a log (review #272)", () => {
       const s = readFileSync(path.join(__dirname, "../src/features", f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
       expect(s, f).not.toMatch(/console\.|Sentry|analytics|track\(/);
     }
+  });
+});
+
+describe("unit:push — a push from another company (spec 42 S27, §14, #1673)", () => {
+  const A = "ca000000-0000-4000-8000-000000000000";
+  const B = "cb000000-0000-4000-8000-000000000000";
+  const R = "/invoice/0c000000-0000-4000-8000-000000000001";
+  it("the company is read only as a uuid", () => {
+    expect(companyOf({ route: R, company: B })).toBe(B);
+    expect(companyOf({ route: R })).toBeNull();
+    expect(companyOf({ route: R, company: "../x" })).toBeNull();
+    expect(companyOf({ route: R, company: 5 })).toBeNull();
+    expect(companyOf(null)).toBeNull();
+  });
+  it("own active company or no company (an older server): the route as before", () => {
+    expect(pushTarget({ route: R, company: A, active: A, companies: [A, B] })).toEqual({ kind: "open", route: R });
+    expect(pushTarget({ route: R, company: null, active: A, companies: [A, B] })).toEqual({ kind: "open", route: R });
+  });
+  it("another of the person's companies: switch there, then the route", () => {
+    expect(pushTarget({ route: R, company: B, active: A, companies: [A, B] })).toEqual({ kind: "switch", company: B, route: R });
+  });
+  it("a company that is not theirs (left, switched off, a forged push): «Уведомления», no switch", () => {
+    expect(pushTarget({ route: R, company: B, active: A, companies: [A] })).toEqual({ kind: "open", route: "/notifications" });
   });
 });
