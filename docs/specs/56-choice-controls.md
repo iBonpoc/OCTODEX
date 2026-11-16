@@ -179,7 +179,7 @@
 | `client.cameFrom` | Откуда пришёл: {source} | **Источник: {source}** / Source: {source} / Origen: {source} |
 | `person.primary` | основной | без изменений |
 | `person.makePrimary` | Сделать основным | без изменений до волны 4 (там — пункт меню метки) |
-| `src.kind.person` | Люди | **По рекомендации** / Referral / Recomendación |
+| `src.kind.person` | Люди | **По рекомендации** / Referral / Recomendación — **не в PR текстов (#1905):** переносит ряд чипов «Тип» в «Новом источнике» на 390; вместе с переводом поля в `SelectField` (волна 1б) |
 
 Старые слова найти в `e2e/specs`, `e2e/cloud` (правило 19).
 
