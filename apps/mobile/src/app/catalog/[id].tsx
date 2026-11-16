@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component } from "@octo/design-tokens";
 import { catalogCost } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import type { CatalogItem, CatalogKind } from "@/data/types";
+import type { CatalogItem, CatalogKind, Supplier } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { countsFromCost, editClean, editOk, editPrice } from "@/features/catalogEdit";
@@ -16,7 +16,9 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { StatusNote } from "@/ui/statusNote";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen } from "@/ui/surfaces";
-import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
+import { canSeeSuppliers, historyOf, pickSupplier, supplierOf, supplierTaxAsk, type SupplierTaxAsk as SupplierTaxAskData } from "@/features/suppliers";
+import { SupplierTaxAsk } from "@/features/SupplierTaxAsk";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
 import { canEditCatalog } from "@/features/access";
 
@@ -39,6 +41,10 @@ export default function CatalogItemScreen() {
   );
   const [pick, setPick] = useState(false);
   const [pickSup, setPickSup] = useState(false);
+  /** #1835: a supplier with a tax picked for a cost typed without one — the question first, then the supplier */
+  const [taxFor, setTaxFor] = useState<{ s: Supplier; ask: SupplierTaxAskData } | null>(null);
+  const taxAsk = useHeldSheet(taxFor);
+  const afterSupPick = useRef<(() => void) | null>(null);
   const set = (p: Partial<CatalogItem>) => setIt((x) => ({ ...x, ...p, placeholder: false }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/catalog"));
   // 19 §9: who does not get our costs (sales without view_costs) edits a material's price as it is — counting it from
@@ -199,12 +205,35 @@ export default function CatalogItemScreen() {
         visible={pickSup}
         onClose={() => setPickSup(false)}
         onPick={(s) => {
-          setIt((x) => ({ ...pickSupplier(x, s), placeholder: false }));
           setPickSup(false);
+          // the question when the cost may already have the supplier's tax in it (#1835); else picked at once
+          const ask = s ? supplierTaxAsk(it, s) : null;
+          // the question opens once the picker has left (review #1904 №4: never two sheets at once)
+          if (s && ask) return void (afterSupPick.current = () => setTaxFor({ s, ask }));
+          setIt((x) => ({ ...pickSupplier(x, s), placeholder: false }));
+        }}
+        onExited={() => {
+          const next = afterSupPick.current;
+          afterSupPick.current = null;
+          next?.();
         }}
         onNew={() => {
           setPickSup(false);
           router.push("/suppliers/new");
+        }}
+      />
+      <SupplierTaxAsk
+        ask={taxAsk.value?.ask ?? null}
+        supplier={taxAsk.value?.s ?? null}
+        unit={it.unit}
+        visible={taxAsk.visible}
+        onExited={taxAsk.onExited}
+        // closed without an answer: no supplier is attached (no default)
+        onClose={() => setTaxFor(null)}
+        onAnswer={(a) => {
+          const f = taxFor;
+          setTaxFor(null);
+          if (f) setIt((x) => ({ ...pickSupplier(x, f.s, a, f.ask), placeholder: false }));
         }}
       />
       <CatalogPicker
