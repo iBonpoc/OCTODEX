@@ -122,7 +122,7 @@ export default function PurchaseOrderScreen() {
   const canRecv = canReceive(role) && ["sent", "partially_received", "received"].includes(found.status);
 
   return (
-    <Screen title={title} back={back} subtitle={[supName ?? t("po.noSupplier"), job ? job.title : t("po.stock")].join(" · ")}>
+    <Screen form title={title} back={back} subtitle={[supName ?? t("po.noSupplier"), job ? job.title : t("po.stock")].join(" · ")}>
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <View testID="po-status">

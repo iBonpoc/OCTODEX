@@ -94,7 +94,7 @@ export default function EditClient() {
   };
 
   return (
-    <Screen title={creating ? t("clients.new") : t("client.editTitle")} back={back}>
+    <Screen form title={creating ? t("clients.new") : t("client.editTitle")} back={back}>
       <FieldGroup>
         <Labeled label={t("client.f.first")}>
           <TextField type="name" value={name.first} onChangeText={setPart("first")} placeholder={t("client.f.first")} icon="user" />
