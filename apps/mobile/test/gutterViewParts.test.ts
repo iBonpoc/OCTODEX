@@ -53,19 +53,19 @@ function rareJobs() {
 }
 
 describe("#1766 #1800 a part's name — the supplier's, the same in Russian — and its properties in words", () => {
-  it("the supplier's names: «5″ K-Style Gutter», «2×3″ A Elbow 75°», «Pop Rivet #42», «Outlet 2×3″» — never a code", () => {
+  it("the supplier's names: «5″ K-Style Gutter», «2″ × 3″ A Elbow 75°», «Pop Rivet #42», «Outlet 2″ × 3″» — never a code", () => {
     const ru = tFor("ru");
     const en = tFor("en");
     const one = (pred: (p: PartQty) => boolean) => parts.find(pred)!;
     expect(partView(ru, one((p) => p.attrs.part === "rivet")).title).toBe("Pop Rivet #42");
     expect(partView(ru, one((p) => p.key.startsWith("gutter."))).title).toBe("5″ K-Style Gutter");
     expect(partView(ru, one((p) => p.key.startsWith("gutter."))).props).toEqual(expect.arrayContaining(["0.027″"]));
-    expect(partView(en, one((p) => p.attrs.part === "elbow" && p.attrs.shape === "rect")).title).toBe("2×3″ A Elbow 75°");
+    expect(partView(en, one((p) => p.attrs.part === "elbow" && p.attrs.shape === "rect")).title).toBe("2″\u00a0×\u00a03″ A Elbow 75°");
     expect(partView(ru, one((p) => p.attrs.part === "elbow" && p.attrs.shape === "round")).title).toMatch(/^3″ Round Elbow \d+°$/);
     // an outlet is its size only (founder 16.11)
     const outlet = partView(ru, one((p) => p.attrs.part === "outlet" && p.attrs.shape !== "round"));
-    expect(outlet).toEqual({ title: "Outlet 2×3″", props: [] });
-    expect(sizeText("2x3")).toBe("2×3″");
+    expect(outlet).toEqual({ title: "Outlet 2″\u00a0×\u00a03″", props: [] });
+    expect(sizeText("2x3")).toBe("2″\u00a0×\u00a03″");
     expect(sizeText("3")).toBe("3″");
   });
   it("no «окрашенный»: a painted part says its colour only; bare metal says «Без покраски»", () => {
