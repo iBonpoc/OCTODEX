@@ -117,10 +117,9 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
   };
   const langs: { key: DocLang; label: string }[] = [{ key: "en", label: "English" }, { key: "es", label: "Español" }, { key: "ru", label: "Русский" }];
   return (
-    <Screen form="center" title={t("intake.title")} back={back}>
+    <Screen form title={t("intake.title")} back={back}>
       <CardList>
-        {/* one rhythm under the title: languages → the company's card → the fields, 20 each (#1728; was 16 and 20) */}
-        <View testID="intake-lang" style={{ marginBottom: space[3] }}>
+        <View testID="intake-lang" style={{ marginBottom: space[2] }}>
           <ChoiceChips items={langs} value={lang} onChange={setLang} />
         </View>
         <Card>

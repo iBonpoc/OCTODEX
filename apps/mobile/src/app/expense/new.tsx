@@ -46,7 +46,7 @@ export default function NewExpense() {
     ...todays.filter((v): v is typeof v & { jobId: string } => !!v.jobId).map((v) => ({ key: v.jobId, label: visitContext(db, v).customer?.name ?? v.jobId })),
   ];
   return (
-    <Screen form title={t("exp.title")} back={back}>
+    <Screen title={t("exp.title")} back={back}>
       {/* the fields straight on the background, no card around them (DS §11 п.17, #1411) */}
       <FieldGroup>
         <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} testID="expense-photo" />

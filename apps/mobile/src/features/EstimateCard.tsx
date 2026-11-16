@@ -138,8 +138,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
     <>
       <Card status={st.s}>
         <RowView style={{ justifyContent: "space-between" }}>
-          {/* beside the status chip in the 360 panel the name needs a third line before «…» (#1728) */}
-          <T v="heading" style={{ flex: 1 }} numberOfLines={3}>
+          <T v="heading" style={{ flex: 1 }} numberOfLines={2}>
             {e.number ? `${e.number} · ` : ""}
             {e.title}
           </T>
