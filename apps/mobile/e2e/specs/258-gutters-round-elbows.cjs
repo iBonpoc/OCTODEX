@@ -52,13 +52,12 @@ exports.run = async (h) => {
   const html = await p.evaluate(() => window.__pdf);
   // the elbow lines (#1766, #1800: a row is «<b>the supplier's name</b><br>properties | qty»): the corrugated rectangular one by
   // its style «A Elbow 75°», the round one by its angle «Round Elbow 45°» — never «A»; the plain 2×3 one has none (#1776)
-  // the PDF's HTML keeps the no-break spaces of «3″ × 4″» as &nbsp; (DS §4.5)
   const rows = [...html.matchAll(/<td><b>([^<]*)<\/b>(?:<br>([^<]*))?<\/td><td class="r">([^<]*)<\/td>/g)]
     .filter((m) => /Elbow \d+°$/.test(m[1]))
     .map((m) => `${m[1]} · ${m[2] || ""} = ${m[3]}`);
   h.expect(rows.length === 2, "two elbow lines (the corrugated rectangular one and the round one; the plain one has none): " + rows.join(" | "));
-  h.expect(!rows.some((r) => /^2″(?:\s|&nbsp;)×(?:\s|&nbsp;)3″/.test(r)), "no elbow line of the plain 2×3 one (#1776): " + rows.join(" | "));
-  h.expect(rows.some((r) => /^3″(?:\s|&nbsp;)×(?:\s|&nbsp;)4″ A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
+  h.expect(!rows.some((r) => /^2×3 /.test(r)), "no elbow line of the plain 2×3 one (#1776): " + rows.join(" | "));
+  h.expect(rows.some((r) => /^3×4 A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
   h.expect(rows.some((r) => /^\d″ Round Elbow 45° · [^=]*= 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };

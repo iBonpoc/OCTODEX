@@ -198,7 +198,7 @@ describe("#814 the details in words", () => {
 });
 
 describe("#1747 the parts' properties in words: no raw value in «Детали»", () => {
-  it("the sample job: a hanger kind is a word (not «hidden»), a downspout size reads 2\"×3\" (not «2x3»)", () => {
+  it("the sample job: a hanger kind is a word (not «hidden»), a downspout size reads «2×3» (not «2x3»)", () => {
     const t = (k: string) => ({ "mod.gutters.attr.k.hidden": "Скрытое", "mod.gutters.attr.st.plain": "Гладкий" } as Record<string, string>)[k] ?? k;
     const names = materialRows({}).map((r) => partName(t as never, r.part));
     expect(names.filter((n) => /\bhidden\b|\bplain\b|\bcorrugated\b/.test(n))).toEqual([]);
