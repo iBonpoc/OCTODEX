@@ -70,7 +70,7 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
     : "";
   const ds = spec.ds.length
     ? crew
-      ? `<h2>${esc(t("mod.gutters.view.ds"))}</h2><table>${spec.ds.map((d) => `<tr><td>${esc(t("mod.gutters.ds", { n: d.n }))}</td><td>${esc(t("mod.gutters.story", { n: d.story }))}</td><td>${esc(dsSizeText(d.size))}</td><td>${esc(dsLine(t, d.elbows, d.offsets))}</td></tr>`).join("")}</table>`
+      ? `<h2>${esc(t("mod.gutters.view.ds"))}</h2><table>${spec.ds.map((d) => `<tr><td>${esc(t("mod.gutters.ds", { n: d.n }))}</td><td>${esc(t("mod.gutters.story", { n: d.story }))}</td><td>${esc(dsSizeText(d.size))}</td><td>${esc(dsLine(t, d))}</td></tr>`).join("")}</table>`
       : `<p>${esc(t("mod.gutters.pdf.dsCount", { n: spec.ds.length }))}</p>`
     : "";
   const partsTable = crew && spec.parts.length
