@@ -95,7 +95,7 @@ export function SideNav() {
       {/* spec 42 S34: two or more companies — «Компании» over the profile */}
       {canSwitch ? (
         <View style={{ paddingHorizontal: space[2], alignItems: open ? "stretch" : "center" }}>
-          <Item icon="home2" label={t("people.switch.open", { name: companyName ?? "" })} open={open} onPress={openCompanies} hideLabel={!open} testID="side-company-switch" />
+          <Item icon="home2" label={companyName ?? t("people.switch.title")} open={open} onPress={openCompanies} hideLabel={!open} testID="side-company-switch" />
         </View>
       ) : null}
       {/* profile → «Профиль и аккаунт» (spec 26) */}

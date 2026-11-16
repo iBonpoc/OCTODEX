@@ -57,7 +57,7 @@ export function CompanyLine() {
     <Press
       testID="company-switch"
       onPress={openCompanies}
-      visibleHeight={size.iconMd}
+      visibleHeight={size.hitMin}
       accessibilityRole="button"
       accessibilityLabel={t("people.switch.open", { name })}
       style={{ flexDirection: "row", alignItems: "center", gap: space[1], alignSelf: "flex-start", minHeight: size.hitMin }}
@@ -99,7 +99,7 @@ export function CompanySheetHost() {
   const { t } = useI18n();
   const open = useSheetOpen() && auth.memberships.length >= 2;
   const held = useHeldSheet(open ? auth.memberships : null);
-  const [sending, setSending] = useState(false);
+  const [sending, setSending] = useState<string | null>(null);
   const [left, setLeft] = useState<Left | null>(null);
   const list = held.value ?? [];
   const current = auth.company;
@@ -110,7 +110,7 @@ export function CompanySheetHost() {
     ticket.current += 1;
     setSheet(false);
     setLeft(null);
-    setSending(false);
+    setSending(null);
   };
   // the other company: closed sheets and windows, Главная, then the switch (the app mounts again: spec 42 §12.2 Б-3)
   const go = (to: Membership) => {
@@ -121,10 +121,10 @@ export function CompanySheetHost() {
   const choose = async (to: Membership) => {
     if (!current || to.companyId === current.companyId) return close();
     const mine = ++ticket.current;
-    setSending(true);
+    setSending(to.companyId);
     const n = await store.sendBeforeSwitch(10_000);
     if (mine !== ticket.current) return;
-    setSending(false);
+    setSending(null);
     if (n > 0) return setLeft({ to, from: current, n });
     go(to);
   };
@@ -144,10 +144,11 @@ export function CompanySheetHost() {
               const here = m.companyId === current?.companyId;
               const n = store.unsentIn(m.companyId);
               return (
-                <View key={m.companyId} testID={`company-row-${m.companyId}`}>
+                // while my changes go (≤ 10 s) the other rows dim: the wait is seen at the row pressed (design-review №4)
+                <View key={m.companyId} testID={`company-row-${m.companyId}`} style={sending && sending !== m.companyId ? { opacity: component.dimOpacity } : undefined}>
                   <ListRow
                     title={m.companyName}
-                    subtitle={t(roleKey(m))}
+                    subtitle={sending === m.companyId ? t("people.switch.sending") : t(roleKey(m))}
                     selected={here}
                     chevron={false}
                     minHeight={component.rowOption}
@@ -162,20 +163,13 @@ export function CompanySheetHost() {
                 </View>
               );
             })}
-            {sending ? (
-              <View testID="company-sending">
-                <T v="caption" tone="mut">
-                  {t("people.switch.sending")}
-                </T>
-              </View>
-            ) : null}
             <Button
               testID="company-create"
               label={t("people.switch.create")}
               icon="plus"
               variant="secondary"
               full
-              disabled={sending}
+              disabled={!!sending}
               onPress={() => {
                 close();
                 router.push("/auth/company?new=1");

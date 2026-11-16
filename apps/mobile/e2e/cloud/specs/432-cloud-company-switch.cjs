@@ -9,10 +9,12 @@
  * The data is this run's own (CHECKS §9 п.6).
  */
 const { execFileSync } = require("node:child_process");
-const { signIn } = require("../signIn.cjs");
+const { signIn, waitRows } = require("../signIn.cjs");
 
 // the offline step: the browser's own «no network» lines (as e2e 104)
 exports.allowConsole = [/Failed to fetch|ERR_INTERNET_DISCONNECTED|net::/];
+
+const TAG = "432";
 
 exports.run = async (h, { seed }) => {
   const p = h.page;
@@ -34,14 +36,22 @@ exports.run = async (h, { seed }) => {
   };
   const sql = (q) => execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c", q], { stdio: ["ignore", "ignore", "inherit"] });
   const value = (q) => execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-At", "-c", q], { encoding: "utf8" }).trim();
-  const until = async (fn, what, timeout = 20000) => {
-    const t0 = Date.now();
-    while (Date.now() - t0 < timeout) {
-      if (await fn()) return true;
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    throw new Error(`432: never ${what}`);
-  };
+  // waits for what is checked (CHECKS §9 №3): the page — Playwright's own waiting; the server — waitRows (signIn.cjs)
+  const lineHas = (name, what, timeout = 20000) =>
+    p
+      .waitForFunction(([n]) => [...document.querySelectorAll('[data-testid="company-switch"]')].some((e) => e.offsetParent && e.innerText.includes(n)), [name], { timeout })
+      .catch(() => {
+        throw new Error(`${TAG}: never ${what}`);
+      });
+  const textHas = (text, what, timeout = 20000) =>
+    p
+      .getByText(text)
+      .first()
+      .waitFor({ timeout })
+      .catch(() => {
+        throw new Error(`${TAG}: never ${what}`);
+      });
+  const admin = (q) => call("GET", `/rest/v1/${q}`);
   const run = Date.now().toString(36);
 
   const email = `two432-${run}@example.test`;
@@ -66,21 +76,21 @@ exports.run = async (h, { seed }) => {
   await h.shot("company-sheet");
   await p.getByTestId(`company-row-${B}`).locator("visible=true").first().click();
   // the toast first (it leaves after a few seconds), then Главная of B (the tech's Главная is «Мои выезды»)
-  await until(async () => (await h.text()).includes(`Вы в «${b1.company}»`), "the toast «Вы в «B»»", 10000);
-  await until(async () => (await p.getByTestId("company-switch").locator("visible=true").first().innerText().catch(() => "")).includes(b1.company), "Главная of B");
+  await textHas(`Вы в «${b1.company}»`, "the toast «Вы в «B»»", 10000);
+  await lineHas(b1.company, "Главная of B");
   h.expect(!/\/settings|\/auth/.test(new URL(p.url()).pathname), `Главная after the switch (${new URL(p.url()).pathname})`);
   await h.shot("switched-to-b");
-  await until(() => lastOnServer() === B, "B as the last company on the server");
+  await waitRows(admin, `users?select=last_active_company_id&id=eq.${pat.id}`, (r) => r[0]?.last_active_company_id === B, "B as the last company");
 
   // a reload keeps B (the phone remembers it)
   await p.reload();
-  await until(async () => (await p.getByTestId("company-switch").locator("visible=true").first().innerText().catch(() => "")).includes(b1.company), "B after a reload");
+  await lineHas(b1.company, "B after a reload");
 
   // no network: back to A (loaded on this phone before) — A opens from its own copy, never the demo (rule 6)
   await p.context().setOffline(true);
   await p.getByTestId("company-switch").locator("visible=true").first().click();
   await p.getByTestId(`company-row-${A}`).locator("visible=true").first().click();
-  await until(async () => (await p.getByTestId("company-switch").locator("visible=true").first().innerText().catch(() => "")).includes(a1.company), "A without the network");
+  await lineHas(a1.company, "A without the network");
   h.expect(!(await h.text()).includes("Демо"), "not the demo without the network");
   await h.shot("offline-back-to-a");
   await p.context().setOffline(false);
@@ -95,5 +105,5 @@ exports.run = async (h, { seed }) => {
   const want = last === A ? a1.company : b1.company;
   await signIn(h, { ...b1, company: want, email, userId: pat.id });
   await h.go("/");
-  await until(async () => (await p.getByTestId("company-switch").locator("visible=true").first().innerText().catch(() => "")).includes(want), `the server's last company (${want}) on a new phone`);
+  await lineHas(want, `the server's last company (${want}) on a new phone`);
 };

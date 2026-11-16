@@ -5,7 +5,9 @@
  * The owner of B invites through the API (the person's own password sign-in for b1); the data is this run's own.
  */
 const { execFileSync } = require("node:child_process");
-const { signIn } = require("../signIn.cjs");
+const { signIn, waitRows } = require("../signIn.cjs");
+
+const TAG = "433";
 
 exports.run = async (h, { seed }) => {
   const p = h.page;
@@ -27,14 +29,22 @@ exports.run = async (h, { seed }) => {
   };
   const sql = (q) => execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c", q], { stdio: ["ignore", "ignore", "inherit"] });
   const value = (q) => execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-At", "-c", q], { encoding: "utf8" }).trim();
-  const until = async (fn, what, timeout = 20000) => {
-    const t0 = Date.now();
-    while (Date.now() - t0 < timeout) {
-      if (await fn()) return true;
-      await new Promise((r) => setTimeout(r, 300));
-    }
-    throw new Error(`433: never ${what}`);
-  };
+  // waits for what is checked (CHECKS §9 №3): the page — Playwright's own waiting; the server — waitRows (signIn.cjs)
+  const lineHas = (name, what, timeout = 20000) =>
+    p
+      .waitForFunction(([n]) => [...document.querySelectorAll('[data-testid="company-switch"]')].some((e) => e.offsetParent && e.innerText.includes(n)), [name], { timeout })
+      .catch(() => {
+        throw new Error(`${TAG}: never ${what}`);
+      });
+  const textHas = (text, what, timeout = 20000) =>
+    p
+      .getByText(text)
+      .first()
+      .waitFor({ timeout })
+      .catch(() => {
+        throw new Error(`${TAG}: never ${what}`);
+      });
+  const admin = (q) => call("GET", `/rest/v1/${q}`);
   const lineText = () => p.getByTestId("company-switch").locator("visible=true").first().innerText().catch(() => "");
   const run = Date.now().toString(36);
 
@@ -51,7 +61,7 @@ exports.run = async (h, { seed }) => {
   await signIn(h, { ...a1, email, userId: pat.id });
   await h.go("/");
   await h.go(`/auth/invite?token=${token}`);
-  await until(async () => (await h.text()).includes(`Вас добавили в «${b1.company}»`), "the toast «Вас добавили в «B»»", 15000);
+  await textHas(`Вас добавили в «${b1.company}»`, "the toast «Вас добавили в «B»»", 15000);
   await h.shot("joined-b");
   h.expect((await lineText()).includes(b1.company), `B is open with the toast (${await lineText()})`);
   // accept_invitation wrote B on the server already
@@ -59,7 +69,7 @@ exports.run = async (h, { seed }) => {
 
   // «Отменить» in the toast (while it is on): back to A — on the phone and on the server
   await p.getByTestId("toast-undo").locator("visible=true").first().click();
-  await until(async () => (await lineText()).includes(a1.company), "back in A after «Отменить»");
-  await until(() => value(`select coalesce(last_active_company_id::text, '') from public.users where id = '${pat.id}'`) === A, "A as the last company on the server again");
+  await lineHas(a1.company, "back in A after «Отменить»");
+  await waitRows(admin, `users?select=last_active_company_id&id=eq.${pat.id}`, (r) => r[0]?.last_active_company_id === A, "A as the last company again");
   await h.shot("back-in-a");
 };

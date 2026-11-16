@@ -166,7 +166,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
             {canSwitch ? (
               <MenuRow
                 icon="home2"
-                label={t("people.switch.open", { name: companyName ?? "" })}
+                label={companyName ?? t("people.switch.title")}
                 testID="menu-company-switch"
                 onPress={() => {
                   onChoose();
