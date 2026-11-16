@@ -4,7 +4,7 @@
  * - the names are the supplier's (#1800, founder 16.11): English trade words even in the Russian app — «End Cap – Left / Right»,
  *   «Coil 11⅞″ · для заказа» (not on the client's estimate), the downspout's sticks on its own row («куски по 10′: 2»);
  *   never two equal names with equal properties in a group;
- * - no code: no «.027», «hidden», «plain», «2x3», «2"×3"», «42» alone; the size reads «2×3″»;
+ * - no code: no «.027», «hidden», «plain», «2x3», «2"×3"», «42» alone; the size reads «2″ × 3″»;
  * - three equal downspouts are one row of their kind «D1–D3 · 3 шт» with the total length; one storey — no «эт N»;
  * - on 820 and 1280 the list is no wider than layout.formMax (560).
  * Finds things by testID; waits on what it checks.
@@ -59,7 +59,7 @@ exports.run = async (h) => {
   h.expect(!/эт \d/.test(ds), `one storey: no «эт N» (${ds})`);
   // founder 16.11: «труба» is never said — only «водосток»
   h.expect(!/труб/i.test(await tid("view-screen").innerText()), "no «труба» on the screen");
-  h.expect(/2×3″/.test(ds) && !/2x3|2"/.test(ds), `the size «2×3″» (${ds})`);
+  h.expect(/2″\s×\s3″/.test(ds) && !/2x3|2"|2×3/.test(ds), `the size «2″ × 3″» (${ds})`);
 
   // the parts: the quantity is one line, as tall as the name's line
   const card = tid("view-parts").locator("xpath=..");

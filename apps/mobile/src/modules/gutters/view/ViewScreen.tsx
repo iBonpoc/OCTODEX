@@ -380,18 +380,18 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
 
         {details && spec.parts.length ? (
           <Card style={{ gap: space[5], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
-            <View testID="view-parts"><RowView style={{ justifyContent: "space-between", alignItems: "center", gap: space[2] }}>
+            <View testID="view-parts"><RowView style={{ alignItems: "center", gap: space[2] }}>
               <T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T>
-              {/* «для заказа» (#1800: «что значит „только закупка“?») — the one «?» of the list says it */}
+              {/* «для заказа» (#1800: «что значит „только закупка“?») — the list's «?», right after its title (DS Б7, #1843) */}
               <HelpButton title={t("mod.gutters.view.buy")} text={t("mod.gutters.view.buyHelp")} testID="view-parts-help" />
             </RowView></View>
             {/* DS §8.14 (#1766): three groups, a name in one line, the properties below, the quantity on its own column */}
             {partGroups(t, spec.parts, fmt).map((g) => (
               <View key={g.key} testID={`view-parts-${g.key}`} style={{ gap: space[2] }}>
                 {/* a subgroup stands out (founder 16.11): its own band, the title as a section's, not a grey caption */}
-                <RowView style={{ justifyContent: "space-between", alignItems: "center", gap: space[2], backgroundColor: c.surf2, borderRadius: radius.field, paddingHorizontal: space[2], paddingVertical: space[1] }}>
+                <RowView style={{ alignItems: "center", gap: space[2], backgroundColor: c.surf2, borderRadius: radius.field, paddingHorizontal: space[2], paddingVertical: space[1] }}>
                   <T v="body" w="semibold">{g.title}</T>
-                  <HelpButton title={g.title} text={g.help} testID={`view-parts-${g.key}-help`} />
+                  <HelpButton title={g.title} text={g.help} to={{ href: "/module/gutters/settings" }} testID={`view-parts-${g.key}-help`} />
                 </RowView>
                 {g.rows.map((r, i) => (
                   <View key={r.key} testID={`view-part-${r.key}`} style={{ gap: space[2] }}>

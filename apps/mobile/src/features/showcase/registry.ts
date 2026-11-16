@@ -51,7 +51,7 @@ export const SCREENS: ShowcaseScreen[] = [
 ];
 
 export const SECTIONS: ShowcaseSection[] = [
-  { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll"] },
+  { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll", "HelpButton"] },
   { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored"] },
   { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup", "FormMain"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar"] },
@@ -73,7 +73,7 @@ export const SECTIONS: ShowcaseSection[] = [
 export const UI_PENDING: readonly string[] = [
   "Columns", "Meter", "ReadOnly", "StatusChip", "Toggle", "Segmented", "TagChip", "Avatar", "MetaTag", "ProgressBar", "Steps",
   "Stepper", "ChoiceChips", "MultiChips", "FilterBar", "FilterRow", "HintsProvider", "ListCard", "CardGrid", "ListCardHeader", "StatusPicker",
-  "ListPanel", "Glass", "Menu", "HelpButton", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
+  "ListPanel", "Glass", "Menu", "T", "Icon", "Card", "RowView", "Grid", "SectionTitle", "ListRow", "CardList",
   "Divider", "Empty", "Screen",
 ];
 
