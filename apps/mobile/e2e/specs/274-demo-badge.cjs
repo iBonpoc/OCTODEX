@@ -10,7 +10,7 @@ exports.run = async (h) => {
     await h.go(path);
     await vis("demo-badge").waitFor({ timeout: 5000 });
     const text = await vis("demo-badge").innerText();
-    h.expect(/Демо · данные только на этом телефоне/.test(text), `${path}: the strip says it (${text.replace(/\n/g, " ")})`);
+    h.expect(/Демо · данные только на этом устройстве/.test(text), `${path}: the strip says it (${text.replace(/\n/g, " ")})`);
   }
   await h.go("/today");
   await vis("demo-badge").getByRole("button").first().click();
