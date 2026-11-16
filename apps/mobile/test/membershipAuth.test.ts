@@ -26,15 +26,19 @@ const deferred = <T,>(): Deferred<T> => {
   let resolve!: (v: T) => void;
   return { promise: new Promise<T>((a) => (resolve = a)), resolve };
 };
-const srv = { uid: "u1" as string | null, reads: [] as Deferred<Answer>[], filters: [] as string[] };
-const query = () => {
+const srv = { uid: "u1" as string | null, reads: [] as Deferred<Answer>[], filters: [] as string[], tables: [] as string[], updates: [] as unknown[] };
+const query = (table = "memberships") => {
   const q = {
     select: () => q,
+    maybeSingle: () => q,
+    insert: (v: unknown) => (srv.updates.push(v), q),
+    update: (v: unknown) => (srv.updates.push(v), q),
     eq: (c: string, v: string) => (srv.filters.push(`${c}=${v}`), q),
     is: (c: string, v: unknown) => (srv.filters.push(`${c} is ${v}`), q),
     then: (ok: (a: Answer) => unknown, bad: (e: unknown) => unknown) => {
       const d = deferred<Answer>();
       srv.reads.push(d);
+      srv.tables.push(table);
       return d.promise.then(ok, bad);
     },
   };
@@ -46,7 +50,7 @@ vi.mock("@/cloud/client", () => ({
       getSession: async () => ({ data: { session: srv.uid ? { user: { id: srv.uid, email: "a@b.c" } } : null } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
     },
-    from: () => query(),
+    from: (t: string) => query(t),
     rpc: () => Promise.resolve({ data: [], error: null }),
   },
 }));
@@ -59,7 +63,7 @@ import { render, settle, type Root } from "./support/miniReact";
 import { AuthProvider } from "../src/cloud/auth";
 import { lastCompanyKey } from "../src/cloud/membershipSync";
 
-type V = { accessDenied: () => void; membershipCheckedAt: number | null; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: () => Promise<unknown> };
+type V = { createCompany: (name: string) => Promise<string | null>; switchCompany: (id: string) => boolean; switched: { to: { companyId: string }; back: { companyId: string } | null; why: string } | null; accessDenied: () => void; membershipCheckedAt: number | null; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: (prefer?: string, why?: "joined" | "created") => Promise<unknown> };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: V } }).props.value;
 const row = (c: string, role = "tech") => ({ company_id: c, role, status: "active", companies: { name: c } });
@@ -79,6 +83,8 @@ beforeEach(() => {
   srv.uid = "u1";
   srv.reads.length = 0;
   srv.filters.length = 0;
+  srv.tables.length = 0;
+  srv.updates.length = 0;
 });
 
 describe("unit:membershipAuth — «read again» on a refusal (#1633 A2)", () => {
@@ -186,5 +192,104 @@ describe("unit:membershipAuth — only a confirmed answer counts (#1633 A2)", ()
     await settle();
     expect(storage.has("octo.cloud.v1.c2.u9")).toBe(false);
     expect(storage.has("octo.cloud.v1.c1.u9")).toBe(true);
+  });
+});
+
+/** the last read of a table (the newest deferred asked of it) */
+const lastOf = (t: string) => srv.reads[srv.tables.lastIndexOf(t)]!;
+
+describe("unit:companySwitch — the company switcher in the sign-in (spec 42 S34, §14, #1673)", () => {
+  it("a switch opens the other company, is remembered on the phone and goes to the server; an unknown id changes nothing", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1"), row("c2")], error: null });
+    expect(valueOf(r).company?.companyId).toBe("c1");
+    expect(valueOf(r).switchCompany("nope")).toBe(false);
+    expect(valueOf(r).company?.companyId).toBe("c1");
+    expect(valueOf(r).switchCompany("c2")).toBe(true);
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).memberships.map((m) => m.companyId)).toEqual(["c2", "c1"]);
+    expect(valueOf(r).switched).toMatchObject({ to: { companyId: "c2" }, back: null, why: "switch" });
+    expect(storage.get(lastCompanyKey("u1"))).toBe("c2");
+    expect(srv.updates).toEqual([{ last_active_company_id: "c2" }]);
+    // no network: the switch waits to be written; the answer comes — nothing waits any more
+    expect(storage.get("octo.company.pending.v1.u1")).toBe("c2");
+    lastOf("users").resolve({ data: null, error: null });
+    await settle();
+    expect(storage.has("octo.company.pending.v1.u1")).toBe(false);
+  });
+  it("П2: a read of the memberships on its way while the person switches keeps the new company (decided after the answer)", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1"), row("c2")], error: null });
+    void valueOf(r).reloadMemberships();
+    await settle();
+    const inFlight = lastOf("memberships");
+    valueOf(r).switchCompany("c2");
+    await settle();
+    inFlight.resolve({ data: [row("c1"), row("c2")], error: null });
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(storage.get(lastCompanyKey("u1"))).toBe("c2");
+  });
+  it("S28(в): a company just joined opens over the one before, with the way back", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1")], error: null });
+    void valueOf(r).reloadMemberships("c2", "joined");
+    await settle();
+    lastOf("memberships").resolve({ data: [row("c1"), row("c2")], error: null });
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).switched).toMatchObject({ to: { companyId: "c2" }, back: { companyId: "c1" }, why: "joined" });
+    expect(storage.get(lastCompanyKey("u1"))).toBe("c2");
+  });
+  it("a new phone (nothing remembered) with two companies opens the server's last one — only one of its memberships", async () => {
+    const r = render(AuthProvider as (p: P) => unknown, { children: null });
+    await settle();
+    srv.reads[0]!.resolve({ data: [row("c1"), row("c2")], error: null });
+    await settle();
+    expect(srv.tables).toContain("users");
+    lastOf("users").resolve({ data: { last_active_company_id: "c2" }, error: null });
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).switched).toBeNull(); // the start is not a switch: no toast
+  });
+  it("…the server's company is not among them (closed, left): the first joined opens instead", async () => {
+    const r = render(AuthProvider as (p: P) => unknown, { children: null });
+    await settle();
+    srv.reads[0]!.resolve({ data: [{ ...row("c2"), created_at: "2026-11-01T00:00:00Z" }, { ...row("c1"), created_at: "2026-11-09T00:00:00Z" }], error: null });
+    await settle();
+    lastOf("users").resolve({ data: { last_active_company_id: "c9" }, error: null });
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+  });
+  it("code-review №1: a newer read while the join's read is on its way still opens the company just joined", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1")], error: null });
+    void valueOf(r).reloadMemberships("c2", "joined");
+    await settle();
+    void valueOf(r).reloadMemberships(); // a re-read (a refusal, a token refresh) overtakes it
+    await settle();
+    lastOf("memberships").resolve({ data: [row("c1"), row("c2")], error: null });
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).switched).toMatchObject({ to: { companyId: "c2" }, back: { companyId: "c1" }, why: "joined" });
+  });
+  it("S32: a company created over another one opens, says so, and is written to the server (a new phone opens it)", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1")], error: null });
+    const made = valueOf(r).createCompany("New Co");
+    await settle();
+    lastOf("companies").resolve({ data: { id: "c2" }, error: null });
+    await settle();
+    lastOf("memberships").resolve({ data: [row("c1"), row("c2", "owner")], error: null });
+    expect(await made).toBeNull();
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).switched).toMatchObject({ to: { companyId: "c2" }, back: { companyId: "c1" }, why: "created" });
+    expect(srv.updates).toContainEqual({ last_active_company_id: "c2" });
+  });
+  it("one company: the server is not asked (nothing to choose)", async () => {
+    await start({ data: [row("c1")], error: null });
+    expect(srv.tables).not.toContain("users");
   });
 });
