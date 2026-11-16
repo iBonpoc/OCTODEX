@@ -7,9 +7,9 @@ async function signIn(h, user) {
   const p = h.page;
   await h.go("/auth/sign-in");
   await h.click("Войти с паролем");
-  await p.getByPlaceholder("Email").last().fill(user.email);
+  await p.getByTestId("auth-email").locator("input").last().fill(user.email);
   await p.getByTestId("legal-agree").last().click();
-  await p.getByPlaceholder("Пароль").last().fill(user.password);
+  await p.getByTestId("auth-password").locator("input").last().fill(user.password);
   await h.click("Войти");
   for (let i = 0; i < 40 && /\/auth\//.test(new URL(p.url()).pathname); i++) await p.waitForTimeout(250);
   // the account (company, email, sync) is in «Профиль и аккаунт» (spec 26)

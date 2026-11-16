@@ -6,6 +6,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { CODE_LENGTH } from "@/features/signIn";
 
 const root = join(__dirname, "../../..");
 const config = readFileSync(join(root, "supabase/config.toml"), "utf8");
@@ -28,6 +29,9 @@ describe("auth emails", () => {
       expect(html).toContain(`expires in ${expiry / 60} minutes`);
     });
   }
+  it("the app's code length is the server's (otp_length, spec 52 Р3)", () => {
+    expect(Number(/\notp_length = (\d+)/.exec(config)?.[1])).toBe(CODE_LENGTH);
+  });
   it("confirmations stay on (accept_invitation trusts email_confirmed_at; the code confirms the address)", () => {
     expect(config).toMatch(/\[auth\.email\]\s*\nenable_confirmations = true/);
   });

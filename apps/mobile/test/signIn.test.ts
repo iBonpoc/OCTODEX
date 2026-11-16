@@ -3,7 +3,7 @@
  * The messages are GoTrue's own (they reach the screen as error.message).
  */
 import { describe, it, expect } from "vitest";
-import { nextReadyAt, RESEND_S, resendLeft, signInError } from "@/features/signIn";
+import { codeDigits, CODE_LENGTH, errPlace, needsSupport, nextReadyAt, RESEND_S, resendLeft, signInError } from "@/features/signIn";
 import { en } from "@/i18n/en";
 import { ru } from "@/i18n/ru";
 import { es } from "@/i18n/es";
@@ -23,6 +23,9 @@ describe("signInError", () => {
     ["Failed to fetch", "auth.err.network"],
     ["Network request failed", "auth.err.network"],
     ["Load failed", "auth.err.network"],
+    ["Error sending magic link email", "auth.err.mailDown"],
+    ["Error sending confirmation email", "auth.err.mailDown"],
+    ["User is banned", "auth.err.blocked"],
     ["Database error saving new user", "auth.err.other"],
     ["", "auth.err.other"],
   ];
@@ -57,5 +60,29 @@ describe("send again", () => {
   it("the server's wait moves it; other refusals keep RESEND_S", () => {
     expect(nextReadyAt(0, { key: "auth.err.wait", seconds: 17 })).toBe(17_000);
     expect(nextReadyAt(0, { key: "auth.err.network" })).toBe(RESEND_S * 1000);
+  });
+});
+
+describe("where a refusal stands", () => {
+  it("a wrong code under the code field, a bad address under the email field, the rest under the button", () => {
+    expect(errPlace("auth.err.code")).toBe("code");
+    expect(errPlace("auth.err.badEmail")).toBe("email");
+    expect(errPlace("auth.err.mailLimit")).toBe("form");
+  });
+  it("dead ends get «Написать в поддержку»", () => {
+    expect(needsSupport("auth.err.notAllowed")).toBe(true);
+    expect(needsSupport("auth.err.mailDown")).toBe(true);
+    expect(needsSupport("auth.err.blocked")).toBe(true);
+    expect(needsSupport("auth.err.code")).toBe(false);
+    expect(needsSupport("auth.err.network")).toBe(false);
+  });
+});
+
+describe("the code as typed", () => {
+  it("digits only, at most CODE_LENGTH", () => {
+    expect(CODE_LENGTH).toBe(8);
+    expect(codeDigits("1234 5678")).toBe("12345678");
+    expect(codeDigits(" 12-34-56-78-9")).toBe("12345678");
+    expect(codeDigits("abc")).toBe("");
   });
 });

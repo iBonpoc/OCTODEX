@@ -2,6 +2,7 @@
      it must carry the code too, or the first sign-in is impossible (#1756). Typing the code confirms the address.
      The SAME text goes to the hosted project by hand (Authentication → Email Templates → Confirm signup).
      Guard: apps/mobile/test/authEmails.test.ts. -->
+<p style="display:none">Your code: {{ .Token }}</p>
 <h2>Your GoRix sign-in code</h2>
 <p style="font-size:32px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
 <p>Enter it in the GoRix app. It works once and expires in 10 minutes.</p>

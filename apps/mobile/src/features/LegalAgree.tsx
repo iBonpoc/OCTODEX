@@ -15,8 +15,8 @@ export function LegalAgree({ on, onChange, testID = "legal-agree" }: { on: boole
   const { t } = useI18n();
   const { c } = useTheme();
   // a document link inside the sentence: a visible underlined word, its own tap (it does not tick the box)
-  const link = (doc: "terms" | "privacy", label: string) => (
-    <Press testID={`${testID}-${doc}`} onPress={() => router.push(legalHref(doc))} visibleHeight={component.checkbox.size} accessibilityRole="link" accessibilityLabel={label}>
+  const link = (doc: "terms" | "privacy", label: string, full: string) => (
+    <Press testID={`${testID}-${doc}`} onPress={() => router.push(legalHref(doc))} visibleHeight={component.checkbox.size} accessibilityRole="link" accessibilityLabel={full}>
       <T v="caption" w="semibold" style={{ textDecorationLine: "underline" }}>
         {label}
       </T>
@@ -49,11 +49,14 @@ export function LegalAgree({ on, onChange, testID = "legal-agree" }: { on: boole
           {on ? <Icon name="check" s={size.iconSm} color={c.onAcc} /> : null}
         </View>
       </Press>
-      <View style={{ flex: 1, flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[1] }}>
-        <T v="caption">{t("legal.agree.pre")}</T>
-        {link("terms", t("legal.terms.title"))}
-        <T v="caption">{t("legal.agree.and")}</T>
-        {link("privacy", t("legal.privacy.title"))}
+      {/* the sentence names both documents in full (clickwrap); the links stand on their own line, apart — their 44-high
+          touch boxes never overlap a neighbour (DS §17 п.6; review #1756: two lines of links were ~19 px apart) */}
+      <View style={{ flex: 1, gap: space[1] }}>
+        <T v="caption">{t("legal.agree.a11y")}</T>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[4] }}>
+          {link("terms", t("legal.agree.termsLink"), t("legal.terms.title"))}
+          {link("privacy", t("legal.agree.privacyLink"), t("legal.privacy.title"))}
+        </View>
       </View>
     </View>
   );

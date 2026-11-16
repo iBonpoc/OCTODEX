@@ -199,7 +199,7 @@
  "e2e/specs/93-messages.cjs": 13,
  "e2e/specs/94-messages-tech.cjs": 8,
  "e2e/specs/95-calls-offline.cjs": 17,
- "e2e/specs/96-legal-help.cjs": 9,
+ "e2e/specs/96-legal-help.cjs": 6,
  "e2e/specs/97-delete-account.cjs": 5,
  "e2e/specs/98-deleted-member.cjs": 1,
  "e2e/specs/99-job-no-service-contact.cjs": 4

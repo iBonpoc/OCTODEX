@@ -14,7 +14,7 @@ async function signInScreen(h) {
 }
 async function agreeAndEmail(h, email) {
   const p = h.page;
-  await p.getByPlaceholder("Email").last().fill(email);
+  await p.getByTestId("auth-email").locator("input").last().fill(email);
   await p.getByTestId("legal-agree").last().click();
 }
 async function expectCompany(h, name, notName) {
@@ -40,13 +40,13 @@ exports.run = async (h, { seed, mailpit }) => {
   await signInScreen(h);
   await h.click("Войти с паролем");
   await agreeAndEmail(h, a1.email);
-  await p.getByPlaceholder("Пароль").last().fill("wrong-password-1");
+  await p.getByTestId("auth-password").locator("input").last().fill("wrong-password-1");
   await h.click("Войти");
   await h.expectText(/Invalid login credentials|неверн/i, "the server's refusal");
   h.expect(/\/auth\/sign-in/.test(p.url()), "a wrong password stays on the sign-in");
 
   // a1 with the password
-  await p.getByPlaceholder("Пароль").last().fill(a1.password);
+  await p.getByTestId("auth-password").locator("input").last().fill(a1.password);
   await h.click("Войти");
   await expectCompany(h, a1.company, b1.company);
   await h.shot("a1-settings");
@@ -72,10 +72,10 @@ exports.run = async (h, { seed, mailpit }) => {
   await h2.click("Получить код");
   await h2.expectText(/Код отправлен/, "the code is sent");
   const mail = await mailpit(b1.email, { after: asked });
-  const code = /\b(\d{6})\b/.exec(mail)?.[1];
-  h.expect(!!code, `a 6-digit code in the email:\n${mail.slice(0, 300)}`);
-  await p2.getByPlaceholder("Код из письма").last().fill(code);
-  await h2.click("Войти");
+  const code = /\b(\d{8})\b/.exec(mail)?.[1];
+  h.expect(!!code, `an 8-digit code in the email:\n${mail.slice(0, 300)}`);
+  // the 8th digit signs in by itself (spec 52 §6)
+  await p2.getByTestId("auth-code").locator("input").last().fill(code);
   await expectCompany(h2, b1.company, a1.company);
   h.expect(!errors.length, `no page errors for b1: ${errors.join("; ")}`);
 
@@ -89,11 +89,10 @@ exports.run = async (h, { seed, mailpit }) => {
   await h2.click("Получить код");
   await h2.expectText(/Код отправлен/, "the code to a new email is sent");
   const mailNew = await mailpit(fresh, { after: askedNew });
-  const codeNew = /\b(\d{6})\b/.exec(mailNew)?.[1];
-  h.expect(!!codeNew, `a new email gets a 6-digit code too:\n${mailNew.slice(0, 300)}`);
+  const codeNew = /\b(\d{8})\b/.exec(mailNew)?.[1];
+  h.expect(!!codeNew, `a new email gets an 8-digit code too:\n${mailNew.slice(0, 300)}`);
   h.expect(!/https?:\/\//.test(mailNew), `no link in the sign-up email:\n${mailNew.slice(0, 300)}`);
-  await p2.getByPlaceholder("Код из письма").last().fill(codeNew);
-  await h2.click("Войти");
+  await p2.getByTestId("auth-code").locator("input").last().fill(codeNew);
   await p2.waitForURL(/\/auth\/company/, { timeout: 10000 });
   h.expect(/\/auth\/company/.test(new URL(p2.url()).pathname), `a new account goes on to «Создать компанию» (${p2.url()})`);
   await ctx.close();
