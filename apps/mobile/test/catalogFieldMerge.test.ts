@@ -92,6 +92,16 @@ describe("unit:catalogFieldMerge — to the server", () => {
     await applyOp({ k: "catalog.save", item: a, costs: {}, fields: catalogItemChange(base, a) }, "co", "u");
     expect(server.row).toMatchObject({ name: "Hanger 5 (test)", unit_price_cents: 330, is_placeholder_price: false, supplier_sku: "HH5-ABC" });
   });
+  it("one field from two devices (the audit's condition): the later save wins, and neither loses its other fields", async () => {
+    server.row = { id: "i1", name: "Hanger (test)", unit_price_cents: 300, is_placeholder_price: true, supplier_sku: "HH5" };
+    // device A: the price and the code; device B, offline, the same price and the name — B reaches the server second
+    const a = { ...base, priceCents: 330, supplierSku: "HH5-A" };
+    const b = { ...base, priceCents: 350, name: "Hanger B (test)" };
+    await applyOp({ k: "catalog.save", item: a, costs: {}, fields: catalogItemChange(base, a) }, "co", "u");
+    await applyOp({ k: "catalog.save", item: b, costs: {}, fields: catalogItemChange(base, b) }, "co", "u");
+    // the price: the later (B); A's code and B's name both stay; what the server keeps is what both phones read next
+    expect(server.row).toMatchObject({ unit_price_cents: 350, supplier_sku: "HH5-A", name: "Hanger B (test)", is_placeholder_price: true });
+  });
   it("the same op of an older build (no fields) writes the whole row, as before (rule 16)", async () => {
     server.row = { id: "i1", unit_price_cents: 330 };
     await applyOp({ k: "catalog.save", item: { ...base, name: "x" } }, "co", "u");
