@@ -24,15 +24,14 @@ exports.run = async (h) => {
     h.expect(true, what);
   };
 
+  // the supplier and two items, put from a page without the app (h.seed, CHECKS §9 №12)
   await h.go("/today");
-  await p.evaluate((k) => {
-    const s = JSON.parse(localStorage.getItem(k));
-    const sup = { id: "sup-e2e-448", name: "Tax Eight Supply (test)", active: true, taxBps: 800 };
-    s.db.suppliers = [...(s.db.suppliers || []).filter((x) => x.id !== sup.id), sup];
-    const mat = (id, name) => ({ id, kind: "material", name, unit: "ea", priceCents: 14040, costCents: 10800, vendorTaxBps: 0, markupBps: 3000 });
-    s.db.catalog = [...s.db.catalog.filter((x) => !x.id.startsWith("cat-e2e-448")), mat("cat-e2e-448a", "Bracket A (test)"), mat("cat-e2e-448b", "Bracket B (test)")];
-    localStorage.setItem(k, JSON.stringify(s));
-  }, DB_KEY);
+  const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
+  const sup = { id: "sup-e2e-448", name: "Tax Eight Supply (test)", active: true, taxBps: 800 };
+  raw.db.suppliers = [...(raw.db.suppliers || []).filter((x) => x.id !== sup.id), sup];
+  const mat = (id, name) => ({ id, kind: "material", name, unit: "ea", priceCents: 14040, costCents: 10800, vendorTaxBps: 0, markupBps: 3000 });
+  raw.db.catalog = [...raw.db.catalog.filter((x) => !x.id.startsWith("cat-e2e-448")), mat("cat-e2e-448a", "Bracket A (test)"), mat("cat-e2e-448b", "Bracket B (test)")];
+  await h.seed(DB_KEY, raw);
 
   const pickSup = async () => {
     await tap("catalog-supplier");
