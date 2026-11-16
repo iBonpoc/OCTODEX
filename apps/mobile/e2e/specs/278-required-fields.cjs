@@ -3,6 +3,8 @@
  * error under every wrong required field, the first one is in view (the page is scrolled down first, so the scroll is
  * real), nothing is saved and the screen stays; a filled wrong value keeps its error until it is right.
  * Lead: phone, name (source has a default); expense: amount; supplier: name, email.
+ * The scroll for real (#1799): a short window, the page at its very bottom — after the main button the first wrong field's top
+ * is in the window, in its upper half (the screen's own form calls its hook above <Screen>; the scroll comes to it from the field).
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -87,4 +89,23 @@ exports.run = async (h) => {
   await vis("showcase-required-name").locator("input").first().fill("Sample");
   await p.getByTestId("showcase-required-name-error").waitFor({ state: "detached", timeout: 3000 });
   h.expect((await vis("field-kind-error").count()) === 1, "showcase: the other error stays");
+
+  // ---- #1799: the scroll for real — a short window, the page at its bottom, the first wrong field comes up
+  const scrolledUp = async (path, button, field, what) => {
+    await h.go(path);
+    await vis(field).waitFor({ timeout: 5000 });
+    await p.setViewportSize({ width: h.layout.width, height: 480 });
+    await p.evaluate(() => document.querySelectorAll("*").forEach((e) => { if (e.scrollHeight > e.clientHeight + 4) e.scrollTop = e.scrollHeight; }));
+    const before = await vis(field).evaluate((e) => e.getBoundingClientRect().top);
+    await vis(button).click();
+    const ok = await p.waitForFunction((tid) => {
+      const e = [...document.querySelectorAll(`[data-testid="${tid}"]`)].find((x) => x.offsetParent !== null);
+      const r = e && e.getBoundingClientRect();
+      return !!r && r.top >= 0 && r.top < window.innerHeight / 2;
+    }, field, { timeout: 4000 }).then(() => true, () => false);
+    const after = await vis(field).evaluate((e) => e.getBoundingClientRect().top);
+    h.expect(ok, `${what}: the screen scrolled up to the first wrong field (top ${Math.round(before)} → ${Math.round(after)}, window 480)`);
+    await p.setViewportSize({ width: h.layout.width, height: h.layout.width === 390 ? 844 : 900 });
+  };
+  await scrolledUp("/lead/new", "lead-save", "field-phone", "lead");
 };
