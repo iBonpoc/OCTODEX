@@ -28,8 +28,10 @@ exports.run = async (h) => {
       const plate = chain.find((x) => x.w > 0 && x.w < maxW - 1 && x.bg && x.bg !== "transparent" && x.bg !== "rgba(0, 0, 0, 0)");
       return plate ? plate.bg : null;
     }, id);
-  const check = async (path, group) => {
+  /** `open` — what brings the group onto the screen (the own direction opens from «＋ Своё направление», #1797) */
+  const check = async (path, group, open) => {
     await h.go(path);
+    if (open) await open();
     await tid(group).waitFor({ timeout: 8000 });
     // a signed-in person reaches the screen without a redirect
     h.expect(new URL(p.url()).pathname === path.split("?")[0], `${path}: no redirect (${p.url()})`);
@@ -47,7 +49,7 @@ exports.run = async (h) => {
   await h.shot("sign-in");
   await check("/auth/company", "company-fields");
   await h.shot("company");
-  await check("/auth/trade", "trade-own");
+  await check("/auth/trade", "trade-own", () => p.getByRole("button", { name: "Своё направление", exact: true }).locator("visible=true").first().click());
   await h.shot("trade");
   await check(`/f/${TOKEN}`, "intake-fields");
   await h.shot("intake");
