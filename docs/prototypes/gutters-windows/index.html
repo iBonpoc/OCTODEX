@@ -132,7 +132,7 @@ const hdr=`<div class="hdr"><span class="b36 round">${ic('cl',20)}</span><span c
 const toolbar=(on)=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic('xsK')}Gutter</div><div class="c ${on==='ds'?'on':''}">${ic('dsRect')}Downspout</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${k('s1')};border-radius:10px;padding:0 6px">Эт 1</span>Этаж</div><div class="c">${ic('undo')}Назад</div><div class="c">${ic('redo')}Вперёд</div><div class="c">${ic('trash')}Удалить</div></div>`;
 const field=`<div class="fld">${ic('dsRect',18)}<b>Downspouts 1</b><span style="color:var(--mut)">· 35′ 10″ gutter</span></div>`;
 const cap=t=>`<div class="cap">${t}</div>`;
-const sheet=(title,sub,body,foot='',save=true)=>`<div class="sheet static"><div class="grab"></div><div class="sh">${save?`<span class="b36 round" aria-label="Закрыть">${ic('close',18)}</span>`:''}<h2>${title}${qm}${sub?` <span class="sub">${sub}</span>`:''}</h2>${save?`<span class="b36 acc">Сохранить</span>`:`<span class="b36 round" aria-label="Закрыть">${ic('close',18)}</span>`}</div><div class="body">${body}</div>${foot}</div>`;
+const sheet=(title,sub,body,foot='',save=true)=>`<div class="sheet static"><div class="grab"></div><div class="sh"><h2>${title}${qm}${sub?` <span class="sub">${sub}</span>`:''}</h2><span class="b36 round" aria-label="Закрыть">${ic('close',18)}</span></div><div class="body">${body}</div>${foot||(save?`<div class="foot"><span class="btnw acc">Сохранить</span></div>`:'')}</div>`;
 let H='';
 if(F==='ds'||F==='ds-copper'||F==='ds-deg'||F==='ds-plain'){
  const cu=F==='ds-copper',pl=F==='ds-plain';
