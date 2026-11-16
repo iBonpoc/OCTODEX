@@ -4,7 +4,8 @@
  * - a draft with a «нет цены» line: «PDF» opens the check «Нельзя отправить», no «Всё равно скачать PDF», no PDF is made;
  *   «Изменить смету» is the way out;
  * - a draft with only a test price: «Проверьте перед отправкой» → «Всё равно скачать PDF» → the PDF, without module words;
- * - a sent (not signed) one: the same check;
+ * - a sent (not signed) one with only a sample price: the PDF at once — the price reminder is said once, before the first
+ *   send (#1873, the audit 16.11), a sent estimate has had it;
  * - a signed estimate: the PDF at once (a copy of what was signed, no check).
  * The core reads only the source flags — the estimates are seeded, no module needed. By testID; waits on what it checks.
  */
@@ -66,22 +67,22 @@ exports.run = async (h) => {
   await capture();
   await pressPdf();
   await tid("pdf-check-review").waitFor({ timeout: 8000 });
-  h.expect((await tid("pdf-check-testPrice").count()) === 1, "the test price is listed");
+  h.expect((await tid("pdf-check-testPrice").count()) === 1, "the sample price is listed");
   h.expect(!(await pdfMade()), "no PDF before the confirmation");
   await h.shot("review");
   await tid("pdf-check-force").getByRole("button").click();
   await p.waitForFunction(() => !!window.__pdf, null, { timeout: 5000 });
   const pdf = await pdfMade();
   h.expect(/Gutter 5in K/.test(pdf), "the PDF has the estimate");
-  h.expect(!/Тестовая цена|Test price|Precio de prueba|Из замера|From measurement/.test(pdf), "no module marks in the PDF");
+  h.expect(!/Тестовая цена|Test price|Precio de prueba|Из замера|From measurement/.test(pdf), "no module marks in the PDF"); // i18n-old: ok — the old words must be absent
   h.expect((await tid("pdf-check").count()) === 0, "the check closed with the PDF");
 
   // sent, not signed: the same check
   await h.go("/estimate/e-e2e-166d");
   await capture();
   await pressPdf();
-  await tid("pdf-check-review").waitFor({ timeout: 8000 });
-  h.expect(!(await pdfMade()), "a sent estimate's PDF waits for the confirmation too");
+  await p.waitForFunction(() => !!window.__pdf, null, { timeout: 5000 });
+  h.expect((await tid("pdf-check").count()) === 0, "a sent estimate with only a sample price: no reminder again (#1873)");
 
   // signed: a copy of what was signed, no check
   await h.go("/estimate/e-e2e-166c");

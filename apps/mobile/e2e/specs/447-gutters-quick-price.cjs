@@ -2,7 +2,7 @@
  * e2e 447 — быстрая правка одной цены (docs/specs/53-price-update.md §6.3, волна 53-1; стык S0d-1). Every view.
  * - «Цены и прайс» модуля Gutters, тестовые позиции созданы: нажатие на карточку материала открывает шторку «Цена»;
  *   закупка и наценка → «Сохранить» — 2 нажатия (карточка, «Сохранить»): закупка и наценка в каталоге, цена клиенту
- *   посчитана (2.40 × 1.30 = $3.12), пометка «тестовая цена» снята;
+ *   посчитана (2.40 × 1.30 = $3.12), пометка в данных снята (надписи «тестовая цена» нет нигде, #1873);
  * - «Сохранить» без правки: пометка остаётся (правило 9);
  * - работа: цена клиенту → «Сохранить» → «Отменить» в тосте возвращает тестовую цену;
  * - закрыть шторку с изменённым вводом: вопрос «Сохранить изменения?» → «Не сохранять» — цена прежняя;
@@ -50,12 +50,12 @@ exports.run = async (h) => {
   // «Сохранить» without a change keeps the test mark
   await tid(`gpr-test-${mat2}`).click();
   await tid("qp-sheet").waitFor({ timeout: 5000 });
-  await tid("qp-test").waitFor({ timeout: 3000 });
+  h.expect((await tid("qp-test").count()) === 0, "no sample-price note in the sheet (#1873)");
   await tid("qp-nomarkup").waitFor({ timeout: 3000 });
   await h.shot("sheet");
   await tid("qp-save").getByRole("button").click();
   await sheetGone(p);
-  h.expect((await tid(`gpr-test-${mat2}`).count()) === 1, "an untouched test price stays a test price");
+  h.expect((await tid(`gpr-test-${mat2}`).count()) === 1, "an untouched sample price stays marked in the data");
 
   // a material: the card, then «Сохранить» — two taps
   taps = 0;
@@ -120,7 +120,7 @@ exports.run = async (h) => {
   h.expect(await undo(h), "«Отменить» in the toast");
   await tid("gpr-test-labor.install.story1").waitFor({ timeout: 5000 });
   await waitDb((db) => (db.catalog || []).some((x) => x.attributes && x.attributes.work === "install" && x.attributes.story === "1" && x.placeholder && x.priceCents !== 650),
-    "«Отменить» brings the test price back");
+    "«Отменить» brings the sample price back");
 
   // close with something typed: the question, «Не сохранять» — the price stays
   const before = (await byAttrs((a) => a.work === "install" && a.story === "1")).priceCents;

@@ -79,7 +79,7 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
-  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc) : null;
+  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc, { firstSend: e.status === "draft" }) : null;
   // C5b (spec 33 П23.11): the modules' words on an open estimate (e.g. «the measurement changed after it»)
   const notes = estimateNotes(db, e);
   const pdf = (checked = false) => {
@@ -517,7 +517,7 @@ function ModuleNoteCard({ n }: { n: ModuleNote & { module: string } }) {
   );
 }
 
-const CHECK_WORD = { noPrice: "ue.src.noPrice", testPrice: "ue.src.testPrice", gone: "ue.src.gone" } as const;
+const CHECK_WORD = { noPrice: "ue.src.noPrice", testPrice: "ue.check.samplePrices", gone: "ue.src.gone" } as const;
 
 /** C5: what stops a send — by kind, icon + word + count and the lines' names (rule 2); a way out in one tap. */
 /** the option a line is in, when there is more than one (a blank name → its number) */

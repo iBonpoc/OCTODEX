@@ -1,6 +1,7 @@
 /**
  * Catalog on the new list cards (step 10а, PR6), every view (3 widths × 2 themes).
- * - card: name, «$X / unit», kind and «тестовая цена» as grey tags, supplier, description; no «…»; edges aligned;
+ * - card: name, «$X / unit», kind as a grey tag, supplier, description; no «…»; edges aligned; a sample price carries no
+ *   mark of its own (#1873, the founder 16.11: «Нигде нет её. Надписи этой»);
  * - the office sees «Себестоимость» and «Маржа» tiles (always both); the technician sees the price but never cost or margin
  *   (spec 06 §7.6 exception for the catalog: the price is needed for an estimate on site);
  * - groups by kind under «All»;
@@ -19,7 +20,7 @@ exports.run = async (h) => {
   const txt = await card.innerText();
   h.expect(txt.includes(it.name) && new RegExp(`\\$[\\d,.]+ / ${it.unit}`).test(txt), `name and «$X / ${it.unit}»: ${txt.slice(0, 200)}`);
   if (it.vendor) h.expect(txt.includes(it.vendor), "supplier on the card");
-  if (it.placeholder) h.expect(txt.includes("тестовая цена"), "«тестовая цена» tag");
+  h.expect(!/тестовая цена/.test(txt), "no «test price» tag on a card (#1873)"); // i18n-old: ok — the old tag must be gone
   h.expect(txt.includes("Себестоимость") && txt.includes("Маржа"), "office: cost and margin tiles");
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…»");
   await h.expectText(/Материал · \d+|Услуга · \d+/, "groups by kind under «All»");

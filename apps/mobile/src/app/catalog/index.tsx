@@ -55,7 +55,7 @@ export default function Catalog() {
         value={`${money(eco.priceCents)} / ${it.unit}`}
         signs={canEdit && loss ? [{ tone: "bad", label: t("card.sign.loss") }] : undefined}
         edge={canEdit && loss ? "bad" : null}
-        tags={[t(kindLabel(it.kind)), ...(it.placeholder ? [t("cat.placeholder")] : [])]}
+        tags={[t(kindLabel(it.kind))]}
         facts={{
           // spec 36: the supplier's name from the list, else the old text
           supplier: supplierName(db, it) ? [supplierName(db, it), tax].filter(Boolean).join(" · ") : undefined,
