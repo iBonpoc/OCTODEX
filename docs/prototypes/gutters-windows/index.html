@@ -2,7 +2,7 @@
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Gutters windows</title>
 <!-- Прототип окон модуля Gutters (этап 0, задание руководителя №13, 16.11). Значения — токены «Наряда» (packages/design-tokens):
-     светлая тема, кнопки 36 / зона 44, поля и строки 44, радиусы card 16 / field 12, шрифт 15/13/11.5. ?f=ds|run|corner|canvas|link|draft|tab &t=light|dark -->
+     светлая тема, кнопки 36 / зона 44, поля и строки 44, радиусы card 16 / field 12, шрифт 15/13/11.5. ?f=ds|run|run-new|run-unsaved|corner|canvas|link|draft|tab &t=light|dark -->
 <style>
 [data-t=light]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--bd:rgba(20,22,30,.1);--bdField:rgba(20,22,30,.5);--track:rgba(20,22,30,.09);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#0B6290;--s2:#8A4F00;--node:#15161A;--grid:rgba(20,22,30,.05);--grid2:rgba(20,22,30,.1);--scrim:rgba(20,22,30,.25);--warnT:#944600;--okT:#176428;--infoT:#3647C4;--sh:0 1px 3px rgba(60,50,40,.12);--badT:#B4232A}
 [data-t=dark]{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;--bd:rgba(255,255,255,.14);--bdField:rgba(255,255,255,.38);--track:rgba(255,255,255,.12);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#7FD4FF;--s2:#FFC46B;--node:#F2F3F5;--grid:rgba(255,255,255,.06);--grid2:rgba(255,255,255,.11);--scrim:rgba(0,0,0,.42);--warnT:#FFB47E;--okT:#9CF0A8;--infoT:#C2CCFF;--sh:0 1px 3px rgba(0,0,0,.4);--badT:#FFAAAA}
@@ -128,7 +128,7 @@ const seg=(items,on)=>`<div class="seg">${items.map((x,i)=>`<span class="${i===o
 let grid='';for(let x=0;x<390;x+=24)grid+=`<line x1="${x}" y1="0" x2="${x}" y2="844" stroke="${x%96?k('grid'):k('grid2')}"/>`;for(let y=0;y<844;y+=24)grid+=`<line x1="0" y1="${y}" x2="390" y2="${y}" stroke="${y%96?k('grid'):k('grid2')}"/>`;
 const runL=(a,b,col=k('s1'),len,sel)=>{let s='';if(sel)s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k('ink')}" stroke-width="12" stroke-linecap="round"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k('bg')}" stroke-width="8" stroke-linecap="round"/>`;s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="${sel?6:4}" stroke-linecap="round"/>`;for(const p of [a,b])s+=`<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/>`;if(len){const v=Math.abs(b[0]-a[0])<2;s+=`<text x="${v?a[0]+12:(a[0]+b[0])/2}" y="${v?(a[1]+b[1])/2:a[1]-12}" font-size="12" font-weight="600" fill="${k('ink')}" text-anchor="${v?'start':'middle'}">${len}</text>`;}return s;};
 const dsM=(p,n)=>`<rect x="${p[0]-15}" y="${p[1]-10}" width="30" height="20" rx="3" fill="${k('s1')}" stroke="${k('bg')}" stroke-width="2"/><text x="${p[0]}" y="${p[1]+4}" font-size="11" font-weight="700" fill="${k('bg')}" text-anchor="middle">D${n}</text>`;
-const canvas=(extra='')=>`<svg class="cv" viewBox="0 0 390 844">${grid}${runL([40,300],[300,300],k('s1'),"21′ 8″",F==='run')}${runL([300,300],[300,470],k('s1'),"14′ 2″")}${dsM([300,430],1)}${extra}</svg>`;
+const canvas=(extra='')=>`<svg class="cv" viewBox="0 0 390 844">${grid}${runL([40,300],[300,300],k('s1'),F.startsWith('run')?"№1 · 21′ 8″":"21′ 8″",F==='run')}${runL([300,300],[300,470],k('s1'),"14′ 2″")}${dsM([300,430],1)}${extra}</svg>`;
 const hdr=`<div class="hdr"><span class="b36 round">${ic('cl',20)}</span><span class="b36">${ic('link',18)}Привязать</span><span class="b36 round">${ic('camera',20)}</span><span class="b36 round">${ic('more',20)}</span><span class="sp"></span><span class="b36 acc">Готово</span></div>`;
 const toolbar=(on)=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic('xsK')}Gutter</div><div class="c ${on==='ds'?'on':''}">${ic('dsRect')}Downspout</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${k('s1')};border-radius:10px;padding:0 6px">Эт 1</span>Этаж</div><div class="c">${ic('undo')}Назад</div><div class="c">${ic('redo')}Вперёд</div><div class="c">${ic('trash')}Удалить</div></div>`;
 const field=`<div class="fld">${ic('dsRect',18)}<b>Downspouts 1</b><span style="color:var(--mut)">· 35′ 10″ gutter</span></div>`;
@@ -173,16 +173,31 @@ if(F==='ds-bottom'){
  const o=(t,d,on)=>`<div class="opt"><div class="stack"><span>${t}</span><small>${d}</small></div>${on?ic('check',20):''}</div>`;
  H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Низ downspout</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">Что ставим у земли, где вода выходит из downspout.</div><div class="grp">${o('Ничего','downspout заканчивается elbow',true)}${o('Удлинитель','жёсткий, отводит воду от стены')}${o('Гибкий рукав','гофрированный, складывается')}${o('Откидной (flip-up)','поднимается, чтобы не мешал')}${o('Отбойная плита (splash block)','лоток под elbow')}${o('Ввод в дренаж (drain adapter)','переходник в дренаж в земле')}${o('Pop-up emitter','выпуск в газоне, открывается водой')}${o('Бочка','вода в бочку для полива')}${o('Чугунный boot','коммерческий, в землю')}${o('На нижнюю крышу','вода стекает на крышу ниже')}</div></div></div>`+cap('Стало v2: «Низ downspout» — список с пояснениями, по умолчанию «Ничего»');
 }
-if(F==='run'){
- H=sheet('Gutter','1-1 · 21′ 8½″',`
- <div class="grp">${sel('Профиль'+qm,'K-Style','xsK')}${sel('Размер'+qm,'5″')}${sel('Этаж'+qm,'1')}</div><div class="note dz">Меню: K-Style · Half Round · Box · Fascia · Euro — значок разреза слева в строке.</div>
- <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin('21','ft')}${fin('8','in')}<span class="sp"></span><span class="b36">Шкала</span></div>${frac('½')}<div class="note">На рисунке 21′ 4″, введено 21′ 8½″ — в расчёт идёт введённое.</div></div>
- <div class="grp">${row('Цвет','',{ctrl:`<span class="v"><i style="width:18px;height:18px;border-radius:9px;background:#D9DACF;border:1px solid var(--bd);display:inline-block"></i>High Gloss White${ic('cr',16)}</span>`})}${row('Материал'+qm,'Алюминий · .027')}</div>
- <div><div class="lbl">Защита от листьев (gutter guard)${qm}</div><div class="grp">${row('Вид','Микросетка')}${row('Сколько закрыть','Весь gutter · 21′ 8½″')}</div><div class="note dz">Список: Нет · Микросетка · Перфорированный · На защёлке · Откидная · Сетка на раме · Козырёк. Пены и ёршиков нет.</div></div>
- <div><div class="lbl">Демонтаж${qm}</div><div class="grp">${row('Снять старый gutter','',{ctrl:'<span class="tog on"></span>'})}${row('Была защита — снять','',{ctrl:'<span class="tog"></span>'})}</div></div>
- <div><div class="lbl">Крепление</div><div class="grp">${row('Крепится к'+qm,'Доске (fascia)')}${row('Кронштейны','Hidden hanger')}</div></div>
- <div class="grp">${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
- <div class="grp"><div class="row del">${ic('trash',20,k('badT'))}Удалить gutter</div></div>`)+cap('Стало v5: окно gutter — профиль, размер, этаж — строки с меню; дробь — клавиши FracKeys (спека 56)');
+if(F==='run'||F==='run-new'||F==='run-unsaved'){
+ // v6 (основатель 16.11 ~06:45, #1857): «Gutter № N»; длина ft · in · дробь (0 видно), лента под длиной, без «Рулетка» и «Применить»;
+ // размер · цвет · этаж одной строкой, профиль — меню со значком; материал, толщина, край крыши, крепление — меню;
+ // «Сохранить» и «Закрыть» внизу; без умолчаний у нового (#1858); цвет один на замер (#1859)
+ const nw=F==='run-new', pick='<span style="color:var(--mut)">Выберите</span>';
+ const mini=(k2,v)=>`<div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;padding:8px 10px"><small style="color:var(--mut);font-size:11.5px">${k2}</small><span style="display:flex;align-items:center;gap:2px;font-weight:600;white-space:nowrap">${v}${ic('cd',14)}</span></div>`;
+ const sw='<i style="width:14px;height:14px;border-radius:7px;background:#D9DACF;border:1px solid var(--bd);display:inline-block;margin-right:4px"></i>';
+ const tape=`<svg viewBox="0 0 358 44" style="width:100%;height:44px;margin-top:8px;border-radius:10px;background:var(--surf2)">${Array.from({length:49},(_,i)=>{const x=10+i*7,h=i%16===0?22:i%8===0?16:i%4===0?11:7;return `<line x1="${x}" y1="4" x2="${x}" y2="${4+h}" stroke="${k('mut')}" stroke-width="1.2"/>`}).join('')}<text x="10" y="40" font-size="11" fill="${k('mut')}">21′</text><text x="122" y="40" font-size="11" fill="${k('mut')}">21′ 8″</text><text x="234" y="40" font-size="11" fill="${k('mut')}">22′ 4″</text><rect x="${10+8*7+3.5}" y="2" width="3" height="40" rx="1.5" fill="${k('ink')}"/></svg>`;
+ const body=`
+ <div class="grp">${sel('Профиль'+qm,nw?pick:'K-Style',nw?null:'xsK')}</div>
+ <div class="grp" style="display:flex;flex-direction:row">${mini('Размер',nw?pick:'5″')}<span style="width:1px;background:var(--bd)"></span>${mini('Цвет',nw?pick:sw+'White')}<span style="width:1px;background:var(--bd)"></span>${mini('Этаж','1')}</div>
+ <div class="note">Цвет один на весь замер: смена меняет все gutters${nw?'':' (3)'}.</div>
+ <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin(nw?'14':'21','ft')}${fin(nw?'2':'8','in')}</div>${frac(nw?'0':'½')}${tape}<div class="note">Лента — прокрутите пальцем, шаг 1/16″. ${nw?'':'На рисунке 21′ 4″, введено 21′ 8½″ — в расчёт идёт введённое.'}</div></div>
+ <div class="grp">${sel('Материал'+qm,nw?pick:'Алюминий')}${sel('Толщина'+qm,nw?pick:'.027')}</div>
+ <div><div class="lbl">Крепление</div><div class="grp">${sel('Край крыши'+qm,'Лобовая доска (fascia)')}${sel('Крепление'+qm,'Hidden hanger')}</div></div>
+ <div><div class="lbl">Защита от листьев (gutter guard)${qm}</div><div class="grp">${sel('Вид','Нет')}</div></div>
+ <div><div class="lbl">Демонтаж${qm}</div><div class="grp">${row('Снять старый gutter','',{ctrl:'<span class="tog"></span>'})}</div></div>
+ <div class="grp">${row('Фото для бригады'+qm,'0',{icon:'camera',sub:'снимок этого места: увидит бригада'})}</div>
+ <div class="grp"><div class="row del">${ic('trash',20,k('badT'))}Удалить gutter</div></div>`;
+ const foot=`<div class="foot"><span class="btnw">Закрыть</span><span class="btnw acc">Сохранить</span></div>`;
+ H=sheet(nw?'Gutter № 2':'Gutter № 1',nw?'новый':'1-1 · 21′ 8½″',body,foot);
+ // «Закрыть» внизу — без второго «✕» в шапке (основатель: «Сохранить» и «Закрыть»)
+ H=H.replace(/<span class="b36 round" aria-label="Закрыть">[\s\S]*?<\/span>/,'');
+ if(F==='run-unsaved') H+=`<div style="position:absolute;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;padding:24px"><div style="background:var(--solid);box-shadow:var(--sh);border-radius:16px;padding:20px;width:100%;max-width:320px;display:flex;flex-direction:column;gap:12px"><b style="font-size:17px">Сохранить изменения?</b><span style="color:var(--mut)">Длина и цвет изменены.</span><span class="btnw acc">Сохранить</span><span class="btnw">Не сохранять</span><span class="btnw" style="background:transparent;border:0">Отмена</span></div></div>`;
+ H+=cap(nw?'Стало v6: новый gutter — профиль, размер, цвет, материал пустые: «Выберите» (без умолчаний, #1858)':F==='run-unsaved'?'Стало v6: «Закрыть» с несохранённым — «Сохранить / Не сохранять» (#1857 е)':'Стало v6: «Gutter № N»; размер · цвет · этаж одной строкой; длина с дробью и лентой; «Сохранить» и «Закрыть» (#1857)');
 }
 if(F==='corner'||F==='corner-in'){
  const inner=F==='corner-in';
