@@ -1,6 +1,5 @@
 /**
  * e2e 438 — forms and the client's request page, the rest of #1728 (DS §19.3, Б10, 1.15.8), every view, by testID:
- * - sign-in: the text button «Войти с паролем» stands on the column's left line with the fields (was 16 in);
  * - the request form /f/: on 820/1280 the 560 column with its title stands in the middle of the screen (was at the left,
  *   the right side empty); on every width one step under the title — languages → the company's card → the fields, equal;
  * - 1280: an estimate with a long name opened beside the list — its name in the panel's header and on its card is not cut
@@ -15,14 +14,6 @@ exports.run = async (h) => {
   await p.route("**/functions/v1/lead-intake*", async (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, form: { company: "Sunset Gutters", language: "en", captcha: false, sms_consent: false, categories: [] } }) }),
   );
-
-  // sign-in: the text button on the fields' line
-  await h.go("/auth/sign-in");
-  await tid("auth-fields").waitFor({ timeout: 8000 });
-  const fields = await tid("auth-fields").boundingBox();
-  const link = await p.getByText("Войти с паролем", { exact: true }).locator("visible=true").first().boundingBox();
-  h.expect(Math.abs(link.x - fields.x) <= 2, `«Войти с паролем» on the column's line (text ${link.x}, fields ${fields.x})`);
-  await h.shot("signin");
 
   // /f/: the column in the middle on a wide screen; one step under the title
   await h.go(`/f/${TOKEN}`);

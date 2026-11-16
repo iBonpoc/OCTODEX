@@ -119,8 +119,7 @@ export default function SignIn() {
           <StatusNote tone="bad">{err}</StatusNote>
         ) : null}
       </FieldGroup>
-      {/* the text buttons stand on the column's left line with the fields and the title, not 16 in (their own padding; #1728) */}
-      <View style={{ gap: space[2], marginLeft: -space[4] }}>
+      <View style={{ gap: space[2] }}>
         {mode !== "code" ? <Button label={t("auth.useCode")} variant="ghost" onPress={() => setMode("code")} /> : null}
         {mode === "code" ? <Button label={t("auth.usePassword")} variant="ghost" onPress={() => setMode("password")} /> : null}
         {mode === "password" ? <Button label={t("auth.noAccount")} variant="ghost" onPress={() => setMode("signup")} /> : null}
