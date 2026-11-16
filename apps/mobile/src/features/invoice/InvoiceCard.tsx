@@ -28,6 +28,7 @@ import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfa
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { paymentRight } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
 const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
 
@@ -135,7 +136,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
       <Card status={chip.s}>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="heading" style={{ flex: 1 }}>
-            {inv.title || t(`inv.kind.${inv.kind ?? "final"}` as DictKey)}
+            {invoiceTitle(inv, t)}
           </T>
           <StatusChip status={chip.s} label={chipLabel} />
         </RowView>
@@ -174,7 +175,7 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
         </RowView>
         <T v="caption" tone="mut">
           {t("money.due", { date: day(inv.dueDate) })}
-          {inv.sentAt ? ` · ${t("st.sent")} ${day(inv.sentAt)}` : ""}
+          {inv.sentAt ? ` · ${t("inv.sentOn", { date: day(inv.sentAt) })}` : ""}
           {lastReminder ? ` · ${t("mny.remind.last", { date: day(lastReminder.at) })}` : ""}
         </T>
       </Card>

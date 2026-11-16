@@ -5,7 +5,8 @@ import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { radius, space, component } from "@octo/design-tokens";
 import { expenseAmountCents } from "@/features/expenseAmount";
-import { isToday, useStore, visitContext } from "@/data/store";
+import { isToday, useStore } from "@/data/store";
+import { expenseJobChoices } from "@/features/expenseJobs";
 import type { ExpenseCategory } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
@@ -45,7 +46,8 @@ export default function NewExpense() {
   };
   const jobs = [
     { key: "none", label: t("exp.noJob") },
-    ...todays.filter((v): v is typeof v & { jobId: string } => !!v.jobId).map((v) => ({ key: v.jobId, label: visitContext(db, v).customer?.name ?? v.jobId })),
+    // the job by its number and title, not the client's name (#1427 053)
+    ...expenseJobChoices(db, todays),
   ];
   return (
     <Screen form title={t("exp.title")} back={back}>

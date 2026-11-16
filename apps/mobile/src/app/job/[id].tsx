@@ -39,6 +39,8 @@ import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
+import { invoiceTitle } from "@/features/invoiceTitle";
+import { signedText } from "@/i18n/translate";
 
 type Tab = "details" | "money" | "history";
 
@@ -47,7 +49,7 @@ export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
-  const { t, money, day, time } = useI18n();
+  const { t, money, day, time, duration } = useI18n();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("details");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
@@ -269,7 +271,7 @@ export default function JobScreen() {
                 testID={`job-visit-${v.id}`}
                 lead={{ kind: "icon", icon: "calendar" }}
                 title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
-                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : `${v.durationMin} ${t("sch.min")}`].filter(Boolean).join(" · ")}
+                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : duration(v.durationMin)].filter(Boolean).join(" · ")}
                 status={{ tone: vs.status, label: t(vs.label) }}
                 onPress={() => router.push(`/visit/${v.id}`)}
               />
@@ -357,10 +359,12 @@ export default function JobScreen() {
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="heading">{t("jobs.profit")}</T>
-            <T v="title" tabular tone={pr.profit < 0 ? "bad" : "ink"}>
-              {money(pr.profit)}
-              {pr.marginPct !== null ? ` · ${pr.marginPct}%` : ""}
-            </T>
+            <View testID="job-profit">
+              <T v="title" tabular tone={pr.profit < 0 ? "bad" : "ink"}>
+                {money(pr.profit)}
+                {pr.marginPct !== null ? ` · ${signedText(pr.marginPct)}%` : ""}
+              </T>
+            </View>
           </RowView>
         </Card>
       </View>
@@ -387,7 +391,7 @@ export default function JobScreen() {
               density="compact"
               testID={`job-invoice-${i.id}`}
               lead={{ kind: "icon", icon: "invoice" }}
-              title={i.title || i.number || t("inv.title")}
+              title={(i.title && invoiceTitle(i, t)) || i.number || t("inv.title")}
               when={i.title ? i.number : undefined}
               value={money(Math.max(0, i.totalCents - i.paidCents))}
               onPress={() => router.push(`/invoice/${i.id}`)}

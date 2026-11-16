@@ -13,7 +13,7 @@ const ICON: Record<ReportId, IconKey> = { owed: "invoice", collected: "wallet", 
 /** «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14; «По направлениям» — step 12б, 18 §11): five reports, each a card with its headline number for this month. */
 export default function Reports() {
   const { db, role } = useStore();
-  const { t, moneyWhole } = useI18n();
+  const { t, tn, moneyWhole } = useI18n();
   const { device } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeeReports(role))
@@ -39,7 +39,9 @@ export default function Reports() {
     })(),
     categories: (() => {
       const c = categoryReport(db, "month");
-      return { value: moneyWhole(c.total.revenueCents), label: t("mny.p.month"), note: t("rpt.cat.note", { n: c.rows.filter((x) => x.key !== NO_CATEGORY).length }) };
+      // «Направлений: 0» next to $4,162 read as a contradiction: no directions set says so in words (#1427 045)
+      const dirs = c.rows.filter((x) => x.key !== NO_CATEGORY).length;
+      return { value: moneyWhole(c.total.revenueCents), label: t("mny.p.month"), note: dirs ? tn("rpt.cat.dirs", dirs) : t("rpt.cat.noDirs") };
     })(),
   };
   const card = (id: ReportId) => (

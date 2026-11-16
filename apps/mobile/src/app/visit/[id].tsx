@@ -34,6 +34,7 @@ import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
 import { canTakeVisitPayment } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
+import { signedText } from "@/i18n/translate";
 
 const haptic = () => haptics.medium();
 
@@ -302,7 +303,7 @@ export default function VisitScreen() {
           />
           <View testID="visit-record-payment">
             <Button
-              label={t("visit.recordPayment")}
+              label={t("money.receive")}
               icon="dollar"
               full
               onPress={() => {
@@ -338,7 +339,7 @@ export default function VisitScreen() {
                 <RowView style={{ justifyContent: "space-between" }}>
                   <T v="body" tone="mut">{t("job.profit")}</T>
                   <T v="heading" tabular tone={p.profit >= 0 ? "ok" : "bad"}>
-                    {money(p.profit)}{p.marginPct !== null ? ` · ${p.marginPct}%` : ""}
+                    {money(p.profit)}{p.marginPct !== null ? ` · ${signedText(p.marginPct)}%` : ""}
                   </T>
                 </RowView>
                 <T v="caption" tone="mut">

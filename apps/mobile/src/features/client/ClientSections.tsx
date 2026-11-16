@@ -34,6 +34,7 @@ import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, ListRow, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
 const PHONE_KEY: Record<string, DictKey> = { mobile: "phone.mobile", home: "phone.home", work: "phone.work", other: "phone.other" };
 
@@ -253,7 +254,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                   density="compact"
                   testID={`client-invoice-${inv.id}`}
                   lead={{ kind: "icon", icon: "invoice" }}
-                  title={inv.title || findJob(db, inv.jobId)?.title || inv.number || ""}
+                  title={(inv.title && invoiceTitle(inv, t)) || findJob(db, inv.jobId)?.title || inv.number || ""}
                   when={[inv.number, inv.title ? findJob(db, inv.jobId)?.title : null].filter(Boolean).join(" · ") || undefined}
                   value={money(inv.totalCents)}
                   status={{ tone: ic.s, label: t(ic.l, ic.p) }}

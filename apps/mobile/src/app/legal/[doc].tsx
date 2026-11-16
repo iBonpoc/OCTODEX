@@ -47,6 +47,15 @@ export default function LegalDocument() {
               <View key={i} style={{ gap: space[1] }}>
                 <T v="heading">{t(`legal.${doc}.${i}.t` as DictKey)}</T>
                 <T v="body">{t(`legal.${doc}.${i}.b` as DictKey)}</T>
+                {/* the SMS carriers' required sentence (A2P 10DLC) stays in English; in RU and ES a line above says why (#1427 090) */}
+                {doc === "privacy" && i === 2 && lang !== "en" ? (
+                  <View testID="legal-privacy-sms" style={{ gap: space[1] }}>
+                    <T v="caption" tone="mut">
+                      {t("legal.privacy.sms.note")}
+                    </T>
+                    <T v="body">{t("legal.privacy.sms.text")}</T>
+                  </View>
+                ) : null}
               </View>
             ))}
           </View>
