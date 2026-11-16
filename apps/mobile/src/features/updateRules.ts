@@ -29,24 +29,29 @@ export function updateView(p: { supported: boolean; downloaded: boolean; needsBu
   return p.downloaded ? "ready" : "none";
 }
 
-/** the file the release puts on the site next to the web app: the runtime the newest publication belongs to (#1675) */
-export type Compat = { runtime: string; build: number };
+/** the file the release puts on the site next to the web app: the runtime of the newest publication per platform (iOS and Android fingerprints differ, #1675) */
+export type Compat = { runtime: { ios?: string; android?: string }; build: number };
 
 export function parseCompat(raw: unknown): Compat | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as { runtime?: unknown; build?: unknown };
-  if (typeof o.runtime !== "string" || !o.runtime.trim()) return null;
+  if (!o.runtime || typeof o.runtime !== "object") return null;
+  const r = o.runtime as { ios?: unknown; android?: unknown };
+  const pick = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  const runtime = { ios: pick(r.ios), android: pick(r.android) };
+  if (!runtime.ios && !runtime.android) return null;
   const build = typeof o.build === "number" && Number.isFinite(o.build) ? o.build : 0;
-  return { runtime: o.runtime.trim(), build };
+  return { runtime, build };
 }
 
 /**
  * Does the running build need a newer one from TestFlight / the App Store? Unknown (no file, no network, no runtime) — null: the strip stays quiet.
  * The SDK cannot say it: a build whose runtime is not the published one is simply served nothing (reason «noUpdateAvailableOnServer»).
  */
-export function needsNewBuild(runningRuntime: string | null | undefined, compat: Compat | null): boolean | null {
-  if (!compat || !runningRuntime) return null;
-  return runningRuntime.trim() !== compat.runtime;
+export function needsNewBuild(runningRuntime: string | null | undefined, compat: Compat | null, platform: "ios" | "android" | string): boolean | null {
+  const want = platform === "ios" || platform === "android" ? compat?.runtime[platform] : undefined;
+  if (!want || !runningRuntime) return null; // no key for this platform: silence
+  return runningRuntime.trim() !== want;
 }
 
 /** the row in Settings: what it says about the update */

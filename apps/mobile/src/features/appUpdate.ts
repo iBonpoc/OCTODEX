@@ -47,7 +47,7 @@ async function readCompat(): Promise<Compat | null> {
   try {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), 8000);
-    const r = await fetch(`${WEB_APP_URL}/app-compat.json`, { cache: "no-store", signal: ctl.signal });
+    const r = await fetch(`${WEB_APP_URL}/app-compat.json?t=${Date.now()}`, { cache: "no-store", signal: ctl.signal });
     clearTimeout(timer);
     return r.ok ? parseCompat(await r.json()) : null;
   } catch {
@@ -62,7 +62,7 @@ export async function checkForUpdate(reason: CheckReason): Promise<void> {
   set({ checking: true });
   try {
     const [compat, found] = await Promise.all([readCompat(), Updates.checkForUpdateAsync()]);
-    const needs = needsNewBuild(Updates.runtimeVersion, compat);
+    const needs = needsNewBuild(Updates.runtimeVersion, compat, Platform.OS);
     if (found.isAvailable) {
       await Updates.fetchUpdateAsync();
       set({ downloaded: true, hidden: false });

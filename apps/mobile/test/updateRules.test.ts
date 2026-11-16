@@ -34,14 +34,18 @@ describe("unit:update — what the strip and the row say", () => {
     expect(updateView({ supported: true, downloaded: true, needsBuild: true })).toBe("needsBuild");
     expect(updateView({ supported: true, downloaded: false, needsBuild: null })).toBe("none");
   });
-  it("compat file: bad shapes are not known (null), a different runtime needs a new build", () => {
+  it("compat file: bad shapes are not known (null); per platform; no key of the platform — silence", () => {
     expect(parseCompat(null)).toBeNull();
-    expect(parseCompat({ runtime: "" })).toBeNull();
-    expect(parseCompat({ runtime: " exposdk:58.0.0 ", build: 7 })).toEqual({ runtime: "exposdk:58.0.0", build: 7 });
-    expect(needsNewBuild("exposdk:58.0.0", parseCompat({ runtime: "exposdk:58.0.0" }))).toBe(false);
-    expect(needsNewBuild("exposdk:58.0.0", parseCompat({ runtime: "fp:abc" }))).toBe(true);
-    expect(needsNewBuild("exposdk:58.0.0", null)).toBeNull(); // no file, no network: silence
-    expect(needsNewBuild(undefined, parseCompat({ runtime: "x" }))).toBeNull();
+    expect(parseCompat({ runtime: "x" })).toBeNull();
+    expect(parseCompat({ runtime: {} })).toBeNull();
+    const c = parseCompat({ runtime: { ios: " exposdk:58.0.0 ", android: "fp:abc" }, build: 7 });
+    expect(c).toEqual({ runtime: { ios: "exposdk:58.0.0", android: "fp:abc" }, build: 7 });
+    expect(needsNewBuild("exposdk:58.0.0", c, "ios")).toBe(false);
+    expect(needsNewBuild("exposdk:58.0.0", c, "android")).toBe(true);
+    expect(needsNewBuild("exposdk:58.0.0", parseCompat({ runtime: { ios: "exposdk:58.0.0" } }), "android")).toBeNull();
+    expect(needsNewBuild("exposdk:58.0.0", null, "ios")).toBeNull(); // no file, no network: silence
+    expect(needsNewBuild(undefined, c, "ios")).toBeNull();
+    expect(needsNewBuild("x", c, "web")).toBeNull();
   });
   it("the row: ready and needsBuild win; then checking; then latest only after a good look", () => {
     expect(rowState({ checking: true, view: "ready", checkedOnce: true })).toBe("ready");
