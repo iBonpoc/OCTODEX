@@ -9148,6 +9148,17 @@ update public.estimate_line_items set quantity = 1 where id = 'a1070000-0000-400
 -- security-check С3: a member cannot make a version that is locked from the start
 select tst.fails_like($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, locked_at)
   values ('a1070000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 7, now())$q$, '%cannot be locked%', 'T107 a version born locked');
+-- #817 (founder 11.11, G-15): a gutter's length in feet to four places — 40′ 5″ = 40.4167 ft (it was 40.42) — at $12.34:
+-- the server keeps all four places and its cents are the engine's (jobLines.test.ts «#817»): floor(40.4167 × 1234 + 0.5) = 49874
+update public.estimate_versions set calc_inputs = jsonb_set(jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"40.4167"'), '{options,0,lines,0,unitPriceCents}', '1234') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 40.4167, unit_price_cents = 1234 where id = 'a1070000-0000-4000-8000-0000000000b1';
+select tst.ok((select quantity = 40.4167 and line_total_cents = 49874 from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b1'), 'T107 #817 40.4167 ft × $12.34 → $498.74, the engine''s cents');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 #817 four places: the document and the lines match');
+:as_office_a
+-- put the line back as the document had it (quantity 1, $100.00): the blocks below change only the quantity
+update public.estimate_versions set calc_inputs = jsonb_set(jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1"'), '{options,0,lines,0,unitPriceCents}', '10000') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1, unit_price_cents = 10000 where id = 'a1070000-0000-4000-8000-0000000000b1';
 -- a quantity with 5 decimals: both sides count the stored 1.2346 (the engine too, custom.test.ts) → $123.46
 update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1.23455"') where id = 'a1070000-0000-4000-8000-000000000002';
 update public.estimate_line_items set quantity = 1.23455 where id = 'a1070000-0000-4000-8000-0000000000b1';
