@@ -14,6 +14,7 @@ import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
+import { StatusNote } from "@/ui/statusNote";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
@@ -30,6 +31,8 @@ export default function CatalogItemScreen() {
   const store = useStore();
   const { t, money } = useI18n();
   const toast = useToast();
+  /** «Сохранить» was pressed with something missing (the button is never pale, DS §11 п.3) */
+  const [need, setNeed] = useState(false);
   const found = store.db.catalog.find((x) => x.id === id);
   const [it, setIt] = useState<CatalogItem>(
     () => found ?? { id: uid(), kind: kind0 && KINDS.includes(kind0) ? kind0 : "service", name: "", unit: "ea", priceCents: 0 },
@@ -177,14 +180,20 @@ export default function CatalogItemScreen() {
         </Card>
       ) : null}
 
+      {/* what is missing: a quiet line until «Сохранить» is pressed, then the warning at the button — one place, as on the other forms
+          (design review of #1728: not a line and a toast) */}
       {!ok ? (
-        <T v="caption" tone="mut">
-          {t("cat.need")}
-        </T>
+        need ? (
+          <StatusNote tone="warn" testID="catalog-need">{t("cat.need")}</StatusNote>
+        ) : (
+          <T v="caption" tone="mut">
+            {t("cat.need")}
+          </T>
+        )
       ) : null}
       <View testID="catalog-save">
         {/* always there to press (DS §11 п.3, #1728): an item without a name or a price says so */}
-        <Button label={t("ue.save")} icon="check" full onPress={() => (ok ? save() : toast.show(t("cat.need")))} />
+        <Button label={t("ue.save")} icon="check" full onPress={() => (ok ? save() : setNeed(true))} />
       </View>
       {found ? <Button label={t("cat.remove")} icon="trash" variant="ghost" full onPress={remove} /> : null}
       <SupplierPicker
