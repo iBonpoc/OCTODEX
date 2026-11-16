@@ -76,7 +76,7 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
             const name = ns.length > 1 ? t("mod.gutters.view.dsMany", { list: dsNumbers(t, ns), n: ns.length }) : dsNumbers(t, ns);
             const what = [sizeText(d.size), d.dsStyle ? word(t, `mod.gutters.attr.st.${d.dsStyle}`, d.dsStyle) : "", d.color ? word(t, `mod.gutters.attr.c.${d.color}`, d.color) : "", story ? t("mod.gutters.story", { n: d.story }) : ""].filter(Boolean).join(" · ");
             const how = [dsLine(t, d), d.bottom !== "none" ? word(t, `mod.gutters.attr.b.${d.bottom}`, d.bottom) : ""].filter(Boolean).join(" · ");
-            return `<tr><td><b>${esc(name)}</b></td><td>${esc(what)}</td><td>${esc(how)}</td><td class="r">${esc(len(d.lengthIn))}</td></tr>`;
+            return `<tr><td><b>${esc(name)}</b></td><td>${esc(what)}</td><td>${esc(how)}</td><td class="r">${esc(ns.length > 1 ? t("mod.gutters.view.dsEach", { len: len(d.lengthIn) }) : len(d.lengthIn))}</td></tr>`;
           })
           .join("")}</table>`
       : `<p>${esc(t("mod.gutters.pdf.dsCount", { n: spec.ds.length }))}</p>`

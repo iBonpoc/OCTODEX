@@ -329,7 +329,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
                   <T v="body" w="semibold">{t("mod.gutters.draw.cutRun", { n: r.n })}</T>
                   <T v="caption" tone="mut">{[spec.manyStories ? t("mod.gutters.story", { n: r.story }) : null, `${word(`mod.gutters.attr.p.${r.profile}`, r.profile)} ${sizeText(r.size)}`, r.color ? word(`mod.gutters.attr.c.${r.color}`, r.color) : null].filter(Boolean).join(" · ")}</T>
                 </RowView>
-                <T v="body" tabular>{t("mod.gutters.view.runLine", { back: fmtLen(r.backIn, fmt), front: fmtLen(r.frontIn, fmt) })}</T>
+                <T v="body">{t("mod.gutters.view.runLine", { back: fmtLen(r.backIn, fmt), front: fmtLen(r.frontIn, fmt) })}</T>
               </View>
             ))}
           </Card>
@@ -342,7 +342,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <View key={c.id} testID={`view-corner-${c.id}`} style={{ gap: space[1] }}>
                 <T v="body" w="semibold">{t("mod.gutters.view.cornerTitle", { k: kindWord(c.kind), deg: c.angleDeg })}</T>
                 {c.runs.map((x) => (
-                  <T key={x.n} v="caption" tabular>{t("mod.gutters.view.cornerRun", { n: x.n, back: fmtLen(x.backIn, fmt), front: fmtLen(x.frontIn, fmt) })}</T>
+                  <T key={x.n} v="caption">{t("mod.gutters.view.cornerRun", { n: x.n, back: fmtLen(x.backIn, fmt), front: fmtLen(x.frontIn, fmt) })}</T>
                 ))}
               </View>
             ))}
@@ -364,7 +364,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
                     title={ns.length > 1 ? t("mod.gutters.view.dsMany", { list: dsNumbers(t, ns), n: ns.length }) : dsNumbers(t, ns)}
                     props={[what]}
                     more={how ? <View testID={`view-ds-line-${d.n}`}><T v="caption" tone="mut" numberOfLines={2}>{how}</T></View> : null}
-                    qty={fmtLen(d.lengthIn, fmt)}
+                    qty={ns.length > 1 ? t("mod.gutters.view.dsEach", { len: fmtLen(d.lengthIn, fmt) }) : fmtLen(d.lengthIn, fmt)}
                     testID={`view-ds-${d.n}`}
                   />
                 </View>

@@ -3596,6 +3596,7 @@ export const en: Dict = {
   "mod.gutters.view.grp.ds": "Downspout",
   "mod.gutters.view.grp.fix": "Fasteners and supplies",
   "mod.gutters.view.dsMany": "{list} · {n} ea",
+  "mod.gutters.view.dsEach": "{len} each",
   "mod.gutters.view.parts": "Parts",
   "mod.gutters.sheet.tape": "Tape — measured exactly, ready to cut",
   "mod.gutters.sheet.scale": "Scale: {len}",

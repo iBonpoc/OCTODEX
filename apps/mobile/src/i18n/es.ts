@@ -3596,6 +3596,7 @@ export const es: Dict = {
   "mod.gutters.view.grp.ds": "Bajante",
   "mod.gutters.view.grp.fix": "Fijaciones y consumibles",
   "mod.gutters.view.dsMany": "{list} · {n} u",
+  "mod.gutters.view.dsEach": "{len} c/u",
   "mod.gutters.view.parts": "Piezas",
   "mod.gutters.sheet.tape": "Cinta — medida exacta, lista para cortar",
   "mod.gutters.sheet.scale": "Escala: {len}",

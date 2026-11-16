@@ -3596,6 +3596,7 @@ export const ru = {
   "mod.gutters.view.grp.ds": "Водосток",
   "mod.gutters.view.grp.fix": "Крепёж и расходники",
   "mod.gutters.view.dsMany": "{list} · {n} шт",
+  "mod.gutters.view.dsEach": "по {len}",
   "mod.gutters.view.parts": "Детали",
   "mod.gutters.sheet.tape": "Рулетка — замер точный, можно резать",
   "mod.gutters.sheet.scale": "Масштаб: {len}",

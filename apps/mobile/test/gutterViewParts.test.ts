@@ -4,13 +4,13 @@
  * the client's language, and «Обновить смету» renames the lines nobody renamed by hand.
  */
 import { describe, expect, it } from "vitest";
-import { computeGutterParts, resolveGutterRules, type PartQty } from "@octo/estimating-engine";
+import { computeGutterParts, GUTTER_SECTIONS, resolveGutterRules, type PartQty } from "@octo/estimating-engine";
 import { tFor } from "../src/i18n/translate";
 import type { DrawnRun, Drawing, P } from "../src/modules/gutters/geometry";
 import { toMeasurement } from "../src/modules/gutters/geometry";
 import { DEFAULT_DS_ATTRS } from "../src/modules/gutters/canvas/model";
 import { partName, partView, sampleJob, sizeText } from "../src/modules/gutters/prices";
-import { dsNumbers, foldDs, measureSpec, partGroups } from "../src/modules/gutters/view/spec";
+import { dsNumbers, foldDs, GROUP_OF, measureSpec, partGroups } from "../src/modules/gutters/view/spec";
 import { linesFromParts, resyncLines } from "../src/modules/gutters/estimate";
 
 const LANGS = ["ru", "en", "es"] as const;
@@ -127,6 +127,9 @@ describe("#1766 «Состав замера»: three groups, no twin rows", () =
       expect(gs[0]!.rows.find((r) => r.key.startsWith("gutter."))!.props).not.toContain(buy);
     });
   }
+  it("every section the engine has belongs to a group (a new one must be placed, not fall into «Крепёж» by itself)", () => {
+    expect(Object.keys(GROUP_OF).sort()).toEqual([...GUTTER_SECTIONS].sort());
+  });
   it("a property every row of a group has is said once, in the group's caption", () => {
     const t = tFor("ru");
     const g = partGroups(t, measureSpec(d, parts).parts)[0]!;

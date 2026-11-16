@@ -5,7 +5,7 @@
  * and the engine's parts in, rows out (the screen words them). Numbers are the drawing's own: gutter №n is the n-th
  * drawn (as the corner sheet says «Желоб n»), DS n the n-th downspout (as the canvas label).
  */
-import { dec, downspoutLengthIn, type Dec, resolveGutterRules, type GutterRulesOverride, type MeasurementInput, type PartQty } from "@octo/estimating-engine";
+import { dec, downspoutLengthIn, type Dec, type GutterSection, resolveGutterRules, type GutterRulesOverride, type MeasurementInput, type PartQty } from "@octo/estimating-engine";
 import type { DictKey } from "@/i18n";
 import { cornerCut, findCorners, toMeasurement, type Drawing, type FoundCorner } from "../geometry";
 import { manyStories, storyOf, type Story } from "../canvas/scene";
@@ -149,10 +149,12 @@ export interface PartGroup {
 }
 
 /** the engine's sections → the three groups a person reads (the gutter, the downspout, the fasteners and supplies) */
-const GROUP_OF: Record<string, PartGroup["key"]> = {
+export const GROUP_OF: Record<GutterSection, PartGroup["key"] | null> = {
   gutter: "gutter", corners_caps: "gutter", guards: "gutter",
   downspouts: "ds", adapters: "ds", ds_bottom: "ds",
   fasteners: "fix", consumables: "fix",
+  // labour is the estimate's, never a part to bring (measureSpec keeps materials only)
+  labor: null,
 };
 
 /**
