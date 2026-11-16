@@ -4,7 +4,7 @@ import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
 import { dayKeyLabel, dayLabel, formatDayKey, getZone, timeLabel, zonedFormat, type DayKey } from "@/features/zone";
 import type { DictKey } from "./ru";
-import { translate, type DocLang, type Lang, type Params } from "./translate";
+import { setAppLang, translate, type DocLang, type Lang, type Params } from "./translate";
 
 export { tFor, DOC_LANGS, DOC_LANG_LABEL, type DocLang, type Lang } from "./translate";
 export const languages: { id: Lang; label: string }[] = [
@@ -42,6 +42,8 @@ const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang, ready] = usePersistentState<Lang>("octo.lang.v1", deviceLang);
+  // before the children render: the store below seeds the demo in this language (#1223)
+  if (ready) setAppLang(lang);
   const t = useCallback(
     (key: DictKey, params?: Params) => translate(lang, key, params),
     [lang],
