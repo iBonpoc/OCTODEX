@@ -32,8 +32,6 @@ export default function AcceptInvite() {
   const [busy, setBusy] = useState(false);
   const [round, setRound] = useState(0);
   const [err, setErr] = useState("");
-  /** «Принять» was pressed without the tick: say what is missing (the button is never pale, DS §11 п.3) */
-  const [need, setNeed] = useState(false);
   const tried = useRef(false);
   const signedIn = !!auth.userId;
   const step = inviteStep({ signedIn, legalChecked: auth.legalChecked, legal: auth.legal });
@@ -95,9 +93,7 @@ export default function AcceptInvite() {
               {err ? (
                 <StatusNote tone="bad">{err}</StatusNote>
               ) : null}
-              {/* the main button of the form is always there to press (DS §11 п.3, #1728): without the tick it says what is missing */}
-              {need ? <StatusNote tone="warn">{t("legal.err.needed")}</StatusNote> : null}
-              <Button label={t("legal.gate.accept")} icon="check" full disabled={busy} onPress={() => (agreed ? agreeAndJoin() : setNeed(true))} />
+              <Button label={t("legal.gate.accept")} icon="check" full disabled={!agreed || busy} onPress={agreeAndJoin} />
             </View>
           ) : state === "error" ? (
             <>
