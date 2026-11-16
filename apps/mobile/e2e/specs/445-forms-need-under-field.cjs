@@ -68,11 +68,10 @@ exports.run = async (h) => {
   h.expect((await ownInput.inputValue()) === "Pressure washing 445", "the own direction is filled from the search");
   await vis("trade-next").click();
   await p.waitForURL(/company\/profile/, { timeout: 8000 });
-  let saved = false;
-  for (let i = 0; i < 20 && !saved; i++) {
-    saved = (await h.db()).serviceCategories.some((c) => c.name === "Pressure washing 445");
-    if (!saved) await p.waitForTimeout(200);
-  }
+  // the store writes to the phone's storage a moment after the change: wait for the record itself
+  const saved = await p
+    .waitForFunction(() => (JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.serviceCategories ?? []).some((c) => c.name === "Pressure washing 445"), null, { timeout: 5000 })
+    .then(() => true, () => false);
   h.expect(saved, "the own direction is saved");
 
   // a new service: no name

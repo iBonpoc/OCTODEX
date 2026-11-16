@@ -43,7 +43,7 @@ export function SelectorsSection() {
   const [vtab, setVtab] = useState<VTab>("overview");
   const [many, setMany] = useState<Unit>("ft");
   // several of many (DS §А4, #1797): a list with flags, not wrapping chips
-  const [multi, setMulti] = useState<string[]>(["gutters"]);
+  const [multi, setMulti] = useState<string[]>(["roofing"]);
   // a required field (DS §11 п.3–4): the button is always on; pressed with the field empty it shows the error under it
   const form = useRequiredForm();
   const [reqName, setReqName] = useState("");
@@ -91,7 +91,7 @@ export function SelectorsSection() {
           testID="showcase-multi"
           value={multi}
           onChange={setMulti}
-          items={(["gutters", "roofing", "hvac", "painting", "cleaning"] as const).map((k) => ({ key: k, label: t(`trade.${k}` as DictKey) }))}
+          items={(["roofing", "hvac", "painting", "cleaning", "flooring"] as const).map((k) => ({ key: k, label: t(`trade.${k}` as DictKey) }))}
         />
       </Card>
       <FieldGroup title={t("ds.req.title")}>
