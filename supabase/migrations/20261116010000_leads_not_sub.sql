@@ -207,6 +207,7 @@ begin
 end;
 $$;
 revoke all on function app.trash_reason(text, uuid, boolean) from public, anon;
+grant execute on function app.trash_reason(text, uuid, boolean) to authenticated;
 
 create or replace function public.trash_list(p_company uuid)
 returns table (kind text, object_id uuid, label text, deleted_by uuid, deleted_by_name text, deleted_at timestamptz, days_left int)
