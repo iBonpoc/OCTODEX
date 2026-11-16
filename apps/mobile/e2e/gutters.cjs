@@ -162,6 +162,17 @@ async function pastDoubleTap(p) {
   await p.waitForFunction((t0) => Date.now() - t0 > 400, Date.now(), { polling: 50, timeout: 3000 });
 }
 
+// The downspout's menu (#1563, founder 14.11): it no longer opens by itself when one is put, nor on one tap with «Водосток» — two taps on its
+// mark open it, as on anything else. `near` (page px): the mark nearest to it (the one just put); none — the last mark drawn.
+async function openDsMenu(p, near) {
+  await pastDoubleTap(p); // the tap that put it is not the first half of these two
+  const marks = await p.getByTestId("draw-svg").first().locator("circle").evaluateAll((cs) => cs.map((c) => { const r = c.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+  if (!marks.length) throw new Error("openDsMenu: no downspout mark on the drawing");
+  const at = near ? marks.sort((u, v) => Math.hypot(u[0] - near[0], u[1] - near[1]) - Math.hypot(v[0] - near[0], v[1] - near[1]))[0] : marks[marks.length - 1];
+  const open = { fn: () => [...document.querySelectorAll('[data-testid="attr-panel"]')].some((e) => e.getClientRects().length > 0), arg: null };
+  await doubleTapUntil(p, at[0], at[1], open, "the downspout's menu opens on two taps");
+}
+
 // «Весь рисунок» (#1273): «вписать» left the header — it is a row of «⋯» (and a double tap on the empty place)
 async function fitAll(p) {
   await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
@@ -180,4 +191,4 @@ async function fitAll(p) {
   await p.evaluate(() => { delete globalThis.__fitW; });
 }
 
-module.exports = { openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+module.exports = { openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

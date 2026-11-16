@@ -4,6 +4,7 @@
  * open lead; a client's address. A measurement already linked goes to another one (relink, #692). Picker rows are
  * ListRow (rule 12); every link can be undone for 5 s (rule 5).
  */
+import * as Clipboard from "expo-clipboard";
 import { useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
@@ -11,6 +12,7 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { phoneKey } from "@/features/leads";
 import { Button, Segmented, TextField } from "@/ui/controls";
+import { formatPhoneUS } from "@/ui/inputFormat";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow } from "@/ui/surfaces";
@@ -30,6 +32,11 @@ export function LinkSheet({ visible, onClose, measurementId }: { visible: boolea
   const [name, setName] = useState("");
   const [client, setClient] = useState<{ c: Customer; places: Property[] } | null>(null);
   const { leads, clients } = linkChoices(store.db, q);
+  // the call the contractor is on: the number pasted by an icon inside the field (DS §11 п.18, #1453; as «Новый лид»)
+  const paste = async () => {
+    const s = await Clipboard.getStringAsync().catch(() => "");
+    if (s) setPhone(formatPhoneUS(s));
+  };
   const reset = () => {
     setTab("leads");
     setClient(null);
@@ -81,7 +88,7 @@ export function LinkSheet({ visible, onClose, measurementId }: { visible: boolea
               <>
                 <View testID="link-new" style={{ gap: space[2] }}>
                   <T v="caption" tone="mut">{t("mod.gutters.link.new")}</T>
-                  <View testID="link-new-phone"><TextField type="phone" value={phone} onChangeText={setPhone} label={t("mod.gutters.link.newPhone")} placeholder="(555) 555-0100" /></View>
+                  <View testID="link-new-phone"><TextField type="phone" value={phone} onChangeText={setPhone} label={t("mod.gutters.link.newPhone")} placeholder="(555) 555-0100" action={{ icon: "copy", label: t("field.pastePhone"), onPress: paste, testID: "link-phone-paste" }} /></View>
                   <View testID="link-new-name"><TextField type="name" value={name} onChangeText={setName} label={t("mod.gutters.link.newName")} placeholder={t("mod.gutters.link.newName")} /></View>
                   <View testID="link-new-save"><Button label={t("mod.gutters.link.newSave")} size="sm" disabled={!phoneOk} onPress={newLead} /></View>
                 </View>

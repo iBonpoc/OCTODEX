@@ -438,8 +438,9 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
         base64: true,
       });
       if (out.base64) set({ brand: { ...draft.brand, logo: `data:image/png;base64,${out.base64}` } });
-    } catch (e) {
-      toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
+    } catch {
+      // the raw text of the error is not for a person (#1642): say what failed and what to do
+      toast.show(t("err.logo"));
     }
   };
   const hex = draft.brand.color ?? "";

@@ -7,6 +7,7 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
+import { cleanName } from "@/features/nameAsk";
 import { supplierToRow } from "@/features/suppliers";
 import { normalizeBarcode, normalizeProductUrl } from "@/features/catalogCard";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
@@ -206,6 +207,8 @@ export type Op =
   | { k: "me.location"; on: boolean }
   /** step 18 P4b: my push switch of one group (public.set_push_kind: only for yourself, an active member) */
   | { k: "me.pushKind"; kind: PushGroup; enabled: boolean }
+  /** #1606: my own name (public.users.full_name: update of the own row only, column grant + users_update) */
+  | { k: "me.name"; name: string }
   /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the 7-day trial) or off; its settings
    *  (only while it is active — founder О2; baseRowVersion = the version edited, a newer one is a conflict) */
   | { k: "module.enable"; module: string }
@@ -784,6 +787,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.rpc("set_my_prefs", { p_company_id: c, p_plan_show_done: op.prefs.planShowDone }));
     case "me.location":
       return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
+    case "me.name":
+      return run(supabase.from("users").update({ full_name: cleanName(op.name) }).eq("id", userId));
     case "me.pushKind":
       return run(supabase.rpc("set_push_kind", { p_company_id: c, p_kind: op.kind, p_enabled: op.enabled }));
     case "module.enable":

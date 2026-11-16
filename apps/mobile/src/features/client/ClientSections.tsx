@@ -144,7 +144,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
         <Empty icon="wrench" title={t("client.empty.jobs")} hint={office ? t("client.empty.jobsHint") : undefined} action={<AddObject kind="job" customerId={c.id} testID="client-section-new-job" />} />
       ) : (
         <>
-        <AddObject kind="job" customerId={c.id} testID="client-section-new-job" />
+        <AddObject kind="job" customerId={c.id} testID="client-section-new-job" inList />
         <CardGrid>
           {r.jobs.map((j) => {
             const v = jobStatusView[j.status];
@@ -216,7 +216,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
         </>
       ) : (
         <>
-        <AddObject kind="estimate" customerId={c.id} testID="client-section-new-estimate" />
+        <AddObject kind="estimate" customerId={c.id} testID="client-section-new-estimate" inList />
         <CardGrid>
           {r.estimates.map((e) => {
             const v = estView[e.status];
@@ -256,7 +256,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                   title={inv.title || findJob(db, inv.jobId)?.title || inv.number || ""}
                   when={[inv.number, inv.title ? findJob(db, inv.jobId)?.title : null].filter(Boolean).join(" · ") || undefined}
                   value={money(inv.totalCents)}
-                  status={{ tone: ic.s, label: t(ic.l) }}
+                  status={{ tone: ic.s, label: t(ic.l, ic.p) }}
                   onPress={() => router.push(`/invoice/${inv.id}`)}
                 />
               );

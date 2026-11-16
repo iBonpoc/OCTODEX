@@ -9,7 +9,7 @@
  *   820/1280: the side panel keeps its own scroll.
  * Finds things by testID / role; waits on what it checks.
  */
-const { openProps, skipLength, sheetGone, pressWhenStill, canvasAt } = require("../gutters.cjs");
+const { openProps, skipLength, sheetGone, pressWhenStill, canvasAt, stands } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -20,11 +20,11 @@ exports.run = async (h) => {
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
     h.expect(!!v, what);
   };
-  const move = async (a, b) => {
+  const move = async (a, b, steps = 12) => {
     const dy = Math.min(b[1] - a[1], p.viewportSize().height - a[1] - 6);
     await p.mouse.move(a[0], a[1]);
     await p.mouse.down();
-    for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + (dy * i) / 12);
+    for (let i = 1; i <= steps; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / steps, a[1] + (dy * i) / steps);
     await p.mouse.up();
   };
   const stroke = async (a, b) => {
@@ -40,9 +40,21 @@ exports.run = async (h) => {
       for (let e = el; e && e.getAttribute("data-testid") !== "sheet-body"; e = e.parentElement) if (/(auto|scroll)/.test(getComputedStyle(e).overflowY)) n++;
       return n;
     });
-  /** a swipe down from the middle of the sheet (a field row near its middle, not the tape that keeps the finger) */
+  /**
+   * a swipe down from the body of the sheet (a field row as near its middle as the travel allows — its upper half; not
+   * the grabber, not the tape that keeps the finger), FAR enough to close it by distance alone: past
+   * `component.sheetDismissRatio` (½) of the sheet's height, plus up to two steps the pan may spend on starting (one to
+   * pass the slop, one more if the browser merges two moves under load). A shorter swipe closes it only as a flick, and under load the browser spaces the moves
+   * out — the speed drops, the sheet comes back (#1492: 260 px on a ~700 px sheet failed on CI, ~1 run in 8).
+   */
   const swipeMiddle = async (ids) => {
+    const sheet = tid("sheet-panel").last();
+    await stands(sheet); // it ends sliding in: a swipe on a moving sheet starts from the wrong place
+    const sh = await sheet.boundingBox();
     const body = await p.getByTestId("sheet-body").locator("visible=true").last().boundingBox();
+    const vh = p.viewportSize().height;
+    const steps = 12;
+    const travel = Math.ceil(((sh.height * 0.5 + 40) * steps) / (steps - 2));
     const mid = body.y + body.height / 2;
     let best = null;
     for (const id of ids) {
@@ -50,10 +62,11 @@ exports.run = async (h) => {
       const bb = await tid(id).first().boundingBox();
       if (!bb || bb.y < body.y || bb.y + bb.height > body.y + body.height) continue;
       const cy = bb.y + Math.min(bb.height / 2, 20);
+      if (cy + travel > vh - 6) continue; // the finger must not leave the screen before it has gone far enough
       if (!best || Math.abs(cy - mid) < Math.abs(best[1] - mid)) best = [bb.x + 12, cy];
     }
-    h.expect(!!best, "a row in the sheet to swipe from");
-    await move(best, [best[0], best[1] + 260]);
+    h.expect(!!best, `a row in the sheet to swipe ${travel} px down from`);
+    await move(best, [best[0], best[1] + travel], steps);
   };
 
   await h.go("/company/modules");
@@ -98,7 +111,7 @@ exports.run = async (h) => {
   // the gutter's sheet: no list of its own; a swipe from its middle closes it
   await openProps(p);
   await panel().waitFor({ timeout: 5000 });
-  await p.waitForTimeout(400);
+  await stands(tid("sheet-panel").last());
   { const n = await scrollers(); h.expect(n === 1, `the gutter's sheet: only the sheet's own scroll (${n})`); }
   await swipeMiddle(["attr-story", "attr-size", "attr-color", "attr-more"]);
   await waitFor(async () => (await panel().count()) === 0, "a swipe down from the middle closes the gutter's sheet");
@@ -108,7 +121,7 @@ exports.run = async (h) => {
   await tid("draw-tool-ds").getByRole("button").click();
   await p.mouse.click((x0 + x1) / 2, y);
   await panel().waitFor({ timeout: 5000 });
-  await p.waitForTimeout(400);
+  await stands(tid("sheet-panel").last());
   { const n = await scrollers(); h.expect(n === 1, `the downspout's sheet: only the sheet's own scroll (${n})`); }
   await swipeMiddle(["attr-ds-size", "attr-color", "attr-elbow-qty", "attr-ds-kind", "attr-more"]);
   await waitFor(async () => (await panel().count()) === 0, "a swipe down from the middle closes the downspout's sheet");

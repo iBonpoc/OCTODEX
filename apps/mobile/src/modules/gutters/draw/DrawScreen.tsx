@@ -31,7 +31,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
-import { isDoubleTap, type LastTap } from "../canvas/doubleTap";
+import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
 import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
@@ -57,7 +57,7 @@ import { LinkSheet } from "./LinkSheet";
 import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
@@ -80,7 +80,7 @@ const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
-/** the name in the header (#1274): a button that SHRINKS — a long name or «Сделать заявкой» is cut with «…» in its own width, never under the icons beside it */
+/** the name in the header (#1274): a button that SHRINKS — a long name is cut (not linked yet — «Привязать», DS §19а, #1665: whole at 390) with «…» in its own width, never under the icons beside it */
 function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
   const { c } = useTheme();
   return (
@@ -656,17 +656,17 @@ export default function DrawScreen() {
         setSheet(true);
         return;
       }
-      // a tap on a downspout that is there picks it — never a second one on top (a drag of it with this tool also ends
-      // in a tap on the web)
-      const onDs = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
-      if (tl === "ds" && onDs?.kind === "ds" && !liftTap.current) {
-        setSelected(onDs.id);
-        setSheet(true); // its menu (founder 09.11)
-        return;
-      }
-      // …nor a tap that puts a downspout (the downspout tool drags ends and corners now)
-      if (tl === "ds" && liftTap.current) return;
-      if (tl === "ds") {
+      // what is under the finger; a tap on a downspout that is there never puts a second one on top — with any tool it is the common rule
+      // (#1563, founder 14.11: «если выбран даунспот — меню сразу, если жёлоб — надо два раза»): one tap picks, two open its properties
+      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
+      const found = h?.kind === "end" ? findCorners(d) : [];
+      const corner = h?.kind === "end" ? found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end)) : undefined;
+      const key = !h ? "" : corner ? `corner:${corner.id}` : h.kind === "end" ? `end:${h.id}:${h.end}` : h.id;
+      // the decision is `tapRule` (canvas/doubleTap.ts, unit-tested): one tap picks, two open — the same for every tool
+      const tapped = tapRule({ tool: tl, onDs: h?.kind === "ds", lift: liftTap.current, key, id: h ? h.id : null, last: lastTap.current, now: Date.now(), windowMs: motion.doubleTapMs });
+      lastTap.current = tapped.last;
+      if (tapped.act.do === "ignore") return;
+      if (tapped.act.do === "place") {
         const id = Crypto.randomUUID();
         const next = addDownspout(d, id, p, tolIn() * 1.5, dsFor(cur.current.ch, cur.current.newDef), cur.current.ch);
         if (next !== d) {
@@ -674,33 +674,28 @@ export default function DrawScreen() {
           haptics.medium(); // set down on the gutter (DS §15.6)
           setSelected(id);
           setFresh(id);
-          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open
+          // its menu at once (founder 09.11): fittings, size, colour — on the phone a sheet, wider the side panel is open. Kept (founder 15.11,
+          // README §12 п.20: «ставится одним нажатием на жёлоб, как сейчас — оставить»)
           setSheet(true);
         }
         return;
       }
-      const h = hitTest(withoutDs(d, !cur.current.layers.ds), p, tolIn());
       if (h) setHint(null);
       // a tap picks AT ONCE and never waits for a second one (spec 33 §3, #1273); what used to happen on the spot — the corner's sheet on an end,
       // the flip of a cap — is the second tap's (a double tap on the same object inside `doubleTapMs`) or a row of its sheet
-      const found = h?.kind === "end" ? findCorners(d) : [];
-      const corner = h?.kind === "end" ? found.find((f) => f.runs.some((x) => x.id === h.id && x.end === h.end)) : undefined;
       // a free end: not a corner, not butted to another gutter — and one with «без заглушки» stays one (its sheet brings the cap back)
       const freeEnd = h?.kind === "end" && !corner && (!!d.runs.find((r) => r.id === h.id)?.noCap?.[h.end] || runEnds(d, found)[h.id]?.[h.end]?.kind !== "join");
-      const key = !h ? "" : corner ? `corner:${corner.id}` : h.kind === "end" ? `end:${h.id}:${h.end}` : h.id;
-      const now = Date.now();
-      const dbl = !liftTap.current && isDoubleTap(lastTap.current, now, key, motion.doubleTapMs);
-      lastTap.current = dbl || liftTap.current ? null : { at: now, id: key };
-      if (!dbl) {
+      if (tapped.act.do === "pick") {
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
         return;
       }
       haptics.light();
-      if (!h) {
-        if (tl === "line" && cur.current.size.w) setView(fit(d, cur.current.size)); // two taps on the empty place: the whole drawing
+      if (tapped.act.do === "fit") {
+        if (cur.current.size.w) setView(fit(d, cur.current.size)); // two taps on the empty place: the whole drawing
         return;
       }
+      if (tapped.act.do === "none" || !h) return;
       setSelected(h.id);
       if (!cur.current.canSave && h.kind === "end") return;
       // the window opens a moment later (`durFast`): the browser sends the tap's `click` after the touch ends, to whatever lies under the finger
@@ -750,11 +745,13 @@ export default function DrawScreen() {
 
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
+  // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
+  const many = manyStories(drawing.runs);
   const selText = !sel
     ? null
     : "a" in sel
-      ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
-      : t("mod.gutters.draw.selDsKind", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
+      ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
+      : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
   const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 

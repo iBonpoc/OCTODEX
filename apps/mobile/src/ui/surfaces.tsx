@@ -3,7 +3,7 @@ import { VersionBadge } from "@/features/version";
 import { DemoBadge } from "@/features/DemoBadge";
 import { ScreenScrollCtx, type ScreenScroll } from "./requiredForm";
 import { coveredBottomOf, scrollTargetY } from "./requiredLogic";
-import { setFooterInset } from "./footerInset";
+import { scrollBottom, setFooterInset } from "./footerInset";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { isAppPath, navInsets } from "@/nav/shell";
@@ -196,6 +196,18 @@ export function FieldGroup({
         {children}
       </View>
     </FieldColumnCtx.Provider>
+  );
+}
+
+/**
+ * The main button of a form group: it stands apart from the fields — `space[4]` more than the usual gap, so it reads as the
+ * step after them, not as one more field (DS §11 п.17, #1594). A second button of the group (the quiet one) goes after it, not inside.
+ */
+export function FormMain({ children, testID }: { children: ReactNode; testID?: string }) {
+  return (
+    <View testID={testID} style={{ marginTop: space[4] }}>
+      {children}
+    </View>
   );
 }
 
@@ -491,6 +503,7 @@ export function Screen({
   footer,
   aside,
   testID,
+  form,
 }: {
   title: string;
   help?: string;
@@ -528,6 +541,8 @@ export function Screen({
    *  for it; hidden while the keyboard is up (the keys cover it, the field is what the person is in). From 820 the screen puts the same
    *  buttons in its own column. */
   footer?: ReactNode;
+  /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column) */
+  form?: boolean;
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
@@ -659,9 +674,10 @@ export function Screen({
                 </T>
               </RowView>
             ) : null}
-            {right || headerFab ? (
+            {right || headerFab || help ? (
               <RowView gap={space[2]} style={{ flexShrink: 0 }}>
-                {/* DS §12.2, Б4: «＋» then «⋯» — «⋯» is always the last on the right (#1474) */}
+                {/* DS §12.2, Б4: «?» · «＋» · «⋯» — «?» first on the right (#1648), «⋯» always the last (#1474) */}
+                {help ? <HelpButton title={title} text={help} /> : null}
                 {headerFab}
                 {right}
               </RowView>
@@ -684,42 +700,50 @@ export function Screen({
                 {title}
               </T>
             </View>
-            {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
         </>
       ) : (
         /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б).
            The screen's actions wrap under the title when the row is too narrow (Plan at 390), never squeeze it. */
+        <>
+          {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — a row above the title, the title
+              stays where it is on the tabs (DS §12.2, #1648; was a round button that pushed the title to the right) */}
+          {backMore ? (
+            <Press
+              testID="back-more"
+              onPress={toMore}
+              visibleHeight={component.dockBtn}
+              accessibilityRole="button"
+              accessibilityLabel={t("nav.more")}
+              containerStyle={{ alignSelf: "flex-start" }}
+            >
+              <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2] }}>
+                <Icon name="chevronLeft" color={c.ink} />
+                <T v="body" w="medium" numberOfLines={1}>
+                  {t("nav.more")}
+                </T>
+              </RowView>
+            </Press>
+          ) : null}
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — no ☰ any more (variant Б) */}
-            {backMore ? (
-              <Press
-                testID="back-more"
-                onPress={toMore}
-                visibleHeight={component.dockBtn}
-                accessibilityRole="button"
-                accessibilityLabel={t("nav.more")}
-                style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
-              >
-                <Icon name="chevronLeft" s={size.iconMd} color={c.ink} />
-              </Press>
-            ) : null}
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="display" numberOfLines={1}>
                 {title}
               </T>
             </View>
-            {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
-          {right || headerFab || home ? (
+          {right || headerFab || home || help ? (
             <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
+              {/* DS §12.2: «?» · «＋» · «⋯» — «?» first on the right (#1648) */}
+              {help ? <HelpButton title={title} text={help} /> : null}
               {headerFab}
               {right}
               {home ? <HomeHeader /> : null}
             </RowView>
           ) : null}
         </RowView>
+        </>
       )}
       {subtitle ? (
         <T v="body" tone="mut">
@@ -750,17 +774,23 @@ export function Screen({
       ) : null}
     </View>
   );
-  const content = (
+  const formColumn = (
     <View
       testID={testID}
       // where the sticky tabs start: right under the content. The sticky wrapper's own layout says 0 on the web (react-native-web
       // measures it inside its sticky box), so the tabs' place is the content's bottom (#1416)
       onLayout={tabs ? (e) => (tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height) : undefined}
-      style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center", gap: space[3] }}
+      style={{ width: "100%", maxWidth: form ? layout.formMax : layout.contentMax, alignSelf: form ? "flex-start" : "center", gap: space[3] }}
     >
       {header}
       {children}
     </View>
+  );
+  // a form column stands on the left line of the 1200 column the other screens' titles stand on, not at the page's edge (DS §12.3)
+  const content = form ? (
+    <View style={{ width: "100%", maxWidth: layout.contentMax, alignSelf: "center" }}>{formColumn}</View>
+  ) : (
+    formColumn
   );
   const { height: winH } = useWindowDimensions();
   const scrollRef = useRef<ScrollViewInstance>(null);
@@ -852,10 +882,11 @@ export function Screen({
         <View style={{ flex: 1 }}>
         {scroll ? (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
+            {/* from 820 the end of the page scrolls out from under the toast (the toast lane, DS §15.2, #1701) */}
             <ScrollView
               ref={scrollRef}
               scrollEnabled={!scrollLocked}
-              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : scrollBottom(navInsets.bottom + (floatFab ? component.fab + space[3] : 0) + (footerOn ? footH : 0), navInsets.wide, safe.bottom), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
               keyboardShouldPersistTaps="handled"
               // react-native-web closes the field on ANY scroll event with "on-drag" (even the browser's own scroll to a field that takes the
               // focus, or ours to a heading): a field closed after 0–1 letters (#1241). The web has no finger dragging a keyboard away.

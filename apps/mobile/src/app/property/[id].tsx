@@ -65,10 +65,15 @@ export default function PropertyScreen() {
   // «не обслуживаем»: nothing new for this property — no «＋», no inspection (S4 / S5 / S17, Customer §5)
   const servable = canServe(db, p.customerId);
   const rows = propertyRowsFor(role);
+  // from 820 the list's «＋ …» button stands in the header on the right, not over the grid (DS §12.2, #1664); an empty list keeps its own
+  const listAdd =
+    wide && (sec === "jobs" || sec === "estimates") && propertyRecords(db, p, role)[sec].length ? (
+      <AddObject kind={sec === "jobs" ? "job" : "estimate"} customerId={p.customerId} propertyId={p.id} testID={`property-section-new-${sec === "jobs" ? "job" : "estimate"}`} />
+    ) : undefined;
   // a row's own list: the same address with ?s=<row>
   if (isPropertyRow(sec) && rows.includes(sec))
     return (
-      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back}>
+      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back} right={listAdd}>
         <PropertySection p={p} s={sec} />
       </Screen>
     );
@@ -131,8 +136,8 @@ export default function PropertyScreen() {
       {office && servable ? (
         <View testID="prop-add" style={{ flexDirection: "row", gap: space[2], alignSelf: wide ? "flex-start" : "stretch" }}>
           {/* two equal halves on the phone, one row (the review of #1395) */}
-          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" full={!wide} /></View>
-          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" full={!wide} /></View>
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" full={!wide} short /></View>
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" full={!wide} short /></View>
         </View>
       ) : null}
 
