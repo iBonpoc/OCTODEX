@@ -310,7 +310,6 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <T v="caption" tone="mut">{t("mod.gutters.draw.moneyCaption")}</T>
               <T v="heading" w="bold" tabular>{money(preview.totalCents)}</T>
             </View>
-            {preview.test ? <View testID="view-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
             <T v="micro" tone="mut">{t("mod.gutters.draw.totalNote")}</T>
           </Card>
         ) : null}

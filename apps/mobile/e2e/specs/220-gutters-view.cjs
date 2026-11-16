@@ -72,7 +72,7 @@ exports.run = async (h) => {
   h.expect(/Угол .*°/.test(await p.locator('[data-testid^="view-corner-"]').locator("visible=true").first().innerText()), "the corner: kind and angle");
   const total = Number((await tid("view-total").innerText()).replace(/[^\d.]/g, ""));
   h.expect(total > 0, `the total (${total})`);
-  h.expect((await tid("view-test-prices").count()) === 1, "marked «тестовые цены»");
+  h.expect((await tid("view-test-prices").count()) === 0, "no «test prices» mark on the view (#1873, rule 9)"); // i18n-old: ok — the old mark must be gone
   h.expect(/перед резкой промерьте/.test(await tid("view-rough").innerText()), "the rough drawing says to measure before cutting");
   // nobody linked: one main action — link it
   h.expect((await tid("view-action-link").count()) === 1, "nobody linked → «Привязать к клиенту или лиду»");

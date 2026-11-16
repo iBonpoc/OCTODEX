@@ -67,7 +67,7 @@ exports.run = async (h) => {
   await capture();
   await pressPdf();
   await tid("pdf-check-review").waitFor({ timeout: 8000 });
-  h.expect((await tid("pdf-check-testPrice").count()) === 1, "the test price is listed");
+  h.expect((await tid("pdf-check-testPrice").count()) === 1, "the sample price is listed");
   h.expect(!(await pdfMade()), "no PDF before the confirmation");
   await h.shot("review");
   await tid("pdf-check-force").getByRole("button").click();

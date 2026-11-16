@@ -1,7 +1,6 @@
 /**
  * unit:noTestPriceWord — #1873, the founder 16.11: «Везде убираем… Нигде нет её. Надписи этой» (the «test price» mark).
- * - No text of the app (ru / en / es) names a «test price» — except the two keys of the drawing's view that leave with
- *   #1773 (ViewScreen is the Gutters №23 chat's until then; LEFT below goes empty then).
+ * - No text of the app (ru / en / es) names a «test price» — the drawing's view included (#1773 merged).
  * - A sample catalog price is reminded about once: the check before the FIRST send (a draft) says «Проверьте цены: в каталоге
  *   стоят примерные»; a sent estimate sent again says nothing (the audit's decision).
  * - The client's document (PDF and /p/: estimateHtml) never carries the word.
@@ -28,8 +27,8 @@ import type { Customer, Estimate, EstimateDoc } from "../src/data/types";
 import type { CustomLine } from "@octo/estimating-engine";
 
 const WORD = /тестов\S* цен|цен\S* тестов|test[- ]prices?|precios? de prueba/i;
-/** leave with #1773 (the drawing's view, Gutters №23): then this list is empty */
-const LEFT = new Set(["mod.gutters.draw.test", "mod.gutters.draw.totalNote"]);
+/** none left: the drawing's view (#1773) was the last (the view's marks went with this PR) */
+const LEFT = new Set<string>([]);
 
 const sample = (id: string): CustomLine => ({ id, group: "material", name: `L ${id}`, quantity: "10", unit: "ft", unitPriceCents: 700, source: { module: "gutters", key: "k", testPrice: true, priceCents: 700 } as never });
 const docWith = (...lines: CustomLine[]): EstimateDoc => {

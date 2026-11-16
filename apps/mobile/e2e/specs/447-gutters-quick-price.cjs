@@ -50,12 +50,12 @@ exports.run = async (h) => {
   // «Сохранить» without a change keeps the test mark
   await tid(`gpr-test-${mat2}`).click();
   await tid("qp-sheet").waitFor({ timeout: 5000 });
-  h.expect((await tid("qp-test").count()) === 0, "no «test price» note in the sheet (#1873)");
+  h.expect((await tid("qp-test").count()) === 0, "no sample-price note in the sheet (#1873)");
   await tid("qp-nomarkup").waitFor({ timeout: 3000 });
   await h.shot("sheet");
   await tid("qp-save").getByRole("button").click();
   await sheetGone(p);
-  h.expect((await tid(`gpr-test-${mat2}`).count()) === 1, "an untouched test price stays a test price");
+  h.expect((await tid(`gpr-test-${mat2}`).count()) === 1, "an untouched sample price stays marked in the data");
 
   // a material: the card, then «Сохранить» — two taps
   taps = 0;
@@ -120,7 +120,7 @@ exports.run = async (h) => {
   h.expect(await undo(h), "«Отменить» in the toast");
   await tid("gpr-test-labor.install.story1").waitFor({ timeout: 5000 });
   await waitDb((db) => (db.catalog || []).some((x) => x.attributes && x.attributes.work === "install" && x.attributes.story === "1" && x.placeholder && x.priceCents !== 650),
-    "«Отменить» brings the test price back");
+    "«Отменить» brings the sample price back");
 
   // close with something typed: the question, «Не сохранять» — the price stays
   const before = (await byAttrs((a) => a.work === "install" && a.story === "1")).priceCents;
