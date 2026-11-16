@@ -4338,6 +4338,20 @@ export const ru = {
   "photoUp.retry": "Повторить",
   "photoUp.retried": "Отправляем фото ещё раз",
   "photoUp.a11y": "не загрузилось",
+  // spec 53 — quick price of one catalog item (wave 53-1)
+  "price.quick.cost": "Закупка за {unit}, $",
+  "price.quick.markup": "Наценка, %",
+  "price.quick.price": "Цена клиенту за {unit}, $",
+  "price.quick.client": "Клиенту",
+  "price.quick.withTax": "с налогом поставщика {pct}",
+  "price.quick.test": "Тестовая цена. После сохранения пометка снимется.",
+  "price.quick.noMarkup": "Без наценки цена клиенту будет равна закупке.",
+  "price.quick.pack": "У поставщика — за {buy}. Здесь — цена за 1 {unit}.",
+  "price.quick.packN": "У поставщика — за {buy} ({n} {unit}). Здесь — цена за 1 {unit}.",
+  "price.quick.needCost": "Укажите закупку",
+  "price.quick.needPrice": "Укажите цену",
+  "price.quick.saved": "Цена сохранена",
+  "price.quick.open": "Открыть позицию",
 } as const;
 
 export type DictKey = keyof typeof ru;

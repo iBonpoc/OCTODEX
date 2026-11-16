@@ -4,7 +4,8 @@
  * tile) and the parts of a job of the company's defaults, each found in the company's price list by its properties
  * (catalogMatch) — or «not in the price list» with «Создать» (a TEST price, rule 9) and «Привязать» (an item of the list
  * without properties). «Создать позиции сразу» makes all the missing ones: test prices, never twice (catalog.save
- * onlyNew, fixed ids). A price is changed in the core's item editor (/catalog/<id>): one editor, cost and markup as everywhere.
+ * onlyNew, fixed ids). A price is changed in a sheet (spec 53 §6.3: the card, then «Сохранить» — QuickPriceSheet of the core,
+ * cost and markup as in the core's item editor); the full editor (/catalog/<id>) is one tap further.
  * The director and the office (catalog rights, staff) change them; only while the module is active (founder О2).
  * Every object is a card (rule 12); the bind picker in a sheet lists rows.
  */
@@ -27,6 +28,7 @@ import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
 import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
 import { withAfter } from "@/data/undo";
+import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -48,6 +50,9 @@ export default function GutterPricesScreen() {
   const labor = useMemo(() => laborRows(), []);
   const parts = useMemo(() => materialRows(raw), [raw]);
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
+  /** spec 53 §6.3 (53-1): the price of a found item in a sheet — two taps (a kit keeps the full editor) */
+  const [quickId, setQuickId] = useState<string | null>(null);
+  const quickItem = quickId ? catalog.find((x) => x.id === quickId) ?? null : null;
 
   /** the item's name in the app's language at the moment it is made: company data from then on (the owner renames it) */
   const nameOf = (p: PartQty): string => partName(t, p);
@@ -100,7 +105,7 @@ export default function GutterPricesScreen() {
           status={it.placeholder ? (testChip ? { tone: "warn", label: t(k("testPrice")) } : undefined) : { tone: "ok", label: t(k("found")) }}
           density={desktop ? "row" : "rich"}
           edge={null}
-          onPress={ro ? undefined : () => router.push(`/catalog/${it.id}`)}
+          onPress={ro ? undefined : () => (it.kind === "kit" ? router.push(`/catalog/${it.id}`) : setQuickId(it.id))}
         />
       );
     }
@@ -169,6 +174,7 @@ export default function GutterPricesScreen() {
         </View>
       </View>
 
+      <QuickPriceSheet item={quickItem} onClose={() => setQuickId(null)} />
       <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>

@@ -169,3 +169,21 @@ describe("unit:catalogCardStore — РС-10", () => {
     expect((valueOf(r).db.priceHistory ?? []).filter((h) => h.itemId === "00000000-0000-4000-8000-0000000005b9")).toEqual([]);
   });
 });
+
+describe("unit:catalogCardStore — spec 53 (53-1), a price change never reaches documents", () => {
+  it("sent and signed estimates and supplier order lines keep their snapshot when an item's price changes", async () => {
+    const r = await signedIn();
+    const before = valueOf(r).db;
+    const used = before.catalog.find((x) => x.id === "cat-bracket")!;
+    const estimates = JSON.stringify(before.estimates);
+    const orders = JSON.stringify(before.purchaseOrders);
+    // the sent order and the signed or sent estimates are there and name the item
+    expect(before.purchaseOrders?.some((o) => o.status === "sent" && o.lines.some((l) => l.catalogItemId === "cat-bracket"))).toBe(true);
+    expect(before.estimates.some((e) => e.status === "approved" || e.status === "sent")).toBe(true);
+    valueOf(r).saveCatalogItem({ ...used, costCents: (used.costCents ?? 0) + 500, markupBps: 3000, priceCents: 9999, placeholder: false });
+    await settle();
+    expect(valueOf(r).db.catalog.find((x) => x.id === "cat-bracket")!.costCents).toBe((used.costCents ?? 0) + 500);
+    expect(JSON.stringify(valueOf(r).db.estimates)).toBe(estimates);
+    expect(JSON.stringify(valueOf(r).db.purchaseOrders)).toBe(orders);
+  });
+});
