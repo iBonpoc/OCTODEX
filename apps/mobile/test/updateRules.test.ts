@@ -120,3 +120,47 @@ describe("unit:update — the press: the queue is on the disk BEFORE the reload,
     (liveWriters() as Set<typeof w>).delete(w);
   });
 });
+
+describe("unit:update — the Gutters canvas holds the update until its drawing is on the phone", () => {
+  it("what counts as unsaved: a finger down, a write on its way, a failed write", async () => {
+    const { canvasUnsaved, unsentAfter } = await import("../src/modules/gutters/draw/unsent");
+    expect(canvasUnsaved({ touching: false, unsent: false })).toBe(false);
+    expect(canvasUnsaved({ touching: true, unsent: false })).toBe(true);
+    expect(canvasUnsaved({ touching: false, unsent: true })).toBe(true);
+    expect(unsentAfter("saved")).toBe(false);
+    expect(unsentAfter("nothing")).toBe(false);
+    expect(unsentAfter("failed")).toBe(true);
+  });
+  it("«Обновить» asks the canvas to write now and waits; it never reloads while the write fails", async () => {
+    const { canvasUnsaved, unsentAfter } = await import("../src/modules/gutters/draw/unsent");
+    let unsent = true;
+    let off: () => void = () => {};
+    let results: ("failed" | "saved")[] = ["failed", "saved"];
+    const flush = () => { // what DrawScreen.flush does: the write ends, the sheet leaves the registry when nothing is unsent
+      setTimeout(() => {
+        unsent = unsentAfter(results.shift()!);
+        if (!canvasUnsaved({ touching: false, unsent })) off();
+      }, 5);
+    };
+    off = registerDirtySheet({ ask: flush });
+    const reload = vi.fn(async () => {});
+    const p = applyUpdate({ settleUnsaved: () => settleDirtySheets(60_000), flush: () => {}, settle: async () => {}, reload });
+    await vi.advanceTimersByTimeAsync(20);
+    expect(reload).not.toHaveBeenCalled(); // the first write failed: the canvas is still registered — the update waits
+    expect(dirtySheetCount()).toBe(1);
+    flush(); // the canvas tries again later (its own retry)
+    await vi.advanceTimersByTimeAsync(20);
+    expect(await p).toBe("reloaded");
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(dirtySheetCount()).toBe(0);
+  });
+  it("a write that never lands: the update gives up (no reload), the drawing stays", async () => {
+    const off = registerDirtySheet({ ask: () => {} });
+    const reload = vi.fn(async () => {});
+    const p = applyUpdate({ settleUnsaved: () => settleDirtySheets(1000), flush: () => {}, settle: async () => {}, reload });
+    await vi.advanceTimersByTimeAsync(1001);
+    expect(await p).toBe("cancelled");
+    expect(reload).not.toHaveBeenCalled();
+    off();
+  });
+});
