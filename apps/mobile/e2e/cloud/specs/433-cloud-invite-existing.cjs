@@ -72,4 +72,28 @@ exports.run = async (h, { seed }) => {
   await lineHas(a1.company, "back in A after «Отменить»");
   await waitRows(admin, `users?select=last_active_company_id&id=eq.${pat.id}`, (r) => r[0]?.last_active_company_id === A, "A as the last company again");
   await h.shot("back-in-a");
+
+  // DS §11 п.3 on the invitation page: the consent step (the person has not accepted the current texts) — «Принять» is
+  // always on; pressed without the tick it says what to do (warn) and sends nothing; with the tick — joined
+  const email2 = `tick433-${run}@example.test`;
+  const pat2 = await call("POST", "/auth/v1/admin/users", { email: email2, password: a1.password, email_confirm: true, user_metadata: { full_name: "Nightly Tick 433" } });
+  sql(`insert into public.memberships (company_id, user_id, role, status) values ('${A}', '${pat2.id}', 'office', 'active');`);
+  const inv2 = await call("POST", "/rest/v1/rpc/invite_member", { p_company_id: B, p_email: email2, p_role: "tech", p_name: "Nightly Tick 433" }, owner.access_token);
+  await p.goto(new URL("/favicon.ico", p.url()).href);
+  await p.evaluate(() => localStorage.clear());
+  await signIn(h, { ...a1, email: email2, userId: pat2.id });
+  // the consent is gone (as after new texts): a fixture, the way the account erasure removes it
+  sql(`set app.erasing_user = 'on'; delete from public.legal_acceptance where user_id = '${pat2.id}';`);
+  await h.go(`/auth/invite?token=${inv2.token}`);
+  const accept = p.getByTestId("invite-accept-legal").locator("visible=true").first();
+  await accept.waitFor({ timeout: 20000 });
+  h.expect(await accept.isEnabled(), "«Принять» is on without the tick");
+  await accept.click();
+  await p.getByTestId("invite-need-tick").locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect((await p.getByTestId("invite-need-tick").first().innerText()).includes("Сначала примите"), "the hint says what to do");
+  h.expect(value(`select count(*) from public.memberships where user_id = '${pat2.id}' and company_id = '${B}'`) === "0", "nothing sent without the tick");
+  await h.shot("invite-need-tick");
+  await p.getByTestId("invite-agree").locator("visible=true").first().click();
+  await accept.click();
+  await textHas(`Вас добавили в «${b1.company}»`, "joined after the tick", 20000);
 };
