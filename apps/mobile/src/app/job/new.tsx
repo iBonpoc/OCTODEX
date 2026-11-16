@@ -131,7 +131,7 @@ export default function NewJob() {
   const missing: DictKey | null = !clientOk ? "job3.new.needClient" : !addressOk ? "job3.new.needAddress" : !titleOk ? "job3.new.needTitle" : null;
 
   return (
-    <Screen title={t("job3.newJob")} back={back}>
+    <Screen form title={t("job3.newJob")} back={back}>
       <SectionTitle title={t("job3.new.client")} />
       {client ? (
         <Card>

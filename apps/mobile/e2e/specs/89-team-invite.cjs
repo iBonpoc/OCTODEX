@@ -29,7 +29,12 @@ exports.run = async (h) => {
   const send = form.getByRole("button", { name: "Отправить приглашение" });
   await form.getByPlaceholder("Имя").fill("Nina Invite");
   await form.getByPlaceholder("Email").fill("nina@");
-  h.expect(await send.isDisabled(), "a broken email does not send");
+  // the main button is never pale (DS §11 п.3, #1728): pressed with a broken email it says what is missing and sends nothing
+  h.expect(!(await send.isDisabled()), "the main button is there to press");
+  const before = (await h.db()).members.length;
+  await send.click();
+  await form.getByText("Укажите имя и email", { exact: true }).locator("visible=true").first().waitFor({ timeout: 4000 });
+  h.expect((await h.db()).members.length === before, "a broken email does not send");
   await form.getByPlaceholder("Email").fill("nina@example.com");
   await radio("Продажи").click();
   await h.shot("invite-form");
