@@ -53,12 +53,16 @@ export function WindowsSection() {
       <Card>
         <View testID="showcase-help" style={{ gap: space[2] }}>
         <RowView style={{ gap: space[2], alignItems: "center" }}>
-          <T v="body" w="semibold">{t("ds.help.setting")}</T>
+          <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("ds.help.setting")}</T>
           <HelpButton title={t("ds.help.setting")} text={t("ds.help.settingText")} to={{ href: "/company" }} testID="showcase-help-setting" />
         </RowView>
         <RowView style={{ gap: space[2], alignItems: "center" }}>
-          <T v="body" w="semibold">{t("ds.help.object")}</T>
+          <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("ds.help.object")}</T>
           <HelpButton title={t("ds.help.object")} text={t("ds.help.objectText")} to={{ href: "/suppliers", label: t("ds.help.objectTo") }} testID="showcase-help-object" />
+        </RowView>
+        <RowView style={{ gap: space[2], alignItems: "center" }}>
+          <T v="body" w="semibold" numberOfLines={1} style={{ flexShrink: 1 }}>{t("ds.help.long")}</T>
+          <HelpButton title={t("ds.help.long")} text={t("ds.help.longText")} testID="showcase-help-long" />
         </RowView>
         <T v="caption" tone="mut">{t("ds.help.hint")}</T>
         </View>

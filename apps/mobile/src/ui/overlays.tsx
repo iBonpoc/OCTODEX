@@ -711,8 +711,16 @@ export function HelpButton({ title, text, to, onPress, testID }: { title: string
   const { c } = useTheme();
   const { t } = useI18n();
   const s = component.help.visible;
+  const leaving = useRef(false);
+  // the way is taken after the sheet has gone (onExited), never while it slides out: a Modal closing under a new screen
+  // jumps on iPhone (rule 27)
   const go = () => {
+    leaving.current = true;
     setOpen(false);
+  };
+  const exited = () => {
+    if (!leaving.current) return;
+    leaving.current = false;
     if (to) router.push(to.href);
   };
   return (
@@ -735,7 +743,7 @@ export function HelpButton({ title, text, to, onPress, testID }: { title: string
           </T>
         </View>
       </Press>
-      <Sheet visible={open} onClose={() => setOpen(false)} title={title}>
+      <Sheet visible={open} onClose={() => setOpen(false)} onExited={exited} title={title}>
         <T v="body">{text}</T>
         {to ? (
           // the way to where it is set or made: a secondary button (DS Б7), the whole row is the target
