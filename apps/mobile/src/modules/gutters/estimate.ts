@@ -12,7 +12,7 @@
  * A line without `source` (typed by hand, or re-picked from the price list on an old phone) is the person's own: never
  * changed, never removed; a part whose price-list item such a line already uses is not added again.
  */
-import { dec, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
+import { dec, jobLineQty, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
 import { findItem, matchKey } from "./prices";
@@ -57,10 +57,11 @@ export type ModuleLine = Omit<CustomLine, "source"> & { source?: LineSource };
 const isOurs = (l: ModuleLine): l is ModuleLine & { source: LineSource } => !!l.source && l.source.module === "gutters" && typeof l.source.key === "string";
 
 /**
- * Feet to bill: hundredths, half up (the estimate's quantity is numeric(14,4); 230″ = 19.1666… ft → 19.17).
- * Each and pounds are whole already.
+ * Feet to bill: four places, half up — the estimate's quantity is numeric(14,4), the engine's and the server's own
+ * rounding (`jobLineQty`). The client sees the length as on the drawing, within 1/16″ (founder 11.11, release plan §8.1 п.3,
+ * G-15, #817): 40′ 5″ = 40.4167 ft (it was 40.42 — 40′ 5 1/16″). Each and pounds are whole already.
  */
-export const billQty = (q: string, unit: string) => (unit === "ft" ? dec(q).toDecimalPlaces(2).toString() : dec(q).toString());
+export const billQty = (q: string, unit: string) => (unit === "ft" ? jobLineQty(q) : dec(q).toString());
 
 /**
  * The module's lines for the parts of one measurement: one per item (the same item's parts add up — end caps left and
