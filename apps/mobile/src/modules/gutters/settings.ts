@@ -85,6 +85,8 @@ export const PALETTES = {
     "Colonial Grey", "Dark Grey", "Terratone", "Tuxedo Grey", "Royal Brown", "Musket Brown", "Harvest Brown", "Bronze", "Black", "Blue", "Green", "Red",
   ],
 } as const;
+/** a palette's name is the module's data, never an app string (#1885: no brand in i18n) */
+export const PALETTE_NAMES: Record<keyof typeof PALETTES, string> = { berger: "Berger", servicePartners: "Service Partners" };
 export const MAX_PALETTE = 60;
 export const MAX_COLOR_LEN = 40;
 /** what module_save_settings takes (bytes of the JSON; Postgres counts its own jsonb a little differently — a margin) */
