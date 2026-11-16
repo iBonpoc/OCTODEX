@@ -2,6 +2,8 @@
  * Chips of a choice never stand in two lines (#1095, DS А2): a <ChoiceChips> that names its field with `label` is a
  * segment (≤4 short options) or a field with a menu. The ones without `label` are the old wrapping chips: they move over
  * one by one, and this list only shrinks — a new <ChoiceChips> must come with `label`.
+ * The same for several of many (#1797, DS §А4): <MultiChips> wraps — a new choice of several is a list with flags
+ * (`CheckRows`) or a `PickerSheet`; the old <MultiChips> places only go away.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -39,7 +41,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 72;
+const LEGACY_MAX = 68;
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];
@@ -64,5 +66,22 @@ describe("ChoiceChips name their field (#1095)", () => {
   it("the parser sees the chips (guards the guard)", () => {
     expect(all).toBeGreaterThan(80);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
+  });
+});
+
+/** the old wrapping <MultiChips> places (several of many). Lower it as screens move over to `CheckRows`; never raise it. */
+const MULTI_LEGACY_MAX = 12;
+
+describe("several of many: no wrapping chips (#1797)", () => {
+  const places: string[] = [];
+  for (const f of files) {
+    const src = readFileSync(f, "utf8");
+    for (const m of src.matchAll(/<MultiChips\b/g)) places.push(`${relative(ROOT, f)}:${src.slice(0, m.index!).split("\n").length}`);
+  }
+  it("the old <MultiChips> places do not grow", () => {
+    expect(places.length, `a new choice of several is CheckRows (ui/checkRows.tsx), not MultiChips; the old ones:\n${places.join("\n")}`).toBeLessThanOrEqual(MULTI_LEGACY_MAX);
+  });
+  it("the first run's directions are a list with flags", () => {
+    expect(places.some((p) => p.startsWith("app/auth/trade.tsx"))).toBe(false);
   });
 });

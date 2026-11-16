@@ -9,8 +9,9 @@
  * - the scroll REALLY goes to the first missing field (a short window, the page scrolled to its bottom first): the field is wholly
  *   in view and near the top — on these two forms and on «Новый лид» (the form's hook sits above its <Screen>: the screen's scroll
  *   comes to it from the fields, `FieldBinding.attach`; before, nothing scrolled);
- * - both forms stand in the form column (`<Screen form>`, DS §12.3): a field is at most 560 wide and still fills the phone
- *   (the column of the other forms — e2e 440).
+ * - the directions are a list with flags (`trade-list`, roles `checkbox`), not wrapping chips (#1797); a search that finds
+ *   nothing offers «＋ Добавить «…»» — the own direction is filled from it and saved with «Продолжить»;
+ * (their column ≤560 — e2e 440)
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -21,19 +22,13 @@ exports.run = async (h) => {
     const box = await vis(id).boundingBox();
     return err.y > box.y + 10 && err.y - (box.y + box.height) <= 12 && Math.abs(err.x - box.x) <= 2;
   };
-  /** the form column: the field is as wide as the column — at most 560, the whole phone */
-  const column = async (id, what) => {
-    const w = (await vis(id).boundingBox()).width;
-    h.expect(w <= 560.5, `${what}: the column is at most 560 wide (${w})`);
-    h.expect(w >= Math.min(h.layout.width - 40, 340) - 1, `${what}: the column still fills the phone (${w})`);
-  };
-  /** after the main button: the field is wholly in the window and stands in its upper part (the scroll went to it) */
+  /** after the main button: the field's top is in the window, in its upper part, and the field is wholly seen when it fits (the scroll went to it) */
   const scrolledTo = async (id, what) => {
     const ok = await p.waitForFunction((tid) => {
       const e = [...document.querySelectorAll(`[data-testid="${tid}"]`)].find((x) => x.offsetParent !== null);
       if (!e) return false;
       const r = e.getBoundingClientRect();
-      return r.top >= 0 && r.bottom <= window.innerHeight && r.top < window.innerHeight / 2;
+      return r.top >= 0 && r.top < window.innerHeight / 2 && (r.bottom <= window.innerHeight || r.height > window.innerHeight - r.top);
     }, id, { timeout: 4000 }).then(() => true, () => false);
     const r = await vis(id).evaluate((e) => { const b = e.getBoundingClientRect(); return { top: b.top, bottom: b.bottom, h: window.innerHeight }; });
     h.expect(ok, `${what}: the screen scrolled to the field (top ${Math.round(r.top)}, bottom ${Math.round(r.bottom)}, window ${r.h})`);
@@ -46,7 +41,6 @@ exports.run = async (h) => {
   // the trade step
   await h.go("/auth/trade");
   await vis("trade-step").waitFor({ timeout: 8000 });
-  await column("field-trade", "/auth/trade");
   await short();
   await toBottom();
   await vis("trade-next").click();
@@ -59,11 +53,31 @@ exports.run = async (h) => {
   await tall();
   await vis("field-trade").getByRole("checkbox").first().click();
   await p.getByTestId("field-trade-error").locator("visible=true").first().waitFor({ state: "hidden", timeout: 4000 });
+  h.expect((await vis("trade-list").getByRole("checkbox").count()) >= 5, "the directions are rows with flags");
+  h.expect(await vis("trade-list").getByRole("checkbox").first().getAttribute("aria-checked") === "true", "the picked row is checked");
+
+  // an own direction from the search: nothing found → «＋ Добавить «…»» → saved
+  await h.go("/auth/trade");
+  await vis("trade-step").waitFor({ timeout: 8000 });
+  await vis("trade-step").getByPlaceholder("Найти направление").fill("Pressure washing 445");
+  const addQ = vis("trade-step").getByRole("button", { name: "Добавить «Pressure washing 445»" });
+  await addQ.waitFor({ timeout: 4000 });
+  await addQ.click();
+  const ownInput = vis("trade-own").locator("input");
+  await ownInput.waitFor({ timeout: 4000 });
+  h.expect((await ownInput.inputValue()) === "Pressure washing 445", "the own direction is filled from the search");
+  await vis("trade-next").click();
+  await p.waitForURL(/company\/profile/, { timeout: 8000 });
+  let saved = false;
+  for (let i = 0; i < 20 && !saved; i++) {
+    saved = (await h.db()).serviceCategories.some((c) => c.name === "Pressure washing 445");
+    if (!saved) await p.waitForTimeout(200);
+  }
+  h.expect(saved, "the own direction is saved");
 
   // a new service: no name
   await h.go("/catalog/new-item-445");
   await vis("catalog-save").waitFor({ timeout: 8000 });
-  await column("field-name", "/catalog/[id]");
   const n0 = (await h.db()).catalog.length;
   await short();
   await toBottom();

@@ -84,7 +84,8 @@ export default function CatalogItemScreen() {
   return (
     <Screen form title={found ? t("cat.edit") : t("cat.new")} back={back}>
       <FieldGroup>
-        <ChoiceChips value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
+        {/* the type: a segment or a field with a menu, never wrapping chips (DS §А1в, #1797) */}
+        <ChoiceChips label={t("cat.kind")} testID="catalog-kind" value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
         <View testID="catalog-name">
           <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} field={form.field("name")} />
         </View>
