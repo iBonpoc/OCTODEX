@@ -75,6 +75,41 @@ exports.run = async (h) => {
     "the catalog keeps the cost, the markup and the price; the test mark is gone");
   await h.shot("saved");
 
+  // #1826 money bug (audit 16.11): the sheet must not remember what was typed for the previous item.
+  // A saved → B opens with B's own cost and markup, «Клиенту» is B's price; «Сохранить» untouched writes nothing to B.
+  const fieldCents = async (id) => Math.round(parseFloat((await tid(id).locator("input").inputValue()).replace(/[$,%\s]/g, "") || "0") * 100);
+  const bKey = (await keys("test")).find((k) => !k.startsWith("labor.") && k !== mat);
+  await tid(`gpr-test-${bKey}`).click();
+  await tid("qp-sheet").waitFor({ timeout: 5000 });
+  const bCost = await fieldCents("qp-cost");
+  const bMarkup = await fieldCents("qp-markup");
+  h.expect(!(bCost === 240 && bMarkup === 3000), `B opens with its own cost and markup, not A's 2.40 / 30 % (${bCost} / ${bMarkup})`);
+  h.expect(!/\$3\.12/.test(await tid("qp-client").innerText()), "B's «Клиенту» is not A's $3.12");
+  const before447 = JSON.stringify((await catalog()).map((x) => [x.id, x.priceCents, x.costCents, x.markupBps, !!x.placeholder]));
+  await tid("qp-save").getByRole("button").click();
+  await sheetGone(p);
+  h.expect(JSON.stringify((await catalog()).map((x) => [x.id, x.priceCents, x.costCents, x.markupBps, !!x.placeholder])) === before447, "«Сохранить» on B untouched changes nothing in the catalog");
+  // A typed and thrown away («Не сохранять») → B opens clean: its own values, no «Сохранить изменения?» on close
+  await tid(`gpr-found-${mat}`).click();
+  await tid("qp-sheet").waitFor({ timeout: 5000 });
+  await tid("qp-cost").locator("input").fill("9.99");
+  await tid("sheet-close").click();
+  await h.expectText(/Сохранить изменения\?/, "unsaved question on close (A)");
+  await p.getByRole("button", { name: "Не сохранять" }).locator("visible=true").click();
+  await sheetGone(p);
+  await tid(`gpr-test-${bKey}`).click();
+  await tid("qp-sheet").waitFor({ timeout: 5000 });
+  h.expect((await fieldCents("qp-cost")) !== 999, "B does not get A's thrown-away 9.99");
+  await tid("sheet-close").click();
+  await sheetGone(p);
+  h.expect((await p.getByText("Сохранить изменения?").locator("visible=true").count()) === 0, "B untouched closes without the question (not dirty)");
+  // A reopened after «Не сохранять» shows A's saved values, not the thrown-away ones
+  await tid(`gpr-found-${mat}`).click();
+  await tid("qp-sheet").waitFor({ timeout: 5000 });
+  h.expect((await fieldCents("qp-cost")) === 240, `A reopened shows its saved 2.40, not the thrown-away 9.99 (${await fieldCents("qp-cost")})`);
+  await tid("sheet-close").click();
+  await sheetGone(p);
+
   // labor: the price, then «Отменить» takes it back
   await tid("gpr-test-labor.install.story1").click();
   await tid("qp-sheet").waitFor({ timeout: 5000 });
