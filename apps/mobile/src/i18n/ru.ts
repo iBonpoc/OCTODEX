@@ -1036,6 +1036,9 @@ export const ru = {
   "first.trade.search": "Найти направление",
   "first.trade.none": "Ничего не нашлось — впишите своё ниже",
   "first.trade.next": "Продолжить",
+  // forms: the main button is never pale — what is missing (#1728, Экраны)
+  "form.need.trade": "Выберите направление или впишите своё",
+  "form.need.invite": "Укажите имя и email",
   "ue.noCslb": "Нет действующей лицензии CSLB. В Калифорнии её номер обязателен в смете и договоре — добавьте в «Компания → Лицензии».",
   "lead.st.estimate": "Смета отправлена",
   "lead.st.won": "Клиент",

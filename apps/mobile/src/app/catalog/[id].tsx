@@ -183,7 +183,8 @@ export default function CatalogItemScreen() {
         </T>
       ) : null}
       <View testID="catalog-save">
-        <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
+        {/* always there to press (DS §11 п.3, #1728): an item without a name or a price says so */}
+        <Button label={t("ue.save")} icon="check" full onPress={() => (ok ? save() : toast.show(t("cat.need")))} />
       </View>
       {found ? <Button label={t("cat.remove")} icon="trash" variant="ghost" full onPress={remove} /> : null}
       <SupplierPicker

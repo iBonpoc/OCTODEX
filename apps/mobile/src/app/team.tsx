@@ -14,6 +14,7 @@ import { visitContext } from "@/data/selectors";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardList, RowView, Screen } from "@/ui/surfaces";
+import { StatusNote } from "@/ui/statusNote";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 import { useAuth } from "@/cloud/auth";
@@ -47,9 +48,11 @@ export default function Team() {
   const cloud = store.mode === "cloud";
   const companyId = auth.company?.companyId;
   const ok = name.trim().length > 1 && validInviteEmail(email) && !busy;
+  const [need, setNeed] = useState(false);
   const origin = Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL;
   const reset = () => {
     setOpen(false);
+    setNeed(false);
     setName("");
     setEmail("");
     setPhone("");
@@ -151,7 +154,9 @@ export default function Team() {
           <T v="caption" tone="mut">
             {cloud ? t("team.inviteHint.link") : t("team.inviteHint")}
           </T>
-          <Button label={t("team.send")} icon="send" full disabled={!ok} onPress={invite} />
+          {/* always there to press (DS §11 п.3, #1728): without a name or a whole email it says what is missing; pale only while it sends */}
+          {need && !ok && !busy ? <StatusNote tone="warn">{t("form.need.invite")}</StatusNote> : null}
+          <Button label={t("team.send")} icon="send" full disabled={busy} onPress={() => (ok ? invite() : setNeed(true))} />
         </View>
       </Sheet>
       <LinkSheet link={link} onClose={() => setLink(null)} />
@@ -352,7 +357,8 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
             {t("team.member.ownerOnly")}
           </T>
         ) : null}
-        <Button label={t("team.member.save")} icon="check" full disabled={!dirty} onPress={save} />
+        {/* always there to press (DS §11 п.3, #1728): nothing changed — it just closes */}
+        <Button label={t("team.member.save")} icon="check" full onPress={dirty ? save : close} />
           </>
         ) : (
           // a subcontractor never signs for the company: nothing to edit here, only the access
