@@ -230,7 +230,9 @@
 | Sealant | «Sealant · 1 tube — outlet 2, end caps 4, corners 2, 1 tube per 8» (точки — только выпуск, заглушка, угол по месту) | точки герметика стыков, `jointsPerSealantTube` | есть («Расходники») |
 | Solder, flux, gas, abrasive, soda (медь, цинк) | «Solder · 1 lb — 8 solder points, 10 per lb» | §2.6, М2–М6 | Н10 |
 | Rivets #42 (только при «заклёпки»; по умолчанию выкл.) | «Rivets #42 · 18 — end caps 2×2, outlet 4, downspout joints 5×2» | `DEFAULT_JOINTS` | есть («Расходники») |
-| Zip screws #8 × ½″ | «Zip screws #8 x ½ · 1 bag — 9 elbows, 1 bag per 12 elbows»; у стыков желоба — «end caps, outlets, corners» | наборы хомутов, `dsJoin` | Н5, есть |
+| Zip screws #8 × ½″ — стыки водостока | «Zip screws #8 x ½ · 1 bag — 9 elbows, 1 bag per 12 elbows» (`ds_joint_screws`) | §2.14 п.3 | «Колен на пакет саморезов» |
+| Zip screws #8 × ½″ — стыки желоба вместо заклёпок | «Zip screws #8 x ½ · 18 — instead of rivets: end caps 2 × 2, outlet 4, corner 6 + 8» (`joint_screws`); «?» — «Компания крепит стыки саморезами, не заклёпками. Число на стык — как в настройке «Расходники». Изменить: «Крепёж стыков: саморезы / заклёпки»» | §2.14 п.4 (аудит 16.11: прибавка расчёта — строка обязательна) | «Крепёж стыков», «Расходники» |
+| Zip screws #8 × ½″ — хомуты | «Zip screws #8 x ½ · 8 — 4 straps × 2» (`kit_screws`) | наборы хомутов | Н5 |
 | Gutter screws #10 × 1½″ | «Gutter screws #10 x 1½ · 42 — 21 hangers × 2» | наборы кронштейнов | Н5 |
 | Anchors | «Anchors · 8 — stucco wall, 4 straps × 2» | наборы стены | есть |
 | Hangers | «Hidden hangers · 21 — 40 ft at 24″ + 1» | шаг кронштейнов | есть |
