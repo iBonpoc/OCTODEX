@@ -1233,7 +1233,7 @@ export default function DrawScreen() {
             <View testID="draw-photos-open">
               {/* the same round plate as «⋯» (IconButton: dockBtn, surf2, a hairline border; founder 16.11, #1752: «фотоаппарат не в единой
                   системе»); with photos the count stands in it and the plate grows into a pill */}
-              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={photoN ? `${t("mod.gutters.photo.open")} · ${photoN}` : t("mod.gutters.photo.open")} visibleHeight={component.dockBtn} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1], height: component.dockBtn, minWidth: component.dockBtn, paddingHorizontal: photoN ? space[3] : 0, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.bd }}>
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={photoN ? `${t("mod.gutters.photo.open")} · ${photoN}` : t("mod.gutters.photo.open")} visibleHeight={component.dockBtn} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1], height: component.dockBtn, minWidth: component.dockBtn, paddingHorizontal: photoN ? space[3] : 0, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}>
                 <Icon name="camera" s={sizes.iconMd} color={c.ink} />
                 {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
               </Press>
