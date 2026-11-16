@@ -1,7 +1,7 @@
 /** Панель атрибутов холста Gutters (docs/specs/33-gutters-screens.md П21.8 M5c): наборы, поправка зависимых полей, рулетка. */
 import { describe, expect, it } from "vitest";
 import { computeGutterParts, DEFAULT_HANGER_KITS, DEFAULT_WALL_KITS } from "@octo/estimating-engine";
-import { changeDs, changeRun, DS_SHAPES, DS_SIZES, elbowsOf, hangerKitsFor, PROFILES, SIZES_BY_PROFILE, tapeIn, wallKitsFor, wallOf, WALLS } from "../src/modules/gutters/canvas/attrs";
+import { changeDs, changeRun, DS_SHAPES, DS_SIZES, elbowCounts, hangerKitsFor, PROFILES, SIZES_BY_PROFILE, tapeIn, wallKitsFor, wallOf, WALLS } from "../src/modules/gutters/canvas/attrs";
 import { pushHistory, setDsAttrs, setLength, setRunAttrs, undo } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { runLengthIn, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
@@ -93,9 +93,10 @@ describe("changeDs: зависимые поля", () => {
     const b = changeDs({ ...DEFAULT_DS_ATTRS, wall: "brick_hook_hd" }, { shape: "round" });
     expect(b.wall).toBe("brick_hook_hd"); // fits both shapes
   });
-  it("колена без записи — 3 × A по умолчанию движка", () => {
-    expect(elbowsOf(DEFAULT_DS_ATTRS)).toEqual({ style: "A", qty: 3 });
-    expect(elbowsOf({ shape: "round" })).toEqual({ style: "45", qty: 3 });
+  it("колена без записи — умолчание движка по виду (#1776): гладкий прямоугольный 0, ребристый 3 × A, круглый 3 × 45°", () => {
+    expect(elbowCounts(DEFAULT_DS_ATTRS)).toEqual({ A: 0, B: 0 });
+    expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "corrugated" })).toEqual({ A: 3, B: 0 });
+    expect(elbowCounts({ shape: "round" })).toMatchObject({ "45": 3 });
   });
 });
 

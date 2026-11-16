@@ -2,7 +2,9 @@
  * e2e 293 — #1165: an estimate computed by an older engine says «Расчёт изменился — обновите» (docs/specs/33-gutters-estimate.md
  * П23.12). Every view. A lead → «Замер» → a run → «Смета» (the lines carry the engine's version); the version in the lines
  * set to an older one → the estimate has the word, «Просмотр замера» the chip; «Обновить из замера» → the same estimate, the
- * lines carry the current version, the words are gone. A signed estimate is only told, never offered «Обновить».
+ * lines carry the current version, the words are gone. #1776 (director №13, 16.11): an older version alone says nothing —
+ * only when «Обновить» would change the lines (here the older engine counted one part differently); a sent estimate is not
+ * told and not offered it (it stays as it went to the client), a signed one neither.
  * Finds things by testID; waits on what it checks.
  */
 const { estMore, estAct, estHas } = require("../estimateMenu.cjs");
@@ -16,10 +18,15 @@ exports.run = async (h) => {
   const ofM = (l, mid) => l.source && l.source.module === "gutters" && l.source.measurementId === mid;
   const versions = async (eid, mid) => ((await db()).estimates.find((x) => x.id === eid)?.doc?.options ?? []).flatMap((o) => o.lines).filter((l) => ofM(l, mid)).map((l) => l.source.engineVersion);
   /** the version in the estimate's module lines (and its status) — written through h.seed, a page without the app (CHECKS §9 №12) */
-  const setVersion = async (eid, v, status) => {
+  // `counted`: the older engine counted the first module line one more (what «Обновить» would now change, #1776)
+  const setVersion = async (eid, v, status, counted = true) => {
     const st = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
     const e = st.db.estimates.find((x) => x.id === eid);
-    for (const o of e.doc.options) for (const l of o.lines) if (l.source && l.source.module === "gutters") l.source.engineVersion = v;
+    let first = true;
+    for (const o of e.doc.options) for (const l of o.lines) if (l.source && l.source.module === "gutters") {
+      l.source.engineVersion = v;
+      if (counted && first) { l.source.qty = String(Number(l.source.qty) + 1); l.quantity = l.source.qty; first = false; }
+    }
     if (status) e.status = status;
     await h.seed(DB_KEY, st);
   };
@@ -55,7 +62,13 @@ exports.run = async (h) => {
   await estMore(p);
   h.expect((await tid("module-gutters-engine").count()) === 0, "no word while the engine is the same");
 
-  // an older engine computed them
+  // an older engine that counted the same: nothing to update, nothing said (#1776)
+  await setVersion(eid, "0.0.1", undefined, false);
+  await h.go(`/estimate/${eid}`);
+  await estMore(p);
+  h.expect((await tid("module-gutters-engine").count()) === 0, "an older engine that counted the same lines: no word");
+
+  // an older engine computed them differently
   await setVersion(eid, "0.0.1");
   await h.go(`/estimate/${eid}`);
   await tid("module-gutters-engine").waitFor({ timeout: 8000 });
@@ -79,12 +92,20 @@ exports.run = async (h) => {
   await estMore(p);
   h.expect((await tid("module-gutters-engine").count()) === 0, "the word is gone after the update");
 
-  // signed: only told (its own chip), nothing offered
+  // sent: not told, not offered «Обновить» — it stays as it went to the client (#1776)
+  await setVersion(eid, "0.0.1", "sent");
+  await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
+  await tid("view-action-open").waitFor({ timeout: 8000 });
+  h.expect((await tid("view-engine-changed").count()) === 0 && (await tid("view-action-update").count()) === 0, "a sent estimate: no «расчёт изменился», no «Обновить»");
+  await h.go(`/estimate/${eid}`);
+  await estMore(p);
+  h.expect((await tid("module-gutters-engine").count()) === 0, "no engine note on a sent estimate's page");
+
+  // signed: neither (#1776: never changed, nothing to update)
   await setVersion(eid, "0.0.1", "approved");
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
-  await tid("view-engine-signed").waitFor({ timeout: 8000 });
-  h.expect((await tid("view-engine-changed").count()) === 0, "a signed estimate has the «после подписи» chip, not the «обновите» one");
   await tid("view-action-signed").waitFor({ timeout: 8000 });
+  h.expect((await tid("view-engine-changed").count()) === 0 && (await tid("view-engine-signed").count()) === 0, "a signed estimate: no engine chip");
   h.expect((await tid("view-action-update").count()) === 0, "no «Обновить» for a signed estimate");
   await h.go(`/estimate/${eid}`);
   await estMore(p);
