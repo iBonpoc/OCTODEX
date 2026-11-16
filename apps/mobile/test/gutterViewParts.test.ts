@@ -32,6 +32,25 @@ const sectional = computeGutterParts(toMeasurement(d), { seamless: false }).part
 /** a code a person must never read: snake_case, a bare word in latin lower case, «.027», «2x3», a bare number */
 const RAW = /^[a-z][a-z_]*$|^\.\d|\d+x\d+|^\d+(\.\d+)?$/;
 
+/** jobs with the rare parts: every wall, both shapes, offsets, reducers, heads, drains, half-round / box / spike / tile hangers, copper */
+function rareJobs() {
+  const base = sampleJob({});
+  const jobs: (typeof base)[] = [];
+  for (const wall of ["wood", "stucco", "brick"])
+    for (const shape of ["rect", "round"] as const) {
+      const m = structuredClone(base);
+      m.downspouts[0] = { ...m.downspouts[0]!, wall, shape, size: shape === "round" ? "3" : "2x3", offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 7, qty: 1 }], reducers: [{ to: "2x3", qty: 1 }], head: "conductor", diverter: true, outletScreen: true, eaveBox: "open", bottom: { kind: "drain", pipe: "4" } };
+      jobs.push(m);
+    }
+  for (const [profile, hanger] of [["half_round", "hr_shank_fascia"], ["k", "spike"], ["k", "tbar_strap"], ["box", "hidden"]] as const) {
+    const m = structuredClone(base);
+    for (const r of m.runs) Object.assign(r, { profile, hanger, guardsIn: r.lengthIn, guard: "micromesh", material: "copper", gauge: "16oz" });
+    for (const c of m.corners) Object.assign(c, { profile, material: "copper" });
+    jobs.push(m);
+  }
+  return jobs;
+}
+
 describe("#1766 #1800 a part's name — the supplier's, the same in Russian — and its properties in words", () => {
   it("the supplier's names: «5″ K-Style Gutter», «2″ × 3″ A Elbow 75°», «Pop Rivet #42», «Outlet 2″ × 3″» — never a code", () => {
     const ru = tFor("ru");
@@ -61,7 +80,8 @@ describe("#1766 #1800 a part's name — the supplier's, the same in Russian — 
     expect(partView(ru, sectional.find((p) => p.attrs.buy === "section")!).title).toMatch(/^5″ K-Style Gutter · /);
   });
   it("a part's name in Russian is the English one (#1800): RU = EN for every name, the properties may differ", () => {
-    for (const p of [...parts, ...sectional].filter((x) => x.kind === "material")) {
+    const rare = rareJobs().flatMap((m) => computeGutterParts(m).parts);
+    for (const p of [...parts, ...sectional, ...rare].filter((x) => x.kind === "material")) {
       expect(partView(tFor("ru"), p, "ftin", { side: true }).title, p.key).toBe(partView(tFor("en"), p, "ftin", { side: true }).title);
     }
   });
@@ -76,20 +96,7 @@ describe("#1766 #1800 a part's name — the supplier's, the same in Russian — 
     }
   });
   it("the rare parts too — wall fasteners, guards, eave boxes, reducers, drains, half-round shanks and bolts, copper — have no code left", () => {
-    const base = sampleJob({});
-    const jobs: (typeof base)[] = [];
-    for (const wall of ["wood", "stucco", "brick"])
-      for (const shape of ["rect", "round"] as const) {
-        const m = structuredClone(base);
-        m.downspouts[0] = { ...m.downspouts[0]!, wall, shape, size: shape === "round" ? "3" : "2x3", offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 7, qty: 1 }], reducers: [{ to: "2x3", qty: 1 }], head: "conductor", diverter: true, outletScreen: true, eaveBox: "open", bottom: { kind: "drain", pipe: "4" } };
-        jobs.push(m);
-      }
-    for (const [profile, hanger] of [["half_round", "hr_shank_fascia"], ["k", "spike"], ["k", "tbar_strap"], ["box", "hidden"]] as const) {
-      const m = structuredClone(base);
-      for (const r of m.runs) Object.assign(r, { profile, hanger, guardsIn: r.lengthIn, guard: "micromesh", material: "copper", gauge: "16oz" });
-      for (const c of m.corners) Object.assign(c, { profile, material: "copper" });
-      jobs.push(m);
-    }
+    const jobs = rareJobs();
     for (const lang of LANGS)
       for (const m of jobs)
         for (const p of computeGutterParts(m).parts.filter((x) => x.kind === "material")) {
@@ -102,7 +109,9 @@ describe("#1766 #1800 a part's name — the supplier's, the same in Russian — 
         }
   });
   it("the human order: the metal and its thickness, then the colour", () => {
-    const v = partView(tFor("en"), parts.find((p) => p.attrs.part === "rivet")!);
+    const v = partView(tFor("en"), parts.find((p) => p.attrs.part === "end_cap")!);
+    // a rivet has no colour (founder 16.11)
+    expect(partView(tFor("en"), parts.find((p) => p.attrs.part === "rivet")!).props.join(" ")).not.toMatch(/White/);
     const at = (x: string) => v.props.findIndex((y) => y.includes(x));
     expect(at("Aluminum")).toBeLessThan(at("White"));
     const g = partView(tFor("en"), parts.find((p) => p.key.startsWith("gutter."))!).props;

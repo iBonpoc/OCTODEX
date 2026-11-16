@@ -11,9 +11,9 @@ import { useEffect, useMemo, useRef, useState, type ElementRef, type ReactNode, 
 import { View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
-import { component, drawingPrint as DP, layout, space } from "@octo/design-tokens";
+import { component, drawingPrint as DP, layout, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { useDevice } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n, type DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import { canSeeClientMoney } from "@/features/clients";
@@ -73,6 +73,7 @@ export default function ViewScreen() {
 export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, panel }: { mid: string; estimate?: boolean; from?: string; /** the measurement was deleted from its card */ onGone: () => void; /** in the 1280 panel beside «Замеры»: one column */ panel?: boolean }) {
   const store = useStore();
   const { device } = useDevice();
+  const { c } = useTheme();
   const cols = device !== "phone" && !panel;
   const { t, money, lang } = useI18n();
   const toast = useToast();
@@ -387,8 +388,9 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             {/* DS §8.14 (#1766): three groups, a name in one line, the properties below, the quantity on its own column */}
             {partGroups(t, spec.parts, fmt).map((g) => (
               <View key={g.key} testID={`view-parts-${g.key}`} style={{ gap: space[2] }}>
-                <RowView style={{ justifyContent: "space-between", alignItems: "center", gap: space[2] }}>
-                  <T v="caption" tone="mut">{g.title}</T>
+                {/* a subgroup stands out (founder 16.11): its own band, the title as a section's, not a grey caption */}
+                <RowView style={{ justifyContent: "space-between", alignItems: "center", gap: space[2], backgroundColor: c.surf2, borderRadius: radius.field, paddingHorizontal: space[2], paddingVertical: space[1] }}>
+                  <T v="body" w="semibold">{g.title}</T>
                   <HelpButton title={g.title} text={g.help} testID={`view-parts-${g.key}-help`} />
                 </RowView>
                 {g.rows.map((r, i) => (

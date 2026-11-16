@@ -9,7 +9,7 @@
  * - on 820 and 1280 the list is no wider than layout.formMax (560).
  * Finds things by testID; waits on what it checks.
  */
-const { skipLength, closeDsMenu, openView, pressWhenStill, canvasAt } = require("../gutters.cjs");
+const { skipLength, closeDsMenu, openView, pressWhenStill, canvasAt, pastDoubleTap } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -34,11 +34,13 @@ exports.run = async (h) => {
   await line(x1, y, x1, y1);
   // three downspouts on the first gutter, all the same
   for (const f of [0.2, 0.45, 0.7]) {
+    // two taps on a tool open «Для новых водостоков» (#1563 B): the next tap waits out the double tap
+    await pastDoubleTap(p);
     await tid("draw-tool-ds").getByRole("button").click();
     await canvasAt(p, x0 + (x1 - x0) * f, y);
     await p.mouse.click(x0 + (x1 - x0) * f, y);
     // the downspout's panel may come late on a loaded machine: wait for it, then close it (closeDsMenu gives up after 2 s)
-    await tid("attr-panel").first().waitFor({ timeout: 8000 }).catch(() => {});
+    if (h.layout.width <= 390) await tid("attr-panel").first().waitFor({ timeout: 8000 });
     await closeDsMenu(p);
   }
   await tid("draw-done").waitFor({ timeout: 8000 });

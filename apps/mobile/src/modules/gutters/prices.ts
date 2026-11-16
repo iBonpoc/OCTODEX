@@ -295,7 +295,8 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
   } else if (part === "downspout") {
     // «2″ × 3″ Plain Square Downspout»; the sticks to buy are this row's «2 × 10′ lengths» (partGroups)
     title = named(dsSize, dsKind());
-    take("size", "shape", "dsStyle", "stickIn");
+    // a stick to buy keeps its length «10′» (the price list and the supplier order tell it from the foot)
+    take("size", "shape", "dsStyle");
   } else if (part === "end_cap" || part === "miter" || part === "strip_miter" || part === "slip_joint" || part === "end_outlet" && !rest.shape) {
     // «5″ K-Style End Cap – Left», «5″ K-Style Box Miter – Outside»
     const side = opts.side && part === "end_cap" && (p.attrs.side === "L" || p.attrs.side === "R") ? word1(`side.${p.attrs.side}`) : "";
@@ -317,15 +318,17 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
     take("hanger", "size", "profile");
     lead = stockKind;
   } else if (part === "screw" && rest.screw) {
-    // «#10 × 1½″ Gutter Screw» (into the fascia) / «#8 × ½″ Zip Screw» (metal to metal)
-    const fascia = /^10x/i.test(rest.screw);
+    // «#10 × 1½″ Hanger Screw» (for the hangers; founder 16.11: not «Gutter Screw») / «#8 × ½″ Zip Screw» (metal to metal)
+    // the metal-to-metal screw is the #8 (the downspout's and the guards'); any other is the company's screw for the hangers
+    const fascia = !/^8x/i.test(rest.screw);
     title = `${say("screw", rest.screw)} ${word1(fascia ? "screw.fascia" : "screw.zip")}`;
     take("screw");
     // what it is for (founder 16.11: «саморез №10 для чего?») — in the app's language
     lead = t(fascia ? "mod.gutters.view.screwFor.fascia" : "mod.gutters.view.screwFor.zip");
   } else if (part === "rivet" && rest.rivet) {
+    // no colour for a rivet (founder 16.11: «не надо цвет выбирать… всё равно их красят»)
     title = t(k("rivetOf"), { n: rest.rivet });
-    take("rivet");
+    take("rivet", "color");
   } else if (part === "offset" && rest.lengthIn) {
     title = `${named(dsSize, roundWord)} ${say("lengthIn", rest.lengthIn)}`;
     take("size", "lengthIn", "shape");
