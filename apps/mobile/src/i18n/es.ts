@@ -632,6 +632,8 @@ export const es: Dict = {
   "auth.useCode": "Usar código por correo",
   "auth.password": "Contraseña",
   "auth.demoNote": "Sin entrar, la app funciona en modo demo con datos de prueba.",
+  "auth.sendCodeIn": "Enviar código en {s} s",
+  "auth.codeResent": "Enviamos un código nuevo a {email}. El anterior ya no sirve.",
   "auth.resend": "Enviar de nuevo",
   "auth.resendIn": "Enviar de nuevo en {s} s",
   "auth.changeEmail": "Cambiar correo",

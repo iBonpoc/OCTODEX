@@ -29,10 +29,11 @@ export function signInError(message: string | null | undefined): SignInErr {
   const after = /only request this after (\d+) second/.exec(m);
   if (after) return { key: "auth.err.wait", seconds: Number(after[1]) };
   // the built-in Supabase mail sends only to the project's team (email_address_not_authorized)
-  if (m.includes("not authorized")) return { key: "auth.err.notAllowed" };
+  // «Signups not allowed for otp» — new accounts are switched off in the project: not a code problem (review #1756 №1)
+  if (m.includes("not authorized") || m.includes("signups not allowed") || m.includes("signup is disabled")) return { key: "auth.err.notAllowed" };
   if (m.includes("email rate limit")) return { key: "auth.err.mailLimit" };
   if (m.includes("rate limit") || m.includes("too many")) return { key: "auth.err.tooMany" };
-  if (m.includes("token has expired") || m.includes("otp") || (m.includes("invalid") && m.includes("token"))) return { key: "auth.err.code" };
+  if (m.includes("token has expired") || m.includes("otp_expired") || (m.includes("invalid") && m.includes("token"))) return { key: "auth.err.code" };
   if (m.includes("invalid login credentials")) return { key: "auth.err.password" };
   if (m.includes("email not confirmed")) return { key: "auth.err.notConfirmed" };
   if (m.includes("email address") && m.includes("invalid")) return { key: "auth.err.badEmail" };

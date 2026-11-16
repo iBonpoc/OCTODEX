@@ -13,6 +13,8 @@ describe("signInError", () => {
     ['Email address "a@b.co" cannot be used as it is not authorized', "auth.err.notAllowed"],
     ["email rate limit exceeded", "auth.err.mailLimit"],
     ["Request rate limit reached", "auth.err.tooMany"],
+    // new accounts switched off in the project: never «the code is wrong» before a code was typed
+    ["Signups not allowed for otp", "auth.err.notAllowed"],
     // a wrong code and an old code are the same answer in GoTrue (otp_expired): one key
     ["Token has expired or is invalid", "auth.err.code"],
     ["Invalid login credentials", "auth.err.password"],

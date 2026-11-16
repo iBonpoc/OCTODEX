@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -32,6 +32,10 @@ export default function SignIn() {
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  // the address as typed NOW: a code that comes back for an address changed meanwhile is not shown as sent (review №3)
+  const typed = useRef("");
+  typed.current = email.trim();
   const [agreed, setAgreed] = useState(false);
   // «Отправить ещё раз»: on after RESEND_S (or the server's own wait)
   const [readyAt, setReadyAt] = useState(0);
@@ -62,6 +66,7 @@ export default function SignIn() {
   const act = async (fn: () => Promise<string | null>, onOk?: () => void | Promise<void>, onErr?: (e: SignInErr) => void) => {
     setBusy(true);
     setErr(null);
+    setNote(null);
     try {
       await rememberAgreement(AsyncStorage, email).catch(() => {});
       const e = await fn();
@@ -76,13 +81,20 @@ export default function SignIn() {
       setBusy(false);
     }
   };
-  const sendCode = () =>
-    act(
-      () => auth.sendCode(email.trim()),
+  const sendCode = () => {
+    const to = email.trim();
+    const again = sent;
+    return act(
+      () => auth.sendCode(to),
       () => {
-        setSent(true);
+        // the pause starts with the send, whatever the screen does next (review №4)
         setReadyAt(nextReadyAt(Date.now()));
         setNow(Date.now());
+        if (typed.current !== to) return;
+        setSent(true);
+        // a new code makes the old one void: the field is cleared and the screen says a new one went (review №8)
+        setCode("");
+        if (again) setNote(t("auth.codeResent", { email: to }));
       },
       // the server's own wait moves the timer (a code sent a moment ago is still good)
       (r) => {
@@ -92,12 +104,13 @@ export default function SignIn() {
         }
       },
     );
-  // another address: back to the first step; the code sent to the old one is dropped
+  };
+  // another address: back to the first step; the code sent to the old one is dropped. The pause stays (review №4).
   const changeEmail = () => {
     setSent(false);
     setCode("");
     setErr(null);
-    setReadyAt(0);
+    setNote(null);
   };
   const onEmail = (v: string) => {
     setEmail(v);
@@ -111,14 +124,23 @@ export default function SignIn() {
         <LegalAgree on={agreed} onChange={setAgreed} />
         {mode === "code" && !sent ? (
           <FormMain>
-            <Button label={t("auth.sendCode")} icon="send" full disabled={!agreed || !okEmail || busy} onPress={sendCode} testID="auth-send-code" />
+            <Button
+              label={left > 0 ? t("auth.sendCodeIn", { s: String(left) }) : t("auth.sendCode")}
+              icon="send"
+              full
+              disabled={!agreed || !okEmail || busy || left > 0}
+              onPress={sendCode}
+              testID="auth-send-code"
+            />
           </FormMain>
         ) : null}
         {mode === "code" && sent ? (
           <>
-            <T v="caption" tone="mut">
-              {t("auth.codeSent", { email: email.trim() })}
-            </T>
+            <View testID="auth-code-sent">
+              <T v="caption" tone="mut">
+                {t("auth.codeSent", { email: email.trim() })}
+              </T>
+            </View>
             <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} testID="auth-code" autoFocus />
             <FormMain>
               <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} testID="auth-verify" />
@@ -132,6 +154,11 @@ export default function SignIn() {
               <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} testID="auth-password-sign-in" />
             </FormMain>
           </>
+        ) : null}
+        {note ? (
+          <StatusNote tone="ok" testID="auth-resent">
+            {note}
+          </StatusNote>
         ) : null}
         {err ? (
           <StatusNote tone="bad" testID="auth-note">
@@ -153,7 +180,10 @@ export default function SignIn() {
             <Button label={t("auth.changeEmail")} variant="ghost" onPress={changeEmail} testID="auth-change-email" />
           </>
         ) : null}
-        {mode === "password" ? <Button label={t("auth.useCode")} variant="ghost" onPress={() => setMode("code")} testID="auth-use-code" /> : null}
+        {mode === "password" ? <Button label={t("auth.useCode")} variant="ghost" onPress={() => {
+              setErr(null);
+              setMode("code");
+            }} testID="auth-use-code" /> : null}
         {mode === "code" ? (
           <Button
             label={t("auth.usePassword")}

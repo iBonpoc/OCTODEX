@@ -631,6 +631,8 @@ export const ru = {
   "auth.useCode": "Войти по коду из письма",
   "auth.password": "Пароль",
   "auth.demoNote": "Без входа приложение работает в демо-режиме на тестовых данных.",
+  "auth.sendCodeIn": "Получить код через {s} с",
+  "auth.codeResent": "Новый код отправлен на {email}. Прежний больше не действует.",
   "auth.resend": "Отправить ещё раз",
   "auth.resendIn": "Отправить ещё раз через {s} с",
   "auth.changeEmail": "Изменить почту",
