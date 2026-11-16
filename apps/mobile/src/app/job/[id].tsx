@@ -302,17 +302,20 @@ export default function JobScreen() {
     </>
   );
 
-  // «＋ Смета» of a job with no estimate lives with the job's money, not in «Связано» (founder 16.11, #1844; testID kept)
+  // «＋ Создать смету» of a job with no estimate stays in «Связано» (DS §12.3 п.6; independent design review of #1844)
   const newEstimate =
     office && servable && c && !j.estimateId && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate")
       ? () => router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`)
       : undefined;
   const moneyTab = showMoney ? (
     <>
-      {newEstimate ? (
-        <RowView>
-          <Button label={t("job3.rel.estimate")} icon="plus" size="sm" variant="secondary" testID="job-rel-new-estimate" accessibilityLabel={t("path.estimateNew")} onPress={newEstimate} />
-        </RowView>
+      {/* a job with no estimate says so here — the one «Создать смету» is in «Связано» (independent design review of #1844) */}
+      {!j.estimateId ? (
+        <View testID="job-money-no-estimate">
+          <T v="body" tone="mut">
+            {t("visitP2.att.noEstimateChip")}
+          </T>
+        </View>
       ) : null}
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -441,7 +444,10 @@ export default function JobScreen() {
 
   return (
     <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")}>
-      <RelatedBlock of={{ type: "job", id: j.id }} />
+      <RelatedBlock
+        of={{ type: "job", id: j.id }}
+        action={newEstimate ? { label: t("path.estimateNew"), testID: "job-rel-new-estimate", onPress: newEstimate } : undefined}
+      />
       {/* #1474: one next step for the whole card, above the tabs (DS §7.3, §12.3); the rest — in «⋯» */}
       {mainStep ? (
         <RowView style={{ alignSelf: wide ? "flex-start" : "stretch" }}>
