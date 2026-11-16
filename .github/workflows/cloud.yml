@@ -5,7 +5,6 @@
 #   api-1 — two companies do not see each other through PostgREST and Storage;
 #   e2e 102 (and next 103, 104) — the app in a browser, built for the local stack, 390 dark (the director's exception);
 #   api-2 — «Удалить аккаунт»: the edge function + delete_account + Auth (S22).
-#   api-3 — sign-up only through the edge function request-code (docs/specs/52 §8).
 # Nightly at 10:47 UTC (after checks.yml's 10:17; 2:47 AM in Los Angeles), by hand, and on a PR that changes the server
 # or these scenarios, or the app code that talks to it (src/cloud, src/data, src/features). A red nightly opens (or adds to) the `nightly-red` issue, like checks.yml.
 name: Cloud scenarios
@@ -70,8 +69,6 @@ jobs:
           node e2e/cloud/cloud.cjs "$RUNNER_TEMP/seed.json"
       - name: api-2 — delete the account (edge function, S22)
         run: node apps/mobile/e2e/cloud/api/delete-account.mjs "$RUNNER_TEMP/seed.json"
-      - name: api-3 — new accounts only through request-code (spec 52 §8)
-        run: node apps/mobile/e2e/cloud/api/request-code.mjs "$RUNNER_TEMP/seed.json"
       - name: Server logs on failure
         if: failure()
         run: |

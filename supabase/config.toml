@@ -17,11 +17,6 @@ verify_jwt = true
 [functions.send-push]
 verify_jwt = false
 
-# «Получить код» for a new address (docs/specs/52 §8 Р10): a person without an account has no JWT. The function makes an
-# account with the email only (no password, no metadata) — the one way to make an account once sign-up is off.
-[functions.request-code]
-verify_jwt = false
-
 # Приём заявок (docs/specs/34 §3): a homeowner's browser (the page /f/<token>) and Zapier have no JWT. The form is found
 # by its token's hash, a webhook by its key (Authorization: Bearer gxk_…) — both in the database, never by the body.
 [functions.lead-intake]
@@ -47,9 +42,6 @@ verify_jwt = true
 # never `config push`, so nothing below reaches the hosted project.
 [auth]
 site_url = "http://127.0.0.1:3000"
-# docs/specs/52 §8 Р10: no public way to make an account — only the function request-code (admin API). The hosted
-# project is switched the same way BY HAND, and only after the build with request-code is out (spec 52 §10).
-enable_signup = false
 additional_redirect_urls = ["http://127.0.0.1:*/**"]
 
 # the app signs in by the 8-digit code from the email (auth/sign-in.tsx → verifyOtp, #1756, docs/specs/52): BOTH emails

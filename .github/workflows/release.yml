@@ -113,7 +113,6 @@ jobs:
       - name: Deploy edge functions
         run: |
           supabase functions deploy delete-account --project-ref "$PROJECT_REF" --yes
-          supabase functions deploy request-code --project-ref "$PROJECT_REF" --yes
           supabase functions deploy send-push --project-ref "$PROJECT_REF" --yes
           supabase functions deploy lead-intake --project-ref "$PROJECT_REF" --yes
           supabase functions deploy stripe-connect --project-ref "$PROJECT_REF" --yes
