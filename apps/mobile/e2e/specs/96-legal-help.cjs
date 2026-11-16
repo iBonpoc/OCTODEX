@@ -2,7 +2,8 @@
  * Wave 7а-1 — согласие, документы, «Помощь и поддержка» (docs/specs/19 §5; legal/01 §3.5; App Store 1.5). Demo mode;
  * the server side (no company / no team without the consent, the journal) is db T49.
  * - the sign-in screen: an EMPTY tick «Я принимаю Условия использования и Политику конфиденциальности»; without it
- *   «Получить код» and «Создать аккаунт» are off even with a good email; the tick turns them on; untick — off again;
+ *   «Получить код» and the password «Войти» are off even with a good email; the tick turns them on; untick — off again
+ *   (no password sign-up since #1756: the first code creates the account);
  * - the underlined links open the drafts /legal/terms and /legal/privacy (a tap on a link does not tick the box);
  * - a draft: «Черновик», «Редакция от …» (US date), sections, «the English text governs» (not in English); an unknown
  *   document — «Такого документа нет»;
@@ -33,15 +34,13 @@ exports.run = async (h) => {
   await tick.click();
   await p.waitForTimeout(200);
   h.expect(await btn("Получить код").isDisabled(), "untick: off again");
-  // the sign-up form too
-  await btn("Войти с паролем").click();
-  await btn("Нет аккаунта — создать").click();
-  await p.getByPlaceholder("Пароль").locator("visible=true").last().fill("secret123");
-  await p.getByPlaceholder("Ваше имя").locator("visible=true").last().fill("Olga Owner");
-  h.expect(await btn("Создать аккаунт").isDisabled(), "sign-up without the tick is off");
+  // the password sign-in too (no password sign-up since #1756)
+  await vis("auth-use-password").click();
+  await vis("auth-password").locator("input").last().fill("secret123");
+  h.expect(await vis("auth-password-sign-in").isDisabled(), "the password «Войти» without the tick is off");
   await vis("legal-agree").click();
   await p.waitForTimeout(200);
-  h.expect(!(await btn("Создать аккаунт").isDisabled()), "sign-up with the tick is on");
+  h.expect(!(await vis("auth-password-sign-in").isDisabled()), "the password «Войти» with the tick is on");
 
   // the links: visible, underlined, open the documents, do not tick
   await h.go("/auth/sign-in");

@@ -69,7 +69,7 @@ Job `cloud` в `checks.yml`: `if: schedule || workflow_dispatch`, `timeout-minut
 
 ## 8а. Что выяснилось при сборке PR-3
 - **Заглушка = Supabase.** Каталог `run.sh` (голый Postgres + `auth_stub.sql`) совпал с `supabase start` один в один: 36 функций, 53 таблицы, все права. Значит, `serverCatalog` на каждом PR проверяет правду. Ночью это сверяет `catalog-diff.mjs`.
-- **Письмо с кодом.** Шаблон магической ссылки по умолчанию в CLI 3.0.0 содержит только ссылку, без кода. Приложение входит по коду (`verifyOtp`), поэтому локальный шаблон `supabase/templates/magic-link.html` с `{{ .Token }}` подключён в `config.toml`. Боевой шаблон задаётся в панели Supabase: `release.yml` делает `db push`, а не `config push`.
+- **Письмо с кодом (#1756).** Шаблоны по умолчанию в CLI содержат только ссылку. Приложение входит только по коду (`verifyOtp`), поэтому оба локальных шаблона с `{{ .Token }}` и без ссылки подключены в `config.toml`: `magic-link.html` (известная почта) и `confirmation.html` (новая почта — GoTrue шлёт «confirmation»). Сторож — `apps/mobile/test/authEmails.test.ts`. Боевые шаблоны те же, вносятся в панели Supabase руками: `release.yml` делает `db push`, а не `config push`. Лимит писем локального стека поднят (`[auth.rate_limit] email_sent`).
 - **Нет токена человека ≠ нет заголовка.** Клиент всегда шлёт `apikey` (anon-ключ — это JWT), шлюз его пропускает, а 401 даёт сама функция (в `userOf` нет пользователя). api-2 проверяет именно это.
 - **Edge runtime в песочнице чата** не скачивает `npm:` через прокси с подменой сертификата (UnknownIssuer). На GitHub такого прокси нет, поэтому api-2 проверяется прогоном `cloud.yml` на PR.
 

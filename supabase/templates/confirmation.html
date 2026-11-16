@@ -1,0 +1,8 @@
+<!-- A NEW email gets this mail, not Magic Link (signInWithOtp creates the account, GoTrue sends «confirmation»):
+     it must carry the code too, or the first sign-in is impossible (#1756). Typing the code confirms the address.
+     The SAME text goes to the hosted project by hand (Authentication → Email Templates → Confirm signup).
+     Guard: apps/mobile/test/authEmails.test.ts. -->
+<h2>Your GoRix sign-in code</h2>
+<p style="font-size:32px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
+<p>Enter this code in the GoRix app to finish signing up. It works once and expires in 1 hour.</p>
+<p>If you didn't ask for it, ignore this email.</p>

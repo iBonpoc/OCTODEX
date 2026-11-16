@@ -5,6 +5,8 @@
  *   no demo note, no «Сбросить тестовые данные»;
  * - b1 with the code from the email (GoTrue sends it; Mailpit catches it) → company B, and nothing of company A.
  * A wrong password stays on the sign-in screen with the server's refusal.
+ * #1756: a NEW email (no account yet) — GoTrue sends «confirmation», not Magic Link; it must carry the code too: the code
+ * signs up, confirms the address and goes on to «Создать компанию». No link anywhere in the email.
  */
 async function signInScreen(h) {
   await h.go("/auth/sign-in");
@@ -76,6 +78,24 @@ exports.run = async (h, { seed, mailpit }) => {
   await h2.click("Войти");
   await expectCompany(h2, b1.company, a1.company);
   h.expect(!errors.length, `no page errors for b1: ${errors.join("; ")}`);
+
+  // #1756: a new email — the first code is the sign-up (in the same fresh browser, b1 signed out)
+  await p2.evaluate(() => localStorage.clear());
+  await ctx.clearCookies();
+  const fresh = `new.${Date.now()}@example.com`;
+  await signInScreen(h2);
+  await agreeAndEmail(h2, fresh);
+  const askedNew = Date.now() - 1000;
+  await h2.click("Получить код");
+  await h2.expectText(/Код отправлен/, "the code to a new email is sent");
+  const mailNew = await mailpit(fresh, { after: askedNew });
+  const codeNew = /\b(\d{6})\b/.exec(mailNew)?.[1];
+  h.expect(!!codeNew, `a new email gets a 6-digit code too:\n${mailNew.slice(0, 300)}`);
+  h.expect(!/https?:\/\//.test(mailNew), `no link in the sign-up email:\n${mailNew.slice(0, 300)}`);
+  await p2.getByPlaceholder("Код из письма").last().fill(codeNew);
+  await h2.click("Войти");
+  await p2.waitForURL(/\/auth\/company/, { timeout: 10000 });
+  h.expect(/\/auth\/company/.test(new URL(p2.url()).pathname), `a new account goes on to «Создать компанию» (${p2.url()})`);
   await ctx.close();
 };
 // the wrong password is a 400 from GoTrue the browser logs as a failed request

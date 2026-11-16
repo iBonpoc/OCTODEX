@@ -1,6 +1,7 @@
-<!-- LOCAL stack only (supabase start; the nightly cloud scenarios, docs/specs/21): the app signs in by the 6-digit
-     code (auth/sign-in.tsx → verifyOtp), so the local email carries {{ .Token }}. The hosted project's template is set
-     in the Supabase dashboard; release.yml runs `db push`, not `config push`, so this file never reaches it. -->
-<h2>Your OCTODEX sign-in code</h2>
-<p>Your code: <strong>{{ .Token }}</strong></p>
-<p>Or follow <a href="{{ .ConfirmationURL }}">this link</a>.</p>
+<!-- The app signs in by the 6-digit code only (auth/sign-in.tsx → verifyOtp, #1756): no link — a link opens the website,
+     not the app. The SAME text goes to the hosted project by hand (Authentication → Email Templates → Magic Link);
+     release.yml runs `db push`, not `config push`. Guard: apps/mobile/test/authEmails.test.ts. -->
+<h2>Your GoRix sign-in code</h2>
+<p style="font-size:32px;font-weight:bold;letter-spacing:6px">{{ .Token }}</p>
+<p>Enter this code in the GoRix app. It works once and expires in 1 hour.</p>
+<p>If you didn't ask for it, ignore this email.</p>

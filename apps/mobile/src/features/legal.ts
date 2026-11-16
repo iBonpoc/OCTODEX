@@ -25,8 +25,8 @@ export function legalState(s: LegalStatus | null | undefined): LegalState {
 }
 
 /**
- * The tick on the sign-in screen waits through sign-in (a code, a password, the email-confirmation link reopening the
- * app): it is kept on the device and sent once a session exists. Kept with the editions the person saw, the email they
+ * The tick on the sign-in screen waits through sign-in (a code or a password; no email link since #1756): it is kept
+ * on the device and sent once a session exists. Kept with the editions the person saw, the email they
  * typed and the time: only a session of THAT email, within PENDING_LEGAL_TTL_MS, sends it (a shared tablet: someone
  * else's later session never «agrees» by another person's tick — security-check 7а-1). Wiped on a failed sign-in and
  * on sign-out.

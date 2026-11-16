@@ -1,0 +1,59 @@
+/**
+ * #1756 — sign-in by the email code: Supabase Auth refusals in the app's words, the «send again» timer.
+ * The messages are GoTrue's own (they reach the screen as error.message).
+ */
+import { describe, it, expect } from "vitest";
+import { nextReadyAt, RESEND_S, resendLeft, signInError } from "@/features/signIn";
+import { en } from "@/i18n/en";
+import { ru } from "@/i18n/ru";
+import { es } from "@/i18n/es";
+
+describe("signInError", () => {
+  const cases: [string, string][] = [
+    ['Email address "a@b.co" cannot be used as it is not authorized', "auth.err.notAllowed"],
+    ["email rate limit exceeded", "auth.err.mailLimit"],
+    ["Request rate limit reached", "auth.err.tooMany"],
+    // a wrong code and an old code are the same answer in GoTrue (otp_expired): one key
+    ["Token has expired or is invalid", "auth.err.code"],
+    ["Invalid login credentials", "auth.err.password"],
+    ["Email not confirmed", "auth.err.notConfirmed"],
+    ['Email address "x@y" is invalid', "auth.err.badEmail"],
+    ["Failed to fetch", "auth.err.network"],
+    ["Network request failed", "auth.err.network"],
+    ["Load failed", "auth.err.network"],
+    ["Database error saving new user", "auth.err.other"],
+    ["", "auth.err.other"],
+  ];
+  it.each(cases)("%s → %s", (msg, key) => expect(signInError(msg).key).toBe(key));
+
+  it("the server's own wait keeps its seconds", () => {
+    expect(signInError("For security purposes, you can only request this after 42 seconds.")).toEqual({ key: "auth.err.wait", seconds: 42 });
+  });
+
+  it("every key has words in RU, EN, ES — and none says «ошибка / не удалось / сбой»", () => {
+    const keys = [...cases.map((c) => c[1]), "auth.err.wait"];
+    for (const dict of [ru, en, es] as Record<string, string>[])
+      for (const k of keys) {
+        expect(dict[k], k).toBeTruthy();
+        expect(dict[k]).not.toMatch(/ошибк|не удалось|сбой|error|failed/i);
+      }
+    // spec 102 finds the wrong-password words by «неверн»
+    expect(ru["auth.err.password"]).toMatch(/неверн/i);
+  });
+});
+
+describe("send again", () => {
+  it("is off for RESEND_S after a code, then on", () => {
+    const t0 = 1_000_000;
+    const ready = nextReadyAt(t0);
+    expect(resendLeft(ready, t0)).toBe(RESEND_S);
+    expect(resendLeft(ready, t0 + 59_001)).toBe(1);
+    expect(resendLeft(ready, t0 + 60_000)).toBe(0);
+    expect(resendLeft(ready, t0 + 999_999)).toBe(0);
+    expect(resendLeft(0, t0)).toBe(0);
+  });
+  it("the server's wait moves it; other refusals keep RESEND_S", () => {
+    expect(nextReadyAt(0, { key: "auth.err.wait", seconds: 17 })).toBe(17_000);
+    expect(nextReadyAt(0, { key: "auth.err.network" })).toBe(RESEND_S * 1000);
+  });
+});
