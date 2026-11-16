@@ -101,6 +101,12 @@ exports.run = async (h) => {
     const pad = 4; // the toast's own pill is a little taller than its text
     return toast.bottom + pad <= bar.top && (!chip || toast.bottom + pad <= chip.top || toast.top >= chip.bottom || chip.right <= toast.left || chip.left >= toast.right);
   }, null, { timeout: 3000 }).catch(async () => h.expect(false, `the toast is above the toolbar and the chips (toast ${JSON.stringify(await tid("toast-text").boundingBox())}, toolbar ${JSON.stringify(await tid("draw-toolbar").boundingBox())})`));
+  // from 820 the side panel of properties stands at the right: the toast (its «Отменить» at its right end) is left of it (#1895)
+  if ((await tid("draw-panel").count()) > 0) {
+    const panel = await tid("draw-panel").boundingBox();
+    const undo = await tid("toast-undo").boundingBox();
+    h.expect(!!undo && undo.x + undo.width <= panel.x - 4, `the toast is left of the panel of properties (undo ${JSON.stringify(undo)}, panel x ${panel.x})`);
+  }
   await h.shot("toast-above-toolbar");
   // «Удалить замер» (#690): off the canvas, gone; «Отменить» brings it back
   await who("Удалить замер");
