@@ -4251,6 +4251,7 @@ export const ru = {
   "sup.taxAsk.q": "Закупка {cost} — это уже с налогом поставщика ({pct})?",
   "sup.taxAsk.with": "Да, с налогом",
   "sup.taxAsk.withHint": "Закупка станет {net}, цена клиенту не изменится: {price}",
+  "sup.taxAsk.withHintCent": "Закупка станет {net}, цена клиенту {price} (сейчас {from} — разница в цент из-за округления)",
   "sup.taxAsk.without": "Нет, без налога",
   "sup.taxAsk.withoutHint": "Налог добавится сверху, цена клиенту станет {price} (сейчас {from})",
   "sup.taxAsk.close": "Закроете — поставщик не привяжется.",

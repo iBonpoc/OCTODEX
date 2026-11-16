@@ -4251,6 +4251,7 @@ export const es: Dict = {
   "sup.taxAsk.q": "¿El costo {cost} ya incluye el impuesto del proveedor ({pct})?",
   "sup.taxAsk.with": "Sí, con impuesto",
   "sup.taxAsk.withHint": "El costo será {net}, el precio al cliente no cambia: {price}",
+  "sup.taxAsk.withHintCent": "El costo será {net}, el precio al cliente {price} (ahora {from}: un centavo por redondeo)",
   "sup.taxAsk.without": "No, sin impuesto",
   "sup.taxAsk.withoutHint": "El impuesto se suma, el precio al cliente será {price} (ahora {from})",
   "sup.taxAsk.close": "Si cierra, el proveedor no se asigna.",
