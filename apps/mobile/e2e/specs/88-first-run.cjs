@@ -1,6 +1,6 @@
 /**
  * Wave 7-1 — first run (docs/specs/13 §3.11, 19 §2 п.1–2; 15-flows §1.8):
- * - «Чем вы занимаетесь?» (/auth/trade): search, pick presets and «Другое» → the company's directions, then the profile wizard;
+ * - «Чем вы занимаетесь?» (/auth/trade): search, pick presets and «＋ Своё направление» → the company's directions, then the profile wizard;
  *   «Пропустить» goes on without adding anything;
  * - «Первые шаги» on the owner's Главная: профиль компании · первая работа · пригласить команду · установить на телефон
  *   (browser); each step opens its screen, «Установить» shows how; «Скрыть» hides it for good; the office does not see it.
@@ -66,7 +66,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect((await card().count()) === 0, "still hidden after reload");
 
-  // «Чем вы занимаетесь?»: search, a preset and «Другое»
+  // «Чем вы занимаетесь?»: search, a preset and «＋ Своё направление»
   const db0 = await h.db();
   const active = new Set(db0.serviceCategories.filter((c) => !c.archivedAt).map((c) => c.seedKey));
   const key = Object.keys(RU).find((k) => !active.has(k));
@@ -80,6 +80,8 @@ exports.run = async (h) => {
   h.expect((await chip.count()) === 1, `search finds «${RU[key]}»`);
   h.expect((await p.getByRole("checkbox").locator("visible=true").count()) <= 3, "search narrows the list");
   await chip.click();
+  // the own direction: «＋ Своё направление» — the last row of the list (#1797) opens its field
+  await p.getByRole("button", { name: "Своё направление", exact: true }).locator("visible=true").click();
   await p.getByPlaceholder("Например, мойка под давлением").locator("visible=true").fill("Мойка фасадов");
   await h.shot("trade");
   await p.getByRole("button", { name: "Продолжить" }).locator("visible=true").click();
@@ -88,7 +90,7 @@ exports.run = async (h) => {
   const db1 = await h.db();
   const cats = db1.serviceCategories.filter((c) => !c.archivedAt);
   h.expect(cats.some((c) => c.seedKey === key), `«${RU[key]}» is a direction now`);
-  h.expect(cats.some((c) => c.name === "Мойка фасадов"), "«Другое» by its own name");
+  h.expect(cats.some((c) => c.name === "Мойка фасадов"), "«Своё направление» by its own name");
 
   // «Пропустить» adds nothing
   await h.go("/auth/trade");

@@ -1,20 +1,21 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space, component } from "@octo/design-tokens";
+import { space, component, radius } from "@octo/design-tokens";
+import { useTheme } from "@/theme/ThemeProvider";
 import { catalogCost } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind } from "@/data/types";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { countsFromCost, editClean, editOk, editPrice } from "@/features/catalogEdit";
+import { countsFromCost, editClean, editPrice, editProblems, type CatalogField } from "@/features/catalogEdit";
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
 import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { StatusNote } from "@/ui/statusNote";
+import { Anchored, FieldAnchor, FieldError, useRequiredForm } from "@/ui/requiredForm";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
@@ -31,8 +32,9 @@ export default function CatalogItemScreen() {
   const store = useStore();
   const { t, money } = useI18n();
   const toast = useToast();
-  /** «Сохранить» was pressed with something missing (the button is never pale, DS §11 п.3) */
-  const [need, setNeed] = useState(false);
+  /** «Сохранить» is never pale: what is missing is said under each such field, the scroll goes to the first (DS §11 п.3) */
+  const form = useRequiredForm();
+  const { c } = useTheme();
   const found = store.db.catalog.find((x) => x.id === id);
   const [it, setIt] = useState<CatalogItem>(
     () => found ?? { id: uid(), kind: kind0 && KINDS.includes(kind0) ? kind0 : "service", name: "", unit: "ea", priceCents: 0 },
@@ -46,7 +48,7 @@ export default function CatalogItemScreen() {
   const noCosts = store.db.costsVisible === false;
   const isMat = countsFromCost(it, noCosts);
   const price = editPrice(it, store.db.catalog, noCosts);
-  const ok = editOk(it, noCosts);
+  const NEED: Record<CatalogField, DictKey> = { name: "form.req.itemName", cost: "form.req.cost", components: "form.req.components" };
   // spec 36: who sees suppliers picks one (the server reads none for sales and the tech)
   const supPick = canSeeSuppliers(store.role) && !store.db.suppliersLegacy;
   const sup = supplierOf(store.db, it.supplierId);
@@ -58,6 +60,7 @@ export default function CatalogItemScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [found?.id, noCosts]);
 
+  const submit = () => form.submit(editProblems(it, noCosts).map((id) => ({ id, text: t(NEED[id]) })), save);
   const save = () => {
     const clean = editClean(it, store.db.catalog, noCosts);
     toast.show(t("cat.saved", { name: clean.name }), store.saveCatalogItem(clean));
@@ -79,11 +82,12 @@ export default function CatalogItemScreen() {
     );
 
   return (
-    <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>
+    <Screen form title={found ? t("cat.edit") : t("cat.new")} back={back}>
       <FieldGroup>
-        <ChoiceChips value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
+        {/* the type: a segment or a field with a menu, never wrapping chips (DS §А1в, #1797) */}
+        <ChoiceChips label={t("cat.kind")} testID="catalog-kind" value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
         <View testID="catalog-name">
-          <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
+          <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} field={form.field("name")} />
         </View>
         <TextField type="unit" value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder={t("cat.unit")} />
         {found?.placeholder ? <StatusChip status="warn" label={t("cat.placeholder")} /> : null}
@@ -131,9 +135,22 @@ export default function CatalogItemScreen() {
           ) : null}
           <RowView style={{ alignItems: "flex-end" }}>
             <Labeled label={t("cat.cost")}>
-              <View testID="catalog-cost">
-                <MoneyField cents={it.costCents ?? 0} onChange={(c) => set({ costCents: c })} />
-              </View>
+              {/* the frame turns status.bad here — drawn OVER the field's own frame, so the field keeps its size and the row stays
+                  level; the words go under the whole row (a column of three is too narrow for them) */}
+              <FieldAnchor field={form.field("cost")}>
+                <View testID="catalog-cost">
+                  <MoneyField
+                    cents={it.costCents ?? 0}
+                    onChange={(cents) => {
+                      set({ costCents: cents });
+                      if (cents > 0) form.field("cost").clear();
+                    }}
+                  />
+                </View>
+                {form.errors.cost ? (
+                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius.field, borderWidth: 1, borderColor: c.status.bad.fill }]} />
+                ) : null}
+              </FieldAnchor>
             </Labeled>
             <Labeled label={t("cat.vendorTax")}>
               <PctField bps={it.vendorTaxBps ?? 0} onChange={(b) => set({ vendorTaxBps: Math.min(b, 10000) })} />
@@ -142,6 +159,7 @@ export default function CatalogItemScreen() {
               <PctField bps={it.markupBps ?? 0} onChange={(b) => set({ markupBps: b })} />
             </Labeled>
           </RowView>
+          <FieldError text={form.errors.cost} testID="field-cost-error" />
           <T v="caption" tone="mut">
             {t("cat.costWithTax", { amount: money(catalogCost(it.costCents ?? 0, it.vendorTaxBps ?? 0)) })}
           </T>
@@ -173,27 +191,18 @@ export default function CatalogItemScreen() {
               </View>
             );
           })}
-          <Button label={t("cat.addComponent")} icon="plus" variant="ghost" size="sm" onPress={() => setPick(true)} />
+          <Anchored field={form.field("components")}>
+            <Button label={t("cat.addComponent")} icon="plus" variant="ghost" size="sm" onPress={() => setPick(true)} />
+          </Anchored>
           <T v="heading" tabular>
             {t("cat.clientPrice", { amount: money(price) })}
           </T>
         </Card>
       ) : null}
 
-      {/* what is missing: a quiet line until «Сохранить» is pressed, then the warning at the button — one place, as on the other forms
-          (design review of #1728: not a line and a toast) */}
-      {!ok ? (
-        need ? (
-          <StatusNote tone="warn" testID="catalog-need">{t("cat.need")}</StatusNote>
-        ) : (
-          <T v="caption" tone="mut">
-            {t("cat.need")}
-          </T>
-        )
-      ) : null}
       <View testID="catalog-save">
-        {/* always there to press (DS §11 п.3, #1728): an item without a name or a price says so */}
-        <Button label={t("ue.save")} icon="check" full onPress={() => (ok ? save() : setNeed(true))} />
+        {/* always there to press (DS §11 п.3, #1728): what is missing is said under the field itself, not at the button */}
+        <Button label={t("ue.save")} icon="check" full onPress={submit} />
       </View>
       {found ? <Button label={t("cat.remove")} icon="trash" variant="ghost" full onPress={remove} /> : null}
       <SupplierPicker
@@ -214,6 +223,7 @@ export default function CatalogItemScreen() {
         onClose={() => setPick(false)}
         onPick={(x) => {
           set({ components: [...comps, { itemId: x.id, qty: "1" }] });
+          form.field("components").clear();
           setPick(false);
         }}
       />

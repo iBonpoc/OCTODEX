@@ -52,7 +52,7 @@ export const SCREENS: ShowcaseScreen[] = [
 
 export const SECTIONS: ShowcaseSection[] = [
   { id: "windows", screen: "windows", ds: "§10", title: "ds.sec.windows", tokenGroups: [], components: ["Sheet", "SheetScroll"] },
-  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored"] },
+  { id: "selectors", screen: "selectors", ds: "§9", title: "ds.sec.selectors", tokenGroups: [], components: ["ViewTabs", "SelectField", "PickerSheet", "FieldError", "Anchored", "CheckRows"] },
   { id: "fields", screen: "fields", ds: "§9", title: "ds.scr.fields", tokenGroups: [], components: ["NumberField", "TextField", "FieldGroup", "FormMain"] },
   { id: "buttons", screen: "buttons", ds: "§7", title: "ds.scr.buttons", tokenGroups: [], components: ["Button", "IconButton", "Press", "ActionBar"] },
   { id: "notices", screen: "notices", ds: "§15", title: "ds.scr.notices", tokenGroups: [], components: ["ToastProvider", "SyncBadge", "Banner", "StatusNote", "Empty", "EmptyFilter", "EmptySearch", "NotFound", "PageNotFound"] },
@@ -82,5 +82,6 @@ export const UI_NOT_SHOWN: Record<string, string> = {
   "OneColumn": "a context, not a component: the 360 panel makes every CardGrid inside it one column (#1343) — seen as the client's panel at 1280, e2e 158",
   "Background": "the screen background under everything; seen on every sample",
   "ScreenScrollCtx": "context that lets a form scroll its screen to a wrong field; nothing to see",
+  "FieldAnchor": "the place of a required field the screen draws itself (the scroll goes to it); nothing to see — its frame and words are FieldError / Anchored",
   "Scrim": "the dim layer of a sheet; seen in the sheet sample",
 };

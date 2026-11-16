@@ -5,6 +5,9 @@
  */
 const FORMS = [
   "/auth/terms",
+  "/auth/trade",
+  "/catalog/cat-haul",
+  "/catalog/new-440?kind=material",
   "/client/edit?id=c1",
   "/client/edit",
   "/client/import",

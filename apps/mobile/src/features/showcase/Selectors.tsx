@@ -4,11 +4,14 @@ import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips, ReadOnly, TextField } from "@/ui/controls";
 import { Anchored, useRequiredForm } from "@/ui/requiredForm";
 import { SelectField } from "@/ui/selectField";
-import { T } from "@/ui/primitives";
-import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
+import { Icon, T } from "@/ui/primitives";
+import { Card, FieldGroup, ListRow, SectionTitle } from "@/ui/surfaces";
+import { useTheme } from "@/theme/ThemeProvider";
+import { component, size } from "@octo/design-tokens";
 import { SECTIONS } from "./registry";
 import { StatusNote } from "@/ui/statusNote";
 import { ViewTabs } from "@/ui/viewTabs";
+import { CheckRows } from "@/ui/checkRows";
 
 const UNITS = ["ft", "in", "yd", "m", "cm", "mm"] as const;
 const TWENTY = Array.from({ length: 20 }, (_, i) => `n${i + 1}`);
@@ -30,6 +33,7 @@ type VTab = string;
 /** Selectors (DS §9): one of 5–12 in a form row — SelectField with the menu at the row. */
 export function SelectorsSection() {
   const { t } = useI18n();
+  const { c } = useTheme();
   const s = SECTIONS.find((x) => x.id === "selectors")!;
   const [unit, setUnit] = useState<Unit | null>("ft");
   const [none, setNone] = useState<Unit | null>(null);
@@ -41,6 +45,8 @@ export function SelectorsSection() {
   const [few, setFew] = useState<"a" | "b" | "c">("a");
   const [vtab, setVtab] = useState<VTab>("overview");
   const [many, setMany] = useState<Unit>("ft");
+  // several of many (DS §А4, #1797): a list with flags, not wrapping chips
+  const [multi, setMulti] = useState<string[]>(["roofing"]);
   // a required field (DS §11 п.3–4): the button is always on; pressed with the field empty it shows the error under it
   const form = useRequiredForm();
   const [reqName, setReqName] = useState("");
@@ -80,6 +86,17 @@ export function SelectorsSection() {
         <View testID="showcase-choice-many">
           <ChoiceChips label={t("ds.choice.many")} value={many} onChange={setMany} items={items} />
         </View>
+      </Card>
+      <Card>
+        <T v="heading">{t("ds.multi.title")}</T>
+        <T v="caption" tone="mut">{t("ds.multi.hint")}</T>
+        <CheckRows
+          testID="showcase-multi"
+          value={multi}
+          onChange={setMulti}
+          items={(["roofing", "hvac", "painting", "cleaning", "flooring"] as const).map((k) => ({ key: k, label: t(`trade.${k}` as DictKey) }))}
+          footer={<ListRow title={t("first.trade.addOwn")} left={<Icon name="plus" s={size.iconSm} color={c.ink} />} chevron={false} minHeight={component.rowOption} onPress={() => {}} />}
+        />
       </Card>
       <FieldGroup title={t("ds.req.title")}>
         <T v="caption" tone="mut">{t("ds.req.hint")}</T>
