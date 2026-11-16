@@ -800,10 +800,6 @@ export default function DrawScreen() {
     later.current();
   };
   const tape = m?.accuracy === "tape";
-  const setAccuracy = (a: "rough" | "tape") => {
-    setM((x) => (x ? { ...x, accuracy: a } : x));
-    later.current();
-  };
   const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
@@ -1031,9 +1027,7 @@ export default function DrawScreen() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
-    // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
-    // «Как мерили, панель» the founder did not understand)
-    ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
+    // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
@@ -1045,7 +1039,7 @@ export default function DrawScreen() {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
-    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "place" || k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
@@ -1476,18 +1470,6 @@ export default function DrawScreen() {
       </Sheet>
       <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
-          {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
-          {moreSheet === "acc" && canSave && m ? (
-            <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
-              <ChoiceChips
-                items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
-                value={tape ? "tape" : "rough"}
-                onChange={(a) => setAccuracy(a)}
-              />
-              <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
-            </View>
-          ) : null}
           {moreSheet === "layers" ? (
             <View testID="draw-layers" style={{ gap: space[2] }}>
               <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>

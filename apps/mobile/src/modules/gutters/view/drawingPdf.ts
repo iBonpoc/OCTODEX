@@ -93,10 +93,9 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
         )
         .join("")}</table>`
     : "";
-  const rough = x.rough ? `<p class="note"><b>${esc(t("mod.gutters.view.rough"))}</b></p>` : "";
   const title = t(crew ? "mod.gutters.pdf.titleCrew" : "mod.gutters.pdf.title");
   const meta = [`${t("mod.gutters.pdf.date")}: ${x.date}`, x.who, x.address].filter(Boolean) as string[];
-  const body = `${sheet ? sheetSvg(sheet) : ""}${rough}${runsTable}${corners}${ds}${partsTable}`;
+  const body = `${sheet ? sheetSvg(sheet) : ""}${runsTable}${corners}${ds}${partsTable}`;
   return docPage({ title, meta, footer: [title, x.company.name].filter(Boolean).join(" · "), company: x.company, body, opts: x.opts });
 }
 

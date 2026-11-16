@@ -253,9 +253,6 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         {!drawing.runs.length ? (
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
         ) : null}
-        {rough && drawing.runs.length ? (
-          <View testID="view-rough"><StatusChip status="warn" label={t("mod.gutters.view.rough")} soft /></View>
-        ) : null}
 
         {/* the main action by the state (#699) and «Править чертёж» */}
         <View style={{ gap: space[2] }}>

@@ -7,7 +7,7 @@
  * - «Документы»: «Для клиента» — «Смета … и чертёж · EN», «Открыть» opens that estimate; «Для бригады» — the cut and the
  *   number of parts; the photos strip; the parts folded under «Подробно»;
  * - 820 / 1280 on its own page: two columns (the documents right of the sheet); the 1280 panel of «Замеры» — one column;
- * - «⋯» → «Точность замера» → «Примерно»: the head says so; «Дублировать» → the copy's card, «Без сметы», «Отменить» —
+ * - no «Рулетка / Примерно» and no «Точность замера» (#768, #1764); «Дублировать» → the copy's card, «Без сметы», «Отменить» —
  *   the copy is gone; a press on whom → «Отвязать (в черновики)» → «Без клиента», «Черновик»; «Удалить» under a signed
  *   estimate says why not; a draft is deleted and «Отменить» brings it back.
  * Finds things by testID; waits on what it checks.
@@ -81,7 +81,7 @@ exports.run = async (h) => {
   await view("e2e228-signed");
   h.expect((await text("view-who")).includes(client.name) && (await text("view-who")).includes(place.address), `whom for and where (${await text("view-who")})`);
   h.expect(/Подписан/.test(await text("view-state")), `the state (${await text("view-state")})`);
-  h.expect(/Рулетка/.test(await text("view-accuracy")), "measured with a tape");
+  h.expect((await tid("view-accuracy").count()) === 0, "no «Рулетка / Примерно» in the head (#768, #1764)"); // i18n-old: ok — checks the old words are gone
   await tid("view-docs").waitFor({ timeout: 5000 });
   await h.shot("head");
   h.expect(/Для клиента/.test(await text("view-doc-client")) && /и чертёж · EN/.test(await text("view-doc-client")), `the client's: the estimate and the drawing, in English (${await text("view-doc-client")})`);
@@ -108,15 +108,13 @@ exports.run = async (h) => {
   await waitFor(async () => /подписанная смета/.test(await p.locator("body").innerText()), "a signed one is not deleted: it says why");
   h.expect((await g()).measurements.some((m) => m.id === "e2e228-signed"), "still there");
 
-  // «Точность замера» → «Примерно»
+  // «⋯» has no «Точность замера» any more (#768, #1764)
   await view("e2e228-free");
   await tid("view-more").getByRole("button").click();
-  await menu("Точность замера");
-  await tid("view-accuracy-pick").waitFor({ timeout: 5000 });
-  await tid("view-accuracy-pick").getByRole("radio", { name: /^Примерно/ }).click();
-  await waitFor(async () => (await g()).measurements.find((m) => m.id === "e2e228-free")?.accuracy === "rough", "the accuracy is saved");
+  await p.getByRole("menuitem", { name: "Дублировать", exact: true }).waitFor({ timeout: 3000 });
+  h.expect((await p.getByRole("menuitem", { name: "Точность замера", exact: true }).count()) === 0, "no «Точность замера» in «⋯»"); // i18n-old: ok — the old item must be gone
   await pressEscUntilClosed(p);
-  await waitFor(async () => /Примерно/.test(await text("view-accuracy")), "the head says «Примерно»");
+  await p.getByRole("menuitem", { name: "Дублировать", exact: true }).waitFor({ state: "detached", timeout: 3000 });
 
   // «Дублировать» → the copy's card; «Отменить» — gone
   await tid("view-more").getByRole("button").click();
