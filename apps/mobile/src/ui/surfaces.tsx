@@ -778,7 +778,8 @@ export function Screen({
   );
   const formColumn = (
     <View
-      testID={testID}
+      // a form without its own testID is found by the tests as `form-column` (e2e 440: the column is at most 560 on every form)
+      testID={testID ?? (form ? "form-column" : undefined)}
       // where the sticky tabs start: right under the content. The sticky wrapper's own layout says 0 on the web (react-native-web
       // measures it inside its sticky box), so the tabs' place is the content's bottom (#1416)
       onLayout={tabs ? (e) => (tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height) : undefined}

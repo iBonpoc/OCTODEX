@@ -74,7 +74,7 @@ export default function NewLead() {
     router.replace(`/lead/${r.id}`);
   };
   return (
-    <Screen title={t("lead.title")}>
+    <Screen form title={t("lead.title")}>
       {/* the fields straight on the background, no card around them; «Вставить» an icon inside the phone field (DS §11 п.17–18, #1411) */}
       <FieldGroup testID="new-lead-fields">
         <Labeled label={t("lead.phone")}>
