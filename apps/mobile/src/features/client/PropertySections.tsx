@@ -18,6 +18,7 @@ import { NotesBlock } from "@/features/NotesBlock";
 import { TasksBlock } from "@/features/lead/LeadParts";
 import { PropertyPeopleSheet } from "@/features/client/PropertySheets";
 import { Button } from "@/ui/controls";
+import { AddObject } from "@/features/client/AddObject";
 import { T } from "@/ui/primitives";
 import { Empty } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
@@ -94,8 +95,10 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
 
     case "jobs":
       return r.jobs.length === 0 ? (
-        <Empty icon="wrench" title={t("client.empty.jobs")} />
+        <Empty icon="wrench" title={t("client.empty.jobs")} action={<AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="property-section-new-job" />} />
       ) : (
+        <>
+        <AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="property-section-new-job" inList />
         <CardGrid>
           {r.jobs.map((j) => {
             const v = jobStatusView[j.status];
@@ -114,12 +117,15 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
             );
           })}
         </CardGrid>
+        </>
       );
 
     case "estimates":
       return r.estimates.length === 0 ? (
-        <Empty icon="invoice" title={t("client.empty.estimates")} />
+        <Empty icon="invoice" title={t("client.empty.estimates")} action={<AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="property-section-new-estimate" />} />
       ) : (
+        <>
+        <AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="property-section-new-estimate" inList />
         <CardGrid>
           {r.estimates.map((e) => (
             <ListCard
@@ -135,6 +141,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
             />
           ))}
         </CardGrid>
+        </>
       );
 
     case "invoices":
@@ -153,7 +160,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
                 title={i.title || i.number || t("inv.title")}
                 when={i.title ? i.number : undefined}
                 value={money(i.totalCents)}
-                status={{ tone: ch.s, label: t(ch.l) }}
+                status={{ tone: ch.s, label: t(ch.l, ch.p) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );

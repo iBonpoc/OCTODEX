@@ -98,7 +98,7 @@ export function SelectField<K extends string>({
             paddingHorizontal: space[3],
             borderRadius: radius.field,
             borderWidth: component.hairline,
-            borderColor: shownError ? c.status.bad.fill : c.bd,
+            borderColor: shownError ? c.status.bad.fill : c.bdField,
             backgroundColor: c.in,
           }}
         >

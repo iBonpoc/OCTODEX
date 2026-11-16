@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { canServe, visibleClients } from "@/features/clients";
 import { mergedTarget } from "@/features/clientDuplicates";
-import { clientRowsFor, isClientSection, isClientTab } from "@/features/clientRows";
+import { clientRecords, clientRowsFor, isClientSection, isClientTab } from "@/features/clientRows";
+import { AddObject } from "@/features/client/AddObject";
 import { ClientSection } from "@/features/client/ClientSections";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { useI18n, type DictKey } from "@/i18n";
@@ -20,7 +21,7 @@ import { useDevice } from "@/theme/ThemeProvider";
  */
 export default function ClientScreen() {
   const { id, s, tab } = useLocalSearchParams<{ id: string; s?: string; tab?: string }>();
-  const { db, role } = useStore();
+  const { db, role, mode } = useStore();
   const { t } = useI18n();
   const { device } = useDevice();
   const c = visibleClients(db, role).find((x) => x.id === id);
@@ -46,10 +47,15 @@ export default function ClientScreen() {
       </Screen>
     );
   const rows = clientRowsFor(role);
+  // from 820 the list's «＋ …» button stands in the header on the right, not over the grid (DS §12.2, #1664); an empty list keeps its own
+  const listAdd =
+    device !== "phone" && (s === "jobs" || s === "estimates") && clientRecords(db, c, role, mode)[s].length ? (
+      <AddObject kind={s === "jobs" ? "job" : "estimate"} customerId={c.id} testID={`client-section-new-${s === "jobs" ? "job" : "estimate"}`} />
+    ) : undefined;
   // a row's own list: the same address with ?s=<row>
   if (isClientSection(s) && rows.includes(s))
     return (
-      <Screen title={t(`client.row.${s}` as DictKey)} subtitle={c.name} back={back} fab={canServe(db, c.id) ? "client" : undefined} fabCtx={{ customerId: c.id }}>
+      <Screen title={t(`client.row.${s}` as DictKey)} subtitle={c.name} back={back} right={listAdd}>
         <ClientSection c={c} s={s} />
       </Screen>
     );

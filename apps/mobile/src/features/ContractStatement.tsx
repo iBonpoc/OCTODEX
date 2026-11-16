@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { contractStatement, progressAmount } from "@octo/estimating-engine";
 import { isOverdue, useStore } from "@/data/store";
+import { daysOverdue } from "@/data/selectors";
 import type { Invoice } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { MoneyField, PctField } from "./fields";
@@ -14,9 +15,13 @@ import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
 
-export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey } {
+/**
+ * One word of an invoice's status everywhere it is shown — its card, the list, the job's statement, the client's and the
+ * property's sections (#1495, #1728): an overdue one says «Просрочен N дн», not a bare «Просрочено». Label: t(chip.l, chip.p).
+ */
+export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey; p?: { d: number } } {
   if (i.paidCents >= i.totalCents) return { s: "ok", l: "money.paid" };
-  if (isOverdue(i.dueDate)) return { s: "bad", l: "st.overdue" };
+  if (isOverdue(i.dueDate)) return { s: "bad", l: "card.sign.overdueDays", p: { d: daysOverdue(i.dueDate) } };
   if (i.paidCents > 0) return { s: "warn", l: "inv.partial" };
   return { s: "info", l: "money.awaiting" };
 }
@@ -94,7 +99,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
                 title={i.title || t(`inv.kind.${i.kind ?? "final"}` as DictKey)}
                 when={[i.number, t("money.due", { date: day(i.dueDate) }), i.paidCents > 0 && i.paidCents < i.totalCents ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined].filter(Boolean).join(" · ")}
                 value={money(i.totalCents)}
-                status={{ tone: chip.s, label: t(chip.l) }}
+                status={{ tone: chip.s, label: t(chip.l, chip.p) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );

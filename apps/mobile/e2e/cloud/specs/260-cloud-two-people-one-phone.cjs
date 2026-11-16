@@ -54,6 +54,11 @@ exports.run = async (h, { seed }) => {
   await p.getByTestId("account-sign-out").first().click();
   // signed out: the session leaves the browser (supabase-js keeps it as «sb-…-auth-token»)
   await p.waitForFunction(() => !Object.keys(localStorage).some((k) => k.endsWith("-auth-token")), null, { timeout: 15000 });
+  // #1633: the owner's copy of the company leaves at the sign-out, before anyone else signs in
+  const wiped = await p
+    .waitForFunction((k) => localStorage.getItem(k) === null && localStorage.getItem("octo.signoutWipe.v1") === null, ownerKey, { timeout: 15000 })
+    .then(() => true, () => false);
+  h.expect(wiped, `the owner's cache ${ownerKey} is gone right after the sign-out (${(await caches()).join(", ")})`);
 
   // the tech signs in on the same browser: the owner's copy leaves once the tech's own is read
   await signIn(h, { ...a1, email, userId: tech.id });

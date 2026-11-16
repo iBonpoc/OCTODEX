@@ -6835,11 +6835,11 @@ select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.as
 update public.leads set assigned_to = 'a8400000-0000-4000-8000-000000000001' where id = '18400000-0000-4000-8000-000000000003';
 select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a8400000-0000-4000-8000-000000000001'),
           'T84 a subcontractor gets no lead push');
--- a lead given to the subcontractor at once: no push to him (the people of the flow still get it)
-:as_office_a
+-- a lead given to the subcontractor at once: no push to him (the people of the flow still get it). Since #1637 the app
+-- cannot give a lead to a subcontractor (T282); a lead the server gives him still sends him nothing
+:as_super
 insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
   ('18400000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Sub', '+13235558405', 'a8400000-0000-4000-8000-000000000001');
-:as_super
 select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a8400000-0000-4000-8000-000000000001')
           and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a0000000-0000-0000-0000-000000000001'),
           'T84 a lead given to the subcontractor at once: nothing to him, the owner still hears');
@@ -14454,6 +14454,14 @@ select tst.ok((select file_size_limit = 26214400 and not public and allowed_mime
 -- T212 (#1557): a file object, once its files row records the upload, is written by nobody again — the office included
 -- (red before 20261115100000: the office could overwrite it). Before the mark the author repeats the upload (upsert).
 -- An old build's late «failed» after the mark leaves the row «uploaded» (the trigger t08_upload_kept).
+:as_super
+-- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
+-- test photos of this tech go to the office (a fixture; the rows' own checks are done)
+set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
+update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
+set session_replication_role = origin;
+-- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
+select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
 insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f2120000-0000-4000-8000-000000000001.jpg');
@@ -14508,6 +14516,14 @@ select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-00000000000
 update public.files set upload_status = 'failed', storage_key = null where id = 'f2120000-0000-4000-8000-000000000004';
 select tst.ok((select upload_status = 'failed' and storage_key is null from public.files where id = 'f2120000-0000-4000-8000-000000000004'),
               'T212 the server''s own fix of a row is not ignored');
+:as_super
+-- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
+-- test photos of this tech go to the office (a fixture; the rows' own checks are done)
+set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
+update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
+set session_replication_role = origin;
+-- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
+select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 -- a failed upload before the mark is still repeated
 insert into public.files (id, company_id, kind) values ('f2120000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
@@ -14527,6 +14543,14 @@ select tst.ok(not has_function_privilege('anon', 'app.can_write_file_object(text
 
 -- T213 (#1572): a files row points only at its own object; the office too keeps «one row, one object» and writes only
 -- for a live files row (red before 20261115110000)
+:as_super
+-- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
+-- test photos of this tech go to the office (a fixture; the rows' own checks are done)
+set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
+update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
+set session_replication_role = origin;
+-- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
+select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values ('f2130000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo');
 select tst.fails_like($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded' where id = 'f2130000-0000-4000-8000-000000000001'$q$, '%its own object%',
@@ -14584,6 +14608,14 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_files_key_own(
 -- T214 (#1538): an expense's receipt goes to the cloud — a files row of kind 'receipt' tied to the expense; it is read
 -- as its expense is (owner, admin, office, the author; not sales, not another tech); the expense takes only a receipt
 -- of its own (red before 20261115120000)
+:as_super
+-- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
+-- test photos of this tech go to the office (a fixture; the rows' own checks are done)
+set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
+update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
+set session_replication_role = origin;
+-- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
+select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values ('f2140000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt');
 insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
@@ -14822,6 +14854,14 @@ select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'c2430000-000
 \echo 'T243 a closed company stays closed to its creator ok'
 
 -- T244 (#1603): a profile picture is a live photo of the person's own (red before 20261115160000)
+:as_super
+-- #1656 (20261115180000): a person outside the office keeps at most 3 files with nothing attached — the earlier blocks'
+-- test photos of this tech go to the office (a fixture; the rows' own checks are done)
+set session_replication_role = replica;  -- the service fields keep created_by (t10_service_fields)
+update public.files set created_by = 'a0000000-0000-0000-0000-000000000002' where created_by = 'a0000000-0000-0000-0000-000000000003' and visit_id is null and job_id is null and customer_id is null and measurement_id is null;
+set session_replication_role = origin;
+-- the role change dropped the session's cached plans: uuid_generate_v7 is planned again here, as on a fresh session
+select public.uuid_generate_v7() is not null as warmed;
 :as_tech_a
 insert into public.files (id, company_id, kind) values
   ('f2440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo'),
@@ -14916,8 +14956,9 @@ select tst.fails($q$insert into public.files (company_id, kind, visit_id) values
 insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
 select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2630000-0000-4000-8000-0000000000b1'$q$) = 1, 'T263 a tech still adds a job photo');
 insert into public.files (id, company_id, kind, job_id) values ('f2630000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'document', 'e1a00000-0000-0000-0000-000000000001');
-update public.files set job_id = null where id = 'f2630000-0000-4000-8000-0000000000b2';
-select tst.ok((select job_id is null from public.files where id = 'f2630000-0000-4000-8000-0000000000b2'), 'T263 a tech still adds and moves a document as before');
+-- #1657 (20261115180000): a tech's file stays where it was added — the job of a document is not taken away any more
+select tst.fails_like($q$update public.files set job_id = null where id = 'f2630000-0000-4000-8000-0000000000b2'$q$, '%stays where it was added%',
+                      'T263 a tech adds a document of a job and cannot move it off (#1657, see T272)');
 :as_super
 -- the visit falls out of the window while the photo waits in the queue: the upload is still recorded
 update public.visits set starts_at = now() - interval '20 days', ends_at = now() - interval '20 days' + interval '3 hours' where id = 'f1a00000-0000-0000-0000-000000000001';
@@ -14948,6 +14989,664 @@ select tst.ok(has_function_privilege('authenticated', 'app.sub_file_ok(text, uui
               and not has_function_privilege('public', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE'), 'T263 rule 18: the policy''s helper for the app only');
 select tst.ok(not has_function_privilege('anon', 'app.sub_file_ok(text, uuid, uuid, uuid, uuid, boolean)', 'EXECUTE')
               and not has_function_privilege('authenticated', 'app.tg_files_sub_attach_fixed()', 'EXECUTE'), 'T263 rule 18');
-\echo 'T263 a subcontractor adds only his visits' photos and his own files ok'
+\echo 'T263 a subcontractor adds only his visits photos and his own files ok'
+
+-- ---------------------------------------------------------------- T264–T275 (#1656, #1657): file rules for every role
+-- (red before 20261115180000)
+\set as_tech264 'reset role; set request.jwt.claim.sub = ''a2640000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2640000-0000-4000-8000-000000000001', 'tech264@a.test', '{"full_name":"Tess Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2640000-0000-4000-8000-000000000001', 'tech', 'active');
+-- T264: a subcontractor's row added before 20261115170000 with a client gets no bytes; his visit photo does; the office does
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002') on conflict do nothing;
+set session_replication_role = replica;  -- an old row as it was before the rule (no trigger, no policy)
+insert into public.files (id, company_id, kind, customer_id, created_by) values
+  ('f2640000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'photo', 'c1a00000-0000-0000-0000-000000000001', 'a5600000-0000-4000-8000-000000000002');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;  -- the role change dropped the cached plans (see T212)
+:as_sub56
+insert into public.files (id, company_id, kind, visit_id, job_id) values
+  ('f2640000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000001');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a1.jpg'),
+              'T264 a subcontractor gets no bytes into his old row of a client');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a2.jpg'),
+              'T264 his visit''s photo gets its bytes');
+select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a1.jpg', auth.uid())$q$,
+                 'T264 the storage refuses the old row''s bytes too');
+:as_office_a
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2640000-0000-4000-8000-0000000000a1.jpg'),
+              'T264 the office still writes the old row''s bytes');
+:as_super
+delete from public.visit_assignees where visit_id = 'f1a00000-0000-0000-0000-000000000001' and user_id = 'a5600000-0000-4000-8000-000000000002';
+\echo 'T264 a subcontractor writes bytes only into a row his rule allows ok'
+
+-- T265: at most 3 files with nothing attached for a person outside the office
+:as_tech264
+insert into public.files (id, company_id, kind) values
+  ('f2650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo'),
+  ('f2650000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo'),
+  ('f2650000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f2650000-%'$q$) = 3, 'T265 three photos with nothing attached');
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%', 'T265 not a fourth');
+select tst.fails_like($q$insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo' from generate_series(1, 2)$q$, '%at most 3%',
+                      'T265 nor several in one insert');
+select tst.ok(app.bare_files_count('ca000000-0000-0000-0000-000000000000', 'a2640000-0000-4000-8000-000000000001', null) = 3
+              and app.bare_files_count('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', null) = 0,
+              'T265 the count tells the caller only his own');
+-- the queue sends one of them again (on conflict do nothing): not a refusal
+insert into public.files (id, company_id, kind) values ('f2650000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo') on conflict do nothing;
+select tst.ok(true, 'T265 the queue sends an insert again: nothing new, no refusal');
+\echo 'T265 at most 3 files with nothing attached ok'
+
+-- T266: a removed one without bytes frees its place; with bytes it still counts (upload, remove, upload again is no limit)
+update public.files set deleted_at = now() where id = 'f2650000-0000-4000-8000-000000000003';
+insert into public.files (id, company_id, kind) values ('f2650000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'photo');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f2650000-0000-4000-8000-000000000004'$q$) = 1, 'T266 a removed one without bytes frees its place');
+update public.files set upload_status = 'uploaded', storage_key = 'ca000000-0000-0000-0000-000000000000/f2650000-0000-4000-8000-000000000004.jpg'
+  where id = 'f2650000-0000-4000-8000-000000000004';
+select tst.ok((select upload_status = 'uploaded' from public.files where id = 'f2650000-0000-4000-8000-000000000004'), 'T266 the queue still marks it uploaded');
+update public.files set deleted_at = now() where id = 'f2650000-0000-4000-8000-000000000004';
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%',
+                      'T266 a removed one with stored bytes still counts');
+\echo 'T266 removed files with bytes count ok'
+
+-- T267: bringing a removed one back over the limit is refused
+-- (two live and one removed with bytes: the removed one without bytes is not brought back as a fourth)
+select tst.fails_like($q$update public.files set deleted_at = null where id = 'f2650000-0000-4000-8000-000000000003'$q$, '%at most 3%',
+                      'T267 a removed one is not brought back over the limit');
+\echo 'T267 restoring over the limit is refused ok'
+
+-- T268: a document, a drawing, a signature with nothing attached — not at all for a person outside the office
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'document')$q$, '%photo or a receipt%', 'T268 not a document with nothing attached');
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'signature')$q$, '%photo or a receipt%', 'T268 not a signature with nothing attached');
+\echo 'T268 a bare document is refused ok'
+
+-- T269: receipts are never refused by the limit — five taken offline in a row arrive, also when their expenses come late
+-- (the queue: the receipt's row, then its expense — cloud/ops.ts expense.add; an expense failing for a while lets the
+-- next receipts in first)
+:as_super
+set session_replication_role = replica;  -- the fixture clears T265–T267's files (the stored mark is kept by t09 otherwise)
+update public.files set deleted_at = now(), upload_status = 'local', storage_key = null where id::text like 'f2650000-%';
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech264
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.files (id, company_id, kind) values ('f2690000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
+  select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T269', 100, 'materials', id, id::text
+    from public.files where id::text like 'f2690000-%';
+select tst.ok(tst.cnt($q$select 1 from public.expenses where vendor = 'T269' and receipt_file_id::text like 'f2690000-%'$q$) = 5,
+              'T269 five receipts taken offline arrive with their expenses, the expenses coming after all the receipts');
+\echo 'T269 receipts are never refused by the limit ok'
+
+-- T270: a visit / job photo is never counted; the office and the server are not limited
+insert into public.files (id, company_id, kind) values ('f2700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'photo');
+:as_office_a
+insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo' from generate_series(1, 5);
+insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'document');
+select tst.ok(true, 'T270 the office adds files with nothing attached without a limit');
+:as_super
+insert into public.files (id, company_id, kind, created_by) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo', 'a2640000-0000-4000-8000-000000000001' from generate_series(1, 4);
+select tst.ok(true, 'T270 the server is not limited');
+\echo 'T270 the office and the server are not limited ok'
+
+-- T271: rule 18 — the count for the trigger only (the app's role), the trigger function for nobody
+select tst.ok(has_function_privilege('authenticated', 'app.bare_files_count(uuid, uuid, uuid)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.bare_files_count(uuid, uuid, uuid)', 'EXECUTE')
+              and not has_function_privilege('public', 'app.bare_files_count(uuid, uuid, uuid)', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_files_bare_limit()', 'EXECUTE'), 'T271 rule 18');
+\echo 'T271 rule 18 ok'
+
+-- T272 (#1657): a tech's file stays where it was added: not moved to another job, off its job, onto a client
+:as_super
+-- on the job through a visit of it (app.is_job_assignee)
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000001', 'a2640000-0000-4000-8000-000000000001') on conflict do nothing;
+:as_tech264
+insert into public.files (id, company_id, kind, job_id) values ('f2720000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001');
+select tst.fails_like($q$update public.files set job_id = null where id = 'f2720000-0000-4000-8000-000000000001'$q$, '%stays where it was added%', 'T272 not off its job');
+select tst.fails_like($q$update public.files set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'f2720000-0000-4000-8000-000000000001'$q$, '%stays where it was added%', 'T272 not onto a client');
+select tst.fails_like($q$update public.files set visit_id = 'f1a00000-0000-0000-0000-000000000001' where id = 'f2720000-0000-4000-8000-000000000001'$q$, '%stays where it was added%', 'T272 not onto a visit');
+\echo 'T272 a tech''s file stays where it was added ok'
+
+-- T273: what the app changes later still works for him: uploaded, removed
+update public.files set upload_status = 'uploaded', storage_key = 'ca000000-0000-0000-0000-000000000000/f2720000-0000-4000-8000-000000000001.jpg', mime = 'image/jpeg', size = 1
+  where id = 'f2720000-0000-4000-8000-000000000001';
+update public.files set deleted_at = now() where id = 'f2720000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select upload_status = 'uploaded' and deleted_at is not null from public.files where id = 'f2720000-0000-4000-8000-000000000001'), 'T273 the queue marks his photo uploaded and removes it');
+\echo 'T273 marking uploaded and removing still work ok'
+
+-- T274: the office (sales included, app.is_staff) still moves a file; merge_customers' move (a definer) passes
+insert into public.files (id, company_id, kind, job_id, created_by) values ('f2740000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e1a00000-0000-0000-0000-000000000001', 'a2640000-0000-4000-8000-000000000001');
+:as_office_a
+update public.files set job_id = 'e1a00000-0000-0000-0000-000000000002' where id = 'f2740000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select job_id = 'e1a00000-0000-0000-0000-000000000002' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 the office moves a file as before');
+:as_sales_a
+update public.files set job_id = 'e1a00000-0000-0000-0000-000000000001' where id = 'f2740000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select job_id = 'e1a00000-0000-0000-0000-000000000001' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 sales (staff) move a file too');
+select tst.server($q$update public.files set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'f2740000-0000-4000-8000-000000000001'$q$);
+select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.files where id = 'f2740000-0000-4000-8000-000000000001'), 'T274 a server function moves a tech''s file (merge_customers)');
+\echo 'T274 the office and the server still move files ok'
+
+-- T275: a subcontractor as before (T263 not broken), the old 3+ bare rows of a person stay (only new ones are refused)
+select tst.ok(tst.cnt($q$select 1 from public.files where created_by = 'a2640000-0000-4000-8000-000000000001' and kind = 'photo' and visit_id is null and job_id is null and customer_id is null and deleted_at is null$q$) >= 4,
+              'T275 files with nothing attached added before stay as they are');
+:as_tech264
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'photo')$q$, '%at most 3%', 'T275 but no new one');
+-- an old row with nothing attached and no bytes, made before the limit: its bytes are not written while 3 others count
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2700000-0000-4000-8000-000000000009.jpg'),
+              'T275 no bytes into an old bare row over the limit');
+:as_super
+delete from public.visit_assignees where user_id = 'a2640000-0000-4000-8000-000000000001';
+\echo 'T275 old rows stay, new ones are limited ok'
+
+-- ---------------------------------------------------------------- T276–T278 (#1694): receipts without an expense
+-- (red before 20261115190000)
+\set as_tech276 'reset role; set request.jwt.claim.sub = ''a2760000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_tech278 'reset role; set request.jwt.claim.sub = ''a2760000-0000-4000-8000-000000000002''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2760000-0000-4000-8000-000000000001', 'tech276@a.test', '{"full_name":"Rae Receipt"}'),
+  ('a2760000-0000-4000-8000-000000000002', 'tech278@a.test', '{"full_name":"Oli Offline"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000001', 'tech', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000002', 'tech', 'active');
+-- 20 receipts of his with bytes and no expense, made two days ago (out of the rows' day: only the bytes count)
+set session_replication_role = replica;
+insert into public.files (id, company_id, kind, created_by, created_at, updated_at, storage_key, upload_status)
+  select ('f2760000-0000-4000-8000-0000000001' || lpad(g::text, 2, '0'))::uuid, 'ca000000-0000-0000-0000-000000000000', 'receipt',
+         'a2760000-0000-4000-8000-000000000001', now() - interval '2 days', now() - interval '2 days',
+         'ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-0000000001' || lpad(g::text, 2, '0') || '.jpg', 'uploaded'
+    from generate_series(1, 20) g;
+-- the same for sales (sales are not the office for receipts)
+insert into public.files (id, company_id, kind, created_by, created_at, storage_key, upload_status)
+  select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', 'a0000000-0000-0000-0000-000000000005', now() - interval '2 days', 'x', 'uploaded'
+    from generate_series(1, 20);
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+
+-- T276: bytes — my receipt with my live expense always; without one only while fewer than 20 hold bytes
+:as_tech276
+insert into public.files (id, company_id, kind) values ('f2760000-0000-4000-8000-000000000021', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-000000000021.jpg'),
+              'T276 the 21st receipt with no expense gets no bytes');
+select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-000000000021.jpg', auth.uid())$q$,
+                 'T276 the storage refuses them too');
+insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
+  values ('e2760000-0000-4000-8000-000000000021', 'ca000000-0000-0000-0000-000000000000', 'T276', 100, 'materials', 'f2760000-0000-4000-8000-000000000021', 'T276-21');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-000000000021.jpg'),
+              'T276 with its live expense it gets its bytes (the queue: row, expense, bytes)');
+-- the expense's receipt stays: not moved to another receipt, not taken off
+insert into public.files (id, company_id, kind) values ('f2760000-0000-4000-8000-000000000022', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+select tst.fails_like($q$update public.expenses set receipt_file_id = 'f2760000-0000-4000-8000-000000000022' where id = 'e2760000-0000-4000-8000-000000000021'$q$,
+                      '%receipt stays%', 'T276 an expense''s receipt is not moved to another one (no endless bytes through one expense)');
+select tst.fails_like($q$update public.expenses set receipt_file_id = null where id = 'e2760000-0000-4000-8000-000000000021'$q$,
+                      '%receipt stays%', 'T276 nor taken off');
+update public.expenses set vendor = 'T276 shop' where id = 'e2760000-0000-4000-8000-000000000021';
+select tst.ok((select vendor = 'T276 shop' from public.expenses where id = 'e2760000-0000-4000-8000-000000000021'), 'T276 the rest of the expense is changed as before');
+-- sales are limited like everyone; owner, admin and office are not
+:as_sales_a
+insert into public.files (id, company_id, kind) values ('f2760000-0000-4000-8000-0000000005a1', 'ca000000-0000-0000-0000-000000000000', 'receipt');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-0000000005a1.jpg'),
+              'T276 sales: no bytes into the 21st receipt with no expense');
+:as_office_a
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-000000000022.jpg'),
+              'T276 the office writes a receipt''s bytes as before');
+update public.expenses set receipt_file_id = 'f2760000-0000-4000-8000-000000000022' where id = 'e2760000-0000-4000-8000-000000000021';
+update public.expenses set receipt_file_id = 'f2760000-0000-4000-8000-000000000021' where id = 'e2760000-0000-4000-8000-000000000021';
+select tst.ok(true, 'T276 the office moves an expense''s receipt');
+-- the expense removed: its receipt counts again
+:as_super
+update public.expenses set deleted_at = now() where id = 'e2760000-0000-4000-8000-000000000021';
+:as_tech276
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2760000-0000-4000-8000-000000000021.jpg'),
+              'T276 an expense removed: its receipt is without one again');
+\echo 'T276 a receipt''s bytes need its expense, or fewer than 20 without one ok'
+
+-- T277: rows — at most 50 of my receipts without a live expense made in a day; removed and brought back counts too
+:as_super
+set session_replication_role = replica;
+insert into public.files (id, company_id, kind, created_by)
+  select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', 'a2760000-0000-4000-8000-000000000001' from generate_series(1, 45);
+-- removed two days ago (out of the day)
+insert into public.files (id, company_id, kind, created_by, created_at, updated_at, deleted_at)
+  values ('f2770000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'a2760000-0000-4000-8000-000000000001',
+          now() - interval '2 days', now() - interval '2 days', now() - interval '2 days');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech276
+-- 45 + f…21, f…22 = 47 (the 20 and the removed one two days old are out of the day); the 48th to the 50th go
+insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt' from generate_series(1, 3);
+select tst.ok(app.hanging_receipts_count('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000001', null, false, now() - interval '1 day') = 50,
+              'T277 the 50th receipt without an expense goes in');
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt')$q$,
+                      '%at most 50%', 'T277 not a 51st');
+select tst.fails_like($q$insert into public.files (id, company_id, kind, job_id) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e1a00000-0000-0000-0000-000000000001')$q$,
+                      '%at most 50%', 'T277 tied to a job counts too');
+select tst.fails_like($q$insert into public.files (id, company_id, kind, created_at) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', '2000-01-01')$q$,
+                      '%at most 50%', 'T277 a phone''s old date does not take it out of the day (the server''s clock counts)');
+select tst.fails_like($q$insert into public.files (id, company_id, kind, deleted_at) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', now())$q$,
+                      '%at most 50%', 'T277 nor one inserted removed');
+select tst.fails_like($q$update public.files set deleted_at = null where id = 'f2770000-0000-4000-8000-000000000001'$q$,
+                      '%at most 50%', 'T277 nor an old removed one brought back');
+-- the queue sends one again (on conflict do nothing): nothing new, no refusal
+insert into public.files (id, company_id, kind) values ('f2760000-0000-4000-8000-000000000022', 'ca000000-0000-0000-0000-000000000000', 'receipt') on conflict do nothing;
+select tst.ok(true, 'T277 the queue sends an insert again at the limit: no refusal');
+:as_office_a
+insert into public.files (id, company_id, kind) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt' from generate_series(1, 60);
+select tst.ok(true, 'T277 the office is not limited');
+-- removed ones count within the day: insert, remove, insert again is no way round
+:as_super
+update public.files set deleted_at = now() where created_by = 'a2760000-0000-4000-8000-000000000001' and kind = 'receipt' and deleted_at is null
+   and storage_key is null and id::text not like 'f2760000-%';
+:as_tech276
+select tst.fails_like($q$insert into public.files (id, company_id, kind) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt')$q$,
+                      '%at most 50%', 'T277 removing them does not make room within the day');
+\echo 'T277 at most 50 receipts without an expense a day ok'
+
+-- T278: the queue of any build (row, expense, bytes; offline, several in a row) is never refused; counts tell only one's own
+:as_tech278
+insert into public.files (id, company_id, kind) select ('f2780000-0000-4000-8000-00000000000' || g)::uuid, 'ca000000-0000-0000-0000-000000000000', 'receipt' from generate_series(1, 5) g;
+insert into public.expenses (id, company_id, vendor, amount_cents, category, receipt_file_id, idempotency_key)
+  select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'T278', 100, 'materials', id, id::text from public.files where id::text like 'f2780000-%';
+select tst.ok((select bool_and(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/' || id::text || '.jpg')) from public.files where id::text like 'f2780000-%'),
+              'T278 five receipts taken offline: each gets its bytes after its expense');
+select tst.ok(app.hanging_receipts_count('ca000000-0000-0000-0000-000000000000', 'a2760000-0000-4000-8000-000000000001', null, false, null) = 0,
+              'T278 another person''s count is never told');
+-- a phone's old date never takes a receipt out of the day: on a fresh count, 50 such rows go and the 51st is refused
+insert into public.files (id, company_id, kind, created_at) select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', '2000-01-01' from generate_series(1, 50);
+select tst.fails_like($q$insert into public.files (id, company_id, kind, created_at) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'receipt', '2000-01-01')$q$,
+                      '%at most 50%', 'T278 the day is the server''s: 50 rows dated 2000 count, the 51st is refused');
+:as_super
+select tst.ok(has_function_privilege('authenticated', 'app.hanging_receipts_count(uuid, uuid, uuid, boolean, timestamptz)', 'EXECUTE')
+              and not has_function_privilege('anon', 'app.hanging_receipts_count(uuid, uuid, uuid, boolean, timestamptz)', 'EXECUTE')
+              and not has_function_privilege('public', 'app.hanging_receipts_count(uuid, uuid, uuid, boolean, timestamptz)', 'EXECUTE'),
+              'T278 rule 18: the count for the app''s role only');
+\echo 'T278 the queue is never refused, counts are one''s own ok'
+
+-- ---------------------------------------------------------------- T279–T280 (#1696): bytes only while still on what the row is tied to
+-- (red before 20261115200000)
+\set as_tech279 'reset role; set request.jwt.claim.sub = ''a2790000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2790000-0000-4000-8000-000000000001', 'tech279@a.test', '{"full_name":"Ted Taken"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2790000-0000-4000-8000-000000000001', 'tech', 'active');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, status) values
+  ('e2790000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T279', 'T279 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'scheduled');
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f2790000-0000-4000-8000-000000000a01', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', now(), now() + interval '2 hours'),
+  ('f2790000-0000-4000-8000-000000000a02', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', now() - interval '30 days', now() - interval '30 days' + interval '2 hours'),
+  ('f2790000-0000-4000-8000-000000000a03', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', now() + interval '1 day', null);
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f2790000-0000-4000-8000-000000000a01', 'a2790000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f2790000-0000-4000-8000-000000000a02', 'a2790000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'f2790000-0000-4000-8000-000000000a03', 'a2790000-0000-4000-8000-000000000001');
+-- his rows, made while he was on them (the queue: the row first, the bytes after)
+:as_tech279
+insert into public.files (id, company_id, kind, visit_id, job_id) values
+  ('f2790000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f2790000-0000-4000-8000-000000000a01', 'e2790000-0000-4000-8000-000000000001'),
+  ('f2790000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f2790000-0000-4000-8000-000000000a02', 'e2790000-0000-4000-8000-000000000001'),
+  ('f2790000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f2790000-0000-4000-8000-000000000a03', 'e2790000-0000-4000-8000-000000000001');
+insert into public.files (id, company_id, kind, job_id) values
+  ('f2790000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e2790000-0000-4000-8000-000000000001');
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category, receipt_file_id, idempotency_key) values
+  ('e2790000-0000-4000-8000-0000000000e4', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', 'T279', 100, 'materials', 'f2790000-0000-4000-8000-000000000004', 'T279-4');
+-- T279: on them — bytes go (a visit 30 days ago too); taken off a visit — none into its photo, also while still on
+-- another visit of the job; taken off the whole job — none into the job's receipt; a removed visit, a suspended member — none
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000001.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000004.jpg'),
+              'T279 on the visit and the job: his photos (a visit 30 days ago too) and the job''s receipt get their bytes');
+:as_super
+update public.visit_assignees set deleted_at = now() where visit_id = 'f2790000-0000-4000-8000-000000000a01' and user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000001.jpg'),
+              'T279 taken off the visit: no bytes into its photo (while still on another visit of the job)');
+select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000001.jpg', auth.uid())$q$,
+                 'T279 the storage refuses the upload');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000004.jpg'),
+              'T279 still on the job (another visit): the job''s receipt still gets its bytes');
+:as_super
+update public.visits set deleted_at = now() where id = 'f2790000-0000-4000-8000-000000000a03';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000003.jpg'),
+              'T279 a removed visit: no bytes into its photo');
+:as_super
+update public.visit_assignees set deleted_at = now() where user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg')
+              and not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000004.jpg'),
+              'T279 taken off the whole job: no bytes into its photos or its receipt (its live expense or not)');
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f2790000-0000-4000-8000-000000000a02' and user_id = 'a2790000-0000-4000-8000-000000000001';
+update public.memberships set status = 'disabled' where user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg'),
+              'T279 disabled: no bytes, even on the visit');
+:as_super
+update public.memberships set status = 'active' where user_id = 'a2790000-0000-4000-8000-000000000001';
+-- a client's row: only while he is on the client (a visit there within 14 days, as files_update right after the bytes);
+-- a measurement's photo: only while he sees the measurement
+set session_replication_role = replica;
+insert into public.files (id, company_id, kind, customer_id, created_by) values
+  ('f2790000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'document', 'c1a00000-0000-0000-0000-000000000001', 'a2790000-0000-4000-8000-000000000001');
+-- the module on for this test (removed again below)
+insert into public.company_modules (company_id, module_key, enabled, trial_ends_at) values ('ca000000-0000-0000-0000-000000000000', 'gutters', true, now() + interval '7 days')
+  on conflict (company_id, module_key) do update set enabled = true, trial_ends_at = now() + interval '7 days';
+insert into public.gutter_measurements (id, company_id, label, created_by) values
+  ('9e279000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T279', 'a0000000-0000-0000-0000-000000000001');
+insert into public.files (id, company_id, kind, measurement_id, created_by) values
+  ('f2790000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e279000-0000-4000-8000-000000000001', 'a2790000-0000-4000-8000-000000000001');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech279
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg'),
+              'T279 a client''s row: no bytes when his last visit there is over 14 days ago');
+select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters')
+              and not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'),
+              'T279 a measurement he does not see: no bytes into its photo');
+-- and the same rows when he is on them: a visit to the client today, a measurement of his own
+:as_super
+update public.visits set starts_at = now(), ends_at = now() + interval '2 hours' where id = 'f2790000-0000-4000-8000-000000000a02';
+set session_replication_role = replica;  -- the author is kept by its trigger otherwise
+update public.gutter_measurements set created_by = 'a2790000-0000-4000-8000-000000000001' where id = '9e279000-0000-4000-8000-000000000001';
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_tech279
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg'),
+              'T279 a client''s row: bytes go with a visit there today');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'),
+              'T279 his own measurement''s photo gets its bytes');
+-- the same photo for the office (it sees the measurement): the check is about him, not the row
+:as_office_a
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000006.jpg'), 'T279 the office writes that photo''s bytes');
+:as_super
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+-- anon: nothing
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$insert into storage.objects (bucket_id, name, owner) values ('files', 'ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000002.jpg', null)$q$,
+                 'T279 anon writes no bytes');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'app.can_write_file_object(text)', 'EXECUTE'), 'T279 the bytes rule is not anon''s');
+\echo 'T279 bytes only while still on what the row is tied to ok'
+
+-- T280: the office and sales as before; sales' receipt with a job and a live expense gets its bytes; a subcontractor as T263/T264
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f2790000-0000-4000-8000-000000000a01' and user_id = 'a2790000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000005.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2790000-0000-4000-8000-000000000003.jpg'),
+              'T280 the office writes any row''s bytes as before');
+:as_sales_a
+insert into public.files (id, company_id, kind, job_id) values
+  ('f2800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'receipt', 'e2790000-0000-4000-8000-000000000001'),
+  ('f2800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', 'e2790000-0000-4000-8000-000000000001');
+insert into public.expenses (id, company_id, job_id, vendor, amount_cents, category, receipt_file_id, idempotency_key) values
+  ('e2800000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'e2790000-0000-4000-8000-000000000001', 'T280', 100, 'materials', 'f2800000-0000-4000-8000-000000000001', 'T280-1');
+select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2800000-0000-4000-8000-000000000001.jpg')
+              and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2800000-0000-4000-8000-000000000002.jpg'),
+              'T280 sales (not on the job): their receipt with a live expense and their photo get their bytes');
+\echo 'T280 the office and sales as before ok'
+
+-- ---------------------------------------------------------------- T281–T284 (#1637): a subcontractor has no leads
+-- (red before 20261116010000)
+\set as_tech281 'reset role; set request.jwt.claim.sub = ''a2810000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2810000-0000-4000-8000-000000000001', 'tech281@a.test', '{"full_name":"Tina Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000001', 'tech', 'active');
+-- as the rows were before the rule: a lead given to the subcontractor, one he made, a task on it for him, a contact, a
+-- call; a lead of the tech's; a removed lead and a removed lead's task of the subcontractor's in the bin
+set session_replication_role = replica;
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by) values
+  ('a2810000-0000-4000-8000-000000000c01', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Given', '+13235552811', 'a5600000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000001'),
+  ('a2810000-0000-4000-8000-000000000c02', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Made', '+13235552812', null, 'a5600000-0000-4000-8000-000000000002'),
+  ('a2810000-0000-4000-8000-000000000c03', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Tech', '+13235552813', 'a2810000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000001');
+insert into public.leads (id, company_id, source_id, contact_name, phone, created_by, deleted_at) values
+  ('a2810000-0000-4000-8000-000000000c04', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T281 Binned', '+13235552814', 'a5600000-0000-4000-8000-000000000002', now());
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, created_by) values
+  ('a2810000-0000-4000-8000-000000000d01', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T281 call +13235552811', 'a5600000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000001');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by, deleted_at) values
+  ('a2810000-0000-4000-8000-000000000d02', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T281 binned task', 'a5600000-0000-4000-8000-000000000002', now());
+insert into public.lead_contacts (company_id, lead_id, name, phone) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000c01', 'T281 Spouse', '+13235552815');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'call', 'out');
+insert into public.trash_entries (company_id, kind, object_id, deleted_by, deleted_at) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c04', 'a5600000-0000-4000-8000-000000000002', now()),
+  ('ca000000-0000-0000-0000-000000000000', 'task', 'a2810000-0000-4000-8000-000000000d02', 'a5600000-0000-4000-8000-000000000002', now());
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+
+-- T281: the subcontractor sees none of it — the lead given to him (left given, director 16.11), the one he made, their
+-- task, contact and call — and changes none
+:as_sub56
+select tst.ok(tst.cnt($q$select 1 from public.leads where id::text like 'a2810000-%'$q$) = 0, 'T281 a subcontractor sees no lead, also one given to him or made by him');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id::text like 'a2810000-%'$q$) = 0, 'T281 nor a lead''s task given to him');
+select tst.ok(tst.cnt($q$select 1 from public.lead_contacts where name = 'T281 Spouse'$q$) = 0
+              and tst.cnt($q$select 1 from public.activities where subject_id = 'a2810000-0000-4000-8000-000000000c01'$q$) = 0,
+              'T281 nor its contacts and calls');
+update public.leads set contact_name = 'x' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.tasks set title = 'x' where id = 'a2810000-0000-4000-8000-000000000d01';
+:as_super
+select tst.ok((select contact_name = 'T281 Given' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01')
+              and (select title = 'T281 call +13235552811' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
+              'T281 he changes neither the lead nor its task');
+\echo 'T281 a subcontractor sees no lead ok'
+
+-- T282: he makes no lead, no lead's task, no call or contact on one; a lead or a lead's task is not given to him
+:as_sub56
+select tst.fails($q$insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 x', '+13235552821')$q$,
+                 'T282 a subcontractor makes no lead');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title, assignee_id) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'T282', auth.uid())$q$,
+                 'T282 nor a task on a lead');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c01', 'call', 'out')$q$,
+                 'T282 nor a call on a lead');
+select tst.fails($q$insert into public.lead_contacts (company_id, lead_id, name) values ('ca000000-0000-0000-0000-000000000000', 'a2810000-0000-4000-8000-000000000c01', 'T282')$q$,
+                 'T282 nor a contact of a lead');
+:as_office_a
+select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
+                      '%not given to a subcontractor%', 'T282 the office does not give a lead to a subcontractor');
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, assigned_to) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 y', '+13235552822', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 nor a new one');
+select tst.fails_like($q$insert into public.tasks (company_id, subject_type, subject_id, title, assignee_id) values ('ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 nor a lead''s task');
+-- the old lead still given to him is edited as before (the assignee unchanged)
+update public.leads set contact_name = 'T281 Given (edited)' where id = 'a2810000-0000-4000-8000-000000000c01';
+update public.tasks set title = 'T281 call back' where id = 'a2810000-0000-4000-8000-000000000d01';
+select tst.ok((select contact_name = 'T281 Given (edited)' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01')
+              and (select title = 'T281 call back' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
+              'T282 the office edits an old lead given to him and its task, the assignee unchanged');
+update public.leads set assigned_to = 'a2810000-0000-4000-8000-000000000001' where id = 'a2810000-0000-4000-8000-000000000c01';
+select tst.ok((select assigned_to = 'a2810000-0000-4000-8000-000000000001' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
+              'T282 the office gives it to a tech');
+:as_super
+update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c01';
+select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
+              'T282 the server is not limited');
+-- not only the office: a tech and sales who may change a lead do not give it to a subcontractor either (the trigger reads
+-- the team as the caller — every member sees the team, so the check holds for them)
+:as_tech281
+select tst.fails_like($q$update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c03'$q$,
+                      '%not given to a subcontractor%', 'T282 a tech does not give his lead to a subcontractor');
+-- a tech's task is his own whoever he names (t04_task_who): never the subcontractor's
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values ('a2820000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'lead', 'a2810000-0000-4000-8000-000000000c03', 'T282 t', 'a5600000-0000-4000-8000-000000000002');
+select tst.ok((select assignee_id = 'a2810000-0000-4000-8000-000000000001' from public.tasks where id = 'a2820000-0000-4000-8000-000000000001'),
+              'T282 nor a task on it (a tech''s task stays his)');
+:as_sales_a
+select tst.fails_like($q$insert into public.leads (company_id, source_id, contact_name, phone, assigned_to) values ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T282 s', '+13235552823', 'a5600000-0000-4000-8000-000000000002')$q$,
+                      '%not given to a subcontractor%', 'T282 sales do not give a new lead to a subcontractor');
+\echo 'T282 a subcontractor makes no lead and gets none ok'
+
+-- T283: the bin — he neither lists nor brings back a lead or a lead's task of his
+:as_sub56
+select tst.ok(tst.cnt($q$select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id::text like 'a2810000-%' and label is not null$q$) = 0,
+              'T283 the bin tells him neither his lead''s name nor his lead''s task''s title');
+select tst.ok(coalesce((select bool_and(not ok) from public.trash_restore('lead', array['a2810000-0000-4000-8000-000000000c04']::uuid[])), true)
+              and coalesce((select bool_and(not ok) from public.trash_restore('task', array['a2810000-0000-4000-8000-000000000d02']::uuid[])), true),
+              'T283 nor brings them back');
+:as_super
+select tst.ok((select deleted_at is not null from public.leads where id = 'a2810000-0000-4000-8000-000000000c04')
+              and (select deleted_at is not null from public.tasks where id = 'a2810000-0000-4000-8000-000000000d02'),
+              'T283 they stay in the bin');
+-- his task on a property is his as before: he removes it, sees it in the bin with its title, brings it back
+:as_super
+set session_replication_role = replica;
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by) values
+  ('a2830000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'property', 'd1a00000-0000-0000-0000-000000000001', 'T283 gate', 'a5600000-0000-4000-8000-000000000002');
+set session_replication_role = origin;
+select public.uuid_generate_v7() is not null as warmed;
+:as_sub56
+update public.tasks set deleted_at = now() where id = 'a2830000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.trash_list('ca000000-0000-0000-0000-000000000000') where object_id = 'a2830000-0000-4000-8000-000000000001' and label = 'T283 gate'$q$) = 1,
+              'T283 his task on a property: removed, in the bin with its title');
+select tst.ok((select bool_and(ok) from public.trash_restore('task', array['a2830000-0000-4000-8000-000000000001']::uuid[])), 'T283 … and brought back');
+\echo 'T283 the bin holds no lead for a subcontractor ok'
+
+-- T284: a tech and the office as before; a tech made a subcontractor loses his leads at once
+:as_tech281
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a2810000-0000-4000-8000-000000000c03'$q$) = 1, 'T284 a tech sees the lead given to him');
+insert into public.leads (id, company_id, source_id, contact_name, phone) values ('a2840000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T284 Own', '+13235552841');
+select tst.ok(tst.cnt($q$select 1 from public.leads where id = 'a2840000-0000-4000-8000-000000000001'$q$) = 1, 'T284 a tech makes a lead');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.leads where id::text like 'a2810000-%' and deleted_at is null$q$) = 3, 'T284 the office sees every lead, the subcontractor''s too');
+:as_super
+update public.memberships set role = 'subcontractor' where user_id = 'a2810000-0000-4000-8000-000000000001';
+:as_tech281
+select tst.ok(tst.cnt($q$select 1 from public.leads where id in ('a2810000-0000-4000-8000-000000000c03', 'a2840000-0000-4000-8000-000000000001')$q$) = 0,
+              'T284 made a subcontractor: his leads are no longer his to see');
+:as_super
+update public.memberships set role = 'tech' where user_id = 'a2810000-0000-4000-8000-000000000001';
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_lead_assignee_not_sub()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_lead_task_not_sub()', 'EXECUTE'),
+              'T284 rule 18: the trigger functions are nobody''s');
+\echo 'T284 a tech and the office as before ok'
+
+-- ---------------------------------------------------------------- T285–T289 (spec 42 §14, #1673): the company a person works in
+-- Pat is office in A; B invites him as admin. users.last_active_company_id — only a company he is active in (red before
+-- 20261116013000); a push says whose company it is (red before 20261116013100).
+\set as_pat285 'reset role; set request.jwt.claim.sub = ''a2850000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2850000-0000-4000-8000-000000000001', 'pat285@a.test', '{"full_name":"Pat Two"}');
+select tst.agree('a2850000-0000-4000-8000-000000000001');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'office', 'active');
+-- his own third company, closed below (no triggers: a fixture, not a sign-up)
+set session_replication_role = replica;
+insert into public.companies (id, name) values ('cc285000-0000-4000-8000-000000000000', 'Pat Closed Co');
+insert into public.memberships (company_id, user_id, role, status) values ('cc285000-0000-4000-8000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'owner', 'active');
+set session_replication_role = origin;
+
+-- T285: the guard — his own active company yes; another company, switched off, removed, closed — 42501; null yes
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'ca000000-0000-0000-0000-000000000000',
+              'T285 his own active company is written');
+select tst.fails_like($q$update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company he is not in is refused');
+update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') is null, 'T285 null is written');
+:as_super
+set session_replication_role = replica;  -- a fixture: closed as delete_account would
+update public.companies set closed_at = now() where id = 'cc285000-0000-4000-8000-000000000000';
+set session_replication_role = origin;
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'cc285000-0000-4000-8000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a closed company is refused');
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+update public.users set full_name = 'Pat T.' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select full_name from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'Pat T.',
+              'T285 switched off in A with A still written: his name still changes (only a change of the company is checked)');
+:as_super
+update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company where he is switched off is refused');
+:as_super
+update public.memberships set status = 'active', deleted_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company he was removed from is refused');
+-- the check is of the row's person, whoever writes (the database owner, a definer function): no way round it
+:as_super
+select tst.fails_like($q$update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 the database owner cannot write a company that is not his either');
+update public.memberships set deleted_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+\echo 'T285 last_active_company_id: only an open company the person is active in ok'
+
+-- T286: another person's company field is never changed through someone else; switching a person off leaves it (the
+-- phone checks it against the memberships it reads, spec 42 §14.8 С6)
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.blocked($q$update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001'$q$, 'T286 the owner of A does not write Pat''s company field');
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'disabled'); end $$;
+select tst.ok((select status from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001') = 'disabled',
+              'T286 set_member_status switches him off with A still written (the guard checks only a change)');
+:as_super
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'ca000000-0000-0000-0000-000000000000',
+              'T286 and his field is left as it was');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
+\echo 'T286 another person''s field and set_member_status ok'
+
+-- T287: accept_invitation still makes the new company the last one (the guard lets it: the membership is in first)
+:as_owner_b
+select public.invite_member('cb000000-0000-0000-0000-000000000000', 'pat285@a.test', 'admin', 'Pat Two') ->> 'token' as t287_token \gset
+:as_pat285
+select tst.ok((public.accept_invitation(:'t287_token') ->> 'company_id') = 'cb000000-0000-0000-0000-000000000000', 'T287 Pat joins B');
+:as_super
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'cb000000-0000-0000-0000-000000000000',
+              'T287 the company he just joined is his last one on the server');
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select count(*) from public.memberships where user_id = 'a2850000-0000-4000-8000-000000000001' and status = 'active' and deleted_at is null) = 3,
+              'T287 he switches back to A: active in A, B (and the closed one — not offered by the app)');
+\echo 'T287 accept_invitation and the last company ok'
+
+-- T288: push_claim says whose company the row is, its name and how many open companies the person is active in
+:as_super
+delete from public.push_outbox;
+insert into public.push_devices (id, user_id, expo_token, platform, lang) values
+  ('d2850000-0000-4000-8000-000000000001', 'a2850000-0000-4000-8000-000000000001', 'ExponentPushToken[t285-pat]', 'ios', 'en');
+insert into public.push_outbox (company_id, user_id, kind, route) values
+  ('cb000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'payment.received', '/notifications');
+create temp table t288_claim (v jsonb);
+grant select, insert on t288_claim to service_role;
+reset role; set role service_role;
+insert into t288_claim select public.push_claim(100);
+:as_super
+select tst.ok((select jsonb_array_length(v) = 1 and v -> 0 ->> 'company' = 'cb000000-0000-0000-0000-000000000000'
+                      and v -> 0 ->> 'company_name' = 'Rival Roofing' and (v -> 0 ->> 'companies')::int = 2 from t288_claim),
+              'T288 the row carries its own company, the company''s name and two open companies (the closed one does not count)');
+select tst.ok(not (select v::text ~ '(Pat|Bonpoc|\$|total|customer)' from t288_claim), 'T288 nothing of the other company, no names or sums');
+reset role; set role authenticated;
+select tst.fails('select public.push_claim(100)', 'T288 push_claim is the service''s only');
+:as_super
+delete from public.push_outbox where user_id = 'a2850000-0000-4000-8000-000000000001';
+delete from public.push_devices where user_id = 'a2850000-0000-4000-8000-000000000001';
+\echo 'T288 push_claim names the company ok'
+
+-- T289: a person in A and B never ties B's records to A's (the composite keys): a client of A in a B job — refused;
+-- switched off in A, B's last company does not open A
+:as_pat285
+select tst.fails($q$insert into public.jobs (company_id, number, title, customer_id, property_id, status) values
+  ('cb000000-0000-0000-0000-000000000000', 'T289', 'T289 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'scheduled')$q$,
+  'T289 a B job with A''s client is refused');
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) > 0, 'T289 office in A: sees A''s clients');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'disabled'); end $$;
+:as_pat285
+update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0
+              and tst.cnt($q$select 1 from public.jobs where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0,
+              'T289 switched off in A: nothing of A, whatever his last company');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
+\echo 'T289 two companies stay apart ok'
 
 \echo 'ALL TESTS PASSED'

@@ -9,7 +9,7 @@ import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { FieldGroup, Screen } from "@/ui/surfaces";
+import { FieldGroup, FormMain, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
 type Mode = "code" | "password" | "signup";
@@ -63,21 +63,25 @@ export default function SignIn() {
   };
 
   return (
-    <Screen title={t("auth.title")} back={back}>
+    <Screen form title={t("auth.title")} back={back}>
       <FieldGroup under testID="auth-fields">
         <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="mail" />
         <LegalAgree on={agreed} onChange={setAgreed} />
         {mode === "code" ? (
           <>
             {!sent ? (
+              <FormMain>
               <Button label={t("auth.sendCode")} icon="send" full disabled={!agreed || !okEmail || busy} onPress={() => act(() => auth.sendCode(email.trim()), () => setSent(true))} />
+              </FormMain>
             ) : (
               <>
                 <T v="caption" tone="mut">
                   {t("auth.codeSent", { email: email.trim() })}
                 </T>
                 <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} />
+                <FormMain>
                 <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} />
+                </FormMain>
               </>
             )}
           </>
@@ -87,8 +91,11 @@ export default function SignIn() {
             {mode === "signup" ? <TextField type="name" value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
             <TextField type={mode === "signup" ? "newPassword" : "password"} value={password} onChangeText={setPassword} placeholder={t("auth.password")} />
             {mode === "password" ? (
+              <FormMain>
               <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} />
+              </FormMain>
             ) : (
+              <FormMain>
               <Button
                 label={t("auth.signUp")}
                 icon="plus"
@@ -101,6 +108,7 @@ export default function SignIn() {
                   })
                 }
               />
+              </FormMain>
             )}
           </>
         ) : null}

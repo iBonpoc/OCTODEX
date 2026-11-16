@@ -426,7 +426,7 @@ function ListCardRow(p: ListCardProps) {
       }}
     >
       {edge ? <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: component.statusEdge, backgroundColor: c.status[edge].fill }} /> : null}
-      {p.selected ? <SelectedCheck /> : null}
+      {p.selected ? <SelectedCheck left /> : null}
       <Lead lead={p.lead} small />
       <View style={{ flex: 1.3, minWidth: 0, gap: spaceHalf.hair }}>
         <Txt w="semibold" color={c.ink}>{p.title}</Txt>

@@ -46,6 +46,27 @@ export const unseenClosed = (list: readonly ClosedCompany[], seen: readonly stri
 export const unsentIn = (items: readonly OwnedItem[], userId: string | null, companyId: string): OwnedItem[] =>
   userId ? items.filter((o) => o.owner?.userId === userId && o.owner.companyId === companyId) : [];
 
+/**
+ * #1669: the companies the server CONFIRMED the person is no longer in (they were removed) that still have the person's changes
+ * on this phone — the server accepts none of them now. `activeIds` null — no confirmed answer yet: none is «removed» (never guess);
+ * `skip` — the companies another card tells about already (closed by the owner: ClosedCompany). Ops without an owner are not
+ * counted (whose they are is unknown).
+ */
+export interface RemovedUnsent {
+  companyId: string;
+  n: number;
+}
+export function removedUnsent(items: readonly OwnedItem[], userId: string | null, activeIds: ReadonlySet<string> | null, skip: ReadonlySet<string> = new Set()): RemovedUnsent[] {
+  if (!userId || !activeIds) return [];
+  const count = new Map<string, number>();
+  for (const o of items) {
+    const c = o.owner;
+    if (!c || c.userId !== userId || activeIds.has(c.companyId) || skip.has(c.companyId)) continue;
+    count.set(c.companyId, (count.get(c.companyId) ?? 0) + 1);
+  }
+  return [...count].map(([companyId, n]) => ({ companyId, n })).sort((a, b) => a.companyId.localeCompare(b.companyId));
+}
+
 /** the outbox without them: other people's and other companies' ops stay (rule 6) */
 export const withoutUnsentIn = (items: readonly OwnedItem[], userId: string | null, companyId: string): OwnedItem[] =>
   userId ? items.filter((o) => !(o.owner?.userId === userId && o.owner.companyId === companyId)) : [...items];

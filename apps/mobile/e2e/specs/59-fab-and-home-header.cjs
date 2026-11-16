@@ -148,14 +148,17 @@ exports.run = async (h) => {
   await p.waitForURL(/\/job\/new/, { timeout: 5000 });
   h.expect(new URL(p.url()).searchParams.get("customerId") === "c1", `«Работы» → «Работа без сметы» for c1 (${p.url()})`);
 
-  // Job: «Запланировать работу» for this job and «Смета»
+  // Job: no «＋» (#1395): «Смета» is a named item of «⋯», «Запланировать работу» is the card's own button in «Выезды»
   await h.go("/job/j1");
-  await plus().click();
-  body = await sheetText();
-  h.expect(await has("visit", "estimate"), "job «＋»: visit and estimate");
-  await sheet().getByTestId("fab-visit").click();
-  await p.waitForTimeout(700);
-  h.expect(path(h) === "/job/schedule" && new URL(p.url()).searchParams.get("jobId") === "j1", `job «＋» → schedule j1 (${p.url()})`);
+  h.expect((await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').count()) === 0, "job: no «＋»");
+  await vis("job-more").first().getByRole("button").click();
+  await vis("job-act-estimate").first().click();
+  await p.waitForURL(/\/estimate\/new/, { timeout: 5000 });
+  h.expect(new URL(p.url()).searchParams.get("customerId"), `job «⋯» → «Создать смету» for the job's client (${p.url()})`);
+  await h.go("/job/j1");
+  await p.getByRole("button", { name: /^(Ещё один выезд|Запланировать работу)$/ }).locator("visible=true").first().click();
+  await p.waitForURL(/\/job\/schedule/, { timeout: 5000 });
+  h.expect(new URL(p.url()).searchParams.get("jobId") === "j1", `job «Запланировать работу» → schedule j1 (${p.url()})`);
 
   // Plan: planners — Лид · Записать в план (the Plan's own sheet)
   await h.go("/plan");
