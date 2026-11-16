@@ -152,7 +152,7 @@
 - **Сито в выпуск (outlet strainer)** — проволочный «колпак» в выпуск, чтобы не забивались выпуск и водосток, когда защиты нет (фото основателя). Вынесен из «Редких деталей» **в окно водостока** переключателем («?»). В движке — `outletScreen` (галочка, деталь `outletscreen`), данные есть.
 
 ### 3.13. Решения основателя 16.11: палитра и английские названия деталей (передал руководитель №13)
-- **Палитра — 24 цвета Service Partners** (образец основателя `docs/prototypes/gutters-ref/colors-service-partners-aluminum.jpg`):
+- **Палитра — 24 цвета палитры поставщика** (по карте основателя, #1803):
   High Gloss White, Satin, Linen, Low Gloss White, Almond, Crème, Sandcastle, Ivory, Wicker, Clay, Wood Beige, Buckskin Brown, Colonial Grey, Dark Grey, Terratone, Tuxedo Grey, Royal Brown, Musket Brown, Harvest Brown, Bronze, Black, Blue, Green, Red.
   - Выбор — выпадающим списком (`after-ds-color`); первым — «Как у gutter (…)».
   - Это набор по умолчанию; сама палитра — настройка компании.
