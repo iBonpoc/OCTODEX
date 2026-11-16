@@ -91,7 +91,7 @@ function TemplateForm({ saved, isNew }: { saved?: ChecklistTemplate; isNew: bool
   };
 
   return (
-    <Screen title={tpl.name.trim() || t(isNew ? "chk2.new" : "chk2.template")} back={back}>
+    <Screen form title={tpl.name.trim() || t(isNew ? "chk2.new" : "chk2.template")} back={back}>
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       {tpl.archivedAt ? <StatusChip status="neutral" label={t("chk2.archived")} /> : null}
       <ReadOnly value={ro}>
