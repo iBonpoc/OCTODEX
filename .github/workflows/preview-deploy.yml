@@ -51,6 +51,15 @@ jobs:
           path: apps/mobile/dist
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ github.token }}
+      - name: The built files are a plain static site
+        working-directory: apps/mobile
+        run: |
+          # the artifact comes from the PR: only static files go online (no server code, no links, an index page, a sane size)
+          [ -f dist/index.html ] || { echo "::error::dist has no index.html"; exit 1; }
+          [ ! -e dist/server ] || { echo "::error::dist has server files"; exit 1; }
+          [ -z "$(find dist -type l)" ] || { echo "::error::dist has symbolic links"; exit 1; }
+          size_mb="$(du -sm dist | cut -f1)"
+          [ "$size_mb" -le 300 ] || { echo "::error::dist is $size_mb MB"; exit 1; }
       - name: Deploy the web copy (its own deployment URL)
         id: web
         working-directory: apps/mobile

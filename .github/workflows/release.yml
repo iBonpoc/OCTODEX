@@ -38,11 +38,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - id: g
+        env:
+          GH_REF: ${{ github.ref }}
         run: |
           no() { echo "$1 — no release"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; }
           docs_only() { [ -z "$1" ] || ! echo "$1" | grep -qvE '^docs/|\.md$'; }
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            [ "${{ github.ref }}" = "refs/heads/main" ] || no "by hand only from main"
+            [ "$GH_REF" = "refs/heads/main" ] || no "by hand only from main"
             sha="$(git rev-parse origin/main)"; echo "sha=$sha" >> "$GITHUB_OUTPUT"; echo "go=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           sha="${{ github.event.workflow_run.head_sha }}"; echo "sha=$sha" >> "$GITHUB_OUTPUT"
