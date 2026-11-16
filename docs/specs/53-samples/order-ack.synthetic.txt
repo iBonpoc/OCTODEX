@@ -1,0 +1,23 @@
+# СИНТЕТИЧЕСКИЙ ОБРАЗЕЦ (спека 53 §8а.10). Всё выдумано: поставщик, люди, адреса, номера, цены.
+# Повторяет только СТРУКТУРУ настоящего подтверждения заказа (описание аудита 16.11). Настоящих реквизитов нет.
+[штрихкод] ||| || ||||| | ||| SO-0004567
+NORTHWIND SHEET METAL SUPPLY                         ORDER ACKNOWLEDGEMENT
+100 Example Road, Springfield, ZZ 00000
+Bill To: DEMO GUTTERS LLC, 1 Sample St, Springfield   Ship To: WILL CALL
+Customer Acct #: C-000123     Order #: SO-0004567     Order Date: 11/03/2026
+Terms: 30 Days NET     Customer PO Number: JOB 42 MAPLE BACK SIDE
+Ship Via: WILL CALL     Weight: 92 LB     Delivery Date: 11/05/2026
+Salesperson: J. SAMPLE  Phone: 555-0100  Email: rep@example.com
+[красный штамп] RECEIVED
+Line # | Item & Description                                   | Qty Ordered | Qty B.O. | Sold UOM | Pricing Qty | Pricing UOM | Unit Price | Total
+1.1    | ALC-0327-WHT : ALUM COIL .027 X 11 7/8 WHITE           | 50          | 0        | LB       | 50          | LB          | 3.90       | 195.00
+       | Note: 130 FEET
+1.2    | ALC-0327-BRN : ALUM COIL .027 X 15 BROWN               | 40          | 0        | LB       | 40          | LB          | 3.75       | 150.00
+       | Note: 75 FEET
+1.3    | DS-23-10-BRN : DOWNSPOUT 2X3 CORRUGATED BROWN          | 12          | 0        | TU       | 12          | TU          | 31         | 372.00
+       | Note: 10 FEET
+1.4    | ELB-23A-WHT : ELBOW 2X3 STYLE A WHITE                  | 24          | 4        | TU       | 20          | TU          | 2.15       | 43.00
+1.5    | HNG-HID-5 : HIDDEN HANGER 5 IN WITH SCREW,             | 100         | 0        | TU       | 100         | TU          | 0.87       | 87.00
+       | ZINC PLATED
+[рукописно] picked up — Tom
+Subtotal: 847.00   Addt. Charges: 0.00   Freight: 35.00   Discounts: 0.00   Tax: 69.89   Total: 951.89
