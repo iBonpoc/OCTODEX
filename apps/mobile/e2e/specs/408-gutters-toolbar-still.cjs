@@ -5,7 +5,8 @@
  * very edge; the chip and the hints are above it. Here: the toolbar stays where it is while the chip comes and goes, and a gutter
  * right under the «Водосток» cell gets nothing from taps on the cell. Every view. Finds things by testID / stored elements.
  */
-const { skipLength } = require("../gutters.cjs");
+const { skipLength, pastDoubleTap } = require("../gutters.cjs");
+const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -130,9 +131,22 @@ exports.run = async (h) => {
   const before = await kinds();
 
   // one tap, then a double tap, then one more: the tool is on, the toolbar never moves, the gutter under the cell gets nothing
+  // (two taps open «Новые водостоки» since #1650: a sheet on the phone, the side column wider — closed before the next taps)
+  const defaultsShown = () => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0);
   for (const n of [1, 2, 1]) {
+    await pastDoubleTap(p);
     for (let i = 0; i < n; i++) await p.mouse.click(at[0], at[1]);
     await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-tool-ds"] [aria-pressed="true"]')].length > 0, null, { timeout: 3000 });
+    if (n === 2) {
+      await p.waitForFunction(defaultsShown, null, { timeout: 5000 }).catch(() => h.expect(false, "two taps on «Водосток»: its new ones' properties"));
+      if ((await tid("draw-panel-close").count()) > 0) await tid("draw-panel-close").getByRole("button").click();
+      else {
+        await pressEscUntilClosed(p);
+        await sheetGone(p);
+      }
+      await p.waitForFunction((f) => !new Function(`return (${f})()`)(), defaultsShown.toString(), { timeout: 5000 });
+      await settled();
+    }
     h.expect((await box("draw-toolbar")) === still, `after ${n} tap(s) on «Водосток» the toolbar stays (${still} → ${await box("draw-toolbar")})`);
     h.expect(await p.evaluate(([x, y]) => !!document.elementFromPoint(x, y)?.closest('[data-testid="draw-tool-ds"]'), at), `after ${n} tap(s) the cell is still under the finger`);
   }
