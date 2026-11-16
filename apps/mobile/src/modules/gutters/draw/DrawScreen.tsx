@@ -32,6 +32,7 @@ import { useHideTabBar } from "@/nav/tabBarHide";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
+import { deleteTarget, hasCap, type PickedEnd } from "../canvas/endPick";
 import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
@@ -212,6 +213,9 @@ export default function DrawScreen() {
   const [tool, setTool] = useState<Tool>("line");
   const [story, setStoryN] = useState<Story>(1);
   const [selected, setSelected] = useState<string | null>(null);
+  /** a cap picked on its own (#1855): the gutter is `selected`, this end its picked cap; gone when another thing is picked */
+  const [pickedEnd, setPickedEnd] = useState<PickedEnd>(null);
+  useEffect(() => { if (pickedEnd && pickedEnd.id !== selected) setPickedEnd(null); }, [selected, pickedEnd]);
   const [place, setPlace] = useState<ToolbarPlace>("bottom");
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<PlanView | null>(null);
@@ -688,6 +692,8 @@ export default function DrawScreen() {
       if (tapped.act.do === "pick") {
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
+        // a tap on a free end with a cap picks the cap: 🗑 takes it off, not the gutter (#1855)
+        setPickedEnd(h?.kind === "end" && freeEnd && hasCap(d, h.id, h.end) ? { id: h.id, end: h.end } : null);
         return;
       }
       haptics.light();
@@ -747,9 +753,12 @@ export default function DrawScreen() {
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
   // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
   const many = manyStories(drawing.runs);
+  const capPicked = !!sel && "a" in sel && !!pickedEnd && pickedEnd.id === sel.id && hasCap(drawing, pickedEnd.id, pickedEnd.end);
   const selText = !sel
     ? null
-    : "a" in sel
+    : capPicked
+      ? t("mod.gutters.draw.selCap")
+      : "a" in sel
       ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
       : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
@@ -873,6 +882,14 @@ export default function DrawScreen() {
   };
   const doDelete = () => {
     if (!selected) return;
+    const target = deleteTarget(drawing, selected, pickedEnd);
+    if (target?.kind === "cap") {
+      // the cap only (#1855): the end stays a free end without one, the gutter stays picked; «Отменить» puts the cap back
+      commit(setCapOff(drawing, target.id, target.end, true));
+      setPickedEnd(null);
+      toast.show(t("mod.gutters.draw.capRemoved"), localUndo(() => { const now = cur.current.drawing; commit(setCapOff(now, target.id, target.end, false), now, true); }));
+      return;
+    }
     const before = drawing;
     commit(removeElement(drawing, selected));
     setSelected(null);

@@ -3073,6 +3073,8 @@ export const es: Dict = {
   "mod.gutters.draw.select": "Elegir",
   "mod.gutters.draw.undo": "Deshacer",
   "mod.gutters.draw.delete": "Eliminar",
+  "mod.gutters.draw.selCap": "End cap",
+  "mod.gutters.draw.capRemoved": "End cap quitada",
   "mod.gutters.draw.deleted": "Eliminado",
   "mod.gutters.draw.story": "Piso {n}",
   "mod.gutters.draw.storyShort": "P {n}",
