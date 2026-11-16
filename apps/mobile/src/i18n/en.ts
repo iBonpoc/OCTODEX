@@ -4179,6 +4179,7 @@ export const en: Dict = {
   "sup.src.ai_scan": "price scan",
   "sup.src.shelf_tag": "shelf tag",
   "sup.src.module": "module",
+  "sup.src.receipt": "order received",
   // spec 37: purchase orders (SUP2-б)
   "nav.purchaseOrders": "Purchase orders",
   "po.title": "Purchase orders",

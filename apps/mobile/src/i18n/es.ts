@@ -4179,6 +4179,7 @@ export const es: Dict = {
   "sup.src.ai_scan": "escaneo de lista",
   "sup.src.shelf_tag": "etiqueta",
   "sup.src.module": "módulo",
+  "sup.src.receipt": "pedido recibido",
   // spec 37: purchase orders (SUP2-б)
   "nav.purchaseOrders": "Pedidos a proveedores",
   "po.title": "Pedidos a proveedores",
