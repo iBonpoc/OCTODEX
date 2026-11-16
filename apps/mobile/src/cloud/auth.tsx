@@ -4,6 +4,8 @@ import { AppState } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
+import { requestCode } from "./requestCode";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
 import { forgetThisPhone } from "@/features/pushNative";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
@@ -410,9 +412,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       memberships,
       company: memberships[0] ?? null,
       sendCode: async (email) => {
-        // the code only, no link (docs/specs/52 Р1): the first code makes the account and confirms the address
-        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
-        return error?.message ?? null;
+        // the code only, no link (Р1); a new account is made by the server only (Р10) — cloud/requestCode.ts
+        return requestCode(email, {
+          callFunction: async (e) => {
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/request-code`, {
+              method: "POST",
+              headers: { "content-type": "application/json", apikey: SUPABASE_PUBLISHABLE_KEY },
+              body: JSON.stringify({ email: e }),
+            });
+            return res.status;
+          },
+          otp: async (e, shouldCreateUser) => {
+            const { error } = await supabase.auth.signInWithOtp({ email: e, options: { shouldCreateUser } });
+            return error?.message ?? null;
+          },
+        });
       },
       verifyCode: async (email, code) => {
         const { error } = await supabase.auth.verifyOtp({ email, token: code, type: "email" });

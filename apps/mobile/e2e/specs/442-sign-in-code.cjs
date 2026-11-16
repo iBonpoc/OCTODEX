@@ -11,6 +11,7 @@
  * - the server's own wait → «через N с»; the built-in mail refusing an address → plain words, never its English;
  * - a wrong code is cleared: the next one is typed over nothing and checked;
  * - without the network «Получить код» says «Нужна сеть» and sends nothing;
+ * - the server (request-code) makes a new account first; Auth is asked for the code with create_user: false;
  * - no password sign-up anywhere.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
@@ -28,6 +29,14 @@ exports.run = async (h) => {
     otpCalls++;
     await route.fulfill({ status: otp.status, contentType: "application/json", body: JSON.stringify(otp.body) });
   });
+  // the server makes a new account (spec 52 Р10); the code is then asked for an existing account only
+  let fnCalls = 0;
+  const otpBodies = [];
+  await p.route("**/functions/v1/request-code*", (route) => {
+    fnCalls++;
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
+  });
+  p.on("request", (r) => r.url().includes("/auth/v1/otp") && otpBodies.push(r.postData() || ""));
   await p.route("**/auth/v1/verify*", (route) => {
     verifyCalls++;
     return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: 403, error_code: "otp_expired", msg: "Token has expired or is invalid" }) });
@@ -56,6 +65,8 @@ exports.run = async (h) => {
   // step 2: the address and the code field only
   await tid("auth-code").waitFor({ timeout: 6000 });
   h.expect(otpCalls === 1, `one code asked (${otpCalls})`);
+  h.expect(fnCalls === 1, `the server was asked to make the account first (${fnCalls})`);
+  h.expect(/"create_user":false/.test(otpBodies[0] || ""), `the code is asked for an existing account only (${otpBodies[0]})`);
   h.expect(/Код отправлен на\s*new\.person@gmail\.com/.test(await tid("auth-code-sent").innerText()), "where the code went");
   h.expect((await none("auth-email")) && (await none("legal-agree")), "no email field and no tick on the code step");
   h.expect(await none("auth-resend"), "no «Отправить ещё раз» during the pause");
