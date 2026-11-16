@@ -1574,7 +1574,7 @@ export const es: Dict = {
   "src.kind": "Tipo",
   "src.kind.marketplace": "Plataformas",
   "src.kind.ads": "Publicidad",
-  "src.kind.person": "Recomendación",
+  "src.kind.person": "Personas",
   "src.kind.own": "Propios",
   "src.name": "Nombre",
   "src.namePh": "p. ej. Kolya (contratista), Nextdoor",

@@ -1573,7 +1573,7 @@ export const ru = {
   "src.kind": "Тип",
   "src.kind.marketplace": "Площадки",
   "src.kind.ads": "Реклама",
-  "src.kind.person": "По рекомендации",
+  "src.kind.person": "Люди",
   "src.kind.own": "Свои",
   "src.name": "Название или имя",
   "src.namePh": "Например: Коля (подрядчик), Nextdoor",
