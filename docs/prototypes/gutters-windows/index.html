@@ -172,7 +172,7 @@ if(F==='ds-bottom'){
 if(F==='run'){
  H=sheet('Gutter','1-1 · 21′ 8½″',`
  <div class="grp">${sel('Профиль'+qm,'K-Style','xsK')}${sel('Размер'+qm,'5″')}${sel('Этаж'+qm,'1')}</div><div class="note">Меню: K-Style · Half Round · Box · Fascia · Euro — значок разреза слева в строке.</div>
- <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin('21','ft')}${fin('8','in')}${dd('½')}<span class="sp"></span><span class="b36">Шкала</span></div><div class="note">На рисунке 21′ 4″, введено 21′ 8½″ — в расчёт идёт введённое.</div></div>
+ <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin('21','ft')}${fin('8','in')}<span class="sp"></span><span class="b36">Шкала</span></div>${frac('½')}<div class="note">На рисунке 21′ 4″, введено 21′ 8½″ — в расчёт идёт введённое.</div></div>
  <div class="grp">${row('Цвет','',{ctrl:`<span class="v"><i style="width:18px;height:18px;border-radius:9px;background:#D9DACF;border:1px solid var(--bd);display:inline-block"></i>High Gloss White${ic('cd',16)}</span>`})}${row('Материал'+qm,'Алюминий · .027')}</div>
  <div><div class="lbl">Защита от листьев (gutter guard)${qm}</div><div class="grp">${row('Вид','Микросетка')}${row('Сколько закрыть','Весь gutter · 21′ 8½″')}</div><div class="note">Список: Нет · Микросетка · Перфорированный · На защёлке · Откидная · Сетка на раме · Козырёк. Пены и ёршиков нет.</div></div>
  <div><div class="lbl">Демонтаж${qm}</div><div class="grp">${row('Снять старый gutter','',{ctrl:'<span class="tog on"></span>'})}${row('Была защита — снять','',{ctrl:'<span class="tog"></span>'})}</div></div>
@@ -187,7 +187,7 @@ if(F==='corner'||F==='corner-in'){
  const cut=(n,w,f)=>`<div class="grp" style="padding:10px 14px"><div style="font-weight:600;font-size:13px">Gutter ${n}</div><table class="cut"><tr><th>По стене</th><th>По лицу</th><th>Рез</th></tr><tr><td style="text-align:left">${w}</td><td><b>${f}</b></td><td>45°</td></tr></table></div>`;
  const segI=(on)=>`<div class="seg">${[['cornerOut','Наружный'],['cornerIn','Внутренний']].map(([i,t],j)=>`<span class="${j===on?'on':''}" style="gap:6px">${ic(i,16)}${t}</span>`).join('')}</div>`;
  H=sheet('Угол','1-1 / 1-2',`
- <div><div class="grp">${sel('Вид угла'+qm,inner?'Внутренний':'Наружный',inner?'cornerIn':'cornerOut')}</div><div class="note">Сменится сторона всей линии</div></div>
+ <div><div class="lbl">Вид угла${qm}</div><div class="grp">${[['cornerOut','Наружный',!inner],['cornerIn','Внутренний',inner]].map(([i,t,on])=>`<div class="opt">${ic(i,20,k('mut'))}<div class="stack"><span>${t}</span></div>${on?ic('check',20,k('ink')):''}</div>`).join('')}</div><div class="note">Сменится сторона всей линии</div></div>
  ${inner?skIn:sk}
  <div><div class="grp">${sel('Как делаем угол'+qm,'Резать')}</div><div class="note">Прибавка на этот угол: <b>${inner?'+7″':'+14″'}</b> — уже в закупке рулона, отдельно не добавляйте. Запас рулона: 1 линия +3 ft, 2 и больше +6 ft (настройки).</div></div>
  <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${inner?cut('1-1','23′ 11″','23′ 6″')+cut('1-2','25′ 11″','25′ 6″'):cut('1-1','23′ 11″','24′ 4″')+cut('1-2','25′ 11″','26′ 4″')}</div></div>
