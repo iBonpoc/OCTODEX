@@ -7,7 +7,7 @@ import type { CatalogItem } from "../src/data/types";
 import { TEST_RATES } from "../src/modules/gutters/canvas/testRates";
 import {
   bindable, bindItem, findItem, LABOR_PARTS, laborRows, listPreview, matchAttrs, matchKey, materialRows, missingItems, sampleJob, stableItemId, testPriceCents,
-  PART_WORDS, WORK_WORDS, dsLine,
+  PART_WORDS, WORK_WORDS, dsLine, partName,
 } from "../src/modules/gutters/prices";
 import { notSavedKey } from "../src/modules/gutters/settings";
 import { uuidV5 } from "../src/modules/gutters/uuid5";
@@ -186,10 +186,21 @@ describe("#814 the details in words", () => {
     expect(codes.size).toBeGreaterThan(20);
     expect([...codes].filter((c) => !PART_WORDS.has(c)), "add the part to PART_WORDS and mod.gutters.pr.p.<code> in ru/en/es").toEqual([]);
   });
-  it("a downspout's line: only what it has — no «колен 0 · офсетов 0»", () => {
-    expect(dsLine(t as never, 3, 0)).toBe('mod.gutters.view.dsElbows{"n":3}');
-    expect(dsLine(t as never, 0, 2)).toBe('mod.gutters.view.dsOffsets{"n":2}');
-    expect(dsLine(t as never, 2, 1)).toBe('mod.gutters.view.dsElbows{"n":2} · mod.gutters.view.dsOffsets{"n":1}');
-    expect(dsLine(t as never, 0, 0)).toBe("");
+  it("a downspout's line (#1747): elbows by style, offsets by length; only what it has — nothing at all is \"\"", () => {
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 3 }], offsets: [] })).toBe('mod.gutters.view.dsElbow{"style":"A","n":3}');
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 2 }, { style: "B", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }] })).toBe(
+      'mod.gutters.view.dsElbow{"style":"A","n":2} · mod.gutters.view.dsElbow{"style":"B","n":1} · mod.gutters.view.dsOffset{"len":"2″","n":1}',
+    );
+    expect(dsLine(t as never, { shape: "round", elbows: [{ style: "45", qty: 2 }], offsets: [] })).toBe('mod.gutters.view.dsElbow{"style":"45°","n":2}');
+    expect(dsLine(t as never, { elbows: [{ style: "A", qty: 0 }], offsets: [] })).toBe("");
+  });
+});
+
+describe("#1747 the parts' properties in words: no raw value in «Детали»", () => {
+  it("the sample job: a hanger kind is a word (not «hidden»), a downspout size reads 2\"×3\" (not «2x3»)", () => {
+    const t = (k: string) => ({ "mod.gutters.attr.k.hidden": "Скрытое", "mod.gutters.attr.st.plain": "Гладкий" } as Record<string, string>)[k] ?? k;
+    const names = materialRows({}).map((r) => partName(t as never, r.part));
+    expect(names.filter((n) => /\bhidden\b|\bplain\b|\bcorrugated\b/.test(n))).toEqual([]);
+    expect(names.filter((n) => /\b\d+x\d+\b/.test(n))).toEqual([]); // nor a screw «10x1.5» — «#10 × 1½″»
   });
 });
