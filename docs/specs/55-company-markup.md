@@ -175,7 +175,7 @@ Jobber при новой закупке держит **цену** и меняе�
 - `company_cost_settings`: select — `can_view_costs`; tech, sub, anon — 0 строк; insert/update — owner/admin; office — отказ.
 - `set_company_markup`: tech/office/sales → отказ 42501; чужая компания → отказ; меняет только позиции своей компании и только `company`.
 - `markup_mode` в `catalog_item_costs` — та же защита таблицы (уже `can_view_costs`).
-- Номера тестов — следующие свободные в `core_rls.sql` (выдаёт руководитель).
+- Номера тестов базы — **T302–T307** (выдал руководитель №13 16.11).
 
 ---
 
