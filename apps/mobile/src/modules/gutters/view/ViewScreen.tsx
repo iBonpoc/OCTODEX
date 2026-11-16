@@ -356,7 +356,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
               <View key={d.id} testID={`view-ds-${d.n}`}>
                 <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
                   <T v="body" w="semibold">{`${t("mod.gutters.ds", { n: d.n })} · ${t("mod.gutters.story", { n: d.story })} · ${dsSizeText(d.size)}`}</T>
-                  {dsLine(t, d.elbows, d.offsets) ? <View testID={`view-ds-line-${d.n}`}><T v="caption" tone="mut">{dsLine(t, d.elbows, d.offsets)}</T></View> : null}
+                  {dsLine(t, d) ? <View testID={`view-ds-line-${d.n}`}><T v="caption" tone="mut">{dsLine(t, d)}</T></View> : null}
                 </RowView>
               </View>
             ))}

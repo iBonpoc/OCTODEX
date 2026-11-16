@@ -52,7 +52,7 @@ describe("the drawing as a PDF", () => {
     expect(h).toContain("По стене");
     expect(h).toContain("По лицевой");
     expect(h).toContain("Углы");
-    expect(h).toContain("колен 2");
+    expect(h).toContain("A ×2"); // #1747: elbows by style
     expect(h).toContain("Детали");
     expect(h).not.toMatch(/\$\s?\d/);
   });
