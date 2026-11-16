@@ -62,8 +62,8 @@ svg.cv{position:absolute;left:0;top:0;width:390px;height:844px}
 .tile.h36{flex-direction:row;min-height:44px;gap:8px;font-size:15px}.tile.h36 svg{width:20px;height:20px}
 .lc{display:flex;gap:12px;align-items:flex-start}.lc .av{width:40px;height:40px;border-radius:20px;border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;flex:none}
 .tog{width:44px;height:26px;border-radius:13px;background:var(--track);position:relative}
-.tog::after{content:"";position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:11px;background:var(--ink);box-shadow:var(--sh)}.tog.on::after{background:var(--onacc)}
-.tog.on{background:var(--acc)}.tog.on::after{left:20px}
+.tog::after{content:"";position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:11px;background:var(--ink);box-shadow:var(--sh)}.tog.on::after{background:var(--bg)}
+.tog.on{background:var(--ink)}.tog.on::after{left:20px}
 .note{font-size:13px;color:var(--mut);margin:6px 4px 0}
 .ph{border:1.5px dashed var(--bd);border-radius:12px;padding:12px;font-size:13px;color:var(--mut)}
 .foot{padding:8px 16px 28px;border-top:1px solid var(--bd);display:flex;gap:8px}
@@ -187,7 +187,7 @@ if(F==='corner'||F==='corner-in'){
  const cut=(n,w,f)=>`<div class="grp" style="padding:10px 14px"><div style="font-weight:600;font-size:13px">Gutter ${n}</div><table class="cut"><tr><th>По стене</th><th>По лицу</th><th>Рез</th></tr><tr><td style="text-align:left">${w}</td><td><b>${f}</b></td><td>45°</td></tr></table></div>`;
  const segI=(on)=>`<div class="seg">${[['cornerOut','Наружный'],['cornerIn','Внутренний']].map(([i,t],j)=>`<span class="${j===on?'on':''}" style="gap:6px">${ic(i,16)}${t}</span>`).join('')}</div>`;
  H=sheet('Угол','1-1 / 1-2',`
- <div><div class="lbl">Вид угла${qm}</div><div class="grp">${[['cornerOut','Наружный',!inner],['cornerIn','Внутренний',inner]].map(([i,t,on])=>`<div class="opt">${ic(i,20,k('mut'))}<div class="stack"><span>${t}</span></div>${on?ic('check',20,k('ink')):''}</div>`).join('')}</div><div class="note">Сменится сторона всей линии</div></div>
+ <div><div class="lbl">Вид угла${qm}</div><div class="grp">${[['cornerOut','Наружный',!inner,'угол дома наружу: лицевая длиннее стены'],['cornerIn','Внутренний',inner,'угол внутрь: лицевая короче стены']].map(([i,t,on,d])=>`<div class="opt">${ic(i,20,k('mut'))}<div class="stack"><span>${t}</span><small>${d}</small></div>${on?ic('check',20,k('ink')):''}</div>`).join('')}</div><div class="note">Сменится сторона всей линии</div></div>
  ${inner?skIn:sk}
  <div><div class="grp">${sel('Как делаем угол'+qm,'Резать')}</div><div class="note">Прибавка на этот угол: <b>${inner?'+7″':'+14″'}</b> — уже в закупке рулона, отдельно не добавляйте. Запас рулона: 1 линия +3 ft, 2 и больше +6 ft (настройки).</div></div>
  <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${inner?cut('1-1','23′ 11″','23′ 6″')+cut('1-2','25′ 11″','25′ 6″'):cut('1-1','23′ 11″','24′ 4″')+cut('1-2','25′ 11″','26′ 4″')}</div></div>
