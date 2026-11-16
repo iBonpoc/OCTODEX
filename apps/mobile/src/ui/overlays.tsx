@@ -59,6 +59,8 @@ export interface MenuItem<K extends string> {
   destructive?: boolean;
   /** pale (`dimOpacity`) but pressable: the press explains why it cannot be done */
   dim?: boolean;
+  /** the first item of its own group (after a line): actions after the choices of a label menu — «Сделать основным» (DS §9 А14а) */
+  group?: boolean;
   testID?: string;
 }
 export function Menu<K extends string>({
@@ -185,7 +187,7 @@ export function Menu<K extends string>({
           {items.map((it, i) => (
             <Fragment key={it.key}>
             {/* the dangerous ones are the last group, after a line (DS Б4): drawn before the first of them when others come before */}
-            {it.destructive && i > 0 && !items[i - 1]!.destructive ? (
+            {(it.destructive && i > 0 && !items[i - 1]!.destructive) || (it.group && i > 0) ? (
               <View testID="menu-divider" style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[1], marginHorizontal: space[4] }} />
             ) : null}
             <Press
