@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Обновить прайс</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип спеки 53. Значения — токены «Наряда» (design/naryad-ds/tokens/*.css), как в list-filters.html.
+   Цены тестовые (правило 9), поставщик и строки прайса вымышлены. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;
+  --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field-phone:44px;--bar-btn:44px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;--scrim:rgba(0,0,0,.42);
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--sh:0 10px 28px rgba(60,50,40,.12);--ov:rgba(250,248,244,.94);
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:400 var(--fs-body)/1.4 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:var(--s6)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{max-width:1300px;margin:0 auto;display:grid;gap:var(--s5)}
+h1{font-size:var(--fs-display);margin:0}
+.lede{color:var(--mut);max-width:72ch;margin:var(--s2) 0 0}
+.bar{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:center}
+.seg{display:inline-flex;background:var(--surf);border:1px solid var(--bd);border-radius:999px;padding:3px;gap:2px;flex-wrap:wrap}
+.seg button{border:0;background:none;border-radius:999px;min-height:var(--c-md);padding:0 var(--s3);cursor:pointer;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--surf2);box-shadow:inset 0 0 0 2px var(--ink);font-weight:700}
+.lbl{font-size:var(--fs-caption);color:var(--mut);letter-spacing:.04em;text-transform:uppercase;margin-right:var(--s1)}
+.cols{display:grid;gap:var(--s6);grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));align-items:start}
+.col{display:grid;gap:var(--s2);justify-items:start;min-width:0}
+.col h2{font-size:var(--fs-heading);margin:0}
+.col p{margin:0;color:var(--mut);font-size:var(--fs-caption);max-width:390px}
+
+/* ---------- телефон ---------- */
+.dev{width:390px;max-width:100%;height:844px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);position:relative;overflow:hidden;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:var(--s2);padding:var(--s4) var(--s4) var(--s2)}
+.iconbtn{width:var(--c-lg);height:var(--c-lg);border-radius:999px;border:1px solid var(--bd);background:var(--surf);display:grid;place-items:center;cursor:pointer;position:relative;flex:none}
+.iconbtn::after{content:"";position:absolute;inset:-4px}
+.ttl{font-size:var(--fs-title);font-weight:700;line-height:1.2}
+.sub{font-size:var(--fs-caption);color:var(--mut)}
+.body{flex:1;overflow:auto;padding:var(--s2) var(--s4) var(--s4);display:grid;gap:var(--s3);align-content:start}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4)}
+.src{display:grid;gap:2px}
+.src .row{display:flex;justify-content:space-between;gap:var(--s2);align-items:center}
+.link{background:none;border:0;padding:0 var(--s1);min-height:var(--hit);font-weight:600;text-decoration:underline;cursor:pointer}
+.btn{min-height:var(--c-lg);border-radius:999px;border:1px solid var(--bd);background:var(--surf2);font-weight:600;font-size:var(--fs-btn);padding:0 var(--s4);display:inline-flex;align-items:center;gap:var(--s2);cursor:pointer;position:relative}
+.btn::after{content:"";position:absolute;inset:-4px 0}
+.btn.primary{background:var(--acc);color:var(--on-acc);border-color:transparent}
+.btn.full{width:100%;justify-content:center}
+.btn.bar{min-height:var(--bar-btn)}
+.tabs{display:flex;gap:var(--s1);overflow-x:auto;padding:6px 0;min-height:calc(var(--c-md) + 12px);scrollbar-width:none}
+.tabs button{flex:none;border:1px solid var(--bd);background:var(--surf);border-radius:999px;min-height:var(--c-md);padding:0 var(--s3);cursor:pointer;font-size:var(--fs-btn);font-weight:500;position:relative}
+.tabs button::after{content:"";position:absolute;inset:-6px 0}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--bg);font-weight:700;border-color:var(--ink)}
+.banner{border-radius:var(--ri);padding:var(--s3) var(--s4);background:var(--surf);border:1px solid var(--bd);display:grid;gap:var(--s2)}
+.banner .h{display:flex;gap:var(--s2);font-weight:600;align-items:flex-start}
+.banner.warn .h svg{color:var(--st-warn-t)}
+.field{display:flex;align-items:center;gap:var(--s2)}
+.field label{font-size:var(--fs-caption);color:var(--mut);flex:1}
+.input{height:var(--field-phone);border-radius:var(--rf);border:1px solid var(--bd);background:var(--in);padding:0 var(--s3);width:110px;text-align:right;font-variant-numeric:tabular-nums}
+.input.wide{width:100%;text-align:left;font-size:var(--fs-title);font-weight:600}
+.list{display:grid;gap:var(--s2)}
+.line{display:grid;grid-template-columns:var(--hit) 1fr;gap:0 var(--s1);align-items:start;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s2) var(--s3) var(--s3) var(--s1);cursor:pointer}
+.line .ck{width:var(--hit);height:var(--hit);display:grid;place-items:center}
+.box{width:22px;height:22px;border-radius:6px;border:2px solid var(--mut);display:grid;place-items:center;background:var(--in)}
+.line[aria-checked="true"] .box{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.line[aria-checked="true"] .box svg{opacity:1}.box svg{opacity:0}
+.line .main{min-width:0;padding-top:var(--s2);display:grid;gap:2px}
+.line .t{font-weight:600;display:flex;justify-content:space-between;gap:var(--s2)}
+.line .t .nm{min-width:0}
+.line .v{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.line .v s{color:var(--mut);font-weight:500;text-decoration:none}
+.line .from{font-size:var(--fs-caption);color:var(--mut)}
+.line .meta{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);align-items:center;font-size:var(--fs-caption);margin-top:2px}
+.line .meta .cl{color:var(--mut)}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 8px;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--bd);background:var(--surf2)}
+.chip.ok{color:var(--st-ok-t)}.chip.warn{color:var(--st-warn-t)}.chip.bad{color:var(--st-bad-t)}.chip.info{color:var(--st-info-t)}
+.chip i{width:8px;height:8px;border-radius:99px;display:inline-block}
+.chip.ok i{background:var(--st-ok)}.chip.warn i{background:var(--st-warn)}.chip.bad i{background:var(--st-bad)}.chip.info i{background:var(--st-info)}
+.panel{border-top:1px solid var(--bd);background:var(--ov);backdrop-filter:blur(24px);border-radius:var(--r) var(--r) 0 0;padding:var(--s3) var(--s4) calc(var(--s3) + 20px);display:grid;gap:var(--s2)}
+.panel .sum{display:flex;justify-content:space-between;font-weight:600}
+.hint{font-size:var(--fs-caption);color:var(--st-warn-t);min-height:1em}
+/* шторка */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--ov);backdrop-filter:blur(24px);border-radius:var(--r) var(--r) 0 0;padding:var(--s2) var(--s4) calc(var(--s4) + 20px);display:grid;gap:var(--s3)}
+.grab{width:36px;height:5px;border-radius:9px;background:var(--bd);justify-self:center}
+.kv{display:flex;justify-content:space-between;color:var(--mut)}
+.kv b{color:var(--ink);font-variant-numeric:tabular-nums}
+.pcard{display:flex;justify-content:space-between;gap:var(--s2);align-items:center;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4);cursor:pointer;min-height:var(--hit)}
+.pcard .v{font-weight:700;white-space:nowrap}
+.sec{font-size:var(--fs-heading);font-weight:700;margin-top:var(--s2)}
+.toast{position:absolute;left:var(--s4);right:var(--s4);bottom:96px;background:var(--ink);color:var(--bg);border-radius:var(--ri);padding:var(--s3) var(--s4);display:flex;justify-content:space-between;align-items:center;font-weight:600}
+.toast button{background:none;border:0;color:var(--bg);text-decoration:underline;font-weight:700;min-height:var(--hit);padding:0 var(--s2);cursor:pointer}
+.ok-big{display:grid;gap:var(--s2);justify-items:start}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Обновить прайс</h1>
+    <p class="lede">Прототип спеки 53: экран «Цены» модуля Gutters с кнопкой «Обновить прайс» и быстрой правкой одной цены, экран «было → стало» после загрузки CSV/Excel и итог. Цены тестовые, поставщик и строки вымышлены. Галочки, вкладки и поле наценки работают.</p>
+  </header>
+  <div class="bar">
+    <span class="lbl">Тема</span>
+    <div class="seg" role="group" aria-label="Тема">
+      <button type="button" data-theme-btn="light" aria-pressed="true">Светлая</button>
+      <button type="button" data-theme-btn="dark" aria-pressed="false">Тёмная</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <!-- ======== 1. Цены Gutters ======== -->
+    <section class="col" aria-labelledby="h1s">
+      <h2 id="h1s">1. «Цены и прайс» Gutters</h2>
+      <p>Кнопка «Обновить прайс» над баннером. Нажатие на карточку открывает шторку «Цена»: ввод и «Сохранить» — 2 нажатия.</p>
+      <div class="dev" id="scr-prices" data-shot="prices">
+        <div class="top">
+          <button class="iconbtn" type="button" aria-label="Назад"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div><div class="sub">Gutters</div><div class="ttl">Цены и прайс</div></div>
+        </div>
+        <div class="body">
+          <div style="color:var(--mut)">Цены работы и деталей берутся из каталога компании.</div>
+          <button class="btn" type="button" data-testid="gpr-update" onclick="go('review')"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v12M7 8l5-5 5 5M5 21h14"/></svg>Обновить прайс</button>
+          <div class="banner warn"><div class="h"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>Тестовые цены: 12</div><div style="color:var(--mut);font-size:var(--fs-caption)">Обновите прайс или нажмите на позицию, чтобы ввести цену.</div></div>
+          <div class="sec">Детали</div>
+          <div class="list">
+            <div class="pcard" role="button" tabindex="0" onclick="openQuick()"><div><div style="font-weight:600">Гаттер · 5″ · K-style · белый</div><span class="chip warn"><i></i>тестовая цена</span></div><div class="v">$3.00 / ft</div></div>
+            <div class="pcard" role="button" tabindex="0"><div><div style="font-weight:600">Заглушка · 5″ · K-style</div><span class="chip warn"><i></i>тестовая цена</span></div><div class="v">$4.50 / ea</div></div>
+            <div class="pcard" role="button" tabindex="0"><div><div style="font-weight:600">Крюк · скрытый · 5″</div><span class="chip ok"><i></i>есть в прайсе</span></div><div class="v">$1.40 / ea</div></div>
+            <div class="pcard" role="button" tabindex="0"><div><div style="font-weight:600">Водосток · 2×3 · белый</div><span class="chip warn"><i></i>тестовая цена</span></div><div class="v">$2.60 / ft</div></div>
+          </div>
+        </div>
+        <div class="scrim" id="q-scrim" hidden onclick="closeQuick()"></div>
+        <div class="sheet" id="q-sheet" role="dialog" aria-label="Цена" hidden>
+          <div class="grab"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center"><div class="ttl" style="font-size:var(--fs-heading)">Гаттер · 5″ · K-style · белый</div><button class="iconbtn" type="button" aria-label="Закрыть" onclick="closeQuick()">✕</button></div>
+          <div style="font-size:var(--fs-caption);color:var(--st-warn-t)">Тестовая цена. После сохранения пометка снимется.</div>
+          <label class="sub" for="q-cost">Закупка за ft</label>
+          <input class="input wide" id="q-cost" inputmode="decimal" value="$2.31" oninput="quickCalc()">
+          <div class="field"><label for="q-mk">Наценка, %</label><input class="input" id="q-mk" inputmode="decimal" value="30" oninput="quickCalc()"></div>
+          <div class="kv"><span>Клиенту</span><b id="q-client">$3.00 / ft</b></div>
+          <button class="btn primary full bar" type="button" onclick="quickSave()">Сохранить</button>
+          <button class="link" type="button" style="justify-self:center">Открыть позицию</button>
+        </div>
+        <div class="toast" id="q-toast" hidden>Цена сохранена<button type="button" onclick="this.parentNode.hidden=true">Вернуть</button></div>
+      </div>
+    </section>
+
+    <!-- ======== 2. Было → стало ======== -->
+    <section class="col" aria-labelledby="h2s">
+      <h2 id="h2s">2. Было → стало</h2>
+      <p>Совпавшие строки отмечены. «Проверьте» (±25 % и больше), «похоже» и смена поставщика — без галочки. Позиции с тестовой ценой — поле наценки.</p>
+      <div class="dev" id="scr-review" data-shot="review">
+        <div class="top">
+          <button class="iconbtn" type="button" aria-label="Назад"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div><div class="sub">Каталог</div><div class="ttl">Обновить прайс</div></div>
+        </div>
+        <div class="body">
+          <div class="card src">
+            <div class="row"><b>ABC Supply</b><button class="link" type="button">Изменить</button></div>
+            <div class="sub">abc-gutters-nov.xlsx · прайс от 11/01/2026 · цены без налога</div>
+          </div>
+          <div class="tabs" role="group" aria-label="Строки прайса">
+            <button type="button" aria-pressed="true" data-tab="changed">Изменились 5</button>
+            <button type="button" aria-pressed="false" data-tab="likely">Похоже 1</button>
+            <button type="button" aria-pressed="false" data-tab="same">Без изменений 9</button>
+            <button type="button" aria-pressed="false" data-tab="none">Нет в каталоге 31</button>
+          </div>
+          <div class="banner warn" id="test-banner">
+            <div class="h"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg><span>У 2 позиций тестовая цена и наценка 0 %. Без наценки цена клиенту будет равна закупке</span></div>
+            <div class="field"><label for="tmk">Наценка для них, %</label><input class="input" id="tmk" inputmode="decimal" placeholder="—" oninput="render()"></div>
+          </div>
+          <div class="list" id="rows"></div>
+        </div>
+        <div class="panel">
+          <div class="sum"><span id="sel-n">Отмечено 3 из 6</span></div>
+          <div class="hint" id="hint" aria-live="polite"></div>
+          <button class="btn primary full bar" type="button" id="apply" onclick="apply()">Применить 3</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 3. Итог ======== -->
+    <section class="col" aria-labelledby="h3s">
+      <h2 id="h3s">3. Итог</h2>
+      <p>Тост «Вернуть» 5 секунд. Отменить загрузку можно 30 дней из истории загрузок. Отправленные сметы не меняются.</p>
+      <div class="dev" id="scr-done" data-shot="done">
+        <div class="top">
+          <button class="iconbtn" type="button" aria-label="Назад"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+          <div><div class="sub">Каталог</div><div class="ttl">Обновить прайс</div></div>
+        </div>
+        <div class="body">
+          <div class="card ok-big">
+            <span class="chip ok"><i></i>Готово</span>
+            <div class="ttl" id="done-n">Обновлено цен: 3</div>
+            <div style="color:var(--mut)">Цена клиенту изменилась у 3 позиций — наценка осталась прежней.</div>
+          </div>
+          <div class="card" style="display:grid;gap:var(--s2)">
+            <b>Черновики с этими позициями: 2</b>
+            <div style="color:var(--mut);font-size:var(--fs-caption)">В черновиках цены остались прежними. Откройте черновик и нажмите «Пересчитать». Отправленные и подписанные сметы не меняются.</div>
+            <button class="btn" type="button">Открыть черновики</button>
+          </div>
+          <div class="card" style="display:grid;gap:var(--s1)">
+            <b>Отменить загрузку</b>
+            <div style="color:var(--mut);font-size:var(--fs-caption)">До 12/16/2026. Позиции, которые поменяют после загрузки, останутся как есть.</div>
+            <button class="btn" type="button" style="justify-self:start">Отменить загрузку</button>
+          </div>
+          <button class="btn primary full bar" type="button" onclick="go('prices')">Готово</button>
+        </div>
+        <div class="toast">Обновлено цен: 3<button type="button" onclick="this.parentNode.hidden=true">Вернуть</button></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+// Деньги в прототипе — целые центы; округление half up, как в движке (catalogPrice). Только показ.
+const ROWS = [
+  {id:"r1", tab:"changed", name:"Гаттер · 5″ · K-style · белый", from:"ABC #GUT5KW · 5\" K-Style White 50' roll — $115.50", unit:"ft", was:210, now:231, mk:0, test:true, pre:true},
+  {id:"r2", tab:"changed", name:"Водосток · 2×3 · белый", from:"ABC #DS23W · 2x3 Downspout White 10' — $19.80", unit:"ft", was:190, now:198, mk:3000, pre:true},
+  {id:"r3", tab:"changed", name:"Крюк · скрытый · 5″", from:"ABC #HH5 · Hidden hanger 5\" box/50 — $49.00", unit:"ea", was:102, now:98, mk:4000, pre:true},
+  {id:"r4", tab:"changed", name:"Колено A · 2×3 · белое", from:"ABC #ELA23W · Elbow A 2x3 White — $31.00", unit:"ea", was:240, now:3100, mk:3000, pre:false, big:true},
+  {id:"r5", tab:"changed", name:"Заглушка · 5″ · K-style", from:"ABC #EC5K · End cap 5\" K — $2.95", unit:"ea", was:350, now:295, mk:0, test:true, pre:false, sup:"Home Depot"},
+  {id:"r6", tab:"likely", name:"Герметик · туба", from:"ABC #SEAL10 · Gutter sealant 10oz — $7.40", unit:"ea", was:690, now:740, mk:3000, pre:false, likely:true},
+];
+const sel = new Set(ROWS.filter(r=>r.pre).map(r=>r.id));
+let tab = "changed";
+const money = c => "$" + (c/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const price = (cost, mk) => Math.floor(cost * (10000 + mk) / 10000 + 0.5);
+const pct = (a,b) => { const p = (b-a)/a*100; return (p>0?"+":"−") + Math.abs(p).toFixed(1) + "%"; };
+const tick = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M5 12l5 5 9-10"/></svg>';
+function testMk(){ const v = parseFloat(document.getElementById("tmk").value.replace(",", ".")); return isFinite(v) && v >= 0 ? Math.round(v*100) : null; }
+function render(){
+  const tm = testMk();
+  const box = document.getElementById("rows");
+  const list = ROWS.filter(r => r.tab === tab);
+  box.innerHTML = list.length ? list.map(r => {
+    const mk = r.test && r.mk === 0 && tm !== null ? tm : r.mk;
+    const up = r.now > r.was, big = Math.abs(r.now - r.was) / r.was >= .25;
+    const chip = r.likely ? '<span class="chip info"><i></i>Похоже — выберите</span>'
+      : big ? `<span class="chip bad"><i></i>Проверьте: ${pct(r.was,r.now)}</span>`
+      : `<span class="chip ${up?"warn":"ok"}"><i></i>${up?"↑":"↓"} ${pct(r.was,r.now)}</span>`;
+    const extra = [
+      r.sup ? `<span class="chip warn"><i></i>Поставщик сменится: ${r.sup} → ABC Supply</span>` : "",
+      r.test && mk === 0 ? '<span class="chip warn"><i></i>Клиенту по закупке</span>' : "",
+      r.likely ? '<span class="cl">Это «Герметик · туба»? Нажмите, чтобы выбрать</span>' : "",
+    ].join("");
+    const on = sel.has(r.id);
+    return `<div class="line" role="checkbox" tabindex="0" aria-checked="${on}" aria-label="Применить строку ${r.name}" data-id="${r.id}">
+      <div class="ck"><span class="box">${tick}</span></div>
+      <div class="main">
+        <div class="t"><span class="nm">${r.name}</span><span class="v"><s>${money(r.was)}</s> → ${money(r.now)}</span></div>
+        <div class="from">${r.from}</div>
+        <div class="meta">${chip}<span class="cl">Клиенту: ${money(price(r.was, r.mk))} → ${money(price(r.now, mk))} / ${r.unit} · наценка ${(mk/100).toFixed(0)}%</span>${extra}</div>
+      </div></div>`;
+  }).join("") : '<div class="card" style="color:var(--mut)">Здесь строки прайса без изменений или без позиции в каталоге. Их можно посмотреть, применять нечего.</div>';
+  box.querySelectorAll(".line").forEach(el => {
+    const t = () => { const id = el.dataset.id; sel.has(id) ? sel.delete(id) : sel.add(id); document.getElementById("hint").textContent=""; render(); };
+    el.onclick = t; el.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); t(); } };
+  });
+  document.getElementById("sel-n").textContent = `Отмечено ${sel.size} из ${ROWS.length}`;
+  document.getElementById("apply").textContent = `Применить ${sel.size}`;
+}
+document.querySelectorAll("[data-tab]").forEach(b => b.onclick = () => {
+  tab = b.dataset.tab; document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-pressed", x === b)); render();
+});
+function apply(){
+  if (!sel.size) { document.getElementById("hint").textContent = "Отметьте строки, которые хотите обновить"; return; }
+  document.getElementById("done-n").textContent = "Обновлено цен: " + sel.size;
+  go("done");
+}
+function go(id){ document.getElementById("scr-" + id).scrollIntoView({behavior:"smooth", block:"center"}); }
+function openQuick(){ document.getElementById("q-scrim").hidden = false; document.getElementById("q-sheet").hidden = false; document.getElementById("q-toast").hidden = true; quickCalc(); document.getElementById("q-cost").focus(); }
+function closeQuick(){ document.getElementById("q-scrim").hidden = true; document.getElementById("q-sheet").hidden = true; }
+function quickCalc(){
+  const c = Math.round(parseFloat(document.getElementById("q-cost").value.replace(/[$,\s]/g,"")) * 100);
+  const m = Math.round(parseFloat(document.getElementById("q-mk").value.replace(",", ".")) * 100) || 0;
+  document.getElementById("q-client").textContent = isFinite(c) ? money(price(c, m)) + " / ft" : "—";
+}
+function quickSave(){ closeQuick(); document.getElementById("q-toast").hidden = false; }
+document.querySelectorAll("[data-theme-btn]").forEach(b => b.onclick = () => {
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+  document.querySelectorAll("[data-theme-btn]").forEach(x => x.setAttribute("aria-pressed", x === b));
+});
+const qs = new URLSearchParams(location.search);
+if (qs.get("theme")) document.documentElement.dataset.theme = qs.get("theme");
+render();
+if (qs.get("sheet") === "1") openQuick();
+</script>
+</body>
+</html>
