@@ -15393,4 +15393,129 @@ select tst.ok(app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f2
               'T280 sales (not on the job): their receipt with a live expense and their photo get their bytes');
 \echo 'T280 the office and sales as before ok'
 
+-- ---------------------------------------------------------------- T285–T289 (spec 42 §14, #1673): the company a person works in
+-- Pat is office in A; B invites him as admin. users.last_active_company_id — only a company he is active in (red before
+-- 20261116013000); a push says whose company it is (red before 20261116013100).
+\set as_pat285 'reset role; set request.jwt.claim.sub = ''a2850000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a2850000-0000-4000-8000-000000000001', 'pat285@a.test', '{"full_name":"Pat Two"}');
+select tst.agree('a2850000-0000-4000-8000-000000000001');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'office', 'active');
+-- his own third company, closed below (no triggers: a fixture, not a sign-up)
+set session_replication_role = replica;
+insert into public.companies (id, name) values ('cc285000-0000-4000-8000-000000000000', 'Pat Closed Co');
+insert into public.memberships (company_id, user_id, role, status) values ('cc285000-0000-4000-8000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'owner', 'active');
+set session_replication_role = origin;
+
+-- T285: the guard — his own active company yes; another company, switched off, removed, closed — 42501; null yes
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'ca000000-0000-0000-0000-000000000000',
+              'T285 his own active company is written');
+select tst.fails_like($q$update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company he is not in is refused');
+update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') is null, 'T285 null is written');
+:as_super
+set session_replication_role = replica;  -- a fixture: closed as delete_account would
+update public.companies set closed_at = now() where id = 'cc285000-0000-4000-8000-000000000000';
+set session_replication_role = origin;
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'cc285000-0000-4000-8000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a closed company is refused');
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+update public.users set full_name = 'Pat T.' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select full_name from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'Pat T.',
+              'T285 switched off in A with A still written: his name still changes (only a change of the company is checked)');
+:as_super
+update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company where he is switched off is refused');
+:as_super
+update public.memberships set status = 'active', deleted_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+:as_pat285
+select tst.fails_like($q$update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 a company he was removed from is refused');
+-- the check is of the row's person, whoever writes (the database owner, a definer function): no way round it
+:as_super
+select tst.fails_like($q$update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001'$q$,
+                      '%not a company of yours%', 'T285 the database owner cannot write a company that is not his either');
+update public.memberships set deleted_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001';
+\echo 'T285 last_active_company_id: only an open company the person is active in ok'
+
+-- T286: another person's company field is never changed through someone else; switching a person off leaves it (the
+-- phone checks it against the memberships it reads, spec 42 §14.8 С6)
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.blocked($q$update public.users set last_active_company_id = null where id = 'a2850000-0000-4000-8000-000000000001'$q$, 'T286 the owner of A does not write Pat''s company field');
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'disabled'); end $$;
+select tst.ok((select status from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a2850000-0000-4000-8000-000000000001') = 'disabled',
+              'T286 set_member_status switches him off with A still written (the guard checks only a change)');
+:as_super
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'ca000000-0000-0000-0000-000000000000',
+              'T286 and his field is left as it was');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
+\echo 'T286 another person''s field and set_member_status ok'
+
+-- T287: accept_invitation still makes the new company the last one (the guard lets it: the membership is in first)
+:as_owner_b
+select public.invite_member('cb000000-0000-0000-0000-000000000000', 'pat285@a.test', 'admin', 'Pat Two') ->> 'token' as t287_token \gset
+:as_pat285
+select tst.ok((public.accept_invitation(:'t287_token') ->> 'company_id') = 'cb000000-0000-0000-0000-000000000000', 'T287 Pat joins B');
+:as_super
+select tst.ok((select last_active_company_id from public.users where id = 'a2850000-0000-4000-8000-000000000001') = 'cb000000-0000-0000-0000-000000000000',
+              'T287 the company he just joined is his last one on the server');
+:as_pat285
+update public.users set last_active_company_id = 'ca000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok((select count(*) from public.memberships where user_id = 'a2850000-0000-4000-8000-000000000001' and status = 'active' and deleted_at is null) = 3,
+              'T287 he switches back to A: active in A, B (and the closed one — not offered by the app)');
+\echo 'T287 accept_invitation and the last company ok'
+
+-- T288: push_claim says whose company the row is, its name and how many open companies the person is active in
+:as_super
+delete from public.push_outbox;
+insert into public.push_devices (id, user_id, expo_token, platform, lang) values
+  ('d2850000-0000-4000-8000-000000000001', 'a2850000-0000-4000-8000-000000000001', 'ExponentPushToken[t285-pat]', 'ios', 'en');
+insert into public.push_outbox (company_id, user_id, kind, route) values
+  ('cb000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'payment.received', '/notifications');
+create temp table t288_claim (v jsonb);
+grant select, insert on t288_claim to service_role;
+reset role; set role service_role;
+insert into t288_claim select public.push_claim(100);
+:as_super
+select tst.ok((select jsonb_array_length(v) = 1 and v -> 0 ->> 'company' = 'cb000000-0000-0000-0000-000000000000'
+                      and v -> 0 ->> 'company_name' = 'Rival Roofing' and (v -> 0 ->> 'companies')::int = 2 from t288_claim),
+              'T288 the row carries its own company, the company''s name and two open companies (the closed one does not count)');
+select tst.ok(not (select v::text ~ '(Pat|Bonpoc|\$|total|customer)' from t288_claim), 'T288 nothing of the other company, no names or sums');
+reset role; set role authenticated;
+select tst.fails('select public.push_claim(100)', 'T288 push_claim is the service''s only');
+:as_super
+delete from public.push_outbox where user_id = 'a2850000-0000-4000-8000-000000000001';
+delete from public.push_devices where user_id = 'a2850000-0000-4000-8000-000000000001';
+\echo 'T288 push_claim names the company ok'
+
+-- T289: a person in A and B never ties B's records to A's (the composite keys): a client of A in a B job — refused;
+-- switched off in A, B's last company does not open A
+:as_pat285
+select tst.fails($q$insert into public.jobs (company_id, number, title, customer_id, property_id, status) values
+  ('cb000000-0000-0000-0000-000000000000', 'T289', 'T289 job', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'scheduled')$q$,
+  'T289 a B job with A''s client is refused');
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) > 0, 'T289 office in A: sees A''s clients');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'disabled'); end $$;
+:as_pat285
+update public.users set last_active_company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a2850000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0
+              and tst.cnt($q$select 1 from public.jobs where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0,
+              'T289 switched off in A: nothing of A, whatever his last company');
+:as_owner_a
+do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
+\echo 'T289 two companies stay apart ok'
+
 \echo 'ALL TESTS PASSED'

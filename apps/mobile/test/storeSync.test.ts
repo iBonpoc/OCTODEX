@@ -1928,3 +1928,52 @@ describe("unit:storeSync — a saved estimate is normalized before it is counted
     expect(e.doc!.options[0]!.lines.map((l) => l.clientVisible)).toEqual([undefined, false]);
   });
 });
+
+describe("unit:companySwitch — the store before and after a switch (spec 42 S34, §2.3, §14, #1673)", () => {
+  type SwitchValue = { sendBeforeSwitch: (ms?: number) => Promise<number>; companyLoaded: boolean; mode: string };
+  const sv = (r: Root<P>) => (r.out as { props: { value: SwitchValue } }).props.value;
+  it("my changes here go before the switch: the answer is how many are left (0 — all sent); another company's wait", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(u1c1, 1), owned({ userId: "u1", companyId: "c2" }, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    const left = sv(r).sendBeforeSwitch(5_000);
+    await wait(1700);
+    await settle();
+    // only c1's goes, to c1
+    expect(server.sends.map((x) => [(x.op as { id: string }).id, x.companyId])).toEqual([["u1@c1#1", "c1"]]);
+    server.sends[0]!.d.resolve();
+    expect(await left).toBe(0);
+    expect(stored().map((x) => x.id)).toEqual(["o-u1@c2#1"]);
+  });
+  it("no network: nothing waits — the count of mine left is the answer at once", async () => {
+    seedOutbox(owned(u1c1, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    (r.out as { props: { value: Value } }).props.value.setOnline(false);
+    await settle();
+    const t0 = Date.now();
+    expect(await sv(r).sendBeforeSwitch(5_000)).toBe(1);
+    expect(Date.now() - t0).toBeLessThan(1_000);
+  });
+  it("a company never loaded on this phone is not «loaded» until the server answers; the demo always is", async () => {
+    signIn("u1", "c9");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(sv(r).mode).toBe("cloud");
+    expect(sv(r).companyLoaded).toBe(false);
+    root.unmount();
+    signOut();
+    const d = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(sv(d).companyLoaded).toBe(true);
+  });
+  it("П5: an older cache that holds its company counts as loaded (no flag needed)", async () => {
+    storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: { me: "u1", company: { id: "c1", name: "Co" } } }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(sv(r).companyLoaded).toBe(true);
+  });
+});

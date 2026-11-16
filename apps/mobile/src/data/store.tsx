@@ -268,6 +268,17 @@ interface StoreCtx {
   dropUnsentIn: (companyId: ID) => boolean;
   /** #1669: the companies I was removed from (the server confirmed) that still have my changes on this phone, with how many */
   unsentRemoved: RemovedUnsent[];
+  /**
+   * Spec 42 S34 (§14, #1673): the company's data has come from the server at least once on this phone (the cache holds
+   * the company). false in the cloud right after a switch to a company never opened here — without the network the
+   * screens say «Данные «B» загрузятся, когда будет сеть». An older cache with its company counts as loaded. Demo: true.
+   */
+  companyLoaded: boolean;
+  /**
+   * Spec 42 §2.3 (1): before a switch — my changes in this company go now (with the network, at most `ms`, the
+   * «Отменить» windows waited out); the answer is how many of mine are still on the phone for it (0 — all sent).
+   */
+  sendBeforeSwitch: (ms?: number) => Promise<number>;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -1366,6 +1377,17 @@ export function StoreProvider({
     });
   };
   const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
+  // spec 42 §2.3 (1): the person's changes here go before the switch; never longer than `ms`, never for another owner
+  const sendBeforeSwitch = async (ms = 10_000): Promise<number> => {
+    const w = whoRef.current;
+    if (!w) return 0;
+    const end = Date.now() + ms;
+    while (Date.now() < end && sameOwner(whoRef.current, w) && onlineRef.current && mineOf(outboxRef.current, w).some((o) => !o.stuck)) {
+      void flush();
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return mineOf(outboxRef.current, w).length;
+  };
   // like discardOp: refused while one of them is on its way to the server (it would get there although the card says no)
   const dropUnsentIn = (companyId: ID): boolean => {
     const gone = new Set(unsentInOf(outboxRef.current, auth.userId ?? null, companyId).map((o) => o.id));
@@ -1571,6 +1593,8 @@ export function StoreProvider({
       unsentIn: unsentInCompany,
       dropUnsentIn,
       unsentRemoved,
+      companyLoaded: mode !== "cloud" || !!db.company,
+      sendBeforeSwitch,
       refresh,
       loading,
       setOnline: (v) => {
