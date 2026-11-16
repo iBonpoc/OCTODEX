@@ -15660,4 +15660,57 @@ select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'ca00
 do $$ begin perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a2850000-0000-4000-8000-000000000001', 'active'); end $$;
 \echo 'T289 two companies stay apart ok'
 
+-- ======================================================================================================================
+-- T292 (#1776, director №13 16.11): a sent estimate stays as it went to the client. A gutters estimate whose engine changed
+-- (a plain downspout has no elbows by default now) is not updated once sent: the app offers «Обновить» on a draft only; here
+-- the server's side — (1) new lines are never saved into the sent (locked) version; (2) when a person does change a sent
+-- estimate (sent → draft, a new version), the version the client got keeps its lines (the 3 × A elbow line and all).
+-- ======================================================================================================================
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e2920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T292');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('f2920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e2920000-0000-4000-8000-000000000001', 1);
+create function tst.t292_save(p_version uuid, p_option uuid, p_lines jsonb) returns void language sql set search_path = '' as $$
+  select public.save_estimate_version('e2920000-0000-4000-8000-000000000001', p_version, 'T292',
+    jsonb_build_object('calc_inputs', jsonb_build_object('mark', 't292'), 'engine_version', 't', 'tax_enabled', false, 'tax_mode', 'added_on_top'),
+    jsonb_build_array(jsonb_build_object('id', p_option, 'name', 'A', 'position', 0)), p_lines, '[]'::jsonb)
+$$;
+grant execute on function tst.t292_save(uuid, uuid, jsonb) to authenticated;
+-- version 1, as the old engine counted it: the gutter (40′ 5″) and 3 × A elbows of a plain downspout
+:as_office_a
+select tst.t292_save('f2920000-0000-4000-8000-000000000001', 'a2920000-0000-4000-8000-0000000000a1', '[
+  {"id": "b2920000-0000-4000-8000-0000000000b1", "option_id": "a2920000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "material", "name": "Gutter", "quantity": "40.4167", "unit": "ft", "unit_price_cents": 1234, "client_visible": true},
+  {"id": "b2920000-0000-4000-8000-0000000000b2", "option_id": "a2920000-0000-4000-8000-0000000000a1", "position": 1, "line_group": "material", "name": "Elbow A", "quantity": "3", "unit": "ea", "unit_price_cents": 900, "client_visible": true}]');
+:as_super
+select tst.server($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = 'f2920000-0000-4000-8000-000000000001'$q$);
+select tst.server($q$update public.estimates set status = 'sent', sent_version_id = 'f2920000-0000-4000-8000-000000000001' where id = 'e2920000-0000-4000-8000-000000000001'$q$);
+create function tst.t292_v1() returns boolean language sql as $$
+  select (select count(*) = 2 and sum(line_total_cents) = 49874 + 2700 from public.estimate_line_items li join public.estimate_options o on o.id = li.option_id where o.version_id = 'f2920000-0000-4000-8000-000000000001')
+     and exists (select 1 from public.estimate_line_items where id = 'b2920000-0000-4000-8000-0000000000b2' and quantity = 3 and unit_price_cents = 900)
+$$;
+select tst.ok(tst.t292_v1(), 'T292 the sent version: the gutter and the 3 × A elbow line, $498.74 + $27.00');
+-- (1) the new engine's lines (no elbow line) into the sent version: refused, the version as it went
+:as_office_a
+select tst.fails_like($q$select tst.t292_save('f2920000-0000-4000-8000-000000000001', 'a2920000-0000-4000-8000-0000000000a1', '[{"id": "b2920000-0000-4000-8000-0000000000b1", "option_id": "a2920000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "material", "name": "Gutter", "quantity": "40.4167", "unit": "ft", "unit_price_cents": 1234, "client_visible": true}]')$q$,
+                 '%is locked%', 'T292 new lines into the sent (locked) version: refused by the version lock');
+-- the same as a tech of the company and as another company: refused (a tech may not change estimates; B does not see A's)
+:as_tech_a
+select tst.fails($q$select tst.t292_save('f2920000-0000-4000-8000-000000000001', 'a2920000-0000-4000-8000-0000000000a1', '[{"id": "b2920000-0000-4000-8000-0000000000b1", "option_id": "a2920000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "material", "name": "Gutter", "quantity": "40.4167", "unit": "ft", "unit_price_cents": 1234, "client_visible": true}]')$q$, 'T292 a tech: refused');
+:as_owner_b
+select tst.fails($q$select tst.t292_save('f2920000-0000-4000-8000-000000000001', 'a2920000-0000-4000-8000-0000000000a1', '[{"id": "b2920000-0000-4000-8000-0000000000b1", "option_id": "a2920000-0000-4000-8000-0000000000a1", "position": 0, "line_group": "material", "name": "Gutter", "quantity": "40.4167", "unit": "ft", "unit_price_cents": 1234, "client_visible": true}]')$q$, 'T292 another company: refused');
+:as_super
+select tst.ok(tst.t292_v1(), 'T292 refused: the sent version''s lines are as they went (the elbow line is there)');
+-- (2) a person changes the sent estimate (the app's save: sent → draft and a new version): the client's version stays
+:as_office_a
+update public.estimates set status = 'draft' where id = 'e2920000-0000-4000-8000-000000000001';
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values ('f2920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e2920000-0000-4000-8000-000000000001', 2);
+select tst.t292_save('f2920000-0000-4000-8000-000000000002', 'a2920000-0000-4000-8000-0000000000a2', '[{"id": "b2920000-0000-4000-8000-0000000000b3", "option_id": "a2920000-0000-4000-8000-0000000000a2", "position": 0, "line_group": "material", "name": "Gutter", "quantity": "40.4167", "unit": "ft", "unit_price_cents": 1234, "client_visible": true}]');
+:as_super
+select tst.ok((select status = 'draft' and current_version_id = 'f2920000-0000-4000-8000-000000000002' and sent_version_id = 'f2920000-0000-4000-8000-000000000001' from public.estimates where id = 'e2920000-0000-4000-8000-000000000001')
+              and tst.t292_v1()
+              and (select count(*) = 1 and sum(line_total_cents) = 49874 from public.estimate_line_items li join public.estimate_options o on o.id = li.option_id where o.version_id = 'f2920000-0000-4000-8000-000000000002'),
+              'T292 sent → draft: a new version without the elbow line; the sent version (what the client got) keeps its lines');
+\echo 'T292 a sent estimate keeps the lines it went with ok'
+
 \echo 'ALL TESTS PASSED'
