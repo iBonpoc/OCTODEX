@@ -122,7 +122,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
     case "people":
       return (
         <>
-          {office ? <Button label={t("client.people")} icon="users" variant="secondary" onPress={() => setPeople(true)} /> : null}
+          {office ? <Button label={t("client.people")} icon="users" variant="secondary" testID="client-people-edit" onPress={() => setPeople(true)} /> : null}
           <CardList>
             {r.people.map((p) => (
               <Card key={p.id}>

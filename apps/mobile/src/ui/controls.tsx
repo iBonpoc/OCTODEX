@@ -763,7 +763,8 @@ export function ChoiceChips<K extends string>({
     const seg = <Segmented radio full label={label} testID={testID} items={items} value={value} onChange={onChange} />;
     // with a `label` the field names itself: a caption over the segment, the row's label in a field
     return label ? (
-      <View style={{ gap: space[1] }}>
+      // the field's box carries the testID (a field with a menu does the same): tests find the choice, not its words
+      <View style={{ gap: space[1] }} testID={testID}>
         <T v="caption" tone="mut" w="semibold">
           {label}
         </T>

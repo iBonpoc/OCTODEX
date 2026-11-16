@@ -16,7 +16,10 @@ exports.run = async (h) => {
   await h.sheet().getByPlaceholder("Город", { exact: true }).fill("Pasadena");
   await h.sheet().getByPlaceholder("91103", { exact: true }).fill("91105");
   await h.sheet().getByPlaceholder("Дом, Сдаётся, Офис…", { exact: true }).fill("Сдаётся");
-  await h.sheet().getByRole("radio", { name: "Многоквартирный" }).click();
+  // the kind is a field with a menu now, not wrapping chips (DS §А1в, #1797): open it, pick by testID
+  await h.sheet().getByTestId("property-kind-button").click();
+  await p.getByTestId("property-kind-multi_family").locator("visible=true").first().click();
+  await p.getByRole("menu").locator("visible=true").waitFor({ state: "detached", timeout: 3000 });
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   let db = await h.db();

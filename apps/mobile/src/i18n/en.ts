@@ -1235,6 +1235,8 @@ export const en: Dict = {
   "client.stHint.archived": "Hidden from \"All\"; history and documents are kept.",
   "client.stHint.do_not_service": "No new jobs, estimates or visits for this client; open estimate links close. A new lead with their phone gets a red mark. Give a reason.",
   "client.statusTitle": "Client status",
+  "client.f.role": "Who is this",
+  "client.f.phoneKind": "Number type",
   "client.statusSaved": "Status changed",
   "client.reason": "Reason: {r}",
   "client.reasonPlaceholder": "Why we don't service",

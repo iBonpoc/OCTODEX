@@ -166,8 +166,11 @@ export default function EditClient() {
       ) : null}
 
       {!creating ? (
-          <FieldGroup title={t("client.row.billing")}>
+          <FieldGroup>
+            {/* the field names itself (a segment with its caption, DS §А1в, #1797) */}
             <ChoiceChips<"same" | "own">
+              label={t("client.row.billing")}
+              testID="client-billing"
               value={billingOwn ? "own" : "same"}
               onChange={(v) => setBillingOwn(v === "own")}
               items={[

@@ -77,10 +77,9 @@ function MergeSheet({ here, other, onClose, visible, onExited }: { here: Custome
   };
   return (
     <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("clientDup.sheetTitle")}>
-      <T v="caption" tone="mut">
-        {t("clientDup.keep")}
-      </T>
       <ChoiceChips<string>
+        label={t("clientDup.keep")}
+        testID="client-dup-keep"
         value={keep}
         onChange={setKeep}
         items={[here, other].map((x) => ({ key: x.id, label: [x.name, x.number].filter(Boolean).join(" · ") }))}

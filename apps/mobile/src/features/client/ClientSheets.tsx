@@ -11,7 +11,6 @@ import { peopleOf } from "@/data/people";
 import { clientStatusChip, statusChoices, statusOf, tagLabel } from "@/features/clients";
 import type { Customer, CustomerStatus, Person, PersonRole, PhoneLabel } from "@/data/types";
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
-import { Labeled } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, MultiChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -69,13 +68,14 @@ export function PeopleEditSheet({
   /** phones and emails of one person: "+ Phone" / "+ Email" are buttons; with several, one is marked "primary" */
   const fields = (p: Person, i: number) => (
     <>
-      <Labeled label={t("lead.langLabel")}>
-        <ChoiceChips<DocLang | "">
-          value={p.language ?? ""}
-          onChange={(v) => edit(i, (x) => ({ ...x, language: v || undefined }))}
-          items={[{ key: "", label: t("lead.any") }, ...DOC_LANGS.map((k) => ({ key: k, label: DOC_LANG_LABEL[k] }))]}
-        />
-      </Labeled>
+      {/* never wrapping chips (DS §А1в, #1797): a segment, or a field with a menu when it does not fit */}
+      <ChoiceChips<DocLang | "">
+        label={t("lead.langLabel")}
+        testID={`person-${i}-lang`}
+        value={p.language ?? ""}
+        onChange={(v) => edit(i, (x) => ({ ...x, language: v || undefined }))}
+        items={[{ key: "", label: t("lead.any") }, ...DOC_LANGS.map((k) => ({ key: k, label: DOC_LANG_LABEL[k] }))]}
+      />
       {p.phones.map((ph, k) => (
         <View key={`ph${k}`} style={{ gap: space[2] }}>
           <RowView>
@@ -89,12 +89,14 @@ export function PeopleEditSheet({
             </View>
             <IconButton icon="trash" label={t("person.removePhone")} onPress={() => edit(i, (x) => ({ ...x, phones: x.phones.filter((_, j) => j !== k) }))} />
           </RowView>
+          <ChoiceChips<PhoneLabel>
+            label={t("client.f.phoneKind")}
+            testID={`person-${i}-phone-${k}-kind`}
+            value={ph.label}
+            onChange={(l) => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => (j === k ? { ...y, label: l } : y)) }))}
+            items={LABELS.map((l) => ({ key: l, label: t(`phone.${l}` as DictKey) }))}
+          />
           <RowView style={{ flexWrap: "wrap" }}>
-            <ChoiceChips<PhoneLabel>
-              value={ph.label}
-              onChange={(l) => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => (j === k ? { ...y, label: l } : y)) }))}
-              items={LABELS.map((l) => ({ key: l, label: t(`phone.${l}` as DictKey) }))}
-            />
             {p.phones.length > 1 ? (
               ph.primary ? (
                 <T v="caption" tone="mut">
@@ -183,6 +185,8 @@ export function PeopleEditSheet({
               />
             </RowView>
             <ChoiceChips<PersonRole>
+              label={t("client.f.role")}
+              testID={`person-${i}-role`}
               value={p.role}
               onChange={(r) => edit(i, (x) => ({ ...x, role: r }))}
               items={ROLES.filter((r) => r !== "main").map((r) => ({ key: r, label: t(`person.role.${r}` as DictKey) }))}
@@ -277,7 +281,7 @@ export function StatusSheet({ visible, customer, onClose, preset }: { visible: b
   };
   return (
     <Sheet visible={visible} onClose={onClose} title={t("client.statusTitle")} dirty={dirty} onSave={ok ? save : undefined}>
-      <ChoiceChips<CustomerStatus> value={st} onChange={setSt} items={options.map((s) => ({ key: s, label: t(clientStatusChip[s].l) }))} />
+      <ChoiceChips<CustomerStatus> label={t("client.statusTitle")} testID="client-status-pick" value={st} onChange={setSt} items={options.map((s) => ({ key: s, label: t(clientStatusChip[s].l) }))} />
       <StatusChip status={clientStatusChip[st].s} label={t(clientStatusChip[st].l)} />
       <T v="caption" tone="mut">
         {t(`client.stHint.${st}` as DictKey)}

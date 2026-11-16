@@ -1234,6 +1234,8 @@ export const ru = {
   "client.stHint.archived": "Скрыт из списка «Все», история и документы сохраняются.",
   "client.stHint.do_not_service": "Новые работы, сметы и выезды этому клиенту не назначить, открытые ссылки на сметы закроются. Новый лид с его телефоном — с красной меткой. Укажите причину.",
   "client.statusTitle": "Статус клиента",
+  "client.f.role": "Кто это",
+  "client.f.phoneKind": "Тип номера",
   "client.statusSaved": "Статус изменён",
   "client.reason": "Причина: {r}",
   "client.reasonPlaceholder": "Почему не обслуживаем",

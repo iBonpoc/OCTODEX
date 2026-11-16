@@ -70,13 +70,13 @@ export function PropertySheet({ value, onClose }: { value: Property | null; onCl
       <Labeled label={t("prop.label")}>
         <TextField type="text" value={d.label ?? ""} onChangeText={(v) => set({ label: v })} placeholder={t("prop.labelHint")} label={t("prop.label")} />
       </Labeled>
-      <Labeled label={t("prop.kind")}>
-        <ChoiceChips<PropertyKind | "">
-          value={d.kind ?? ""}
-          onChange={(v) => set({ kind: v || undefined })}
-          items={[{ key: "", label: t("lead.any") }, ...PROPERTY_KINDS.map((k) => ({ key: k, label: t(`prop.kind.${k}` as DictKey) }))]}
-        />
-      </Labeled>
+      <ChoiceChips<PropertyKind | "">
+        label={t("prop.kind")}
+        testID="property-kind"
+        value={d.kind ?? ""}
+        onChange={(v) => set({ kind: v || undefined })}
+        items={[{ key: "", label: t("lead.any") }, ...PROPERTY_KINDS.map((k) => ({ key: k, label: t(`prop.kind.${k}` as DictKey) }))]}
+      />
       <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
     </Sheet>
   );

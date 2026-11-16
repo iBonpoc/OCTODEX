@@ -1235,6 +1235,8 @@ export const es: Dict = {
   "client.stHint.archived": "Oculto de «Todos»; se guardan historial y documentos.",
   "client.stHint.do_not_service": "No se pueden asignar trabajos, presupuestos ni visitas nuevos; los enlaces abiertos de presupuestos se cierran. Un lead nuevo con su teléfono tendrá una marca roja. Indique el motivo.",
   "client.statusTitle": "Estado del cliente",
+  "client.f.role": "Quién es",
+  "client.f.phoneKind": "Tipo de número",
   "client.statusSaved": "Estado cambiado",
   "client.reason": "Motivo: {r}",
   "client.reasonPlaceholder": "Por qué no atendemos",
