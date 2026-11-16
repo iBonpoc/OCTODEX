@@ -38,3 +38,9 @@ revoke all on function app.tg_users_last_active_guard() from public, anon, authe
 drop trigger if exists t15_last_active_guard on public.users;
 create trigger t15_last_active_guard before insert or update of last_active_company_id on public.users
   for each row execute function app.tg_users_last_active_guard();
+
+-- 3 ------------------------------------------------------------------------------------------------
+-- security-check of the wave: the guard checks only a change, so after a switch-off or a closing the old value stays
+-- (on purpose, T286) — the column is a hint for which company a phone opens, never a right
+comment on column public.users.last_active_company_id is
+  'The company the person last worked in (spec 42 S34): a hint for which company a new phone opens. Never a right: read it only together with an active membership of that company.';
