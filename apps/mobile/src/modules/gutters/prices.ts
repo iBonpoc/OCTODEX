@@ -11,7 +11,7 @@
  * «insert, or nothing if it is there» (catalog.save onlyNew): a second press, a second phone, the queue sending twice —
  * one item, and a price someone already set is never overwritten by the test one.
  */
-import { computeGutterParts, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
+import { computeGutterParts, defaultElbowsFor, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogMatch } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
@@ -102,6 +102,10 @@ export function sampleJob(raw: unknown): MeasurementInput {
   const ra = newRunAttrs(ch);
   const stock = { profile: ra.profile, size: ra.size, material: ra.material, gauge: ra.gauge, finish: ra.finish, color: ra.color };
   const run = (id: string, lengthIn: number, ends: MeasurementInput["runs"][number]["ends"]) => ({ ...ra, id, lengthIn, ends, houseSide: "R" as const });
+  // the downspout's elbow is in the price list whatever its kind: a plain rectangular one has none by default (#1776), so the
+  // sample gives it one A — a company that has elbows put on a plain one by hand still finds that elbow priced
+  const ds0 = newDsAttrs(ch) as Omit<MeasurementInput["downspouts"][number], "id" | "runId">;
+  const sampleDs = ds0.shape !== "round" && !ds0.elbows && defaultElbowsFor(ds0).length === 0 ? { ...ds0, elbows: [{ style: "A", qty: 1 }] } : ds0;
   return {
     runs: [
       // guards on the first run: the price list gets the guard row too (the starter «Только guards», #1323)
@@ -113,7 +117,7 @@ export function sampleJob(raw: unknown): MeasurementInput {
       { ...stock, id: "c1", kind: "out", method, story: 1 },
       { ...stock, id: "c2", kind: "in", method, story: 1 },
     ],
-    downspouts: [{ ...(newDsAttrs(ch) as Omit<MeasurementInput["downspouts"][number], "id" | "runId">), id: "d", runId: "a" }],
+    downspouts: [{ ...sampleDs, id: "d", runId: "a" }],
   };
 }
 

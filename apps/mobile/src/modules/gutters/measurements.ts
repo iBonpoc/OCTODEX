@@ -8,6 +8,7 @@ import type { DB, Estimate } from "@/data/types";
 import { fromElements } from "./canvas/model";
 import type { MeasurementRow } from "./canvas/model";
 import { gutterData } from "./data";
+import { GUTTER_PARTS_VERSION } from "@octo/estimating-engine";
 import { engineChangedFor, estimateOfMeasurement, ofMeasurement } from "./estimateLink";
 import { runLengthIn } from "./geometry";
 
@@ -35,7 +36,7 @@ export interface MeasurementStateView {
   engineChanged: boolean;
 }
 
-type StateDB = Pick<DB, "estimates">;
+type StateDB = Pick<DB, "estimates"> & Partial<Pick<DB, "moduleData" | "company">>;
 
 /** the state of one measurement (П25.4); `drawn` — something is drawn (an emptied drawing makes no lines: never «changed») */
 export function measurementState(db: StateDB, m: Pick<MeasurementRow, "id" | "status" | "leadId" | "propertyId">, drawn: boolean): MeasurementStateView {
@@ -45,9 +46,9 @@ export function measurementState(db: StateDB, m: Pick<MeasurementRow, "id" | "st
   // sign `staleMeasurements` reads
   const changed = drawn && m.status === "draft";
   const signed = mine.find((e) => SIGNED.has(e.status));
-  if (signed) return { state: "signed", estimate: signed, changed, engineChanged: engineChangedFor(signed, m.id) };
+  if (signed) return { state: "signed", estimate: signed, changed, engineChanged: false }; // never changed, nothing to update (#1776)
   const e = estimateOfMeasurement(db, m.id);
-  if (e) return { state: "estimate", estimate: e, changed, engineChanged: engineChangedFor(e, m.id) };
+  if (e) return { state: "estimate", estimate: e, changed, engineChanged: engineChangedFor(e, m.id, GUTTER_PARTS_VERSION, db) };
   return { state: "noEstimate", changed: false, engineChanged: false };
 }
 
@@ -69,7 +70,7 @@ export interface MeasurementItem {
   view: MeasurementStateView;
 }
 
-type ListDB = Pick<DB, "moduleData" | "leads" | "properties" | "customers" | "estimates">;
+type ListDB = Pick<DB, "moduleData" | "leads" | "properties" | "customers" | "estimates"> & Partial<Pick<DB, "company">>;
 
 export function measurementList(db: ListDB): MeasurementItem[] {
   const g = gutterData(db);
