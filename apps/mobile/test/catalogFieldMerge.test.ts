@@ -140,6 +140,11 @@ describe("unit:catalogFieldMerge — to the server", () => {
     expect(server.updates).toEqual([{ service_category_id: "sc-new" }]);
     expect(server.upserts).toEqual([]);
   });
+  it("a field name that is no column of the item (an inherited key, a server column) is never sent", async () => {
+    server.row = { id: "i1" };
+    await applyOp({ k: "catalog.save", item: { ...base, name: "v" }, costs: {}, fields: ["__proto__", "toString", "row_version", "company_id", "deleted_at", "name"] }, "co", "u");
+    expect(server.updates).toEqual([{ name: "v" }]);
+  });
   it("another refusal stays the op's", async () => {
     server.row = { id: "i1" };
     server.updateErrors.push({ code: "23514", message: "new row violates check constraint" });

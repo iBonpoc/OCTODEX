@@ -1091,7 +1091,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.fields && !op.onlyNew) {
         const cols = catalogItemCols(it);
         const pick = (withCard: boolean): Record<string, unknown> => ({
-          ...Object.fromEntries(op.fields!.filter((f) => f in cols && (withCard || !(f in card))).map((f) => [f, cols[f]])),
+          ...Object.fromEntries(op.fields!.filter((f) => own(cols, f) && (withCard || !own(card, f))).map((f) => [f, cols[f]])),
           ...costCols,
         });
         const update = (row: Record<string, unknown>) => supabase.from("catalog_items").update(row).eq("id", it.id).eq("company_id", c).select("id");
@@ -1288,6 +1288,8 @@ export function catalogItemCols(it: CatalogItem): Record<string, unknown> {
     ...catalogCardCols(it),
   };
 }
+/** the object's own key (never an inherited one such as «__proto__»: a queued op's field names are only data) */
+const own = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
 /** a value as text with an object's keys in order: {a, b} and {b, a} are the same properties */
 const canon = (v: unknown): string =>
   JSON.stringify(v ?? null, (_k, x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
