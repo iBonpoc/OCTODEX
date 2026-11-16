@@ -341,7 +341,7 @@ export const WHY_RULES = [
   "rivets_per_joints", "ds_joint_screws", "joint_screws", "kit_screws", "kit_anchors", "hangers_spacing", "kit_per_hanger",
   "ds_straps_per_ds", "flat_coil_straps", "touch_up_per_color", "corner_allowance", "coil_reserve", "bend_in_place",
   "ds_round_up", "ds_sticks", "slip_joints", "outlet_per_ds", "endcap_free_end", "splash_guard_inside", "expansion_joint",
-  "guard_pieces",
+  "guard_pieces", "adapter_per_bottom",
 ] as const;
 export type WhyRule = (typeof WHY_RULES)[number];
 export interface PartWhy {
@@ -561,7 +561,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   let solderWhy: PartWhy | undefined;
   const JW: Record<JointKind, [string, string]> = {
     section: ["sections", "perSection"], endcap: ["endcaps", "perEndcap"], outlet: ["outlets", "perOutlet"], ds: ["dsJoints", "perDsJoint"],
-    corner_prefab: ["corners", "perCorner"], corner_cut: ["corners", "perCorner"], corner_strip: ["corners", "perCorner"],
+    corner_prefab: ["prefabCorners", "perPrefabCorner"], corner_cut: ["cutCorners", "perCutCorner"], corner_strip: ["stripCorners", "perStripCorner"],
   } as Record<JointKind, [string, string]>;
   const paintColors = new Set<string>();
   const joint = (kind: JointKind, s: { material: string; finish?: string; color?: string }, n = 1) => {
@@ -593,7 +593,8 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   type KitHost = { main: (n: number) => PartWhy; host: string; wall?: string };
   const kitWhy = (p: KitPart, n: number, h: KitHost): PartWhy => {
     if (p.use === "both" || p.part === "hanger") return h.main(n * p.per);
-    if (p.part === "screw") return { rule: "kit_screws", params: { part: h.host, units: n, perUnit: p.per, screws: n * p.per }, setting: "woodScrew" };
+    // only the wood screw is the company's choice (woodScrew); a #8 is not
+    if (p.part === "screw") return { rule: "kit_screws", params: { part: h.host, screw: p.attrs?.screw ?? "-", units: n, perUnit: p.per, screws: n * p.per }, ...(p.attrs?.screw === WOOD_SCREW ? { setting: "woodScrew" } : {}) };
     if (p.part === "anchor") return { rule: "kit_anchors", params: { wall: h.wall ?? "-", units: n, perUnit: p.per, anchors: n * p.per }, setting: "anchor" };
     return { rule: "kit_per_hanger", params: { part: p.part, hangers: n, per: p.per } };
   };
@@ -676,7 +677,8 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const kit = rules.hangerKits[r.hanger];
     const spacing = [r.hangerSpacingIn, rules.hangerSpacingIn[r.hanger], kit?.spacingIn].find(okPos) ?? 24;
     const hangers = len.gt(0) ? (rules.hangerAtEnds ? len.div(spacing).floor().add(1) : len.div(spacing).ceil()) : dec(0);
-    const hangerWhy = (h: number): PartWhy => ({ rule: "hangers_spacing", params: { lengthIn: r.lengthIn, spacingIn: spacing, atEnds: rules.hangerAtEnds ? 1 : 0, hangers: h }, setting: "hangerSpacingIn" });
+    // rounded on every run: the line is the sum of the runs' own counts — `runs` says how many, `hangers` is the line (never recount it)
+    const hangerWhy = (h: number): PartWhy => ({ rule: "hangers_spacing", params: { runs: 1, lengthIn: r.lengthIn, spacingIn: spacing, atEnds: rules.hangerAtEnds ? 1 : 0, hangers: h }, setting: "hangerSpacingIn" });
     const hn = hangers.toNumber();
     if (kit) kitParts(kit.parts, "fasteners", hangers, { gutter: r, kitId: r.hanger }, undefined, undefined, { main: hangerWhy, host: "hanger" });
     else {
@@ -692,7 +694,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
       const gk = rules.guardKits[type];
       if (gk && okPos(gk.pieceIn)) {
         const pieces = Math.ceil(g / gk.pieceIn);
-        const guardWhy = (n: number): PartWhy => ({ rule: "guard_pieces", params: { coveredIn: g, pieceIn: gk.pieceIn, pieces: n } });
+        const guardWhy = (n: number): PartWhy => ({ rule: "guard_pieces", params: { runs: 1, coveredIn: g, pieceIn: gk.pieceIn, pieces: n } });
         acc.add({ key: `guardpiece.${type}.${r.profile}.${r.size}`, section: "guards", unit: "ea", use: "purchase", kind: "material", attrs: { part: "guard", guard: type, profile: r.profile, size: r.size, lengthIn: String(gk.pieceIn) } }, pieces, guardWhy(pieces));
         kitParts(gk.parts, "guards", pieces, { gutter: r }, undefined, undefined, { main: guardWhy, host: "guard" });
       } else advice.push({ code: "guard_kit_unknown", runId: r.id, guard: type });
@@ -707,7 +709,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     if (r.material.startsWith("alu") && r.lengthIn > rules.expansionJointIn) {
       const n = Math.ceil(r.lengthIn / rules.expansionJointIn) - 1;
       advice.push({ code: "expansion_joint", runId: r.id, joints: n });
-      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n, { rule: "expansion_joint", params: { lengthIn: r.lengthIn, everyIn: rules.expansionJointIn, joints: n }, setting: "expansionJointIn" });
+      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n, { rule: "expansion_joint", params: { runs: 1, lengthIn: r.lengthIn, everyIn: rules.expansionJointIn, joints: n }, setting: "expansionJointIn" });
     }
   }
 
@@ -748,7 +750,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const wallKitId = rules.wallKitByWall[ds.shape]?.[wall] ?? wall;
     const wk = rules.wallKits[wallKitId];
     const fasteners = Math.max(1, Math.ceil(lenIn / rules.dsFastenerSpacingIn));
-    if (wk) kitParts(wk.parts, "fasteners", fasteners, { ds }, strips, ds.id, { main: (n) => ({ rule: "ds_straps_per_ds", params: { downspouts: 1, lengthIn: lenIn, everyIn: rules.dsFastenerSpacingIn, straps: n }, setting: "dsFastenerSpacingIn" }), host: "ds_strap", wall });
+    if (wk) kitParts(wk.parts, "fasteners", fasteners, { ds }, strips, ds.id, { main: (n) => ({ rule: "ds_straps_per_ds", params: { downspouts: 1, lengthIn: lenIn, everyIn: rules.dsFastenerSpacingIn, straps: n }, setting: "dsFastenerSpacingIn" }), host: wk.parts.find((x) => x.use === "both")?.part ?? (wk.parts.some((x) => x.stripInBySize) ? "flat_coil" : "ds_strap"), wall });
     else advice.push({ code: "wall_kit_unknown", downspoutId: ds.id, wall });
 
     if (ds.endOutlet && endOutlets.get(`${run.id}:${ds.endOutlet === "start" ? 0 : 1}`) === ds.id) {
@@ -793,7 +795,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     } else if (b.kind === "flex" || b.kind === "drain") {
       acc.add({ key: `bottom.${b.kind}.${ds.shape}.${ds.size}${bc}`, section: "ds_bottom", unit: "ft", use: "both", kind: "material", attrs: { part: b.kind, ...bAttrs } }, ft(dec(b.lengthIn ?? 0)));
       pieces += 1;
-      if (b.kind === "drain") acc.add({ key: `bottom.drain_adapter.${ds.shape}.${ds.size}${b.pipe ? `.${b.pipe}` : ""}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "drain_adapter", shape: ds.shape, size: ds.size, ...(b.pipe ? { pipe: b.pipe } : {}) } }, 1);
+      if (b.kind === "drain") acc.add({ key: `bottom.drain_adapter.${ds.shape}.${ds.size}${b.pipe ? `.${b.pipe}` : ""}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "drain_adapter", shape: ds.shape, size: ds.size, ...(b.pipe ? { pipe: b.pipe } : {}) } }, 1, { rule: "adapter_per_bottom", params: { part: "drain_adapter", bottoms: 1 } });
     } else if (b.kind === "lower_roof") {
       acc.add({ key: "bottom.splash_pan", section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_pan" } }, 1);
     }
@@ -827,7 +829,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     dsPerRun.set(run.id, (dsPerRun.get(run.id) ?? 0) + 1);
     const len = dec(ch.lengthIn ?? ch.story * rules.storyHeightIn);
     acc.add({ key: "rainchain", section: "downspouts", unit: "ft", use: "both", kind: "material", attrs: { part: "rain_chain" } }, ft(len));
-    acc.add({ key: `rainchain_adapter.${run.profile}.${run.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "rain_chain_adapter", profile: run.profile, size: run.size } }, 1);
+    acc.add({ key: `rainchain_adapter.${run.profile}.${run.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "rain_chain_adapter", profile: run.profile, size: run.size } }, 1, { rule: "adapter_per_bottom", params: { part: "rain_chain_adapter", bottoms: 1 } });
   }
 
   for (const r of input.runs) {
@@ -847,7 +849,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     // the line's inches by where they come from (§2.12: drawn + corners + reserve = the line before rounding up), and why — the reserve,
     // and the corner allowances when there are any
     const breakdown: CoilBreakdown = { drawnIn: b.drawnIn, cornersIn: b.cornersIn, wasteIn: wasteIn.toNumber() };
-    const corners: PartWhy[] = b.outN + b.inN > 0 ? [{ rule: "corner_allowance", params: { outCount: b.outN, outIn: rules.cutCornerOutAllowanceIn, inCount: b.inN, inIn: rules.cutCornerAllowanceIn }, setting: "cutCornerOutAllowanceIn" }] : [];
+    const corners: PartWhy[] = b.outN + b.inN > 0 ? [{ rule: "corner_allowance", params: { outCount: b.outN, outIn: rules.cutCornerOutAllowanceIn, inCount: b.inN, inIn: rules.cutCornerAllowanceIn } }] : [];
     const why: PartWhy = { rule: "coil_reserve", params: { runs: b.runs, reserveFt: Number(rules.wasteFt) }, setting: "wasteFt", ...(corners.length ? { also: corners } : {}) };
     if (rules.seamless) {
       const blank = rules.coilBlankIn[`${stock.profile}.${stock.size}`];
@@ -862,11 +864,11 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   for (const [c, pts] of [...sealantPts].sort(([a], [b]) => a.localeCompare(b)))
     if (pts > 0)
       acc.add({ key: c === "-" ? "sealant" : `sealant.${seg(c)}`, section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant", ...(c !== "-" ? { color: c } : {}) } }, Math.ceil(pts / rules.jointsPerSealantTube),
-        withParams(sealantWhy.get(c), { perTube: rules.jointsPerSealantTube, tubes: Math.ceil(pts / rules.jointsPerSealantTube) }, "jointsPerSealantTube"));
+        withParams(sealantWhy.get(c), { points: pts, perTube: rules.jointsPerSealantTube, tubes: Math.ceil(pts / rules.jointsPerSealantTube) }, "jointsPerSealantTube"));
   if (solderPts > 0) {
     const lb = Math.ceil(solderPts / rules.solderPointsPerLb);
-    acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, lb, withParams(solderWhy, { perLb: rules.solderPointsPerLb, lb }, "solderPointsPerLb"));
-    acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1, { rule: "flux_per_solder", params: { lb, cans: 1 } });
+    acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, lb, withParams(solderWhy, { points: solderPts, perLb: rules.solderPointsPerLb, lb }, "solderPointsPerLb"));
+    acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1, { rule: "flux_per_solder", params: { lb, perJob: 1, cans: 1 } });
   }
   if (rules.touchUpPaint) for (const c of paintColors) acc.add({ key: `paint.${c}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "touch_up_paint", color: c } }, 1, { rule: "touch_up_per_color", params: { color: c }, setting: "touchUpPaint" });
 
