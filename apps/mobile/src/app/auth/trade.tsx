@@ -11,7 +11,7 @@ import { Button, MultiChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, FieldGroup, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
-import { FieldError, useRequiredForm } from "@/ui/requiredForm";
+import { FieldAnchor, FieldError, useRequiredForm } from "@/ui/requiredForm";
 import { useTheme } from "@/theme/ThemeProvider";
 
 type Trade = (typeof TRADES)[number];
@@ -51,7 +51,7 @@ export default function TradeStep() {
       <View testID="trade-step" style={{ gap: space[3] }}>
         <TextField type="search" value={q} onChangeText={setQ} placeholder={t("first.trade.search")} icon="search" />
         {/* the directions are the field: the card's own frame turns status.bad, the words under it (not a second frame around it) */}
-        <View ref={tradeField.anchorRef} collapsable={false} testID={tradeField.testID} style={{ gap: space[1] }}>
+        <FieldAnchor field={tradeField} style={{ gap: space[1] }}>
           <Card style={tradeField.error ? { borderColor: c.status.bad.fill } : undefined}>
             {shown.length ? (
               <MultiChips<Trade>
@@ -69,7 +69,7 @@ export default function TradeStep() {
             )}
           </Card>
           <FieldError text={tradeField.error} testID={`${tradeField.testID}-error`} />
-        </View>
+        </FieldAnchor>
         <FieldGroup title={t("trade.other")} testID="trade-own">
           <TextField
             type="title"

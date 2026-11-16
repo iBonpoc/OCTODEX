@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component, radius } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -15,7 +15,7 @@ import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Anchored, FieldError, useRequiredForm } from "@/ui/requiredForm";
+import { Anchored, FieldAnchor, FieldError, useRequiredForm } from "@/ui/requiredForm";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
@@ -134,23 +134,22 @@ export default function CatalogItemScreen() {
           ) : null}
           <RowView style={{ alignItems: "flex-end" }}>
             <Labeled label={t("cat.cost")}>
-              {/* the frame turns status.bad here; the words go under the whole row (a column of three is too narrow for them) */}
-              <View
-                ref={form.field("cost").anchorRef}
-                collapsable={false}
-                testID="field-cost"
-                style={{ borderRadius: radius.field, borderWidth: form.errors.cost ? 1 : 0, borderColor: c.status.bad.fill }}
-              >
+              {/* the frame turns status.bad here — drawn OVER the field's own frame, so the field keeps its size and the row stays
+                  level; the words go under the whole row (a column of three is too narrow for them) */}
+              <FieldAnchor field={form.field("cost")}>
                 <View testID="catalog-cost">
                   <MoneyField
                     cents={it.costCents ?? 0}
-                    onChange={(c) => {
-                      set({ costCents: c });
-                      if (c > 0) form.field("cost").clear();
+                    onChange={(cents) => {
+                      set({ costCents: cents });
+                      if (cents > 0) form.field("cost").clear();
                     }}
                   />
                 </View>
-              </View>
+                {form.errors.cost ? (
+                  <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius.field, borderWidth: 1, borderColor: c.status.bad.fill }]} />
+                ) : null}
+              </FieldAnchor>
             </Labeled>
             <Labeled label={t("cat.vendorTax")}>
               <PctField bps={it.vendorTaxBps ?? 0} onChange={(b) => set({ vendorTaxBps: Math.min(b, 10000) })} />
