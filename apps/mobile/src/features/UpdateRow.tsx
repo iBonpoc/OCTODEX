@@ -22,9 +22,9 @@ export function UpdateRow() {
       <ListRow
         left={<Icon name="sync" s={size.iconMd} color={c.mut} />}
         chevron={false}
-      title={t("upd.row.title")}
-      subtitle={subtitle}
-      onPress={() => (state === "ready" ? void applyDownloadedUpdate() : void checkForUpdate("manual"))}
+        title={t("upd.row.title")}
+        subtitle={subtitle}
+        onPress={() => (state === "ready" ? void applyDownloadedUpdate() : void checkForUpdate("manual"))}
       />
     </View>
   );

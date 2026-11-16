@@ -16,7 +16,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("update-bar").count()) === 0, "the showcase strip is the demo, not the real one");
   const text = (await vis("showcase-update-bar").innerText()).replace(/\s+/g, " ");
   h.expect(/Доступна новая версия/.test(text), `the strip says: ${text}`);
-  h.expect(/перезапустится/.test(text) && /не пропадут/.test(text), `the strip says nothing is lost: ${text}`);
+  h.expect(/перезапустится/.test(text) && /сохранятся/.test(text), `the strip says nothing is lost: ${text}`);
   await vis("showcase-update-bar-action").getByRole("button", { name: "Обновить" }).click();
   const last = (await vis("showcase-state-pressed").innerText()).replace(/\s+/g, " ").trim();
   h.expect(last === "Нажато: Обновить", `the action answers: ${last}`);

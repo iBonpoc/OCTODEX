@@ -46,8 +46,8 @@ export function UpdateBar() {
     <Banner
       tone="info"
       testID="update-bar"
-      title={t("upd.ready.title")}
-      hint={t(st.applying ? "upd.applying" : "upd.ready.hint")}
+      title={t(st.applying ? "upd.applying" : "upd.ready.title")}
+      hint={st.applying ? undefined : t("upd.ready.hint")}
       action={st.applying ? undefined : { label: t("upd.apply"), onPress: () => void applyDownloadedUpdate() }}
       onClose={st.applying ? undefined : hideStrip}
     />
