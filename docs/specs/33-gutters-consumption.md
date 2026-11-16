@@ -249,8 +249,39 @@
 | Expansion joint | «Expansion joint · 2 — aluminum run 90 ft, every 40 ft» | Ж6 | Н9 |
 | Guard pieces и винты | «Micro-mesh · 6 pcs (4 ft) — 21′ 8½″ covered» | З3, З4 | Н6 |
 
+**Коды правил (`why.rule`) — закрытый список** (Gutters №23 заводит по нему ключи `mod.gutters.why.<rule>` и сторож «у каждого `rule` движка есть текст»; новое правило — сначала строка здесь). Все длины в `params` — в дюймах (`…In`) или футах (`…Ft`), как в названии; количества — целые.
+
+| `rule` | `params` | Строка |
+|---|---|---|
+| `sealant_points` | points, perTube, tubes | Sealant |
+| `solder_points` | points, perLb, lb | Solder |
+| `flux_per_solder` | lb, perCan, cans | Flux |
+| `gas_per_points` | points, perCylinder, cylinders | Gas (MAPP / propane) |
+| `abrasive_per_points` | points, perPack, packs | Abrasive |
+| `soda_per_job` | — | Baking soda |
+| `rivets_per_joints` | endcaps, outlets, corners, sections, dsJoints, rivets | Rivets #42 |
+| `ds_joint_screws` | dsJoints, perJoint, screws | Zip screws (стыки водостока при `dsJoin = screw`) |
+| `kit_screws` | part, units, perUnit, screws | Zip screws / Gutter screws в наборе (хомут, кронштейн, кусок защиты) |
+| `kit_anchors` | wall, units, perUnit, anchors | Anchors |
+| `hangers_spacing` | lengthIn, spacingIn, atEnds, hangers | Hangers |
+| `kit_per_hanger` | part, hangers, per | Wedges, ferrules, spikes, circles, bolts |
+| `ds_straps_spacing` | lengthIn, spacingIn, straps | D/S straps |
+| `flat_coil_straps` | straps, stripIn, size, ft | Flat coil (хомуты из рулона) |
+| `touch_up_per_color` | color, fieldCuts | Touch-up paint |
+| `corner_allowance` | outCount, outIn, inCount, inIn | Corner allowance |
+| `coil_reserve` | runs, reserveFt | Coil reserve |
+| `bend_in_place` | elbows, offsets, perBendIn, addIn | Bent-in-place elbows |
+| `ds_round_up` | lengthIn, stepFt, roundedFt | Rounding up of downspout |
+| `ds_sticks` | downspouts, stickFt, shared, sticks | Downspout sticks |
+| `slip_joints` | sections, joints | Slip joints |
+| `outlet_per_ds` | downspouts | Outlet |
+| `endcap_free_end` | side | End cap |
+| `splash_guard_inside` | corners | Splash guard |
+| `expansion_joint` | lengthIn, everyIn, joints | Expansion joint |
+| `guard_pieces` | coveredIn, pieceIn, pieces | Guard pieces |
+
 **Данные из движка (PR-1, PR-2 — код Gutters №22).**
-- Каждая деталь, которую движок вывел сам, получает отдельное поле `PartQty.why?: { rule: string; params: Record<string, string | number>; setting?: string }`. Это код правила, числа для текста и ключ поля настройки.
+- Каждая деталь, которую движок вывел сам, получает отдельное поле `PartQty.why?: { rule: WhyRule; params: Record<string, string | number>; setting?: string }`, где `WhyRule` — union из таблицы выше. Это код правила, числа для текста и ключ поля настройки. Деталь, которую дают несколько правил (заклёпки с разных стыков), несёт сумму в `params`; строка одна.
 - `coilBreakdown` (§2.12) — частный случай `why` для строки рулона.
 - **Не в `attrs`**: `attrs` — свойства подбора цены.
 - Текст строки собирает экран (i18n RU/EN/ES; названия деталей английские, как у поставщика). Движок даёт только правило и числа.
