@@ -15460,12 +15460,12 @@ select tst.ok((select contact_name = 'T281 Given (edited)' from public.leads whe
               and (select title = 'T281 call back' from public.tasks where id = 'a2810000-0000-4000-8000-000000000d01'),
               'T282 the office edits an old lead given to him and its task, the assignee unchanged');
 update public.leads set assigned_to = 'a2810000-0000-4000-8000-000000000001' where id = 'a2810000-0000-4000-8000-000000000c01';
-update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where false;
 select tst.ok((select assigned_to = 'a2810000-0000-4000-8000-000000000001' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
               'T282 the office gives it to a tech');
 :as_super
 update public.leads set assigned_to = 'a5600000-0000-4000-8000-000000000002' where id = 'a2810000-0000-4000-8000-000000000c01';
-select tst.ok(true, 'T282 the server is not limited');
+select tst.ok((select assigned_to = 'a5600000-0000-4000-8000-000000000002' from public.leads where id = 'a2810000-0000-4000-8000-000000000c01'),
+              'T282 the server is not limited');
 \echo 'T282 a subcontractor makes no lead and gets none ok'
 
 -- T283: the bin — he neither lists nor brings back a lead or a lead's task of his
