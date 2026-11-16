@@ -179,7 +179,7 @@ export function receiptHtml(db: DB, p: Payment, company: PortalData["company"], 
   const day = docDay;
   const inv = db.invoices.find((i) => i.id === p.invoiceId);
   const cust = db.customers.find((c) => c.id === p.customerId);
-  const balance = inv ? Math.max(0, inv.totalCents - inv.paidCents) : 0;
+  const balance = inv ? invoiceOwes(inv) : 0;
   const body = `
 <table style="margin-top:10pt">
 <tr><td>${esc(t("rcpt.receivedFrom"))}</td><td class="r">${esc(cust?.name ?? "")}</td></tr>
@@ -199,7 +199,7 @@ export function invoiceMessage(db: DB, inv: Invoice, company: PortalData["compan
   const t = tFor(lang);
   const p = db.company?.payment;
   const how = [p?.zelle ? `Zelle ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean).join(", ");
-  const balance = Math.max(0, inv.totalCents - inv.paidCents);
+  const balance = invoiceOwes(inv);
   return {
     text: t("inv.sendText", { company: company.name, number: inv.number ?? "", amount: docMoney(balance), date: docDay(inv.dueDate), how: how || "—" }),
     subject: `${t("inv.title")} ${inv.number ?? ""}`.trim(),

@@ -4,7 +4,7 @@ import { Image } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import { radius, space, component } from "@octo/design-tokens";
-import { parseMoneyToCents } from "@octo/estimating-engine";
+import { expenseAmountCents } from "@/features/expenseAmount";
 import { isToday, useStore, visitContext } from "@/data/store";
 import type { ExpenseCategory } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -32,8 +32,8 @@ export default function NewExpense() {
   const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
   const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
   const [photo, setPhoto] = useState<string | undefined>();
-  // money through the engine (rule 8, #1537): «12.345» → $12.35 (half up), «1,234.50» → $1,234.50, garbage → nothing
-  const cents = parseMoneyToCents(amount) ?? 0;
+  // money through the engine, the app's one money parser (rule 8, #1537; features/expenseAmount)
+  const cents = expenseAmountCents(amount);
   const ok = cents > 0;
   const form = useRequiredForm();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
