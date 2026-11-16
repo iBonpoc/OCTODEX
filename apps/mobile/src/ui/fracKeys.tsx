@@ -36,15 +36,17 @@ export function FracKeys({ onKey, value, testID }: { onKey: (k: FracKey) => void
             accessibilityState={{ selected: on }}
             style={{
               minHeight: h,
-              borderRadius: radius.inner,
+              // a key, not a chip: a rounded rectangle; not chosen — no fill, the `bd` hairline; chosen — «Заливка» with the field
+              // frame `bdField` (the fill alone is ≈ 1.4:1 to a dark card: the frame tells it apart)
+              borderRadius: radius.field,
               borderWidth: component.hairline,
-              borderColor: c.bdField,
+              borderColor: on ? c.bdField : c.bd,
               alignItems: "center",
               justifyContent: "center",
-              ...(on ? fillStyle(c) : { backgroundColor: c.surf2 }),
+              ...(on ? fillStyle(c) : { backgroundColor: "transparent" }),
             }}
           >
-            <T v="button" w={on ? "semibold" : undefined} numberOfLines={1}>
+            <T v="button" w={on ? "semibold" : "regular"} numberOfLines={1} style={{ color: c.ink }}>
               {GLYPH[k]}
             </T>
           </Press>

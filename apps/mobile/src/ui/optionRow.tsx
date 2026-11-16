@@ -20,6 +20,7 @@ export function OptionRow({
   onPress,
   multiple,
   disabled,
+  iconSlot,
   testID,
 }: {
   title: string;
@@ -30,6 +31,8 @@ export function OptionRow({
   /** a row of a choice of several: `option` with `aria-selected` instead of `radio` */
   multiple?: boolean;
   disabled?: boolean;
+  /** another row of the group has an icon: keep its place empty here, so the titles line up */
+  iconSlot?: boolean;
   testID?: string;
 }) {
   const { c } = useTheme();
@@ -51,7 +54,7 @@ export function OptionRow({
       accessibilityLabel={subtitle ? `${title}, ${subtitle}` : title}
       style={{ minHeight, flexDirection: "row", alignItems: "center", gap: space[3], paddingVertical: space[2] }}
     >
-      {icon ? <Icon name={icon} color={c.ink} /> : null}
+      {icon ? <Icon name={icon} color={c.ink} /> : iconSlot ? <View style={{ width: size.iconMd }} /> : null}
       <View style={{ flex: 1 }}>
         <T v="body" numberOfLines={2}>
           {title}
@@ -103,6 +106,7 @@ export function OptionRows<K extends string>(
     ? ({ role: "listbox", "aria-multiselectable": true } as object)
     : ({ accessibilityRole: "radiogroup" } as object);
   const web = Platform.OS === "web";
+  const iconSlot = items.some((i) => i.icon);
   return (
     <View
       testID={testID}
@@ -122,6 +126,7 @@ export function OptionRows<K extends string>(
           selected={isOn(it.key)}
           multiple={props.multiple}
           disabled={disabled}
+          iconSlot={iconSlot}
           onPress={() => choose(it.key)}
         />
       ))}

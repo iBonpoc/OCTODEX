@@ -1,5 +1,5 @@
 import { Platform, View } from "react-native";
-import { component, radius, size, space } from "@octo/design-tokens";
+import { component, layout, radius, size, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button } from "./controls";
@@ -78,7 +78,7 @@ export function PctUsdField({
     </View>
   ) : null;
   return (
-    <View testID={testID} style={{ gap: space[2] }}>
+    <View testID={testID} style={{ gap: space[2], maxWidth: layout.formMax }}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: space[2] }}>
         {/* the field keyed by the unit: a new kind of number, a fresh text in it */}
         <View key={unit} style={{ flex: 1, minWidth: 0 }}>
@@ -113,7 +113,7 @@ export function PctUsdField({
                   ...(on ? fillStyleFlat(c) : { backgroundColor: "transparent" }),
                 }}
               >
-                <T v="button" w={on ? "semibold" : undefined} style={{ color: on ? c.ink : c.mut }}>
+                <T v="button" w={on ? "semibold" : "regular"} style={{ color: on ? c.ink : c.mut }}>
                   {u.sign}
                 </T>
               </Press>

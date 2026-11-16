@@ -2,7 +2,8 @@ import { useState } from "react";
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
 import { useI18n } from "@/i18n";
-import { Button, TextField } from "@/ui/controls";
+import { Button } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
 import { DoneCircle } from "@/ui/doneCircle";
 import { FracKeys, type FracKey } from "@/ui/fracKeys";
 import { MultiValueField, type MultiValue } from "@/ui/multiValueField";
@@ -10,7 +11,7 @@ import { OptionRows } from "@/ui/optionRow";
 import { OptionTiles } from "@/ui/optionTile";
 import { PctUsdField, type PctUsdUnit } from "@/ui/pctUsdField";
 import { T } from "@/ui/primitives";
-import { Card, FieldGroup, SectionTitle } from "@/ui/surfaces";
+import { Card, SectionTitle } from "@/ui/surfaces";
 import { ToggleRow } from "@/ui/toggleRow";
 import { useToast } from "@/ui/overlays";
 import { SECTIONS } from "./registry";
@@ -32,7 +33,7 @@ export function ChoiceSection() {
   const [corner, setCorner] = useState<"out" | "in">("out");
   const [unlinked, setUnlinked] = useState(false);
   const [billing, setBilling] = useState(false);
-  const [street, setStreet] = useState("");
+  const [billTo, setBillTo] = useState<"manager" | "owner" | null>(null);
   const [allDay, setAllDay] = useState(true);
   const [unit, setUnit] = useState<PctUsdUnit>("pct");
   const [bps, setBps] = useState(4000);
@@ -107,15 +108,25 @@ export function ChoiceSection() {
           </View>
         ) : null}
       </Card>
-      {/* a form's fields lie on the background (DS §11 п.17): the row with the field it turns on — in a FieldGroup, not a Card */}
-      <FieldGroup title={t("ds.ch.toggle.title")}>
+      {/* a sample card like the others; what the row turns on is a menu field (a text field in a card is a form on a plate, DS §11 п.17) */}
+      <Card>
+        <T v="heading">{t("ds.ch.toggle.title")}</T>
         <T v="caption" tone="mut">{t("ds.ch.toggle.hint")}</T>
         <ToggleRow testID="showcase-toggle-row" label={t("ds.ch.toggle.billing")} caption={t("ds.ch.toggle.billingCaption")} value={billing} onChange={setBilling}>
-          <TextField type="street" value={street} onChangeText={setStreet} placeholder={t("ds.ch.toggle.street")} label={t("ds.ch.toggle.street")} testID="showcase-toggle-row-street" />
+          <SelectField
+            testID="showcase-toggle-row-street"
+            label={t("ds.ch.toggle.street")}
+            value={billTo}
+            onChange={setBillTo}
+            items={[
+              { key: "manager", label: t("ds.ch.toggle.toManager") },
+              { key: "owner", label: t("ds.ch.toggle.toOwner") },
+            ]}
+          />
         </ToggleRow>
         <ToggleRow testID="showcase-toggle-allday" label={t("ds.ch.toggle.allDay")} value={allDay} onChange={setAllDay} />
         <ToggleRow testID="showcase-toggle-disabled" label={t("ds.ch.toggle.locked")} value disabled onChange={() => {}} />
-      </FieldGroup>
+      </Card>
       <Card>
         <T v="heading">{t("ds.ch.pct.title")}</T>
         <T v="caption" tone="mut">{t("ds.ch.pct.hint")}</T>

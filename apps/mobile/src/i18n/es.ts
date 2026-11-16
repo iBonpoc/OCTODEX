@@ -4475,6 +4475,8 @@ export const es: Dict = {
   "ds.ch.toggle.billing": "Facturar a otra dirección",
   "ds.ch.toggle.billingCaption": "Por ejemplo, una administradora",
   "ds.ch.toggle.street": "Dirección de facturación",
+  "ds.ch.toggle.toManager": "Oficina de la administradora",
+  "ds.ch.toggle.toOwner": "El propietario",
   "ds.ch.toggle.allDay": "Todo el día",
   "ds.ch.toggle.locked": "Sin impuesto (cliente exento)",
   "ds.ch.pct.title": "Unidad de la suma % | $ (A1e)",

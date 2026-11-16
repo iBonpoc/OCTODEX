@@ -257,9 +257,9 @@ export const component = {
   /** list cards (docs/specs/06-list-cards.md): option row in a picker sheet; narrowest figure tile */
   rowOption: 48,
   tileMin: 78,
-  /** choice controls (DS §9, spec 56 wave 1а): a tile of `OptionTile` (≈ 100 × 76, А2б); the «⊖» of a repeated value — visible 22,
+  /** choice controls (DS §9, spec 56 wave 1а): a tile of `OptionTile` (≈ 100 × 76, not wider than 120 — the row stays left on 1280, А2б); the «⊖» of a repeated value — visible 22,
    *  the zone 44 (А14а); its label button — not wider than 110 (the row on 390: ⊖ 36 + label 110 + 8 + field 204) */
-  optionTileH: 76,
+  optionTile: { h: 76, maxW: 120 },
   valueIcon: 22,
   valueLabelMax: 110,
 } as const;

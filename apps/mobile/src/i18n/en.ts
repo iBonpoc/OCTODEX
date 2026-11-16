@@ -4475,6 +4475,8 @@ export const en: Dict = {
   "ds.ch.toggle.billing": "Bill to another address",
   "ds.ch.toggle.billingCaption": "A property manager, for one",
   "ds.ch.toggle.street": "Billing address",
+  "ds.ch.toggle.toManager": "The property manager's office",
+  "ds.ch.toggle.toOwner": "The homeowner",
   "ds.ch.toggle.allDay": "All day",
   "ds.ch.toggle.locked": "No tax (the client is exempt)",
   "ds.ch.pct.title": "Sum unit % | $ (A1e)",

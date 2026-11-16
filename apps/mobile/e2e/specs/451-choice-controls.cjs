@@ -75,6 +75,14 @@ exports.run = async (h) => {
   const gapChoice = tIn.x - (tOut.x + tOut.width);
   const gapAction = tAct.x - (tIn.x + tIn.width);
   h.expect(gapAction > gapChoice + 2, `OptionTile: the action stands further (${gapAction}) than the choice tiles (${gapChoice})`);
+  h.expect(tOut.width <= 121, `OptionTile: a tile stops at maxW 120 (${tOut.width})`);
+  await vis(tile("divider")).waitFor({ timeout: 3000 });
+  const card = await vis("showcase-option-tile").boundingBox();
+  h.expect(Math.abs(tOut.x - card.x) <= 1, "OptionTile: the row starts at the left");
+  for (const id of ["showcase-pct-usd", "showcase-multi-value"]) {
+    const b = await box(id);
+    h.expect(b.width <= 561, `${id}: not wider than formMax 560 (${b.width})`);
+  }
   await vis(tile("action")).click();
   await vis("showcase-option-tile-unlinked").waitFor({ timeout: 3000 });
   h.expect((await p.getByTestId(tile("in-check")).count()) === 0, "OptionTile: after the action no tile is chosen");

@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { component, size, space } from "@octo/design-tokens";
+import { component, layout, size, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton, TextField } from "./controls";
 import type { FieldType } from "./fieldTypes";
@@ -126,7 +126,7 @@ export function MultiValueField<L extends string>({
   const { c } = useTheme();
   const ro = useReadOnly();
   return (
-    <View testID={testID} style={{ gap: space[1] }}>
+    <View testID={testID} style={{ gap: space[1], maxWidth: layout.formMax }}>
       {rows.map((r, i) => {
         const id = testID ? `${testID}-row-${i}` : undefined;
         return (

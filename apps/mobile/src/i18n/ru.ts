@@ -4475,6 +4475,8 @@ export const ru = {
   "ds.ch.toggle.billing": "Счета на другой адрес",
   "ds.ch.toggle.billingCaption": "Например, управляющая компания",
   "ds.ch.toggle.street": "Адрес для счетов",
+  "ds.ch.toggle.toManager": "Офис управляющей компании",
+  "ds.ch.toggle.toOwner": "Владелец дома",
   "ds.ch.toggle.allDay": "Весь день",
   "ds.ch.toggle.locked": "Без налога (клиент не облагается)",
   "ds.ch.pct.title": "Единица суммы % | $ (А1е)",
