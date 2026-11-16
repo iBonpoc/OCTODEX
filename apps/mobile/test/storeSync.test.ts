@@ -1969,6 +1969,36 @@ describe("unit:companySwitch — the store before and after a switch (spec 42 S3
     await settle();
     expect(sv(d).companyLoaded).toBe(true);
   });
+  it("A's answer that comes after the switch never lands in B (memory or B's cache)", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(server.loads).toHaveLength(1); // A's reload on start, still on its way
+    await as(r, "u1", "c2");
+    const a = makeSeed();
+    a.customers = a.customers.map((c) => ({ ...c, name: `ONLY-A ${c.name}` }));
+    server.loads[0]!.resolve(a);
+    await settle();
+    await wait(300);
+    await settle();
+    expect(valueOf(r).db.customers.some((c) => c.name.startsWith("ONLY-A"))).toBe(false);
+    expect(storage.get("octo.cloud.v1.c2.u1") ?? "").not.toContain("ONLY-A");
+  });
+  it("a held op (paused after a failure) does not keep the switch waiting for the whole time", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(u1c1, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(1700);
+    await settle();
+    retry.pause = 60_000;
+    server.sends[0]!.d.reject(notNow(503));
+    await settle();
+    const t0 = Date.now();
+    expect(await sv(r).sendBeforeSwitch(8_000)).toBe(1);
+    expect(Date.now() - t0).toBeLessThan(3_000);
+    retry.pause = 0;
+  });
   it("П5: an older cache that holds its company counts as loaded (no flag needed)", async () => {
     storage.set("octo.cloud.v1.c1.u1", JSON.stringify({ day: "cloud", db: { me: "u1", company: { id: "c1", name: "Co" } } }));
     signIn("u1", "c1");

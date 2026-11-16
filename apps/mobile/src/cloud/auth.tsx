@@ -158,12 +158,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setMembershipsFor(null);
     setMembershipCheckedAt(null);
     setSwitched(null);
+    preferRef.current = null;
   };
   const [legal, setLegal] = useState<LegalState>("unknown");
   const [legalChecked, setLegalChecked] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
   const [closedCompanies, setClosedCompanies] = useState<ClosedCompany[]>([]);
   const [switched, setSwitched] = useState<CompanySwitch | null>(null);
+  /**
+   * a company to open that a read was asked for (joined, created): kept until a confirmed answer has it — a newer read
+   * (a refusal's re-read, a token refresh) takes it over instead of dropping it (code-review of the wave №1)
+   */
+  const preferRef = useRef<{ id: string; why: "joined" | "created"; uid: string; at: number } | null>(null);
   const checkedUid = useRef<string | null>(null);
   /** #1633: who is signed in by this app's own state (a «signed out» event wipes that person's caches) */
   const signedUid = useRef<string | null>(null);
@@ -232,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     const uid = s.session.user.id;
     if (signal) lastSignalRead.current = Date.now();
+    if (prefer) preferRef.current = { id: prefer, why, uid, at: Date.now() };
     const { data, error } = await supabase
       .from("memberships")
       .select("company_id, role, status, created_at, companies(name)")
@@ -250,12 +257,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // way is the current one now (the plan's review П2: deciding before the await switched the person back)
     const current = memRef.current[0]?.companyId ?? null;
     const phone = await AsyncStorage.getItem(lastCompanyKey(uid)).catch(() => null);
-    const pending = await AsyncStorage.getItem(pendingLastKey(uid)).catch(() => null);
     const has = (id: string | null | undefined) => !!id && parsed.some((m) => m.companyId === id);
+    // a wish not met within 2 minutes (the answer never had that company) is dropped: it never opens a company later
+    const asked = preferRef.current?.uid === uid && Date.now() - preferRef.current.at < 120_000 ? preferRef.current : null;
+    prefer = asked?.id;
+    why = asked?.why ?? why;
     // the server is asked only when there is a choice and the phone knows nothing (a new phone); no answer — the first
     // by date
     const server = parsed.length < 2 || has(prefer) || has(current) || has(phone) ? null : await lastActiveOnServer(uid);
     if (!((await supabase.auth.getSession()).data.session?.user.id === uid && ticket === memTicket.current)) return null;
+    // read after every await: a switch made meanwhile is the one waiting to be written (code-review №5)
+    const pending = await AsyncStorage.getItem(pendingLastKey(uid)).catch(() => null);
+    if (has(prefer)) preferRef.current = null;
     const pick = pickActive(parsed, { current: has(prefer) ? prefer : (memRef.current[0]?.companyId ?? null), phone, server });
     const list = orderMemberships(parsed, pick);
     const before = memRef.current[0] ?? null;
@@ -441,6 +454,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const id = (data as { id?: unknown } | null)?.id;
         if (!error) {
           await reloadMemberships(typeof id === "string" ? id : undefined, "created");
+          // a new phone opens it too (accept_invitation writes it on the server itself; a created company does not)
+          const uid = signedUid.current;
+          if (uid && typeof id === "string" && memRef.current[0]?.companyId === id) void writeLastActive(uid, id);
         }
         return error?.message ?? null;
       },

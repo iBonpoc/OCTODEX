@@ -31,6 +31,7 @@ const query = (table = "memberships") => {
   const q = {
     select: () => q,
     maybeSingle: () => q,
+    insert: (v: unknown) => (srv.updates.push(v), q),
     update: (v: unknown) => (srv.updates.push(v), q),
     eq: (c: string, v: string) => (srv.filters.push(`${c}=${v}`), q),
     is: (c: string, v: unknown) => (srv.filters.push(`${c} is ${v}`), q),
@@ -62,7 +63,7 @@ import { render, settle, type Root } from "./support/miniReact";
 import { AuthProvider } from "../src/cloud/auth";
 import { lastCompanyKey } from "../src/cloud/membershipSync";
 
-type V = { switchCompany: (id: string) => boolean; switched: { to: { companyId: string }; back: { companyId: string } | null; why: string } | null; accessDenied: () => void; membershipCheckedAt: number | null; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: (prefer?: string, why?: "joined" | "created") => Promise<unknown> };
+type V = { createCompany: (name: string) => Promise<string | null>; switchCompany: (id: string) => boolean; switched: { to: { companyId: string }; back: { companyId: string } | null; why: string } | null; accessDenied: () => void; membershipCheckedAt: number | null; memberships: { companyId: string }[]; company: { companyId: string } | null; membershipsFor: string | null; membershipStamp: number; reloadMemberships: (prefer?: string, why?: "joined" | "created") => Promise<unknown> };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: V } }).props.value;
 const row = (c: string, role = "tech") => ({ company_id: c, role, status: "active", companies: { name: c } });
@@ -260,6 +261,32 @@ describe("unit:companySwitch — the company switcher in the sign-in (spec 42 S3
     lastOf("users").resolve({ data: { last_active_company_id: "c9" }, error: null });
     await settle();
     expect(valueOf(r).company?.companyId).toBe("c2");
+  });
+  it("code-review №1: a newer read while the join's read is on its way still opens the company just joined", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1")], error: null });
+    void valueOf(r).reloadMemberships("c2", "joined");
+    await settle();
+    void valueOf(r).reloadMemberships(); // a re-read (a refusal, a token refresh) overtakes it
+    await settle();
+    lastOf("memberships").resolve({ data: [row("c1"), row("c2")], error: null });
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).switched).toMatchObject({ to: { companyId: "c2" }, back: { companyId: "c1" }, why: "joined" });
+  });
+  it("S32: a company created over another one opens, says so, and is written to the server (a new phone opens it)", async () => {
+    storage.set(lastCompanyKey("u1"), "c1");
+    const r = await start({ data: [row("c1")], error: null });
+    const made = valueOf(r).createCompany("New Co");
+    await settle();
+    lastOf("companies").resolve({ data: { id: "c2" }, error: null });
+    await settle();
+    lastOf("memberships").resolve({ data: [row("c1"), row("c2", "owner")], error: null });
+    expect(await made).toBeNull();
+    await settle();
+    expect(valueOf(r).company?.companyId).toBe("c2");
+    expect(valueOf(r).switched).toMatchObject({ to: { companyId: "c2" }, back: { companyId: "c1" }, why: "created" });
+    expect(srv.updates).toContainEqual({ last_active_company_id: "c2" });
   });
   it("one company: the server is not asked (nothing to choose)", async () => {
     await start({ data: [row("c1")], error: null });
