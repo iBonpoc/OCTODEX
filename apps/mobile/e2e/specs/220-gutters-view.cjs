@@ -66,7 +66,8 @@ exports.run = async (h) => {
   await tid("view-parts").waitFor({ timeout: 5000 });
   for (const id of ["view-run-1", "view-run-2", "view-ds-1", "view-parts", "view-rough"]) h.expect((await tid(id).count()) === 1, `the review has ${id}`);
   h.expect(/по стене .* по лицевой/.test(await tid("view-run-1").innerText()), "a gutter: along the wall and along the face");
-  h.expect(/эт 1/.test(await tid("view-run-1").innerText()), "a gutter: its storey");
+  // one storey: «эт N» tells nothing and is not written (#1275, #1766)
+  h.expect(!/эт \d/.test(await tid("view-run-1").innerText()), "a gutter of a one-storey drawing: no storey word");
   h.expect((await p.locator('[data-testid^="view-corner-"]').locator("visible=true").count()) === 1, "the corner with its cut");
   h.expect(/Угол .*°/.test(await p.locator('[data-testid^="view-corner-"]').locator("visible=true").first().innerText()), "the corner: kind and angle");
   const total = Number((await tid("view-total").innerText()).replace(/[^\d.]/g, ""));
