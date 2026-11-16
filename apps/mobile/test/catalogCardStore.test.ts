@@ -169,3 +169,55 @@ describe("unit:catalogCardStore — РС-10", () => {
     expect((valueOf(r).db.priceHistory ?? []).filter((h) => h.itemId === "00000000-0000-4000-8000-0000000005b9")).toEqual([]);
   });
 });
+
+describe("unit:catalogCardStore — spec 53 (53-1), a price change never reaches documents", () => {
+  it("sent and signed estimates and supplier order lines keep their snapshot when an item's price changes", async () => {
+    const r = await signedIn();
+    const before = valueOf(r).db;
+    const used = before.catalog.find((x) => x.id === "cat-bracket")!;
+    const estimates = JSON.stringify(before.estimates);
+    const orders = JSON.stringify(before.purchaseOrders);
+    // the sent order and the signed or sent estimates are there and name the item
+    expect(before.purchaseOrders?.some((o) => o.status === "sent" && o.lines.some((l) => l.catalogItemId === "cat-bracket"))).toBe(true);
+    expect(before.estimates.some((e) => e.status === "approved" || e.status === "sent")).toBe(true);
+    valueOf(r).saveCatalogItem({ ...used, costCents: (used.costCents ?? 0) + 500, markupBps: 3000, priceCents: 9999, placeholder: false });
+    await settle();
+    expect(valueOf(r).db.catalog.find((x) => x.id === "cat-bracket")!.costCents).toBe((used.costCents ?? 0) + 500);
+    expect(JSON.stringify(valueOf(r).db.estimates)).toBe(estimates);
+    expect(JSON.stringify(valueOf(r).db.purchaseOrders)).toBe(orders);
+  });
+});
+
+describe("unit:catalogCardStore — spec 53-0, saved by field", () => {
+  /** the queue sends one op at a time: answer each and let the next go */
+  const drain = async (n: number) => {
+    for (let i = 0; i < n; i++) {
+      await tick();
+      server.sends.forEach((x) => x.d.resolve());
+      await settle();
+    }
+  };
+  const sent = () => server.sends.filter((x) => x.op.k === "catalog.save").map((x) => x.op as unknown as { item: CatalogItem; fields?: string[]; onlyNew?: true });
+  it("an item there: the op carries only the columns this save changed; a new item — none (written whole)", async () => {
+    const r = await signedIn();
+    valueOf(r).saveCatalogItem({ ...itemOf(r), name: "Bracket 2 (test)" });
+    valueOf(r).saveCatalogItem({ id: "00000000-0000-4000-8000-0000000005c1", kind: "service", name: "Visit (test)", unit: "ea", priceCents: 100 });
+    await drain(2);
+    const [a, b] = sent();
+    expect(a!.fields).toEqual(["name"]);
+    expect("fields" in b!).toBe(false);
+  });
+  it("a batch save and a supplier's tax: by field too; a batch of new ones (onlyNew) — whole", async () => {
+    const r = await signedIn({ suppliers: [{ id: SUP, name: "ABC Supply (test)", active: true, taxBps: 1025 }] });
+    valueOf(r).saveCatalogItems([{ ...itemOf(r), priceCents: 777 }]);
+    valueOf(r).applySupplierTax(SUP);
+    valueOf(r).saveCatalogItems([{ ...itemOf(r), id: "00000000-0000-4000-8000-0000000005c2" }], { onlyNew: true });
+    await drain(3);
+    const ops = sent();
+    expect(ops[0]!.fields).toEqual(["unit_price_cents"]);
+    // the tax is a cost (catalogCostChange), not an item column
+    expect(ops[1]!.fields).toEqual([]);
+    expect(ops[2]!.onlyNew).toBe(true);
+    expect("fields" in ops[2]!).toBe(false);
+  }, 15000);
+});
