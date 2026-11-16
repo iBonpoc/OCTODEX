@@ -16,12 +16,16 @@ concurrency:
 jobs:
   health:
     name: Supabase key and the last release
+    # the key lives in the environment `release` (only branch main may use it)
+    environment: release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       PROJECT_REF: kgiaxygsjkyiquhjbxdg
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: supabase/setup-cli@v1
         with:
           # exact version, as release.yml: "latest" asks the GitHub API and fails on its rate limit
