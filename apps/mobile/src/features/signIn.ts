@@ -25,6 +25,12 @@ export interface SignInErr {
 
 /** digits of the email code — equals `otp_length` in supabase/config.toml and the hosted project (spec 52 Р3; guard: authEmails.test.ts) */
 export const CODE_LENGTH = 8;
+/**
+ * the fewest digits «Войти» sends: a 6-digit code still works while the hosted project is moved from 6 to 8 (the app
+ * update reaches phones at once, the setting is changed by hand — security-check of PR-1); the last digit signs in by
+ * itself only at CODE_LENGTH
+ */
+export const CODE_MIN = 6;
 
 /** the pause before «Отправить ещё раз» — the hosted project's minimum between two emails to one address */
 export const RESEND_S = 60;
@@ -62,7 +68,8 @@ export function nextReadyAt(now: number, err?: SignInErr | null): number {
 /** where the screen shows a refusal: under its field (DS §11 п.2), or under the button */
 export function errPlace(key: SignInErrKey): "code" | "email" | "form" {
   if (key === "auth.err.code") return "code";
-  if (key === "auth.err.badEmail") return "email";
+  // the address is what to change: under the email field (review PR-1 №8)
+  if (key === "auth.err.badEmail" || key === "auth.err.notAllowed") return "email";
   return "form";
 }
 /** a refusal with no way on but a person: «Написать в поддержку» next to it */

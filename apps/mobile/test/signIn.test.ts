@@ -67,6 +67,7 @@ describe("where a refusal stands", () => {
   it("a wrong code under the code field, a bad address under the email field, the rest under the button", () => {
     expect(errPlace("auth.err.code")).toBe("code");
     expect(errPlace("auth.err.badEmail")).toBe("email");
+    expect(errPlace("auth.err.notAllowed")).toBe("email");
     expect(errPlace("auth.err.mailLimit")).toBe("form");
   });
   it("dead ends get «Написать в поддержку»", () => {

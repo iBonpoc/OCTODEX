@@ -44,9 +44,12 @@ verify_jwt = true
 site_url = "http://127.0.0.1:3000"
 additional_redirect_urls = ["http://127.0.0.1:*/**"]
 
-# the app signs in by the 6-digit code from the email (auth/sign-in.tsx → verifyOtp, #1756): BOTH emails carry the code
-# and no link — a new address gets «confirmation», a known one «magic_link». The code in the subject lets iOS offer it
-# over the keyboard. The hosted project gets the same subjects and texts by hand (guard: test/authEmails.test.ts).
+# the app signs in by the 8-digit code from the email (auth/sign-in.tsx → verifyOtp, #1756, docs/specs/52): BOTH emails
+# carry the code and no link — a new address gets «confirmation», a known one «magic_link»; the same text for both, so
+# the email does not tell a new address from a known one. The code in the subject lets iOS offer it over the keyboard.
+# The hosted project gets the same subjects and texts BY HAND (release.yml runs `db push`, not `config push`):
+# the templates hold no comments, so a file copied whole puts nothing of ours into the email.
+# Guard: apps/mobile/test/authEmails.test.ts.
 [auth.email.template.magic_link]
 subject = "{{ .Token }} — your GoRix sign-in code"
 content_path = "./supabase/templates/magic-link.html"

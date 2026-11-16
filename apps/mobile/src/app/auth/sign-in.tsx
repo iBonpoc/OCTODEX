@@ -2,19 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { space } from "@octo/design-tokens";
+import { component, space } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { SUPPORT_EMAIL, SUPPORT_PLACEHOLDER, mailto } from "@/config/support";
 import { useStore } from "@/data/store";
 import { emailTypoFix } from "@/features/emailTypo";
 import { LegalAgree } from "@/features/LegalAgree";
 import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/legal";
-import { codeDigits, CODE_LENGTH, errPlace, needsSupport, nextReadyAt, resendLeft, signInError, type SignInErr } from "@/features/signIn";
+import { codeDigits, CODE_LENGTH, CODE_MIN, errPlace, needsSupport, nextReadyAt, resendLeft, signInError, type SignInErr } from "@/features/signIn";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { Sheet } from "@/ui/overlays";
 import { Press, T } from "@/ui/primitives";
 import { FieldError } from "@/ui/requiredForm";
+import { haptics } from "@/ui/haptics";
 import { FieldGroup, FormMain, ListRow, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 
@@ -47,6 +48,8 @@ export default function SignIn() {
   const [note, setNote] = useState<string | null>(null);
   const [agreed, setAgreed] = useState(false);
   const [noMail, setNoMail] = useState(false);
+  // what the screen is waiting for: said under the main button (no spinner in Button yet — Н-49)
+  const [doing, setDoing] = useState<"send" | "check" | null>(null);
   const [resends, setResends] = useState(0);
   // the address the code went to (step 2 shows it; a code that comes back for an address changed meanwhile is not shown)
   const [sentTo, setSentTo] = useState("");
@@ -63,6 +66,7 @@ export default function SignIn() {
     return () => clearInterval(timer);
   }, [ticking]);
 
+  const canSupport = !SUPPORT_PLACEHOLDER;
   const okEmail = /^\S+@\S+\.\S+$/.test(email.trim());
   const typo = step === "email" ? emailTypoFix(email) : null;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
@@ -74,8 +78,11 @@ export default function SignIn() {
     setNow(Date.now());
   };
   const say = (e: SignInErr) => {
-    const text = e.key === "auth.err.wait" ? t(e.key, { s: String(e.seconds ?? 60) }) : t(e.key);
-    setErr({ text, place: errPlace(e.key), support: needsSupport(e.key) });
+    // «напишите в поддержку» only while there is a support address to write to (#836); else what to do now (review PR-1 №1)
+    const dead = needsSupport(e.key);
+    const key = dead && !canSupport ? (`${e.key}.later` as const) : e.key;
+    const text = e.key === "auth.err.wait" ? t("auth.err.wait", { s: String(e.seconds ?? 60) }) : t(key as Parameters<typeof t>[0]);
+    setErr({ text, place: errPlace(e.key), support: dead });
   };
   // signed in: the consent to the server first (the company and the invitation need it); a refusal — the words of the app
   const done = async () => {
@@ -86,13 +93,18 @@ export default function SignIn() {
   };
 
   // busy until the whole step is over (sign-in AND the consent on the server): a second tap gives no false error (M7)
+  // a lock that holds at once (state waits for the next render): iOS may put the code in twice in a row (review PR-1 Ж3)
+  const running = useRef(false);
   const act = async (fn: () => Promise<string | null>, onOk?: () => void | Promise<void>, onErr?: (e: SignInErr) => void) => {
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setErr(null);
     setNote(null);
     try {
       await rememberAgreement(AsyncStorage, email).catch(() => {});
-      const e = await fn();
+      // a call that throws instead of answering (no network on some platforms) is a refusal too: the tick goes
+      const e = await fn().catch((x: unknown) => (x instanceof Error && x.message ? x.message : "network"));
       // a failed sign-in leaves no tick behind (security-check 7а-1); every next try writes it again
       if (e) {
         await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
@@ -101,7 +113,9 @@ export default function SignIn() {
         onErr?.(r);
       } else await onOk?.();
     } finally {
+      running.current = false;
       setBusy(false);
+      setDoing(null);
     }
   };
 
@@ -116,10 +130,14 @@ export default function SignIn() {
   const sendCode = () => {
     if (busy) return;
     const m = missing();
-    if (m) return setErr(m);
+    if (m) {
+      if (m.place === "agree") haptics.warning();
+      return setErr(m);
+    }
     if (ticking) return; // the countdown under the button says when
     const to = email.trim();
     const again = step === "code";
+    setDoing("send");
     return act(
       () => auth.sendCode(to),
       () => {
@@ -141,25 +159,34 @@ export default function SignIn() {
   };
   const verify = (digits = code) => {
     if (busy) return;
-    if (digits.length < CODE_LENGTH) return setErr({ text: t("auth.need.code", { n: String(CODE_LENGTH) }), place: "code" });
-    return act(() => auth.verifyCode(sentTo, digits), done);
+    if (digits.length < CODE_MIN) return setErr({ text: t("auth.need.code", { n: String(CODE_LENGTH) }), place: "code" });
+    setDoing("check");
+    // a wrong or old code is cleared: the next one is typed or put in by iOS over nothing (review PR-1 Ж2)
+    return act(() => auth.verifyCode(sentTo, digits), done, (r) => {
+      if (r.key === "auth.err.code") setCode("");
+    });
   };
   const onCode = (v: string) => {
     const d = codeDigits(v);
     setCode(d);
     if (err?.place === "code") setErr(null);
     // the last digit signs in by itself (a code put in by iOS from Mail too)
-    if (d.length === CODE_LENGTH && d !== code) void verify(d);
+    if (d.length === CODE_LENGTH && d !== code && !running.current) void verify(d);
   };
   const signInPassword = () => {
     if (busy) return;
     const m = missing();
-    if (m && m.place !== "form") return setErr(m);
+    if (m && m.place !== "form") {
+      if (m.place === "agree") haptics.warning();
+      return setErr(m);
+    }
     if (password.length < 6) return setErr({ text: t("auth.need.password"), place: "password" });
+    setDoing("check");
     return act(() => auth.signInPassword(email.trim(), password), done);
   };
   // another address: back to step 1; the code sent to the old one is dropped, the pause stays (review №4)
   const changeEmail = () => {
+    if (running.current) return; // a request under way finishes on the step it started on
     setStep("email");
     setCode("");
     setErr(null);
@@ -171,8 +198,9 @@ export default function SignIn() {
     if (err?.place === "email") setErr(null);
   };
   const support = () => void Linking.openURL(mailto(SUPPORT_EMAIL, t("auth.title")));
-  const canSupport = !SUPPORT_PLACEHOLDER;
 
+  // a text link is a real 44-high box (DS §7.1; the web has no hitSlop — §11 п.18)
+  const hitBox = { minHeight: component.button.hit, justifyContent: "center" as const, alignSelf: "flex-start" as const };
   const label = (text: string) => (
     <T v="caption" w="semibold" tone="mut">
       {text}
@@ -209,11 +237,12 @@ export default function SignIn() {
                 label={t("auth.emailLabel")}
                 icon="mail"
                 testID="auth-email"
+                autoFocus={step === "email"}
                 error={under("email")}
                 onSubmit={step === "email" ? sendCode : undefined}
               />
               {typo ? (
-                <Press testID="auth-typo" onPress={() => setEmail(typo)} accessibilityRole="button" accessibilityLabel={t("auth.typo", { email: typo })}>
+                <Press testID="auth-typo" onPress={() => setEmail(typo)} accessibilityRole="button" accessibilityLabel={t("auth.typo", { email: typo })} style={hitBox}>
                   <T v="caption" w="semibold" style={{ textDecorationLine: "underline" }}>
                     {t("auth.typo", { email: typo })}
                   </T>
@@ -221,25 +250,34 @@ export default function SignIn() {
               ) : null}
             </View>
             <View style={{ gap: space[1] }}>
-              <LegalAgree on={agreed} onChange={(v) => { setAgreed(v); if (err?.place === "agree") setErr(null); }} />
+              <LegalAgree
+                on={agreed}
+                error={err?.place === "agree"}
+                onChange={(v) => {
+                  setAgreed(v);
+                  if (err?.place === "agree") setErr(null);
+                }}
+              />
               <FieldError text={under("agree")} testID="auth-agree-error" />
             </View>
           </>
         ) : (
           <>
-            <View testID="auth-code-sent" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: space[1] }}>
+            {/* the address on its own line, «Изменить» right by it — never alone on the next line (review PR-1 №10) */}
+            <View testID="auth-code-sent">
               <T v="body">{t("auth.sentTo")}</T>
-              <T v="body" w="semibold">
-                {sentTo}
-              </T>
-              <T v="body" tone="mut">
-                ·
-              </T>
-              <Press testID="auth-change-email" onPress={changeEmail} accessibilityRole="button" accessibilityLabel={t("auth.change")}>
-                <T v="body" w="semibold" style={{ textDecorationLine: "underline" }}>
-                  {t("auth.change")}
-                </T>
-              </Press>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
+                <View style={{ flexShrink: 1 }}>
+                  <T v="body" w="semibold" numberOfLines={1}>
+                    {sentTo}
+                  </T>
+                </View>
+                <Press testID="auth-change-email" onPress={changeEmail} accessibilityRole="button" accessibilityLabel={t("auth.change")} style={hitBox}>
+                  <T v="body" w="semibold" style={{ textDecorationLine: "underline" }}>
+                    {t("auth.change")}
+                  </T>
+                </Press>
+              </View>
             </View>
             <View style={{ gap: space[1] }}>
               {label(t("auth.codeLabel"))}
@@ -272,7 +310,14 @@ export default function SignIn() {
           {step === "code" ? <Button label={t("auth.signIn")} icon="check" full onPress={() => void verify()} testID="auth-verify" /> : null}
           {step === "password" ? <Button label={t("auth.signIn")} icon="check" full onPress={signInPassword} testID="auth-password-sign-in" /> : null}
         </FormMain>
-        {step !== "password" ? countdown : null}
+        {doing ? (
+          <View testID="auth-busy" accessibilityLiveRegion="polite">
+            <T v="caption" tone="mut">
+              {t(doing === "send" ? "auth.busy.send" : "auth.busy.check")}
+            </T>
+          </View>
+        ) : null}
+        {step === "email" ? countdown : null}
         {note ? (
           <StatusNote tone="ok" testID="auth-resent">
             {note}
@@ -288,7 +333,12 @@ export default function SignIn() {
         ) : null}
       </FieldGroup>
       <View style={{ gap: space[2] }}>
-        {step === "code" && !ticking ? <Button label={t("auth.resend")} variant="ghost" icon="send" onPress={sendCode} testID="auth-resend" /> : null}
+        {/* one place for «Отправить ещё раз»: the countdown, then the button — nothing under the finger jumps (§14.4) */}
+        {step === "code" ? (
+          <View style={{ minHeight: component.button.hit, justifyContent: "center" }}>
+            {ticking ? countdown : <Button label={t("auth.resend")} variant="ghost" icon="send" onPress={sendCode} testID="auth-resend" />}
+          </View>
+        ) : null}
         {step === "code" ? <Button label={t("auth.noMail")} variant="ghost" onPress={() => setNoMail(true)} testID="auth-no-mail" /> : null}
         {step === "password" ? (
           <Button
@@ -316,6 +366,7 @@ export default function SignIn() {
             }}
             accessibilityRole="button"
             accessibilityLabel={t("auth.usePassword")}
+            style={hitBox}
           >
             <T v="caption" tone="mut" style={{ textDecorationLine: "underline" }}>
               {t("auth.usePassword")}

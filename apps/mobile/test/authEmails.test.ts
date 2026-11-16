@@ -1,5 +1,5 @@
 /**
- * #1756 — the sign-in emails carry the 6-digit code and no link. A new address gets «confirmation», a known one
+ * #1756 — the sign-in emails carry the 8-digit code and no link. A new address gets «confirmation», a known one
  * «magic_link» (signInWithOtp): if either has no {{ .Token }} the screen asks for a code the email does not have, and a
  * link signs in on the website instead of the app. The hosted project takes the same texts by hand.
  */
@@ -23,6 +23,9 @@ describe("auth emails", () => {
       expect(html).toContain("{{ .Token }}");
       expect(html).not.toMatch(/ConfirmationURL|TokenHash|RedirectTo|SiteURL|href=/);
       expect(html).not.toMatch(/OCTODEX|Supabase/i);
+      // copied by hand into the hosted project: nothing of ours in it, nothing a stranger could have set (spec 52 §8)
+      expect(html).not.toMatch(/<!--|\{\{ *\.Data/);
+      expect(html).toContain("Never share this code");
       // the words say the real life of the code (otp_expiry, docs/specs/52 Р3)
       const expiry = Number(/\notp_expiry = (\d+)/.exec(config)?.[1]);
       expect(expiry).toBe(600);

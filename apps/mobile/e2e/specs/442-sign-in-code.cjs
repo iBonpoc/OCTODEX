@@ -9,6 +9,8 @@
  * - «Отправить ещё раз» only after the pause (a countdown before), a new code clears the field and says so;
  * - «Не пришло письмо?» — a sheet with what to check; «Изменить» → step 1, the pause stays;
  * - the server's own wait → «через N с»; the built-in mail refusing an address → plain words, never its English;
+ * - a wrong code is cleared: the next one is typed over nothing and checked;
+ * - without the network «Получить код» says «Нужна сеть» and sends nothing;
  * - no password sign-up anywhere.
  */
 const { pressEscUntilClosed } = require("../sheet.cjs");
@@ -70,7 +72,11 @@ exports.run = async (h) => {
   await tid("auth-code").getByText(/Код неверный или устарел/).waitFor({ timeout: 6000 });
   h.expect(verifyCalls === 1, `the ${LEN}th digit checked the code by itself (${verifyCalls})`);
   h.expect(/\/auth\/sign-in/.test(p.url()), "stays on the sign-in");
+  h.expect((await codeIn.inputValue()) === "", "a wrong code is cleared");
   await h.shot("wrong-code");
+  await Promise.all([p.waitForRequest("**/auth/v1/verify*", { timeout: 6000 }), codeIn.fill("87654321".slice(0, LEN))]);
+  await tid("auth-code").getByText(/Код неверный или устарел/).waitFor({ timeout: 6000 });
+  h.expect(verifyCalls === 2, `a new code over the cleared field is checked (${verifyCalls})`);
 
   // after the pause: «Отправить ещё раз» → a new code, the field cleared, the screen says so
   await p.clock.fastForward(61_000);
@@ -111,14 +117,30 @@ exports.run = async (h) => {
   await p.getByTestId("auth-countdown").locator("visible=true").first().waitFor({ state: "detached", timeout: 6000 });
   otp = { status: 400, body: { code: 400, error_code: "email_address_not_authorized", msg: 'Email address "new.person@gmail.com" cannot be used as it is not authorized' } };
   await tid("auth-send-code").click();
-  await tid("auth-note").getByText(/письма пока не уходят/).waitFor({ timeout: 6000 });
-  h.expect(!/not authorized/i.test(await tid("auth-note").innerText()), "plain words, not the server's English");
+  // the address is what to change: under the email field; no support address yet → «попробуйте другой адрес»
+  await tid("auth-email").getByText(/письма пока не уходят — попробуйте другой адрес/).waitFor({ timeout: 6000 });
+  h.expect(!/not authorized/i.test(await tid("auth-email").innerText()), "plain words, not the server's English");
   await h.shot("not-allowed");
 
   // the password is only a small way in for an existing account
   await tid("auth-use-password").click();
   await tid("auth-password").waitFor({ timeout: 4000 });
   h.expect(!/Создать аккаунт|Нет аккаунта/.test(await h.text()), "no password sign-up"); // i18n-old: ok
+
+  // without the network: «Нужна сеть», nothing sent. «Проверка: режим без сети» lives in memory — switch it, then go
+  // to the sign-in inside the app (a page load would turn the network back on)
+  await h.go("/settings");
+  const offline = p.getByRole("switch", { name: /режим без сети/i }).locator("visible=true").last();
+  await offline.click();
+  await p.locator('[role="switch"][aria-checked="true"]').filter({ hasText: /режим без сети/i }).or(p.getByRole("switch", { name: /режим без сети/i, checked: true })).first().waitFor({ timeout: 4000 });
+  await p.evaluate(() => { window.history.pushState({}, "", "/auth/sign-in"); window.dispatchEvent(new PopStateEvent("popstate")); });
+  await tid("auth-email").waitFor({ timeout: 6000 });
+  await tid("auth-email").locator("input").last().fill("new.person@example.com");
+  await tid("legal-agree").click();
+  const before = otpCalls;
+  await tid("auth-send-code").click();
+  await tid("auth-note").getByText(/Нужна сеть/).waitFor({ timeout: 4000 });
+  h.expect(otpCalls === before, "nothing sent without the network");
 };
 // GoTrue's refusals put in above are 4xx the browser logs as failed requests
 exports.allowConsole = [/status of (400|403|429) /];
