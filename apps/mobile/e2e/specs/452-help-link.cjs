@@ -1,5 +1,5 @@
 /**
- * e2e 448 — «?» (DS 1.18.0 Б7, founder 16.11, #1843, #1853). Every view.
+ * e2e 452 — «?» (DS 1.18.0 Б7, founder 16.11, #1843, #1853). Every view.
  * - in the showcase («Окна»): «?» stands right after its words (its left edge close to the words' right edge, on their line);
  *   inside — what it is, then the way: «Изменить в настройках» opens the company's settings, «Открыть поставщиков» — suppliers;
  * - Gutters «Просмотр замера» → «Детали»: a group's «?» is right after the group's title and leads to the module's settings.
