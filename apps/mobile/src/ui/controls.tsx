@@ -77,7 +77,9 @@ export function Button({
           ...(bar ? { paddingVertical: space[1] } : null),
           backgroundColor: bg,
           borderWidth: variant === "secondary" ? 1 : 0,
-          borderColor: c.bd,
+          // the edge of a secondary button is seen (≥ 3:1 to the page, WCAG 1.4.11, DS §7.3 1.15.6, #1728): the fields' frame,
+          // not `bd` (≈1.2:1 in the light theme — a «Связано» chip on 390 had no edge)
+          borderColor: c.bdField,
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "center",
