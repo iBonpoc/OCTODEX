@@ -4059,7 +4059,7 @@ begin
                         'resend_invitation(uuid)', 'resend_signed_copy(uuid)', 'revoke_estimate_link(uuid)', 'revoke_invitation(uuid)',
                         'save_customer_people(uuid,jsonb)', 'save_estimate_version(uuid,uuid,text,jsonb,jsonb,jsonb,jsonb)',
                         'save_lead_people(uuid,jsonb)', 'send_estimate(uuid,text)', 'set_customer_tags(uuid,uuid[])',
-                        'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_status(uuid,uuid,text)',
+                        'set_job_tags(uuid,uuid[])', 'set_location_consent(uuid,boolean)', 'set_member_role(uuid,uuid,text)', 'set_member_status(uuid,uuid,text)',
                         'set_my_prefs(uuid,boolean)', 'set_push_kind(uuid,text,boolean)', 'set_share_location(uuid,boolean)',
                         'sign_estimate_on_site(uuid,text,text)', 'sign_estimate_on_site(uuid,text,text,bigint)',
                         'stop_member_location(uuid,uuid)', 'transfer_ownership(uuid,uuid)', 'trash_items(text,uuid[])', 'trash_list(uuid)',
@@ -15712,5 +15712,166 @@ select tst.ok((select status = 'draft' and current_version_id = 'f2920000-0000-4
               and (select count(*) = 1 and sum(line_total_cents) = 49874 from public.estimate_line_items li join public.estimate_options o on o.id = li.option_id where o.version_id = 'f2920000-0000-4000-8000-000000000002'),
               'T292 sent → draft: a new version without the elbow line; the sent version (what the client got) keeps its lines');
 \echo 'T292 a sent estimate keeps the lines it went with ok'
+
+-- ---------------------------------------------------------------- T301 (#1866): the role of a person already on the team
+-- public.set_member_role (20261116080000; red before it — no such function). Company C of its own: owner Olly, admins Ada
+-- and Abe, office Fay, tech Ted, subcontractor Sid. Every rule of the function, the locks against a transfer, audit_log.
+\set as_o301 'reset role; set request.jwt.claim.sub = ''a3010000-0000-4000-8000-000000000001''; reset request.jwt.claims; set role authenticated;'
+\set as_a301 'reset role; set request.jwt.claim.sub = ''a3010000-0000-4000-8000-000000000002''; reset request.jwt.claims; set role authenticated;'
+\set as_b301 'reset role; set request.jwt.claim.sub = ''a3010000-0000-4000-8000-000000000003''; reset request.jwt.claims; set role authenticated;'
+\set as_f301 'reset role; set request.jwt.claim.sub = ''a3010000-0000-4000-8000-000000000004''; reset request.jwt.claims; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a3010000-0000-4000-8000-000000000001', 'olly301@c.test', '{"full_name":"Olly Owner"}'),
+  ('a3010000-0000-4000-8000-000000000002', 'ada301@c.test',  '{"full_name":"Ada Admin"}'),
+  ('a3010000-0000-4000-8000-000000000003', 'abe301@c.test',  '{"full_name":"Abe Admin"}'),
+  ('a3010000-0000-4000-8000-000000000004', 'fay301@c.test',  '{"full_name":"Fay Office"}'),
+  ('a3010000-0000-4000-8000-000000000005', 'ted301@c.test',  '{"full_name":"Ted Tech"}'),
+  ('a3010000-0000-4000-8000-000000000006', 'sid301@c.test',  '{"full_name":"Sid Sub"}');
+select tst.agree('a3010000-0000-4000-8000-000000000001'), tst.agree('a3010000-0000-4000-8000-000000000002'), tst.agree('a3010000-0000-4000-8000-000000000003');
+set session_replication_role = replica;  -- a fixture: the company and its team, no sign-up triggers
+insert into public.companies (id, name) values ('cc301000-0000-4000-8000-000000000000', 'Company C 301');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000001', 'owner', 'active'),
+  ('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000002', 'admin', 'active'),
+  ('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000003', 'admin', 'active'),
+  ('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'office', 'active'),
+  ('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'tech', 'active'),
+  ('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000006', 'subcontractor', 'active');
+-- Fay is also a tech of company A (two companies: a call with A's id never reaches C)
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'tech', 'active');
+update public.memberships set permissions_override = '{"view_costs": true}'
+ where company_id = 'cc301000-0000-4000-8000-000000000000' and user_id = 'a3010000-0000-4000-8000-000000000005';
+set session_replication_role = origin;
+create function tst.role301(p_user uuid) returns text language sql security definer set search_path = '' as $$
+  select role from public.memberships where company_id = 'cc301000-0000-4000-8000-000000000000' and user_id = p_user $$;
+grant execute on function tst.role301(uuid) to authenticated;
+
+-- the owner changes an employee's role; the change is in audit_log with the owner as the actor; the same role again —
+-- a repeat, nothing written; view_costs given by hand goes with the old role
+:as_o301
+select tst.ok((public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'office') ->> 'repeat') = 'false',
+              'T301 the owner makes a tech the office');
+:as_super
+select tst.ok(tst.role301('a3010000-0000-4000-8000-000000000005') = 'office', 'T301 the role is changed');
+select tst.ok(not ((select permissions_override from public.memberships where company_id = 'cc301000-0000-4000-8000-000000000000'
+                     and user_id = 'a3010000-0000-4000-8000-000000000005') ? 'view_costs'), 'T301 view_costs given by hand goes with the old role');
+select tst.ok(exists (select 1 from public.audit_log l where l.company_id = 'cc301000-0000-4000-8000-000000000000' and l.entity_type = 'memberships'
+                        and l.actor_id = 'a3010000-0000-4000-8000-000000000001' and l.before ->> 'role' = 'tech' and l.after ->> 'role' = 'office'),
+              'T301 audit_log: old and new role, the owner as the actor');
+create temp table t301_audit as select count(*) n from public.audit_log where company_id = 'cc301000-0000-4000-8000-000000000000';
+grant select on t301_audit to authenticated;
+:as_o301
+select tst.ok((public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'office') ->> 'repeat') = 'true',
+              'T301 the same role again is a repeat');
+:as_super
+select tst.ok((select count(*) from public.audit_log where company_id = 'cc301000-0000-4000-8000-000000000000') = (select n from t301_audit),
+              'T301 a repeat writes nothing');
+
+-- an admin changes employees; raising to admin needs a fresh sign-in; an existing admin is the owner's only
+:as_a301
+select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'sales');
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'admin')$q$,
+                      '%sign in again%', 'T301 raising to admin without a fresh sign-in — refused');
+select tst.fresh();
+select tst.ok((public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'admin') ->> 'role') = 'admin',
+              'T301 an admin raises an employee to admin after a fresh sign-in (as an invitation can)');
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000003', 'office')$q$,
+                      '%only the owner%', 'T301 an admin does not change another admin');
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000002', 'office')$q$,
+                      '%not yourself%', 'T301 nobody changes their own role (an admin)');
+reset request.jwt.claims;
+-- an admin lowered by the owner: the invitations they sent stop
+:as_b301
+select public.invite_member('cc301000-0000-4000-8000-000000000000', 'new301@c.test', 'tech') ->> 'id' as t301_inv \gset
+:as_o301
+select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000003', 'office');
+:as_super
+select tst.ok(tst.role301('a3010000-0000-4000-8000-000000000003') = 'office', 'T301 the owner lowers an admin');
+select tst.ok((select status from public.invitations where id = :'t301_inv') = 'revoked', 'T301 the invitations of the admin lowered are revoked');
+-- the owner, the owner role, a subcontractor, oneself, a wrong role — refused
+:as_o301
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000001', 'admin')$q$,
+                      '%not yourself%', 'T301 the owner does not change their own role (the last director stays)');
+select tst.fails($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000002', 'owner')$q$,
+                 'T301 nobody is made owner here (only transfer_ownership)');
+select tst.fails($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000006', 'tech')$q$,
+                 'T301 a subcontractor does not become an employee here (a new invitation)');
+select tst.fails($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'subcontractor')$q$,
+                 'T301 an employee does not become a subcontractor here');
+select tst.fails($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', null)$q$,
+                 'T301 no role — refused');
+:as_a301
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000001', 'office')$q$,
+                      '%no such person%', 'T301 an admin does not lower the owner');
+-- an office, a tech: not theirs to change
+:as_f301
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'tech')$q$,
+                      '%no such person%', 'T301 the office does not change roles');
+-- another company: the same «no» (nothing tells its team); a person in both companies — C's id never reaches A
+select tst.fails_like($q$select public.set_member_role('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'sales')$q$,
+                      '%no such person%', 'T301 a tech of company A changes nothing in A');
+:as_owner_b
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'tech')$q$,
+                      '%no such person%', 'T301 another company''s owner — refused');
+:as_o301
+select tst.fails_like($q$select public.set_member_role('ca000000-0000-0000-0000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'sales')$q$,
+                      '%no such person%', 'T301 the owner of C cannot change Fay''s role in company A');
+:as_super
+select tst.ok((select role from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a3010000-0000-4000-8000-000000000004') = 'tech'
+              and tst.role301('a3010000-0000-4000-8000-000000000004') = 'office', 'T301 Fay keeps her role in each company');
+-- a switched-off person — refused
+update public.memberships set status = 'disabled' where company_id = 'cc301000-0000-4000-8000-000000000000' and user_id = 'a3010000-0000-4000-8000-000000000004';
+:as_o301
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'sales')$q$,
+                      '%no such person%', 'T301 a switched-off person — refused');
+:as_super
+update public.memberships set status = 'active' where company_id = 'cc301000-0000-4000-8000-000000000000' and user_id = 'a3010000-0000-4000-8000-000000000004';
+-- the direct update stays closed (column grants)
+:as_o301
+select tst.fails($q$update public.memberships set role = 'sales' where company_id = 'cc301000-0000-4000-8000-000000000000' and user_id = 'a3010000-0000-4000-8000-000000000004'$q$,
+                 'T301 no direct role change, even by the owner');
+reset role; set role anon;
+select tst.fails($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'sales')$q$, 'T301 anon — refused');
+-- after a transfer the old owner (now an admin) cannot lower the new owner: every check is after the locks; the company
+-- keeps an active owner
+:as_o301
+select tst.fresh();
+select public.transfer_ownership('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000002');
+reset request.jwt.claims;
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000002', 'office')$q$,
+                      '%no such person%', 'T301 after the transfer the old owner does not lower the new one');
+:as_super
+select tst.ok(tst.role301('a3010000-0000-4000-8000-000000000002') = 'owner' and tst.role301('a3010000-0000-4000-8000-000000000001') = 'admin',
+              'T301 the transfer stands; the company keeps its owner');
+select tst.ok(exists (select 1 from public.audit_log l where l.company_id = 'cc301000-0000-4000-8000-000000000000' and l.entity_type = 'memberships'
+                        and l.actor_id = 'a3010000-0000-4000-8000-000000000001' and l.after ->> 'role' = 'owner'),
+              'T301 audit_log has the transfer too');
+\echo 'T301 set_member_role ok'
+
+-- ---------------------------------------------------------------- T308 (#1866, audit №2): after a lowering the old
+-- token and the offline queue of the person lowered write nothing the new role may not — the server checks the role at
+-- the moment of each write (the token carries no role). Fay (office in C) adds a client; the owner (Ada since the
+-- transfer in T301) makes her a tech; the same session then adds nothing and reads no clients of C.
+:as_f301
+insert into public.customers (id, company_id, display_name) values ('c3080000-0000-4000-8000-000000000001', 'cc301000-0000-4000-8000-000000000000', 'T308 before');
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'cc301000-0000-4000-8000-000000000000'$q$) = 1, 'T308 the office adds and reads a client');
+:as_a301
+select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000004', 'tech');
+-- the same «token» (the session's claims are not touched) and what its queue would send next
+:as_f301
+select tst.blocked($q$insert into public.customers (id, company_id, display_name) values ('c3080000-0000-4000-8000-000000000002', 'cc301000-0000-4000-8000-000000000000', 'T308 after')$q$,
+                   'T308 lowered to a tech: a queued «new client» is refused');
+select tst.blocked($q$update public.customers set display_name = 'T308 changed' where id = 'c3080000-0000-4000-8000-000000000001'$q$,
+                   'T308 lowered to a tech: a queued change of a client is refused');
+select tst.ok(tst.cnt($q$select 1 from public.customers where company_id = 'cc301000-0000-4000-8000-000000000000'$q$) = 0,
+              'T308 lowered to a tech: no clients of C are read any more');
+select tst.fails_like($q$select public.set_member_role('cc301000-0000-4000-8000-000000000000', 'a3010000-0000-4000-8000-000000000005', 'tech')$q$,
+                      '%no such person%', 'T308 lowered: no role changes either');
+:as_super
+select tst.ok((select display_name from public.customers where id = 'c3080000-0000-4000-8000-000000000001') = 'T308 before'
+              and not exists (select 1 from public.customers where id = 'c3080000-0000-4000-8000-000000000002'), 'T308 nothing written after the lowering');
+\echo 'T308 a lowered role writes nothing of the role before ok'
 
 \echo 'ALL TESTS PASSED'

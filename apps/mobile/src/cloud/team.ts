@@ -16,5 +16,8 @@ export const inviteMember = (companyId: string, email: string, role: DbRole, nam
 export const resendInvitation = (id: string) => call<{ id: string; token: string }>("resend_invitation", { p_id: id });
 export const revokeInvitation = (id: string) => call<void>("revoke_invitation", { p_id: id });
 export const acceptInvitation = (token: string) => call<{ company_id: string; role: DbRole; repeat: boolean }>("accept_invitation", { p_token: token });
+/** #1866: the role of a person already on the team (only with the network: it changes access — spec 42 §8.2) */
+export const setMemberRole = (companyId: string, userId: string, role: "admin" | "office" | "sales" | "tech") =>
+  call<{ company_id: string; user_id: string; role: string; repeat: boolean }>("set_member_role", { p_company_id: companyId, p_user_id: userId, p_role: role });
 export const setMemberStatus = (companyId: string, userId: string, status: "active" | "disabled") =>
   call<void>("set_member_status", { p_company_id: companyId, p_user_id: userId, p_status: status });

@@ -2,7 +2,7 @@ import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Platform, View } from "react-native";
 import { router } from "expo-router";
-import { size, space } from "@octo/design-tokens";
+import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Member, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -11,17 +11,17 @@ import { canGrantSign } from "@/features/estimateSign";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { crewNow } from "@/features/crewList";
 import { visitContext } from "@/data/selectors";
-import { T } from "@/ui/primitives";
+import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { CardList, RowView, Screen } from "@/ui/surfaces";
+import { CardList, ListRow, RowView, Screen } from "@/ui/surfaces";
 import { StatusNote } from "@/ui/statusNote";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 import { useAuth } from "@/cloud/auth";
-import { inviteMember, resendInvitation, revokeInvitation, setMemberStatus } from "@/cloud/team";
+import { inviteMember, resendInvitation, revokeInvitation, setMemberRole, setMemberStatus } from "@/cloud/team";
 import { WEB_APP_URL } from "@/config/backend";
 import { copyText, shareText } from "@/features/sendEstimate";
-import { canDisable, dbRoleFor, INVITE_ROLES, inviteLink, teamErrorKey, teamList, teamState, validInviteEmail } from "@/features/team";
+import { canChangeRole, canDisable, dbRoleFor, INVITE_ROLES, inviteLink, roleChoices, roleLabelKey, soleAdmin, teamErrorKey, teamList, teamRoleOf, teamState, validInviteEmail, type TeamRole } from "@/features/team";
 
 /** «Пригласить» → the link (cloud) to send by «Поделиться» or copy; email comes with the mail service (П1b) */
 type LinkFor = { name: string; link: string } | null;
@@ -281,9 +281,14 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
   const [loaded, setLoaded] = useState<string | null>(null);
   const [sure, setSure] = useState(false);
   const [busy, setBusy] = useState(false);
+  // #1866: the role — the list of roles open, then the confirmation of the one chosen (rule 5)
+  const [picking, setPicking] = useState(false);
+  const [nextRole, setNextRole] = useState<TeamRole | null>(null);
   const auth = useAuth();
   if (member && loaded !== member.id) {
     setSure(false);
+    setPicking(false);
+    setNextRole(null);
     setLoaded(member.id);
     setTitle(member.title ?? "");
     setHis(member.hisNumber ?? "");
@@ -302,6 +307,30 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
     onClose();
   };
   const switchable = !!member && (member.disabled || canDisable(store.db, store.db.me, member));
+  const roleNow = member ? teamRoleOf(member) : null;
+  const roleEditable = !!member && canChangeRole(store.db, store.db.me, member);
+  /** #1866: the new role — the demo at once (with «Отменить»), the cloud on the server (only with the network), then a reload */
+  const changeRole = async (role: TeamRole) => {
+    if (!member) return;
+    const words = { name: member.name, role: t(roleLabelKey(role)) };
+    if (store.mode !== "cloud") {
+      toast.show(t("team.role.changed", words), store.setMemberRole(member.id, role));
+      return close();
+    }
+    const companyId = auth.company?.companyId;
+    if (!store.online || !companyId) return toast.show(t("team.needOnline"));
+    setBusy(true);
+    try {
+      await setMemberRole(companyId, member.id, role);
+      toast.show(t("team.role.changed", words));
+      store.refresh();
+      close();
+    } catch (e) {
+      toast.show(t(teamErrorKey((e as Error).message)));
+    } finally {
+      setBusy(false);
+    }
+  };
   /** «Отключить» / «Включить снова» (S21): the person's records stay with the company; only the access changes */
   const setDisabled = async (disabled: boolean) => {
     if (!member) return;
@@ -340,6 +369,44 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
         </View>
       ) : (
       <View testID="member-sheet" style={{ gap: space[3] }}>
+        {/* #1866: the role of a working person — a row, the roles as rows (rule 12), a confirmation (rule 5) */}
+        {member && roleEditable && roleNow ? (
+          <View testID="member-role" style={{ gap: space[2] }}>
+            <ListRow
+              title={t("team.role.row")}
+              subtitle={t(roleLabelKey(roleNow))}
+              onPress={busy ? undefined : () => (setPicking(!picking), setNextRole(null))}
+            />
+            {picking && !nextRole
+              ? roleChoices(store.db, store.db.me).map((r) => (
+                  <View key={r} testID={`member-role-${r}`}>
+                    <ListRow
+                      title={t(roleLabelKey(r))}
+                      selected={r === roleNow}
+                      chevron={false}
+                      minHeight={component.rowOption}
+                      right={r === roleNow ? <Icon name="check" s={size.iconSm} /> : undefined}
+                      onPress={r === roleNow ? () => setPicking(false) : () => setNextRole(r)}
+                    />
+                  </View>
+                ))
+              : null}
+            {nextRole ? (
+              <View testID="member-role-confirm" style={{ gap: space[2] }}>
+                <T v="body">{t("team.role.sure", { name: member.name, role: t(roleLabelKey(nextRole)) })}</T>
+                {roleNow === "admin" && soleAdmin(store.db, member.id) ? (
+                  <StatusNote tone="warn">{t("team.role.lastAdmin")}</StatusNote>
+                ) : null}
+                <Button testID="member-role-yes" label={t("team.role.yes")} icon="check" variant="secondary" full disabled={busy} onPress={() => changeRole(nextRole)} />
+                <Button label={t("team.role.no")} variant="ghost" full disabled={busy} onPress={() => (setNextRole(null), setPicking(false))} />
+              </View>
+            ) : null}
+          </View>
+        ) : member && member.id !== store.db.me && member.kind === "employee" && member.isOwner && roleChoices(store.db, store.db.me).length ? (
+          <T v="caption" tone="mut">
+            {t("team.role.ownerHint")}
+          </T>
+        ) : null}
         {member?.kind !== "sub" ? (
           <>
         <TextField type="jobTitle" value={title} onChangeText={setTitle} placeholder={t("team.member.jobTitle")} />
@@ -362,7 +429,12 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
           </>
         ) : (
           // a subcontractor never signs for the company: nothing to edit here, only the access
-          <T v="body">{t("team.subHint")}</T>
+          <>
+            <T v="body">{t("team.subHint")}</T>
+            <T v="caption" tone="mut">
+              {t("team.role.subHint")}
+            </T>
+          </>
         )}
         {switchable && member?.id !== store.db.me ? (
           !sure ? (

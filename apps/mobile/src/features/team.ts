@@ -65,6 +65,44 @@ export function canDisable(db: DB, me: string, target: Member): boolean {
   return !target.isOwner || !!mine.isOwner;
 }
 
+/**
+ * #1866: the role of a person already on the team — the server's employee roles (an owner is made by a transfer only, a
+ * subcontractor ↔ an employee by a new invitation). The app's Member has no server role: «director» without the owner
+ * mark is an admin (as canDisable). The same rules as public.set_member_role (T301); the server decides.
+ */
+export type TeamRole = "admin" | "office" | "sales" | "tech";
+export const TEAM_ROLES: readonly TeamRole[] = ["tech", "sales", "office", "admin"];
+export const teamDbRole = (r: TeamRole): DbRole => r;
+/** the role as the server has it; null — the owner, a subcontractor, someone not working (not changed here) */
+export function teamRoleOf(m: Member): TeamRole | null {
+  if (m.kind === "sub" || m.pending) return null;
+  if (m.roles.includes("director")) return m.isOwner ? null : "admin";
+  if (m.roles.includes("dispatcher")) return "office";
+  if (m.roles.includes("sales")) return "sales";
+  return "tech";
+}
+/** may I change this person's role: a director, never my own, never the owner or a subcontractor; an admin — the owner only */
+export function canChangeRole(db: DB, me: string, target: Member): boolean {
+  if (target.id === me) return false;
+  const mine = db.members.find((m) => m.id === me);
+  if (!mine?.roles.includes("director") || mine.pending) return false;
+  const now = teamRoleOf(target);
+  if (!now) return false;
+  return now !== "admin" || !!mine.isOwner;
+}
+/** the roles I may give (an admin may raise to admin, as an invitation can; the server asks for a fresh sign-in) */
+export function roleChoices(db: DB, me: string): TeamRole[] {
+  const mine = db.members.find((m) => m.id === me);
+  return mine?.roles.includes("director") && !mine.pending ? [...TEAM_ROLES] : [];
+}
+
+/** the words of a role (the app shows admin as «Директор», office as «Диспетчер») */
+export const roleLabelKey = (r: TeamRole): "role.director" | "role.dispatcher" | "role.sales" | "role.tech" =>
+  r === "admin" ? "role.director" : r === "office" ? "role.dispatcher" : r === "sales" ? "role.sales" : "role.tech";
+/** the only admin (not the owner) at work: lowering them leaves no one to hand the company over to (transfer_ownership) */
+export const soleAdmin = (db: DB, id: string): boolean =>
+  !db.members.some((m) => m.id !== id && !m.pending && m.kind === "employee" && m.roles.includes("director") && !m.isOwner);
+
 /** the invitation link waits through sign-in / sign-up (the email confirmation may reopen the app) */
 const PENDING_KEY = "octo.invite.token.v1";
 export const isInviteToken = (t: string | undefined) => !!t && /^[A-Za-z0-9_-]{20,200}$/.test(t);
@@ -79,7 +117,7 @@ export async function takeInvite(store: { getItem: (k: string) => Promise<string
 export const peekInviteKey = PENDING_KEY;
 
 /** a server refusal → the words of the app (rule 7: no raw server text on screen) */
-export type TeamErrorKey = "team.err.otherEmail" | "team.err.expired" | "team.err.already" | "team.err.confirm" | "team.err.noInvite" | "team.err.lastOwner" | "team.err.rights" | "team.err.generic";
+export type TeamErrorKey = "team.err.otherEmail" | "team.err.expired" | "team.err.already" | "team.err.confirm" | "team.err.noInvite" | "team.err.lastOwner" | "team.err.rights" | "team.err.signInAgain" | "team.err.again" | "team.err.gone" | "team.err.generic";
 export function teamErrorKey(message: string): TeamErrorKey {
   const m = message.toLowerCase();
   if (m.includes("another email")) return "team.err.otherEmail";
@@ -87,7 +125,11 @@ export function teamErrorKey(message: string): TeamErrorKey {
   if (m.includes("already on the team") || m.includes("already accepted")) return "team.err.already";
   if (m.includes("confirm your email")) return "team.err.confirm";
   if (m.includes("no such invitation") || m.includes("invitation is")) return "team.err.noInvite";
-  if (m.includes("active owner")) return "team.err.lastOwner";
+  if (m.includes("active owner") || m.includes("keeps a director")) return "team.err.lastOwner";
+  // #1866 set_member_role: a fresh sign-in for raising to admin; a lock taken — try again; the person is not on the team now
+  if (m.includes("sign in again")) return "team.err.signInAgain";
+  if (m.includes("try again")) return "team.err.again";
+  if (m.includes("no such person")) return "team.err.gone";
   if (m.includes("only the owner") || m.includes("only owner") || m.includes("not yourself")) return "team.err.rights";
   return "team.err.generic";
 }
