@@ -374,7 +374,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
         ) : null}
 
         {details && spec.parts.length ? (
-          <Card style={{ gap: space[3], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
+          <Card style={{ gap: space[5], ...(cols ? { maxWidth: layout.formMax } : {}) }}>
             <View testID="view-parts"><T v="heading" w="semibold">{t("mod.gutters.view.parts")}</T></View>
             {/* DS §8.14 (#1766): three groups, a name in one line, the properties below, the quantity on its own column */}
             {partGroups(t, spec.parts, fmt).map((g) => (
