@@ -50,11 +50,14 @@ exports.run = async (h) => {
     { timeout: 10000 },
   );
   const html = await p.evaluate(() => window.__pdf);
-  // the elbow lines by their shape and style, not by the word «Колено» (that is the dictionary's): «… · A» / «… · 45»
-  const rows = [...html.matchAll(/<td>([^<]*· (?:A|45))<\/td><td class="r">([^<]*)<\/td>/g)].map((m) => `${m[1]} = ${m[2]}`);
+  // the elbow lines (#1766, #1800: a row is «<b>the supplier's name</b><br>properties | qty»): the corrugated rectangular one by
+  // its style «A Elbow 75°», the round one by its angle «Round Elbow 45°» — never «A»; the plain 2×3 one has none (#1776)
+  const rows = [...html.matchAll(/<td><b>([^<]*)<\/b>(?:<br>([^<]*))?<\/td><td class="r">([^<]*)<\/td>/g)]
+    .filter((m) => /Elbow \d+°$/.test(m[1]))
+    .map((m) => `${m[1]} · ${m[2] || ""} = ${m[3]}`);
   h.expect(rows.length === 2, "two elbow lines (the corrugated rectangular one and the round one; the plain one has none): " + rows.join(" | "));
-  h.expect(!rows.some((r) => /2["″]?\s*[×x]\s*3/.test(r)), "no elbow line of the plain 2×3 one (#1776): " + rows.join(" | "));
-  h.expect(rows.some((r) => /(rect|Прямоугольный)/.test(r) && /· A = 3 \S+$/.test(r)), "the rectangular: 3 × A — " + rows.join(" | "));
-  h.expect(rows.some((r) => /(round|Круглый)/.test(r) && /· 45 = 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
+  h.expect(!rows.some((r) => /^2×3″/.test(r)), "no elbow line of the plain 2×3 one (#1776): " + rows.join(" | "));
+  h.expect(rows.some((r) => /^3×4″ A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
+  h.expect(rows.some((r) => /^\d″ Round Elbow 45° · [^=]*= 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };
