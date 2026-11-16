@@ -32,12 +32,13 @@ export function ListPanel({ title, subtitle, outside, actions, more, onOpen, onC
     <View testID="list-panel" role="complementary" aria-label={title} style={{ width: component.panelW, borderLeftWidth: component.hairline, borderLeftColor: c.bd }}>
       <ScrollView contentContainerStyle={{ padding: space[4], gap: space[3] }}>
         <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+          {/* 360 beside three buttons: a long name («EST-0006 · Carpet, railing, bulb, haul-away») takes a third line, not «…» (#1728) */}
           <View style={{ flexShrink: 1 }}>
-            <T v="title" numberOfLines={2}>
+            <T v="title" numberOfLines={3}>
               {title}
             </T>
             {subtitle ? (
-              <T v="body" tone="mut" numberOfLines={2}>
+              <T v="body" tone="mut" numberOfLines={3}>
                 {subtitle}
               </T>
             ) : null}
