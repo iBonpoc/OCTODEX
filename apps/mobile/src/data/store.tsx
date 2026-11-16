@@ -14,6 +14,7 @@ import { motion } from "@octo/design-tokens";
 import { useAuth, type DbRole } from "@/cloud/auth";
 import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
+import { canChangeRole, roleChoices, teamDbRole, teamRoleOf, type TeamRole } from "@/features/team";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, catalogItemChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
@@ -519,6 +520,9 @@ interface StoreCtx {
   /** wave 7-2 (S21), demo: cancel an invitation / switch a person off or back on (the cloud goes through cloud/team.ts) */
   revokeInvite: (id: ID) => Undo;
   setMemberDisabled: (id: ID, disabled: boolean) => Undo;
+  /** #1866: the demo's change of a working person's role (the cloud changes it on the server — cloud/team.ts setMemberRole,
+   *  then a reload); the same rules as the server (features/team.ts canChangeRole) */
+  setMemberRole: (id: ID, role: TeamRole) => Undo;
   /** company profile (owner/admin in the cloud) */
   saveCompany: (patch: Partial<Omit<Company, "id" | "licenses" | "contacts" | "modules">>) => Undo;
   saveLicense: (l: CompanyLicense) => Undo;
@@ -2890,6 +2894,14 @@ export function StoreProvider({
       revokeInvite: (id) => {
         if (modeRef.current !== "demo" || !dbRef.current.members.some((m) => m.id === id && m.pending)) return NO_UNDO;
         return mutate("member.revoke", (d) => ({ ...d, members: d.members.filter((m) => m.id !== id) }));
+      },
+      setMemberRole: (id, next) => {
+        if (modeRef.current !== "demo") return NO_UNDO;
+        const d0 = dbRef.current;
+        const m = d0.members.find((x) => x.id === id);
+        if (!m || !canChangeRole(d0, d0.me, m) || !roleChoices(d0, d0.me).includes(next) || teamRoleOf(m) === next) return NO_UNDO;
+        // the app's roles of that server role; the owner mark is never touched here (an owner is made by a transfer only)
+        return mutate("member.role", (d) => ({ ...d, members: d.members.map((x) => (x.id !== id ? x : { ...x, roles: appRoles(teamDbRole(next)) })) }));
       },
       setMemberDisabled: (id, disabled) => {
         if (modeRef.current !== "demo") return NO_UNDO;
