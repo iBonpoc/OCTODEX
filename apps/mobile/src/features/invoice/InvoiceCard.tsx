@@ -10,7 +10,6 @@ import { useI18n, type DictKey } from "@/i18n";
 import { companyForPortal } from "@/cloud/portal";
 import { invoiceChip } from "@/features/ContractStatement";
 import { invoiceNext } from "@/features/invoice/invoiceNext";
-import { daysOverdue } from "@/data/selectors";
 import { invoiceHtml, invoiceMessage } from "@/features/docPdf";
 import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
@@ -68,10 +67,8 @@ export function InvoiceCardBody({ inv, frame, inline = true }: { inv: Invoice; f
   // no part, no reference (the server's deposit function takes neither)
   const right = paymentRight(store.role, inv, { fromEstimate: !!job?.estimateId, pendingCents });
   const chip = invoiceChip(inv);
-  // one word of status in the list and on the card (#1495): an overdue invoice says «Просрочен N дн» here as in the list
-  // the one source of truth is `invoiceChip` (colour, word and the line «what next» agree)
-  const overdueNow = chip.l === "st.overdue" && !!inv.dueDate;
-  const chipLabel = overdueNow ? t("card.sign.overdueDays", { d: daysOverdue(inv.dueDate!) }) : t(chip.l);
+  // one word of status in the list and on the card (#1495): the one source of truth is `invoiceChip`
+  const chipLabel = t(chip.l, chip.p);
   const company = companyForPortal(db, store.companyName ?? APP_NAME);
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
   const lang = docLanguageFor(db, { customerId: inv.customerId });
