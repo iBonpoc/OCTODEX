@@ -216,6 +216,14 @@ export default function DrawScreen() {
   /** a cap picked on its own (#1855): the gutter is `selected`, this end its picked cap; gone when another thing is picked */
   const [pickedEnd, setPickedEnd] = useState<PickedEnd>(null);
   useEffect(() => { if (pickedEnd && pickedEnd.id !== selected) setPickedEnd(null); }, [selected, pickedEnd]);
+  // the drawing changed (a gutter drawn, an end pulled, the length set): what is picked is the gutter, not its cap — the lift of a
+  // stroke on the web is a tap on its end
+  const drawnAt = useRef<{ d: unknown; at: number }>({ d: null, at: 0 });
+  useEffect(() => {
+    if (drawnAt.current.d === drawing) return;
+    drawnAt.current = { d: drawing, at: Date.now() };
+    setPickedEnd(null);
+  }, [drawing]);
   const [place, setPlace] = useState<ToolbarPlace>("bottom");
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<PlanView | null>(null);
@@ -693,7 +701,8 @@ export default function DrawScreen() {
         if ((h ? h.id : null) !== cur.current.selected) haptics.selection();
         setSelected(h ? h.id : null);
         // a tap on a free end with a cap picks the cap: 🗑 takes it off, not the gutter (#1855)
-        setPickedEnd(h?.kind === "end" && freeEnd && hasCap(d, h.id, h.end) ? { id: h.id, end: h.end } : null);
+        // (not the lift of a drag: a gutter just drawn or an end just pulled is the gutter picked, its end under the finger is not a tap on the cap)
+        setPickedEnd(h?.kind === "end" && freeEnd && !liftTap.current && Date.now() - drawnAt.current.at > motion.doubleTapMs && hasCap(d, h.id, h.end) ? { id: h.id, end: h.end } : null);
         return;
       }
       haptics.light();
