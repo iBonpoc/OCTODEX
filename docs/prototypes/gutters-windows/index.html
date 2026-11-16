@@ -54,11 +54,16 @@ svg.cv{position:absolute;left:0;top:0;width:390px;height:844px}
 .row.sub{min-height:52px}
 .row .stack{flex:1;display:flex;flex-direction:column}
 .row .stack small{font-size:13px;color:var(--mut)}
-.stp{display:flex;align-items:center;border:1px solid var(--bd);border-radius:18px;height:32px;overflow:hidden}
-.stp b{width:34px;text-align:center;font-weight:500;color:var(--ink)}.stp i{font-style:normal;min-width:28px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+.stp{display:flex;align-items:center;gap:0}
+.stp b{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);background:var(--surf2);display:flex;align-items:center;justify-content:center;font-weight:500;color:var(--ink);font-size:18px}.stp b.off{color:var(--track);background:transparent}.stp i{font-style:normal;width:56px;text-align:center;font-weight:600;font-size:17px;font-variant-numeric:tabular-nums}
+.row.del{color:#B4232A;justify-content:center;font-weight:600}
+.tb2{position:absolute;left:12px;right:12px;bottom:92px;height:60px;border-radius:24px;background:var(--solid);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around}
+.tb2 .c{width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;color:var(--ink)}.tb2 .c.on{background:var(--ink);color:var(--bg);box-shadow:var(--sh)}
+.tile.h36{flex-direction:row;min-height:44px;gap:8px;font-size:15px}.tile.h36 svg{width:20px;height:20px}
+.lc{display:flex;gap:12px;align-items:flex-start}.lc .av{width:40px;height:40px;border-radius:20px;border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;flex:none}
 .tog{width:44px;height:26px;border-radius:13px;background:var(--track);position:relative}
 .tog::after{content:"";position:absolute;left:2px;top:2px;width:22px;height:22px;border-radius:11px;background:#fff;box-shadow:var(--sh)}
-.tog.on{background:var(--okT)}.tog.on::after{left:20px}
+.tog.on{background:var(--acc)}.tog.on::after{left:20px}
 .note{font-size:13px;color:var(--mut);margin:6px 4px 0}
 .ph{border:1.5px dashed var(--bd);border-radius:12px;padding:12px;font-size:13px;color:var(--mut)}
 .foot{padding:8px 16px 28px;border-top:1px solid var(--bd);display:flex;gap:8px}
@@ -98,9 +103,9 @@ xsK:"M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",xsHalf:"M
 cornerOut:"M12 3l9 9-9 9-9-9z",cornerIn:"M12 3l9 9-9 9-9-9zM12 11l1 1-1 1-1-1z"};
 const ic=(n,s=22,col='currentColor',sw=1.75)=>`<svg class="ic" style="width:${s}px;height:${s}px" viewBox="0 0 24 24"><path d="${P[n]}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const chk=`<svg class="chk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="${k('ink')}"/><path d="${P.check}" fill="none" stroke="${k('bg')}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const tile=(icon,label,on)=>`<div class="tile ${on?'on':''}">${ic(icon,26)}<span>${label}</span>${on?chk:''}</div>`;
+const tile=(icon,label,on,cls='')=>`<div class="tile ${cls} ${on?'on':''}">${ic(icon,26)}<span>${label}</span>${on?chk:''}</div>`;
 const row=(key,val,opts={})=>`<div class="row ${opts.sub?'sub':''}">${opts.icon?ic(opts.icon,20,k('mut')):''}${opts.sub?`<div class="stack"><span>${key}</span><small>${opts.sub}</small></div>`:`<span class="k">${key}</span>`}${opts.ctrl??`<span class="v">${val}${ic('cr',16)}</span>`}</div>`;
-const stp=n=>`<span class="stp"><b>−</b><i>${n}</i><b>+</b></span>`;
+const stp=n=>`<span class="stp"><b class="${n?'':'off'}">−</b><i>${n}</i><b>+</b></span>`;
 const seg=(items,on)=>`<div class="seg">${items.map((x,i)=>`<span class="${i===on?'on':''}">${x}</span>`).join('')}</div>`;
 let grid='';for(let x=0;x<390;x+=24)grid+=`<line x1="${x}" y1="0" x2="${x}" y2="844" stroke="${x%96?k('grid'):k('grid2')}"/>`;for(let y=0;y<844;y+=24)grid+=`<line x1="0" y1="${y}" x2="390" y2="${y}" stroke="${y%96?k('grid'):k('grid2')}"/>`;
 const runL=(a,b,col=k('s1'),len,sel)=>{let s='';if(sel)s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k('ink')}" stroke-width="12" stroke-linecap="round"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k('bg')}" stroke-width="8" stroke-linecap="round"/>`;s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="${sel?6:4}" stroke-linecap="round"/>`;for(const p of [a,b])s+=`<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/>`;if(len){const v=Math.abs(b[0]-a[0])<2;s+=`<text x="${v?a[0]+12:(a[0]+b[0])/2}" y="${v?(a[1]+b[1])/2:a[1]-12}" font-size="12" font-weight="600" fill="${k('ink')}" text-anchor="${v?'start':'middle'}">${len}</text>`;}return s;};
@@ -114,34 +119,51 @@ const sheet=(title,sub,body,foot='')=>`<div class="sheet static"><div class="gra
 let H='';
 if(F==='ds'){
  H=sheet('Водосток','D1 · желоб 1-2',`
- <div><div class="lbl">Форма</div><div class="tiles c4">${tile('dsRect','Прямоуг.<br>гладкий',true)}${tile('dsRectRibbed','Прямоуг.<br>ребристый')}${tile('dsRound','Круглый<br>гладкий')}${tile('dsRoundRibbed','Круглый<br>ребристый')}</div></div>
+ <div><div class="lbl">Форма</div><div class="tiles c4">${tile('dsRect','Прямой',true)}${tile('dsRectRibbed','Прямой<br>ребристый')}${tile('dsRound','Круглый')}${tile('dsRoundRibbed','Круглый<br>ребристый')}</div></div>
  <div><div class="lbl">Размер</div>${seg(['2×3','3×4','4×5'],1)}</div>
  <div class="grp">${row('Цвет','Как у желоба · White')}${row('Длина','По этажу · 10′')}${row('Материал','Алюминий')}</div>
  <div><div class="lbl">Вниз</div>${seg(['Труба','В желоб','Цепь'],0)}</div>
- <div><div class="lbl">Колена и офсеты</div><div class="grp">${row('Колено A','',{ctrl:stp(2)})}${row('Колено B','',{ctrl:stp(1)})}${row('Офсет','2″',{ctrl:stp(0)})}</div><div class="ph" style="margin-top:8px">Список колен (A, B, офсеты, градусы) — место под результат ресёрча аудита. Строка = вид колена, справа число.</div></div>
- <div class="grp">${row('Низ','Удлинитель')}${row('Стена','Дерево · крепление 2 шт')}</div>
- <div class="grp">${row('Переход на меньший','Нет')}${row('Сверху','Ничего')}${row('Отвод в бочку','',{ctrl:'<span class="tog"></span>'})}${row('Сетка выпуска','',{ctrl:'<span class="tog on"></span>'})}</div>`,
- `<div class="foot"><span class="btnw">${ic('trash',18)}&nbsp;Удалить водосток</span></div>`)+cap('Стало: окно водостока. Толщины нет; форма — значками на виду; строки 44 вместо полей');
+ <div><div class="lbl">Колена</div><div class="grp">${row('Колено A · 75°','',{sub:'вперёд/назад от стены',ctrl:stp(2)})}${row('Колено B · 75°','',{sub:'влево/вправо',ctrl:stp(1)})}${row('Добавить колено','',{icon:'plus',ctrl:''})}</div><div class="note">Обычно 2 вверху и 1 внизу. Нажатие на строку — вид и угол. У круглой трубы A/B нет — только угол. Ждёт сверки основателя.</div></div>
+ <div><div class="lbl">Офсеты</div><div class="grp">${row('Офсет A · 2″','',{sub:'от стены',ctrl:stp(1)})}${row('Добавить офсет','',{icon:'plus',ctrl:''})}</div></div>
+ <div><div class="lbl">Низ и стена</div><div class="grp">${row('Низ','Удлинитель')}${row('Стена','Дерево · крепление 2 шт')}</div></div>
+ <div><div class="lbl">Редко</div><div class="grp">${row('Переход на меньший','Нет')}${row('Сверху','Ничего')}${row('Отвод в бочку','',{ctrl:'<span class="tog"></span>'})}${row('Сетка выпуска','',{ctrl:'<span class="tog on"></span>'})}</div></div>
+ <div class="grp">${row('Фото элемента','2',{icon:'camera'})}</div>
+ <div class="grp"><div class="row del">Удалить водосток</div></div>`)+cap('Стало: окно водостока. Толщины нет; форма — значками на виду; строки 44 вместо полей');
+}
+if(F==='elbow'){
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36 round">${ic('cl',18)}</span><h2>Колено</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body">
+ <div><div class="lbl">Вид</div><div class="tiles c2">${tile('dsRect','A — вперёд/назад<br>от стены',true)}${tile('dsRect','B — влево/вправо')}</div></div>
+ <div><div class="lbl">Угол</div>${seg(['30°','45°','60°','75°','90°'],3)}<div class="note">Стандарт — 75°.</div></div>
+ <div class="grp">${row('Сколько','',{ctrl:stp(2)})}</div>
+ <div><div class="lbl">Офсет (готовый)</div>${seg(['Нет','Double A','Double B','Single'],0)}<div class="grp" style="margin-top:8px">${row('Смещение','2″')}</div><div class="note">Смещение 1½–6″. У Amerimax офсет собирают из двух колен с отрезком. Ждёт сверки основателя.</div></div>
+ </div><div class="foot"><span class="btnw acc">Готово</span></div></div>`+cap('Стало: страница «Колено» внутри окна водостока: вид A/B, угол, сколько; офсет');
 }
 if(F==='run'){
  H=sheet('Желоб','1-1 · 21′ 8″',`
- <div><div class="lbl">Профиль</div><div class="tiles c5">${tile('xsK','K-style',true)}${tile('xsHalf','Полу-<br>круглый')}${tile('xsFascia','Fascia')}${tile('xsBox','Box')}${tile('xsEuro','Euro')}</div></div>
+ <div><div class="lbl">Профиль</div><div class="tiles c5">${tile('xsK','K',true)}${tile('xsHalf','Полукр.')}${tile('xsFascia','Fascia')}${tile('xsBox','Box')}${tile('xsEuro','Euro')}</div></div>
  <div><div class="lbl">Размер</div>${seg(['5″','6″','7″'],0)}</div>
  <div><div class="lbl">Этаж</div>${seg(['1','2','3','4'],0)}</div>
- <div class="grp">${row('Длина','21′ 8″ · рулетка',{icon:'pencil'})}${row('Цвет','White')}${row('Материал','Алюминий · .027')}</div>
- <div><div class="lbl">Крепление</div><div class="grp">${row('Монтаж','На фасад')}${row('Кронштейны','Hidden hanger')}</div></div>`,
- `<div class="foot"><span class="btnw">${ic('trash',18)}&nbsp;Удалить желоб</span></div>`)+cap('Стало: окно желоба. Профиль значками; размер и этаж — сегменты; углы — в окне угла');
+ <div><div class="lbl">Длина</div><div style="display:flex;gap:8px;align-items:center"><div class="inp" style="width:84px">21</div><span style="color:var(--mut)">ft</span><div class="inp" style="width:84px">8</div><span style="color:var(--mut)">in</span><span class="sp"></span><span class="b36">Рулетка</span></div><div class="note">Нарисовано 21′ 4″</div></div>
+ <div class="grp">${row('Цвет','White')}${row('Материал','Алюминий · .027')}</div>
+ <div><div class="lbl">Крепление</div><div class="grp">${row('Монтаж','На фасад')}${row('Кронштейны','Hidden hanger')}</div></div>
+ <div class="grp">${row('Фото элемента','0',{icon:'camera'})}</div>
+ <div class="grp"><div class="row del">Удалить желоб</div></div>`)+cap('Стало: окно желоба. Профиль значками; размер и этаж — сегменты; углы — в окне угла');
 }
 if(F==='corner'){
- H=sheet('Угол','1-1 / 1-2 · 90°',`
- <div><div class="lbl">Вид угла</div><div class="tiles c2">${tile('cornerOut','Наружный',true)}${tile('cornerIn','Внутренний')}</div></div>
- <div><div class="lbl">Как делаем</div>${seg(['Готовый','Резать','Полоса'],1)}</div>
- <div class="grp" style="padding:8px 14px"><table class="cut"><tr><th>Кусок</th><th>По стене</th><th>По лицу</th><th>Угол реза</th></tr><tr><td>1-1</td><td>21′ 8″</td><td><b>22′ 1″</b></td><td>45°</td></tr><tr><td>1-2</td><td>14′ 2″</td><td><b>14′ 7″</b></td><td>45°</td></tr></table></div>
- <div class="grp">${row('Брызговик на угол','',{ctrl:'<span class="tog on"></span>'})}</div>`,
- `<div class="foot"><span class="btnw">Разъединить угол</span></div>`)+cap('Стало: окно угла. Вид — две плитки со значками; способ — сегмент; размеры реза — таблицей');
+ const sk=`<svg viewBox="0 0 300 200" style="width:100%;height:170px"><rect x="40" y="40" width="190" height="22" fill="${k('surf2')}"/><rect x="208" y="40" width="22" height="150" fill="${k('surf2')}"/><path d="M40 62H208V190" fill="none" stroke="${k('ink')}" stroke-width="3"/><path d="M40 40H230V190" fill="none" stroke="${k('ink')}" stroke-width="2" stroke-dasharray="5 4"/><path d="M208 62L230 40" stroke="${k('ink')}" stroke-width="2.5"/><path d="M190 62A18 18 0 0 0 208 80" fill="none" stroke="${k('mut')}" stroke-width="1.5" stroke-dasharray="6 3 1 3"/><text x="180" y="96" font-size="12" font-weight="600" fill="${k('ink')}">90°</text><text x="120" y="30" font-size="12" fill="${k('ink')}" text-anchor="middle">лицевая 24′ 4″</text><text x="120" y="80" font-size="12" fill="${k('mut')}" text-anchor="middle">стена 23′ 11″</text></svg>`;
+ const cut=(n,w,f)=>`<div class="grp" style="padding:10px 14px"><div style="font-weight:600;font-size:13px">Желоб ${n}</div><table class="cut"><tr><th>По стене</th><th>По лицу</th><th>Рез</th></tr><tr><td style="text-align:left">${w}</td><td><b>${f}</b></td><td>45°</td></tr></table></div>`;
+ H=sheet('Угол','1-1 / 1-2',`
+ <div><div class="tiles c2">${tile('cornerOut','наружный',true,'h36')}${tile('cornerIn','внутренний',false,'h36')}</div><div class="note">Сменится сторона всей линии</div></div>
+ ${sk}
+ <div><div class="lbl">Как делаем угол</div>${seg(['Готовый','Резать','Полоса'],1)}<div class="note">Было в окне желоба («Углы этого желоба») — теперь здесь.</div></div>
+ <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${cut('1-1','23′ 11″','24′ 4″')}${cut('1-2','25′ 11″','26′ 4″')}</div><div class="note" style="color:var(--warnT)">⚠ Замер примерный: перед резкой перемерьте рулеткой</div></div>
+ <div class="grp">${row('Брызговик на угол','',{ctrl:'<span class="tog on"></span>'})}${row('Угол по замеру','A, B, C',{})}</div>
+ <div class="grp"><div class="row del">Разъединить угол</div></div>`)+cap('Стало: окно угла — всё из DS §19б остаётся; добавлен способ угла; «Угол по замеру» — строкой ›');
 }
 if(F==='canvas'){
- H=`<div class="scr">${canvas()}${hdr}${toolbar('ds')}${field}${cap('Стало: шапка холста — все кнопки 36, одна форма; фотоаппарат как остальные; «Готово» той же высоты, единственный жёлтый')}</div>`;
+ const tb=`<div class="tb2"><span style="color:var(--mut)">⋮⋮</span><div class="c on">${ic('xsK')}</div><div class="c">${ic('dsRect')}</div><div class="c" style="width:auto"><span style="font-size:13px;font-weight:700;border:2px solid ${k('s1')};border-radius:14px;padding:4px 8px">Эт 1</span></div><div class="c">${ic('undo')}</div><div class="c">${ic('redo')}</div><div class="c">${ic('trash')}</div></div><div class="fld" style="bottom:44px"><b>Желоб · 25′ 11″</b></div>`;
+ const hd=`<div class="hdr"><span class="b36 round">${ic('cl',20)}</span><span class="b36">${ic('plus',18)}Привязать</span><span class="sp"></span><span class="b36" style="padding:0 10px">${ic('camera',20)}<span style="font-size:13px">2</span></span><span class="b36 round">${ic('more',20)}</span><span class="b36 acc">Готово</span></div>`;
+ H=`<div class="scr">${canvas()}${hd}${tb}${cap('Стало: шапка — 5 кнопок высотой 36 одной формы; 📷 с числом фото; «Готово» 36. Панель и плашка — как сейчас')}</div>`;
 }
 if(F==='link'||F==='draft'){
  const draft=F==='draft';
@@ -149,19 +171,20 @@ if(F==='link'||F==='draft'){
  ${seg(['Лиды','Клиенты','Черновик'],draft?2:0)}
  ${draft?`<div><div class="lbl">Название черновика</div><div class="inp focus">Дом на Maple, задний двор<span class="sp"></span>${ic('close',16,k('mut'))}</div><div class="note">Видно в списке «Черновики» на вкладке Gutters. Привязать к лиду или клиенту можно потом.</div></div>`
  :`<div class="inp">${ic('search',18,k('mut'))}<span class="ph2">Имя, телефон или адрес</span></div>
-  <div class="grp">${row('Maria Lopez','',{icon:'user',sub:'(555) 555-0142 · лид от 14 нояб.'})}${row('John Carter','',{icon:'user',sub:'(555) 555-0187 · лид от 12 нояб.'})}${row('Новый лид','',{icon:'plus',sub:'По телефону и имени'})}</div>`}`,
- `<div class="foot"><span class="btnw acc">${draft?'Сохранить черновик':'Привязать'}</span></div>`)+cap(draft?'Стало: «Привязать» → «Черновик»: поле названия, сохраняется':'Стало: «Привязать» — три вкладки: лиды, клиенты, черновик');
+  <div class="grp">${row('Maria Lopez','',{icon:'user',sub:'412 Oak St · лид от 14 нояб.',ctrl:chk.replace('class="chk"','style="width:22px;height:22px"')})}${row('John Carter','',{icon:'user',sub:'88 Pine Ave · лид от 12 нояб.',ctrl:''})}${row('Kevin Brooks','',{icon:'user',sub:'лид от 10 нояб.',ctrl:''})}</div><div class="grp">${row('Новый лид','',{icon:'plus',sub:'По телефону и имени'})}</div>`}`,
+ `<div class="foot"><span class="btnw acc">${draft?'Сохранить черновик':'Привязать к Maria Lopez'}</span></div>`)+cap(draft?'Стало: «Привязать» → «Черновик»: поле названия, сохраняется':'Стало: «Привязать» — три вкладки: лиды, клиенты, черновик');
 }
 if(F==='tab'){
- const card=(t,m,chip)=>`<div class="card"><div class="t"><span>${t}</span>${chip||''}</div><div class="m">${m}</div></div>`;
- H=`<div class="scr"><div class="top"><div class="crumb">${ic('cl',16)}&nbsp;Ещё</div>
- <div class="ttl"><h1>Gutters</h1><span class="q">?</span><span class="sp"></span><span class="b36 sec">${ic('plus',18)}Замер</span></div>
- <div class="inp">${ic('search',18,k('mut'))}<span class="ph2">Поиск по имени, адресу</span></div>
+ const card=(icon,t,date,chip,line)=>`<div class="card"><div class="lc"><span class="av">${ic(icon,20)}</span><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="t"><span>${t}</span><span class="m">${date}</span></div>${chip}<div class="m">${line}</div></div></div></div>`;
+ const ch=(col,i,txt)=>`<span><span class="chip" style="color:${col}">${i} ${txt}</span></span>`;
+ H=`<div class="scr" style="background:linear-gradient(160deg,rgba(124,224,138,.25),var(--bg) 35%,var(--bg) 70%,rgba(255,160,60,.18))"><div class="top"><div class="crumb">GoRix v1.0.0 · 1736 · вс, 15 нояб. 5:14 PM</div>
+ <div class="ttl"><h1>Gutters</h1><span class="q">?</span><span class="sp"></span><span class="b36">${ic('plus',18)}Замер</span></div>
+ <div class="inp">${ic('search',18,k('mut'))}<span class="ph2">Поиск: имя, адрес, название</span></div>
  <div class="secH"><b>Черновики</b><span>2</span></div>
- <div style="display:flex;flex-direction:column;gap:8px">${card('Дом на Maple, задний двор','3 желоба · 62 ft · 2 водостока · вчера')}${card('Без названия','1 желоб · 21 ft · 1 водосток · 12 нояб.')}</div>
- <div class="secH"><b>Привязанные к клиентам и лидам</b><span>3</span></div>
- <div style="display:flex;flex-direction:column;gap:8px">${card('Лид: Maria Lopez','412 Oak St · 4 желоба · 96 ft · 3 водостока',`<span class="chip" style="color:var(--warnT)">⚠ Без сметы</span>`)}${card('John Carter','88 Pine Ave · 2 желоба · 40 ft',`<span class="chip" style="color:var(--infoT)">● Смета</span>`)}${card('Ann Park','7 Birch Rd · 5 желобов · 120 ft',`<span class="chip" style="color:var(--okT)">✓ Подписана</span>`)}</div></div>
- <div class="tabbar"><div>${ic('home')}Главная</div><div>${ic('users')}Клиенты</div><div>${ic('note')}Сметы</div><div class="on">${ic('more')}Ещё</div></div>${cap('Стало: вкладка Gutters — «?» у заголовка; два списка: черновики и привязанные')}</div>`;
+ <div style="display:flex;flex-direction:column;gap:8px">${card('pencil','Дом на Maple, задний двор','вчера',ch(k('mut'),'▢','Черновик'),'Желобов: 3 · 62 ft · водостоков: 2')}${card('pencil','Без названия','15 нояб.',ch(k('mut'),'▢','Черновик'),'Желобов: 2 · 50 ft · водостоков: 3')}</div>
+ <div class="secH"><b>Привязанные к клиентам и лидам</b><span>2</span></div>
+ <div style="display:flex;flex-direction:column;gap:8px">${card('user','Лид · Maria Lopez','14 нояб.',ch(k('warnT'),'⚠','Без сметы'),'412 Oak St · желобов: 4 · 96 ft')}${card('users','Клиент · John Carter','12 нояб.',ch(k('infoT'),'◷','Смета отправлена'),'88 Pine Ave · желобов: 2 · 40 ft')}</div></div>
+ <div class="tabbar" style="left:16px;right:16px;bottom:44px;border-radius:24px;height:60px;border:1px solid var(--bd)"><div>${ic('home')}Главная</div><div>${ic('note')}План</div><div>${ic('users')}Чаты</div><div>${ic('users')}Клиенты</div><div class="on">${ic('note')}Замеры</div><div>${ic('more')}Ещё</div></div>${cap('Стало: «?» у заголовка; черновики и привязанные — двумя секциями; у каждой карточки значок и слово «Лид / Клиент»')}</div>`;
 }
 document.getElementById('scr').outerHTML=F==='canvas'||F==='tab'?H:`<div class="scr">${canvas()}<div class="scrim"></div>${H}</div>`;
 const sh=document.querySelector('.sheet.static');if(sh&&sh.offsetHeight+130<844){sh.style.position='absolute';sh.style.left='0';sh.style.right='0';sh.style.bottom='34px';sh.style.margin='0';}
