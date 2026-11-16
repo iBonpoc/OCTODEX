@@ -55,7 +55,7 @@ exports.run = async (h) => {
     .filter((m) => /Elbow \d+°$/.test(m[1]))
     .map((m) => `${m[1]} · ${m[2] || ""} = ${m[3]}`);
   h.expect(rows.length === 2, "two elbow lines (a rectangular one and a round one): " + rows.join(" | "));
-  h.expect(rows.some((r) => /^\d″ × \d″ A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
+  h.expect(rows.some((r) => /^\d×\d″ A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
   h.expect(rows.some((r) => /^\d″ Round Elbow 45° · [^=]*= 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };

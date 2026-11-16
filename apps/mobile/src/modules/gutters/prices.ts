@@ -293,7 +293,7 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
     title = named(stockSize, stockKind);
     take("profile", "size");
   } else if (part === "downspout") {
-    // «2″ × 3″ Plain Square Downspout»; the sticks to buy are this row's «2 × 10′ lengths» (partGroups)
+    // «2×3″ Plain Square Downspout»; the sticks to buy are this row's «2 × 10′ lengths» (partGroups)
     title = named(dsSize, dsKind());
     // a stick to buy keeps its length «10′» (the price list and the supplier order tell it from the foot)
     take("size", "shape", "dsStyle");
@@ -304,11 +304,11 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
     title = [named(stockSize, stockKind), side || corner].filter(Boolean).join(" – ");
     take("profile", "size", "corner");
   } else if (part === "outlet" || part === "end_outlet") {
-    // an outlet is its size only (founder 16.11): «Outlet 2″ × 3″», «Outlet 3″ Round»
+    // an outlet is its size only (founder 16.11): «Outlet 2×3″», «Outlet 3″ Round»
     title = [word, dsSize, roundWord].filter(Boolean).join(" ");
     take("profile", "size", "gutterSize", "shape", "material", "metal", "gauge", "color", "dsStyle");
   } else if (part === "elbow") {
-    // «2″ × 3″ A Elbow 75°»; a round one by its angle: «3″ Round Elbow 45°»
+    // «2×3″ A Elbow 75°»; a round one by its angle: «3″ Round Elbow 45°»
     const round = rest.shape === "round" || /^\d+$/.test(rest.style ?? "");
     title = named(dsSize, "", round ? t(k("elbowRound"), { deg: `${rest.angle ?? rest.style ?? ""}°` }) : t(k("elbowOf"), { style: rest.style ?? "", deg: `${rest.angle ?? ELBOW_DEFAULT_DEG}°` }));
     take("size", "shape", "style", "angle");
@@ -333,7 +333,7 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
     title = `${named(dsSize, roundWord)} ${say("lengthIn", rest.lengthIn)}`;
     take("size", "lengthIn", "shape");
   } else if (rest.shape && rest.size) {
-    // a downspout's part by its size: «2″ × 3″ Downspout Band», «3″ Hinged Downspout Hook»
+    // a downspout's part by its size: «2×3″ Downspout Band», «3″ Hinged Downspout Hook»
     title = named(dsSize, roundWord);
     take("size", "shape");
   } else if (rest.profile) {
@@ -341,7 +341,7 @@ export function partView(t: Tr, p: Pick<PartQty, "key" | "kind" | "attrs">, fmt:
     title = named(stockSize, stockKind);
     take("profile", "size");
   }
-  // «2″ × 3″» already says it is square; «Round» is a word only for a round one (and only where the title has not said it)
+  // «2×3″» already says it is square; «Round» is a word only for a round one (and only where the title has not said it)
   if (rest.shape !== "round" || used.has("shape")) used.add("shape");
   // the finish is said only when it is bare metal (founder 16.11: no «окрашенный»; «mill» — no colour)
   const props = Object.keys(rest)
@@ -377,10 +377,10 @@ const ATTR_WORDS: Record<string, string> = { profile: "p", material: "m", metal:
 /** a property in inches (a coil's blank, a section's length): feet-inches-sixteenths, as on the drawing */
 const ATTR_IN = new Set(["blankIn", "lengthIn", "stickIn"]);
 
-/** a cross-section as the founder writes it (16.11, #1800): «2″ × 3″» — the inch mark at each number; a round «3″» */
+/** a cross-section as DS §4.5 writes it (#1766): «2×3″», a round «3″» — one inch mark at the end (DS 1.19.0 will make it «2″ × 3″», founder 16.11) */
 export const sizeText = (v: string) => {
   if (/^\d+(\.\d+)?$/.test(v)) return `${v}″`;
-  if (/^\d+(\.\d+)?x\d+(\.\d+)?$/i.test(v)) return v.split(/x/i).map((n) => `${n}″`).join(" × ");
+  if (/^\d+(\.\d+)?x\d+(\.\d+)?$/i.test(v)) return `${v.replace(/x/i, "×")}″`;
   return v;
 };
 
