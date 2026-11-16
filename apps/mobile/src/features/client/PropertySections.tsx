@@ -160,7 +160,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
                 title={i.title || i.number || t("inv.title")}
                 when={i.title ? i.number : undefined}
                 value={money(i.totalCents)}
-                status={{ tone: ch.s, label: t(ch.l) }}
+                status={{ tone: ch.s, label: t(ch.l, ch.p) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );
