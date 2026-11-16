@@ -66,7 +66,7 @@ export default function ScheduleJob() {
   };
 
   return (
-    <Screen title={t("sch.title")} back={back} subtitle={[customer?.name, property?.address].filter(Boolean).join(" · ")}>
+    <Screen form title={t("sch.title")} back={back} subtitle={[customer?.name, property?.address].filter(Boolean).join(" · ")}>
       <Card>
         <T v="heading">{job.title}</T>
         <T v="title" tabular>
