@@ -1,6 +1,7 @@
 /**
  * e2e 427 — «Подробно» в просмотре замера говорит словами, без нулей и кодов (#814, аудит Q-04). Every view.
- * - a gutter and a downspout (by default no elbows and no offsets): its line has no «колен 0 · офсетов 0» (it was there);
+ * - a gutter and a downspout: its elbows by style, as the engine counts them — by default «A ×3» (#1747: they were hidden,
+ *   while the canvas said «AAA» and the estimate counted three); no «колен 0 · офсетов 0» (#814);
  *   its size reads «2"×3"» (as on the canvas), not «2x3»;
  * - the parts are words: no row is a code (`snake_case`, `coil.…`, `dsstick.…`), none is «0».
  * Finds things by testID; waits on what it checks.
@@ -35,12 +36,13 @@ exports.run = async (h) => {
   await tid("view-ds-1").waitFor({ timeout: 5000 });
 
   const ds = (await tid("view-ds-1").innerText()).replace(/\s+/g, " ");
-  h.expect(!/офсетов 0|колен 0/.test(ds), `no zero row beside the downspout (${ds})`);
+  h.expect(!/офсетов 0|колен 0/.test(ds), `no zero row beside the downspout (${ds})`); // i18n-old: ok — it checks the old zero row is gone
+  h.expect((await tid("view-ds-line-1").count()) === 1 && /A ×3/.test(ds), `the default elbows are shown: «A ×3» (${ds})`);
   h.expect(/\d["″]×\d["″]/.test(ds) && !/\dx\d/.test(ds), `the size reads «2"×3"» as on the canvas (${ds})`);
 
   const rows = (await tid("view-parts").locator("xpath=..").innerText()).split("\n").map((s) => s.trim()).filter(Boolean);
   h.expect(rows.length > 2, `the parts are listed (${rows.length})`);
-  const codes = rows.filter((r) => /\b[a-z]+_[a-z_]+\b|\bcoil\.|\bdsstick\./.test(r));
+  const codes = rows.filter((r) => /\b[a-z]+_[a-z_]+\b|\bcoil\.|\bdsstick\.|\bhidden\b|\bplain\b|\bcorrugated\b|\b\d+x\d+\b/.test(r));
   h.expect(codes.length === 0, `no part is a code (${codes.join(" | ")})`);
   await h.shot("details");
 };
