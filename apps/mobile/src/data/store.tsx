@@ -30,7 +30,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, docLanguageFor, leadPeopleOf, mainContact, nextClientNumber } from "./people";
-import { tFor, type DocLang } from "@/i18n/translate";
+import { appLangNow, tFor, type DocLang } from "@/i18n/translate";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { visitDueCents } from "@/features/visitDue";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
@@ -590,7 +590,8 @@ export function StoreProvider({
   // of the server.
   const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB; role?: DbRole }>(
     cacheKey,
-    () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
+    // the demo's own texts (its checklist template) come in the app's language at the moment it starts (#1223)
+    () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed(appLangNow() ?? "en") }),
     {
       // #1189: only the shape — the record is an object of this mode; a list it lacks (an older version's record) is filled
       // by normalizeDB, never a reason to start the demo over (that wiped the person's own records)
@@ -2965,7 +2966,7 @@ export function StoreProvider({
           },
         );
       },
-      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : NO_UNDO),
+      resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed(appLangNow() ?? "en")) : NO_UNDO),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [db, mode, company, role, online, link, pendingQueue.length, unsentAll, removedKey, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],

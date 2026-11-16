@@ -7,6 +7,8 @@ import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 import { addDays } from "@/features/calendar";
 import { checklistFor } from "@/features/checklist";
 import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
+import { translate, type Lang } from "@/i18n/translate";
+import type { DictKey } from "@/i18n/ru";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
 const S = (id: string, name: string, unit: string, priceCents: number, kind: "service" | "labor" = "service"): CatalogItem => ({
@@ -120,20 +122,26 @@ export const SEED_TAGS: Tag[] = [
  * checklistFor as a real visit (S9). Generic, nothing trade-specific; modules add their own (CH3). Not «every visit»:
  * the demo inspection stays without a list (an inspection template is the director's choice, В6).
  */
-export const DEMO_TEMPLATE: ChecklistTemplate = {
+export const DEMO_TEMPLATE_KEYS = {
   id: "tpl-job",
-  name: "Every job visit",
+  nameKey: "chk.demo.name",
   items: [
-    { id: "tpl-job-i0", label: "Protect floors and furniture", kind: "check", required: false },
-    { id: "tpl-job-i1", label: "Confirm scope with the client", kind: "check", required: true },
-    { id: "tpl-job-i2", label: "Clean up the work area", kind: "check", required: true },
-    { id: "tpl-job-i3", label: "Walk through with the client", kind: "check", required: true },
+    { id: "tpl-job-i0", labelKey: "chk.demo.i0", kind: "check", required: false },
+    { id: "tpl-job-i1", labelKey: "chk.demo.i1", kind: "check", required: true },
+    { id: "tpl-job-i2", labelKey: "chk.demo.i2", kind: "check", required: true },
+    { id: "tpl-job-i3", labelKey: "chk.demo.i3", kind: "check", required: true },
   ],
+} as const satisfies { id: string; nameKey: DictKey; items: readonly { id: string; labelKey: DictKey; kind: "check"; required: boolean }[] };
+/** the demo template in the app's language at the moment of seeding (#1223, as a module's starter: then it is the company's own) */
+export const demoTemplate = (lang: Lang = "en"): ChecklistTemplate => ({
+  id: DEMO_TEMPLATE_KEYS.id,
+  name: translate(lang, DEMO_TEMPLATE_KEYS.nameKey),
+  items: DEMO_TEMPLATE_KEYS.items.map((i) => ({ id: i.id, label: translate(lang, i.labelKey), kind: i.kind, required: i.required })),
   appliesTo: { everyVisit: false, visitKinds: ["work"], catalogItemIds: [] },
-};
-const jobChecklist = (prefix: string): ChecklistItem[] => {
+});
+const jobChecklist = (tpl: ChecklistTemplate, prefix: string): ChecklistItem[] => {
   let n = 0;
-  return checklistFor({ kind: "work" }, [DEMO_TEMPLATE], () => `${prefix}-c${n++}`);
+  return checklistFor({ kind: "work" }, [tpl], () => `${prefix}-c${n++}`);
 };
 
 /** Demo directions of the business (presets, translated in the app). */
@@ -160,7 +168,9 @@ export const DEMO_COMPANY: Company = {
   skipped: [],
 };
 
-export function makeSeed(): DB {
+/** `lang` — the app's language when the demo starts: the demo checklist template comes in it (#1223) */
+export function makeSeed(lang: Lang = "en"): DB {
+  const tpl = demoTemplate(lang);
   return {
     me: "m-alex",
     sources: SEED_SOURCES,
@@ -225,31 +235,31 @@ export function makeSeed(): DB {
       { id: "j6", number: "JOB-0006", customerId: "c6", jobTypeId: "jt-install", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
       { id: "j8", number: "JOB-0008", customerId: "c1", jobTypeId: "jt-install", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
     ],
-    checklistTemplates: [DEMO_TEMPLATE],
+    checklistTemplates: [tpl],
     visits: [
       {
         id: "v1", jobId: "j1", techId: "m-alex", start: at(0, 8, 30), durationMin: 240, step: "scheduled",
         scope: ["Remove old vanity and toilet", "Install new vanity, faucet and toilet", "Tile backsplash, 24 sq ft"],
-        checklist: jobChecklist("v1"), photos: [], amountDueCents: 342000,
+        checklist: jobChecklist(tpl, "v1"), photos: [], amountDueCents: 342000,
       },
       {
         id: "v2", jobId: "j2", techId: "m-alex", start: at(0, 13, 30), durationMin: 120, step: "scheduled",
         scope: ["Replace kitchen faucet", "Install 3/4 HP garbage disposal"],
-        checklist: jobChecklist("v2"), photos: [], amountDueCents: 68000,
+        checklist: jobChecklist(tpl, "v2"), photos: [], amountDueCents: 68000,
       },
       {
         id: "v3", jobId: "j3", techId: "m-alex", start: at(0, 16, 0), durationMin: 60, step: "scheduled",
         scope: ["Patch 2 drywall holes in hallway", "Prime and paint touch-up"],
-        checklist: jobChecklist("v3"), photos: [], amountDueCents: 42000,
+        checklist: jobChecklist(tpl, "v3"), photos: [], amountDueCents: 42000,
       },
       {
         id: "v4", jobId: "j5", techId: "m-ivan", start: at(0, 9, 0), durationMin: 180, step: "working",
-        scope: ["Deep clean 3-bedroom house after move-out"], checklist: jobChecklist("v4"), photos: [{ id: "ph1", kind: "before" }], amountDueCents: 156000,
+        scope: ["Deep clean 3-bedroom house after move-out"], checklist: jobChecklist(tpl, "v4"), photos: [{ id: "ph1", kind: "before" }], amountDueCents: 156000,
       },
       {
         // late by the rule, not by a flag (docs/specs/03 П3c): started 40 min ago (not before midnight), on the way for 30
         id: "v5", jobId: "j6", techId: "m-sub", start: todayMinutesAgo(40), durationMin: 360, step: "en_route", enRouteAt: todayMinutesAgo(30),
-        scope: ["Replace 100A panel with 200A", "Permit and inspection"], checklist: jobChecklist("v5"), photos: [], amountDueCents: 518000,
+        scope: ["Replace 100A panel with 200A", "Permit and inspection"], checklist: jobChecklist(tpl, "v5"), photos: [], amountDueCents: 518000,
       },
       {
         // an inspection: a visit at the property, no job (docs/specs/03 §3.1)

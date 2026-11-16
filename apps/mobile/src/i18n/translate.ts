@@ -22,5 +22,12 @@ export function translate(lang: Lang, key: DictKey, params?: Params): string {
   return s.replace(/(?<!\.)\.\.(?!\.)/g, ".");
 }
 
+/** the app's language as I18nProvider holds it (null before it); the store seeds the demo in it (#1223) */
+let appLang: Lang | null = null;
+export const setAppLang = (l: Lang) => {
+  appLang = l;
+};
+export const appLangNow = (): Lang | null => appLang;
+
 /** A translator for a client's language: tFor(docLanguageFor(db, …))("key"). */
 export const tFor = (lang: DocLang) => (key: DictKey, params?: Params) => translate(lang, key, params);
