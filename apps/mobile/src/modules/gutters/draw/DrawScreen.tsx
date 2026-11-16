@@ -26,6 +26,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { fillStyle } from "@/ui/fill";
@@ -33,8 +34,8 @@ import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { tapRule, type LastTap } from "../canvas/doubleTap";
 import { CornerSheet } from "./CornerSheet";
 import { EndSheet } from "./EndSheet";
-import { autoDownspouts, autoManaged, commitAuto } from "../canvas/autoDs";
-import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
+import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
 import { dsKindOf, PROFILE_ICON, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import type { GutterProfile } from "@octo/estimating-engine";
@@ -55,7 +56,7 @@ import { LinkSheet } from "./LinkSheet";
 import { summaryOf } from "./summary";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
-import { buildScene, fitView, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
+import { buildScene, fitView, manyStories, nextStoryOf, storyOf, toPlan, toScreen, zoomLimits, type Scene, type Story, type View as PlanView } from "../canvas/scene";
 import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
@@ -78,7 +79,7 @@ const MULTI_TAP_MS = motion.durSlow * 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
-/** the name in the header (#1274): a button that SHRINKS — a long name or «Сделать заявкой» is cut with «…» in its own width, never under the icons beside it */
+/** the name in the header (#1274): a button that SHRINKS — a long name is cut (not linked yet — «Привязать», DS §19а, #1665: whole at 390) with «…» in its own width, never under the icons beside it */
 function NameButton({ icon, label, onPress, filled }: { icon: IconKey; label: string; onPress: () => void; filled?: boolean }) {
   const { c } = useTheme();
   return (
@@ -362,14 +363,12 @@ export default function DrawScreen() {
 
   /** one finished edit: history, the drawing, the save */
   const commit = useCallback(
-    (made: Drawing, prev = cur.current.drawing, placed = false, quiet = false) => {
+    (made: Drawing, prev = cur.current.drawing, placed = false) => {
       // every chain a change touched has its downspout(s) by itself (spec 33-gutters-ds-auto, #1246): one step of «Назад» with the change
       const next = commitAuto(made, prev, placed, cur.current.canSave && cur.current.autoDs ? { ...cur.current.autoDs, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() } : null);
       if (next === prev) return;
       // the program took automatic downspouts off because the chain wants fewer now (shorter, joined, split): say so, with «Отменить» (#1246)
-      // not when the gutter only went to another story by the story button (#1569, founder 14.11: «переключал этажи 1 → 4 → 1 — высветило
-      // „водостоков стало пять“, не понял почему»): the corner split on story 2 and joined again on 1 — the count is what it was
-      if (!quiet && next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
+      if (next !== made && next.downspouts.filter((x) => x.auto).length < made.downspouts.filter((x) => x.auto).length) {
         announceDs.current(next.downspouts.length, localUndo(() => commit(made, next, true)));
       }
       // a downspout put by the program must not stand unseen: the layer of downspouts is switched on (#1246 review)
@@ -741,11 +740,13 @@ export default function DrawScreen() {
 
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
+  // «· эт N» only with more than one storey on the drawing (#1666, DS §19а — as the lengths on the canvas, #1275)
+  const many = manyStories(drawing.runs);
   const selText = !sel
     ? null
     : "a" in sel
-      ? t("mod.gutters.draw.selRun", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
-      : t("mod.gutters.draw.selDsKind", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
+      ? t(many ? "mod.gutters.draw.selRun" : "mod.gutters.draw.selRunOne", { len: fmtLen(runLengthIn(sel), ch.lenFormat), n: storyOf(sel.attrs.story) })
+      : t(many ? "mod.gutters.draw.selDsKind" : "mod.gutters.draw.selDsKindOne", { kind: t(`mod.gutters.attr.kind.${dsKindOf(sel.shape, sel.dsStyle).key}`).replace("\n", " "), size: dsSizeText(sel.size), n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
   /** the picked downspout's kind icon on the bottom bar (#929): the kind seen at a glance, no colour */
   const selDsIcon = sel && !("a" in sel) ? dsKindOf(sel.shape, sel.dsStyle).icon : null;
 
@@ -849,11 +850,9 @@ export default function DrawScreen() {
     // «Отменить» puts back what was deleted and keeps what was drawn since
     toast.show(t("mod.gutters.draw.deleted"), localUndo(() => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing, true))); // put back as it was: no recount (#1264)
   };
-  const nextStory = () => {
-    const n = ((story % 4) + 1) as Story;
-    setStoryN(n);
-    if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n), drawing, false, true); // quiet: #1569
-  };
+  // «Эт» only switches the story the next gutter is drawn on; what is picked stays where it is (#1608, founder 15.11, README §12 п.19).
+  // A gutter goes to another story by its own properties (the «Этаж» row), not by this button
+  const nextStory = () => setStoryN(nextStoryOf(story));
   /** how far the toolbar is dragged by its grip, px */
   const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
   /** the toolbar is being dragged by its grip: it stands out and says where to let go (founder 09.11) */
@@ -1045,6 +1044,17 @@ export default function DrawScreen() {
     setHint("move");
   }, [selected, canSave, drawing.runs]);
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
+  // a chain short of downspouts (#1570, founder 14.11: «удалил водосток — пусть пишет, что не хватает»): a warning while it lasts, with «Поставить водосток»
+  const short = useMemo(() => (canSave && autoDs ? shortChains(drawing, autoDs.spacingIn) : []), [canSave, autoDs, drawing]);
+  const shortRun = short[0] ? drawing.runs.filter((r) => short[0]!.runIds.includes(r.id)).sort((u, v) => runLengthIn(v) - runLengthIn(u))[0] : undefined;
+  const refill = () => {
+    const o = cur.current.autoDs;
+    const s0 = short[0];
+    if (!o || !s0) return;
+    // put back as the rule wants: one step of «Назад», no second pass of the automatic downspouts (`placed`)
+    // every short chain at once (code-reviewer #1576: with two short the button fixed only the first, the warning stayed)
+    commit(refillChain(cur.current.drawing, short.flatMap((c) => c.runIds), { ...o, attrs: newDsAttrs(cur.current.ch), ch: cur.current.ch, newId: () => Crypto.randomUUID() }), cur.current.drawing, true);
+  };
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
   const gA = ghost && view ? toScreen(view, ghost.a) : null;
@@ -1146,6 +1156,23 @@ export default function DrawScreen() {
             </RowView>
           </View>
         )}
+        {/* a chain short of downspouts (#1570): under the header, as a banner stands (DS) — not at the bottom, where the hand draws */}
+        {short.length && shortRun && !gripping ? (
+          <Banner
+            tone="warn"
+            testID="draw-ds-short"
+            title={short.length > 1 ? t("mod.gutters.draw.dsShort.titleMany", { n: short.length }) : t("mod.gutters.draw.dsShort.title")}
+            // «водостоков 0 из 1», not «стоит 0» (read as a price); the story only when there is more than one, in full (design-reviewer #1570)
+            hint={t("mod.gutters.draw.dsShort.hint", {
+              run: new Set(drawing.runs.map((r) => storyOf(r.attrs.story))).size > 1
+                ? t("mod.gutters.draw.dsShort.runStory", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat), n: storyOf(shortRun.attrs.story) })
+                : t("mod.gutters.draw.dsShort.run", { len: fmtLen(runLengthIn(shortRun), ch.lenFormat) }),
+              need: short[0]!.need,
+              have: short[0]!.have,
+            })}
+            action={{ label: short.length > 1 ? t("mod.gutters.draw.dsShort.actionMany") : t("mod.gutters.draw.dsShort.action"), onPress: refill }}
+          />
+        ) : null}
         {/* the toolbar stuck to the top (founder 09.11): under the header */}
         {at === "top" && !flat ? <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View> : null}
       </View>

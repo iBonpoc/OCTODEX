@@ -3,8 +3,8 @@
  * - «Компания → Модули» → «Холст замера»: the module is off — the canvas says at once that nothing will be saved;
  *   the empty canvas asks to draw the first run; no total under the drawing (#700: it is on «Просмотр замера»);
  * - one finger draws a run → a line with its length alone (one storey: no «· эт 1», #1275); a second run from
- *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button turns the picked run
- *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
+ *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button leaves the picked run
+ *   on its storey (#1608: «Эт» is for what is drawn next); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
  * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Свойства on the phone — «Выбрать» is gone, #687 — Эт 1 / Этаж, Назад, Вперёд);
  *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «D1» on the canvas;
  *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
@@ -81,7 +81,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await count("line")) === 1, "one run drawn");
   // one storey: the label is the length alone (no «· эт 1», founder 12.11, #1275)
   await waitFor(async () => (await labels()).some((t) => /^\d+(′|″)/.test(t) && !/эт/.test(t)), "its label: the length alone (one storey)");
-  h.expect(/Желоб · .* · эт 1/.test(await tid("draw-selected").innerText()), "the new run is picked");
+  h.expect(/^Желоб · [^·]+$/.test((await tid("draw-selected").innerText()).trim()), "the new run is picked: «Желоб · <length>», no «эт 1» with one storey (#1666)");
   h.expect((await tid("draw-empty").count()) === 0, "the empty hint is gone");
 
   // a second run from near its end: sticks to it → a corner, more $
@@ -104,16 +104,18 @@ exports.run = async (h) => {
   h.expect((await labels()).includes("D1"), "the downspout is «D1» on the canvas");
   await h.shot("drawn");
 
-  // pick the first run, storey 2
+  // pick the first run; «Этаж» does not move it (#1608, founder 15.11: «Эт» only switches the story of what is drawn next)
   // a tap with «Желоб» picks (#687: no «Выбрать»)
   await tid("draw-tool-line").getByRole("button").click();
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y);
   await waitFor(async () => /Желоб/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
-  await waitFor(async () => (await labels()).some((t) => / · эт 2$/.test(t)), "storey 2 on its label");
+  await waitFor(async () => /2/.test(await tid("draw-story").innerText()), "the story button says 2");
+  h.expect(!/эт/.test(await tid("draw-selected").innerText()), "the picked run stays on storey 1: still one storey, no «эт N» in the summary (#1666)");
+  h.expect(!(await labels()).some((t) => / · эт \d$/.test(t)), "one storey on the drawing: no «эт N» on the lengths");
   const after = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
-  h.expect(after.size === 2 && before.size === 1, `storey 2 has its own colour (${[...before]} → ${[...after]})`);
+  h.expect(after.size === 1 && before.size === 1, `the picked run keeps its colour (${[...before]} → ${[...after]})`);
 
   // delete → «Отменить»
   await tid("draw-delete").getByRole("button").click();

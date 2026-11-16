@@ -1,0 +1,149 @@
+-- #1538 (G-photo-path Ф-5): a receipt of an expense goes to the cloud. The app sends a files row of kind 'receipt',
+-- the expense with receipt_file_id, then the bytes (cloud/ops.ts expense.add). The columns are there since
+-- 20261104010000; this migration ties them together and gives a receipt the rights of the expense it belongs to.
+-- Rule 16: nothing renamed or dropped; an old build sends expenses without a receipt, as before.
+
+-- 1 ------------------------------------------------------------------------------------------------
+-- an expense's receipt is a file of the same company (the column has been empty so far: the app never sent it)
+alter table public.expenses drop constraint if exists expenses_receipt_file_fk;
+alter table public.expenses add constraint expenses_receipt_file_fk
+  foreign key (company_id, receipt_file_id) references public.files (company_id, id) not valid;
+-- (expenses is not a big table of migrationGuard; receipt_file_id is null in every row: the check reads nothing)
+alter table public.expenses validate constraint expenses_receipt_file_fk;
+-- the foreign key's index (T: every foreign key has an index); partial — only expenses with a receipt
+create index if not exists expenses_receipt_file_idx on public.expenses (company_id, receipt_file_id) where receipt_file_id is not null;
+
+-- 2 ------------------------------------------------------------------------------------------------
+-- the app ties an expense only to a receipt: kind 'receipt', made by the same person (the office: any receipt of the
+-- company). Not a visit's photo, not someone else's receipt. The server's roles are not limited.
+-- (not security definer: current_user is the caller, and the file is looked up under the caller's own read rule)
+create or replace function app.tg_expenses_receipt_own()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('authenticated', 'anon') and new.receipt_file_id is not null
+     and (tg_op = 'INSERT' or new.receipt_file_id is distinct from old.receipt_file_id)
+     and not exists (select 1 from public.files f
+                      where f.id = new.receipt_file_id and f.company_id = new.company_id and f.kind = 'receipt'
+                        and f.deleted_at is null
+                        and (f.created_by = auth.uid() or app.has_role(f.company_id, array['owner', 'admin', 'office']))) then
+    raise exception 'an expense''s receipt is a receipt of its own' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+-- rule 18 (T52): a trigger function; nobody calls it
+revoke all on function app.tg_expenses_receipt_own() from public, anon, authenticated;
+drop trigger if exists t08_receipt_own on public.expenses;
+create trigger t08_receipt_own before insert or update of receipt_file_id on public.expenses
+  for each row execute function app.tg_expenses_receipt_own();
+
+-- 3 ------------------------------------------------------------------------------------------------
+-- a receipt is read as its expense is (20261111140000): owner, admin, office, and the one who made it. Other files as
+-- before (20261110150000): the office (sales included), the author, a tech of the visit, a subcontractor's visit photos,
+-- a tech of a measurement.
+drop policy if exists files_select on public.files;
+create policy files_select on public.files for select to authenticated
+  using (app.has_role(company_id, array['owner', 'admin', 'office'])
+         or (app.is_member(company_id) and created_by = (select auth.uid()))
+         or (kind <> 'receipt'
+             and (app.is_staff(company_id)
+                  or (app.has_role(company_id, array['tech'])
+                      and visit_id is not null and app.is_visit_assignee(visit_id))
+                  or (app.has_role(company_id, array['subcontractor'])
+                      and kind = 'photo' and visit_id is not null and app.is_visit_assignee(visit_id))
+                  or (app.has_role(company_id, array['tech'])
+                      and measurement_id is not null and app.gutter_sees_measurement(measurement_id)))));
+
+-- the Storage object: by the same rule as the row; an object without a files row — owner, admin, office only
+create or replace function app.can_read_file_object(p_name text)
+returns boolean language plpgsql stable security definer set search_path = '' as $$
+declare p record;
+begin
+  p := app.file_object_parts(p_name);
+  if p.company_id is null then return false; end if;
+  if app.has_role(p.company_id, array['owner', 'admin', 'office']) then return true; end if;
+  return exists (select 1 from public.files f
+                  where f.id = p.file_id and f.company_id = p.company_id
+                    and ((app.is_member(f.company_id) and f.created_by = auth.uid())
+                         or (f.kind <> 'receipt'
+                             and (app.is_staff(f.company_id)
+                                  or (app.has_role(f.company_id, array['tech'])
+                                      and f.visit_id is not null and app.is_visit_assignee(f.visit_id))
+                                  or (app.has_role(f.company_id, array['subcontractor'])
+                                      and f.kind = 'photo' and f.visit_id is not null and app.is_visit_assignee(f.visit_id))
+                                  or (app.has_role(f.company_id, array['tech'])
+                                      and f.measurement_id is not null and app.gutter_sees_measurement(f.measurement_id))))));
+end;
+$$;
+revoke all on function app.can_read_file_object(text) from public, anon, authenticated;
+grant execute on function app.can_read_file_object(text) to authenticated;
+
+-- 4 ------------------------------------------------------------------------------------------------
+-- a receipt is changed as its expense is: owner, admin, office, or its author (sales are not the office here). Other
+-- files as before (20261107190000).
+drop policy if exists files_update on public.files;
+create policy files_update on public.files for update to authenticated
+  using (app.has_role(company_id, array['owner', 'admin', 'office'])
+         or (app.is_member(company_id) and created_by = (select auth.uid()))
+         or (kind <> 'receipt' and app.is_staff(company_id)))
+  with check ((app.has_role(company_id, array['owner', 'admin', 'office'])
+               or (kind <> 'receipt' and app.is_staff(company_id))
+               or (app.is_member(company_id) and created_by = (select auth.uid())
+                   and (customer_id is null or app.is_customer_assignee(customer_id))
+                   and (job_id is null or app.is_job_assignee(job_id))
+                   and (visit_id is null or app.is_visit_assignee(visit_id))))
+              and (measurement_id is null
+                   or (app.gutter_sees_measurement(measurement_id) and app.module_active(company_id, 'gutters'))));
+
+-- a file keeps its kind and its author (the app never changes them): a receipt is not turned into a photo to be read
+-- by others, nor a photo into a receipt. The server's roles are not limited.
+create or replace function app.tg_files_kind_fixed()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if current_user in ('authenticated', 'anon')
+     and (new.kind is distinct from old.kind or new.created_by is distinct from old.created_by) then
+    raise exception 'a file''s kind and author are set once' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+-- rule 18 (T52): a trigger function; nobody calls it
+revoke all on function app.tg_files_kind_fixed() from public, anon, authenticated;
+drop trigger if exists t10_kind_fixed on public.files;
+create trigger t10_kind_fixed before update of kind, created_by on public.files
+  for each row execute function app.tg_files_kind_fixed();
+
+-- 5 ------------------------------------------------------------------------------------------------
+-- the bytes of a receipt: written by owner, admin, office or its author (before: the office with sales). The same as
+-- 20261115110000 otherwise.
+create or replace function app.can_write_file_object(p_name text)
+returns boolean language plpgsql stable security definer set search_path = '' as $$
+declare p record;
+begin
+  p := app.file_object_parts(p_name);
+  if p.company_id is null then return false; end if;
+  -- a stored file is not replaced by anyone (a «before / after» photo, a signed estimate's photo is evidence)
+  if exists (select 1 from public.files f
+              where f.id = p.file_id and f.company_id = p.company_id
+                and (f.storage_key is not null or f.upload_status = 'uploaded')) then
+    return false;
+  end if;
+  -- a measurement's photo: nobody uploads while the module is not active, the office included
+  if exists (select 1 from public.files f where f.id = p.file_id and f.company_id = p.company_id and f.measurement_id is not null)
+     and not app.module_active(p.company_id, 'gutters') then
+    return false;
+  end if;
+  -- a live row of this file: the office (a receipt — not sales), or its author
+  return exists (select 1 from public.files f
+                  where f.id = p.file_id and f.company_id = p.company_id and f.deleted_at is null
+                    and (app.has_role(f.company_id, array['owner', 'admin', 'office'])
+                         or (f.kind <> 'receipt' and app.is_staff(f.company_id))
+                         or (app.is_member(f.company_id) and f.created_by = auth.uid())))
+         -- one row, one object: no second object of the same file under another extension (the office too)
+         and not exists (select 1 from storage.objects o
+                          where o.bucket_id = 'files' and o.name <> p_name
+                            and o.name like p.company_id::text || '/' || p.file_id::text || '.%');
+end;
+$$;
+revoke all on function app.can_write_file_object(text) from public, anon, authenticated;
+grant execute on function app.can_write_file_object(text) to authenticated;

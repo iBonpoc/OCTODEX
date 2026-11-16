@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -8,10 +9,12 @@ import { useI18n } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { goTo } from "@/nav/go";
 import { ClosedCompanies } from "@/features/ClosedCompany";
-import { Button, Segmented, StatusChip } from "@/ui/controls";
+import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, FieldGroup, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { StuckOps } from "@/features/StuckOps";
+import { useSignOutAsk } from "@/features/SignOutAsk";
 
 /**
  * «Профиль и аккаунт» (spec 26, founder 07.11: the profile card and «Мои настройки» led to the same screen).
@@ -20,8 +23,20 @@ import { StuckOps } from "@/features/StuckOps";
  */
 export default function Profile() {
   const { t } = useI18n();
-  const { role, setRole, mode, companyName, availableRoles, queue, syncError, refresh, loading } = useStore();
+  const { role, setRole, mode, companyName, availableRoles, queue, syncError, refresh, loading, db, setMyName } = useStore();
   const auth = useAuth();
+  const toast = useToast();
+  const signOutAsk = useSignOutAsk();
+  // my name (#1606): what colleagues see and what the company's signature carries; saved at once, offline through the queue
+  const myName = db.members.find((m) => m.id === db.me)?.name ?? "";
+  const [name, setName] = useState<string | null>(null);
+  const shown = name ?? myName;
+  const changed = name !== null && name.trim() !== "" && name.trim() !== myName;
+  const saveName = () => {
+    const undo = setMyName(name ?? "");
+    setName(null);
+    toast.show(t("profile.name.saved"), undo);
+  };
   // the profile sits above the tabs: go DOWN to the new role's home (dismissTo), navigate would leave this card on top
   // (lesson of #274; goTo = dismissTo when it can, else replace)
   const changeRole = (r: Role) => {
@@ -30,6 +45,15 @@ export default function Profile() {
   };
   return (
     <Screen title={t("fix.settings.profile")}>
+      {db.members.some((m) => m.id === db.me) ? (
+        <FieldGroup title={t("profile.name.title")} testID="profile-name-group">
+          <TextField type="name" label={t("profile.name.label")} value={shown} onChangeText={setName} onSubmit={changed ? saveName : undefined} testID="profile-name" />
+          <T v="caption" tone="mut">
+            {t("profile.name.hint")}
+          </T>
+          {changed ? <Button testID="profile-name-save" label={t("profile.name.save")} icon="check" variant="primary" onPress={saveName} /> : null}
+        </FieldGroup>
+      ) : null}
       <SectionTitle title={t("account.title")} />
       <Card>
         {mode === "cloud" ? (
@@ -48,7 +72,7 @@ export default function Profile() {
             />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
-              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
           </>
         ) : auth.session ? (
@@ -60,7 +84,7 @@ export default function Profile() {
             <ClosedCompanies />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("company.create")} icon="plus" onPress={() => router.push("/auth/company")} />
-              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+              <Button testID="account-sign-out" label={t("account.signOut")} variant="ghost" onPress={signOutAsk.ask} />
             </RowView>
           </>
         ) : (
@@ -99,6 +123,7 @@ export default function Profile() {
           <ListRow title={t("acct.title")} subtitle={t("acct.row")} onPress={() => router.push("/settings/delete-account")} />
         </View>
       </Card>
+      {signOutAsk.sheet}
     </Screen>
   );
 }

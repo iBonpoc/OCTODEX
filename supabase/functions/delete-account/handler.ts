@@ -48,11 +48,19 @@ export interface Res {
   headers: Record<string, string>;
 }
 
+// #1605: the app's own sites (production and the PR previews, as lead-intake's SITE_ORIGIN) and a developer's local
+// web build get the answer; any other page is not told it (no «*»). The phone app sends no Origin — nothing changes there.
+export const SITE_ORIGIN = /^https:\/\/gorix(--[a-z0-9]+(-[a-z0-9]+)*)?\.expo\.app$/;
+const LOCAL_ORIGIN = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+export const allowedOrigin = (origin: string | null) => !!origin && (SITE_ORIGIN.test(origin) || LOCAL_ORIGIN.test(origin));
 export const CORS: Record<string, string> = {
-  "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+  Vary: "Origin",
 };
+/** the CORS headers of one answer: the page's own origin when it is ours, else none of «Allow-Origin» */
+export const corsFor = (origin: string | null): Record<string, string> =>
+  allowedOrigin(origin) ? { ...CORS, "Access-Control-Allow-Origin": origin! } : { ...CORS };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const json = (status: number, body: unknown): Res => ({ status, body: JSON.stringify(body), headers: { ...CORS, "Content-Type": "application/json" } });
 
@@ -74,6 +82,11 @@ export function parseBody(raw: string): { confirm: string; closeCompanies: strin
 }
 
 export async function handleDelete(req: Req, deps: DeleteDeps): Promise<Res> {
+  const res = await handleDeleteInner(req, deps);
+  return { ...res, headers: { ...res.headers, ...corsFor(req.header("origin")) } };
+}
+
+async function handleDeleteInner(req: Req, deps: DeleteDeps): Promise<Res> {
   if (req.method === "OPTIONS") return { status: 204, body: "", headers: { ...CORS } };
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
   const auth = req.header("authorization") ?? "";

@@ -7,6 +7,7 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
+import { cleanName } from "@/features/nameAsk";
 import { supplierToRow } from "@/features/suppliers";
 import { normalizeBarcode, normalizeProductUrl } from "@/features/catalogCard";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
@@ -206,6 +207,8 @@ export type Op =
   | { k: "me.location"; on: boolean }
   /** step 18 P4b: my push switch of one group (public.set_push_kind: only for yourself, an active member) */
   | { k: "me.pushKind"; kind: PushGroup; enabled: boolean }
+  /** #1606: my own name (public.users.full_name: update of the own row only, column grant + users_update) */
+  | { k: "me.name"; name: string }
   /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the 7-day trial) or off; its settings
    *  (only while it is active — founder О2; baseRowVersion = the version edited, a newer one is a conflict) */
   | { k: "module.enable"; module: string }
@@ -293,7 +296,8 @@ export type Op =
       dueDate?: string;
     }
   | { k: "invoice.pay"; invoiceId: string; paymentId: string; customerId: string; amountCents: number; method: PaymentMethod }
-  | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number };
+  /** #1538: receiptFileId + receiptUri — the receipt's files row, then its bytes (an older op has neither: as before) */
+  | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number; receiptFileId?: string; receiptUri?: string };
 
 export interface OutboxItem {
   id: string;
@@ -563,7 +567,8 @@ export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<
 }
 
 /** what a sent op tells the phone back: a photo's file refused by the cloud, or taken (#1431) */
-export type OpResult = { photo: { id: string; failed: PhotoFail | null } };
+/** what the queue tells the phone back: a visit photo's file taken or refused (#1431); an expense's receipt (#1538) */
+export type OpResult = { photo?: { id: string; failed: PhotoFail | null }; receipt?: { expenseId: string; failed: PhotoFail | null } };
 
 export async function applyOp(op: Op, companyId: string, userId: string): Promise<OpResult | void> {
   const c = companyId;
@@ -782,6 +787,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.rpc("set_my_prefs", { p_company_id: c, p_plan_show_done: op.prefs.planShowDone }));
     case "me.location":
       return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
+    case "me.name":
+      return run(supabase.from("users").update({ full_name: cleanName(op.name) }).eq("id", userId));
     case "me.pushKind":
       return run(supabase.rpc("set_push_kind", { p_company_id: c, p_kind: op.kind, p_enabled: op.enabled }));
     case "module.enable":
@@ -1200,13 +1207,21 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           amount_cents: op.amountCents, status: "succeeded", idempotency_key: op.paymentId, received_by: userId,
         }),
       );
-    case "expense.add":
-      return run(
+    case "expense.add": {
+      // #1538: the receipt's row first (the expense points at it), then the expense, then the bytes — as a visit's photo
+      // (a refusal marks the file «failed», no network repeats the op; every step is idempotent)
+      if (op.receiptFileId)
+        await run(ins("files", { id: op.receiptFileId, company_id: c, kind: "receipt", job_id: realJob(op.jobId), taken_at: new Date().toISOString() }));
+      await run(
         ins("expenses", {
           id: op.id, company_id: c, job_id: realJob(op.jobId), vendor: op.vendor, category: expenseCategoryToDb[op.category],
-          amount_cents: op.amountCents, idempotency_key: op.id,
+          amount_cents: op.amountCents, idempotency_key: op.id, ...(op.receiptFileId ? { receipt_file_id: op.receiptFileId } : {}),
         }),
       );
+      // the phone is told whether the cloud took the receipt (a refusal or a vanished file is shown on the card)
+      if (op.receiptFileId && op.receiptUri) return { receipt: { expenseId: op.id, failed: await uploadPhoto(c, op.receiptFileId, op.receiptUri) } };
+      return;
+    }
     default:
       // an op this build does not know (a newer build queued it) is never «sent»: it stays in the outbox (A-19, #784)
       throw unknownOp((op as { k?: unknown }).k);

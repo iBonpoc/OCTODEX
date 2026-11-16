@@ -13,6 +13,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { canSeeGateCode, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
 import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type PropertyRow } from "@/features/propertyRows";
 import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
+import { AddObject } from "@/features/client/AddObject";
 import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
 import { canServe } from "@/features/clients";
@@ -64,10 +65,15 @@ export default function PropertyScreen() {
   // «не обслуживаем»: nothing new for this property — no «＋», no inspection (S4 / S5 / S17, Customer §5)
   const servable = canServe(db, p.customerId);
   const rows = propertyRowsFor(role);
+  // from 820 the list's «＋ …» button stands in the header on the right, not over the grid (DS §12.2, #1664); an empty list keeps its own
+  const listAdd =
+    wide && (sec === "jobs" || sec === "estimates") && propertyRecords(db, p, role)[sec].length ? (
+      <AddObject kind={sec === "jobs" ? "job" : "estimate"} customerId={p.customerId} propertyId={p.id} testID={`property-section-new-${sec === "jobs" ? "job" : "estimate"}`} />
+    ) : undefined;
   // a row's own list: the same address with ?s=<row>
   if (isPropertyRow(sec) && rows.includes(sec))
     return (
-      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back} fab={servable ? "client" : undefined} fabCtx={{ customerId: p.customerId, propertyId: p.id }}>
+      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back} right={listAdd}>
         <PropertySection p={p} s={sec} />
       </Screen>
     );
@@ -120,11 +126,18 @@ export default function PropertyScreen() {
         ) : null}
       </Card>
       {/* #1474: the card's step, under the tiles as on the client's card — a returning client wants a new estimate: an
-          inspection without a lead (docs/specs/03 §5.1); the office only, never for «не обслуживаем». Secondary: the screen's
-          yellow is still its «＋» (it leaves the cards with #1395, then this becomes the main one) */}
+          inspection without a lead (docs/specs/03 §5.1); the office only, never for «не обслуживаем». Secondary: the screen has no yellow «＋» any more (#1395) */}
       {office && servable ? (
         <View testID="prop-main" style={{ alignSelf: wide ? "flex-start" : "stretch" }}>
           <Button label={t("lead.next.book")} icon="calendar" variant="secondary" full={!wide} onPress={() => setInspect(true)} />
+        </View>
+      ) : null}
+      {/* the card has no «＋» (#1395): «Смета» and «Работа без сметы» for this client and this address are named here */}
+      {office && servable ? (
+        <View testID="prop-add" style={{ flexDirection: "row", gap: space[2], alignSelf: wide ? "flex-start" : "stretch" }}>
+          {/* two equal halves on the phone, one row (the review of #1395) */}
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="estimate" customerId={p.customerId} propertyId={p.id} testID="prop-new-estimate" full={!wide} short /></View>
+          <View style={{ flex: wide ? undefined : 1 }}><AddObject kind="job" customerId={p.customerId} propertyId={p.id} testID="prop-new-job" full={!wide} short /></View>
         </View>
       ) : null}
 
@@ -228,9 +241,6 @@ export default function PropertyScreen() {
       title={propertyTitle(p)}
       back={back}
       subtitle={c?.name}
-      // «＋»: Новая работа and Смета for this client and this property (S17, S5); none for «не обслуживаем»
-      fab={servable ? "client" : undefined}
-      fabCtx={{ customerId: p.customerId, propertyId: p.id }}
     >
       {overview}
 

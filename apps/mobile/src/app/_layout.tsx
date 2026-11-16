@@ -20,6 +20,8 @@ import { TabBar } from "@/nav/TabBar";
 import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
+import { NameAsk } from "@/nav/NameAsk";
+import { RemovedCompanyNotice } from "@/nav/RemovedCompanyNotice";
 import { BootRoot, useBootDone } from "@/features/boot";
 
 function Shell() {
@@ -44,6 +46,10 @@ function Shell() {
               <LegalGate />
               {/* 7а-3 «в»: once per company its owner closed (docs/specs/22 §3.6) */}
               <ClosedCompanyNotice />
+              {/* #1606: once, a sign-in by code made an account without a name */}
+              <NameAsk />
+              {/* #1669: removed from a company — its unsent changes are still here */}
+              <RemovedCompanyNotice />
             </View>
           </View>
         </NavMenuProvider>

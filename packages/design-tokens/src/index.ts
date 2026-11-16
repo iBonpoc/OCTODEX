@@ -260,7 +260,7 @@ export const component = {
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
 export const breakpoint = { phone: 0, tablet: 820, desktop: 1280 } as const;
-export const layout = { contentMax: 1200, gridCols: { phone: 1, tablet: 2, desktop: 3 } } as const;
+export const layout = { contentMax: 1200, formMax: 560, gridCols: { phone: 1, tablet: 2, desktop: 3 } } as const;
 
 /* ---------- theme.css + status.css ---------- */
 export type ThemeName = "dark" | "light";
@@ -288,8 +288,12 @@ export interface ThemeColors {
   surfSolid: string;
   in: string;
   bd: string;
+  /** the frame of an input field (DS §8.1, #1594): ≥ 3:1 to the screen `bg` (WCAG 1.4.11); `bd` stays for cards and quiet lines */
+  bdField: string;
   track: string;
   ov: string;
+  /** `ov` without the transparency: the glass of a floating layer where the glass must not show the content (the tab bar's fallback panel, DS §6.4; «Reduce transparency», #1467) */
+  ovSolid: string;
   acc: string;
   onAcc: string;
   scrim: string;
@@ -322,8 +326,10 @@ export const themes: Record<ThemeName, ThemeColors> = {
     surfSolid: "#33363C",
     in: "rgba(255,255,255,0.05)",
     bd: "rgba(255,255,255,0.14)",
+    bdField: "rgba(255,255,255,0.38)",
     track: "rgba(255,255,255,0.12)",
     ov: "rgba(38,41,48,0.72)",
+    ovSolid: "#262930",
     acc: "#FBFF00",
     onAcc: "#0B0C0F",
     scrim: "rgba(0,0,0,0.42)",
@@ -343,7 +349,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       bad: { fill: statusFill.bad, text: "#FFAAAA", on: statusOn },
       neutral: { fill: "rgba(255,255,255,0.11)", text: "#CDD1DA", on: "#F2F3F5" },
     },
-    drawing: { node: "#F2F3F5", story: ["#7FD4FF", "#FFC46B", "#D59BFF", "#7CEBC6"] },
+    drawing: { node: "#F2F3F5", story: ["#7FD4FF", "#FF8FD0", "#D59BFF", "#7CEBC6"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
   light: {
@@ -356,8 +362,10 @@ export const themes: Record<ThemeName, ThemeColors> = {
     surfSolid: "#F9F7F5",
     in: "rgba(255,255,255,0.55)",
     bd: "rgba(20,22,30,0.1)",
+    bdField: "rgba(20,22,30,0.5)",
     track: "rgba(20,22,30,0.09)",
     ov: "rgba(250,248,244,0.78)",
+    ovSolid: "#FAF8F4",
     acc: "#FBFF00",
     onAcc: "#0B0C0F",
     scrim: "rgba(20,22,30,0.25)",
@@ -377,7 +385,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       bad: { fill: statusFill.bad, text: "#B4232A", on: statusOn },
       neutral: { fill: "rgba(20,22,30,0.09)", text: "#575C68", on: "#15161A" },
     },
-    drawing: { node: "#15161A", story: ["#0B6290", "#8A4F00", "#7A3DB8", "#0B6E50"] },
+    drawing: { node: "#15161A", story: ["#0B6290", "#A0327A", "#7A3DB8", "#0B6E50"] },
     tape: { markFill: "#FBFF00", markText: "#0B0C0F" },
   },
 };

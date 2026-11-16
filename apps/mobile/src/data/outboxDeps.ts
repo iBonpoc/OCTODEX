@@ -93,7 +93,7 @@ const CREATES: Creates = {
   "activity.call": (o) => [o.activityId], "invoice.remind": (o) => [o.activityId], "lead.close": (o) => [o.activityId],
   "lead.reopen": (o) => [o.activityId], "lead.assign": (o) => [o.activityId], "lead.cost": none,
   "lead.contactSave": (o) => [o.contact.id], "lead.contactRemove": none, "task.save": (o) => [o.task.id],
-  "calendarEvent.save": (o) => (o.isNew ? [o.event.id] : []), "calendarEvent.remove": none, "me.prefs": none, "me.location": none, "me.pushKind": none,
+  "calendarEvent.save": (o) => (o.isNew ? [o.event.id] : []), "calendarEvent.remove": none, "me.prefs": none, "me.location": none, "me.pushKind": none, "me.name": none,
   "module.enable": none, "module.disable": none, "module.saveSettings": none, "module.op": (o) => o.made ?? [],
   "customField.save": (o) => (o.isNew ? [o.field.id] : []), "customFieldValue.save": (o) => (o.isNew ? [o.value.id] : []),
   "customFieldValue.remove": none, "source.save": (o) => [o.source.id],
@@ -107,7 +107,7 @@ const CREATES: Creates = {
   "note.add": (o) => [o.id], "note.update": none, "catalog.save": (o) => [o.item.id], "catalog.remove": none,
   "notice.read": none, "estimate.sign": none, "estimate.countersign": (o) => [o.jobId, o.invoiceId], "estimate.revoke": none,
   "estimate.decline": none, "estimate.reopen": none, "member.signature": (o) => [o.id], "member.update": none,
-  "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id],
+  "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id, ...(o.receiptFileId ? [o.receiptFileId] : [])],
 };
 /**
  * Upserts that do not say whether the object is new: their CREATES lists every id they write. When the op is queued, the

@@ -63,15 +63,16 @@ exports.run = async (h) => {
   for (const id of ["leads", "jobs", "estimates", "catalog", "calls", "settings"]) h.expect((await tile(id).count()) === 1, `tech: tile «${id}»`);
   await setRole(h, "director");
 
-  // the floating «＋» never covers the last card (phone)
+  // nothing floats on a list (#1395): the last card is not covered by the bar (phone)
   if (!wide) {
     await h.go("/clients");
     await p.evaluate(() => document.querySelectorAll("*").forEach((el) => el.scrollHeight > el.clientHeight + 4 && (el.scrollTop = el.scrollHeight)));
     await p.waitForTimeout(500);
+    h.expect((await p.getByTestId("fab").locator("visible=true").count()) === 0, "no floating «＋» on Clients");
     const cards = p.locator('[data-testid="list-card"]:visible');
     const last = await box(cards.last());
-    const fab = await box(p.getByTestId("fab").locator("visible=true"));
-    h.expect(last.y + last.height <= fab.y + 1, `the last card ends above «＋» (${last.y + last.height} vs ${fab.y})`);
+    const bar = await box(p.getByTestId("tab-bar").locator("visible=true"));
+    h.expect(last.y + last.height <= bar.y + 1, `the last card ends above the bar (${last.y + last.height} vs ${bar.y})`);
   }
 
   h.expect(!(await p.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)), `no horizontal scroll at ${w}`);

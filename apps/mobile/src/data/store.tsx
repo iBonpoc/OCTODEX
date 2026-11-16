@@ -11,7 +11,8 @@ import { applyAdvance, type AdvanceError } from "@/features/payments/advance";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
-import { useAuth } from "@/cloud/auth";
+import { useAuth, type DbRole } from "@/cloud/auth";
+import { MEMBERSHIP_REREAD_MS, memberMatches } from "@/cloud/membershipSync";
 import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory, loadPriceHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
@@ -46,18 +47,18 @@ import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type Void
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
-import { canRetry, keepPhotoLocal, markPhoto } from "./photoUpload";
+import { canRetry, keepPhotoLocal, keepReceiptLocal, markPhoto, markReceipt } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { cloudCacheKey, isNewCacheKey, othersCaches, othersCopies } from "./cacheKey";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { backoffMs, classify, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
+import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
-import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
+import { removedUnsent, unsentIn as unsentInOf, withoutUnsentIn, type RemovedUnsent } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
@@ -120,6 +121,7 @@ import {
   type PurchaseOrder,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
+import { cleanName } from "@/features/nameAsk";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, templatesOfActiveModules, visitSettingsOf } from "@/features/checklist";
 
 /** every action's «Отменить» is a GuardedUndo (#1261): true — back, false — too late, undefined — nothing to take back */
@@ -264,6 +266,8 @@ interface StoreCtx {
   unsentIn: (companyId: ID) => number;
   /** false — one of them is being sent right now: nothing removed */
   dropUnsentIn: (companyId: ID) => boolean;
+  /** #1669: the companies I was removed from (the server confirmed) that still have my changes on this phone, with how many */
+  unsentRemoved: RemovedUnsent[];
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -337,6 +341,8 @@ interface StoreCtx {
   /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
    *  through the offline queue — rule 6) */
   setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
+  /** #1606: my own name — at once in the team list, then to public.users.full_name through the queue; undo brings the old one back */
+  setMyName: (name: string) => Undo;
   /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the trial) or off; nothing of the
    *  module is deleted by «off». Locally at once, then module_enable / module_disable through the queue (rule 6). */
   enableModule: (key: string) => Undo;
@@ -565,7 +571,7 @@ export function StoreProvider({
   // Demo data is kept as the person left it, any day — never reseeded silently at midnight (the founder's measurement was
   // wiped that way, 12.11; К1). Only «Сбросить тестовые данные» starts it over (with «Отменить»). Cloud data is a cache
   // of the server.
-  const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB }>(
+  const [saved, setSaved, dbReady, dbHealth] = usePersistentState<{ day: string; db: DB; role?: DbRole }>(
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
     {
@@ -584,6 +590,20 @@ export function StoreProvider({
   const [gateCodes, setGateCodes] = useState<Record<string, string>>({});
   const cacheKeyRef = useRef(cacheKey);
   cacheKeyRef.current = cacheKey;
+  // #1633 A2: the server role the cache was read with (written with the record). Another role now — changed while the app
+  // runs, or a record of the role before found on the start — and the next full read takes nothing the phone kept for
+  // the role before (a module's data, the cost history); until it lands the record keeps that role, so a phone killed
+  // meanwhile asks again. Nothing is emptied before it: what waits to be sent stays seen (rule 6).
+  const roleRef = useRef<DbRole | null>(null);
+  roleRef.current = mode === "cloud" ? company!.role : null;
+  const staleRole = useRef<{ key: string; role: DbRole } | null>(null);
+  const seenRole = useRef<{ key: string; role: DbRole } | null>(null);
+  if (mode === "cloud" && dbReady) {
+    const r = company!.role;
+    const was = seenRole.current?.key === cacheKey ? seenRole.current.role : saved.role;
+    if (was && was !== r && staleRole.current?.key !== cacheKey) staleRole.current = { key: cacheKey, role: was };
+    seenRole.current = { key: cacheKey, role: r };
+  }
   // the device was wiped (account deletion, 19 §6.12): no send and no reload until the store holds another key
   // (sign-out → the demo, or the next person's company); every async step also drops its result if the generation moved
   const wipedKey = useRef<string | null>(null);
@@ -628,7 +648,8 @@ export function StoreProvider({
       if (cacheKeyRef.current !== cacheKey) return;
       const { db: bare, codes } = splitGateCodes(next);
       setGateCodes(codes);
-      setSaved({ day: "cloud", db: bare }, cacheKey);
+      const role = staleRole.current?.key === cacheKey ? staleRole.current.role : roleRef.current;
+      setSaved({ day: "cloud", db: bare, ...(role ? { role } : {}) }, cacheKey);
     },
     [setSaved, mode, cacheKey],
   );
@@ -677,6 +698,19 @@ export function StoreProvider({
   const who = mode === "cloud" ? { userId: auth.userId!, companyId: company!.companyId } : null;
   const whoRef = useRef(who);
   whoRef.current = who;
+  // #1633 A2: «read my memberships again» and how many confirmed answers came (an auth without them — the tests' stand-ins)
+  const accessDeniedRef = useRef(auth.accessDenied);
+  accessDeniedRef.current = auth.accessDenied;
+  const stampRef = useRef(auth.membershipStamp);
+  stampRef.current = auth.membershipStamp;
+  const checkedAtRef = useRef(auth.membershipCheckedAt);
+  checkedAtRef.current = auth.membershipCheckedAt;
+  /** an op refused for lack of rights (42501) → the confirmed answer it waits for (the stamp at the refusal; -Infinity —
+   *  confirmed since, its refusals are tries) */
+  const deniedAt = useRef(new Map<string, number>());
+  /** the company's own read did not show me as the memberships say: the stamp then — its answers are not taken until a
+   *  newer confirmed answer of the memberships (a removed person never gets an empty company written over the cache) */
+  const mismatchAt = useRef<number | null>(null);
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
   // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
   const rejectedReadyRef = useRef(rejectedReady);
@@ -782,15 +816,31 @@ export function StoreProvider({
     const gen = deviceGeneration();
     if (stale(gen)) return;
     setLoading(true);
+    const askedRole = company.role;
     try {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== cloudCacheKey(company.companyId, auth.userId)) return;
+      // #1633 A2: read with the role before (it changed meanwhile) — not this role's truth
+      if (roleRef.current !== askedRole) return;
+      // the company's own read says who I am there: gone, switched off or another role → the memberships are read again
+      if (!memberMatches(next.members?.find((m) => m.id === auth.userId), askedRole)) {
+        accessDeniedRef.current?.();
+        if (stampRef.current !== undefined) {
+          if (mismatchAt.current === null) mismatchAt.current = stampRef.current;
+          // not read again since: this answer is not taken (the memberships decide: removed — the store leaves the company)
+          if (mismatchAt.current >= stampRef.current) return;
+        }
+      } else mismatchAt.current = null;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
+        // #1633 A2: the role changed — nothing kept from the role before
+        const fresh = staleRole.current?.key === cacheKeyRef.current;
+        if (fresh) staleRole.current = null;
         // spec 36: the history read on open stays (the full read has none)
+        const base = fresh ? next : keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current);
         // #1431: a photo's file on this phone and why the cloud refused it — only the phone knows them
-        setDb(keepPhotoLocal(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current), dbRef.current));
+        setDb(keepReceiptLocal(keepPhotoLocal(base, dbRef.current), dbRef.current));
         // the whole company read again: every module's settings are the server's now
         settingsStale.current.clear();
       }
@@ -904,6 +954,14 @@ export function StoreProvider({
               setDb(marked);
             }
           }
+          // #1538: an expense's receipt the cloud refused — the card says so; taken — the mark goes
+          if (sent?.receipt) {
+            const marked = markReceipt(dbRef.current, sent.receipt.expenseId, sent.receipt.failed);
+            if (marked !== dbRef.current) {
+              dbRef.current = marked;
+              setDb(marked);
+            }
+          }
           if (!still()) break;
         } catch (e) {
           inFlight.current = null;
@@ -945,6 +1003,24 @@ export function StoreProvider({
             probed = true;
             failedNow.add(item.id);
             continue;
+          }
+          // #1633 A2: «no rights» (42501) may mean the person was just removed from the company or given another role: no
+          // try is spent until the memberships are read again (a removed person's ops are never dropped by it — they wait
+          // for «Убрать»); confirmed since and still here — a «no» like any other
+          if (isAccessDenied(e) && accessDeniedRef.current && stampRef.current !== undefined) {
+            const at = deniedAt.current.get(item.id);
+            // the memberships were just read again on such a signal and I am still here: a plain «no» (e2e 118)
+            const checked = checkedAtRef.current;
+            const fresh = checked != null && Date.now() - checked < MEMBERSHIP_REREAD_MS;
+            if (!fresh && (at === undefined || at >= stampRef.current)) {
+              if (at === undefined) deniedAt.current.set(item.id, stampRef.current);
+              accessDeniedRef.current();
+              failedOnce(item, msg);
+              failedNow.add(item.id);
+              continue;
+            }
+            // confirmed since: every later refusal of it is a try (not another 5-minute wait each, code-reviewer №1)
+            deniedAt.current.set(item.id, -Infinity);
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
           clearFails(item.id);
@@ -1239,7 +1315,14 @@ export function StoreProvider({
     const sum = leavingSummary(gone.map((o) => o.op.k));
     return { leaving: gone.length, leavingKinds: sum.kinds, leavingMoney: [self, ...gone].some((o) => isMoneyOp(o, MONEY_KINDS)) };
   };
-  const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null) : 0;
+  // #1633 A2: the ops of a company the server confirmed the person is no longer in do not hold the account deletion (they
+  // stay on the phone until «Убрать»); no confirmed answer yet — every one counts, as before
+  const activeIds = auth.membershipsFor && auth.membershipsFor === auth.userId ? new Set(auth.memberships.map((m) => m.companyId)) : null;
+  const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null, activeIds ? (c) => activeIds.has(c) : undefined) : 0;
+  // (the tests' auth stand-ins have no closedCompanies: an empty list then)
+  const closedIds = new Set((auth.closedCompanies ?? []).map((c) => c.companyId));
+  const unsentRemoved = mode === "cloud" ? removedUnsent(outbox, who?.userId ?? null, activeIds, closedIds) : [];
+  const removedKey = unsentRemoved.map((r) => `${r.companyId}:${r.n}`).join(",");
   const stuckOps: StuckOp[] =
     mode === "cloud"
       ? mineOf(outbox, who)
@@ -1487,6 +1570,7 @@ export function StoreProvider({
       dismissRejected,
       unsentIn: unsentInCompany,
       dropUnsentIn,
+      unsentRemoved,
       refresh,
       loading,
       setOnline: (v) => {
@@ -1831,6 +1915,13 @@ export function StoreProvider({
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
       },
+      setMyName: (name) => {
+        const me = dbRef.current.me;
+        // an empty name is never written: it stays as it is
+        const clean = cleanName(name) || (dbRef.current.members.find((m) => m.id === me)?.name ?? "");
+        const init = clean.split(" ").map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
+        return mutate("me.name", (d) => ({ ...d, members: d.members.map((m) => (m.id === me ? { ...m, name: clean, initials: init } : m)) }), { k: "me.name", name: clean });
+      },
       setPushKind: (kind, enabled) =>
         mutate("me.pushKind", (d) => ({ ...d, pushPrefs: { ...d.pushPrefs, [kind]: enabled } }), { k: "me.pushKind", kind, enabled }),
       // row_version mirrors the server (an insert is 1, each change +1), so the next saveSettings sends the right base
@@ -2048,10 +2139,13 @@ export function StoreProvider({
       },
       addExpense: (x) => {
         const id = uid();
+        // #1538: a receipt goes to the cloud with the expense (its own files row)
+        const receiptFileId = x.receiptUri ? uid() : undefined;
+        const receipt = receiptFileId ? { receiptFileId, receiptUri: x.receiptUri } : {};
         return mutate(
           "expense.add",
-          (d) => ({ ...d, expenses: [{ ...x, id, at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])] }),
-          { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents },
+          (d) => ({ ...d, expenses: [{ ...x, ...receipt, id, at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])] }),
+          { k: "expense.add", id, jobId: x.jobId, vendor: x.vendor, category: x.category, amountCents: x.amountCents, ...receipt },
         );
       },
       payInvoice: (id, method) => {
@@ -2840,7 +2934,7 @@ export function StoreProvider({
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : NO_UNDO),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, removedKey, notSavedOnDevice, outbox, rejected, sendingId, syncError, loading, mutate, undoTogether, setRole, setQueue, refresh, flush, auth.userId],
   );
 
   // nothing is written while a state is not loaded: the screen only reads again (A-01)

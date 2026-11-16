@@ -40,6 +40,9 @@ export interface Writer {
   keyChanged: (key: string) => void;
   /** the device is being wiped: the pending write is dropped */
   forget: () => void;
+  /** #1633: a pending write of a key `drop` names is dropped (a sign-out wipes that person's cache only — nothing else of
+   *  the device is touched: no generation, no outbox) */
+  forgetKeys: (drop: (key: string) => boolean) => void;
   /** the app is leaving (background, the tab hidden or closed): the pending write is written now (rule 6) */
   flush: () => void;
   /** #1189 (code-reviewer №2): the device's writes of this key wait for `p` (the copy of what is about to be written over);
@@ -114,6 +117,12 @@ export function createWriter(
       pending = null;
       seq += 1; // a write still running before the wipe tells nothing after it
     },
+    forgetKeys: (drop) => {
+      if (!pending || !drop(pending.key)) return;
+      if (timer) clearTimeout(timer);
+      timer = null;
+      pending = null;
+    },
     flush: () => {
       if (pending) write();
     },
@@ -135,6 +144,11 @@ export const liveWriters = (): ReadonlySet<Writer> => live;
 /** the app goes to the background / the tab is hidden or closed: write what waits (the store calls it, appActive.ts) */
 export function flushAllWriters(): void {
   for (const w of [...live]) w.flush();
+}
+
+/** #1633: the pending writes of the keys `drop` names are dropped in every mounted writer (the sign-out wipe) */
+export function forgetPendingWrites(drop: (key: string) => boolean): void {
+  for (const w of [...live]) w.forgetKeys(drop);
 }
 
 /** the hook's state; `forgotten` — reset by a wipe, or a cache started empty after a failed read (#926): not written until the next real change; `readError` — the device

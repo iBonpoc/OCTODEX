@@ -264,6 +264,12 @@ export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
   ],
 };
 
+/**
+ * Lists (DS §5.3, §12.2; founder 14.11, #1395 variant А): their «＋ <object>» is a secondary button in the screen's header on every width
+ * (and the same button in an empty list); the floating yellow «＋» is «Главная»'s alone. Objects (client, job, visit) follow in the next groups.
+ */
+export const LIST_FABS: readonly FabSet[] = ["clients", "tasks", "plan", "calls", "messages"];
+
 /** the «＋» of a screen for this role: filtered by rights and by what the screen can tie it to; [] = no button */
 export function fabItems(set: FabSet, role: Role, ctx: FabCtx = {}): FabItem[] {
   const out: FabItem[] = [];
