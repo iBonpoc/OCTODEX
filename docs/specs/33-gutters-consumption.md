@@ -255,37 +255,41 @@
 
 | `rule` | `params` | Строка |
 |---|---|---|
-| `sealant_points` | endcaps, outlets, corners, bentDownspouts, points, perTube, tubes | Sealant |
-| `solder_points` | points, perLb, lb | Solder |
-| `flux_per_solder` | lb, perCan, cans | Flux |
+| `sealant_points` | стыки по видам: sections/perSection, endcaps/perEndcap, outlets/perOutlet, dsJoints/perDsJoint, cutCorners/perCutCorner, stripCorners/perStripCorner, prefabCorners/perPrefabCorner; points, perTube, tubes (bentDownspouts — с гибом, PR-1) | Sealant |
+| `solder_points` | стыки по видам (как у sealant); points, perLb, lb | Solder |
+| `flux_per_solder` | lb, perJob, cans | Flux |
 | `gas_per_points` | points, perCylinder, cylinders | Gas (MAPP / propane) |
 | `abrasive_per_points` | points, perPack, packs | Abrasive |
 | `soda_per_job` | — | Baking soda |
-| `rivets_per_joints` | corners, perCorner, outlets, perOutlet, sections, rivets | Rivets #42 (стыки желоба при «заклёпки») |
-| `ds_joint_screws` | elbows, bends, otherJoints, perJoint, screws | Zip screws (колена, загибы, стыки водостока) |
+| `rivets_per_joints` | стыки по видам (как у sealant); rivets | Rivets #42 (стыки желоба при «заклёпки») |
+| `ds_joint_screws` | joints, perJoint, screws (elbows, bends, otherJoints — PR-1) | Zip screws (колена, загибы, стыки водостока) |
 | `joint_screws` | corners, perCorner, outlets, perOutlet, sections, screws | Zip screws (стыки желоба при «саморезы») |
-| `kit_screws` | part, units, perUnit, screws | Zip screws / Gutter screws в наборе (хомут, кронштейн, кусок защиты) |
+| `kit_screws` | part, screw, units, perUnit, screws | Zip screws / Gutter screws в наборе (хомут, кронштейн, кусок защиты) |
 | `kit_anchors` | wall, units, perUnit, anchors | Anchors |
-| `hangers_spacing` | lengthIn, spacingIn, atEnds, hangers | Hangers |
+| `hangers_spacing` | runs, lengthIn, spacingIn, atEnds, hangers | Hangers |
 | `kit_per_hanger` | part, hangers, per | Wedges, ferrules, spikes, circles, bolts |
-| `ds_straps_per_ds` | downspouts, perDs, straps | D/S straps |
+| `ds_straps_per_ds` | downspouts, lengthIn, everyIn, straps — **до PR-2**: код считает по длине (шаг `dsFastenerSpacingIn`); правило основателя §2.14 п.7 — 2 на водосток (Н1 «Хомутов на водосток»), тогда params — downspouts, perDs, straps | D/S straps |
 | `flat_coil_straps` | straps, perStrapIn, ft | Flat coil (хомуты из рулона) |
 | `touch_up_per_color` | color | Touch-up paint |
 | `corner_allowance` | outCount, outIn, inCount, inIn | Corner allowance |
 | `coil_reserve` | runs, reserveFt | Coil reserve |
 | `bend_in_place` | elbows, offsets, perBendIn, addIn | Bent-in-place elbows |
 | `ds_round_up` | lengthIn, stepFt, roundedFt | Rounding up of downspout |
-| `ds_sticks` | downspouts, stickFt, shared, sticks | Downspout sticks |
-| `slip_joints` | sections, joints | Slip joints |
+| `ds_sticks` | downspouts, lengthIn, stickIn, shared, sticks | Downspout sticks |
+| `slip_joints` | sections, sectionIn, joints | Slip joints |
 | `outlet_per_ds` | downspouts | Outlet |
-| `endcap_free_end` | side | End cap |
+| `endcap_free_end` | side, ends | End cap |
 | `splash_guard_inside` | corners | Splash guard |
-| `expansion_joint` | lengthIn, everyIn, joints | Expansion joint |
-| `guard_pieces` | coveredIn, pieceIn, pieces | Guard pieces |
+| `expansion_joint` | runs, lengthIn, everyIn, joints | Expansion joint |
+| `guard_pieces` | runs, coveredIn, pieceIn, pieces | Guard pieces |
+| `adapter_per_bottom` | part, bottoms | Drain adapter, rain chain adapter (по одному на низ «drain» и на цепь) |
 
 **Данные из движка (PR-1, PR-2 — код Gutters №22).**
 - Каждая деталь, которую движок вывел сам, получает отдельное поле `PartQty.why?: { rule: WhyRule; params: Record<string, string | number>; setting?: string }`, где `WhyRule` — union из таблицы выше. Это код правила, числа для текста и ключ поля настройки. Деталь, которую дают несколько правил (заклёпки с разных стыков), несёт сумму в `params`; строка одна.
-- `coilBreakdown` (§2.12) — частный случай `why` для строки рулона.
+- `coilBreakdown` (§2.12) — раскладка строки рулона и секций; у самой строки `why` = `coil_reserve` (runs, reserveFt), прибавки на углы — `corner_allowance` в `also`.
+- **Итог причины — это количество строки** (hangers, pieces, joints, straps, sticks, rivets, tubes, lb, ft): экран показывает его, а не пересчитывает. Счёт округляется по каждому участку или водостоку, поэтому сумма длин ÷ шаг может не совпасть с итогом — число групп (`runs`, `downspouts`) говорит, сколько их (ревью PR-1а, 16.11).
+- **Одна строка, несколько правил** — `why.also`: например, саморезы #8 хомутов и кусков защиты. Одно правило с другой ставкой (`per…`, шаг, длина куска) — тоже отдельная группа в `also`; счёты одного правила с той же ставкой складываются. Сторож движка: сумма итогов групп правила = количество строки.
+- **«С чертежа» без `why`** (явный список в `test/gutterWhy.test.ts`): угол готовый (`miter`) и полоса угла (`strip_miter` — следует способу угла), колено, офсет, переходник, воронка, конденсатор, отвод, eave box, сетка выпуска, низ водостока (удлинитель, splash block, гибкий, дренаж, поддон), тройник, цепь. Остальное — с `why`.
 - **Не в `attrs`**: `attrs` — свойства подбора цены.
 - Текст строки собирает экран (i18n RU/EN/ES; названия деталей английские, как у поставщика). Движок даёт только правило и числа.
 
