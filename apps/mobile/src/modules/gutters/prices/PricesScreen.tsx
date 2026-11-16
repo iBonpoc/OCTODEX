@@ -29,6 +29,7 @@ import { CardList, ListRow, Screen } from "@/ui/surfaces";
 import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
+import { quickSheetKey } from "@/features/quickPrice";
 import { useHeldSheet } from "@/ui/heldSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
@@ -176,7 +177,7 @@ export default function GutterPricesScreen() {
         </View>
       </View>
 
-      <QuickPriceSheet key={quick.opening} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
+      <QuickPriceSheet key={quickSheetKey(quick.opening, quick.value)} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
       <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>
