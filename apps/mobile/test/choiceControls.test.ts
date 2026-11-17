@@ -76,7 +76,6 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
 
   // п.27.6: the switch stands only in its row (ToggleRow: the whole row presses, the label is the switch's). Old places by file.
   const TOGGLE_LEGACY: Record<string, number> = {
-    "app/client/edit.tsx": 1,
     "app/company/[section].tsx": 5,
     "app/company/checklist/[id].tsx": 5,
     "app/company/checklists.tsx": 2,

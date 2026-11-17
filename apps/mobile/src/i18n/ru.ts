@@ -4526,6 +4526,26 @@ export const ru = {
   "ds.ch.frac.title": "Клавиши дробей (А6.3)",
   "ds.ch.frac.hint": "Клавиши ввода, не выбор: одна строка и на 390.",
   "ds.ch.frac.typed": "Длина: 6 {frac} in",
+  // client, wave 4 of spec 56 (Контакты, правка клиента, карточка клиента)
+  "cw4.menu": "Метка",
+  "cw4.addPhone": "Добавить телефон",
+  "cw4.addEmail": "Добавить email",
+  "cw4.removePhone": "Удалить номер",
+  "cw4.removeEmail": "Удалить email",
+  "cw4.phoneRemoved": "Номер удалён",
+  "cw4.emailRemoved": "Email удалён",
+  "cw4.lang": "Язык",
+  "cw4.who": "Кто это",
+  "cw4.deleteContact": "Удалить контакт",
+  "cw4.contactRemoved": "Контакт удалён",
+  "cw4.moreHint": "Супруг(а), арендатор, управляющий — кому ещё можно звонить",
+  "cw4.billingOther": "Счета на другой адрес",
+  "cw4.addProperty": "Объект",
+  "cw4.cardHelp": "Карточка клиента: контакты, объекты, сметы, счета и история. Нажмите на статус, чтобы сменить его, на метки — чтобы отметить клиента.",
+  "cw4.tags": "Метки: {list}",
+  "cw4.moreTags": "ещё {n}",
+  "cw4.done": "Готово · {n}",
+  "cw4.reasonTitle": "Не обслуживаем: причина",
 } as const;
 
 export type DictKey = keyof typeof ru;

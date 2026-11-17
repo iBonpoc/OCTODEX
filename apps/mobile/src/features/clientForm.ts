@@ -63,6 +63,43 @@ export const mainEmailOf = (c: Customer): string => {
   return main?.emails.find((e) => e.primary)?.address ?? "";
 };
 
+/** The main person's emails as the form shows them: the primary first (spec 56 §3а.5 — the form lists them all). */
+export function mainEmailsOf(c: Customer): string[] {
+  const main = peopleOf(c)[0];
+  if (!main) return [];
+  return [...main.emails].sort((a, b) => Number(!!b.primary) - Number(!!a.primary)).map((e) => e.address);
+}
+
+/**
+ * The client's people with the main person's phones and emails replaced by the form's (all of them, spec 56 §3а.5): empty lines
+ * are dropped, the first phone and the first email are the primary ones (DS §9 А14а «Основной — первым»).
+ */
+export function withMainContactsAll(c: Customer, phones: PhoneLine[], emails: string[]): Person[] {
+  const [main, ...others] = peopleOf(c);
+  if (!main) return [];
+  const next: Person = {
+    ...main,
+    phones: phones.map((p) => ({ number: p.number.trim(), label: p.label })).filter((p) => p.number),
+    emails: emails.map((e) => ({ address: e.trim() })).filter((e) => e.address),
+  };
+  return [markPrimaryFirst([next])[0]!, ...others];
+}
+
+/** As shown in «Контакты»: each person's primary phone and email stand first (the model keeps a flag, spec 56 §3а.3). */
+export function primaryFirst(people: Person[]): Person[] {
+  const first = <X extends { primary?: boolean }>(xs: X[]) => [...xs].sort((a, b) => Number(!!b.primary) - Number(!!a.primary));
+  return people.map((p) => ({ ...p, phones: first(p.phones), emails: first(p.emails) }));
+}
+
+/** On save: the first phone and the first email of each person are the primary ones, the others are not (DS §9 А14а). */
+export function markPrimaryFirst(people: Person[]): Person[] {
+  return people.map((p) => ({
+    ...p,
+    phones: p.phones.map((x, i) => ({ ...x, primary: i === 0 || undefined })),
+    emails: p.emails.map((x, i) => ({ ...x, primary: i === 0 || undefined })),
+  }));
+}
+
 export const EMPTY_BILLING: BillingAddress = { line1: "", unit: "", city: "", state: "CA", zip: "" };
 /** a billing address is saved only with a street and a city; otherwise invoices go to the property address */
 export const billingOk = (b: BillingAddress) => b.line1.trim().length > 0 && b.city.trim().length > 0;

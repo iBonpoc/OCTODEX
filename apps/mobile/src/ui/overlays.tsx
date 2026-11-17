@@ -533,6 +533,7 @@ export function Sheet({
     return { opacity: fade.value * scrimLevel(drag.value, sheetH.value || winH) };
   });
   const fullH = winH - insets.top - space[2];
+  const toastHere = useToastHost(open && visible);
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
     <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
@@ -695,6 +696,8 @@ export function Sheet({
           </SheetInset.Provider>
         </Animated.View>
       </KeyboardAvoidingView>
+      {/* the toast of what is done in the sheet («⊖» → «Вернуть») stands over the sheet, not under its Modal */}
+      {toastHere}
       </GestureHandlerRootView>
     </ScreenScrollCtx.Provider>
     </Modal>
@@ -794,6 +797,27 @@ interface ToastItem {
  */
 type ToastApi = { show: (text: string, undo?: GuardedUndo, opts?: { grow?: number }) => number; showing: (id: number) => boolean };
 const ToastCtx = createContext<ToastApi | null>(null);
+/**
+ * Where the toast is drawn: an open sheet is a Modal over everything (a native window of its own), so a toast of the screen under it
+ * would be hidden and its «Отменить» out of reach (spec 56 wave 4: «⊖» in «Контакты» offers «Вернуть»). The top open sheet hosts
+ * the toast inside its Modal; with no sheet open the screen does.
+ */
+type ToastHostApi = { view: (key: number) => ReactNode; host: (key: number, on: boolean) => void; top: number | null };
+const ToastHostCtx = createContext<ToastHostApi | null>(null);
+let toastHostSeq = 0;
+/** a sheet that is open hosts the toast (the latest one opened); returns the toast to draw inside its Modal, or null */
+function useToastHost(open: boolean): ReactNode {
+  const ctx = useContext(ToastHostCtx);
+  const key = useRef(0);
+  if (!key.current) key.current = ++toastHostSeq;
+  const host = ctx?.host;
+  useEffect(() => {
+    if (!host) return;
+    host(key.current, open);
+    return () => host(key.current, false);
+  }, [host, open]);
+  return ctx && open && ctx.top === key.current ? ctx.view(key.current) : null;
+}
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [item, setItemState] = useState<ToastItem | null>(null);
@@ -816,10 +840,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
   }, []);
+  const [hosts, setHosts] = useState<number[]>([]);
+  const host = useCallback((key: number, on: boolean) => setHosts((hs) => (on ? (hs.includes(key) ? hs : [...hs, key]) : hs.filter((k) => k !== key))), []);
+  const top = hosts.length ? hosts[hosts.length - 1]! : null;
+  const view = (key: number) => <ToastView key={`host${key}`} item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />;
   return (
     <ToastCtx.Provider value={{ show, showing }}>
-      {children}
-      <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />
+      <ToastHostCtx.Provider value={{ view, host, top }}>
+        {children}
+        {top === null ? <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} /> : null}
+      </ToastHostCtx.Provider>
     </ToastCtx.Provider>
   );
 }

@@ -6,7 +6,7 @@ import { Button } from "@/ui/controls";
 import { SelectField } from "@/ui/selectField";
 import { DoneCircle } from "@/ui/doneCircle";
 import { FracKeys, type FracKey } from "@/ui/fracKeys";
-import { MultiValueField, type MultiValue } from "@/ui/multiValueField";
+import { ActionRow, MultiValueField, type MultiValue } from "@/ui/multiValueField";
 import { OptionRows } from "@/ui/optionRow";
 import { OptionTiles } from "@/ui/optionTile";
 import { PctUsdField, type PctUsdUnit } from "@/ui/pctUsdField";
@@ -170,6 +170,8 @@ export function ChoiceSection() {
           }}
           actionsFor={(r, i) => (i > 0 ? [{ key: "main", label: t("ds.ch.mv.main"), onPress: () => setPhones((p) => [r, ...p.filter((x) => x.id !== r.id)]) }] : [])}
         />
+        {/* the red row of a dangerous action (iOS «Контакты»: «Удалить контакт»), with «Вернуть» in the toast */}
+        <ActionRow testID="showcase-action-row-bad" tone="bad" label={t("cw4.deleteContact")} onPress={() => toast.show(t("cw4.contactRemoved"), localUndo(() => undefined))} />
       </Card>
       <Card>
         <T v="heading">{t("ds.ch.done.title")}</T>

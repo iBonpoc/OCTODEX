@@ -1,3 +1,4 @@
+const { sheetGone } = require("../sheet.cjs");
 const { listSearch, listSearchClear } = require("../listSearch.cjs");
 const { expectOneAccent } = require("../accent.cjs");
 /**
@@ -28,7 +29,8 @@ exports.run = async (h) => {
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
   await h.expectText(/Долг[\s\S]*\$0[\s\S]*Оплачено[\s\S]*\$582\b/, "owes / paid (one word each, #1417)");
   await h.expectText(/Контакты клиента[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
-  await h.expectText(/Контакты клиента[\s\S]*Контакты[\s\S]*Tom Mitchell/, "the spouse in the row «Контакты»");
+  // «Контакты · 2 ›» (spec 56 §3а.6): the client and the spouse
+  h.expect(/Контакты\s*2\b/.test(await p.getByTestId("client-people").locator("visible=true").first().innerText()), "the row «Контакты · 2»");
   await h.expectText(/Выставлено/, "invoiced");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
@@ -75,34 +77,36 @@ exports.run = async (h) => {
   await row("files");
   await h.expectText(/Фото с выездов|Файлов нет/, "files list renders");
 
-  // People: + Phone is a button; the new phone of the spouse is saved and shown
+  // People: «Контакты · 2 ›» opens the sheet; «⊕ Добавить телефон» of the spouse; the new phone is saved and shown
   await h.go("/client/c1");
   await row("people");
-  await p.getByRole("button", { name: "Контакты", exact: true }).last().click();
-  await p.waitForTimeout(500);
-  await h.sheet().getByRole("button", { name: "Телефон", exact: true }).last().click();
-  await h.sheet().getByPlaceholder("Телефон").last().fill("6265550199");
-  await save();
+  await h.sheet().getByTestId("people-sheet").waitFor({ timeout: 5000 });
+  await h.sheet().getByTestId("people-1-phones-add").click();
+  await h.sheet().getByTestId("people-1-phones-row-1-value").locator("input").fill("6265550199");
+  await h.sheet().getByTestId("people-save").click();
+  await sheetGone(p);
+  await h.go("/client/c1?s=people");
   await h.expectText(/\(626\) 555-0199/, "new phone in the people list");
   await h.go("/client/c1");
 
-  // Tags sheet: add Favorite
-  await p.getByRole("button", { name: "VIP", exact: true }).first().click();
-  await p.waitForTimeout(500);
-  await h.sheet().getByRole("checkbox", { name: "Избранный" }).click().catch(async () => h.sheet().getByText("Избранный", { exact: true }).click());
-  await save();
-  await h.expectText(/VIP[\s\S]*Постоянный[\s\S]*Избранный/, "tag added");
+  // Tags sheet (rows with a check, «Готово · N»): add Favorite
+  await p.getByTestId("client-tags").locator("visible=true").first().click();
+  await h.sheet().getByText("Избранный", { exact: true }).click();
+  await h.sheet().getByTestId("tags-done").click();
+  await sheetGone(p);
+  // one line: the tags that do not fit at this width go into «+N» (spec 56 §3а.6)
+  await h.expectText(/VIP[\s\S]*(Постоянный|\+\d)/, "tags in their line");
+  // the store is written to disk a moment after the tap: wait for the saved tags
+  h.expect(await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.customers.find((c) => c.id === "c1")?.tagIds?.length === 3, null, { timeout: 5000 }).then(() => true, () => false), "three tags saved");
 
-  // Status menu at the label (not a sheet): archive at once; "do not service" asks for a reason
-  await p.getByRole("button", { name: /^Статус клиента/ }).click();
-  await p.waitForTimeout(400);
-  await p.getByRole("menuitem", { name: "В архиве" }).click();
-  await p.waitForTimeout(400);
-  await h.expectText(/В архиве/, "archived from the menu");
-  await p.getByRole("button", { name: /^Статус клиента/ }).click();
-  await p.waitForTimeout(400);
-  await p.getByRole("menuitem", { name: "Не обслуживаем" }).click();
-  await p.waitForTimeout(500);
+  // the status at the chip — the one StatusPicker (DS §9 А10): archive at once; "do not service" asks for a reason
+  await p.getByTestId("client-status").locator("visible=true").first().click();
+  await h.sheet().getByRole("radio", { name: "В архиве" }).click();
+  await sheetGone(p);
+  await h.expectText(/В архиве/, "archived from the picker");
+  await p.getByTestId("client-status").locator("visible=true").first().click();
+  await h.sheet().getByRole("radio", { name: "Не обслуживаем" }).click();
+  await h.sheet().getByPlaceholder("Почему не обслуживаем").waitFor({ timeout: 5000 });
   h.expect(await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled(), "save needs a reason");
   await h.sheet().getByPlaceholder("Почему не обслуживаем").fill("Did not pay twice");
   await save();
