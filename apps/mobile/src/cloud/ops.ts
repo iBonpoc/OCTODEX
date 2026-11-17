@@ -265,7 +265,16 @@ export type Op =
    * costs: the cost fields this save changed (19 §9) — only these are written; a field left out keeps the server's value
    * (a cache without costs never erases them). No `costs` (an op queued by an older build): every cost field as before.
    */
-  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange }
+  /** fields (spec 53-0): the item's columns this save changed (catalogItemChange) — an item already on the server gets only
+   *  these (PRD 04 §9, merge by field); none (a new item, an op queued by an older build) — the whole row */
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; fields?: string[] }
+  /** #1913 (the price-key spec, §4.6): one price for the whole price group of `itemId` (catalog_set_group_price).
+   *  `expected*` — the item's values on the phone before the change: someone else changed them first → 40001
+   *  row_version_conflict, nothing written. Costs only for who sees them (absent otherwise). `group` — its priceGroup, for
+   *  merging and dropping in the queue. */
+  | { k: "catalog.groupPrice"; itemId: string; group: string; priceCents: number; placeholder: boolean;
+      costCents?: number | null; vendorTaxBps?: number | null; markupBps?: number | null;
+      expectedPriceCents: number; expectedCostCents?: number | null; expectedTaxBps?: number | null; expectedMarkupBps?: number | null }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
@@ -638,6 +647,15 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
     case "po.save":
       return savePurchaseOrder(op, c);
+    case "catalog.groupPrice": {
+      const { error, status } = await supabase.rpc("catalog_set_group_price", {
+        p_item_id: op.itemId, p_price_cents: op.priceCents, p_placeholder: op.placeholder,
+        p_cost_cents: op.costCents ?? null, p_tax_bps: op.vendorTaxBps ?? null, p_markup_bps: op.markupBps ?? null,
+        p_expected_price_cents: op.expectedPriceCents,
+        p_expected_cost_cents: op.expectedCostCents ?? null, p_expected_tax_bps: op.expectedTaxBps ?? null, p_expected_markup_bps: op.expectedMarkupBps ?? null,
+      });
+      return run(Promise.resolve({ error, status }));
+    }
     case "po.receive": {
       const { error, status } = await supabase.rpc("po_receive", {
         p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })),
@@ -1082,27 +1100,53 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const it = op.item;
       const costCols = catalogCostCols(op);
       const card = catalogCardCols(it);
+      // spec 53-0 (PRD 04 §9 «merge by field»): an item already there gets only the columns this save changed — a save
+      // queued on another phone before a price update never puts back the fields its person did not touch. A new item,
+      // onlyNew and an op queued by an older build (no `fields`): the whole row, as before (rule 16)
+      let r: { error: { message: string; code?: string; hint?: string } | null; status?: number; data?: unknown } | null = null;
+      if (op.fields && !op.onlyNew) {
+        const cols = catalogItemCols(it);
+        /** the changed columns, but those named in `drop` */
+        const pick = (drop: readonly string[] = []): Record<string, unknown> => ({
+          ...Object.fromEntries(op.fields!.filter((f) => own(cols, f) && !drop.includes(f)).map((f) => [f, cols[f]])),
+          ...costCols,
+        });
+        const update = (row: Record<string, unknown>) => supabase.from("catalog_items").update(row).eq("id", it.id).eq("company_id", c).select("id");
+        let row = pick();
+        if (!Object.keys(row).length) return; // nothing changed: nothing written
+        r = await update(row);
+        // the card's fields never cost the save (as the upsert below): a refused direction — without it alone; a server
+        // before the migration (no such column) — without the card's fields
+        const refused =
+          r.error?.code === "23503" && "service_category_id" in row && /service_category/.test(r.error.message ?? "")
+            ? ["service_category_id"]
+            : r.error?.code === "PGRST204"
+              ? Object.keys(card)
+              : null;
+        if (refused) {
+          row = pick(refused);
+          // only the card's fields changed and the server takes none of them: nothing else to write
+          if (!Object.keys(row).length) return;
+          r = await update(row);
+        }
+        await run(Promise.resolve(r));
+        // no row updated (not on the server yet, or not ours to change) — the whole row, as before: the server decides
+        if (!(Array.isArray(r.data) && r.data.length)) r = null;
+      }
       const upsertItem = (cardCols: Record<string, string | null>) =>
         supabase.from("catalog_items").upsert(
-          {
-            id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
-            unit_price_cents: it.priceCents, vendor: it.vendor ?? null, ...costCols,
-            components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
-            // C3 (docs/specs/33 П16): only what is set — an item without them never writes the new columns
-            ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
-            ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
-            ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
-            // spec 36: the same — only once set ("" = cleared)
-            ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
-            ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
-            // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server
-            // keeps them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
-            ...cardCols,
-          },
+          { id: it.id, company_id: c, ...catalogItemCols({ ...it, sku: undefined, barcode: undefined, productUrl: undefined, serviceCategoryId: undefined }), ...costCols, ...cardCols },
           // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
         );
-      let r = await upsertItem(card);
+      if (op.fields && !op.onlyNew && r) {
+        // written by field: the side table of costs as below
+        if (!op.costs || !Object.keys(costCols).length) return;
+        const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
+        if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
+        return;
+      }
+      r = await upsertItem(card);
       // РС-10 (code-reviewer): the card's fields never cost the item's save — a direction the server does not have (made
       // offline and refused, 23503 on catalog_items_service_category_fk) goes without it; a server before the migration
       // (PGRST204, no such column) gets the item without the card's fields
@@ -1245,6 +1289,44 @@ export function catalogCardCols(it: Pick<CatalogItem, "sku" | "barcode" | "produ
   }
   if (it.serviceCategoryId !== undefined) out.service_category_id = it.serviceCategoryId || null;
   return out;
+}
+
+/**
+ * The item's own columns a save writes (not the id, the company or the costs): what it has; the module's properties,
+ * the purchase unit, the supplier and the card's fields only once set (an item without them never writes them).
+ */
+export function catalogItemCols(it: CatalogItem): Record<string, unknown> {
+  return {
+    kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
+    unit_price_cents: it.priceCents, vendor: it.vendor ?? null,
+    components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
+    // C3 (docs/specs/33 П16): only what is set — an item without them never writes the new columns
+    ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
+    ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
+    ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
+    // spec 36: the same — only once set ("" = cleared)
+    ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
+    ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
+    // РС-10: the card's fields, the same — only once set ("" = cleared); the link and the barcode as the server keeps
+    // them, and one the server would refuse is not sent (the item itself is saved; the store cleans first)
+    ...catalogCardCols(it),
+  };
+}
+/** the object's own key (never an inherited one such as «__proto__»: a queued op's field names are only data) */
+const own = (o: object, k: string) => Object.prototype.hasOwnProperty.call(o, k);
+/** a value as text with an object's keys in order: {a, b} and {b, a} are the same properties */
+const canon = (v: unknown): string =>
+  JSON.stringify(v ?? null, (_k, x: unknown) => (x && typeof x === "object" && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b))) : x));
+/**
+ * spec 53-0 (PRD 04 §9 «merge by field»): the item's columns this save changed — both sides through the same columns
+ * (catalogItemCols cleans the card's fields alike), so a value written another way is no change. A new item (no prev):
+ * undefined — written whole. Only what the phone has now counts: a field it does not carry is never sent.
+ */
+export function catalogItemChange(prev: CatalogItem | undefined, it: CatalogItem): string[] | undefined {
+  if (!prev) return undefined;
+  const a = catalogItemCols(prev);
+  const b = catalogItemCols(it);
+  return Object.keys(b).filter((k) => canon(a[k]) !== canon(b[k]));
 }
 
 const COST_COL = { costCents: "unit_cost_cents", vendorTaxBps: "vendor_tax_bps", markupBps: "markup_bps" } as const;

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { visitPayment, acceptPayment, canIssue, clientMoney, contractStatement, invoiceTaxShare, progressAmount } from "../src/contract.js";
+import { visitPayment, acceptPayment, canIssue, clientMoney, contractStatement, invoiceOwes, invoiceTaxShare, progressAmount } from "../src/contract.js";
+import { parseMoneyToCents } from "../src/custom.js";
 
 describe("contract statement", () => {
   it("$3,400 contract, 10% deposit invoiced and paid", () => {
@@ -116,5 +117,32 @@ describe("#865: invoices of a contract — never more than the contract, the tax
     expect(invoiceTaxShare(C, T, old, C - 109500)).toBe(85500); // 985500 × 950 / 10950 = 85500, not all 95000
     // an invoice whose own share rounds to 0 (a cent) is no mark of the old way
     expect(invoiceTaxShare(C, T, [{ totalCents: 1, paidCents: 0, taxCents: 0 }], C - 1)).toBe(95000);
+  });
+});
+
+describe("money rule 8 debts (#1550, #1553, #1537)", () => {
+  it("#1550: what an invoice still owes — total − paid, never below 0 (the invoice PDF reads this)", () => {
+    expect(invoiceOwes({ totalCents: 51000, paidCents: 20000 })).toBe(31000);
+    expect(invoiceOwes({ totalCents: 51000, paidCents: 51000 })).toBe(0);
+    expect(invoiceOwes({ totalCents: 51000, paidCents: 60000 })).toBe(0);
+    expect(invoiceOwes({ totalCents: 0, paidCents: 0 })).toBe(0);
+  });
+  it("#1553: a void invoice is not taken off the contract (invoiced, paid, to invoice, due, remaining)", () => {
+    const live = { totalCents: 20000, paidCents: 20000 };
+    const voided = { totalCents: 30000, paidCents: 0, void: true };
+    const s = contractStatement(100000, [live, voided]);
+    expect(s).toEqual({ contract: 100000, invoiced: 20000, paid: 20000, toInvoice: 80000, due: 0, remaining: 80000 });
+    expect(canIssue(100000, [live, voided], 80000)).toBe(true);
+    expect(canIssue(100000, [live, voided], 80001)).toBe(false);
+  });
+  it("#1537: a new expense's amount through the engine — «12.345» → 1235 (half up), «1,234.50» → 123450, garbage → null", () => {
+    expect(parseMoneyToCents("12.345")).toBe(1235);
+    expect(parseMoneyToCents("1,234.50")).toBe(123450);
+    expect(parseMoneyToCents("$0.005")).toBe(1);
+    expect(parseMoneyToCents("abc")).toBeNull();
+    expect(parseMoneyToCents("")).toBeNull();
+    // the old way (Math.round(Number(x) * 100)) lost a cent on «1.005» (1.005 * 100 = 100.49999…): the engine does not
+    expect(Math.round(Number("1.005") * 100)).toBe(100);
+    expect(parseMoneyToCents("1.005")).toBe(101);
   });
 });

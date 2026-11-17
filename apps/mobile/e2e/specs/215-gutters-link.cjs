@@ -92,10 +92,30 @@ exports.run = async (h) => {
   await who("Отвязать (в черновики)");
   await waitFor(async () => { const m = await mOf(m2); return !!m && !m.leadId && !m.propertyId; }, "unlinked: a draft");
   await waitFor(async () => (await tid("draw-to-lead").count()) === 1, "«Привязать» again");
+  // its toast stands above what lies at the bottom of the canvas — the toolbar and the chips (#1819: it lay on the toolbar)
+  await tid("toast-text").waitFor({ timeout: 5000 });
+  await p.waitForFunction(() => {
+    const r = (id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.getClientRects().length)?.getBoundingClientRect();
+    const toast = r("toast-text"), bar = r("draw-toolbar"), chip = r("draw-summary");
+    if (!toast || !bar) return false;
+    const pad = 4; // the toast's own pill is a little taller than its text
+    return toast.bottom + pad <= bar.top && (!chip || toast.bottom + pad <= chip.top || toast.top >= chip.bottom || chip.right <= toast.left || chip.left >= toast.right);
+  }, null, { timeout: 3000 }).catch(async () => h.expect(false, `the toast is above the toolbar and the chips (toast ${JSON.stringify(await tid("toast-text").boundingBox())}, toolbar ${JSON.stringify(await tid("draw-toolbar").boundingBox())})`));
+  // from 820 the side panel of properties stands at the right: the toast (its «Отменить» at its right end) is left of it (#1895)
+  if ((await tid("draw-panel").count()) > 0) {
+    const panel = await tid("draw-panel").boundingBox();
+    const undo = await tid("toast-undo").boundingBox();
+    h.expect(!!undo && undo.x + undo.width <= panel.x - 4, `the toast is left of the panel of properties (undo ${JSON.stringify(undo)}, panel x ${panel.x})`);
+  }
+  await h.shot("toast-above-toolbar");
   // «Удалить замер» (#690): off the canvas, gone; «Отменить» brings it back
   await who("Удалить замер");
   await waitFor(async () => !(await mOf(m2)), "deleted: not in the store");
   h.expect(!/\/module\/gutters\/draw/.test(new URL(p.url()).pathname), "off the canvas");
-  await p.getByRole("button", { name: "Отменить" }).first().click();
+  // …to the list of measurements (#1819: not an empty canvas «Замер»)
+  await p.waitForURL(/\/module\/gutters\/list/, { timeout: 5000 }).catch(() => h.expect(false, `after «Удалить замер»: the list of measurements (${p.url()})`));
+  // the deletion's own toast (not the «Отвязано» one still fading): its «Отменить»
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="toast-text"]')].some((e) => e.getClientRects().length && /Замер удалён/.test(e.textContent || "")), null, { timeout: 5000 });
+  await tid("toast-undo").click();
   await waitFor(async () => !!(await mOf(m2)), "«Отменить»: back");
 };

@@ -37,8 +37,11 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { fabItems } from "@/nav/sections";
 import { CardGrid, ListCard } from "@/ui/listCard";
+import { FilterBar } from "@/ui/filterBar";
 import { memberLabel, memberName } from "@/features/team";
 import { canSeeJob } from "@/features/access";
+import { invoiceTitle } from "@/features/invoiceTitle";
+import { signedText } from "@/i18n/translate";
 
 type Tab = "details" | "money" | "history";
 
@@ -47,7 +50,7 @@ export default function JobScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { db } = store;
-  const { t, money, day, time } = useI18n();
+  const { t, money, day, time, duration } = useI18n();
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("details");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
@@ -269,7 +272,7 @@ export default function JobScreen() {
                 testID={`job-visit-${v.id}`}
                 lead={{ kind: "icon", icon: "calendar" }}
                 title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
-                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : `${v.durationMin} ${t("sch.min")}`].filter(Boolean).join(" · ")}
+                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : duration(v.durationMin)].filter(Boolean).join(" · ")}
                 status={{ tone: vs.status, label: t(vs.label) }}
                 onPress={() => router.push(`/visit/${v.id}`)}
               />
@@ -302,8 +305,21 @@ export default function JobScreen() {
     </>
   );
 
+  // «＋ Создать смету» of a job with no estimate stays in «Связано» (DS §12.3 п.6; independent design review of #1844)
+  const newEstimate =
+    office && servable && c && !j.estimateId && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate")
+      ? () => router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`)
+      : undefined;
   const moneyTab = showMoney ? (
     <>
+      {/* a job with no estimate says so here — the one «Создать смету» is in «Связано» (independent design review of #1844) */}
+      {!j.estimateId ? (
+        <View testID="job-money-no-estimate">
+          <T v="body" tone="mut">
+            {t("visitP2.att.noEstimateChip")}
+          </T>
+        </View>
+      ) : null}
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="body" tone="mut">
@@ -344,10 +360,12 @@ export default function JobScreen() {
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="heading">{t("jobs.profit")}</T>
-            <T v="title" tabular tone={pr.profit < 0 ? "bad" : "ink"}>
-              {money(pr.profit)}
-              {pr.marginPct !== null ? ` · ${pr.marginPct}%` : ""}
-            </T>
+            <View testID="job-profit">
+              <T v="title" tabular tone={pr.profit < 0 ? "bad" : "ink"}>
+                {money(pr.profit)}
+                {pr.marginPct !== null ? ` · ${signedText(pr.marginPct)}%` : ""}
+              </T>
+            </View>
           </RowView>
         </Card>
       </View>
@@ -374,7 +392,7 @@ export default function JobScreen() {
               density="compact"
               testID={`job-invoice-${i.id}`}
               lead={{ kind: "icon", icon: "invoice" }}
-              title={i.title || i.number || t("inv.title")}
+              title={(i.title && invoiceTitle(i, t)) || i.number || t("inv.title")}
               when={i.title ? i.number : undefined}
               value={money(Math.max(0, i.totalCents - i.paidCents))}
               onPress={() => router.push(`/invoice/${i.id}`)}
@@ -390,17 +408,19 @@ export default function JobScreen() {
   const items = filterJobHistory(jobHistory(db, j.id, store.role), filter);
   const historyTab = (
     <>
-      <Segmented
-        full
-        value={filter}
-        onChange={setFilter}
-        items={[
-          { key: "all", label: t("job3.f.all") },
-          { key: "action", label: t("job3.f.action") },
-          { key: "note", label: t("job3.f.note") },
-          { key: "call", label: t("job3.f.call") },
-        ]}
-      />
+      {/* a filter over the history list — the list's filter lane (spec 56 §3.1), not segments */}
+      <View testID="job-history-filter">
+        <FilterBar<JobHistoryFilter>
+          value={filter}
+          onChange={setFilter}
+          items={[
+            { key: "all", label: t("job3.f.all") },
+            { key: "action", label: t("job3.f.action") },
+            { key: "note", label: t("job3.f.note") },
+            { key: "call", label: t("job3.f.call") },
+          ]}
+        />
+      </View>
       {items.length ? (
         <CardGrid>
           {items.map((e) => (
@@ -433,11 +453,7 @@ export default function JobScreen() {
     <Screen testID="job-screen" title={title} back={back} right={more} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")}>
       <RelatedBlock
         of={{ type: "job", id: j.id }}
-        action={
-          office && servable && c && !j.estimateId && fabItems("job", store.role, { customerId: c.id }).some((i) => i.id === "estimate")
-            ? { label: t("path.estimateNew"), testID: "job-rel-new-estimate", onPress: () => router.push(`/estimate/new?customerId=${c.id}${p ? `&propertyId=${p.id}` : ""}`) }
-            : undefined
-        }
+        action={newEstimate ? { label: t("path.estimateNew"), testID: "job-rel-new-estimate", onPress: newEstimate } : undefined}
       />
       {/* #1474: one next step for the whole card, above the tabs (DS §7.3, §12.3); the rest — in «⋯» */}
       {mainStep ? (

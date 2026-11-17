@@ -25,6 +25,7 @@ import { ActionBar } from "@/ui/actionBar";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Card, Divider, Empty, RowView, Screen } from "@/ui/surfaces";
 import { RelatedBlock } from "@/features/RelatedBlock";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
 /** Receipt = one payment: number, amount, method, invoice, balance; PDF and send to the client. A client's advance (no
  *  invoice, spec 35 §4г) opens here too: refund it, or apply it to an invoice of the same client. */
@@ -122,7 +123,7 @@ export default function ReceiptScreen() {
         </T>
         {line(t("rcpt.date"), day(p.at))}
         {line(t("rcpt.method"), `${t(`pay.${p.method}` as DictKey)}${p.reference ? ` · ${p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference}` : ""}`)}
-        {inv ? line(t("rcpt.forInvoice"), [inv.number, inv.title].filter(Boolean).join(" · ")) : null}
+        {inv ? line(t("rcpt.forInvoice"), [inv.number, inv.title ? invoiceTitle(inv, t) : undefined].filter(Boolean).join(" · ")) : null}
         {advance ? <View testID="rcpt-advance">{line(t("rcpt.forInvoice"), t("mny.adv.noInvoice"))}</View> : null}
         {fee ? <View testID="rcpt-fee">{line(t("mny.refund.fee"), money(fee))}</View> : null}
         <Divider />

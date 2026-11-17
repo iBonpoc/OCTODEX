@@ -71,6 +71,7 @@ export default function CompanySection() {
 
   return (
     <Screen
+      form
       title={t(stepTitle(step))}
       back={back}
       subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: SETUP_STEPS.length }) : undefined}

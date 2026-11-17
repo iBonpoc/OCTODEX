@@ -126,7 +126,7 @@ export default function DeleteAccount() {
   });
 
   return (
-    <Screen title={t("acct.title")} back={() => (router.canGoBack() ? router.back() : router.replace("/settings"))}>
+    <Screen form title={t("acct.title")} back={() => (router.canGoBack() ? router.back() : router.replace("/settings"))}>
       {!account ? (
         <Card status="info">
           <View testID="acct-demo">

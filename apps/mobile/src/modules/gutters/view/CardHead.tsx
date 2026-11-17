@@ -13,18 +13,18 @@ import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { estimateStatusView } from "@/features/estimateStatus";
 import { moduleActive, moduleHref } from "@/modules/registry";
-import { ChoiceChips, IconButton, StatusChip } from "@/ui/controls";
+import { IconButton, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import type { MeasurementRow } from "../canvas/model";
-import { duplicateMeasurement, KEY, relink, removeMeasurement, setAccuracy } from "../data";
+import { duplicateMeasurement, KEY, relink, removeMeasurement } from "../data";
 import { signedOn } from "../estimateLink";
 import { measurementState } from "../measurements";
 import { LinkSheet } from "../draw/LinkSheet";
 
 type Anchor = { x: number; y: number; w: number; h: number };
-type MoreKey = "acc" | "dup" | "delete";
+type MoreKey = "dup" | "delete";
 type WhoKey = "relink" | "unlink";
 
 export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boolean; /** the card's measurement was deleted: leave it */ onGone: () => void }) {
@@ -41,14 +41,12 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
   const where = prop ? [prop.address, prop.city].filter(Boolean).join(", ") : lead?.address;
   const v = measurementState(db, m, drawn);
   const est = v.estimate ? estimateStatusView(v.estimate.status) : null;
-  const tape = m.accuracy === "tape";
 
   const whoRef = useRef<ElementRef<typeof View>>(null);
   const moreRef = useRef<ElementRef<typeof View>>(null);
   const [whoAt, setWhoAt] = useState<Anchor | null>(null);
   const [moreAt, setMoreAt] = useState<Anchor | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
-  const [accOpen, setAccOpen] = useState(false);
   const at = (r: { current: ElementRef<typeof View> | null }, set: (a: Anchor) => void) => r.current?.measureInWindow((x: number, y: number, w: number, h: number) => set({ x, y, w, h }));
 
   const onWho = (k: WhoKey) => {
@@ -56,7 +54,6 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
     else toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
   };
   const onMore = (k: MoreKey) => {
-    if (k === "acc") return setAccOpen(true);
     if (k === "dup") {
       const r = duplicateMeasurement(store, m.id, uid);
       if (!r) return toast.show(t("mod.gutters.est.off"));
@@ -121,9 +118,6 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
             <StatusChip status="warn" label={t(v.state === "signed" ? "mod.gutters.list.s.engineSigned" : "mod.gutters.list.s.engine")} />
           </View>
         ) : null}
-        <View testID="view-accuracy">
-          <StatusChip status={tape ? "ok" : "warn"} soft label={t(tape ? "mod.gutters.card.tape" : "mod.gutters.card.rough")} />
-        </View>
       </RowView>
 
       <Menu
@@ -140,7 +134,6 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
         visible={!!moreAt}
         anchor={moreAt}
         items={[
-          { key: "acc" as const, label: t("mod.gutters.draw.accItem") },
           { key: "dup" as const, label: t("mod.gutters.card.duplicate") },
           { key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true },
         ]}
@@ -148,16 +141,6 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
         onClose={() => setMoreAt(null)}
       />
       <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
-      <Sheet visible={accOpen} onClose={() => setAccOpen(false)} title={t("mod.gutters.draw.accItem")}>
-        <View testID="view-accuracy-pick" style={{ gap: space[2] }}>
-          <ChoiceChips
-            items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
-            value={tape ? "tape" : "rough"}
-            onChange={(a) => setAccuracy(store, m.id, a)}
-          />
-          <T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T>
-        </View>
-      </Sheet>
     </View>
   );
 }

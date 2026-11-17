@@ -109,7 +109,7 @@ exports.run = async (h) => {
   await p.waitForFunction(() => /3×4/.test(document.querySelector('[data-testid="draw-new-defaults"]')?.textContent || ""), null, { timeout: 5000 });
   // the title: the phone's sheet has it in its header (with «✕»), wider the column has it on top
   const title = wide ? await tid("draw-new-defaults").innerText() : await tid("sheet-title").innerText();
-  h.expect(/Для новых водостоков/.test(title), `«Для новых водостоков» (${JSON.stringify(title.slice(0, 60))})`);
+  h.expect(/Для новых downspout/.test(title), `«Для новых downspout» (${JSON.stringify(title.slice(0, 60))})`);
   if (!wide) h.expect((await tid("sheet-close").count()) === 1, "the phone's sheet has its «✕»");
   await closeNew();
   // a new downspout is 3×4; the one put before keeps the company's size
@@ -121,7 +121,7 @@ exports.run = async (h) => {
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await openNew("line");
-  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Для новых желобов» still brown (${await chosen("attr-color")})`);
+  h.expect((await chosen("attr-color")) === "Коричневый", `after a reload: «Для новых gutter» still brown (${await chosen("attr-color")})`);
   // «Сбросить»: white again (as in the company's settings)
   await tid("draw-new-defaults-reset").getByRole("button").click();
   await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
@@ -135,7 +135,7 @@ exports.run = async (h) => {
   h.expect(newest.attrs.color === "white", `after «Сбросить»: a new gutter is white again (${newest.attrs.color})`);
   // «Для новых водостоков» after the reload: still 3×4; «Сбросить» — the company's size
   await openNew("ds");
-  h.expect(/3×4/.test(await chosen("attr-ds-size")), `after a reload: «Для новых водостоков» still 3×4 (${await chosen("attr-ds-size")})`);
+  h.expect(/3×4/.test(await chosen("attr-ds-size")), `after a reload: «Для новых downspout» still 3×4 (${await chosen("attr-ds-size")})`);
   await tid("draw-new-defaults-reset").getByRole("button").click();
   await p.waitForFunction(() => !document.querySelector('[data-testid="draw-new-defaults-reset"]'), null, { timeout: 5000 });
   h.expect(!/3×4/.test(await chosen("attr-ds-size")), "«Сбросить»: the company's size again");

@@ -1,26 +1,35 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component } from "@octo/design-tokens";
 import { catalogCost } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import type { CatalogItem, CatalogKind } from "@/data/types";
+import type { CatalogItem, CatalogKind, Supplier } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { countsFromCost, editClean, editOk, editPrice } from "@/features/catalogEdit";
+import { countsFromCost, editClean, editOk, editPrice, priceLocked } from "@/features/catalogEdit";
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
 import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
-import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { Button, IconButton, ReadOnly, TextField, useReadOnly } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
+import { usePersistentState } from "@/data/persist";
+import { UNITS } from "@/features/estimate/LineRow";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { StatusNote } from "@/ui/statusNote";
 import { Card, Divider, Empty, FieldGroup, ListRow, RowView, Screen } from "@/ui/surfaces";
-import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
+import { canSeeSuppliers, historyOf, pickSupplier, supplierOf, supplierTaxAsk, type SupplierTaxAsk as SupplierTaxAskData } from "@/features/suppliers";
+import { SupplierTaxAsk } from "@/features/SupplierTaxAsk";
+import { useHeldSheet } from "@/ui/heldSheet";
 import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
 import { canEditCatalog } from "@/features/access";
 
 const KINDS: CatalogKind[] = ["service", "labor", "material", "kit"];
+/** the id of the choice «Своя…» in the unit list (as on an estimate line) */
+const OWN = "__own__";
+/** the kind a new item starts with: the last one chosen on this device (spec 56 §3а.4) */
+const LAST_KIND = "octo.catalog.lastKind.v1";
 
 /**
  * Catalog item. Material: supplier price + supplier tax (per supplier: 0, 10%, 10.25%…) + your markup
@@ -39,12 +48,32 @@ export default function CatalogItemScreen() {
   );
   const [pick, setPick] = useState(false);
   const [pickSup, setPickSup] = useState(false);
+  /** #1835: a supplier with a tax picked for a cost typed without one — the question first, then the supplier */
+  const [taxFor, setTaxFor] = useState<{ s: Supplier; ask: SupplierTaxAskData } | null>(null);
+  const taxAsk = useHeldSheet(taxFor);
+  const afterSupPick = useRef<(() => void) | null>(null);
   const set = (p: Partial<CatalogItem>) => setIt((x) => ({ ...x, ...p, placeholder: false }));
+  // a new item starts with the kind chosen last on this device, unless the list was filtered by a kind (spec 56 §3а.4)
+  const [lastKind, setLastKind, lastReady] = usePersistentState<CatalogKind | null>(LAST_KIND, null, { validate: (v) => v === null || KINDS.includes(v) });
+  const kindTouched = useRef(false);
+  useEffect(() => {
+    if (found || kindTouched.current || !lastReady || !lastKind || (kind0 && KINDS.includes(kind0))) return;
+    setIt((x) => ({ ...x, kind: lastKind }));
+    // once, when the device's value has been read
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastReady]);
+  // «Своя…»: the unit is written by hand — chosen so, or not one of the list
+  const knownUnit = (UNITS as readonly string[]).includes(it.unit);
+  const [pickedOwn, setPickedOwn] = useState(false);
+  const ownUnit = pickedOwn || !knownUnit;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/catalog"));
   // 19 §9: who does not get our costs (sales without view_costs) edits a material's price as it is — counting it from
   // a cost the phone does not have would overwrite the real price
   const noCosts = store.db.costsVisible === false;
   const isMat = countsFromCost(it, noCosts);
+  // by the stored item: switching the kind on this screen does not unlock its price (the store keeps the kind too)
+  const locked = priceLocked(found ?? it, noCosts, store.db.catalog);
+  const outerRo = useReadOnly();
   const price = editPrice(it, store.db.catalog, noCosts);
   const ok = editOk(it, noCosts);
   // spec 36: who sees suppliers picks one (the server reads none for sales and the tech)
@@ -60,6 +89,7 @@ export default function CatalogItemScreen() {
 
   const save = () => {
     const clean = editClean(it, store.db.catalog, noCosts);
+    if (!found) setLastKind(clean.kind);
     toast.show(t("cat.saved", { name: clean.name }), store.saveCatalogItem(clean));
     back();
   };
@@ -81,12 +111,39 @@ export default function CatalogItemScreen() {
   return (
     <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>
       <FieldGroup>
-        <ChoiceChips value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
+        {/* «Тип ⌄» — a value of the form, a row with a menu (spec 56 §3 row 4), not a tab bar; who may not change the price of
+            a material counted from its cost may not change its kind either (the server refuses it, #1971) */}
+        <ReadOnly value={locked || outerRo}>
+          <SelectField<CatalogKind>
+            testID="catalog-kind"
+            label={t("cat.kindLabel")}
+            value={it.kind}
+            items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))}
+            onChange={(k) => {
+              kindTouched.current = true;
+              set({ kind: k });
+            }}
+          />
+        </ReadOnly>
+        {locked ? (
+          <View testID="catalog-kind-locked">
+            <T v="caption" tone="mut">{t("cat.kind.locked")}</T>
+          </View>
+        ) : null}
+        {/* the name: its label over the field (spec 56 §3а.4), as the price and the cost below */}
         <View testID="catalog-name">
-          <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
+          <Labeled label={t("cat.name")}>
+            <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} label={t("cat.name")} />
+          </Labeled>
         </View>
-        <TextField type="unit" value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder={t("cat.unit")} />
-        {found?.placeholder ? <StatusChip status="warn" label={t("cat.placeholder")} /> : null}
+        <SelectField<string>
+          testID="catalog-unit"
+          label={t("cat.unitLabel")}
+          value={ownUnit ? OWN : it.unit}
+          items={[...UNITS.map((u) => ({ key: u as string, label: u })), { key: OWN, label: t("est.row.unitOwn") }]}
+          onChange={(u) => (u === OWN ? setPickedOwn(true) : (setPickedOwn(false), set({ unit: u })))}
+        />
+        {ownUnit ? <TextField type="unit" value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder="ea" label={t("est.row.unitOwn")} testID="catalog-unit-own" /> : null}
         {/* properties a trade module set (docs/specs/33 П16): read here, changed in the module */}
         {it.attributes && Object.keys(it.attributes).length ? (
           <View testID="catalog-attributes">
@@ -99,9 +156,17 @@ export default function CatalogItemScreen() {
         <FieldGroup>
           <Labeled label={t("cat.price")}>
             <View testID="catalog-price">
-              <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
+              {/* #1807: counted by the server from a cost this person does not see — shown, not changed */}
+              <ReadOnly value={locked || outerRo}>
+                <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
+              </ReadOnly>
             </View>
           </Labeled>
+          {locked ? (
+            <View testID="catalog-price-locked">
+              <T v="caption" tone="mut">{t("price.fromCost.locked")}</T>
+            </View>
+          ) : null}
         </FieldGroup>
       ) : null}
 
@@ -200,12 +265,35 @@ export default function CatalogItemScreen() {
         visible={pickSup}
         onClose={() => setPickSup(false)}
         onPick={(s) => {
-          setIt((x) => ({ ...pickSupplier(x, s), placeholder: false }));
           setPickSup(false);
+          // the question when the cost may already have the supplier's tax in it (#1835); else picked at once
+          const ask = s ? supplierTaxAsk(it, s) : null;
+          // the question opens once the picker has left (review #1904 №4: never two sheets at once)
+          if (s && ask) return void (afterSupPick.current = () => setTaxFor({ s, ask }));
+          setIt((x) => ({ ...pickSupplier(x, s), placeholder: false }));
+        }}
+        onExited={() => {
+          const next = afterSupPick.current;
+          afterSupPick.current = null;
+          next?.();
         }}
         onNew={() => {
           setPickSup(false);
           router.push("/suppliers/new");
+        }}
+      />
+      <SupplierTaxAsk
+        ask={taxAsk.value?.ask ?? null}
+        supplier={taxAsk.value?.s ?? null}
+        unit={it.unit}
+        visible={taxAsk.visible}
+        onExited={taxAsk.onExited}
+        // closed without an answer: no supplier is attached (no default)
+        onClose={() => setTaxFor(null)}
+        onAnswer={(a) => {
+          const f = taxFor;
+          setTaxFor(null);
+          if (f) setIt((x) => ({ ...pickSupplier(x, f.s, a, f.ask), placeholder: false }));
         }}
       />
       <CatalogPicker

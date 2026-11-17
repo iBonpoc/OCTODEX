@@ -9,6 +9,7 @@
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
+import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { useWindowDimensions, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
@@ -29,6 +30,8 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
+import { goTo } from "@/nav/go";
+import { setFooterInset, setToastRight } from "@/ui/footerInset";
 import { fillStyle } from "@/ui/fill";
 import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
@@ -143,7 +146,7 @@ function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow, disabl
 }
 
 /** a downspout size for the bar: «3×4», a round one «3″» */
-const dsSizeText = (s: string) => (s.includes("x") ? s.replace("x", "×") : `${s}″`);
+const dsSizeText = sizeText; // one format everywhere (#1916)
 
 const NO_VIEW: PlanView = { k: 1, ox: 0, oy: 0 };
 
@@ -798,10 +801,6 @@ export default function DrawScreen() {
     later.current();
   };
   const tape = m?.accuracy === "tape";
-  const setAccuracy = (a: "rough" | "tape") => {
-    setM((x) => (x ? { ...x, accuracy: a } : x));
-    later.current();
-  };
   const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
@@ -1029,9 +1028,7 @@ export default function DrawScreen() {
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
     ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
-    // how exact the lengths are, and where the toolbar sits — two items, each says what it is (#739; was one
-    // «Как мерили, панель» the founder did not understand)
-    ...(canSave && m ? [{ key: "acc" as const, label: t("mod.gutters.draw.accItem") }] : []),
+    // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
     // a measurement from before the automatic downspouts gets them only when asked (#1246): not silently, the estimate would change
@@ -1043,7 +1040,7 @@ export default function DrawScreen() {
     if (k === "fit") { if (size.w) setView(fit(drawing, size)); return; }
     if (k === "props") return setSheet(true);
     if (k === "end0" || k === "end1") return setEndSheet(endRun0 ? { id: endRun0.id, end: k === "end1" ? 1 : 0 } : null);
-    if (k === "acc" || k === "place" || k === "layers") return setMoreSheet(k);
+    if (k === "place" || k === "layers") return setMoreSheet(k);
     if (k === "autods") return placeAutoDs();
     if (!m) return;
     flush();
@@ -1052,10 +1049,25 @@ export default function DrawScreen() {
     else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
     else {
       const undo = removeMeasurement(store, m.id);
-      back();
+      flush();
+      // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
+      // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
+      goTo(moduleHref("gutters", "list"));
       toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
     }
   };
+  // the toast stands above what lies at the bottom of the canvas — the hints, the chips and the toolbar (#1819: «Замер удалён ·
+  // Отменить» lay on the toolbar); the same lane the pinned action bar gives (ui/footerInset), gone with the screen
+  const [barH, setBarH] = useState(0);
+  useEffect(() => {
+    setFooterInset(barH);
+    return () => setFooterInset(0);
+  }, [barH]);
+  // from 820 the side panel of properties stands at the right over the whole height: the toast is centred in the canvas, not on it (#1895)
+  useEffect(() => {
+    setToastRight(panelSide);
+    return () => setToastRight(0);
+  }, [panelSide]);
   const back = () => {
     flush();
     if (router.canGoBack()) router.back();
@@ -1086,6 +1098,10 @@ export default function DrawScreen() {
   // not fit the height); the grip puts the toolbar left or right of the card
   const at = place;
   const side = !flat && (at === "left" || at === "right");
+  /** the toolbar beside the chip, not under it: on a side, or the phone on its side (#1630) */
+  const row = side || flat;
+  /** in that row the toolbar is at the left edge (the left side; lying, unless put on the right) */
+  const toolsFirst = at === "left" || (flat && at !== "right");
   // the grip (founder 08.11): drag the toolbar, let go — it sticks to the nearest edge
   const grip = (
     <GestureDetector gesture={gripPan}>
@@ -1215,7 +1231,9 @@ export default function DrawScreen() {
           </View>
           {mPhotos && !wide && !flat && canSave ? (
             <View testID="draw-photos-open">
-              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.photo.open")} visibleHeight={sizes.hitMin} style={{ flexDirection: "row", alignItems: "center", gap: space[1], minHeight: sizes.hitMin, paddingHorizontal: space[1] }}>
+              {/* the same round plate as «⋯» (IconButton: dockBtn, surf2, a hairline border; founder 16.11, #1752: «фотоаппарат не в единой
+                  системе»); with photos the count stands in it and the plate grows into a pill */}
+              <Press onPress={() => setPhotoSheet(true)} accessibilityRole="button" accessibilityLabel={photoN ? `${t("mod.gutters.photo.open")} · ${photoN}` : t("mod.gutters.photo.open")} visibleHeight={component.dockBtn} style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[1], height: component.dockBtn, minWidth: component.dockBtn, paddingHorizontal: photoN ? space[3] : 0, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}>
                 <Icon name="camera" s={sizes.iconMd} color={c.ink} />
                 {photoN ? <T v="caption" w="semibold">{photoN}</T> : null}
               </Press>
@@ -1227,7 +1245,8 @@ export default function DrawScreen() {
             </View>
           ) : null}
           {inStore ? (
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="sm" onPress={() => void done()} /></View>
+            // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (
@@ -1310,7 +1329,12 @@ export default function DrawScreen() {
           }}
         />
       ) : null}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+      <View pointerEvents="box-none" onLayout={(e) => setBarH(Math.round(e.nativeEvent.layout.height))} style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+        {/* the toolbar keeps its place (#1630): below the chip and the hints when at the bottom; beside them, at its own edge, when on a side
+            or when the phone lies on its side — the chip coming and going never moves it under the finger */}
+        <View pointerEvents="box-none" style={row ? { flexDirection: "row", alignItems: "flex-end", gap: space[2] } : { gap: space[2] }}>
+        {row && toolsFirst ? tools : null}
+        <View pointerEvents="box-none" style={row ? { flex: 1, alignItems: toolsFirst ? "flex-end" : "flex-start", gap: space[2] } : { gap: space[2] }}>
         {gripping ? (
           <View pointerEvents="none" testID="draw-grip-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: component.hairline, borderColor: c.bd }}>
             <T v="caption" w="semibold" center>{t("mod.gutters.draw.gripHint")}</T>
@@ -1321,8 +1345,6 @@ export default function DrawScreen() {
             <T v="caption" w="semibold" center>{hintText}</T>
           </View>
         ) : null}
-        {flat || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: at === "bottom" ? (grow ? "stretch" : "center") : at === "right" ? "flex-end" : "flex-start" }}>{tools}</View>}
-        <View pointerEvents="box-none" style={flat ? { flexDirection: at === "left" ? "row-reverse" : "row", alignItems: "flex-end", gap: space[2] } : undefined}>
         {/* the summary chip (#1274, founder 12.11: «строки выбора нет — маленькая полупрозрачная плашка-сводка в нижнем углу», over the drawing, no row of its own):
             what is picked, else «Дальше: водостоки», else the totals; a tap opens the measurement's «Просмотр» (the materials and the sum) */}
         {summary && !gripping && (!flat || summary.kind === "selected") ? (
@@ -1364,8 +1386,12 @@ export default function DrawScreen() {
             ) : null}
           </View>
         ) : null}
-        {flat ? tools : null}
         </View>
+        {row && !toolsFirst ? tools : null}
+        </View>
+        {/* at the bottom the toolbar is the lowest, at the very edge (#1630): the chip and the hints above it come and go without moving
+            it — a toolbar that jumps under the finger sends the next tap to the canvas (a downspout put by a double tap on «Водосток») */}
+        {row || at === "top" ? null : <View pointerEvents="box-none" style={{ alignItems: grow ? "stretch" : "center" }}>{tools}</View>}
       </View>
 
       {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
@@ -1445,18 +1471,6 @@ export default function DrawScreen() {
       </Sheet>
       <Sheet visible={moreSheet !== null} onClose={() => setMoreSheet(null)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
-          {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
-          {moreSheet === "acc" && canSave && m ? (
-            <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
-              <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
-              <ChoiceChips
-                items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
-                value={tape ? "tape" : "rough"}
-                onChange={(a) => setAccuracy(a)}
-              />
-              <View testID="draw-accuracy-hint"><T v="caption" tone="mut">{t("mod.gutters.draw.accHint")}</T></View>
-            </View>
-          ) : null}
           {moreSheet === "layers" ? (
             <View testID="draw-layers" style={{ gap: space[2] }}>
               <T v="heading">{t("mod.gutters.draw.layersTitle")}</T>

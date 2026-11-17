@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Stack, type ErrorBoundaryProps } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
 import { StorageReadError } from "@/features/StorageReadError";
+import { CrashScreen } from "@/features/CrashScreen";
 import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
@@ -56,6 +57,11 @@ function Shell() {
       </ToastProvider>
     </View>
   );
+}
+
+/** a failure anywhere under the root: the crash screen, not a white one (#1555; it stands outside the providers, so it needs none) */
+export function ErrorBoundary(props: ErrorBoundaryProps) {
+  return <CrashScreen {...props} />;
 }
 
 export default function RootLayout() {

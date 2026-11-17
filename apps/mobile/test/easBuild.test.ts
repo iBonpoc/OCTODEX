@@ -148,19 +148,17 @@ describe("app.json: what Apple checks on upload", () => {
     expect(picker[1].microphonePermission).toBe(false);
   });
   // Plugins write their own "Allow $(PRODUCT_NAME)…" texts unless told otherwise (seen with `expo config --type introspect`).
-  it("location: honest texts for the Always keys Apple scans for, no motion and no temporary full accuracy", () => {
+  // Plugins write their own "Allow $(PRODUCT_NAME)…" texts unless told otherwise (seen with `expo config --type introspect`).
+  // 17.11.2026 (#1940, docs/16 п. 23): no background location, so no NSLocationAlways* keys at all — `false` makes the plugin delete them.
+  it("location: no Always keys (false), no motion, no temporary full accuracy", () => {
     const loc = (app.plugins as unknown[]).find((p) => Array.isArray(p) && p[0] === "expo-location") as [string, Record<string, unknown>];
-    for (const k of ["locationAlwaysAndWhenInUsePermission", "locationAlwaysPermission"]) {
-      expect(String(loc[1][k]), k).toMatch(/never uses your location in the background/);
-    }
+    for (const k of ["locationAlwaysAndWhenInUsePermission", "locationAlwaysPermission"]) expect(loc[1][k], k).toBe(false);
     expect(loc[1].motionUsagePermission).toBe(false);
     expect(loc[1].locationFullAccuracyPermission).toBe(false);
     expect(loc[1].isIosBackgroundLocationEnabled).toBe(false);
     for (const lang of ["en", "ru", "es"]) {
       const ios = JSON.parse(read(`apps/mobile/locales/${lang}.json`)).ios;
-      for (const k of ["NSLocationAlwaysAndWhenInUseUsageDescription", "NSLocationAlwaysUsageDescription"]) {
-        expect(String(ios[k] ?? "").length, `${lang} ${k}`).toBeGreaterThan(20);
-      }
+      expect(Object.keys(ios).filter((k) => /^NSLocationAlways/.test(k)), lang).toEqual([]);
     }
     expect(JSON.stringify(app)).not.toContain("$(PRODUCT_NAME)");
   });

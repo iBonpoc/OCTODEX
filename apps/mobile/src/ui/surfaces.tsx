@@ -234,7 +234,7 @@ export function ListRow({
   chevron?: boolean;
   /** the row's least height (`rowMax` 52; a choice row — `rowOption` 48) */
   minHeight?: number;
-  /** how many lines the title and the subtitle may take (default 1; long addresses — 2) */
+  /** how many lines the title and the subtitle may take (default 1; long addresses — 2; 0 — no limit, the text wraps whole) */
   lines?: number;
 }) {
   const { c } = useTheme();
@@ -409,6 +409,7 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
     return (
       <Press
         key={cr.href}
+        testID={`crumb-${cr.href}`}
         onPress={() => go(cr.href)}
         visibleHeight={component.dockBtn}
         accessibilityRole="button"
@@ -451,8 +452,9 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
     <View accessibilityRole="toolbar" accessibilityLabel={t("nav.trail")} style={{ flex: 1, minWidth: 0 }}>
       <RowView gap={space[1]} style={{ minHeight: size.hitMin }}>
         {items}
+        {/* where I am takes only the room the links leave (no width of its own): the links keep their names first (#1427) */}
         {current ? (
-          <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 2 }}>
+          <T v="caption" tone="mut" numberOfLines={1} style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 }}>
             {current}
           </T>
         ) : null}
@@ -541,8 +543,10 @@ export function Screen({
    *  for it; hidden while the keyboard is up (the keys cover it, the field is what the person is in). From 820 the screen puts the same
    *  buttons in its own column. */
   footer?: ReactNode;
-  /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column) */
-  form?: boolean;
+  /** a form screen (sign-in, a company, a client link): the column is at most `layout.formMax` wide, on the same left line as the title (DS §12.3, #1594); not together with `tabs` (their sticky offset is measured on the plain column).
+   *  `"center"` — a public page of the client with no side menu (the request form /f/): the column with its title stands in the middle
+   *  of a wide screen, not at its left edge with the right side empty (DS §12.3, 1.15.8, #1728) */
+  form?: boolean | "center";
   /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
   aside?: ReactNode;
   /** the screen's content, for the tests (a record that opened: its own testID, not its words — CHECKS §9 п.2) */
@@ -695,7 +699,7 @@ export function Screen({
               Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
           {pinned ? null : addressRow}
           <RowView style={{ gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
               <T v="title" numberOfLines={2}>
                 {title}
               </T>
@@ -727,7 +731,7 @@ export function Screen({
           ) : null}
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]} testID="screen-title">
               <T v="display" numberOfLines={1}>
                 {title}
               </T>
@@ -776,11 +780,12 @@ export function Screen({
   );
   const formColumn = (
     <View
-      testID={testID}
+      // a form without its own testID is found by the tests as `form-column` (e2e 440: the column is at most 560 on every form)
+      testID={testID ?? (form ? "form-column" : undefined)}
       // where the sticky tabs start: right under the content. The sticky wrapper's own layout says 0 on the web (react-native-web
       // measures it inside its sticky box), so the tabs' place is the content's bottom (#1416)
       onLayout={tabs ? (e) => (tabsY.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height) : undefined}
-      style={{ width: "100%", maxWidth: form ? layout.formMax : layout.contentMax, alignSelf: form ? "flex-start" : "center", gap: space[3] }}
+      style={{ width: "100%", maxWidth: form ? layout.formMax : layout.contentMax, alignSelf: form && form !== "center" ? "flex-start" : "center", gap: space[3] }}
     >
       {header}
       {children}

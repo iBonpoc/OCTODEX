@@ -718,6 +718,9 @@ export interface CatalogItem {
   components?: { itemId: ID; qty: string }[];
   /** test price (founder rule: real prices never in code) */
   placeholder?: boolean;
+  /** #1807 (53-0б): the server counts this material's price from its cost (catalog_items.price_from_cost). Who does not
+   *  see our costs reads the price and cannot change it. Absent = not counted (before the migration, local data). */
+  priceFromCost?: boolean;
   /** properties set by a trade module: name → text (catalog_items.attributes, docs/specs/33 П16). The core keeps no list
    *  of names or values. Absent = none (and not sent: an old server without the column is never written to) */
   attributes?: Record<string, string>;
@@ -1095,6 +1098,17 @@ export interface PendingPayment {
   at: string;
 }
 
+/** #1807 (spec 53 §5.3б п.4): a price someone sent for a material counted from its cost, and the price that stayed */
+export interface PriceRecalc {
+  id: ID;
+  itemId: ID;
+  sentCents: number;
+  serverCents: number;
+  /** who sent it (a member's user id; absent — unknown) */
+  by?: ID;
+  at: string;
+}
+
 export interface DB {
   me: ID;
   members: Member[];
@@ -1166,6 +1180,9 @@ export interface DB {
    * so a material's price is edited as it is. undefined — not known (demo, a cache from before): as before.
    */
   costsVisible?: boolean;
+  /** #1807: prices a phone sent that the server replaced with the one from the cost (catalog_price_recalc; only who sees
+   *  our costs gets rows) — the office's «Требует внимания». Absent / empty: none. */
+  priceRecalc?: PriceRecalc[];
   notices: Notice[];
   company: Company | null;
   notes: Note[];

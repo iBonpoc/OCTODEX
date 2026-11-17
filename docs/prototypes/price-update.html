@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Обновить прайс</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Прототип спеки 53 (ред. 2 — после design-reviewer). Значения — токены «Наряда» (design/naryad-ds/tokens/*.css,
+   packages/design-tokens): checkbox 22/7/1.5, banner — рамка тона, toast — пилюля Glass strong с кольцом.
+   Цены тестовые (правило 9), поставщик и строки прайса вымышлены. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;--pill:999px;
+  --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field-phone:44px;--bar-btn:44px;
+  --cb:22px;--cb-r:7px;--cb-b:1.5px;--icon:16px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--scrim:rgba(0,0,0,.42);
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--sh:0 10px 28px rgba(60,50,40,.12);--sh-sm:0 1px 3px rgba(20,22,30,.14);--ov:rgba(250,248,244,.94);
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--sh-sm:0 1px 3px rgba(0,0,0,.5);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--sh-sm:0 1px 3px rgba(0,0,0,.5);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:400 var(--fs-body)/1.4 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:var(--s6)}
+button,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+svg.i{width:var(--icon);height:var(--icon);flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.wrap{max-width:1300px;margin:0 auto;display:grid;gap:var(--s5)}
+h1{font-size:var(--fs-display);margin:0}
+.lede{color:var(--mut);max-width:72ch;margin:var(--s2) 0 0}
+.bar{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:center}
+.seg{display:inline-flex;background:var(--surf);border:1px solid var(--bd);border-radius:var(--pill);padding:4px;gap:2px}
+.seg button{border:0;background:none;border-radius:var(--pill);min-height:var(--c-md);padding:0 var(--s3);cursor:pointer;font-weight:500;color:var(--mut)}
+.seg button[aria-pressed="true"]{background:var(--surf2);color:var(--ink);font-weight:600}
+.lbl{font-size:var(--fs-caption);color:var(--mut);letter-spacing:.04em;text-transform:uppercase;margin-right:var(--s1)}
+.cols{display:grid;gap:var(--s6);grid-template-columns:repeat(auto-fit,minmax(min(100%,390px),1fr));align-items:start}
+.col{display:grid;gap:var(--s2);justify-items:start;min-width:0}
+.col h2{font-size:var(--fs-heading);margin:0}
+.col p{margin:0;color:var(--mut);font-size:var(--fs-caption);max-width:390px}
+
+/* ---------- телефон ---------- */
+.dev{width:390px;max-width:100%;height:844px;background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);position:relative;overflow:hidden;display:flex;flex-direction:column}
+.top{display:flex;align-items:center;gap:var(--s2);padding:var(--s4) var(--s4) var(--s2)}
+.iconbtn{width:var(--c-lg);height:var(--c-lg);border-radius:var(--pill);border:1px solid var(--bd);background:var(--surf2);display:grid;place-items:center;cursor:pointer;position:relative;flex:none}
+.iconbtn::after{content:"";position:absolute;inset:-4px}
+.ttl{font-size:var(--fs-title);font-weight:700;line-height:1.2}
+.sub{font-size:var(--fs-caption);color:var(--mut)}
+.body{flex:1;overflow:auto;padding:var(--s2) var(--s4) var(--s4);display:grid;gap:var(--s3);align-content:start}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4)}
+.src{display:flex;justify-content:space-between;gap:var(--s2);align-items:center}
+.btn{min-height:var(--c-lg);border-radius:var(--pill);border:1px solid var(--bd);background:var(--surf2);font-weight:600;font-size:var(--fs-btn);padding:0 var(--s4);display:inline-flex;align-items:center;justify-content:center;gap:var(--s2);cursor:pointer;position:relative}
+.btn::after{content:"";position:absolute;inset:-4px 0}
+.btn.primary{background:var(--acc);color:var(--on-acc);border-color:transparent}
+.btn.full{width:100%}
+.btn.bar{min-height:var(--bar-btn)}
+.btn.ghost{background:none;border-color:transparent;text-decoration:underline}
+/* баннер DS Б9: рамка тона, значок тона, заголовок, пояснение, одно действие под текстом */
+.banner{border-radius:var(--ri);padding:var(--s3);background:var(--surf);border:1px solid var(--bd);display:grid;gap:var(--s2);grid-template-columns:auto 1fr}
+.banner.warn{border-color:var(--st-warn)}
+.banner > svg{color:var(--st-warn-t);margin-top:1px}
+.banner .tx{display:grid;gap:2px}
+.banner .tx b{font-weight:600}
+.banner .tx span{font-size:var(--fs-caption);color:var(--mut)}
+.banner .act{grid-column:2;display:grid;gap:var(--s2)}
+/* поле с подписью сверху (§11) */
+.fld{display:grid;gap:var(--s1)}
+.fld label{font-size:var(--fs-caption);color:var(--mut)}
+.input{height:var(--field-phone);border-radius:var(--rf);border:1px solid var(--bd);background:var(--in);padding:0 var(--s3);width:100%;font-variant-numeric:tabular-nums}
+.input.big{font-size:var(--fs-title);font-weight:600}
+.fields{display:grid;grid-template-columns:3fr 2fr;gap:var(--s3)}
+/* строки прайса: карточка, флажок справа (DS А4) */
+.list{display:grid;gap:var(--s2)}
+.line{display:grid;grid-template-columns:1fr var(--hit);gap:0 var(--s1);align-items:start;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) 0 var(--s3) var(--s4);cursor:pointer}
+.line[aria-checked="true"]{background:var(--surf2);box-shadow:var(--sh-sm)}
+.line[aria-disabled="true"]{cursor:default}
+.ck{width:var(--hit);height:var(--hit);display:grid;place-items:center;margin-top:-10px}
+.box{width:var(--cb);height:var(--cb);border-radius:var(--cb-r);border:var(--cb-b) solid var(--mut);display:grid;place-items:center;background:var(--in);color:var(--ink)}
+.box svg{opacity:0;width:14px;height:14px;stroke-width:3}
+.line[aria-checked="true"] .box{border-color:var(--ink);background:var(--surf2)}
+.line[aria-checked="true"] .box svg{opacity:1}
+.main{min-width:0;display:grid;gap:2px}
+.t{font-weight:600;display:flex;justify-content:space-between;gap:var(--s2)}
+.v{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.v s{color:var(--mut);font-weight:500;text-decoration:none}
+.from{font-size:var(--fs-caption);color:var(--mut)}
+.meta{display:flex;flex-wrap:wrap;gap:var(--s1) var(--s2);align-items:center;font-size:var(--fs-caption);margin-top:2px}
+.meta .cl{color:var(--mut)}
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:var(--pill);padding:2px 8px 2px 6px;font-size:var(--fs-caption);font-weight:600;border:1px solid var(--bd);background:var(--surf2)}
+.chip svg{width:12px;height:12px;stroke-width:2.5}
+.chip.ok{color:var(--st-ok-t)}.chip.warn{color:var(--st-warn-t)}.chip.bad{color:var(--st-bad-t)}.chip.info{color:var(--st-info-t)}
+.note{display:flex;gap:var(--s1);align-items:flex-start;font-size:var(--fs-caption)}
+.note.warn{color:var(--st-warn-t)}.note.ok{color:var(--st-ok-t)}
+.note svg{width:14px;height:14px;margin-top:1px}
+.group{display:flex;justify-content:space-between;align-items:center;min-height:var(--hit);padding:0 var(--s4);background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);cursor:pointer;font-weight:600}
+.group span{color:var(--mut);font-weight:500}
+.mini{display:grid;gap:2px;padding:var(--s2) var(--s4);font-size:var(--fs-caption);color:var(--mut)}
+.panel{border-top:1px solid var(--bd);background:var(--ov);backdrop-filter:blur(24px);border-radius:var(--r) var(--r) 0 0;padding:var(--s3) var(--s4) calc(var(--s3) + 20px);display:grid;gap:var(--s2)}
+.panel .sum{font-weight:600}
+/* шторка */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--ov);backdrop-filter:blur(24px);border-radius:var(--r) var(--r) 0 0;padding:var(--s2) var(--s4) calc(var(--s4) + 20px);display:grid;gap:var(--s3)}
+.grab{width:36px;height:5px;border-radius:9px;background:var(--bd);justify-self:center}
+.sh-head{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
+.kv{display:flex;justify-content:space-between;color:var(--mut)}
+.kv b{color:var(--ink);font-variant-numeric:tabular-nums}
+.pcard{display:grid;grid-template-columns:1fr auto auto;gap:var(--s2);align-items:center;background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s2) var(--s3) var(--s4);cursor:pointer;min-height:var(--hit)}
+.pcard .v{font-weight:700;white-space:nowrap}
+.pcard > svg{color:var(--mut)}
+.prow{display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 var(--s3);border-radius:var(--rf);cursor:pointer}
+.prow:hover{background:var(--surf)}
+.sec{font-size:var(--fs-heading);font-weight:700;margin-top:var(--s2)}
+/* тост DS Б8: пилюля Glass strong, «Вернуть» с кольцом */
+.toast{position:absolute;left:50%;transform:translateX(-50%);width:calc(100% - 2 * var(--s4));max-width:444px;bottom:110px;background:var(--ov);backdrop-filter:blur(24px);border:1px solid var(--bd);box-shadow:var(--sh);color:var(--ink);border-radius:var(--pill);min-height:var(--hit);padding:var(--s1) var(--s1) var(--s1) var(--s4);display:flex;justify-content:space-between;align-items:center;font-weight:500}
+.toast button{background:none;border:0;font-weight:700;min-height:var(--hit);padding:0 var(--s3);cursor:pointer;display:inline-flex;align-items:center;gap:var(--s2)}
+.ring{width:18px;height:18px}
+.done-h{display:flex;gap:var(--s2);align-items:center}
+.done-h svg{width:20px;height:20px;color:var(--st-ok-t)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9L2 18a2 2 0 001.7 3h16.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-chevd" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V3M7 8l5-5 5 5M5 21h14"/></symbol>
+</svg>
+<div class="wrap">
+  <header>
+    <h1>Обновить прайс</h1>
+    <p class="lede">Прототип спеки 53 (редакция 2 — после независимого дизайн-ревью). Экран «Цены» модуля Gutters с «Обновить прайс» и быстрой правкой одной цены, экран «было → стало» после загрузки CSV или Excel и итог. Цены тестовые, поставщик и строки вымышлены. Флажки, «Похоже», свёрнутые группы и поле наценки работают.</p>
+  </header>
+  <div class="bar">
+    <span class="lbl">Тема</span>
+    <div class="seg" role="radiogroup" aria-label="Тема">
+      <button type="button" role="radio" data-theme-btn="light" aria-pressed="true">Светлая</button>
+      <button type="button" role="radio" data-theme-btn="dark" aria-pressed="false">Тёмная</button>
+    </div>
+  </div>
+
+  <div class="cols">
+    <!-- ======== 1. Цены Gutters ======== -->
+    <section class="col" aria-labelledby="h1s">
+      <h2 id="h1s">1. «Цены и прайс» Gutters</h2>
+      <p>«Обновить прайс» — действие баннера «Тестовые цены». Нажатие на карточку открывает шторку «Цена»: ввод и «Сохранить» — 2 нажатия.</p>
+      <div class="dev" id="scr-prices">
+        <div class="top">
+          <button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button>
+          <div><div class="sub">Gutters</div><div class="ttl">Цены и прайс</div></div>
+        </div>
+        <div class="body">
+          <div style="color:var(--mut)">Цены работы и деталей берутся из каталога компании.</div>
+          <div class="banner warn" role="status">
+            <svg class="i"><use href="#i-alert"/></svg>
+            <div class="tx"><b>Тестовые цены: 12</b><span>Загрузите прайс поставщика или нажмите на позицию, чтобы ввести цену.</span></div>
+            <div class="act"><button class="btn" type="button" data-testid="gpr-update"><svg class="i"><use href="#i-upload"/></svg>Обновить прайс</button></div>
+          </div>
+          <div class="sec">Детали</div>
+          <div class="list">
+            <div class="pcard" role="button" tabindex="0" onclick="openQuick()"><div><div style="font-weight:600">Гаттер · 5″ · K-style · белый</div></div><div class="v">$3.00 / ft</div><svg class="i"><use href="#i-chev"/></svg></div>
+            <div class="pcard" role="button" tabindex="0"><div><div style="font-weight:600">Заглушка · 5″ · K-style</div></div><div class="v">$4.50 / ea</div><svg class="i"><use href="#i-chev"/></svg></div>
+            <div class="pcard" role="button" tabindex="0"><div><div style="font-weight:600">Крюк · скрытый · 5″</div></div><div class="v">$1.40 / ea</div><svg class="i"><use href="#i-chev"/></svg></div>
+            <div class="pcard" role="button" tabindex="0"><div><div style="font-weight:600">Водосток · 2×3 · белый</div></div><div class="v">$2.60 / ft</div><svg class="i"><use href="#i-chev"/></svg></div>
+          </div>
+        </div>
+        <div class="scrim" id="q-scrim" hidden onclick="closeQuick()"></div>
+        <div class="sheet" id="q-sheet" role="dialog" aria-label="Цена" hidden>
+          <div class="grab"></div>
+          <div class="sh-head"><div class="ttl" style="font-size:var(--fs-heading)">Гаттер · 5″ · K-style · белый</div><button class="iconbtn" type="button" aria-label="Закрыть" onclick="closeQuick()"><svg class="i"><use href="#i-close"/></svg></button></div>
+          <div class="note warn"><svg class="i"><use href="#i-alert"/></svg><span>Тестовая цена. После сохранения пометка снимется.</span></div>
+          <div class="fields">
+            <div class="fld"><label for="q-cost">Закупка за ft</label><input class="input big" id="q-cost" inputmode="decimal" value="$2.31" oninput="quickCalc()"></div>
+            <div class="fld"><label for="q-mk">Наценка, %</label><input class="input big" id="q-mk" inputmode="decimal" value="30" oninput="quickCalc()"></div>
+          </div>
+          <div class="kv"><span>Клиенту</span><b id="q-client">$3.00 / ft</b></div>
+          <button class="btn primary full bar" type="button" onclick="quickSave()">Сохранить</button>
+          <button class="btn ghost" type="button" style="justify-self:center">Открыть позицию</button>
+        </div>
+        <div class="toast" id="q-toast" hidden role="status">Цена сохранена<button type="button" onclick="this.parentNode.hidden=true"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="50.3" stroke-dashoffset="18" transform="rotate(-90 10 10)"/></svg>Вернуть</button></div>
+      </div>
+    </section>
+
+    <!-- ======== 2. Было → стало ======== -->
+    <section class="col" aria-labelledby="h2s">
+      <h2 id="h2s">2. Было → стало</h2>
+      <p>Сверху — строки к проверке; «Без изменений» и «Нет в каталоге» свёрнуты внизу. Скачок ±25 % и больше, «похоже», смена поставщика и тестовые позиции без наценки — без галочки.</p>
+      <div class="dev" id="scr-review">
+        <div class="top">
+          <button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button>
+          <div><div class="sub">Каталог</div><div class="ttl">Обновить прайс</div></div>
+        </div>
+        <div class="body" id="r-body">
+          <div class="card src">
+            <div><b>ABC Supply</b><div class="sub">abc-gutters-nov.xlsx · прайс от 11/01/2026 · без налога</div></div>
+            <button class="btn" type="button">Изменить</button>
+          </div>
+          <div class="banner warn" id="test-banner" role="status">
+            <svg class="i"><use href="#i-alert"/></svg>
+            <div class="tx"><b>Тестовые цены без наценки: 2</b><span>Без наценки цена клиенту будет равна закупке. Укажите наценку — строки отметятся.</span></div>
+            <div class="act fld"><label for="tmk">Наценка для них, %</label><input class="input" id="tmk" inputmode="decimal" placeholder="например, 30" oninput="onMk()"></div>
+          </div>
+          <div class="list" id="rows"></div>
+          <div class="group" role="button" tabindex="0" aria-expanded="false" onclick="toggleGroup(this,'g-same')">Без изменений <span>9 <svg class="i" style="vertical-align:middle"><use href="#i-chevd"/></svg></span></div>
+          <div class="mini" id="g-same" hidden><div>Крюк · скрытый · 6″ — $1.12 / ea</div><div>Водосток · 3×4 · белый — $2.40 / ft</div><div>…ещё 7</div></div>
+          <div class="group" role="button" tabindex="0" aria-expanded="false" onclick="toggleGroup(this,'g-none')">Нет в каталоге <span>31 <svg class="i" style="vertical-align:middle"><use href="#i-chevd"/></svg></span></div>
+          <div class="mini" id="g-none" hidden><div>ABC #GUT6KB · 6" K-Style Brown 50' roll — $142.00</div><div>ABC #LGM · Leaf guard mesh 4' — $6.10</div><div>…ещё 29. Их нет в вашем каталоге — обновлять нечего.</div></div>
+        </div>
+        <div class="panel">
+          <div class="sum" id="sel-n">Отмечено 2 из 6</div>
+          <div class="note warn" id="hint" hidden><svg class="i"><use href="#i-alert"/></svg><span>Отметьте строки, которые хотите обновить</span></div>
+          <button class="btn primary full bar" type="button" id="apply" onclick="apply()">Применить 2</button>
+        </div>
+        <div class="scrim" id="l-scrim" hidden onclick="closeLikely()"></div>
+        <div class="sheet" id="l-sheet" role="dialog" aria-label="Какая это позиция" hidden>
+          <div class="grab"></div>
+          <div class="sh-head"><div><div class="ttl" style="font-size:var(--fs-heading)">Какая это позиция?</div><div class="sub">ABC #SEAL10 · Gutter sealant 10oz — $7.40</div></div><button class="iconbtn" type="button" aria-label="Закрыть" onclick="closeLikely()"><svg class="i"><use href="#i-close"/></svg></button></div>
+          <div>
+            <div class="prow" role="button" tabindex="0" onclick="pickLikely()"><span>Герметик · туба</span><b>$6.90 / ea</b></div>
+            <div class="prow" role="button" tabindex="0" onclick="pickLikely()"><span>Герметик · прозрачный</span><b>$7.10 / ea</b></div>
+            <div class="prow" role="button" tabindex="0" onclick="closeLikely()"><span>Нет такой позиции</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ======== 3. Итог ======== -->
+    <section class="col" aria-labelledby="h3s">
+      <h2 id="h3s">3. Итог</h2>
+      <p>Тост «Вернуть» 5 секунд. Отменить загрузку позже можно 30 дней — в «Каталог → ⋯ → История загрузок» (с подтверждением). Отправленные сметы не меняются.</p>
+      <div class="dev" id="scr-done">
+        <div class="top">
+          <button class="iconbtn" type="button" aria-label="Назад"><svg class="i"><use href="#i-back"/></svg></button>
+          <div><div class="sub">Каталог</div><div class="ttl">Обновить прайс</div></div>
+        </div>
+        <div class="body">
+          <div class="card" style="display:grid;gap:var(--s2)">
+            <div class="done-h"><svg class="i"><use href="#i-check"/></svg><div class="ttl" id="done-n">Обновлено цен: 2</div></div>
+            <div style="color:var(--mut)">Цена клиенту изменилась вместе с закупкой — наценка осталась прежней.</div>
+          </div>
+          <div class="card" style="display:grid;gap:var(--s2)">
+            <b>Черновики с этими позициями: 2</b>
+            <div style="color:var(--mut);font-size:var(--fs-caption)">В черновиках цены пока прежние: откройте черновик и нажмите «Пересчитать». Отправленные и подписанные сметы не меняются.</div>
+            <button class="btn" type="button" style="justify-self:start">Открыть черновики</button>
+          </div>
+        </div>
+        <div class="toast" role="status"><span id="toast-n">Обновлено цен: 2</span><button type="button" onclick="this.parentNode.hidden=true"><svg class="ring" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="50.3" stroke-dashoffset="18" transform="rotate(-90 10 10)"/></svg>Вернуть</button></div>
+        <div class="panel"><button class="btn primary full bar" type="button" onclick="go('prices')">Готово</button></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+// Деньги в прототипе — целые центы; округление half up, как в движке (catalogPrice). Только показ.
+const ROWS = [
+  {id:"r1", name:"Гаттер · 5″ · K-style · белый", from:"ABC #GUT5KW · 5\" K-Style White 50' roll — $115.50", unit:"ft", was:210, now:231, mk:0, test:true},
+  {id:"r2", name:"Водосток · 2×3 · белый", from:"ABC #DS23W · 2x3 Downspout White 10' — $19.80", unit:"ft", was:190, now:198, mk:3000},
+  {id:"r3", name:"Крюк · скрытый · 5″", from:"ABC #HH5 · Hidden hanger 5\" box/50 — $49.00", unit:"ea", was:102, now:98, mk:4000},
+  {id:"r4", name:"Колено A · 2×3 · белое", from:"ABC #ELA23W · Elbow A 2x3 White — $31.00", unit:"ea", was:240, now:3100, mk:3000},
+  {id:"r5", name:"Заглушка · 5″ · K-style", from:"ABC #EC5K · End cap 5\" K — $2.95", unit:"ea", was:350, now:295, mk:0, test:true, sup:"Home Depot"},
+  {id:"r6", name:"Герметик · туба", from:"ABC #SEAL10 · Gutter sealant 10oz — $7.40", unit:"ea", was:690, now:740, mk:3000, likely:true},
+];
+const sel = new Set();
+const isBig = r => Math.abs(r.now - r.was) / r.was >= .25;
+// галочка по умолчанию (спека §7.3): совпало, < 25 %, тот же поставщик, у тестовой позиции задана наценка
+const preOk = (r, tm) => !r.likely && !isBig(r) && !r.sup && !(r.test && r.mk === 0 && tm === null);
+const money = c => "$" + (c/100).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const price = (cost, mk) => Math.floor(cost * (10000 + mk) / 10000 + 0.5);
+const pct = (a,b) => { const p = (b-a)/a*100; return (p>0?"+":"−") + Math.abs(p).toFixed(1) + "%"; };
+const ic = n => `<svg class="i"><use href="#i-${n}"/></svg>`;
+function testMk(){ const v = parseFloat(document.getElementById("tmk").value.replace(",", ".")); return isFinite(v) && v >= 0 ? Math.round(v*100) : null; }
+function onMk(){ const tm = testMk(); ROWS.filter(r => r.test && r.mk === 0 && !r.sup).forEach(r => tm === null ? sel.delete(r.id) : sel.add(r.id)); render(); }
+// строки «к проверке» сверху: похоже, скачок, смена поставщика, тестовые без наценки; затем обычные
+const order = r => (r.likely ? 0 : isBig(r) ? 1 : r.sup ? 2 : r.test && r.mk === 0 && testMk() === null ? 3 : 4);
+function render(){
+  const tm = testMk();
+  const box = document.getElementById("rows");
+  box.innerHTML = [...ROWS].sort((a,b) => order(a) - order(b)).map(r => {
+    const mk = r.test && r.mk === 0 && tm !== null ? tm : r.mk;
+    const up = r.now > r.was;
+    // направление цены — не статус: нейтральный чип со стрелкой; статус только «Проверьте» (bad) и «Похоже» (info)
+    const chip = r.likely ? `<span class="chip info">${ic("clock")}Похоже — выберите позицию</span>`
+      : isBig(r) ? `<span class="chip bad">${ic("close")}Проверьте: ${pct(r.was,r.now)}</span>`
+      : `<span class="chip">${ic(up ? "up" : "down")}${pct(r.was,r.now)}</span>`;
+    const extra = [
+      r.sup ? `<span class="chip warn">${ic("alert")}Поставщик сменится: ${r.sup} → ABC Supply</span>` : "",
+      r.test && mk === 0 ? `<span class="chip warn">${ic("alert")}Клиенту по закупке</span>` : "",
+    ].join("");
+    const on = sel.has(r.id);
+    return `<div class="line" role="checkbox" tabindex="0" aria-checked="${on}" aria-label="Применить строку ${r.name}" data-id="${r.id}">
+      <div class="main">
+        <div class="t"><span>${r.name}</span><span class="v"><s>${money(r.was)}</s> → ${money(r.now)}</span></div>
+        <div class="from">${r.from}</div>
+        <div class="meta">${chip}${extra}</div>
+        <div class="meta"><span class="cl">Клиенту: ${money(price(r.was, r.mk))} → ${money(price(r.now, mk))} / ${r.unit} · наценка ${(mk/100).toFixed(0)}%</span></div>
+      </div>
+      <div class="ck"><span class="box">${ic("check")}</span></div></div>`;
+  }).join("");
+  box.querySelectorAll(".line").forEach(el => {
+    const r = ROWS.find(x => x.id === el.dataset.id);
+    const t = () => {
+      if (r.likely && !r.picked) return openLikely();
+      sel.has(r.id) ? sel.delete(r.id) : sel.add(r.id); document.getElementById("hint").hidden = true; render();
+    };
+    el.onclick = t; el.onkeydown = e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); t(); } };
+  });
+  document.getElementById("test-banner").hidden = !ROWS.some(r => r.test && r.mk === 0);
+  document.getElementById("sel-n").textContent = `Отмечено ${sel.size} из ${ROWS.length}`;
+  document.getElementById("apply").textContent = `Применить ${sel.size}`;
+}
+function openLikely(){ document.getElementById("l-scrim").hidden = false; document.getElementById("l-sheet").hidden = false; }
+function closeLikely(){ document.getElementById("l-scrim").hidden = true; document.getElementById("l-sheet").hidden = true; }
+function pickLikely(){ const r = ROWS.find(x => x.likely); r.picked = true; r.likely = false; sel.add(r.id); closeLikely(); render(); }
+function toggleGroup(el, id){ const g = document.getElementById(id); g.hidden = !g.hidden; el.setAttribute("aria-expanded", String(!g.hidden)); }
+function apply(){
+  if (!sel.size) { document.getElementById("hint").hidden = false; return; }
+  document.getElementById("done-n").textContent = "Обновлено цен: " + sel.size;
+  document.getElementById("toast-n").textContent = "Обновлено цен: " + sel.size;
+  go("done");
+}
+function go(id){ document.getElementById("scr-" + id).scrollIntoView({behavior:"smooth", block:"center"}); }
+function openQuick(){ document.getElementById("q-scrim").hidden = false; document.getElementById("q-sheet").hidden = false; document.getElementById("q-toast").hidden = true; quickCalc(); document.getElementById("q-cost").focus(); }
+function closeQuick(){ document.getElementById("q-scrim").hidden = true; document.getElementById("q-sheet").hidden = true; }
+function quickCalc(){
+  const c = Math.round(parseFloat(document.getElementById("q-cost").value.replace(/[$,\s]/g,"")) * 100);
+  const m = Math.round(parseFloat(document.getElementById("q-mk").value.replace(",", ".")) * 100) || 0;
+  document.getElementById("q-client").textContent = isFinite(c) ? money(price(c, m)) + " / ft" : "—";
+}
+function quickSave(){ closeQuick(); document.getElementById("q-toast").hidden = false; }
+document.querySelectorAll("[data-theme-btn]").forEach(b => b.onclick = () => {
+  document.documentElement.dataset.theme = b.dataset.themeBtn;
+  document.querySelectorAll("[data-theme-btn]").forEach(x => x.setAttribute("aria-pressed", x === b));
+});
+const qs = new URLSearchParams(location.search);
+if (qs.get("theme")) document.documentElement.dataset.theme = qs.get("theme");
+ROWS.filter(r => preOk(r, null)).forEach(r => sel.add(r.id));
+render();
+if (qs.get("sheet") === "1") openQuick();
+if (qs.get("likely") === "1") openLikely();
+</script>
+</body>
+</html>

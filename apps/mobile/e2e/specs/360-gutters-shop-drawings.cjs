@@ -92,7 +92,7 @@ exports.run = async (h) => {
   h.expect(d.includes("@page{size:11in 17in"), "11 × 17 pages");
   h.expect((d.match(/<svg/g) || []).length >= 2, "a plan sheet and a schedules sheet");
   h.expect(d.includes(">G-1<") && d.includes(">G-2<"), "sheets G-1 and G-2");
-  h.expect(d.includes("ПЛАН ВОДОСТОКОВ — ЭТАЖ 1") && d.includes("ВЕДОМОСТЬ ЖЕЛОБОВ"), "the plan and the schedule, in the app's language");
+  h.expect(d.includes("ПЛАН GUTTERS — ЭТАЖ 1") && d.includes("ВЕДОМОСТЬ GUTTERS"), "the plan and the schedule, in the app's language");
   h.expect(d.includes(">1-1<") && d.includes(">1-2<") && d.includes(">90°<"), "two segments and the corner's angle");
   h.expect(d.includes("НЕ ДЛЯ РАЗРЕШЕНИЯ"), "«not for permit»");
   h.expect(!/\$\s?\d/.test(d), "no prices on the drawings");
@@ -103,7 +103,7 @@ exports.run = async (h) => {
   h.expect((await p.getByTestId("view-docs").locator('[data-testid^="view-doc-"]').count()) === 4, "four documents: the client's, the crew's, the shop drawings (one row), the order");
   const l = await printVia("view-pdf-shop", "view-shop-paper-letter");
   h.expect(l.includes("@page{size:8.5in 11in"), "Letter pages");
-  h.expect(l.includes('height="11.000in"') && l.includes("ПЛАН ВОДОСТОКОВ"), "the whole sheet reduced to the page");
+  h.expect(l.includes('height="11.000in"') && l.includes("ПЛАН GUTTERS"), "the whole sheet reduced to the page");
 
   // the supplier's order: English, on Letter
   const o = await printVia("view-pdf-shop-order");

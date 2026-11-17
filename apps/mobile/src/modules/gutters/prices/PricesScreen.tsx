@@ -4,7 +4,8 @@
  * tile) and the parts of a job of the company's defaults, each found in the company's price list by its properties
  * (catalogMatch) — or «not in the price list» with «Создать» (a TEST price, rule 9) and «Привязать» (an item of the list
  * without properties). «Создать позиции сразу» makes all the missing ones: test prices, never twice (catalog.save
- * onlyNew, fixed ids). A price is changed in the core's item editor (/catalog/<id>): one editor, cost and markup as everywhere.
+ * onlyNew, fixed ids). A price is changed in a sheet (spec 53 §6.3: the card, then «Сохранить» — QuickPriceSheet of the core,
+ * cost and markup as in the core's item editor); the full editor (/catalog/<id>) is one tap further.
  * The director and the office (catalog rights, staff) change them; only while the module is active (founder О2).
  * Every object is a card (rule 12); the bind picker in a sheet lists rows.
  */
@@ -25,8 +26,11 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { withAfter } from "@/data/undo";
+import { QuickPriceSheet } from "@/features/QuickPriceSheet";
+import { quickSheetKey } from "@/features/quickPrice";
+import { useHeldSheet } from "@/ui/heldSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -48,21 +52,15 @@ export default function GutterPricesScreen() {
   const labor = useMemo(() => laborRows(), []);
   const parts = useMemo(() => materialRows(raw), [raw]);
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
+  /** spec 53 §6.3 (53-1): the price of a found item in a sheet — two taps (a kit keeps the full editor) */
+  const [quickId, setQuickId] = useState<string | null>(null);
+  // held while the sheet goes out (DS Б1, #1163); an item deleted meanwhile (another phone) — the sheet goes out
+  const quick = useHeldSheet(quickId ? catalog.find((x) => x.id === quickId) ?? null : null);
 
   /** the item's name in the app's language at the moment it is made: company data from then on (the owner renames it) */
   const nameOf = (p: PartQty): string => partName(t, p);
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  /** rows priced by a test item (rule 9): said once in the banner, each card keeps its own «тестовая цена» */
-  // counted as ITEMS of the price list, as the toast «Создано позиций: N» and «Нет в прайсе: N» count them (two rows may share one item)
-  const testN = new Set([...labor, ...parts].map((r) => findItem(catalog, r.part)).filter((it) => it?.placeholder).map((it) => it!.id)).size;
-  /** own prices and test prices side by side: then a card marks its test price even under the banner (it tells which are left) */
-  const mixed = testN > 0 && [...labor, ...parts].some((r) => { const it = findItem(catalog, r.part); return !!it && !it.placeholder; });
-  /** the banner «Тестовые цены: N» is on the screen (the module on, the person writes prices, nothing missing) */
-  const testBanner = active && staff && !missing.length && testN > 0;
-  /** rule 9: a test price is ALWAYS marked — by the banner or by the card's chip; the chip is left out only under the banner
-   *  and only while every price is a test one (DS Б9: no wall of the same chip). Read only, off, or something still missing: chips */
-  const testChip = !testBanner || mixed;
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
    *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */
   const made = useRef(new Set<string>());
@@ -84,7 +82,8 @@ export default function GutterPricesScreen() {
   const keep = (x: string) => x.replace(/ · /g, "\u00a0· ").replace(/ (\d+)$/, "\u00a0$1");
   const desktop = device === "desktop";
   const card = (row: PriceRow) => {
-    const it = findItem(catalog, row.part);
+    // a part priced only by another degree's elbow (§2.7) is shown missing here: the company prices its own
+    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findItem(catalog, row.part);
     const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {
@@ -95,12 +94,12 @@ export default function GutterPricesScreen() {
           title={title}
           lead={{ kind: "icon", icon: row.part.kind === "labor" ? "wrench" : "box" }}
           value={`${money(catalogUnitPrice(it))} / ${unit}`}
-          // DS Б9 (#1426): the banner says «Тестовые цены: N»; a card marks its test price only while the list mixes test and own
-          // prices (then it tells which are left to set) — all test: no wall of the same chip
-          status={it.placeholder ? (testChip ? { tone: "warn", label: t(k("testPrice")) } : undefined) : { tone: "ok", label: t(k("found")) }}
+          // #1873 (the founder 16.11: «Везде убираем… Нигде нет её. Надписи этой»): a sample price is a price like any other —
+          // no mark; the testID keeps the state for the tests only
+          status={{ tone: "ok", label: t(k("found")) }}
           density={desktop ? "row" : "rich"}
           edge={null}
-          onPress={ro ? undefined : () => router.push(`/catalog/${it.id}`)}
+          onPress={ro ? undefined : () => (it.kind === "kit" ? router.push(`/catalog/${it.id}`) : setQuickId(it.id))}
         />
       );
     }
@@ -153,8 +152,8 @@ export default function GutterPricesScreen() {
         ) : missing.length ? (
           <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
         ) : (
-          // the words name the state: test prices left — «Тестовые цены: N» (warn); none — «Всё есть в прайсе» (ok)
-          <Banner tone={testN ? "warn" : "ok"} testID="gpr-all-found" title={testN ? t(k("testN"), { n: testN }) : t(k("allFound"))} hint={testN ? t(k("testHint")) : undefined} />
+          // everything is in the price list (#1873: sample prices carry no mark)
+          <Banner tone="ok" testID="gpr-all-found" title={t(k("allFound"))} />
         )}
 
         <View style={{ gap: space[2] }} testID="gpr-labor">
@@ -169,6 +168,7 @@ export default function GutterPricesScreen() {
         </View>
       </View>
 
+      <QuickPriceSheet key={quickSheetKey(quick.opening, quick.value)} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
       <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
         <View style={{ gap: space[3] }} testID="gpr-bind">
           <T v="caption" tone="mut">{t(k("bindHint"))}</T>

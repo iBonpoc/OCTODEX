@@ -64,6 +64,73 @@ describe("design system: components", () => {
     );
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
+  // Rule 29 (founder 16.11.2026: «никаких кастомных кнопок, никаких кастомных шторок… всё по токенам и сущностям»; DS §8.0):
+  // screens and modules are built from src/ui only. Counts below are the debt found on 16.11 — they may only go down;
+  // fixing goes with the waves of spec 56 (Gutters draw/** — wave G). A new place is an exception in DS §8.0 first.
+  const RULE29_MODAL: Record<string, number> = {
+    "features/SignatureFullscreen.tsx": 1,
+    "modules/gutters/draw/InputWindow.tsx": 1,
+    "nav/NavMenu.tsx": 1,
+  };
+  const countIn = (src: string, re: RegExp) => (src.match(re) || []).length;
+  it("rule 29: no own Modal outside src/ui (sheets and windows — Sheet / InputDialog of src/ui); the old ones only go down", () => {
+    const now: Record<string, number> = {};
+    for (const f of outsideUi) {
+      const src = readFileSync(f, "utf8");
+      if (!/import\s*\{[^}]*\bModal\b[^}]*\}\s*from\s*"react-native"/.test(src)) continue;
+      const n = countIn(src, /<Modal\b/g);
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (RULE29_MODAL[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${RULE29_MODAL[k] ?? 0}`);
+    const less = Object.entries(RULE29_MODAL).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `own Modal outside src/ui (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  // a Press drawn as a button / tile / chip by the screen itself: its own background, radius or border in the tag
+  const RULE29_STYLED_PRESS: Record<string, number> = {
+    "features/DatePick.tsx": 1,
+    "features/PhotoStrip.tsx": 2,
+    "features/PlanParts.tsx": 1,
+    "features/estimate/SwipeRow.tsx": 1,
+    "features/showcase/Rows.tsx": 1,
+    "modules/gutters/draw/AttrPanel.tsx": 1,
+    "modules/gutters/draw/CornerSheet.tsx": 1,
+    "modules/gutters/draw/DrawScreen.tsx": 2,
+    "modules/gutters/draw/FracPicker.tsx": 1,
+    "modules/gutters/settings/SettingsScreen.tsx": 1,
+    "nav/Fab.tsx": 3,
+    "nav/HomeHeader.tsx": 1,
+    "nav/NavMenu.tsx": 2,
+    "nav/SearchEntry.tsx": 1,
+    "nav/SideNav.tsx": 2,
+    "nav/TabBar.tsx": 1,
+  };
+  const styledPress = (src: string) => {
+    let n = 0;
+    for (const m of src.matchAll(/<Press\b/g)) {
+      let depth = 0;
+      let i = m.index! + 6;
+      for (; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") depth--;
+        else if (ch === ">" && depth === 0) break;
+      }
+      if (/backgroundColor|borderRadius|borderWidth|fillStyle\(/.test(src.slice(m.index!, i))) n++;
+    }
+    return n;
+  };
+  it("rule 29: no Press drawn as an own button outside src/ui (Button / IconButton / ListRow / OptionRow / OptionTile); the old ones only go down", () => {
+    const now: Record<string, number> = {};
+    for (const f of outsideUi) {
+      const n = styledPress(readFileSync(f, "utf8"));
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (RULE29_STYLED_PRESS[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${RULE29_STYLED_PRESS[k] ?? 0}`);
+    const less = Object.entries(RULE29_STYLED_PRESS).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `own button-looking Press outside src/ui (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
   it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
@@ -369,9 +436,8 @@ describe("design system: a form's fields have no plate (#1411)", () => {
   const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
     "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
-    "features/ServiceCategoryPicker.tsx": { n: 1, why: "«Добавить» свою категорию" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
-    "features/client/ClientSheets.tsx": { n: 2, why: "«Удалить» человека; «Добавить» метку" },
+    "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
   };
   it("a field's helper action is an icon inside it: no worded button in one row with a field", () => {
     const bad: string[] = [];

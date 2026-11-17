@@ -26,7 +26,7 @@ exports.run = async (h) => {
   await h.clickText("Задачи");
   await h.click("Что дальше?");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
-  h.expect((await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).count()) === 0, "sales: no person rows in the form");
+  h.expect((await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).count()) === 0, "sales: no person rows in the form");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(600);
   db = await h.db();
   const v = db.visits.find((x) => x.leadId === angela.id);

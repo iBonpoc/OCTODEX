@@ -18,7 +18,7 @@ exports.run = async (h) => {
   await h.click("Что дальше?");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
   await expectOneAccent(h, "the visit form", '[aria-modal="true"]');
-  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  await h.sheet().getByRole("option", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(600);
   // «Сообщить клиенту?»: a ready text; copying it marks the visit as told (nothing is sent by us)
   await h.expectText(/Сообщить клиенту\?/, "notify sheet after booking");

@@ -9,8 +9,8 @@ import { useStore } from "@/data/store";
 import type { DB, Job } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { tagLabel } from "@/features/clients";
-import { Button, MultiChips } from "@/ui/controls";
-import { Icon, T } from "@/ui/primitives";
+import { Button } from "@/ui/controls";
+import { OptionRows } from "@/ui/optionRow";
 import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 
@@ -19,6 +19,9 @@ export function jobTypeName(db: Pick<DB, "jobTypes">, id: string | undefined, t:
   if (!jt) return undefined;
   return jt.name ?? (jt.seedKey ? t(`job3.jt.${jt.seedKey}` as DictKey) : undefined);
 }
+
+/** «Без типа» in the list of types */
+const NONE = "__none";
 
 export function JobTypeTags({ job, canEdit }: { job: Job; canEdit: boolean }) {
   const store = useStore();
@@ -48,16 +51,19 @@ export function JobTypeTags({ job, canEdit }: { job: Job; canEdit: boolean }) {
       {row(t("job3.type"), jobTypeName(db, job.jobTypeId, t) ?? t("job3.noType"), canEdit ? () => setSheet("type") : undefined)}
       {row(t("job5.tags"), tagNames.join(", ") || t("job5.tags.none"), canEdit ? () => { setSel(job.tagIds ?? []); setSheet("tags"); } : undefined)}
       <Sheet visible={sheet === "type"} onClose={() => setSheet(null)} title={t("job5.type.pick")}>
-        <View>
-          {types.map((x) => (
-            <ListRow key={x.id} title={jobTypeName(db, x.id, t) ?? ""} right={x.id === job.jobTypeId ? <Icon name="check" /> : undefined} onPress={() => pickType(x.id)} />
-          ))}
-          <ListRow title={t("job3.noType")} right={!job.jobTypeId ? <Icon name="check" /> : undefined} onPress={() => pickType(null)} />
-        </View>
+        {/* the sheet's one question — rows, a tap picks and closes, `CheckMark` at the chosen (spec 56 §3 row 5) */}
+        <OptionRows<string>
+          testID="job-type-options"
+          label={t("job5.type.pick")}
+          items={[...types.map((x) => ({ key: x.id, title: jobTypeName(db, x.id, t) ?? "" })), { key: NONE, title: t("job3.noType") }]}
+          value={job.jobTypeId ?? NONE}
+          onChange={(k) => pickType(k === NONE ? null : k)}
+        />
       </Sheet>
       <Sheet visible={sheet === "tags"} onClose={() => setSheet(null)} title={t("job5.tags")} dirty={sel.slice().sort().join() !== (job.tagIds ?? []).slice().sort().join()} onSave={saveTags}>
         <View style={{ gap: space[3] }}>
-          <MultiChips items={tags.map((x) => ({ key: x.id, label: tagLabel(x, t) }))} value={sel} onChange={setSel} />
+          {/* several marks — rows with a check (spec 56 §3 row 7), not chips */}
+          <OptionRows<string> multiple testID="job-tags-options" label={t("job5.tags")} items={tags.map((x) => ({ key: x.id, title: tagLabel(x, t) }))} value={sel} onChange={setSel} />
           <RowView>
             <Button label={t("ue.save")} icon="check" full onPress={saveTags} />
           </RowView>

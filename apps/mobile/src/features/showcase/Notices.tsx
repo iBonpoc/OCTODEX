@@ -11,6 +11,7 @@ import { EmptyFilter, EmptySearch, NotFound, PageNotFound } from "@/ui/emptyStat
 import { DemoBadge } from "@/features/DemoBadge";
 import { StatusNote } from "@/ui/statusNote";
 import { Banner } from "@/ui/banner";
+import { CrashView } from "@/features/CrashScreen";
 import { SECTIONS } from "./registry";
 import { localUndo, TOO_LATE } from "@/data/undo";
 
@@ -52,6 +53,14 @@ export function NoticesSection() {
         </View>
       </View>
       {/* DS Б9, §15.3 (#957): the screen's state — one banner, the tone's icon + words, one action; «✕» only on info */}
+      {/* DS §13 «Экран сбоя» (#1555): what the root's ErrorBoundary draws when the app itself fails */}
+      <Card>
+        <View testID="showcase-crash" style={{ gap: space[3] }}>
+          <T v="heading">{t("ds.crash.title")}</T>
+          <T v="caption" tone="mut">{t("ds.crash.hint")}</T>
+          <CrashView t={t} onRetry={() => setPressed(t("crash.retry"))} onRestart={() => setPressed(t("crash.restart"))} />
+        </View>
+      </Card>
       <Card>
         <View testID="showcase-banners" style={{ gap: space[3] }}>
           <T v="heading">{t("ds.banner.title")}</T>

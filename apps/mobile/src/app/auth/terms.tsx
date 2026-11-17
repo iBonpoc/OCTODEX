@@ -25,7 +25,7 @@ export default function TermsGate() {
   const changed = auth.legal === "changed";
   const leave = () => (router.canGoBack() ? router.back() : router.replace("/"));
   return (
-    <Screen title={t(changed ? "legal.gate.changedTitle" : "legal.gate.firstTitle")}>
+    <Screen form title={t(changed ? "legal.gate.changedTitle" : "legal.gate.firstTitle")}>
       <View testID="legal-gate" style={{ gap: space[3] }}>
         <Card>
           <View style={{ gap: space[3] }}>
