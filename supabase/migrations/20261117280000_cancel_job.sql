@@ -12,6 +12,7 @@
 -- The estimate (approved) and the lead (won) do not change. A repeat on a cancelled job changes nothing (the offline queue may replay).
 -- Lock order as cancel_visit (visit → job): the visits of the job first (by id), then the job — a cancel of a visit and a cancel
 -- of its job never wait for each other crosswise.
+-- The hints (job_paid, job_invoice_open, job_visit_on_site, job_done) are the phone's own words for a refusal (outboxRejected.ts).
 -- Not here: a way back (the founder's word — variant B of §12); the client's notice.
 
 create or replace function public.cancel_job(p_job uuid, p_reason text)
@@ -45,15 +46,16 @@ begin
     return jsonb_build_object('status', 'cancelled', 'repeat', true, 'visits', 0, 'invoices', 0);
   end if;
   if j.status in ('completed', 'closed') then
-    raise exception 'job:done' using errcode = '23514', hint = 'done';
+    raise exception 'job:done' using errcode = '23514', hint = 'job_done';
   end if;
   if exists (select 1 from public.visits v where v.job_id = j.id and v.company_id = v_company and v.deleted_at is null
                 and v.status = 'on_site') then
-    raise exception 'job:visitOnSite' using errcode = '23514', hint = 'visitOnSite';
+    raise exception 'job:visitOnSite' using errcode = '23514', hint = 'job_visit_on_site';
   end if;
   v_why := app.job_cancel_reason(v_company, j.id);
   if v_why is not null then
-    raise exception 'job:%', v_why using errcode = case when v_why = 'noRight' then '42501' else '23514' end, hint = v_why;
+    raise exception 'job:%', v_why using errcode = case when v_why = 'noRight' then '42501' else '23514' end,
+      hint = case v_why when 'paid' then 'job_paid' when 'invoiceOpen' then 'job_invoice_open' else v_why end;
   end if;
 
   -- S9a: the open visits (cancel_visit takes the job back to «waits for a date» with the last one)

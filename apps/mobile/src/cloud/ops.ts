@@ -168,6 +168,8 @@ export type Op =
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
   /** В1-5 (#1107): void a sent invoice without payments, with the reason (owner / admin; the server checks the same) */
   | { k: "invoice.void"; id: string; jobId: string; reason: string; totalCents: number }
+  /** #2015 (spec 38 §12): cancel a job — the visits, the unpaid invoices and the job in one server transaction */
+  | { k: "job.cancel"; jobId: string; reason: string }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
   | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean }
   | { k: "license.save"; license: CompanyLicense }
@@ -712,6 +714,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // one server function for S4a / S9a (migration 20261105300000): the cancel and the roll-backs in one transaction;
       // a repeat after a partial failure changes nothing
       return run(supabase.rpc("cancel_visit", { p_visit_id: op.visitId, p_reason: op.reason, p_text: op.text ?? null }));
+    case "job.cancel":
+      // public.cancel_job (migration 20261117280000): rights, the same refusals as the guard, the visits and invoices of the job;
+      // a repeat on a cancelled job changes nothing
+      return run(supabase.rpc("cancel_job", { p_job: op.jobId, p_reason: op.reason }));
     case "visit.notified":
       // the time is the server's (t07_visit_notified_stamp sets now()); any non-null value only marks «told»
       return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));

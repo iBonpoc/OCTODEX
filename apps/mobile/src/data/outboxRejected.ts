@@ -19,7 +19,7 @@ export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 /** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
  *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price";
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price" | "job";
 /**
  * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
  * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
@@ -47,6 +47,11 @@ export const REJECT_REASONS = {
   invoice_void_forbidden: "inv.void.rej.role",
   // a payment into an invoice voided meanwhile (migration 20261112090000, t06_payment_not_void)
   invoice_void: "inv.void.rej.payment",
+  // #2015 (migration 20261117280000, cancel_job): the cancel the server refused — the job stays as it was
+  job_paid: "job.cancel.rej.paid",
+  job_invoice_open: "job.cancel.rej.invoiceOpen",
+  job_visit_on_site: "job.cancel.rej.onSite",
+  job_done: "job.cancel.rej.done",
   // #1913 (migration 20261117210000): a price group has at most 200 items
   price_group_full: "price.group.rejFull",
 } as const;
@@ -113,6 +118,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
     case "invoice.issue": return { ...base, what: "invoice", href: `/job/${op.jobId}`, amountCents: op.totalCents, ...(reason === "invoice_over_contract" ? { reason } : {}) };
     // В1-5: the void the server did not take — the invoice stays live; the card says why
     case "invoice.void": return { ...base, what: "invoice", href: `/invoice/${op.id}`, amountCents: op.totalCents, labelKey: "inv.void.rej.title", ...(reason ? { reason } : {}) };
+    // #2015: the cancel of a job the server did not take — the job is back in its list; the card says why
+    case "job.cancel": return { ...base, what: "job", href: `/job/${op.jobId}`, labelKey: "job.cancel.rej.title", ...(reason ? { reason } : {}) };
     case "invoice.pay": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents, ...(reason === "invoice_void" ? { reason } : {}) };
     case "payment.record": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents, ...(reason === "invoice_void" ? { reason } : {}) };
     // the money in the tech's hand the server did not take (more than due, the visit cancelled meanwhile…): say it in

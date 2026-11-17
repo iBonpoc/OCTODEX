@@ -638,6 +638,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
     taxRatePpm: j.tax_rate_ppm == null ? undefined : n(j.tax_rate_ppm),
     status: jobStatus[s(j.status)] ?? "scheduled",
+    ...(jobDbCancelled.includes(s(j.status)) ? { cancelReason: s(j.cancel_reason) || undefined, cancelledAt: s(j.cancelled_at) || s(j.updated_at) || undefined } : {}),
     amountCents: n(j.contract_total_cents),
     ...contractTaxOfRow(j),
     estimateId: (j.estimate_id as string | null) ?? undefined,

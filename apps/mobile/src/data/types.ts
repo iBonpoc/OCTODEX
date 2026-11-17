@@ -193,6 +193,9 @@ export interface Job {
   taxRateBps?: number;
   /** #1219: the rate in ppm (8.875 % = 88750; server jobs.tax_rate_ppm) — the rate when set; absent — the basis points */
   taxRatePpm?: number;
+  /** #2015 (spec 38 §12): a cancelled job (db.cancelledJobs) — why and when (server: jobs.cancel_reason / cancelled_at) */
+  cancelReason?: string;
+  cancelledAt?: string;
 }
 
 /** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
