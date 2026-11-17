@@ -194,8 +194,9 @@ revoke all on function app.erase_queue_run() from public, anon, authenticated;
 grant execute on function app.erase_queue_run() to service_role;
 
 -- the edge function's three calls (not for people: service_role only)
--- Two callers may claim the same rows at once (the claim holds its lock only for the statement): harmless — removing an object twice is not an
--- error for the Storage API — the worst is a doubled count. Idempotent on purpose.
+-- Two callers may claim the same rows at once: `for update skip locked` holds the rows only until this call (one RPC = one statement) ends, so
+-- NOBODY may rely on it as a lock between claim and done. Harmless on purpose — removing an object twice is not an error for the Storage API —
+-- the worst is a doubled count. Idempotent.
 create or replace function public.storage_erase_claim(p_limit int default 50)
 returns table (id uuid, bucket text, path text) language sql security definer set search_path = '' as $$
   select q.id, q.bucket, q.path from app.storage_erase_queue q
