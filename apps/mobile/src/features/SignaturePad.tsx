@@ -76,6 +76,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label, consent
           ...(Platform.OS === "web" ? ({ touchAction: "none" } as object) : null),
         }}
         accessibilityLabel={(label ?? t("visit.signHere"))}
+        accessibilityState={ro ? { disabled: true } : undefined}
         testID="signature-pad"
         {...(ro ? null : pan.panHandlers)}
       >

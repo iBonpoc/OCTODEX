@@ -16773,7 +16773,7 @@ begin;
 do $t$
 declare i int;
 begin
-  for i in 1..3 loop
+  for i in 1..4 loop
     insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
       (('37900000-0000-4000-8000-00000000000' || i)::uuid, 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
        'd1a00000-0000-0000-0000-000000000001', 'T379 ' || i);
@@ -16814,6 +16814,16 @@ end $t$;
 select tst.ok((select status from public.estimates where id = '37900000-0000-4000-8000-000000000001') = 'sent'
           and not exists (select 1 from public.estimate_approvals where estimate_id = '37900000-0000-4000-8000-000000000001'),
   'T379 after the refusals: still sent, no signature');
+
+-- a tech of the company, by the link: refused too (any person of the company)
+:as_tech_a
+select tst.fails_like($q$select public.portal_accept('tok_t379_1_0123456789abcdef', '37920000-0000-4000-8000-000000000001', null, 'Tech', 'M0 0 L5 5', true, 'portal')$q$,
+  '%not by the client''s link%', 'T379 a tech signs by the link: refused');
+
+-- a person of ANOTHER company is only a client here: signs by the link
+:as_owner_b
+select tst.ok(public.portal_accept('tok_t379_4_0123456789abcdef', '37920000-0000-4000-8000-000000000004', null, 'T379 Other co', 'M0 0 L5 5', true) ->> 'status'
+              = 'awaiting_countersign', 'T379 a member of another company signs as a client');
 
 -- the client: anonymous, by the token — signs as before
 reset role; reset request.jwt.claim.sub; set role anon;

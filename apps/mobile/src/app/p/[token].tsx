@@ -67,7 +67,7 @@ export default function ClientEstimatePage() {
   // Rule 7: the page, its sheets and toasts speak the client's language, not the app's (or the browser's).
   return (
     <I18nOverride lang={data.lang}>
-      <PortalBody data={data} doc={data.doc} token={token!} back={back} setRemote={setRemote} />
+      <PortalBody data={data} doc={data.doc} token={token!} back={back} setRemote={setRemote} officeNote={t("portalPreview.sign")} />
     </I18nOverride>
   );
 }
@@ -81,6 +81,8 @@ function browserLang(): DocLang {
 /** a failure on the client page in our words: «no connection» or «try again» — never the browser's or the server's text */
 function portalFail(t: (k: DictKey) => string, e: unknown): string {
   const m = String((e as Error)?.message ?? e);
+  // #2020: a person of the company signing by the client's link — the server refuses; say who signs, not «try again»
+  if (/not by the client's link/i.test(m)) return t("portalPreview.sign");
   return /fetch|network|timeout|abort/i.test(m) ? t("portal.offline") : t("portal.failed");
 }
 
@@ -98,7 +100,8 @@ function NoPage({ loading, failed, back }: { loading: boolean; failed: boolean; 
   );
 }
 
-function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; doc: EstimateDoc; token: string; back?: () => void; setRemote: (d: PortalData | null) => void }) {
+/** `officeNote`: the preview's note for the office — in the APP's language (it is not for the client; rule 7) */
+function PortalBody({ data, doc, token, back, setRemote, officeNote }: { data: PortalData; doc: EstimateDoc; token: string; back?: () => void; setRemote: (d: PortalData | null) => void; officeNote: string }) {
   const store = useStore();
   const { t, money, day } = useI18n();
   const toast = useToast();
@@ -302,7 +305,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                 {data.preview ? (
                   <View testID="portal-preview-note">
                     <T v="caption" tone="mut">
-                      {t("portalPreview.sign")}
+                      {officeNote}
                     </T>
                   </View>
                 ) : null}

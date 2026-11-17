@@ -67,6 +67,15 @@ exports.run = async (h, { seed, admin }) => {
   const approve = p.getByRole("button", { name: /Одобрить и подписать|Approve and sign|Aprobar y firmar/ }).last();
   h.expect(await approve.isDisabled(), "С1: «Approve and sign» is off in the preview");
   h.expect(!(await p.getByPlaceholder(/Ваше имя|Your name|Su nombre/).last().isEditable()), "С1: the name field does not take text");
+  // a stroke on the pad leaves nothing: «Clear» stays off (the pad takes no finger in the preview)
+  const pad = p.getByTestId("signature-pad").locator("visible=true").last();
+  await pad.scrollIntoViewIfNeeded();
+  const bb = await pad.boundingBox();
+  await p.mouse.move(bb.x + 30, bb.y + 60); await p.mouse.down();
+  for (let i = 0; i < 20; i++) await p.mouse.move(bb.x + 30 + i * 12, bb.y + 60 - Math.sin(i / 2) * 30);
+  await p.mouse.up();
+  h.expect(await p.getByTestId("signature-clear").locator("visible=true").last().getByRole("button").isDisabled(), "С1: the pad took no stroke («Clear» off)");
+  h.expect(await approve.isDisabled(), "С1: «Approve and sign» still off after the stroke");
   await h.shot("preview-sign");
   const [e1] = await admin(`estimates?id=eq.${est[0].e}&select=status`);
   const appr = await admin(`estimate_approvals?estimate_id=eq.${est[0].e}&select=id`);
