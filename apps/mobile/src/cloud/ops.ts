@@ -1377,6 +1377,11 @@ export function catalogCostSeen(prev: CatalogItem | undefined, costs: CatalogCos
   if (!prev || !Object.keys(costs).length) return undefined;
   return Object.fromEntries((Object.keys(costs) as (keyof CatalogCostChange)[]).map((f) => [f, prev[f] ?? null]));
 }
+/** the op's `costsSeen` field, or nothing (a new item, no cost change) */
+export const withCostsSeen = (prev: CatalogItem | undefined, costs: CatalogCostChange): { costsSeen?: CatalogCostChange } => {
+  const seen = catalogCostSeen(prev, costs);
+  return seen ? { costsSeen: seen } : {};
+};
 
 /**
  * Draft estimate → database: estimate row, an unlocked version (a new one if the current is already sent),
