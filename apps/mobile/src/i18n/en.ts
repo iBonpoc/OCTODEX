@@ -255,6 +255,7 @@ export const en: Dict = {
   "est.signConsent": "By signing, the client accepts the estimate and the amount.",
   "visit.signConsent": "By signing, the client confirms the completed work and amount.",
   "visit.amountDue": "Amount due",
+  "visit.close": "Close the visit",
   "visit.method": "Payment method",
   "visit.payCard": "Card",
   "visit.payCash": "Cash",

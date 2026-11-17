@@ -1,5 +1,6 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { visitDueCents } from "@/features/visitDue";
+import { signedAction } from "@/features/visitSignedAction";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
@@ -33,7 +34,6 @@ import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { canSeeVisit } from "@/features/access";
-import { canTakeVisitPayment } from "@/features/moneyLists";
 import { StatusNote } from "@/ui/statusNote";
 import { signedText } from "@/i18n/translate";
 
@@ -94,6 +94,8 @@ export default function VisitScreen() {
   // «Перенести / Отменить»: the office only (owner / admin / office ↔ director / dispatcher), like cancel_visit on the server
   const office = canPlan([store.role]);
 
+  // #2018: what «Подпись» offers — never a dead end, never «Принять оплату» on $0
+  const signed = signedAction(store.role, visitDueCents(db, v));
   const advance = (msg: string) => {
     haptic();
     const undo = store.advanceVisit(v.id);
@@ -277,7 +279,22 @@ export default function VisitScreen() {
         </>
       ) : null}
 
-      {v.step === "signed" && canTakeVisitPayment(store.role) ? (
+      {/* #2018 С1: nothing to pay (the job is paid by invoice) — «Закрыть выезд», no «$0.00» and no payment step; the same
+          payVisit, which on $0 writes no payment and ends the visit on the server */}
+      {v.step === "signed" && signed === "close" ? (
+        <View testID="visit-close">
+          <Button
+            label={t("visit.close")}
+            icon="check"
+            full
+            onPress={() => {
+              haptic();
+              toast.show(queuedHint() ?? t("toast.step", { step: t("st.done") }), store.payVisit(v.id, method));
+            }}
+          />
+        </View>
+      ) : null}
+      {v.step === "signed" && signed === "pay" ? (
         <Card>
           <T v="caption" tone="mut">
             {t("visit.amountDue")}
