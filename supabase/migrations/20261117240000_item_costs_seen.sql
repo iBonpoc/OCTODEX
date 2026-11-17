@@ -12,6 +12,10 @@
 -- t32 counts a material's price from the new cost (53-0б), t98 spreads it to the item's price group (#1913), the cost
 -- history writes «manual».
 --
+-- app.costs_checked_write = the item's id (transaction-local, set around the write only): a trigger of catalog_item_costs
+-- that would put something else than what was sent into THAT row refuses instead (hint, e.g. supplier_tax — #1834), so
+-- nothing is changed silently; other rows (a group spread) stay as they are.
+--
 -- rule 16: nothing is renamed or dropped. Old builds keep writing as before (t30, the upsert): they cannot send what they
 -- saw. Cutting them off is the founder's question (#1958 «вопрос»: the minimum version, #1949 / #1675).
 -- rule 18: revoke from everyone, then execute for authenticated only.
@@ -68,12 +72,18 @@ begin
   v_cost   := case when p_costs ? 'unit_cost_cents' then (p_costs ->> 'unit_cost_cents')::bigint else k.unit_cost_cents end;
   v_tax    := case when p_costs ? 'vendor_tax_bps'  then (p_costs ->> 'vendor_tax_bps')::int     else k.vendor_tax_bps end;
   v_markup := case when p_costs ? 'markup_bps'      then (p_costs ->> 'markup_bps')::int         else k.markup_bps end;
+  -- «a checked write» of THIS item for the triggers of the side table: one that would change what was sent (a supplier's
+  -- tax over the item's — #1834) refuses it with a hint instead of keeping its own value silently, as it does for old
+  -- builds (rule 16). The item's id, not «on»: the group spread (t98) writes the other items of the group inside this
+  -- statement, and they keep each its own supplier's tax quietly. Taken off right after.
+  perform set_config('app.costs_checked_write', it.id::text, true);
   insert into public.catalog_item_costs as c (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps, updated_by)
   values (it.id, it.company_id, v_cost, v_tax, v_markup, auth.uid())
   on conflict (item_id) do update
     set unit_cost_cents = excluded.unit_cost_cents, vendor_tax_bps = excluded.vendor_tax_bps, markup_bps = excluded.markup_bps,
         updated_at = now(), updated_by = auth.uid()
     where (c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps) is distinct from (excluded.unit_cost_cents, excluded.vendor_tax_bps, excluded.markup_bps);
+  perform set_config('app.costs_checked_write', '', true);
 end;
 $$;
 revoke all on function public.catalog_set_item_costs(uuid, jsonb, jsonb) from public, anon, authenticated;

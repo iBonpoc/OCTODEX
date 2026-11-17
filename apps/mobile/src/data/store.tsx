@@ -1119,12 +1119,14 @@ export function StoreProvider({
           // …and the same for «not yours to price» (42501 price_from_cost: a group counted from its cost): no five tries
           // #1958 (а): an item's cost changed meanwhile (another phone, a price-list upload): the rest of the save is on the
           // server, the cost is not — no five tries (each would be refused the same), one card per item, the truth read again
-          if (item.op.k === "catalog.save" && isRowConflict(e)) {
+          // …and «the tax of this item is its supplier's» (22023 hint supplier_tax, #1834): a refusal the same every time
+          const supplierTax = (e as { hint?: unknown } | null)?.hint === "supplier_tax";
+          if (item.op.k === "catalog.save" && (isRowConflict(e) || supplierTax)) {
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             opPause.current.delete(item.id);
             deadOps.current.add(item.id);
             dropped = true;
-            setRejected((prev) => itemCostRejected(freshRejected(prev, Date.now()), item, msg, Date.now(), w));
+            setRejected((prev) => itemCostRejected(freshRejected(prev, Date.now()), item, msg, Date.now(), w, supplierTax ? "price.cost.rejSupplierTax" : undefined));
             setOutbox(outboxRef.current);
             continue;
           }

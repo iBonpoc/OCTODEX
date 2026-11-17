@@ -209,15 +209,16 @@ export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly O
 /**
  * #1958 (а): an item's cost refused as «changed meanwhile» (catalog_set_item_costs, row_version_conflict — another phone
  * or a price-list upload changed it first): one card per item and person, the newest refusal; it opens the item, and the
- * truth is read again. The rest of the save (name, unit…) was written — only the cost was not.
+ * truth is read again. The rest of the save (name, unit…) was written — only the cost was not. The same card, other words,
+ * for «the tax of this item is its supplier's» (hint supplier_tax, #1834).
  */
-export function itemCostRejected(prev: readonly RejectedOp[], item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp[] {
+export function itemCostRejected(prev: readonly RejectedOp[], item: OwnedItem, error: string, now: number, who: Owner | null, labelKey = "price.cost.rejConflict"): RejectedOp[] {
   if (item.op.k !== "catalog.save") return [...prev];
   const owner = item.owner ?? who ?? undefined;
   const id = `cost.${item.op.item.id}.${owner?.userId ?? ""}.${owner?.companyId ?? ""}`;
   const rec: RejectedOp = {
     id, ...(owner ? { owner } : {}), kind: "catalog.save", what: "price", href: `/catalog/${item.op.item.id}`,
-    labelKey: "price.cost.rejConflict", error, at: new Date(now).toISOString(),
+    labelKey, error, at: new Date(now).toISOString(),
   };
   return [...prev.filter((x) => x.id !== id), rec];
 }

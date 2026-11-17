@@ -16891,7 +16891,30 @@ select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-
           and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"vendor_tax_bps": 500}', '{"vendor_tax_bps": null}')$q$) = 'ok'
           and pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, 500, 10000]'::jsonb,
   'T370 С7: a batch over one group — the peer already holds the value sent: no conflict');
+
+-- T371 (С11): the «checked write» mark — the named item's id while its own row is written, so a trigger of the side
+-- table (the supplier's tax, #1834) refuses that row instead of changing it silently; a group peer written by the spread
+-- inside the same statement does not carry it; cleared after
+\echo 'T371 the checked-write mark'
+:as_super
+create table pg_temp.t371 (item_id uuid, mark text);
+grant all on pg_temp.t371 to public;
+create function pg_temp.t371_seen() returns trigger language plpgsql as $f$
+begin
+  insert into pg_temp.t371 values (new.item_id, coalesce(current_setting('app.costs_checked_write', true), ''));
+  return new;
+end $f$;
+create trigger t371_probe before insert or update on public.catalog_item_costs for each row execute function pg_temp.t371_seen();
+:as_office_a
+select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"unit_cost_cents": 320}', '{"unit_cost_cents": 300}');
+:as_super
+select tst.ok((select mark from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a2' limit 1) = '53650000-0000-4000-8000-0000000000a2'
+          and (select bool_and(mark is distinct from item_id::text) from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a3')
+          and (select count(*) from pg_temp.t371 where item_id = '53650000-0000-4000-8000-0000000000a3') >= 1
+          and coalesce(current_setting('app.costs_checked_write', true), '') = '',
+  'T371 С11: the mark is the named item''s while its row is written; the group peer''s row does not carry it; cleared after');
+drop trigger t371_probe on public.catalog_item_costs;
 rollback;
-\echo 'T365–T370 ok'
+\echo 'T365–T371 ok'
 
 \echo 'ALL TESTS PASSED'

@@ -186,4 +186,23 @@ describe("unit:itemCostsSeenStore — #1958 (а)", () => {
     expect(cards[0]).toMatchObject({ labelKey: "price.cost.rejConflict", href: "/catalog/x" });
     expect(server.loads.length).toBeGreaterThan(loads);
   });
+
+  it("С11: «the tax of this item is its supplier's» (supplier_tax) — at once, its own card, the truth read", async () => {
+    const { v } = await start();
+    v().setOnline(false);
+    await settle();
+    v().saveCatalogItem({ ...v().db.catalog.find((c) => c.id === "x")!, vendorTaxBps: 500 });
+    await settle();
+    v().setOnline(true);
+    await settle();
+    const loads = server.loads.length;
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    server.sends.find((x) => (x.op as GP).k === "catalog.save")!.d.reject(new PermanentError("the item's tax is its supplier's", 400, "22023", "supplier_tax"));
+    await settle();
+    expect(sentOps("catalog.save")).toHaveLength(1);
+    const cards = v().rejectedOps.filter((c) => c.kind === "catalog.save");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ labelKey: "price.cost.rejSupplierTax", href: "/catalog/x" });
+    expect(server.loads.length).toBeGreaterThan(loads);
+  });
 });
