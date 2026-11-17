@@ -13931,7 +13931,12 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_i
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 2,
               'T202 the purchase history keeps only the purchase rows (the first cost and the cost change)');
 -- who reads: the office yes; a tech, sales without view_costs, another company no; nobody writes it by hand
-select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 4, 'T202 the office reads the price history');
+-- 4 rows of T202 itself + 3 prices the server counted from the cost since #1807 (53-0б): $12.13 → $12.35 (markup 12 %),
+-- → $12.47 (cost $10.10), → $12.81 (markup 15 % the old way); the first cost gave $12.1275 → $12.13 = the price as it was
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_history where item_id = 'a2020000-0000-4000-8000-000000000001'$q$) = 7
+          and (select array_agg(unit_price_cents order by at, id) from public.catalog_price_history
+                where item_id = 'a2020000-0000-4000-8000-000000000001' and unit_price_cents is not null) = array[1213, 1235, 1247, 1281]::bigint[],
+              'T202 the office reads the price history (the server''s prices from the cost included, #1807)');
 select tst.fails($q$insert into public.catalog_price_history (company_id, item_id, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'a2020000-0000-4000-8000-000000000001', 1)$q$, 'T202 the office does not write the history by hand');
 select tst.fails($q$update public.catalog_price_history set unit_price_cents = 1 where item_id = 'a2020000-0000-4000-8000-000000000001'$q$, 'T202 …nor change it (no update right)');
 :as_tech_a
@@ -15803,5 +15808,212 @@ select tst.ok(has_function_privilege('authenticated', 'public.po_receive(uuid, j
           and not has_function_privilege('anon', 'public.po_receive(uuid, jsonb, bigint)', 'execute'),
   'T321 po_receive — the app only (rule 18)');
 \echo 'T321 a receipt writes the cost history ok'
+
+
+-- ================================================================ T322–T331: the server counts a material's price (#1807, 53-0б, spec 53 §5.3б)
+-- T322: one formula in the engine and in the database (packages/estimating-engine/test/fixtures/catalogPrice.json, read by
+-- catalogPrice.fixture.test.ts too); nobody executes the formula directly (rule 18, check 2 N1)
+\set price_json `cat :catalog_price`
+:as_super
+select tst.ok(coalesce(string_agg(x::text, '; '), '') = '', format('T322 app.item_price_cents = the engine''s catalogPrice: %s', coalesce(string_agg(x::text || ' → ' || app.item_price_cents((x ->> 'cost')::bigint, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int), '; '), '')))
+  from jsonb_array_elements((:'price_json')::jsonb -> 'cases') x
+ where app.item_price_cents((x ->> 'cost')::bigint, (x ->> 'taxBps')::int, (x ->> 'markupBps')::int) is distinct from (x ->> 'price')::bigint;
+select tst.ok(jsonb_array_length((:'price_json')::jsonb -> 'cases') >= 20, 'T322 the shared set has its examples');
+select tst.ok(not has_function_privilege('authenticated', 'app.item_price_cents(bigint, int, int)', 'execute')
+          and not has_function_privilege('anon', 'app.item_price_cents(bigint, int, int)', 'execute'),
+  'T322 nobody executes the formula directly — only the server''s triggers');
+-- an off-formula price, as the database may hold one today (written without the triggers)
+create or replace function pg_temp.drift322(p_id uuid, p_price bigint) returns void language plpgsql as $f$
+begin
+  set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = p_price where id = p_id;
+  set local session_replication_role = origin;
+end $f$;
+\echo 'T322 one formula ok'
+
+-- T323: two phones — B changed the cost, A (who had the old cost) changed the markup and sent its price: the stored price
+-- follows the new cost and the new markup
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53220000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T323 coil', 'ft', 0);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53220000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 1000, 0, 1000);
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 1100 and (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T323 a cost written directly counts the price: $10.00 + 10 % = $11.00, counted from the cost');
+-- phone B: the cost $20.00
+update public.catalog_item_costs set unit_cost_cents = 2000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+-- phone A: the markup 20 % with its price from the old cost ($12.00)
+update public.catalog_items set markup_bps = 2000, unit_price_cents = 1200 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 2400,
+  'T323 two phones: the new cost ($20.00) with the new markup (20 %) = $24.00, not the $12.00 phone A counted');
+\echo 'T323 two phones ok'
+
+-- T324: an old phone sends the cost on the item row (t30): no 27000, the price counted; the cost cleared — not counted any
+-- more, the price stays
+update public.catalog_items set unit_cost_cents = 3000, vendor_tax_bps = 0, markup_bps = 1000, unit_price_cents = 999
+ where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 3300,
+  'T324 an old phone''s cost on the item: moved and counted in the same command ($30.00 + 10 % = $33.00), not its $9.99');
+update public.catalog_item_costs set unit_cost_cents = null where item_id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 3300 and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T324 the cost cleared: the price stays $33.00, no longer counted from the cost');
+\echo 'T324 the old phone''s path ok'
+
+-- T325: the new phone writes both (the item and catalog_item_costs): counted, one history row; a price import's source
+update public.catalog_item_costs set unit_cost_cents = 4000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+update public.catalog_items set unit_cost_cents = 4000, unit_price_cents = 4400 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 4400 and (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1')
+          and (select count(*) = 1 from public.catalog_price_history where item_id = '53220000-0000-4000-8000-0000000000c1' and unit_price_cents = 4400),
+  'T325 the new phone''s two writes: $44.00 once in the price history');
+do $t$ begin
+  perform set_config('app.cost_source', 'import_file', true);
+  update public.catalog_item_costs set unit_cost_cents = 5000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+end $t$;
+select tst.ok((select source = 'import_file' and unit_price_cents = 5500 and prev_unit_price_cents = 4400 from public.catalog_price_history
+                where item_id = '53220000-0000-4000-8000-0000000000c1' and unit_price_cents = 5500),
+  'T325 a direct cost write (a price import): the price counted and logged with its source');
+\echo 'T325 the new phone''s paths ok'
+
+-- T326: price_from_cost is the server's — a client's value does not hold; a material that stops being one — false
+update public.catalog_items set price_from_cost = false where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'), 'T326 a client cannot clear price_from_cost');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, price_from_cost) values
+  ('53220000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T326 no cost', 'ea', 700, true);
+select tst.ok(not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c2') and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c2') = 700,
+  'T326 …nor set it: a material without a cost keeps its hand price, not counted');
+update public.catalog_items set kind = 'labor' where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok(not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 5500,
+  'T326 a material that became labor: not counted any more, its price as it was');
+update public.catalog_items set kind = 'material' where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 5500,
+  'T326 …and back a material: counted again');
+\echo 'T326 price_from_cost ok'
+
+-- T327: a rename keeps an off-formula price — from the new phone and from an old one (the same three cost numbers)
+:as_super
+select pg_temp.drift322('53220000-0000-4000-8000-0000000000c1', 6000);
+:as_office_a
+update public.catalog_items set name = 'T327 coil renamed' where id = '53220000-0000-4000-8000-0000000000c1';
+update public.catalog_items set name = 'T327 coil again', unit_cost_cents = 5000, vendor_tax_bps = 0, markup_bps = 1000, unit_price_cents = 6000
+ where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
+  'T327 a rename (new phone, old phone with the same cost) keeps the off-formula $60.00');
+:as_office_a
+select tst.ok((select count(*) = 1 and min(formula_cents) = 5500 from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000')
+                where item_id = '53220000-0000-4000-8000-0000000000c1'),
+  'T327 the office sees it in the list of off-formula prices (for 55-1)');
+\echo 'T327 a rename ok'
+
+-- T328: sales without view_costs (the audit's conditions 17.11): never gets the formula back, nor our costs; a replaced price
+-- is noted for the office; a stale echo is not; an old office build's hand price is
+:as_sales_a
+update public.catalog_items set unit_price_cents = 6500 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
+  'T328 sales sent $65.00 for a counted material: the price stays $60.00 — not the formula $55.00');
+update public.catalog_items set kind = 'labor' where id = '53220000-0000-4000-8000-0000000000c1';
+update public.catalog_items set kind = 'material' where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
+  'T328 sales turning it into labor and back gets no formula either');
+select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T328 sales sees that the price is counted (no number in it)');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_price_history where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
+          and tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
+          and (select unit_cost_cents is null and vendor_tax_bps is null and markup_bps is null from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T328 sales reads no cost, tax, markup, price history or recalc note');
+select tst.fails($q$select * from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000')$q$, 'T328 sales gets no list of off-formula prices');
+select tst.fails($q$insert into public.catalog_price_recalc (company_id, item_id, sent_price_cents, server_price_cents) values ('ca000000-0000-0000-0000-000000000000', '53220000-0000-4000-8000-0000000000c1', 1, 1)$q$,
+  'T328 nobody writes a recalc note by hand');
+:as_office_a
+select tst.ok((select count(*) = 1 and bool_and(sent_price_cents = 6500 and server_price_cents = 6000)
+                 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1' and by = 'a0000000-0000-0000-0000-000000000005'),
+  'T328 the office reads the note: sales sent $65.00, $60.00 stayed');
+-- the office's own replaced prices are noted too (check 2, S1): T323's $12.00 from the old cost, T324's old phone's $9.99
+select tst.ok((select array_agg(sent_price_cents || '>' || server_price_cents order by at, id) = array['1200>2400', '999>3300']
+                 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1' and by = 'a0000000-0000-0000-0000-000000000002'),
+  'T328 a price the server replaced for the office is noted too (T323, T324)');
+-- the office changes the cost ($60.00 → $66.00); an old phone of sales then sends its cached row (the stale $60.00): no note
+update public.catalog_item_costs set unit_cost_cents = 6000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+:as_sales_a
+update public.catalog_items set name = 'T328 coil', unit_price_cents = 6000 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6600
+          and tst.cnt($q$select 1 from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1' and name = 'T328 coil'$q$) = 1,
+  'T328 the cost changed: $66.00 for everyone; the rename of an old phone of sales goes through');
+:as_office_a
+select tst.ok((select count(*) = 1 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1' and by = 'a0000000-0000-0000-0000-000000000005'),
+  'T328 a stale echo ($60.00, the price before the last change) is no note');
+-- an old office build (no costs on it) types a price by hand: the formula stays, and the office is told
+update public.catalog_items set unit_price_cents = 7000 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6600
+          and (select count(*) = 1 from public.catalog_price_recalc
+                where item_id = '53220000-0000-4000-8000-0000000000c1' and sent_price_cents = 7000 and server_price_cents = 6600),
+  'T328 an old office build''s hand price: $66.00 from the cost stays, noted');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_price_recalc$q$) = 0, 'T328 another company reads no recalc note');
+\echo 'T328 sales without our costs ok'
+
+-- T329: labor, service and a kit are not counted (spec 55 brings their modes)
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53220000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'labor', 'T329 install', 'hr', 9000),
+  ('53220000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 'service', 'T329 haul', 'ea', 5000);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values
+  ('53220000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 4500, 500),
+  ('53220000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 2000, 500);
+update public.catalog_item_costs set unit_cost_cents = 4600 where item_id in ('53220000-0000-4000-8000-0000000000c3', '53220000-0000-4000-8000-0000000000c4');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, components) values
+  ('53220000-0000-4000-8000-0000000000c5', 'ca000000-0000-0000-0000-000000000000', 'kit', 'T329 kit', 'ea', 0,
+   '[{"item_id":"53220000-0000-4000-8000-0000000000c1","qty":"2"}]');
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c3') = 9000 and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c4') = 5000
+          and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c5') = 0
+          and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c3') and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c4')
+          and not (select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c5'),
+  'T329 labor, service and a kit keep their own price, not counted');
+\echo 'T329 only materials ok'
+
+-- T330: in the Trash — not counted; back from the Trash — counted
+:as_super
+update public.catalog_items set deleted_at = now() where id = '53220000-0000-4000-8000-0000000000c1';
+:as_office_a
+update public.catalog_item_costs set unit_cost_cents = 7000 where item_id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents = 6600 from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
+  'T330 an item in the Trash is not counted');
+:as_super
+update public.catalog_items set deleted_at = null where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 7700, 'T330 back from the Trash: counted ($70.00 + 10 % = $77.00)');
+\echo 'T330 the Trash ok'
+
+-- T331: the flags do not leak and cannot be forged; the cost's bound
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53220000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 'material', 'T331 a', 'ea', 0),
+  ('53220000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 'material', 'T331 b', 'ea', 0);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, markup_bps) values
+  ('53220000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 100, 0),
+  ('53220000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 200, 0);
+-- two rows in one command (the old way, through t30)
+update public.catalog_items set markup_bps = 5000 where id in ('53220000-0000-4000-8000-0000000000c6', '53220000-0000-4000-8000-0000000000c7');
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 150 and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c7') = 300,
+  'T331 two rows in one command: both counted');
+-- two commands in one transaction
+do $t$ begin
+  update public.catalog_items set markup_bps = 10000 where id = '53220000-0000-4000-8000-0000000000c6';
+  update public.catalog_items set markup_bps = 10000 where id = '53220000-0000-4000-8000-0000000000c7';
+end $t$;
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 200 and (select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c7') = 400,
+  'T331 two commands in one transaction: both counted');
+-- the «moving» flag set by hand at the top level skips nothing
+do $t$ begin
+  perform set_config('app.item_costs_moving', '53220000-0000-4000-8000-0000000000c6', true);
+  perform set_config('app.item_price_due', '53220000-0000-4000-8000-0000000000c7', true);
+  update public.catalog_item_costs set unit_cost_cents = 300 where item_id = '53220000-0000-4000-8000-0000000000c6';
+end $t$;
+select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c6') = 600, 'T331 a forged flag does not skip the count');
+select tst.fails($q$update public.catalog_item_costs set unit_cost_cents = 100000001 where item_id = '53220000-0000-4000-8000-0000000000c6'$q$,
+  'T331 a cost above $1 000 000 a unit is refused');
+:as_super
+select tst.ok((select condeferrable = false and convalidated from pg_constraint where conname = 'catalog_item_costs_cost_max'),
+  'T331 the bound is validated');
+\echo 'T331 the flags ok'
 
 \echo 'ALL TESTS PASSED'

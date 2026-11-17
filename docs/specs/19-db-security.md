@@ -140,3 +140,5 @@
 - `leads.cost_refunded_cents`, `cost_origin` видны мастеру у своих лидов (сейчас 0 / пусто) — в шаге 2 вместе с `cost_cents`.
 - Realtime: `catalog_items`, `estimate_versions` (и спутники) не добавлять в публикацию `supabase_realtime` — строка при вставке до переноса несёт себестоимость. Сейчас публикация пуста; включение realtime — только с тестом-сторожем.
 - ~~`estimate_line_costs` читается в `repo.ts` с `.catch(() => [])`~~ — **закрыто**: `.catch(orNoTable)`, обрыв = ошибка загрузки (unit `techNoCosts`).
+
+- **Исключение из правила 8 (#1807, 53-0б, 17.11):** цену материала с себестоимостью считает и сервер — `app.item_price_cents` (миграция `20261117160000_item_price_server.sql`). Формула обязана совпадать с `catalogPrice` движка на общем наборе примеров `packages/estimating-engine/test/fixtures/catalogPrice.json` (тест движка и T322). Продажник без `view_costs` формулу в ответ не получает (T328): у него цена остаётся прежней, а заменённая цена записывается в `catalog_price_recalc`, которую читают только люди с `can_view_costs`.
