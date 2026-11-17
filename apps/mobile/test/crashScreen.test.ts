@@ -1,6 +1,6 @@
 /**
  * #1555: the root layout must export the router's ErrorBoundary, and it must stand outside the providers (a failure may be in them).
- * Source checks — the screen itself is drawn in the showcase (e2e 455); a real crash on the phone is checked by hand (rule 27).
+ * Source checks — the screen itself is drawn in the showcase (e2e 459); a real crash on the phone is checked by hand (rule 27).
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";

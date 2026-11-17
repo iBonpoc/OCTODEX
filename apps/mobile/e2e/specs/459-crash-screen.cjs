@@ -1,5 +1,5 @@
 /**
- * e2e 455 — the crash screen (#1555, DS §13.1), every view: it is drawn in the showcase («Уведомления»), with its words and both buttons;
+ * e2e 459 — the crash screen (#1555, DS §13.1), every view: it is drawn in the showcase («Уведомления»), with its words and both buttons;
  * each button answers. The root's ErrorBoundary itself (outside every provider, on a real failure) is checked by test/crashScreen.test.ts
  * and on the phone (rule 27).
  */
