@@ -5201,6 +5201,12 @@ select tst.ok(not has_function_privilege('anon', 'public.transfer_ownership(uuid
 select tst.ok(has_function_privilege('authenticated', 'public.delete_account(text,uuid[])', 'EXECUTE'), 'authenticated: delete_account');
 select tst.ok(not has_function_privilege('authenticated', 'app.signed_in_recently(int)', 'EXECUTE'), 'internal: signed_in_recently');
 select tst.ok(not has_function_privilege('authenticated', 'app.erase_personal_rows(uuid)', 'EXECUTE'), 'internal: erase_personal_rows');
+-- 50-1 (spec 50 §3.2, rule 18): the erasure itself is behind delete_account — nobody calls it directly
+select tst.ok(not has_function_privilege('anon', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'anon: no erase_account');
+select tst.ok(not has_function_privilege('authenticated', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'internal: erase_account (only delete_account calls it)');
+select tst.ok(not has_function_privilege('public', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'public: no erase_account');
+select tst.ok(not has_function_privilege('service_role', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'service_role: no erase_account yet (spec 45 §5.6 grants it with its own caller)');
+select tst.ok((select prosecdef from pg_proc where oid = 'app.erase_account(uuid,uuid[])'::regprocedure), 'erase_account is security definer (the wrapper delete_account calls it as the owner)');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_user_erased_guard()', 'EXECUTE'), 'internal: the users guard');
 -- the watchman: every column that points to a person is classified — a new table must say what happens on deletion
 select coalesce(string_agg(format('%s.%s', t, c), ', ' order by t, c), '') as t50_unclassified from (
@@ -15714,8 +15720,8 @@ select tst.ok((select status = 'draft' and current_version_id = 'f2920000-0000-4
 \echo 'T292 a sent estimate keeps the lines it went with ok'
 
 -- ---------------------------------------------------------------- T321: receiving a supplier order writes the cost history (#1836)
--- the first time a line came: one 'receipt' row with the price paid per the item's own unit (a pack ÷ pack_size, UP to the
--- cent, #1849), the order's supplier; a repeat or a tick taken back and put again — nothing new; the item's own cost stays
+-- the first time a line came: one 'receipt' row with the price paid per the item's own unit (a pack ÷ pack_size, half up to
+-- the cent: #1948, the audit on #1849), the order's supplier; a repeat or a tick taken back and put again — nothing new; the item's own cost stays
 -- (В8 #1832); the tech who receives never reads the history
 :as_owner_a
 insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('53210000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T321 Supply (test)', 950);
@@ -15743,10 +15749,10 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id
   'T321 the tech never reads the cost history');
 :as_super
 select tst.ok(pg_temp.t321_rows() = 1
-          and (select unit_cost_cents = 334 and supplier_id = '53210000-0000-4000-8000-0000000000a1' and vendor_tax_bps = 950
+          and (select unit_cost_cents = 333 and supplier_id = '53210000-0000-4000-8000-0000000000a1' and vendor_tax_bps = 950
                       and po_line_id = '53210000-0000-4000-8000-0000000000b1' and by = 'a0000000-0000-0000-0000-000000000003'
                  from public.catalog_cost_history where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c1'),
-  'T321 one receipt row: $10.00 a box of 3 → $3.34 an elbow (up to the cent), the order''s supplier, the item''s tax, who received');
+  'T321 one receipt row: $10.00 a box of 3 → $3.33 an elbow (half up, #1948), the order''s supplier, the item''s tax, who received');
 select tst.ok((select unit_cost_cents = 300 from public.catalog_item_costs where item_id = '53210000-0000-4000-8000-0000000000c1'),
   'T321 the item''s own cost stays (В8 #1832: only the history)');
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b2'$q$) = 0,

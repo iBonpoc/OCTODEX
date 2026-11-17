@@ -10,6 +10,8 @@ import { GestureDetector, GestureHandlerRootView, GestureStateManager, State, us
 import { menuPick } from "./menuPick";
 import { exitDuration, scrimLevel, swipeCloses, swipeStart, swipeStep, type SwipeState } from "./sheetSwipe";
 import { leaveBefore } from "./sheetLeave";
+import { helpBack, helpClosed, helpOpen, pageSwitch, sheetHeader, type HelpPage } from "./sheetHelp";
+import { useScrollFade } from "./scrollFade";
 import Svg, { Rect } from "react-native-svg";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -269,6 +271,7 @@ export function Sheet({
   footer: footerNow,
   height: heightNow = "fit",
   onBack: onBackNow,
+  help: helpNow,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -281,6 +284,9 @@ export function Sheet({
   height?: "fit" | "medium" | "large";
   /** a nested step is a page inside the sheet, never a second sheet (DS Б1): «‹ Назад» goes to the page before */
   onBack?: () => void;
+  /** «?» right after the title (DS Б1, Б7): what it is, then the way to where it is set or made (`to`). It opens as a page inside
+   *  this sheet (header «‹ Назад» + the help's title), never a second sheet; «‹» goes back to the content as it was */
+  help?: SheetHelp;
   /** unsaved changes in the sheet */
   dirty?: boolean;
   /** "Save" in the unsaved-changes question */
@@ -294,16 +300,83 @@ export function Sheet({
 }) {
   // While the sheet goes out the owner has often already emptied what it showed (`visible={!!x}`, `{x ? … : null}`):
   // it keeps showing the last render from while it was open, so it does not collapse or jump on the way out
-  const seen = useRef({ title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow });
-  if (visible) seen.current = { title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow };
-  const { title, children, footer, height, onBack } = seen.current;
+  const seen = useRef({ title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow, help: helpNow });
+  if (visible) seen.current = { title: titleNow, children: childrenNow, footer: footerNow, height: heightNow, onBack: onBackNow, help: helpNow };
+  const { title: ownTitle, children, footer: ownFooterSeen, height, onBack: ownBack, help } = seen.current;
   const { c } = useTheme();
   const { wide } = useDevice();
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const { t } = useI18n();
   const { height: winH } = useWindowDimensions();
+  // the help page (DS Б1): the content stays mounted under it (its state is kept), its scroll is given back on «‹»
+  const [helpPage, setHelpPage] = useState<HelpPage>(helpClosed);
+  const bodyRef = useRef<ScrollViewInstance>(null);
+  const bodyTop = useRef(0);
+  const restoreTo = useRef<number | null>(null);
+  const hdr = sheetHeader(helpPage, { title: ownTitle, hasBack: !!ownBack, help }, t("common.help"));
+  const title = hdr.title;
+  // the way between the pages (DS Б1, like a page of the sheet): the new page slides in over durBase and the body's height
+  // goes from the old page's to the new one's — the window never jumps in one frame; reduced motion: no slide, no glide
+  const slideX = useSharedValue(0);
+  const bodyFixH = useSharedValue(-1); // ≥ 0 while the height glides: the body is held at it
+  const bodyBox = useRef({ w: 0, h: 0 });
+  const switching = useRef<null | "in" | "back">(null);
+  const releaseBody = useCallback(() => {
+    switching.current = null;
+    bodyFixH.value = -1;
+  }, [bodyFixH]);
+  const startSwitch = (dir: "in" | "back") => {
+    if (reduce) return;
+    switching.current = dir;
+    bodyFixH.value = bodyBox.current.h;
+    slideX.value = dir === "in" ? bodyBox.current.w : -bodyBox.current.w;
+    slideX.value = withTiming(0, { duration: motion.durBase, easing: Easing.bezier(...motion.easeOut) });
+    // the new page has not told its size (the same as the old): the body is let go after the way
+    setTimeout(() => {
+      if (switching.current === dir) releaseBody();
+    }, motion.durBase * 2);
+  };
+  // the new page's size is known: the body glides from the old height to the new, then is let go
+  const pageSized = (contentH: number) => {
+    const dir = switching.current;
+    if (!dir) return;
+    switching.current = null;
+    const room = (wide ? winH - insets.top - insets.bottom - space[8] * 2 : maxH) - (sheetH.value || 0);
+    const sw = pageSwitch(dir, bodyBox.current.w, bodyBox.current.h, room, contentH);
+    bodyFixH.value = withTiming(sw.toH, { duration: motion.durBase, easing: Easing.bezier(...motion.easeOut) }, (done) => {
+      "worklet";
+      if (done) bodyFixH.value = -1;
+    });
+  };
+  const openHelp = () => {
+    startSwitch("in");
+    setHelpPage((s) => helpOpen(s, bodyTop.current));
+    restoreTo.current = 0;
+  };
+  const closeHelp = () => {
+    startSwitch("back");
+    const r = helpBack(helpPage);
+    setHelpPage(r.state);
+    restoreTo.current = r.restore;
+  };
+  const pageSlide = useAnimatedStyle(() => ({ transform: [{ translateX: slideX.value }] }));
+  const bodyHold = useAnimatedStyle(() => (bodyFixH.value >= 0 ? { height: bodyFixH.value, flexShrink: 0 } : {}));
+  const onBack = hdr.back === "help" ? closeHelp : ownBack;
+  const footer = helpPage.on ? null : ownFooterSeen;
+  useEffect(() => {
+    // the page switched: the content goes back to where it was scrolled, the help starts at its top
+    const y = restoreTo.current;
+    if (y === null) return;
+    restoreTo.current = null;
+    const id = requestAnimationFrame(() => bodyRef.current?.scrollTo({ y, animated: false }));
+    return () => cancelAnimationFrame(id);
+  }, [helpPage.on]);
+  // the help's way (`to`) is taken after the sheet has gone (onExited), never while it slides out (rule 27)
+  const goTo = useRef<Href | null>(null);
   const drag = useSharedValue(0);
+  const sideR = wide ? space[4] : Math.max(insets.right, space[4]);
+  const edgeFade = useScrollFade(bodyRef, c.ov, sideR);
   const fade = useSharedValue(1); // the sheet and its scrim dissolve (reduce motion, the centred window): 1 → 0
   const sheetH = useSharedValue(0); // the sheet's own height: how far it has to go, and how the scrim follows
   const leaving = useRef(false); // a close is asked or under way: one onClose per close, whatever is pressed meanwhile
@@ -341,6 +414,11 @@ export function Sheet({
       setPresent(true);
       setFull(false);
       setAsk(false);
+      setHelpPage(helpClosed);
+      goTo.current = null;
+      switching.current = null;
+      slideX.value = 0;
+      bodyFixH.value = -1;
     }
   }, [visible, drag, fade]);
   // iOS: the owner closed it (by itself, or at a moment of its own while the sheet was going out): the exit that was under
@@ -350,7 +428,7 @@ export function Sheet({
     session.current++;
     leaving.current = false;
     setGoingOut(false);
-    live.current.onExited?.();
+    exited();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
   // web: the Modal's root is a fixed layer that takes every tap; while the sheet goes out it lets them through (DS §10:
@@ -373,6 +451,12 @@ export function Sheet({
       }
     }
   }, []);
+  const exited = useCallback(() => {
+    live.current.onExited?.();
+    const to = goTo.current;
+    goTo.current = null;
+    if (to) router.push(to);
+  }, []);
   const mounted = useRef(false);
   useEffect(() => {
     mounted.current = true;
@@ -382,8 +466,8 @@ export function Sheet({
     if (id !== session.current || !mounted.current) return;
     leaving.current = false;
     setPresent(false);
-    live.current.onExited?.();
-  }, []);
+    exited();
+  }, [exited]);
   // it goes down at the finger's speed (✕, the scrim, Esc, the owner's own close — in durBase), the scrim fades with
   // it; reduce motion and the centred window (no swipe) — it dissolves; `then` runs once, when it has left
   const animateOut = useCallback(
@@ -426,6 +510,7 @@ export function Sheet({
   // we asked the owner (onClose); if it is still open after the answer, the sheet comes back at once (busy, a key to enter…)
   useEffect(() => {
     if (asked === 0 || !shown.current) return;
+    goTo.current = null; // the owner kept it open: the help's way is not taken
     leaving.current = false;
     setGoingOut(false);
     exitSpeed.current = 0;
@@ -545,7 +630,8 @@ export function Sheet({
         behavior={avoidBehavior}
         // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32) — without one, as before;
         // the phone sheet runs to the edge
-        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + space[2], paddingBottom: wide ? insets.bottom : 0 }}
+        // 820/1280: the window never comes closer than space[8] to the window's top and bottom (DS Б1); its body scrolls inside
+        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + (wide ? space[8] : space[2]), paddingBottom: wide ? insets.bottom + space[8] : 0 }}
       >
         <Animated.View
           entering={reduce ? undefined : FadeIn.duration(motion.durBase)}
@@ -571,7 +657,7 @@ export function Sheet({
             !wide && height !== "fit" ? { flexBasis: maxH, flexShrink: 1 } : null, follow]}
           accessibilityViewIsModal
         >
-          <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: wide ? space[4] : Math.max(insets.right, space[4]) }}>
+          <SheetInset.Provider value={{ l: wide ? space[4] : Math.max(insets.left, space[4]), r: sideR }}>
           <Glass
             strong
             style={{
@@ -609,8 +695,12 @@ export function Sheet({
                       </View>
                     </Press>
                   ) : null}
-                  <View testID="sheet-title" style={{ flex: 1 }}>
-                    <T v="title" numberOfLines={2}>{title ?? ""}</T>
+                  {/* «?» right after the title, ✕ stays on the right (DS Б7); a long title gives way, «?» stays by it */}
+                  <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: space[2] }}>
+                    <View testID="sheet-title" style={{ flexShrink: 1 }}>
+                      <T v="title" numberOfLines={2}>{title ?? ""}</T>
+                    </View>
+                    {hdr.showHelp && help ? <HelpMark title={help.title ?? ownTitle ?? ""} onPress={openHelp} testID="sheet-help" /> : null}
                   </View>
                   <Press testID="sheet-close" onPress={() => requestClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
                     <View
@@ -668,24 +758,61 @@ export function Sheet({
             ) : (
               /* the form scrolls when the keyboard leaves less room than the sheet needs */
               <GestureDetector gesture={bodyPan}>
-              <View style={{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }} testID="sheet-body">
+              <Animated.View
+                style={[{ flexShrink: 1, flexGrow: !wide && height !== "fit" ? 1 : 0 }, bodyHold]}
+                testID="sheet-body"
+                onLayout={(e) => {
+                  bodyBox.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height };
+                }}
+              >
                 <GestureDetector gesture={scrollNative}>
                 <SheetScroll
+                  ref={bodyRef}
+                  testID="sheet-scroll"
                   style={{ flexGrow: 0 }}
                   contentContainerStyle={{ gap: space[3] }}
                   keyboardShouldPersistTaps="handled"
                   bounces={false}
                   scrollEventThrottle={16}
+                  onLayout={edgeFade.onLayout}
+                  onContentSizeChange={(w, h) => {
+                    edgeFade.onContentSizeChange(w, h);
+                    pageSized(h);
+                  }}
                   onScroll={(e) => {
                     scrollTop.current = e.nativeEvent.contentOffset.y;
+                    if (!helpPage.on) bodyTop.current = e.nativeEvent.contentOffset.y;
+                    edgeFade.onScroll(e);
                   }}
                 >
-                  <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
+                  {/* the content stays mounted under the help page (its fields, its choices are kept) */}
+                  <Animated.View style={[{ gap: space[3], display: helpPage.on ? "none" : "flex" }, pageSlide]} testID="sheet-content">
+                    <SheetHold.Provider value={held}>{children}</SheetHold.Provider>
+                  </Animated.View>
+                  {helpPage.on && help ? (
+                    <Animated.View testID="sheet-help-page" style={[{ gap: space[3] }, pageSlide]}>
+                      {typeof help.body === "string" ? <T v="body">{help.body}</T> : help.body}
+                    </Animated.View>
+                  ) : null}
                 </SheetScroll>
                 </GestureDetector>
-              </View>
+                {edgeFade.overlay}
+              </Animated.View>
               </GestureDetector>
             )}
+            {helpPage.on && help?.to && !ask ? (
+              // the help's way at the bottom, where the sheet's main button stands (DS Б7)
+              <View testID="sheet-footer" style={{ paddingTop: space[2] }}>
+                <HelpLink
+                  to={help.to}
+                  testID="sheet-help-to"
+                  onPress={() => {
+                    goTo.current = help.to!.href;
+                    requestClose();
+                  }}
+                />
+              </View>
+            ) : null}
             {footer && !ask ? (
               <View testID="sheet-footer" style={{ paddingTop: space[2] }}>
                 {footer}
@@ -708,11 +835,66 @@ export function Sheet({
  * a row's — never alone in a corner. Inside: what it is, then a way to it — `to` opens the place where the value is set (a
  * company or module setting) or where the thing is made (suppliers, catalog items). A value that can be set has `to`.
  */
-export function HelpButton({ title, text, to, onPress, testID }: { title: string; text?: string; to?: { href: Href; label?: string }; onPress?: () => void; testID?: string }) {
-  const [open, setOpen] = useState(false);
+export type SheetHelp = { title?: string; body: ReactNode | string; to?: { href: Href; label?: string } };
+
+/** the «?» mark itself: visible 18, hit 44 (DS Б7); the label for the screen reader is «Справка: <title>» */
+function HelpMark({ title, onPress, testID }: { title: string; onPress: () => void; testID?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const s = component.help.visible;
+  return (
+    <Press onPress={onPress} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`} testID={testID}>
+      <View
+        style={{
+          width: s,
+          height: s,
+          borderRadius: s / 2,
+          borderWidth: 1,
+          borderColor: c.bd,
+          backgroundColor: c.surf2,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <T v="micro" w="bold" style={{ fontSize: component.help.icon, lineHeight: component.help.icon + 2 }}>
+          ?
+        </T>
+      </View>
+    </Press>
+  );
+}
+
+/** the way to where it is set or made: a secondary button with «›», the whole row is the target (DS Б7) */
+function HelpLink({ to, onPress, testID }: { to: { href: Href; label?: string }; onPress: () => void; testID?: string }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  return (
+    <Press onPress={onPress} visibleHeight={component.button.phone} accessibilityRole="link" testID={testID}>
+      <View
+        style={{
+          minHeight: component.button.phone,
+          borderRadius: radius.pill,
+          borderWidth: 1,
+          borderColor: c.bdField,
+          backgroundColor: c.surf2,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: space[1],
+          paddingHorizontal: space[4],
+        }}
+      >
+        <T v="body" w="semibold">
+          {to.label ?? t("common.helpSettings")}
+        </T>
+        <Icon name="chevronRight" s={size.iconSm} />
+      </View>
+    </Press>
+  );
+}
+
+export function HelpButton({ title, text, to, onPress, testID }: { title: string; text?: string; to?: { href: Href; label?: string }; onPress?: () => void; testID?: string }) {
+  const [open, setOpen] = useState(false);
   const leaving = useRef(false);
   // the way is taken after the sheet has gone (onExited), never while it slides out: a Modal closing under a new screen
   // jumps on iPhone (rule 27)
@@ -727,50 +909,10 @@ export function HelpButton({ title, text, to, onPress, testID }: { title: string
   };
   return (
     <>
-      <Press onPress={onPress ?? (() => setOpen(true))} visibleHeight={s} accessibilityRole="button" accessibilityLabel={`${t("common.help")}: ${title}`} testID={testID}>
-        <View
-          style={{
-            width: s,
-            height: s,
-            borderRadius: s / 2,
-            borderWidth: 1,
-            borderColor: c.bd,
-            backgroundColor: c.surf2,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <T v="micro" w="bold" style={{ fontSize: component.help.icon, lineHeight: component.help.icon + 2 }}>
-            ?
-          </T>
-        </View>
-      </Press>
+      <HelpMark title={title} onPress={onPress ?? (() => setOpen(true))} testID={testID} />
       <Sheet visible={open} onClose={() => setOpen(false)} onExited={exited} title={title}>
         <T v="body">{text}</T>
-        {to ? (
-          // the way to where it is set or made: a secondary button (DS Б7), the whole row is the target
-          <Press onPress={go} visibleHeight={component.button.phone} accessibilityRole="link" testID={testID ? `${testID}-to` : undefined}>
-            <View
-              style={{
-                minHeight: component.button.phone,
-                borderRadius: radius.pill,
-                borderWidth: 1,
-                borderColor: c.bdField,
-                backgroundColor: c.surf2,
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: space[1],
-                paddingHorizontal: space[4],
-              }}
-            >
-              <T v="body" w="semibold">
-                {to.label ?? t("common.helpSettings")}
-              </T>
-              <Icon name="chevronRight" s={size.iconSm} />
-            </View>
-          </Press>
-        ) : null}
+        {to ? <HelpLink to={to} onPress={go} testID={testID ? `${testID}-to` : undefined} /> : null}
       </Sheet>
     </>
   );
