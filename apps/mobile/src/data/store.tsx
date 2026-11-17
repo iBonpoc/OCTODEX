@@ -2627,7 +2627,11 @@ export function StoreProvider({
       saveCatalogItem: (it0) => {
         const prev = dbRef.current.catalog.find((x) => x.id === it0.id);
         // РС-10: the link, the barcode and the direction as the server will keep them (the phone and the server the same)
-        const it = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
+        const it1 = cleanCardFields(cleanSupplierLink(cleanCatalogItem(it0)), prev, dbRef.current);
+        // #1807 (53-0б-2): a material whose price the server counts from a cost this person does not see keeps its price and
+        // its kind, from any caller (the server would keep its own; the phone must not show another one meanwhile)
+        const locked = dbRef.current.costsVisible === false && prev?.kind === "material" && !!prev.priceFromCost;
+        const it = locked && prev ? { ...it1, kind: prev.kind, priceCents: prev.priceCents, placeholder: prev.placeholder } : it1;
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
         const costs = catalogCostChange(prev, it);
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)

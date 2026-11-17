@@ -75,6 +75,24 @@ describe("unit:techNoCosts — read (loadCompanyDB)", () => {
     expect(db.catalog[0]).toMatchObject({ priceCents: 1213, costCents: 1000, vendorTaxBps: 1025, markupBps: 1000 });
     expect(db.estimates[0]!.marginPct).toBe("41.2");
   });
+  it("#1807: price_from_cost → priceFromCost; catalog_price_recalc → priceRecalc; a server without them — none (rule 16)", async () => {
+    rows = {
+      ...base("sales"),
+      catalog_items: [
+        { id: "i1", kind: "material", name: "Counted (test)", unit: "ft", unit_price_cents: 6000, price_from_cost: true },
+        { id: "i2", kind: "material", name: "Hand (test)", unit: "ft", unit_price_cents: 700, price_from_cost: false },
+        { id: "i3", kind: "material", name: "Old server (test)", unit: "ft", unit_price_cents: 700 },
+      ],
+      catalog_price_recalc: [{ id: "r1", item_id: "i1", sent_price_cents: 6500, server_price_cents: 6000, by: "u-sam", at: "2026-11-17T10:00:00Z" }],
+    };
+    const db = await loadCompanyDB("co-1", "u-me");
+    expect(db.catalog.find((c) => c.id === "i1")!.priceFromCost).toBe(true);
+    expect(db.catalog.find((c) => c.id === "i2")!.priceFromCost).toBeUndefined();
+    expect(db.catalog.find((c) => c.id === "i3")!.priceFromCost).toBeUndefined();
+    expect(db.priceRecalc).toEqual([{ id: "r1", itemId: "i1", sentCents: 6500, serverCents: 6000, by: "u-sam", at: "2026-11-17T10:00:00Z" }]);
+    missing = new Set(["catalog_price_recalc"]);
+    expect((await loadCompanyDB("co-1", "u-me")).priceRecalc).toEqual([]);
+  });
   it("a margin of null in the side table (costs not complete) is null, not the old totals", async () => {
     rows = {
       ...base("office"),
