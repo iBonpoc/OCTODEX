@@ -20,6 +20,7 @@ import { fmtLen, type LenFormat } from "./canvas/format";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
 import { uuidV5 } from "./uuid5";
+import { priceGroupKey } from "./prices/groups";
 
 /** what a part is, for the parts the engine leaves without `part` (their key's first word says it) */
 const PART_BY_KEY: Record<string, string> = { gutter: "gutter", ds: "downspout", guard: "guard_run", coil: "gutter", section: "gutter", dsstick: "downspout" };
@@ -201,10 +202,19 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
       // a material's price is cost × tax × markup in the core's editor (catalog/[id]): cost = the price, no tax, no markup
       ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
-      attributes: matchAttrs(part),
+      attributes: withGroup(part.unit, matchAttrs(part)),
     });
   }
   return [...out.values()];
+}
+
+/**
+ * A coloured part's item the module makes is in its price group from the start (#1913 §4.3: the module writes `priceGroup` on the
+ * coloured items it creates): a colour added later joins it and takes its price, no transition needed. Not coloured — as it is.
+ */
+function withGroup(unit: string, attrs: Record<string, string>): Record<string, string> {
+  if (!attrs.color?.trim() || !PART_WORDS.has(attrs.part ?? "")) return attrs;
+  return { ...attrs, priceGroup: priceGroupKey({ unit, attributes: attrs }) };
 }
 
 /** «Привязать»: an item of the list without properties gets the part's (one with properties is another part's) */

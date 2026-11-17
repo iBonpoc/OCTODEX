@@ -31,6 +31,9 @@ import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
 import { useHeldSheet } from "@/ui/heldSheet";
+import { seeCosts } from "@/features/access";
+import { transitionGroups, transitionWrites } from "./groups";
+import { TransitionSheet } from "./TransitionSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -71,6 +74,17 @@ export default function GutterPricesScreen() {
     const undo = store.saveCatalogItems(fresh, { onlyNew: true });
     // too late (false): the items stay made — a second press must not make them again (#1244)
     toast.show(store.online ? t(k("made"), { n: fresh.length }) : t("offline.queued"), withAfter(undo, () => fresh.forEach((it) => made.current.delete(it.id))));
+  };
+  // «Одна цена на все цвета» (#1913 PR3): the company's coloured items gathered into price groups once; done by who sees our costs
+  const groups = useMemo(() => (active ? transitionGroups(catalog) : []), [active, catalog]);
+  const canGroup = staff && seeCosts(store.db, store.role, store.mode);
+  const [pgOpen, setPgOpen] = useState(false);
+  const doGroups = (choice: Record<string, number>) => {
+    setPgOpen(false);
+    const sees = seeCosts(store.db, store.role, store.mode);
+    // the source of each group first: it starts the group with its price, the others join it (they take its price — store and server)
+    const undos = groups.flatMap((g) => transitionWrites(g, choice[g.key] ?? g.suggested, sees).map((it) => store.saveCatalogItem(it)));
+    toast.show(store.online ? t("mod.gutters.pg.done", { n: groups.length }) : t("offline.queued"), store.undoTogether(undos));
   };
   const bind = (it: CatalogItem, row: PriceRow) => {
     setBindFor(null);
@@ -149,6 +163,11 @@ export default function GutterPricesScreen() {
           />
         ) : !staff ? (
           <Banner tone="info" testID="gpr-ro" title={t(k("askOffice"))} />
+        ) : groups.length && !canGroup ? (
+          // the transition is the owner's or the office's (it moves prices with our costs): the others are told who does it
+          <Banner tone="info" testID="gpr-pg-ask" title={t("mod.gutters.pg.askOwner")} />
+        ) : groups.length ? (
+          <Banner tone="info" testID="gpr-pg" title={t("mod.gutters.pg.banner", { n: groups.length })} hint={t("mod.gutters.pg.bannerHint")} action={{ label: t("mod.gutters.pg.open"), onPress: () => setPgOpen(true) }} />
         ) : missing.length ? (
           <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
         ) : (
@@ -168,6 +187,7 @@ export default function GutterPricesScreen() {
         </View>
       </View>
 
+      <TransitionSheet visible={pgOpen && canGroup && groups.length > 0} groups={groups} onClose={() => setPgOpen(false)} onDone={doGroups} />
       <QuickPriceSheet key={quickSheetKey(quick.opening, quick.value)} item={quick.value} visible={quick.visible} onExited={quick.onExited} onClose={() => setQuickId(null)} />
       <Sheet visible={!!bindFor} onClose={() => setBindFor(null)} title={bindFor ? nameOf(bindFor.part) : ""}>
         <View style={{ gap: space[3] }} testID="gpr-bind">
