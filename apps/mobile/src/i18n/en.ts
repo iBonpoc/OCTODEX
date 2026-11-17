@@ -4010,6 +4010,7 @@ export const en: Dict = {
   "intake.state": "State",
   "intake.zip": "ZIP",
   "intake.service": "Type of work",
+  "intake.lang": "Language",
   "intake.message": "What do you need?",
   "intake.consent": "I agree to receive text messages from {company} about my request. Msg & data rates may apply. Reply STOP to opt out.",
   "intake.needContact": "Leave a phone or an email so they can answer.",

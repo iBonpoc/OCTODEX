@@ -41,20 +41,23 @@ exports.run = async (h) => {
   await h.expectText(/Tell Sunset Gutters what you need/, "in English");
   h.expect(await p.locator('[data-testid="intake-consent"]').count() === 1, "the SMS box is there when the company turned it on");
   await h.expectText(/Gutters/, "a preset kind of work in the client's language");
-  await h.expectText(/Window cleaning/, "the company's own kind of work");
+  // the kinds of work are a «Type of work ⌄» row now (spec 56 §3 row 4): the company's own kind is in its menu (picked below)
+  h.expect(await p.getByTestId("intake-category-button").locator("visible=true").count() === 1, "«Type of work» is a row with a menu");
   h.expect(await send().getAttribute("aria-disabled") === "true", "no phone and no email: «Send request» is off");
   await h.expectText(/Leave a phone or an email/, "the page says what is missing");
   await h.shot("form-en");
 
-  // Spanish by the chip: the whole page follows
-  await h.clickText("Español");
-  await h.expectText(/Cuéntele a Sunset Gutters lo que necesita/, "the chips change the page's language");
+  // Spanish from the «Language ⌄» row's menu (spec 56 §3 row 4): the whole page follows
+  await p.getByTestId("intake-lang-button").locator("visible=true").first().click();
+  await p.getByTestId("intake-lang-es").locator("visible=true").first().click();
+  await h.expectText(/Cuéntele a Sunset Gutters lo que necesita/, "the language menu changes the page's language");
   h.expect(await p.getByRole("switch", { name: /Acepto recibir mensajes de texto de Sunset Gutters/ }).count() === 1, "the SMS consent text in Spanish");
 
   await input("intake-name").fill("Ana López");
   await input("intake-phone").fill("6265550113");
   await input("intake-message").fill("Limpiar canaletas, 2 pisos");
-  await h.clickText("Window cleaning");
+  await p.getByTestId("intake-category-button").locator("visible=true").first().click();
+  await h.clickText("Window cleaning"); // the company's own kind of work, in the menu
   await p.getByRole("switch", { name: /Acepto recibir/ }).click();
   failNext = true; // the first send meets a busy server
   await send().click();
