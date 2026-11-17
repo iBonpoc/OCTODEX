@@ -45,7 +45,7 @@ import { docForSave, newToken, normalizeDoc, storedDoc, summarize } from "@/feat
 import { syncCompanyTerms, termsForNew, termsOnClientChange, withFrozenTerms, type TermsFor } from "@/features/estimateTerms";
 import { contractInvoice, contractInvoices, voidRefusal, withTaxSplit, type VoidRefusal } from "@/features/contractInvoice";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, canSignDraftOnSite, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
-import { acceptPayment, sumCents, visitPayment } from "@octo/estimating-engine";
+import { acceptPayment, invoiceOwes, sumCents, visitPayment } from "@octo/estimating-engine";
 import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { canRetry, keepPhotoLocal, keepReceiptLocal, markPhoto, markReceipt } from "./photoUpload";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -2250,7 +2250,7 @@ export function StoreProvider({
       },
       payInvoice: (id, method) => {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
-        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : NO_UNDO;
+        return inv ? recordPayment(id, invoiceOwes(inv), method) : NO_UNDO;
       },
       recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
       refundPaymentDemo: (paymentId, amountCents) => {
@@ -3024,7 +3024,7 @@ export function StoreProvider({
         if (!e || !e.depositCents) return NO_UNDO;
         const job0 = jobOfEstimate(dbRef.current, id);
         const depInv = job0 ? dbRef.current.invoices.find((i) => i.jobId === job0.id && i.kind === "deposit") : undefined;
-        if (depInv) return recordPayment(depInv.id, depInv.totalCents - depInv.paidCents, method, undefined, fromClient);
+        if (depInv) return recordPayment(depInv.id, invoiceOwes(depInv), method, undefined, fromClient);
         const now = new Date().toISOString();
         const existingJob = jobOfEstimate(dbRef.current, id);
         const jobId = existingJob?.id ?? uid();
