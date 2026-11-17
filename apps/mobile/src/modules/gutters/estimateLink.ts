@@ -329,6 +329,8 @@ export function detachDoc(doc: EstimateDoc, measurementId: string): EstimateDoc 
  * refuses before (signedOn).
  */
 export function removeMeasurementDetached(store: ModuleEstimateStore, measurementId: string): GuardedUndo | null {
+  // a signed estimate stands on it: never deleted (the screens say why; the server refuses too) — the function itself refuses as well
+  if (signedOn(store.db, measurementId)) return null;
   const { drafts } = estimatesOn(store.db, measurementId);
   const saves = drafts.map((e) =>
     store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: detachDoc(e.doc!, measurementId), ...(e.leadId ? { leadId: e.leadId } : {}) }),
