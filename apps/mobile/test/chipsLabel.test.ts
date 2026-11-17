@@ -39,7 +39,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 59; // 72 → 59: spec 56 wave 4 (client: contacts, form, property, duplicates, the new source) took 8 old chips away (67 → 59)
+const LEGACY_MAX = 56; // 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/ language and kind of work, «Местоположение»)
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];
@@ -62,9 +62,9 @@ describe("ChoiceChips name their field (#1095)", () => {
     expect(/\blabel=""/.test(sample('<ChoiceChips label="" items={x} />'))).toBe(true);
   });
   it("the parser sees the chips (guards the guard)", () => {
-    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away;
+    // 80 → 75: the accuracy choice left the canvas and the card (#768, #1764); 75 → 70: spec 56 wave 4 (client) took 8 away; 70 → 67: wave 4б took 3;
     // the parser still sees every chip
-    expect(all).toBeGreaterThan(70);
+    expect(all).toBeGreaterThan(67);
     expect(all - legacy.length).toBeGreaterThanOrEqual(5);
   });
 });
