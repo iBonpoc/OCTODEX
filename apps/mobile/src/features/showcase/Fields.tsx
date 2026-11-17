@@ -10,7 +10,7 @@ import { DateField } from "@/ui/dateField";
 import { addDays, todayKey, type DayKey } from "@/features/calendar";
 import { formatBps, formatCents } from "@/ui/numberInput";
 import { T } from "@/ui/primitives";
-import { FieldGroup, FormMain, SectionTitle } from "@/ui/surfaces";
+import { FieldGroup, FormMain, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 /**
@@ -27,6 +27,8 @@ export function FieldsSection() {
   const [qty, setQty] = useState("2.5");
   const [date, setDate] = useState<DayKey | null>(() => addDays(todayKey(), 1));
   const [due, setDue] = useState<DayKey | null>(null);
+  const [ft, setFt] = useState("12");
+  const [inch, setInch] = useState("7 1/2");
   const [days, setDays] = useState(12);
   const paste = async () => {
     const v = await Clipboard.getStringAsync().catch(() => "");
@@ -79,6 +81,18 @@ export function FieldsSection() {
         {/* DS А7: a day in a form — the row, «Сегодня · Завтра» and the calendar open under it; the second one may be empty */}
         <DateField label={t("ds.fields.date")} value={date} onChange={setDate} testID="showcase-date" />
         <DateField label={t("ds.fields.due")} value={due} onChange={setDue} optional testID="showcase-due" />
+        {/* two narrow fields in one row (#1990): the unit stays inside its own frame on a phone */}
+        <T v="caption" tone="mut">{t("ds.fields.narrow")}</T>
+        <View testID="showcase-num-narrow">
+        <RowView style={{ alignItems: "flex-start" }}>
+          <View style={{ flex: 1 }}>
+            <NumberField kind="qty" label={t("ds.fields.ft")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={ft} onChange={setFt} testID="showcase-num-ft" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <NumberField kind="qty" label={t("ds.fields.in")} unit="in" unitWord={t("ds.fields.inWord")} qty={inch} onChange={setInch} testID="showcase-num-in" />
+          </View>
+        </RowView>
+        </View>
       </FieldGroup>
     </View>
   );
