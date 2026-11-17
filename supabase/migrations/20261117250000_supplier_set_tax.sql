@@ -10,6 +10,9 @@
 --     (source 'supplier_tax'). Who may: app.is_staff and app.can_view_costs — the one rule of «who sees our costs» (#1837).
 --     Lock order: the supplier → its catalog_items (by id) → their catalog_item_costs (by item_id), the same as
 --     public.catalog_set_item_costs («Прайс», #1958): no two writers meet crosswise.
+--   * t95_supplier_tax_moves (after update of purchase_tax_bps on suppliers): the rate of the supplier moves to its items on the
+--     server whoever wrote it — public.supplier_set_tax, the app's upsert of the supplier (every phone, old ones too) or a server
+--     writer. supplier_set_tax is the strict door (it checks what the phone saw); the trigger does the moving.
 --   * t13_tax_follows_supplier (before insert or update on catalog_item_costs): an item WITH a supplier that has a rate always
 --     has that rate in its costs. An old phone's own rate (sent straight to catalog_item_costs, or through catalog_items where t30
 --     moves it into this table) is brought back to the supplier's: one guard catches both paths.
@@ -87,18 +90,49 @@ create trigger t94_item_supplier_tax after update of supplier_id on public.catal
   for each row when (old.supplier_id is distinct from new.supplier_id)
   execute function app.tg_item_supplier_tax();
 
--- ---- the one place that changes the rate ----------------------------------------------------------------------------------
+-- ---- t95: the supplier's rate moves to its items, on the server, whoever wrote it ----------------------------------------
+-- Lock order: the supplier (the update that fired this) → its catalog_items (by id) → their catalog_item_costs (by item_id).
+create or replace function app.tg_supplier_tax_moves()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_ids uuid[];
+  v_n int := 0;
+begin
+  -- a supplier left without a rate: the items keep their own (the phone asks the person)
+  if new.purchase_tax_bps is null then
+    perform set_config('app.supplier_tax_moved', '0', true);
+    return null;
+  end if;
+  select coalesce(array_agg(x.id order by x.id), '{}') into v_ids from (
+    select i.id from public.catalog_items i
+     where i.company_id = new.company_id and i.supplier_id = new.id order by i.id for update) x;
+  perform 1 from public.catalog_item_costs k
+   where k.company_id = new.company_id and k.item_id = any (v_ids) order by k.item_id for update;
+  perform set_config('app.cost_source', 'supplier_tax', true);
+  update public.catalog_item_costs k set vendor_tax_bps = new.purchase_tax_bps
+   where k.company_id = new.company_id and k.item_id = any (v_ids) and k.vendor_tax_bps is distinct from new.purchase_tax_bps;
+  get diagnostics v_n = row_count;
+  perform set_config('app.cost_source', '', true);
+  perform set_config('app.supplier_tax_moved', v_n::text, true);
+  return null;
+end;
+$$;
+revoke all on function app.tg_supplier_tax_moves() from public, anon, authenticated;
+drop trigger if exists t95_supplier_tax_moves on public.suppliers;
+create trigger t95_supplier_tax_moves after update of purchase_tax_bps on public.suppliers
+  for each row when (old.purchase_tax_bps is distinct from new.purchase_tax_bps)
+  execute function app.tg_supplier_tax_moves();
+
+-- ---- the strict door: what the phone saw must be what is stored ------------------------------------------------------------
 create or replace function public.supplier_set_tax(p_supplier uuid, p_tax_bps int, p_seen_bps int)
 returns int language plpgsql security definer set search_path = '' as $$
 declare
   s public.suppliers;
-  v_ids uuid[];
-  v_n int := 0;
 begin
   if p_tax_bps is not null and p_tax_bps not between 0 and 10000 then
     raise exception 'tax: 0..10000 basis points' using errcode = '22023';
   end if;
-  -- 1. the supplier
+  -- 1. the supplier locked first (the order of locks: supplier → items → costs; the moving is t95)
   select * into s from public.suppliers where id = p_supplier and deleted_at is null for update;
   if s.id is null or not (app.is_staff(s.company_id) and app.can_view_costs(s.company_id)) then
     raise exception 'supplier not found' using errcode = 'P0002';
@@ -110,24 +144,9 @@ begin
   if p_tax_bps is not distinct from s.purchase_tax_bps then
     return 0;
   end if;
+  perform set_config('app.supplier_tax_moved', '0', true);
   update public.suppliers set purchase_tax_bps = p_tax_bps where id = s.id;
-  -- a supplier left without a rate: the items keep their own (the phone asks the person)
-  if p_tax_bps is null then
-    return 0;
-  end if;
-  -- 2. its items, by id (also those in the trash: a restored item must not come back on the old rate)
-  select coalesce(array_agg(x.id order by x.id), '{}') into v_ids from (
-    select i.id from public.catalog_items i
-     where i.company_id = s.company_id and i.supplier_id = s.id order by i.id for update) x;
-  -- 3. their costs, by item_id
-  perform 1 from public.catalog_item_costs k
-   where k.company_id = s.company_id and k.item_id = any (v_ids) order by k.item_id for update;
-  perform set_config('app.cost_source', 'supplier_tax', true);
-  update public.catalog_item_costs k set vendor_tax_bps = p_tax_bps
-   where k.company_id = s.company_id and k.item_id = any (v_ids) and k.vendor_tax_bps is distinct from p_tax_bps;
-  get diagnostics v_n = row_count;
-  perform set_config('app.cost_source', '', true);
-  return v_n;
+  return coalesce(nullif(current_setting('app.supplier_tax_moved', true), ''), '0')::int;
 end;
 $$;
 revoke all on function public.supplier_set_tax(uuid, int, int) from public, anon;

@@ -16855,13 +16855,20 @@ select tst.ok((select purchase_tax_bps is null from public.suppliers where id = 
 \echo 'T377 the order of locks'
 -- С7: the supplier, then its items, then their costs — the same as catalog_set_item_costs; a regression of the order shows here
 do $$ declare d text; a int; b int; c int; begin
-  d := pg_get_functiondef('public.supplier_set_tax(uuid,integer,integer)'::regprocedure);
-  a := position('from public.suppliers where id = p_supplier' in d);
-  b := position('from public.catalog_items i' in d);
-  c := position('from public.catalog_item_costs k' in d);
-  perform tst.ok(a > 0 and b > a and c > b, 'T377 С7 locks: supplier, items, costs (in this order)');
+  d := pg_get_functiondef('app.tg_supplier_tax_moves()'::regprocedure);
+  a := position('from public.catalog_items i' in d);
+  b := position('from public.catalog_item_costs k' in d);
+  perform tst.ok(a > 0 and b > a, 'T377 С7 locks in t95: items, then costs (the supplier is locked by the update that fires it)');
   perform tst.ok(d ~ 'order by i\.id for update' and d ~ 'order by k\.item_id for update', 'T377 С7 each set locked in key order');
+  d := pg_get_functiondef('public.supplier_set_tax(uuid,integer,integer)'::regprocedure);
+  perform tst.ok(position('for update' in d) > 0 and position('from public.suppliers where id = p_supplier' in d) < position('update public.suppliers set' in d), 'T377 С7 supplier_set_tax locks the supplier first');
 end $$;
+-- the app''s own upsert of a supplier (every phone, the old ones too) moves the rate as well
+:as_office_a
+update public.suppliers set purchase_tax_bps = 1100 where id = '37100000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1100),
+  'T377 С1 the supplier saved by a phone''s own upsert moves the rate to its items on the server');
 \echo 'T378 rights'
 select tst.ok(has_function_privilege('authenticated', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
               and not has_function_privilege('anon', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
