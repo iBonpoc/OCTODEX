@@ -131,6 +131,36 @@ describe("design system: components", () => {
     expect(over, `own button-looking Press outside src/ui (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
     expect(less, less.join("\n")).toEqual([]);
   });
+  // #1997: inside src/ui too. A ui component is built from ui components; its own look (a Press with a background, radius
+  // or border) belongs only to the component that defines that look — listed here by file, with what it defines. A new file,
+  // or one more in a listed file, is an own button hidden in ui (as the old «Сохранить изменения?» of Sheet was, #1996).
+  const UI_OWN_STYLED_PRESS: Record<string, number> = {
+    "ui/controls.tsx": 6, // Button, IconButton, Toggle, Segmented, TagChip, TextField's action
+    "ui/filterBar.tsx": 4, // FilterBar (chip, «Фильтр», «Сброс»), FilterRow
+    "ui/fracKeys.tsx": 1, // FracKeys — the key
+    "ui/listCard.tsx": 2, // ListCard, its open panel
+    "ui/optionTile.tsx": 1, // OptionTile
+    "ui/overlays.tsx": 3, // Menu row; LEGACY ×2 — the old unsaved question of Sheet, goes with #1996 (UnsavedAsk from Button)
+    "ui/pctUsdField.tsx": 1, // PctUsdField — the «% | $» switch
+    "ui/selectField.tsx": 1, // SelectField — the row
+    "ui/surfaces.tsx": 2, // Card (pressable), ListRow
+  };
+  it("rule 29 inside src/ui (#1997): an own look only in the component that defines it; the list only goes down", () => {
+    const now: Record<string, number> = {};
+    for (const f of code.filter((x) => x.includes(join("src", "ui")))) {
+      const n = styledPress(readFileSync(f, "utf8"));
+      if (n) now[relative(ROOT, f).split("\\").join("/")] = n;
+    }
+    const over = Object.entries(now).filter(([k, n]) => n > (UI_OWN_STYLED_PRESS[k] ?? 0)).map(([k, n]) => `${k}: ${n} > ${UI_OWN_STYLED_PRESS[k] ?? 0}`);
+    const less = Object.entries(UI_OWN_STYLED_PRESS).filter(([k, n]) => (now[k] ?? 0) < n).map(([k, n]) => `${k}: ${now[k] ?? 0} < ${n} — lower the list`);
+    expect(over, `an own button-looking Press inside src/ui — build it from Button / ListRow / OptionRow …, or add the component that defines the look with a reason (rule 29, DS §8.0):\n${over.join("\n")}`).toEqual([]);
+    expect(less, less.join("\n")).toEqual([]);
+  });
+  it("the styled-Press counter sees what it must (guards the guard)", () => {
+    expect(styledPress(`<Press onPress={go} style={{ backgroundColor: c.surf2, borderRadius: radius.pill }}><T>x</T></Press>`)).toBe(1);
+    expect(styledPress(`<Press onPress={go} accessibilityRole="button"><T>x</T></Press>`)).toBe(0);
+    expect(styledPress(`<Press style={[a, { borderWidth: 1 }]} onPress={() => { if (x) y(); }}>z</Press>`)).toBe(1);
+  });
   it("vibration only through ui/haptics.ts (no expo-haptics anywhere else; the «Вибрация» switch must work, DS §15.6)", () => {
     const hits = code.filter((f) => !f.endsWith(join("ui", "haptics.ts")) && /from "expo-haptics"/.test(readFileSync(f, "utf8"))).map((f) => relative(ROOT, f));
     expect(hits).toEqual([]);
