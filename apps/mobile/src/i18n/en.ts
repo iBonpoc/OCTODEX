@@ -4526,4 +4526,10 @@ export const en: Dict = {
   "ds.ch.frac.title": "Fraction keys (A6.3)",
   "ds.ch.frac.hint": "Input keys, not a choice: one line, also on 390.",
   "ds.ch.frac.typed": "Length: 6 {frac} in",
+  "crash.title": "Something went wrong",
+  "crash.body": "The app stopped. Data on the phone and unsent changes are safe. Tap “Retry”; if that doesn’t help, tap “Restart”.",
+  "crash.retry": "Retry",
+  "crash.restart": "Restart",
+  "ds.crash.title": "Crash screen",
+  "ds.crash.hint": "Drawn by the root ErrorBoundary when the app itself fails (§13): no raw error text, “Retry” draws the screen again, “Restart” reloads the app. Outside the app's theme and language: it takes the system's.",
 };
