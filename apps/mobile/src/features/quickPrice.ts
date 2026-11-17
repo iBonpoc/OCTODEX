@@ -6,7 +6,7 @@
  * untouched test price never makes it a real one (the full editor does the same, catalog/[id].tsx `set`).
  */
 import type { CatalogItem } from "@/data/types";
-import { countsFromCost, editClean } from "./catalogEdit";
+import { countsFromCost, editClean, priceLocked } from "./catalogEdit";
 
 export type QuickPriceInput = { costCents?: number; markupBps?: number; priceCents?: number };
 
@@ -15,6 +15,8 @@ export const quickAsksCost = (it: Pick<CatalogItem, "kind">, noCosts: boolean) =
 
 /** the typed fields that differ from the item */
 function changedOf(it: CatalogItem, input: QuickPriceInput, noCosts: boolean): Partial<CatalogItem> {
+  // #1807: a price counted by the server from a cost this person does not see is not changed here (no save, no «saved»)
+  if (priceLocked(it, noCosts)) return {};
   const want: Partial<CatalogItem> = quickAsksCost(it, noCosts)
     ? { costCents: input.costCents ?? it.costCents, markupBps: input.markupBps ?? it.markupBps }
     : { priceCents: input.priceCents ?? it.priceCents };

@@ -5,18 +5,21 @@
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/client/c1");
-  // the client's properties are on its «Обзор» tab, with «Добавить объект» (#1343, DS §9 А1п)
+  // the client's properties are on its «Обзор» tab, «＋ Объект» right of the title (#1343, DS §9 А1п; spec 56 §3а.6)
   await p.getByTestId("client-tab-overview").locator("visible=true").first().waitFor({ timeout: 8000 });
   h.expect(/Объекты/.test(await p.getByTestId("client-tab-overview").locator("visible=true").first().innerText()), "«Объекты» on the client's overview");
 
   // + property
-  await h.click("Добавить объект");
+  await p.getByTestId("client-add-property").locator("visible=true").first().click();
   await h.sheet().getByPlaceholder("Улица и дом", { exact: true }).fill("77 Maple Dr");
   await h.sheet().getByPlaceholder("Квартира / офис", { exact: true }).fill("3");
   await h.sheet().getByPlaceholder("Город", { exact: true }).fill("Pasadena");
   await h.sheet().getByPlaceholder("91103", { exact: true }).fill("91105");
   await h.sheet().getByPlaceholder("Дом, Сдаётся, Офис…", { exact: true }).fill("Сдаётся");
-  await h.sheet().getByRole("radio", { name: "Многоквартирный" }).click();
+  // «Тип · Любой ⌄» — a row with a menu (DS §9 А2)
+  await h.sheet().getByTestId("prop-kind-button").click();
+  await p.getByTestId("prop-kind-multi_family").click();
+  await p.getByRole("menu").waitFor({ state: "detached" });
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   let db = await h.db();
@@ -58,7 +61,7 @@ exports.run = async (h) => {
   h.expect(p.url().includes(`${card}?s=people`), `people row opens its list (${p.url()})`);
   await p.getByRole("button", { name: "Люди объекта", exact: true }).last().click();
   await p.waitForTimeout(300);
-  await h.sheet().getByText(/^Tom Mitchell · /).click();
+  await h.sheet().getByTestId("prop-people-rows-pp-c1-2").click();
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();

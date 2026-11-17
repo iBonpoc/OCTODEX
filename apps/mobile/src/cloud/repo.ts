@@ -175,6 +175,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     });
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   // spec 35 §4г: refunds on their way (staff only by RLS; a server before 20а has no table — nothing on its way)
+  // #1807 (53-0б): the prices the server replaced with the one from the cost (only who sees our costs gets rows — RLS; a
+  // night job keeps 90 days); «Требует внимания» takes the last 7 days. A server before the migration has no table — none
+  const recalcRows = await every<Row>("catalog_price_recalc", "id, item_id, sent_price_cents, server_price_cents, by, at").catch(() => [] as Row[]);
   const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status, created_at").catch(() => [] as Row[]);
   const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
@@ -795,6 +798,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       visibility: r.visibility === "private" ? "private" : "team", pinned: !!r.pinned, authorId: s(r.created_by), at: s(r.created_at),
     })),
     costsVisible: costsVisibleFor(mems.find((m) => m.user_id === userId)),
+    priceRecalc: recalcRows.map((r) => ({
+      id: s(r.id), itemId: s(r.item_id), sentCents: n(r.sent_price_cents), serverCents: n(r.server_price_cents),
+      ...(typeof r.by === "string" ? { by: r.by } : {}), at: s(r.at),
+    })),
     catalog: catalogRows
       .filter((r) => r.is_active !== false)
       .map((r): Row => ({ ...r, ...itemCostOf.get(s(r.id)) }))
@@ -811,6 +818,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         markupBps: r.markup_bps === null || r.markup_bps === undefined ? undefined : n(r.markup_bps),
         components: ((r.components as { item_id: string; qty: string }[] | null) ?? []).map((x) => ({ itemId: x.item_id, qty: String(x.qty) })),
         placeholder: !!r.is_placeholder_price,
+        // #1807: counted by the server from the cost (absent before the migration)
+        ...(r.price_from_cost === true ? { priceFromCost: true } : {}),
         // C3 (docs/specs/33 П16): empty before the migration and for items without properties
         ...catalogExtrasFromRow(r),
         // spec 36: absent before the migration and for items without a supplier
