@@ -65,7 +65,7 @@ exports.run = async (h) => {
     await p.waitForTimeout(250);
     midLabel = await labelText(); // the finger is still down
     await p.mouse.up();
-    await skipLength(p); // «Желоб»: a pull out straight opens the length window, as growing a gutter always did
+    await skipLength(p); // «Gutter»: a pull out straight opens the length window, as growing a gutter always did
   };
   const gutters2 = async () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).map((e) => e.geom), KEY);
   const count = async () => (await p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length, KEY));
@@ -99,7 +99,7 @@ exports.run = async (h) => {
   await waitFor(async () => len((await gutters2())[0]) !== before, "the handle, no hold, along the gutter: pulled");
   // «Желоб», a long press on the cap, then ACROSS: the end is taken (director 12.11) — it swings, no new gutter (e2e 292 has the angle)
   await pull(await capAt(1), 0, 90);
-  await waitFor(async () => { const g = await gutters2(); return g.length === 1 && Math.abs(g[0].b[1] - g[0].a[1]) > 5; }, "a long press then across with «Желоб»: the end swings, it is still one gutter");
+  await waitFor(async () => { const g = await gutters2(); return g.length === 1 && Math.abs(g[0].b[1] - g[0].a[1]) > 5; }, "a long press then across with «Gutter»: the end swings, it is still one gutter");
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => { const g = await gutters2(); return g.length === 1 && Math.abs(g[0].b[1] - g[0].a[1]) < 1; }, "«Назад»: straight again");
   // «Желоб», the picked gutter's ring, NO hold, ACROSS: a new gutter from the end, as before (#504) — drawing on from an end is what «Желоб» does

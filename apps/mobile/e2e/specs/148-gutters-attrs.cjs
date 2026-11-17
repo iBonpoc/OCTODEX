@@ -170,7 +170,7 @@ exports.run = async (h) => {
     return [r.x + (n("x1") + n("x2") * 3) / 4, r.y + (n("y1") + n("y2") * 3) / 4];
   });
   await p.mouse.click(at[0], at[1]);
-  await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
+  await waitFor(async () => /Gutter/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
   await more();
   h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped"); // i18n-old: ok — «taped» is the data value, not a label

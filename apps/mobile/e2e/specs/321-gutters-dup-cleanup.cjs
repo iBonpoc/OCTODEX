@@ -37,7 +37,7 @@ exports.run = async (h) => {
   h.expect((await live()) === 2, "the old drawing has two rows on one line");
   await h.go(`/module/gutters/draw?m=${mid}`);
   await tid("draw-surface").waitFor({ timeout: 8000 });
-  await h.expectText(/Убран лишний желоб/, "the toast says an extra gutter was removed");
+  await h.expectText(/Убран лишний gutter/, "the toast says an extra gutter was removed");
   await p.waitForFunction(([k]) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => e.kind === "run" && !e.deletedAt).length === 1, [KEY], { timeout: 8000 });
   h.expect((await live()) === 1, "one live gutter is left in the saved rows");
   await h.shot("cleaned");
