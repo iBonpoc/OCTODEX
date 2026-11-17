@@ -16941,4 +16941,27 @@ update public.jobs set deleted_at = now() where id = '39100000-0000-4000-8000-00
 select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000003', 'no')$q$, '%only the office%', 'T391 a deleted job: the same answer as «not found»');
 :as_super
 
+\echo 'T392 pay, refund in full, then cancel ok'
+-- a payment refunded in full does not hold the cancel (job_cancel_reason counts amount − refunded) and the void of the invoice
+-- goes through tg_invoice_guard (paid_cents is back to 0 after the refund)
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T392 refunded in full', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39200000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39200000-0000-4000-8000-000000000001', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39200000-0000-4000-8000-0000000000b1';
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('39200000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', '39200000-0000-4000-8000-0000000000b1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 5000, 'succeeded', 't392-pay');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39200000-0000-4000-8000-000000000001', 'no')$q$, 'job:paid%', 'T392 a paid job: refund first');
+:as_super
+select set_config('app.invoice_recalc', 'on', false);
+update public.payments set refunded_cents = 5000, status = 'refunded' where id = '39200000-0000-4000-8000-0000000000c1';
+select set_config('app.invoice_recalc', '', false);
+select tst.ok((select paid_cents = 0 from public.invoices where id = '39200000-0000-4000-8000-0000000000b1'), 'T392 the refund took the payment off the invoice (paid_cents 0)');
+:as_owner_a
+select tst.ok((public.cancel_job('39200000-0000-4000-8000-000000000001', 'Refunded, client left')) ->> 'invoices' = '1', 'T392 refunded in full: the job is cancelled and its invoice voided');
+:as_super
+select tst.ok((select status = 'void' from public.invoices where id = '39200000-0000-4000-8000-0000000000b1') and (select status = 'cancelled' from public.jobs where id = '39200000-0000-4000-8000-000000000001'), 'T392 the invoice void, the job cancelled');
+
 \echo 'ALL TESTS PASSED'
