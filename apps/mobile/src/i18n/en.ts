@@ -4461,6 +4461,7 @@ export const en: Dict = {
   "price.group.rejRights": "The group price was not saved: the app counts it from the cost. Someone who sees the cost can change it",
   "price.group.rejFull": "The item was not saved: its price group already has 200 items. Take some out of the group and save again",
   "price.group.rejConflict": "The group price was not saved: it was changed on another phone. Open the item and set the price again",
+  "price.cost.rejConflict": "Cost not saved: it was changed on another phone or by a price list upload. Open the item and check it",
   "att.rejected.price": "Group price not saved",
   // #1807 (53-0б): a price counted by the server from the cost
   "price.recalc.att": "{name}: {who} set {sent} — {kept} from the cost was kept",

@@ -206,6 +206,22 @@ export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly O
 }
 
 /** the card «the template was not saved: changed on another phone» — it opens «Шаблоны смет» (spec 07 §12.7) */
+/**
+ * #1958 (а): an item's cost refused as «changed meanwhile» (catalog_set_item_costs, row_version_conflict — another phone
+ * or a price-list upload changed it first): one card per item and person, the newest refusal; it opens the item, and the
+ * truth is read again. The rest of the save (name, unit…) was written — only the cost was not.
+ */
+export function itemCostRejected(prev: readonly RejectedOp[], item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp[] {
+  if (item.op.k !== "catalog.save") return [...prev];
+  const owner = item.owner ?? who ?? undefined;
+  const id = `cost.${item.op.item.id}.${owner?.userId ?? ""}.${owner?.companyId ?? ""}`;
+  const rec: RejectedOp = {
+    id, ...(owner ? { owner } : {}), kind: "catalog.save", what: "price", href: `/catalog/${item.op.item.id}`,
+    labelKey: "price.cost.rejConflict", error, at: new Date(now).toISOString(),
+  };
+  return [...prev.filter((x) => x.id !== id), rec];
+}
+
 export function templateRejected(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp {
   const owner = item.owner ?? who ?? undefined;
   return { id: item.id, ...(owner ? { owner } : {}), kind: item.op.k, what: "estimate", href: "/estimate/templates", labelKey: "est.tpl.rejConflict", error, at: new Date(now).toISOString() };
