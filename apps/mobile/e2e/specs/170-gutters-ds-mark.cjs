@@ -8,7 +8,7 @@
  *   (docs/specs/33-gutters-canvas-ideas.md П35, founder 12.11: replaces «a long press on an end = a new line» of 08.11; e2e 292, 295).
  * Finds things by id / testID; waits on what it checks.
  */
-const { pickDsKind, skipLength, canvasAt } = require("../gutters.cjs");
+const { openProps, pickDsKind, saveAttrs, skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -59,21 +59,23 @@ exports.run = async (h) => {
   // elbows by style
   // the menu opened by itself when it was put (founder 09.11)
   if (!wide) await tid("attr-panel").waitFor({ timeout: 5000 });
-  await pickDsKind(p, "rectRibbed");
+  await pickDsKind(p, "rectRibbed"); // the window's copy saved (#1858)
   await waitFor(async () => (await live("downspout"))[0]?.attrs?.dsStyle === "corrugated", "the store: corrugated");
   await waitFor(async () => (await texts()).includes("AAA"), "a corrugated one: its default fittings over it, «AAA»");
+  if (!wide) await openProps(p); // the phone's sheet closed on «Сохранить»: open the downspout again
   await tid("attr-elbow-qty").waitFor({ timeout: 5000 });
   await step("B", 1);
-  await waitFor(async () => (await texts()).includes("AAAB"), "B +1 → «AAAB»");
   await step("A", -1);
-  await waitFor(async () => (await texts()).includes("AAB"), "A −1 → «AAB»");
+  h.expect((await texts()).includes("AAA"), "not saved yet: the drawing keeps «AAA» (the window works on a copy)");
+  await saveAttrs(p);
+  await waitFor(async () => (await texts()).includes("AAB"), "B +1, A −1, «Сохранить» → «AAB»");
   await waitFor(async () => {
     const ds = (await live("downspout"))[0];
     return JSON.stringify(ds?.attrs?.elbows) === JSON.stringify([{ style: "A", qty: 2 }, { style: "B", qty: 1 }]);
   }, "the store: A 2, B 1");
   await h.shot("ds");
-  if (!wide) await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
-  else await tid("draw-panel-close").getByRole("button").click();
+  // saved: the phone's sheet is closed already; wider «Закрыть» at the panel's bottom lets the pick go
+  if (wide) await tid("attr-close").getByRole("button").click();
 
   // drag the downspout along its run
   await waitFor(async () => (await tid("attr-panel").count()) === 0, "the downspout's menu is closed");

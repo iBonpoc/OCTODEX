@@ -40,7 +40,7 @@ exports.run = async (h) => {
   };
   const scrim = () => p.getByRole("button", { name: /^(Закрыть|Close|Cerrar)$/ }).last().click({ position: { x: 10, y: 10 } });
   const closePanel = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
+    if (wide) await tid("attr-close").getByRole("button").click();
     else await scrim();
     await waitFor(async () => (await tid("attr-panel").count()) === 0, "the panel is closed");
   };

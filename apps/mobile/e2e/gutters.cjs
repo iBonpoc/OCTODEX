@@ -192,7 +192,7 @@ async function fitAll(p) {
 }
 
 /** the open downspout's kind (its menu is open): «Ещё» first where the phone folds it (as e2e 253); `key` — rectPlain, rectRibbed, … */
-async function pickDsKind(p, key) {
+async function pickDsKind(p, key, { save = true } = {}) {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   await tid("attr-panel").first().waitFor({ timeout: 5000 });
   if (!(await tid(`attr-ds-kind-${key}`).count()) && (await tid("attr-more").count())) {
@@ -201,6 +201,8 @@ async function pickDsKind(p, key) {
   }
   await tid(`attr-ds-kind-${key}`).click();
   await p.waitForFunction((k) => document.querySelector(`[data-testid="attr-ds-kind-${k}"]`)?.getAttribute("aria-checked") === "true", key, { timeout: 5000 });
+  // the window works on a copy (#1858): the kind is on the drawing after «Сохранить» (the phone's sheet closes, wider the panel stays)
+  if (save) await saveAttrs(p);
 }
 
 // The window of a gutter / downspout works on a copy (#1858, v6): a choice changes the window only; «Сохранить» at its bottom writes it.
@@ -214,10 +216,13 @@ async function saveAttrs(p) {
 // a menu row of the window (SelectField): opens its menu at the row, picks the item by its key
 async function chooseAttr(p, field, key) {
   await p.getByTestId(`${field}-button`).locator("visible=true").first().click();
-  const item = p.getByTestId(`${field}-${key}`).locator("visible=true").first();
+  // up to 12 a menu at the row; more — a sheet with search (DS А2 → А3), its rows `<field>-picker-<key>`
+  const item = p.getByTestId(`${field}-${key}`).or(p.getByTestId(`${field}-picker-${key}`)).locator("visible=true").first();
   await item.waitFor({ timeout: 5000 });
+  const inSheet = ((await item.getAttribute("data-testid")) || "").startsWith(`${field}-picker-`);
   await item.click();
-  await item.waitFor({ state: "detached", timeout: 5000 });
+  if (inSheet) await sheetGone(p);
+  else await item.waitFor({ state: "detached", timeout: 5000 });
 }
 
 // what a menu row of the window shows now (its value, or «Выберите»)
@@ -225,4 +230,31 @@ async function attrValue(p, field) {
   return (await p.getByTestId(`${field}-button`).locator("visible=true").first().innerText()).trim();
 }
 
-module.exports = { saveAttrs, chooseAttr, attrValue, pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };
+// how many choices a menu row of the window offers: opens its menu, counts, picks the first to close it (the window's copy only — not saved)
+async function attrChoices(p, field) {
+  await p.getByTestId(`${field}-button`).locator("visible=true").first().click();
+  const menu = p.getByRole("menu").locator("visible=true").first();
+  await menu.waitFor({ timeout: 5000 });
+  const items = menu.getByRole("menuitem");
+  const n = await items.count();
+  await items.first().click();
+  await menu.waitFor({ state: "detached", timeout: 5000 });
+  return n;
+}
+
+// a menu row of the window by the word of the item (the item's own name in the menu)
+async function chooseAttrByName(p, field, name) {
+  await p.getByTestId(`${field}-button`).locator("visible=true").first().click();
+  const menu = p.getByRole("menu").locator("visible=true").first();
+  await menu.waitFor({ timeout: 5000 });
+  await menu.getByRole("menuitem", { name, exact: true }).click();
+  await menu.waitFor({ state: "detached", timeout: 5000 });
+}
+
+// the value a menu row of the window shows: the last line of the row (its label stands first, or above it)
+async function attrChosen(p, field) {
+  const lines = (await attrValue(p, field)).split("\n").map((x) => x.trim()).filter(Boolean);
+  return lines[lines.length - 1] ?? "";
+}
+
+module.exports = { chooseAttrByName, attrChosen, attrChoices, saveAttrs, chooseAttr, attrValue, pickDsKind, openDsMenu, openProps, fitAll, doubleTap, doubleTapUntil, pastDoubleTap, savedOnce, skipLength, closeDsMenu, canvasAt, sheetGone, openView, backToCanvas, viewTotal, pressWhenStill, stands };

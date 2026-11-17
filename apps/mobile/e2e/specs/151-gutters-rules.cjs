@@ -7,7 +7,7 @@
  * - the office reads the rules, cannot change them.
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { openProps, saveAttrs, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -122,11 +122,12 @@ exports.run = async (h) => {
   await tid("attr-more-open").waitFor({ timeout: 5000 });
   await nth("attr-head", 2).click();
   await tid("attr-diverter").getByRole("switch").click();
+  await h.shot("downspout");
+  await saveAttrs(p); // the window's copy into the drawing (#1858)
   await waitFor(async () => {
     const d = (await stored()).find((e) => e.kind === "downspout");
     return d && d.attrs.head === "conductor" && d.attrs.diverter === true;
   }, "the store: leader head and diverter");
-  await h.shot("downspout");
 
   // a reload: the corner and the downspout are back
   await p.waitForTimeout(1300);

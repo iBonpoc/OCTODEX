@@ -10,7 +10,7 @@
  * - the office (dispatcher): read only, «ask the owner».
  * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» has no testID — by its name).
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { attrChoices, openProps, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 /** an in-app move: a full load would put the demo back online */
@@ -102,11 +102,8 @@ exports.run = async (h) => {
   await waitFor(async () => (((await db()).moduleData?.gutters?.elements) || []).some((e) => e.kind === "run" && e.attrs.color === pal[4]), "a new run has the company's colour");
   if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
-  await more();
-  await tid("attr-profile-open").click(); // a dropdown (#677)
-  h.expect((await radios("attr-profile").count()) === 4, "the panel offers 4 profiles (no Box)");
-  await tid("attr-color-open").click(); // folded (founder 09.11)
-  h.expect((await radios("attr-color").count()) === 9, "the panel offers the palette's 8 colours and «Без покраски»");
+  h.expect((await attrChoices(p, "attr-profile")) === 4, "the window offers 4 profiles (no Box)"); // a menu row (#677, v6)
+  h.expect((await attrChoices(p, "attr-color")) === 9, "the window offers the palette's 8 colours and «Без покраски»");
   await h.shot("canvas");
 
   // offline: saved on the phone, waits in the queue

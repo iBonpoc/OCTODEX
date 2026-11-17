@@ -73,7 +73,7 @@ exports.run = async (h) => {
   await h.shot("element");
 
   // the measurement's photo
-  if (wide) await tid("draw-panel-close").getByRole("button").click();
+  if (wide) await tid("attr-close").getByRole("button").click();
   else {
     await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
     await waitFor(async () => (await tid("attr-panel").count()) === 0, "the sheet closed");

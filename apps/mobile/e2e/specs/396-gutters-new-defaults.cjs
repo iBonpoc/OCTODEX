@@ -4,7 +4,7 @@
  * colour of every NEW gutter of this drawing, the gutter drawn before keeps its own; after a reload it is still there (kept on this phone);
  * «Сбросить» gives the company's back. The same for «Водосток» (a size). Every view. Finds things by testID; waits on what it checks.
  */
-const { skipLength, pastDoubleTap, doubleTapUntil } = require("../gutters.cjs");
+const { attrChosen, chooseAttrByName, skipLength, pastDoubleTap, doubleTapUntil } = require("../gutters.cjs");
 const { pressEscUntilClosed, sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -14,11 +14,9 @@ exports.run = async (h) => {
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   const els = () => p.evaluate((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt), KEY);
   const runs = async () => (await els()).filter((e) => e.kind === "run");
-  const chosen = async (field) => ((await tid(`${field}-value`).count()) ? tid(`${field}-value`).innerText() : tid(field).locator('[aria-checked="true"]').innerText());
-  const choose = async (field, name) => {
-    if ((await tid(`${field}-open`).count()) && !(await tid(field).getByRole("radio").count())) await tid(`${field}-open`).click();
-    await tid(field).getByRole("radio", { name, exact: true }).click();
-  };
+  // the rows are the window's menu rows (v6, #1858); «Для новых …» still writes at once (the drawing's own setting, not an element)
+  const chosen = (field) => attrChosen(p, field);
+  const choose = (field, name) => chooseAttrByName(p, field, name);
   const shown = () => p.evaluate(() => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0));
   /** two taps on a tool cell: «Новые …» open */
   const openNew = async (tool) => {
@@ -28,7 +26,11 @@ exports.run = async (h) => {
     await tid(`draw-tool-${tool}`).getByRole("button").click();
     const b1 = await tid(`draw-tool-${tool}`).boundingBox(); // inside the window of a second tap: where the second tap goes
     h.expect(Math.abs(b1.y - b.y) < 1 && Math.abs(b1.x - b.x) < 1, `picking «${tool}» does not move the toolbar (${Math.round(b.y)} → ${Math.round(b1.y)})`);
-    await doubleTapUntil(p, b.x + b.width / 2, b.y + b.height / 2, { fn: () => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0), arg: null }, `two taps on «${tool}»: its new ones' properties`);
+    // the second tap of the two (a third would land on the sheet just opened — on its last row, «Кронштейны», v6)
+    const shownFn = () => [...document.querySelectorAll('[data-testid="draw-new-defaults"]')].some((e) => e.getClientRects().length > 0);
+    await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2);
+    const ok = await p.waitForFunction(shownFn, null, { timeout: 1500 }).then(() => true, () => false);
+    if (!ok) await doubleTapUntil(p, b.x + b.width / 2, b.y + b.height / 2, { fn: shownFn, arg: null }, `two taps on «${tool}»: its new ones' properties`);
   };
   const closeNew = async () => {
     if (wide) await tid("draw-panel-close").getByRole("button").click();
@@ -43,7 +45,7 @@ exports.run = async (h) => {
   /** a downspout's menu (it opens by itself when one is put) closed */
   const closeAttrs = async () => {
     await tid("attr-panel").waitFor({ timeout: 5000 });
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
+    if (wide) await tid("attr-close").getByRole("button").click();
     else {
       await pressEscUntilClosed(p);
       await sheetGone(p);

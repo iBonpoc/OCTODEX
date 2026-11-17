@@ -9,7 +9,7 @@
  * - the grip: while dragged it says where to let go.
  * Finds things by testID / id; waits on what it checks.
  */
-const { openProps, skipLength, canvasAt } = require("../gutters.cjs");
+const { attrValue, chooseAttr, openProps, saveAttrs, skipLength, canvasAt } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -37,7 +37,8 @@ exports.run = async (h) => {
     await tid(field).getByRole("radio", { name, exact: true }).click();
   };
   const closePanel = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
+    if (!(await panel().count())) return; // the phone's sheet closed on «Сохранить» already
+    if (wide) await tid("attr-close").getByRole("button").click();
     else await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
     await waitFor(async () => (await panel().count()) === 0, "the menu is closed");
   };
@@ -72,28 +73,30 @@ exports.run = async (h) => {
   await p.mouse.click(x0 + 2, (y0 + y1) / 2);
   await panel().waitFor({ timeout: 5000 });
   await tid("attr-ds-size").waitFor({ timeout: 3000 });
-  h.expect((await tid("attr-ds-size-value").count()) === 1 && (await tid("attr-color-value").count()) === 1, "size and colour are folded rows");
-  h.expect(/^Как у gutter/.test(await tid("attr-color-value").innerText()), "the colour: «Как у gutter»");
+  h.expect((await tid("attr-ds-size-button").count()) === 1 && (await tid("attr-color-button").count()) === 1, "size and colour are menu rows");
+  h.expect(/Как у gutter/.test(await attrValue(p, "attr-color")), "the colour: «Как у gutter»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
-  // the length is a dropdown now (#1276: size, colour and length are folded rows): «по этажу» by default, a number of feet on a pick, back to «по этажу»
-  h.expect((await tid("attr-ds-length-value").count()) === 1 && /^По этажу/.test(await tid("attr-ds-length-value").innerText()), "the length: a folded row, «По этажу» by default");
-  await tid("attr-ds-length-open").click();
-  await p.getByRole("button", { name: "20′", exact: true }).or(p.getByText("20′", { exact: true })).last().click();
-  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20′ picked: the downspout's own height is 240″");
-  await tid("attr-ds-length-open").click();
-  await p.getByText("По этажу", { exact: true }).last().click();
-  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "«По этажу»: no own height");
-
-  // offsets: 1, then 4″ (the chips are the stocked 1, 2, 4″ — «Расход v2» Н4), then its own 2½″
+  // the length is a menu row (#1276): «по этажу» by default, a number of feet on a pick, back to «по этажу»; offsets: 1, then 4″
+  // (the chips are the stocked 1, 2, 4″ — «Расход v2» Н4), then its own 2½″. The window works on a copy: written on «Сохранить» (#1858)
+  h.expect(/По этажу$/.test(await attrValue(p, "attr-ds-length")), "the length: a menu row, «По этажу» by default");
+  await chooseAttr(p, "attr-ds-length", "20");
   await tid("attr-offset-qty").getByRole("button", { name: /\+1$/ }).click();
   await tid("attr-offset-len").getByRole("radio", { name: "4″", exact: true }).click();
+  h.expect((await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "not saved yet: no own height in the store");
+  await saveAttrs(p);
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === 240, "20′ saved: the downspout's own height is 240″");
   await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 4, qty: 1 }]), "one 4″ offset");
+  if (!wide) await openProps(p); // the phone's sheet closed on «Сохранить»: the downspout is still picked, open it again
+  await panel().waitFor({ timeout: 5000 });
+  await chooseAttr(p, "attr-ds-length", "0");
   await tid("attr-offset-len").getByRole("radio", { name: "Свой", exact: true }).click();
   await tid("attr-offset-own").locator("input").fill("2.5");
   await tid("attr-offset-own-apply").getByRole("button").click();
-  await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 2.5, qty: 1 }]), "its own 2½″ offset");
   await h.shot("ds-menu");
+  await saveAttrs(p);
+  await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.heightIn === undefined, "«По этажу»: no own height");
+  await waitFor(async () => JSON.stringify((await els()).find((e) => e.kind === "downspout")?.attrs.offsets) === JSON.stringify([{ lengthIn: 2.5, qty: 1 }]), "its own 2½″ offset");
   await closePanel();
 
   // the gutter turns black → the downspout follows
@@ -101,10 +104,14 @@ exports.run = async (h) => {
   await p.mouse.click(x0 + 1, y1 - (y1 - y0) * 0.15);
   if (!wide) await openProps(p);
   await panel().waitFor({ timeout: 5000 });
-  await pickIn("attr-color", "Чёрный");
+  await chooseAttr(p, "attr-color", "black");
+  await saveAttrs(p);
   await waitFor(async () => (await els()).find((e) => e.kind === "downspout")?.attrs.color === "black", "the downspout follows its gutter: black");
   // «Без покраски» is a colour
-  await pickIn("attr-color", "Без покраски");
+  if (!wide) await openProps(p);
+  await panel().waitFor({ timeout: 5000 });
+  await chooseAttr(p, "attr-color", "@mill");
+  await saveAttrs(p);
   await waitFor(async () => (await els()).find((e) => e.kind === "run" && e.attrs.story === 2)?.attrs.finish === "mill", "«Без покраски» → the gutter is bare");
   await closePanel();
 

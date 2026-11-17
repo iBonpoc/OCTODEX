@@ -3,7 +3,7 @@
  * (#677 founder 09.11: «Материал, профиль, толщина — селекторы»; «Строка "Размер" слишком широкая»). Every view.
  * Finds things by testID; waits on what it checks (no pauses).
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { attrChosen, openProps, skipLength } = require("../gutters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -23,28 +23,27 @@ exports.run = async (h) => {
   await skipLength(p);
   if (!wide) await openProps(p);
   await tid("attr-panel").waitFor({ timeout: 5000 });
-  if (await tid("attr-more").count()) {
-    await tid("attr-more").getByRole("button").click();
-    await tid("attr-more-open").waitFor({ timeout: 5000 });
+  // window v6 (#1858): every choice is a menu row of the core (SelectField, `<id>-button`), no chips
+  for (const f of ["attr-material", "attr-profile", "attr-size", ...((await tid("attr-gauge-button").count()) ? ["attr-gauge"] : [])]) {
+    await tid(`${f}-button`).waitFor({ timeout: 5000 });
+    h.expect((await tid(f).getByRole("radio").count()) === 0, `${f}: a menu row, no chips`);
   }
-  for (const f of ["attr-material", "attr-profile", "attr-size", ...((await tid("attr-gauge-value").count()) ? ["attr-gauge"] : [])]) {
-    await tid(`${f}-value`).waitFor({ timeout: 5000 });
-    h.expect((await tid(f).getByRole("radio").count()) === 0, `${f}: closed — a dropdown row, no chips`);
-  }
-  // the size row is as wide as what it shows, not the whole panel
-  const size = await tid("attr-size-open").boundingBox();
-  const mat = await tid("attr-material-open").boundingBox();
-  h.expect(size.width < mat.width * 0.8, `the size row is narrower than the full row (${Math.round(size.width)} vs ${Math.round(mat.width)})`);
-  // a pick closes the list and the row shows it
-  await tid("attr-profile-open").click();
-  const profiles = await tid("attr-profile").getByRole("radio").count();
-  h.expect(profiles >= 2, `the profile list opens (${profiles})`);
-  const before = (await tid("attr-profile-value").innerText()).trim();
-  const other = tid("attr-profile").getByRole("radio").filter({ hasNotText: before }).first();
+  // the size is one of three in a row (size · colour · storey), not the whole width
+  const size = await tid("attr-size-button").boundingBox();
+  const mat = await tid("attr-material-button").boundingBox();
+  h.expect(size.width < mat.width * 0.5, `the size row is a third of the full row (${Math.round(size.width)} vs ${Math.round(mat.width)})`);
+  // a pick closes the menu and the row shows it
+  await tid("attr-profile-button").click();
+  const menu = p.getByRole("menu").locator("visible=true").first();
+  await menu.waitFor({ timeout: 5000 });
+  const profiles = await menu.getByRole("menuitem").count();
+  h.expect(profiles >= 2, `the profile menu opens (${profiles})`);
+  const before = await attrChosen(p, "attr-profile");
+  const other = menu.getByRole("menuitem").filter({ hasNotText: before }).first();
   const name = (await other.innerText()).trim();
   await other.click();
-  await p.waitForFunction((id) => !document.querySelector(`[data-testid="${id}"] [role="radio"]`), "attr-profile", { timeout: 5000 });
-  h.expect((await tid("attr-profile-value").innerText()).trim() === name, `the row shows the pick: ${name}`);
+  await menu.waitFor({ state: "detached", timeout: 5000 });
+  h.expect((await attrChosen(p, "attr-profile")) === name, `the row shows the pick: ${name}`);
   await h.shot("dropdowns");
 
   // the settings (#931): every field either a segment in ONE line, or a closed dropdown (`<id>-button`, no chips); a pick is saved

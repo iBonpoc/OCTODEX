@@ -2,14 +2,14 @@
  * e2e 148 — панель атрибутов холста Gutters (docs/specs/33-gutters-screens.md П21.8 M5c; спека 33 §7). Every view.
  * - 390: «Свойства» in the picked bar opens the sheet; 820/1280: the panel is a column right of the canvas (not over
  *   it: drawing goes on beside it), says how to pick when nothing is picked, no «Свойства» button, «Закрыть» unpicks;
- * - a run: drawn → profile «Полукруглый» (size 5″, hanger Shank #10 follow), colour «Коричневый», the tape
- *   25′ 6″ → «По рисунку» offered, the label follows; a bad tape (12 in) says so and changes nothing;
- *   «Назад» on the canvas takes the tape back;
+ * - a run (window v6, #1858): every row on every width; profile «Полукруглый» (size 5″, hanger Shank #10 follow), colour
+ *   «Коричневый», the length 25′ 6″ — written on «Сохранить», the label follows; a bad length (12 in) says so and saves nothing;
+ *   «Назад» on the canvas takes the length back;
  * - a downspout: «Круглый» → size 3″; wall «Кирпич» → its default wall kit;
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
-const { openProps, skipLength } = require("../gutters.cjs");
+const { attrChosen, attrValue, chooseAttr, openProps, saveAttrs, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -61,7 +61,7 @@ exports.run = async (h) => {
     await panel().waitFor({ timeout: 5000 });
   };
   const closeAttrs = async () => {
-    if (wide) await tid("draw-panel-close").getByRole("button").click();
+    if (wide) await tid("attr-close").getByRole("button").click();
     // the scrim above the sheet (its middle is under the sheet)
     else await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
     await waitFor(async () => (await panel().count()) === 0, "the attributes are closed");
@@ -87,45 +87,38 @@ exports.run = async (h) => {
 
   // the run
   await openAttrs();
-  if (!wide) {
-    // 390 (П20.9): storey, size, colour and the tape on top; the rest under «Ещё»
-    for (const id of ["attr-story", "attr-size", "attr-color", "attr-length"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
-    h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
-    h.expect((await tid("attr-profile").count()) === 0 && (await tid("attr-hanger").count()) === 0, "390: profile and hangers under «Ещё»");
-    h.expect(/профиль/.test(await tid("attr-more").innerText()), "«Ещё» says what is in it");
-    await h.shot("props");
-  } else h.expect((await tid("attr-profile").count()) === 1 && (await tid("attr-more").count()) === 0, "820/1280: every field of the gutter, no «Ещё»");
-  await more();
-  h.expect((await tid("attr-length-reset").count()) === 0, "a drawn length: no «По рисунку» (П20.16: the accuracy is the drawing's, not a line's)");
-  h.expect((await chosen("attr-profile")) === "K", "K-style by default");
-  await choose("attr-profile", "Полукруглый");
-  await waitFor(async () => (await chosen("attr-profile")) === "Полукруглый", "half round picked");
-  h.expect((await chosen("attr-size")) === "5″", "the size follows: 5″");
-  h.expect((await chosen("attr-hanger")) === "Shank #10 (доска)", "the hanger follows the profile: shank #10 on fascia");
-  await choose("attr-color", "Коричневый");
-  await waitFor(async () => (await chosen("attr-color")) === "Коричневый", "brown picked");
+  // v6 (#1858): the same rows on every width, no «Ещё» for a gutter
+  for (const id of ["attr-profile", "attr-size", "attr-color", "attr-story", "attr-length", "attr-material", "attr-mount", "attr-hanger"]) h.expect((await tid(id).count()) === 1, `${id} in the window`);
+  h.expect((await tid("attr-more").count()) === 0, "no «Ещё» in the gutter's window");
+  h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
+  if (!wide) await h.shot("props");
+  h.expect(/K$/.test(await attrValue(p, "attr-profile")), "K-style by default");
+  await chooseAttr(p, "attr-profile", "half_round");
+  await waitFor(async () => /Полукруглый$/.test(await attrValue(p, "attr-profile")), "half round picked");
+  h.expect(/^5″/.test(await attrValue(p, "attr-size")), "the size follows: 5″");
+  h.expect(/Shank #10 \(доска\)$/.test(await attrValue(p, "attr-hanger")), "the hanger follows the profile: shank #10 on fascia");
+  await chooseAttr(p, "attr-color", "brown");
+  await waitFor(async () => /^Коричневый/.test(await attrValue(p, "attr-color")), "brown picked");
   await h.shot("run");
 
-  // a bad tape changes nothing
+  // a bad length saves nothing (the window stays and says so)
   await tid("attr-length-ft").locator("input").fill("25");
   await tid("attr-length-in").locator("input").fill("12");
-  await tid("attr-length-apply").getByRole("button").click();
+  await tid("attr-save").getByRole("button").click();
   await tid("attr-length-bad").waitFor({ timeout: 3000 });
-  h.expect((await tid("attr-length-reset").count()) === 0, "a bad tape keeps the drawn length");
-  // the tape
+  h.expect(((await stored()).find((e) => e.kind === "run") || {}).attrs?.color !== "brown", "a bad length: nothing saved, not even the colour");
+  // the length, then «Сохранить»: all of it at once
   await tid("attr-length-in").locator("input").fill("6");
-  await tid("attr-length-apply").getByRole("button").click();
-  await waitFor(async () => (await tid("attr-length-reset").count()) === 1, "taped: «По рисунку» puts the drawn one back"); // i18n-old: ok — «taped» is the data value, not a label
-  h.expect((await tid("attr-length-bad").count()) === 0, "the warning is gone");
-  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the taped length"); // i18n-old: ok — «taped» is the data value, not a label
+  await saveAttrs(p);
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "the label shows the typed length");
   await waitFor(async () => {
     const r = (await stored()).find((e) => e.kind === "run");
     return r && r.confidence === "taped" && r.geom.lengthIn === 306 && r.attrs.profile === "half_round" && r.attrs.color === "brown" && r.attrs.hanger === "hr_shank_fascia"; // i18n-old: ok — «taped» is the data value, not a label
-  }, "the store: the run's attributes and the tape");
+  }, "the store: the run's attributes and the length");
   await h.shot("taped"); // i18n-old: ok — «taped» is the data value, not a label
 
-  // «Назад» on the canvas takes the tape back
-  await closeAttrs();
+  // «Назад» on the canvas takes the length back (the phone's sheet closed on «Сохранить»; wider «Закрыть» lets the pick go)
+  if (wide) await closeAttrs();
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await labels()).every((t) => !/^25′ 6″/.test(t)), "«Назад»: the drawn length again");
   await tid("draw-redo").getByRole("button").click(); // «Вперёд» on the toolbar (founder 09.11)
@@ -148,10 +141,11 @@ exports.run = async (h) => {
   h.expect((await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 0, "the chosen kind has the check, the other has none");
   await tid("attr-ds-kind-roundPlain").click(); // the kind: round
   await waitFor(async () => (await tid("attr-ds-kind-roundPlain").getByTestId("selected-check").count()) === 1 && (await tid("attr-ds-kind-rectPlain").getByTestId("selected-check").count()) === 0, "the check moved to the round kind");
-  await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
+  await waitFor(async () => (await attrChosen(p, "attr-ds-size")) === "3″", "round: the size follows (3″)");
   await choose("attr-wall", "Кирпич");
   await waitFor(async () => (await chosen("attr-wall-kit")) === "Conductor band + анкеры", "brick: its default wall kit");
   await h.shot("downspout");
+  await saveAttrs(p); // the window's copy into the drawing (#1858)
   await waitFor(async () => {
     const d = (await stored()).find((e) => e.kind === "downspout");
     return d && d.attrs.shape === "round" && d.attrs.size === "3" && d.attrs.wall === "brick";
@@ -172,7 +166,6 @@ exports.run = async (h) => {
   await p.mouse.click(at[0], at[1]);
   await waitFor(async () => /Gutter/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
-  await more();
-  h.expect((await tid("attr-length-reset").count()) === 1, "after a reload: still taped"); // i18n-old: ok — «taped» is the data value, not a label
-  h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
+  h.expect((await tid("attr-length-ft").locator("input").inputValue()) === "25" && (await tid("attr-length-in").locator("input").inputValue()) === "6", "after a reload: the length 25′ 6″ in the window");
+  h.expect(/Полукруглый$/.test(await attrValue(p, "attr-profile")) && /^Коричневый/.test(await attrValue(p, "attr-color")), "after a reload: profile and colour");
 };

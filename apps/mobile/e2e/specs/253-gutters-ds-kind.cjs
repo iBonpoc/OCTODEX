@@ -8,7 +8,7 @@
  * - «Назад» takes the last pick back.
  * No fixed pauses: it waits on what it checks.
  */
-const { skipLength } = require("../gutters.cjs");
+const { openProps, pickDsKind, skipLength } = require("../gutters.cjs");
 const { sheetGone } = require("../sheet.cjs");
 const KEY = "octo.db.v5";
 
@@ -67,29 +67,42 @@ exports.run = async (h) => {
   h.expect((await tid("attr-ds-kind-rectPlain").getAttribute("aria-checked")) === "true", "the smooth rectangular one is picked by default");
   h.expect((await tid("attr-shape").count()) === 0 && (await tid("attr-ds-style").count()) === 0, "no separate shape and style rows any more");
 
-  await tid("attr-ds-kind-rectRibbed").click();
-  await stored("the store: rect + corrugated", "a.shape === 'rect' && a.dsStyle === 'corrugated'");
-  await tid("draw-selected-kind").waitFor({ timeout: 5000 });
-  h.expect(/ребристый/.test(await bar()) && /2×3/.test(await bar()), `the bar names the kind and the size (${await bar()})`);
-
-  await tid("attr-ds-kind-roundRibbed").click();
-  await stored("the store: round + corrugated, a round size", "a.shape === 'round' && a.dsStyle === 'corrugated' && a.size === '3'");
-  h.expect(/Круглый ребристый/.test(await bar()) && /3″/.test(await bar()), `the bar: round, ribbed, 3″ (${await bar()})`);
-  h.expect((await tid("attr-ds-kind-roundRibbed").getAttribute("aria-checked")) === "true", "the picked tile says so");
-
-  await tid("attr-ds-kind-roundPlain").click();
-  await stored("the store: round + plain", "a.shape === 'round' && (a.dsStyle === 'plain' || a.dsStyle === undefined)");
+  // the window works on a copy (#1858): a tile, then «Сохранить» (pickDsKind) — the phone's sheet closes, open it again for the next
+  const again = async () => {
+    if (wide) return;
+    await sheetGone(p);
+    await openProps(p);
+    await tid("attr-panel").waitFor({ timeout: 5000 });
+    if (await tid("attr-more").count()) {
+      await tid("attr-more").getByRole("button").click();
+      await tid("attr-more-open").waitFor({ timeout: 5000 });
+    }
+    await tid("attr-ds-kind").waitFor({ timeout: 5000 });
+  };
   // no tile's words run over its frame
   const over = await p.evaluate(() => [...document.querySelectorAll('[data-testid^="attr-ds-kind-"]')].filter((e) => e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1).map((e) => e.getAttribute("data-testid")));
   h.expect(over.length === 0, `no tile overflows (${over.join(",")})`);
   await h.shot("kinds");
 
-  // «Назад» takes the last pick back (on the phone the properties sheet is closed first)
-  if (!wide) {
-    await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } }); // the scrim above the sheet
-    await tid("attr-panel").waitFor({ state: "detached", timeout: 5000 });
-    await sheetGone(p);
-  }
+  await pickDsKind(p, "rectRibbed");
+  await stored("the store: rect + corrugated", "a.shape === 'rect' && a.dsStyle === 'corrugated'");
+  await tid("draw-selected-kind").waitFor({ timeout: 5000 });
+  h.expect(/ребристый/.test(await bar()) && /2×3/.test(await bar()), `the bar names the kind and the size (${await bar()})`);
+
+  await again();
+  await pickDsKind(p, "roundRibbed", { save: false });
+  h.expect((await tid("attr-ds-kind-roundRibbed").getAttribute("aria-checked")) === "true", "the picked tile says so");
+  await stored("not saved yet: still rect + corrugated", "a.shape === 'rect' && a.dsStyle === 'corrugated'");
+  await tid("attr-save").getByRole("button").click();
+  await stored("the store: round + corrugated, a round size", "a.shape === 'round' && a.dsStyle === 'corrugated' && a.size === '3'");
+  h.expect(/Круглый ребристый/.test(await bar()) && /3″/.test(await bar()), `the bar: round, ribbed, 3″ (${await bar()})`);
+
+  await again();
+  await pickDsKind(p, "roundPlain");
+  await stored("the store: round + plain", "a.shape === 'round' && (a.dsStyle === 'plain' || a.dsStyle === undefined)");
+
+  // «Назад» takes the last save back (the phone's sheet closed on «Сохранить»)
+  if (!wide) await sheetGone(p);
   await tid("draw-undo").getByRole("button").click();
   await stored("«Назад»: ribbed round again", "a.shape === 'round' && a.dsStyle === 'corrugated'");
 };

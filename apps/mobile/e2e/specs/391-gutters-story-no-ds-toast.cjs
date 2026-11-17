@@ -6,7 +6,7 @@
  * a gutter drawn after that, with the button on 2, is on story 2.
  * Every view. Finds things by testID / stored elements; waits on what it checks (no pauses).
  */
-const { openProps, sheetGone, skipLength } = require("../gutters.cjs");
+const { chooseAttr, openProps, saveAttrs, sheetGone, skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.autoDs = true; // about the automatic downspouts (the runner switches them off for the others)
@@ -62,13 +62,11 @@ exports.run = async (h) => {
 
   // a gutter goes to another story by its properties (the «Этаж» row): the picked one → 2, the button follows; «Назад» takes it back
   await openProps(p);
-  await tid("attr-story").getByRole("radio", { name: "эт 2", exact: true }).click();
+  await chooseAttr(p, "attr-story", "2"); // a menu row of the window (v6); written on «Сохранить» (#1858)
+  await saveAttrs(p);
   await waitStored((k) => { const r = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run"); return r.filter((e) => Number(e.attrs?.story ?? 1) === 2).length === 1 && r.filter((e) => Number(e.attrs?.story ?? 1) === 1).length === 1; }, KEY, "the properties moved the picked gutter to story 2");
   await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="draw-story"]')].some((e) => e.offsetParent && (e.textContent || "").includes("2")), null, { timeout: 5000 });
-  if ((p.viewportSize()?.width ?? 0) <= 390) {
-    await p.getByRole("button", { name: "Закрыть", exact: true }).last().click({ position: { x: 10, y: 10 } });
-    await sheetGone(p);
-  }
+  await sheetGone(p); // the phone's sheet closed on «Сохранить»
   await tid("draw-undo").getByRole("button").click();
   await waitStored((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).filter((e) => !e.deletedAt && e.kind === "run").every((e) => Number(e.attrs?.story ?? 1) === 1), KEY, "«Назад»: both gutters back on story 1");
   await dsCount(1, "back on one story: one downspout");
