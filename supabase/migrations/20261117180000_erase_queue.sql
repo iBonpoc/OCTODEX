@@ -17,9 +17,12 @@ create table if not exists app.erase_queue (
   membership_ids uuid[] not null default '{}',
   at             timestamptz not null default now(),
   done_at        timestamptz,
-  tries          int not null default 0
+  tries          int not null default 0   -- failed runs only; the job leaves a row after 5 (50-6 raises an alarm on such rows)
 );
 revoke all on app.erase_queue from public, anon, authenticated;
+-- not served by the API (the schema is not published), and still closed in itself: if a grant ever appears, the rows stay shut
+alter table app.erase_queue enable row level security;
+alter table app.erase_queue force row level security;
 
 create or replace function app.erase_account(p_uid uuid, p_close_companies uuid[] default '{}')
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -122,12 +125,15 @@ end;
 $$;
 revoke all on function app.erase_account(uuid, uuid[]) from public, anon, authenticated;
 
--- the journal: still append-only; the job may redact before/after of a row, nothing else of it
+-- the journal: still append-only; the job (and only its owner role) may redact before/after of a row, nothing else of it
 create or replace function app.tg_append_only()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   if tg_op = 'UPDATE' and tg_table_name = 'audit_log'
-     and current_setting('app.erasing_journal', true) = 'on' and current_user not in ('authenticated', 'anon')
+     and current_setting('app.erasing_journal', true) = 'on'
+     -- the flag is not a secret (set_config is open to everyone): the caller must BE the owner of the job, whoever sets the flag
+     and current_user = (select r.rolname from pg_catalog.pg_proc p join pg_catalog.pg_roles r on r.oid = p.proowner
+                          where p.oid = 'app.erase_queue_run()'::pg_catalog.regprocedure)
      and (to_jsonb(new) - 'before' - 'after') = (to_jsonb(old) - 'before' - 'after') then
     return new;
   end if;
@@ -151,7 +157,7 @@ declare
   v_done int := 0;
   v_keys constant text[] := array['title', 'his_registration_number', 'color'];
 begin
-  for q in select * from app.erase_queue where done_at is null order by at, user_id for update skip locked loop
+  for q in select * from app.erase_queue where done_at is null and tries < 5 order by at, user_id for update skip locked loop
     begin
       perform set_config('app.erasing_journal', 'on', true);
       update public.audit_log
@@ -170,7 +176,7 @@ begin
          or exists (select 1 from public.catalog_cost_history where by = q.user_id) then
         raise exception 'erasure by the queue incomplete';
       end if;
-      update app.erase_queue set done_at = now(), tries = tries + 1 where user_id = q.user_id;
+      update app.erase_queue set done_at = now() where user_id = q.user_id;
       v_done := v_done + 1;
     exception when others then
       perform set_config('app.erasing_journal', '', true);

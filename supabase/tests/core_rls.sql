@@ -5289,6 +5289,7 @@ select tst.ok((public.delete_account('DELETE') ->> 'repeat')::boolean, 'T230 aga
 select tst.ok((select count(*) = 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T230 one queue row for the erased person (a repeat adds none)');
 select tst.ok((select membership_ids = array['a2300000-0000-4000-8000-0000000000a1'::uuid] and done_at is null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T230 the row holds the membership ids and waits');
 select tst.ok(not exists (select 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000002'), 'T230 nobody else is queued');
+select tst.ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'app.erase_queue'::regclass), 'T238 the queue has row security on and forced');
 select tst.ok(not has_table_privilege('authenticated', 'app.erase_queue', 'SELECT') and not has_table_privilege('anon', 'app.erase_queue', 'SELECT')
               and not has_function_privilege('authenticated', 'app.erase_queue_run()', 'EXECUTE') and not has_function_privilege('anon', 'app.erase_queue_run()', 'EXECUTE')
               and has_function_privilege('service_role', 'app.erase_queue_run()', 'EXECUTE'),
@@ -5307,6 +5308,18 @@ do $$ begin
   end;
 end $$;
 select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 without the job the journal is append-only');
+-- the flag is not a secret: with it set, anon and authenticated (and anyone but the job's owner) still cannot rewrite the journal
+set role authenticated;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 authenticated with the flag cannot rewrite the journal');
+reset role; set role anon;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 anon with the flag cannot rewrite the journal');
+reset role; set role service_role;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 service_role with the flag, outside the job, cannot rewrite the journal');
+reset role;
+select set_config('app.erasing_journal', '', false);
 reset role; set role service_role;
 select tst.ok(app.erase_queue_run() >= 1, 'T240 the job does the waiting people (the earlier deletions of this file too)');
 reset role;
