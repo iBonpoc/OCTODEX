@@ -80,23 +80,32 @@ exports.run = async (h) => {
   h.expect(mid.attrs.color === before.attrs.color && mid.geom.lengthIn === lenBefore, "not saved yet: the store has the old colour and length");
   h.expect((await labels()).every((t) => !/30′/.test(t)), "not saved yet: the drawing has the old length");
 
-  if (!wide) {
-    // «Закрыть» over the unsaved copy: the question; «Не сохранять» — nothing written
-    // TEMP (#1858): the scrim asks today; «Закрыть» at the bottom asks too once the core's Sheet lets its footer ask (Экраны №9)
-    await p.getByRole("button", { name: "Закрыть", exact: true }).first().click({ position: { x: 10, y: 10 } });
-    await p.getByText("Сохранить изменения?").first().waitFor({ timeout: 5000 });
-    await h.shot("unsaved");
-    await p.getByRole("button", { name: "Не сохранять", exact: true }).first().click();
-    await panel().first().waitFor({ state: "detached", timeout: 5000 });
-    const after = await storedRun();
-    h.expect(after.attrs.color === before.attrs.color && after.geom.lengthIn === lenBefore, "«Не сохранять»: nothing written");
-    await open();
-    h.expect(!/Коричневый/.test(await attrValue(p, "attr-color")), "opened again: the window shows what is saved, not the dropped copy");
-    await chooseAttr(p, "attr-color", "brown");
-    await tid("attr-length-ft").locator("input").fill("30");
-    await tid("attr-length-in").locator("input").fill("0");
-    await tid("attr-length-fracs-1-2").click();
+  // «Закрыть» over the unsaved copy: the question (DS §7.3: Сохранить · Не сохранять · Назад, 44 each); «Назад» keeps the copy,
+  // «Не сохранять» drops it — nothing written. 390: the sheet's own question; 820/1280: the core's window over the column
+  await tid("attr-close").getByRole("button").click();
+  await tid("unsaved-ask").waitFor({ timeout: 5000 });
+  for (const id of ["unsaved-save", "unsaved-discard", "unsaved-back"]) {
+    const bb = await tid(id).boundingBox();
+    h.expect(bb && bb.height >= 43.5, `${id}: 44 visible (${bb && bb.height})`);
   }
+  h.expect(/длина/.test(await tid("unsaved-ask").innerText()), "the question says what changed");
+  await h.shot("unsaved");
+  await tid("unsaved-back").click();
+  await tid("unsaved-ask").waitFor({ state: "detached", timeout: 5000 });
+  h.expect(/Коричневый/.test(await attrValue(p, "attr-color")), "«Назад»: the window is there with the copy");
+  await tid("attr-close").getByRole("button").click();
+  await tid("unsaved-discard").click();
+  if (wide) await tid("draw-panel-empty").waitFor({ timeout: 5000 });
+  else await panel().first().waitFor({ state: "detached", timeout: 5000 });
+  const after = await storedRun();
+  h.expect(after.attrs.color === before.attrs.color && after.geom.lengthIn === lenBefore, "«Не сохранять»: nothing written");
+  if (wide) await p.mouse.click((a0[0] + a1[0]) / 2, y); // the «Желоб» tool: a tap picks, the panel shows it
+  await open();
+  h.expect(!/Коричневый/.test(await attrValue(p, "attr-color")), "opened again: the window shows what is saved, not the dropped copy");
+  await chooseAttr(p, "attr-color", "brown");
+  await tid("attr-length-ft").locator("input").fill("30");
+  await tid("attr-length-in").locator("input").fill("0");
+  await tid("attr-length-fracs-1-2").click();
 
   // «Сохранить»: colour and length at once
   await saveAttrs(p);

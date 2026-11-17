@@ -11,7 +11,7 @@
  */
 import { sizeText } from "../sizeText";
 import { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
-import { applyDraft, draftOf, isDirty, patchDraft, setDraftLen, type AttrDraft, type LenFields } from "./attrDraft";
+import { applyDraft, draftChanges, draftOf, isDirty, patchDraft, setDraftLen, type AttrDraft, type LenFields } from "./attrDraft";
 import { useWindowDimensions, View } from "react-native";
 import { router, Stack, useLocalSearchParams, type Href } from "expo-router";
 import * as Crypto from "expo-crypto";
@@ -27,7 +27,7 @@ import { moduleHref, moduleState } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, ChoiceChips, IconButton, StatusChip, Toggle } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Menu, Sheet, useToast } from "@/ui/overlays";
+import { Menu, Sheet, UnsavedDialog, useSheetClose, useToast } from "@/ui/overlays";
 import { Banner } from "@/ui/banner";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
@@ -77,6 +77,20 @@ const FINGER = sizes.hitMin / 2;
 
 /** a window opened BY a tap waits `durFast`: the `click` the browser sends after the touch — late on a busy page — must not land in it (see the tap handler) */
 const afterTap = (f: () => void) => setTimeout(f, motion.durFast);
+
+/**
+ * «Закрыть | Сохранить» at the bottom of the window (DS §7.3 exception of Gutters): 44 each, half the width. In the phone's sheet
+ * «Закрыть» is the sheet's own close (`useSheetClose`: asks «Сохранить изменения?» over an unsaved copy); in the column the owner's.
+ */
+function WinFoot({ onClose, onSave, closeLabel, saveLabel }: { onClose: () => void; onSave: () => void; closeLabel: string; saveLabel: string }) {
+  const sheetClose = useSheetClose();
+  return (
+    <View style={{ flexDirection: "row", gap: space[3] }} testID="attr-foot">
+      <View style={{ flex: 1 }} testID="attr-close"><Button label={closeLabel} variant="secondary" size="bar" full onPress={sheetClose ?? onClose} /></View>
+      <View style={{ flex: 1 }} testID="attr-save"><Button label={saveLabel} size="bar" full onPress={onSave} /></View>
+    </View>
+  );
+}
 /** the width of a magnet's window across a ray, in the finger's pixels (a quarter of a hit target; plan inches = px ÷ scale, #818) */
 const SNAP_PX = sizes.hitMin / 4;
 /** a tap this soon after a two-finger gesture began or ended is not a tap */
@@ -838,10 +852,12 @@ export default function DrawScreen() {
     setLenBad(false);
     setSelected(next);
   };
-  // TEMP (#1858): the question over the panel comes from the core (Экраны №9, after #1964/#1975) — until then the copy is dropped
-  useEffect(() => {
-    if (askNext) resolveAsk("discard");
-  }, [askNext]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** what the question says is changed: «Изменён цвет», «Изменена длина», both (DS §7.3: the question names what goes) */
+  const askText = (() => {
+    if (!winFor) return undefined;
+    const x = draftChanges(winFor.base, winFor.dr);
+    return x.attrs && x.length ? t("mod.gutters.win.askBoth") : x.length ? t("mod.gutters.win.askLen") : x.attrs ? t("mod.gutters.win.askAttrs") : undefined;
+  })();
   // the corners of the picked run (M7c): stored on its runs, else the company's method
   const runCorners: RunCorner[] =
     sel && "a" in sel
@@ -901,12 +917,7 @@ export default function DrawScreen() {
     </>
   );
   /** «Закрыть | Сохранить» at the bottom of the window (DS §7.3 exception of Gutters): 44 each, half the width, no «✕» on top */
-  const winFoot = (
-    <View style={{ flexDirection: "row", gap: space[3] }} testID="attr-foot">
-      <View style={{ flex: 1 }} testID="attr-close"><Button label={t("mod.gutters.win.close")} variant="secondary" size="bar" full onPress={onWinClose} /></View>
-      <View style={{ flex: 1 }} testID="attr-save"><Button label={t("mod.gutters.win.save")} size="bar" full onPress={onWinSave} /></View>
-    </View>
-  );
+  const winFoot = <WinFoot onClose={onWinClose} onSave={onWinSave} closeLabel={t("mod.gutters.win.close")} saveLabel={t("mod.gutters.win.save")} />;
   // «Новые желоба» / «Новые водостоки» (#1563 PR B): the rows of a gutter's / downspout's properties, for the new ones of this drawing
   const newTitle = newSheet === "line" ? t("mod.gutters.draw.newDefaults.runs") : t("mod.gutters.draw.newDefaults.ds");
   const newOwn = newSheet === "line" ? newDef.run : newDef.ds;
@@ -1503,8 +1514,10 @@ export default function DrawScreen() {
           )}
         </View>
       ) : null}
+      {/* 820/1280: «Закрыть» or another pick over an unsaved panel — the core's question (DS §7.3): Сохранить · Не сохранять · Назад */}
+      <UnsavedDialog visible={wide && !!askNext} text={askText} onSave={() => resolveAsk("save")} onDiscard={() => resolveAsk("discard")} onBack={() => resolveAsk("back")} />
       {/* 390: no title (no «✕»: «Закрыть | Сохранить» pinned at the bottom, DS §7.3 exception); a swipe, the scrim or «Закрыть» over an unsaved copy ask first */}
-      <Sheet visible={!wide && sheet && !!attrs && !newSheet} onClose={leaveWin} dirty={dirty} onSave={onWinSave} footer={winFoot}>
+      <Sheet visible={!wide && sheet && !!attrs && !newSheet} onClose={leaveWin} dirty={dirty} onSave={onWinSave} footer={winFoot} askBack askText={askText}>
         <AttrBody inSheet>{attrs}</AttrBody>
       </Sheet>
       <Sheet visible={!wide && !!newSheet} onClose={() => setNewSheet(null)} title={newSheet ? newTitle : undefined}>
