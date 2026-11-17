@@ -10,6 +10,9 @@ import { catalogMatch } from "../src/features/catalogMatch";
 import { colouredPart, groupAttrs, groupText, priceGroupKey, transitionGroups, transitionWrites } from "../src/modules/gutters/prices/groups";
 import { findItem, matchAttrs, missingItems, laborRows } from "../src/modules/gutters/prices";
 import { linesFromParts, resyncLines } from "../src/modules/gutters/estimate";
+import { jobMaterialNeeds } from "../src/features/purchaseOrders";
+import { starterLookup } from "../src/features/estimateTemplate";
+import type { DB } from "../src/data/types";
 
 const it_ = (id: string, color: string | undefined, o: Partial<CatalogItem> = {}): CatalogItem => ({
   id,
@@ -142,6 +145,48 @@ describe("деньги: старые сметы не меняются, пока 
     const updated = resyncLines(saved, linesFromParts(parts, cat1, name, uid));
     expect(total(updated)).toBe(100 * 800 + 100 * 800);
     expect(updated.map((l) => l.catalogItemId).sort()).toEqual(["b", "w"]);
+    // two lines, one per colour; the line keys (sourceKey) are the ones of the saved estimate
+    expect(updated).toHaveLength(2);
+    expect(updated.map((l) => l.source?.key).sort()).toEqual(saved.map((l) => l.source?.key).sort());
+    expect(Object.fromEntries(updated.map((l) => [l.catalogItemId, l.unitPriceCents]))).toEqual({ w: 800, b: 800 });
+  });
+});
+
+describe("стык «замер → смета» по обе стороны перехода (§7, story-map S5g)", () => {
+  const cat0 = () => [it_("w", "white", { updatedAt: "2026-11-12T00:00:00Z" }), it_("b", "brown", { priceCents: 900, costCents: 450 })];
+  const moved = (cat: CatalogItem[]) => {
+    const g = transitionGroups(cat)[0]!;
+    return transitionWrites(g, g.options.findIndex((o) => o.priceCents === 800), true);
+  };
+  /** an approved estimate of the measurement and its job: what the supplier's order is made from */
+  const db = (catalog: CatalogItem[], lines: ReturnType<typeof linesFromParts>) =>
+    ({
+      catalog,
+      jobLines: [],
+      jobs: [{ id: "j1", estimateId: "e1" }],
+      estimates: [{ id: "e1", status: "approved", doc: { options: [{ id: "o1", name: "A", lines }] }, approval: { optionId: "o1", addonIds: [] } }],
+    }) as unknown as DB;
+  it("С14: заказ поставщику (jobMaterialNeeds) — по цветам до перехода, после перехода и после «Обновить смету»: две позиции, 100 ft каждая", () => {
+    const parts = [part("white"), part("brown")];
+    const c0 = cat0();
+    const saved = linesFromParts(parts, c0, name, uid);
+    const want = [{ catalogItemId: "w", qty: "100" }, { catalogItemId: "b", qty: "100" }];
+    const sort = (xs: { catalogItemId: string; qty: string }[]) => [...xs].sort((a, b) => a.catalogItemId.localeCompare(b.catalogItemId));
+    expect(sort(jobMaterialNeeds(db(c0, saved), "j1"))).toEqual(sort(want));
+    const c1 = moved(c0);
+    expect(sort(jobMaterialNeeds(db(c1, saved), "j1"))).toEqual(sort(want));
+    const updated = resyncLines(saved, linesFromParts(parts, c1, name, uid));
+    expect(sort(jobMaterialNeeds(db(c1, updated), "j1"))).toEqual(sort(want));
+  });
+  it("С15: начальная смета (starterLookup) с цветом компании находит ту же позицию до и после перехода; без цвета — «несколько» и до, и после", () => {
+    const c0 = cat0(), c1 = moved(c0);
+    const white = matchAttrs(part("white")), brown = matchAttrs(part("brown"));
+    expect(starterLookup(c0, { part: "gutter" }, "ft", white).item?.id).toBe("w");
+    expect(starterLookup(c1, { part: "gutter" }, "ft", white).item?.id).toBe("w");
+    expect(starterLookup(c0, { part: "gutter" }, "ft", brown).item?.id).toBe("b");
+    expect(starterLookup(c1, { part: "gutter" }, "ft", brown).item?.id).toBe("b");
+    expect(starterLookup(c0, { part: "gutter" }, "ft").why).toBe("several");
+    expect(starterLookup(c1, { part: "gutter" }, "ft").why).toBe("several");
   });
 });
 

@@ -51,7 +51,6 @@ export function TransitionSheet({ visible, groups, onClose, onDone }: { visible:
       visible={visible}
       onClose={onClose}
       title={t(k("title"))}
-      height="large"
       footer={<View testID="gpr-pg-do"><Button label={t(k("do"))} size="bar" full onPress={() => onDone(choice)} /></View>}
     >
       <View style={{ gap: space[4] }} testID="gpr-pg-sheet">
@@ -63,10 +62,8 @@ export function TransitionSheet({ visible, groups, onClose, onDone }: { visible:
           const pick = choice[g.key] ?? g.suggested;
           return (
             <FieldGroup key={g.key} title={groupName(t, g.items[0]!)} testID={`gpr-pg-${g.key.slice(-16)}`}>
-              {/* «было»: each price with its colours — «White, Brown · $8.00 / ft» */}
-              {g.options.map((_, i) => (
-                <T key={i} v="caption" tone="mut">{`${colours(g, i)} · ${priceOf(g, i)}`}</T>
-              ))}
+              {/* «было» in one line: «Белый $8 / ft · Коричневый $9 / ft» (the spec's «было → станет»: the field under it is «станет») */}
+              <T v="caption" tone="mut">{g.options.map((_, i) => `${colours(g, i)} ${priceOf(g, i)}`).join(" · ")}</T>
               <SelectField
                 label={t(k("price"))}
                 testID={`gpr-pg-pick-${g.key.slice(-16)}`}

@@ -163,13 +163,14 @@ export default function GutterPricesScreen() {
           />
         ) : !staff ? (
           <Banner tone="info" testID="gpr-ro" title={t(k("askOffice"))} />
+        ) : missing.length ? (
+          // the most urgent first (DS §15.3, design review of #1913 PR3): parts with no item (warn) before «one price» (info)
+          <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
         ) : groups.length && !canGroup ? (
           // the transition is the owner's or the office's (it moves prices with our costs): the others are told who does it
           <Banner tone="info" testID="gpr-pg-ask" title={t("mod.gutters.pg.askOwner")} />
         ) : groups.length ? (
           <Banner tone="info" testID="gpr-pg" title={t("mod.gutters.pg.banner", { n: groups.length })} hint={t("mod.gutters.pg.bannerHint")} action={{ label: t("mod.gutters.pg.open"), onPress: () => setPgOpen(true) }} />
-        ) : missing.length ? (
-          <Banner tone="warn" testID="gpr-missing-n" title={t(k("missingN"), { n: missing.length })} hint={t(k("makeHint"))} action={{ label: t(k("makeAll"), { n: missing.length }), onPress: () => make(missing) }} />
         ) : (
           // everything is in the price list (#1873: sample prices carry no mark)
           <Banner tone="ok" testID="gpr-all-found" title={t(k("allFound"))} />

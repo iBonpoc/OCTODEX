@@ -44,6 +44,7 @@ exports.run = async (h) => {
   await pick.click();
   await p.getByRole("menu").locator("visible=true").first().getByRole("menuitem").filter({ hasText: /\$9(\.00)? \// }).first().click();
   await tid("gpr-pg-sheet").getByText("Выбрано вами").waitFor({ timeout: 5000 });
+  await h.shot("picked"); // the person's own choice: «Выбрано вами» instead of the suggestion's why (§7а п.3)
   await tid("gpr-pg-do").getByRole("button").click();
   await tid("gpr-pg-sheet").waitFor({ state: "detached", timeout: 5000 });
   await p.waitForFunction((k) => {
