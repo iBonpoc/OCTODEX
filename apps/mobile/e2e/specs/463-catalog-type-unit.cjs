@@ -10,6 +10,7 @@
 const DB_KEY = "octo.db.v5";
 const ID = "cat-e2e-463";
 const NAME = "Counted Coil 463";
+const OWN_ID = "cat-e2e-463-own";
 
 exports.run = async (h) => {
   const p = h.page;
@@ -54,7 +55,9 @@ exports.run = async (h) => {
     await h.go("/catalog");
     await p.waitForFunction((k) => !!JSON.parse(localStorage.getItem(k) || "null")?.db, DB_KEY, { timeout: 8000 });
     const raw = await p.evaluate((k) => JSON.parse(localStorage.getItem(k)), DB_KEY);
-    raw.db.catalog = [...raw.db.catalog.filter((x) => x.id !== ID), { id: ID, kind: "material", name: NAME, unit: "ft", priceCents: 6000, priceFromCost: true }];
+    raw.db.catalog = [...raw.db.catalog.filter((x) => x.id !== ID && x.id !== OWN_ID), { id: ID, kind: "material", name: NAME, unit: "ft", priceCents: 6000, priceFromCost: true },
+      // an item saved before the list: its unit is not one of it (#1869 review: shown as «Своя…» with its text, not lost)
+      { id: OWN_ID, kind: "service", name: "Old Unit 463", unit: "bundle of 10", priceCents: 2500 }];
     raw.db.costsVisible = costsVisible;
     await h.seed(DB_KEY, raw);
   };
@@ -70,4 +73,14 @@ exports.run = async (h) => {
   await h.go(`/catalog/${ID}`);
   await tid("catalog-name").waitFor({ timeout: 8000 });
   h.expect((await tid("catalog-kind-locked").count()) === 0 && (await tid("catalog-kind-button").getAttribute("aria-disabled")) !== "true", "the office changes the type, no lock words");
+
+  // an old item with its own unit: «Своя…» and the field with its text; a save keeps the unit as it was
+  await h.go(`/catalog/${OWN_ID}`);
+  await tid("catalog-unit-own").waitFor({ timeout: 8000 });
+  h.expect(/Своя/.test(await tid("catalog-unit-button").innerText()), "«Единица · Своя…» for a unit not in the list");
+  h.expect((await tid("catalog-unit-own").locator("input").first().inputValue()) === "bundle of 10", "the own unit's text is there");
+  await tid("catalog-name").locator("input").first().fill("Old Unit 463 b");
+  await tid("catalog-save").locator('[role="button"]').first().click();
+  await stored("Old Unit 463 b");
+  h.expect((await h.db()).catalog.find((x) => x.id === OWN_ID).unit === "bundle of 10", "a save keeps the old unit");
 };
