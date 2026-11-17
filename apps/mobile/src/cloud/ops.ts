@@ -263,11 +263,15 @@ export type Op =
    *  phone or a second send never overwrites a price someone already set */
   /**
    * costs: the cost fields this save changed (19 §9) — only these are written; a field left out keeps the server's value
-   * (a cache without costs never erases them). No `costs` (an op queued by an older build): every cost field as before.
+   * (a cache without costs never erases them). No `costs` (an op queued by an older build): no cost field at all (#1958 —
+   * its three cached fields would put back a cost changed meanwhile; a cost change queued before the update is not sent),
+   * but onlyNew as before (an insert only).
+   * costsSeen (#1958 (а)): what the phone had in the same fields before the change — the server writes them only over
+   * that (catalog_set_item_costs), else 40001 row_version_conflict and nothing; none (a new item) — as before.
    */
   /** fields (spec 53-0): the item's columns this save changed (catalogItemChange) — an item already on the server gets only
    *  these (PRD 04 §9, merge by field); none (a new item, an op queued by an older build) — the whole row */
-  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; fields?: string[] }
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; costsSeen?: CatalogCostChange; fields?: string[] }
   /** #1913 (the price-key spec, §4.6): one price for the whole price group of `itemId` (catalog_set_group_price).
    *  `expected*` — the item's values on the phone before the change: someone else changed them first → 40001
    *  row_version_conflict, nothing written. Costs only for who sees them (absent otherwise). `group` — its priceGroup, for
@@ -1098,8 +1102,21 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.save": {
       const it = op.item;
-      const costCols = catalogCostCols(op);
+      // #1958 (а): an item already there whose cost this save changed — the cost goes over what the phone saw
+      // (catalog_set_item_costs), never in the item's row (t30 would put it over whatever is there)
+      const seen = op.costsSeen && !op.onlyNew && Object.keys(catalogCostCols(op)).length ? op.costsSeen : undefined;
+      const costCols = seen ? {} : catalogCostCols(op);
       const card = catalogCardCols(it);
+      const seenWrite = async () => {
+        const r = await supabase.rpc("catalog_set_item_costs", { p_item_id: it.id, p_costs: catalogCostCols(op), p_seen: costColsOf(seen!) });
+        // a server before the migration (no such function, PGRST202): the side table as before
+        if (r.error?.code === "PGRST202") {
+          const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...catalogCostCols(op) }, { onConflict: "item_id" });
+          if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
+          return;
+        }
+        await run(Promise.resolve(r));
+      };
       // spec 53-0 (PRD 04 §9 «merge by field»): an item already there gets only the columns this save changed — a save
       // queued on another phone before a price update never puts back the fields its person did not touch. A new item,
       // onlyNew and an op queued by an older build (no `fields`): the whole row, as before (rule 16)
@@ -1113,7 +1130,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         });
         const update = (row: Record<string, unknown>) => supabase.from("catalog_items").update(row).eq("id", it.id).eq("company_id", c).select("id");
         let row = pick();
-        if (!Object.keys(row).length) return; // nothing changed: nothing written
+        if (!Object.keys(row).length) return seen ? seenWrite() : undefined; // nothing else changed: only the cost
         r = await update(row);
         // the card's fields never cost the save (as the upsert below): a refused direction — without it alone; a server
         // before the migration (no such column) — without the card's fields
@@ -1126,7 +1143,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         if (refused) {
           row = pick(refused);
           // only the card's fields changed and the server takes none of them: nothing else to write
-          if (!Object.keys(row).length) return;
+          if (!Object.keys(row).length) return seen ? seenWrite() : undefined;
           r = await update(row);
         }
         await run(Promise.resolve(r));
@@ -1141,6 +1158,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         );
       if (op.fields && !op.onlyNew && r) {
         // written by field: the side table of costs as below
+        if (seen) return seenWrite();
         if (!op.costs || !Object.keys(costCols).length) return;
         const k = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
         if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
@@ -1162,6 +1180,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —
         // nothing written (an upsert sets only the columns it sends). No right to see costs (42501, sales) or a server
         // before the migration (no table) — the item itself is saved.
+        if (seen) return seenWrite();
         if (!op.costs || !Object.keys(costCols).length) return;
         const r = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
         if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
@@ -1339,10 +1358,24 @@ export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem
   }
   return out;
 }
-/** the cost columns a save writes: the changed ones; an old op without `costs` — all of them, as it did */
+/**
+ * the cost columns a save writes: the changed ones. An old op without `costs`: none (#1958 — its three cached fields
+ * would put back a cost changed meanwhile), but an onlyNew one all three as before (an insert that never touches a row
+ * already there: ON CONFLICT DO NOTHING moves no cost — T99)
+ */
 function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string, number | null> {
-  const ch: CatalogCostChange = op.costs ?? { costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null };
-  return Object.fromEntries((Object.keys(ch) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
+  if (!op.costs && op.onlyNew) return costColsOf({ costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null });
+  return costColsOf(op.costs ?? {});
+}
+const costColsOf = (ch: CatalogCostChange): Record<string, number | null> =>
+  Object.fromEntries((Object.keys(ch).filter((f) => f in COST_COL) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
+/**
+ * #1958 (а): what the phone had in the fields it changed, before the change — from the item as the phone saw it. Only for
+ * an item already there (a new one has nothing to be changed meanwhile).
+ */
+export function catalogCostSeen(prev: CatalogItem | undefined, costs: CatalogCostChange): CatalogCostChange | undefined {
+  if (!prev || !Object.keys(costs).length) return undefined;
+  return Object.fromEntries((Object.keys(costs) as (keyof CatalogCostChange)[]).map((f) => [f, prev[f] ?? null]));
 }
 
 /**
