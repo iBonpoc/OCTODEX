@@ -4,7 +4,7 @@
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
 import { useHeldSheet } from "@/ui/heldSheet";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Linking, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
@@ -19,16 +19,18 @@ import { useI18n, type DictKey } from "@/i18n";
 import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
-import { DatePick, dayOffsetOf } from "@/features/DatePick";
+import { dayOffsetOf } from "@/features/DatePick";
+import { DateField } from "@/ui/dateField";
+import { SelectField } from "@/ui/selectField";
 import { addDays, isoDayKey, todayKey, type DayKey } from "@/features/calendar";
 import { formDayOffset } from "@/features/planFeed";
 import { minuteIn } from "@/features/zone";
-import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { Button, IconButton, Stepper, TextField } from "@/ui/controls";
 import { OptionRows } from "@/ui/optionRow";
 import { ToggleRow } from "@/ui/toggleRow";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
+import { Card, Divider, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
 import { cancelNotice } from "@/features/cancelNotify";
@@ -36,6 +38,10 @@ import { NO_UNDO } from "@/data/undo";
 import { StatusNote } from "@/ui/statusNote";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string; allDay?: boolean };
+
+/** «Начало ⌄»: the first 12 free slots as before (a menu, not a sheet: MENU_MAX), the chosen minute always among them */
+export const startMinutes = (slots: number[], chosen: number): number[] =>
+  (slots.slice(0, 12).includes(chosen) ? slots.slice(0, 12) : [...slots.slice(0, 11), chosen]).sort((x, y) => x - y);
 
 /** a day of the company, `offset` days after its today (the form works on the company's calendar, П4b) */
 const dayAt = (offset: number) => addDays(todayKey(), offset);
@@ -103,15 +109,8 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
   const { db, role } = useStore();
   const planner = canPlan([role]);
-  const { t, tn, day, dayOf, time } = useI18n();
-  const [calendar, setCalendar] = useState(false);
+  const { t, tn, day, time } = useI18n();
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  const days = useMemo(() => {
-    const label = (i: number) => (i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : dayOf(dayAt(i)));
-    const list = Array.from({ length: SCHEDULE_DEFAULTS.formDays }, (_, i) => ({ key: String(i), label: label(i) }));
-    // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
-    return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
-  }, [t, dayOf, f.dayOffset]);
   const range = (v: Visit) => visitWhen(v, time, t("plan5.allDay"));
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
@@ -119,30 +118,22 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   };
   return (
     <View style={{ gap: space[3] }}>
-      <Field label={t("sch.date")}>
-        <ChoiceChips value={String(f.dayOffset)} onChange={(k) => { f.setDayOffset(Number(k)); f.setMinute(null); }} items={days} />
-        {f.exceptId ? (
-          // moving a visit: quick dates on the company's calendar and clock (13 §3.6)
-          <RowView style={{ flexWrap: "wrap" }}>
-            {quickStarts(todayKey(), minuteIn(new Date().toISOString())).map((q) => (
-              <Button
-                key={q.key}
-                label={t(`job3.q.${q.key}` as DictKey, { time: time(atMinute(q.day, q.minute)) })}
-                size="sm"
-                variant="secondary"
-                onPress={() => { f.setDayOffset(dayOffsetOf(q.day)); f.setMinute(q.minute); }}
-              />
-            ))}
-          </RowView>
-        ) : null}
-        <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
-        {calendar ? (
-          <DatePick
-            value={f.day}
-            onPick={(k) => { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); setCalendar(false); }}
-          />
-        ) : null}
-      </Field>
+      {/* the day — one row, the calendar opens under it (DS А7, spec 56 §3: «день в форме — DateField»); the company's days */}
+      <DateField testID="vf-date" label={t("sch.date")} value={f.day} onChange={(k) => { if (k) { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); } }} />
+      {f.exceptId ? (
+        // moving a visit: quick dates on the company's calendar and clock (13 §3.6)
+        <RowView style={{ flexWrap: "wrap" }}>
+          {quickStarts(todayKey(), minuteIn(new Date().toISOString())).map((q) => (
+            <Button
+              key={q.key}
+              label={t(`job3.q.${q.key}` as DictKey, { time: time(atMinute(q.day, q.minute)) })}
+              size="sm"
+              variant="secondary"
+              onPress={() => { f.setDayOffset(dayOffsetOf(q.day)); f.setMinute(q.minute); }}
+            />
+          ))}
+        </RowView>
+      ) : null}
       <Field label={t("sch.tech")}>
         {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
         {!planner ? <T v="body" tone="mut">{t("vf.dispatcherAssigns")}</T> : <T v="caption" tone="mut">{t("vf.techsHint")}</T>}
@@ -171,11 +162,14 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
       ) : null}
       {f.allDay ? null : (<>
       <Field label={t("sch.start")}>
+        {/* «Начало ⌄» — the free slots of the day (display only: the busy rule is formWarnings/freeSlots, unchanged); ± below */}
         {f.slots.length ? (
-          <ChoiceChips
+          <SelectField<string>
+            testID="vf-start"
+            label={t("sch.start")}
             value={String(f.startMin)}
+            items={startMinutes(f.slots, f.startMin).map((m) => ({ key: String(m), label: time(atMinute(f.day, m)) }))}
             onChange={(k) => f.setMinute(Number(k))}
-            items={f.slots.slice(0, 12).map((m) => ({ key: String(m), label: time(atMinute(f.day, m)) }))}
           />
         ) : (
           <T v="caption" tone="mut">{t("vf.noSlots")}</T>
@@ -371,9 +365,14 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
   };
   return (
     <Sheet visible={!!visitId} onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
-      {CANCEL_REASONS.map((r) => (
-        <ListRow key={r} title={`${reason === r ? "✓ " : ""}${t(`vc.r.${r}` as DictKey)}`} onPress={() => setReason(r)} />
-      ))}
+      {/* the reason — the one question of this sheet: rows, the chosen one with a check on the right (spec 56 §3 row 5) */}
+      <OptionRows<CancelReason>
+        testID="vc-reason"
+        label={t("vc.title")}
+        items={CANCEL_REASONS.map((r) => ({ key: r, title: t(`vc.r.${r}` as DictKey) }))}
+        value={reason}
+        onChange={setReason}
+      />
       {reason === "other" ? <TextField type="note" value={text} onChangeText={setText} placeholder={t("vc.otherPh")} /> : null}
       <Divider />
       {leadBack ? <T v="caption" tone="mut">{t("vc.leadBack")}</T> : null}

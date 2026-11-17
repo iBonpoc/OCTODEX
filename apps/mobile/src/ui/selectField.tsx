@@ -30,6 +30,7 @@ export function SelectField<K extends string>({
   field,
   labelAbove,
   onOpen,
+  expanded,
 }: {
   label: string;
   value: K | null | undefined;
@@ -49,6 +50,8 @@ export function SelectField<K extends string>({
   /** the owner's own sheet opens instead of the menu — a list with groups and «＋ Новый …» (the sources, spec 56 §3а.5); `items` then
    *  only name the chosen value */
   onOpen?: () => void;
+  /** with `onOpen`: what the owner opened under the row is open now (DateField's calendar) — read to the screen reader */
+  expanded?: boolean;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
@@ -92,7 +95,9 @@ export function SelectField<K extends string>({
           // the web reads the label instead of the button's text and ignores the value: the chosen one goes into the label
           accessibilityLabel={Platform.OS === "web" ? `${label}, ${shown}` : label}
           accessibilityValue={{ text: shown }}
-          accessibilityState={{ expanded: !!anchor || picker, disabled: !!(disabled || ro) }}
+          accessibilityState={{ expanded: !!anchor || picker || !!expanded, disabled: !!(disabled || ro) }}
+          // the web reads `aria-expanded` only when it is set on the element (as est-bar-total does)
+          {...({ "aria-expanded": !!anchor || picker || !!expanded } as object)}
           aria-haspopup={long || onOpen ? "dialog" : "menu"}
           style={{
             minHeight: size.fieldPhone,

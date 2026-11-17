@@ -12,26 +12,26 @@ import { IconButton } from "@/ui/controls";
 import { fillStyle } from "@/ui/fill";
 import { Press, T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { SelectedCheck } from "@/ui/selectedCheck";
 
 /**
- * «Другая дата» in the visit form (docs/specs/03 §7.1, wave П3b): a month calendar. Past days cannot be picked; days off
- * are paler but can be picked (an emergency on Saturday is normal). The picked day has an ink frame — the one yellow of
- * the form stays the save button (rule 2).
+ * The month calendar of `DateField` (DS А7; docs/specs/03 §7.1): days before `min` (the company's today by default) cannot
+ * be picked; days off are paler but can be picked (an emergency on Saturday is normal). The picked day — «Заливка» and bold
+ * (DS §9.2; no corner check: spec 56 removed `SelectedCheck`); today — `surf2`. The one yellow of the form stays its save.
  */
-export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey) => void }) {
+export function DatePick({ value, onPick, min, testID }: { value: DayKey | null; onPick: (k: DayKey) => void; min?: DayKey; testID?: string }) {
   // days off of the company are paler (its hours by weekday, «Компания → Расписание»)
   const hours = businessHoursOf(useStore().db.company);
   const { t, lang } = useI18n();
   const { c } = useTheme();
-  const [month, setMonth] = useState<DayKey>(value);
+  const [month, setMonth] = useState<DayKey>(value ?? todayKey());
   const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
   const cells = monthGrid(month);
   const weeks = [0, 1, 2, 3, 4, 5].map((w) => cells.slice(w * 7, w * 7 + 7));
   // labels of calendar days (no zone); «today» is the company's (П4b)
   const title = formatDayKey(month, { month: "long", year: "numeric" }, loc);
   const today = todayKey();
-  const thisMonth = month.slice(0, 7) <= today.slice(0, 7);
+  const first = min ?? today;
+  const thisMonth = month.slice(0, 7) <= first.slice(0, 7);
   return (
     <View style={{ gap: space[1] }}>
       <RowView style={{ justifyContent: "space-between" }}>
@@ -49,12 +49,13 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
       {weeks.map((row) => (
         <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
           {row.map((x) => {
-            const past = x.key < today;
+            const past = x.key < first;
             const off = !isWorkday(x.key, hours);
             const selected = x.key === value;
             return (
               <Press
                 key={x.key}
+                testID={testID ? `${testID}-${x.key}` : undefined}
                 onPress={past ? undefined : () => onPick(x.key)}
                 disabled={past}
                 visibleHeight={component.rowCompact}
@@ -74,7 +75,6 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
                   justifyContent: "center",
                 }}
               >
-                {selected ? <SelectedCheck small /> : null}
                 <T v="caption" w={selected ? "bold" : "regular"} tabular>
                   {Number(x.key.slice(8))}
                 </T>

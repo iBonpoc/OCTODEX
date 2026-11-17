@@ -20,7 +20,7 @@ exports.run = async (h) => {
   // S9a: cancel the only visit of j2 → the job waits for a date
   await h.go("/visit/v2");
   await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
-  await h.sheet().getByRole("button", { name: "Мы отменили" }).click();
+  await h.sheet().getByRole("radio", { name: "Мы отменили" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(800);
 
   // the Plan: «Ждут даты · 1» with the client, the job and «Запланировать»
@@ -32,13 +32,16 @@ exports.run = async (h) => {
   // «Запланировать» → the visit form; «Другая дата» → next month, the 15th
   await p.getByRole("button", { name: "Запланировать", exact: true }).first().click(); await p.waitForTimeout(600);
   h.expect(/\/job\/schedule/.test(p.url()), `the form for the job opens (${p.url()})`);
-  await p.getByRole("button", { name: "Другая дата" }).first().click(); await p.waitForTimeout(300);
-  await p.getByRole("button", { name: "Вперёд" }).last().click(); await p.waitForTimeout(200);
+  await p.getByTestId("vf-date-row-button").locator("visible=true").first().click(); // the day — DateField (spec 56 wave 5б)
+  await p.getByTestId("vf-date-panel").locator("visible=true").first().waitFor({ timeout: 4000 });
+  await p.getByTestId("vf-date-panel").locator("visible=true").first().getByRole("button", { name: "Вперёд" }).click();
   // next month of the company's calendar, the 15th (a day key: labelled in UTC, as the calendar does — П4b)
   const [ny, nm] = todayKey().split("-").map(Number);
   const nextKey = new Date(Date.UTC(ny, nm, 15)).toISOString().slice(0, 10);
   const label = new Intl.DateTimeFormat("ru-RU", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).format(new Date(`${nextKey}T12:00:00Z`));
-  await p.getByRole("button", { name: label, exact: true }).click(); await p.waitForTimeout(300);
+  const cell = p.getByTestId(`vf-date-day-${nextKey}`).locator("visible=true").first();
+  h.expect((await cell.getAttribute("aria-label")) === label, `the day says its full date (${label})`);
+  await cell.click();
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(400);
   db = await h.db();

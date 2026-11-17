@@ -25,7 +25,7 @@ exports.run = async (h) => {
   await h.go("/visit/v1");
   await p.evaluate(() => { window.__opened = []; window.open = (u) => { window.__opened.push(String(u)); return null; }; });
   await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
-  await h.sheet().getByRole("button", { name: "Клиент отменил" }).click();
+  await h.sheet().getByRole("radio", { name: "Клиент отменил" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.expectText(/Сообщить клиенту об отмене\?/, "after the cancel the office is asked to tell the client");
   await h.expectText(/visita de trabajo .+ está cancelada/, "the text is in the client's language (es), not the app's");
@@ -56,7 +56,7 @@ exports.run = async (h) => {
   h.expect(!!v, "inspection booked");
   await h.go(`/visit/${v.id}`);
   await p.getByRole("button", { name: "Отменить выезд", exact: true }).first().click(); await p.waitForTimeout(400);
-  await h.sheet().getByRole("button", { name: "Мы отменили" }).click();
+  await h.sheet().getByRole("radio", { name: "Мы отменили" }).click(); // the reason — a row with a check (spec 56 wave 5б)
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.expectText(/Сообщить клиенту об отмене\?/, "S4a: asked after an inspection cancel too");
   await h.expectText(/осмотр .+ отменён|estimate visit .+ is cancelled|visita de evaluación .+ está cancelada/, "the inspection text");
