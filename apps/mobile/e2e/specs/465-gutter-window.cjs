@@ -9,6 +9,7 @@
  * Finds things by testID; waits on what it checks.
  */
 const { attrValue, chooseAttr, openProps, saveAttrs, skipLength } = require("../gutters.cjs");
+const { settle } = require("../settle.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -19,7 +20,7 @@ exports.run = async (h) => {
   const labels = () => svg().locator("text").evaluateAll((ts) => ts.map((t) => t.textContent || ""));
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
-    for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
+    for (let i = 0; i < tries && !v; i++) { await settle(p, { quietMs: 100, maxMs: 300 }); v = await ok(); }
     h.expect(!!v, what);
   };
   const storedRun = () =>
@@ -73,7 +74,8 @@ exports.run = async (h) => {
   await tid("attr-length-ft").locator("input").fill("30");
   await tid("attr-length-in").locator("input").fill("0");
   await tid("attr-length-fracs-1-2").click();
-  await p.waitForTimeout(1300); // the drawing's save runs a second after an edit: none must come
+  // the page quiet, then «leaving» (settle sends pagehide): the drawing writes whatever waits — the copy must not be in it
+  await settle(p, { quietMs: 600, maxMs: 3000 });
   const mid = await storedRun();
   h.expect(mid.attrs.color === before.attrs.color && mid.geom.lengthIn === lenBefore, "not saved yet: the store has the old colour and length");
   h.expect((await labels()).every((t) => !/30′/.test(t)), "not saved yet: the drawing has the old length");
