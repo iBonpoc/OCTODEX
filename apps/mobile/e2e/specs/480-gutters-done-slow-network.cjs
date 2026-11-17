@@ -1,5 +1,5 @@
 /**
- * e2e 480 — «Готово» на чертеже не ждёт сеть (#2019; spec 33-gutters-workflow «Готово без сети», С1, С2). Every view.
+ * e2e 480 — «Готово» на чертеже не ждёт сеть (#2019; spec 33-gutters-workflow «Готово без сети и при медленной сети», С1 — медленная сеть, С2 — без сети). Every view.
  * The drawing is written on the phone at once (the queue sends it later, rule 6): with the network gone, and with every request answered
  * only after 30 s (the browser holds them — page.route, no sleeping), «Готово» opens «Просмотр замера» at once and the measurement is
  * in the phone's data. Finds things by testID and the store; waits on what it checks.
@@ -37,7 +37,7 @@ exports.run = async (h) => {
   await tid("module-gutters-enable").getByRole("button").click();
   await p.waitForFunction((k) => !!(JSON.parse(localStorage.getItem(k) || "null") || {}).db?.company?.modules?.gutters?.enabled, DB_KEY, { timeout: 8000 });
 
-  // С2: every request answered only after 30 s (the browser holds it)
+  // С1: every request answered only after 30 s (the browser holds it)
   const held = [];
   await p.route("**/*", (route) => {
     const u = route.request().url();
@@ -49,16 +49,16 @@ exports.run = async (h) => {
   await tid("module-gutters-measure").getByRole("button").click();
   await draw(0.4);
   const mid = new URL(p.url()).searchParams.get("m");
-  await doneWithin(2000, "a 30 s network");
+  await doneWithin(2000, "С1: a 30 s network");
   h.expect(((await db())?.moduleData?.gutters?.measurements ?? []).some((m) => m.id === mid), "the measurement is in the phone's data");
   await p.unroute("**/*");
 
-  // С1: no network at all
+  // С2: no network at all
   // (the app is loaded: the network goes now, the canvas is opened inside the app — «Править чертёж»)
   await p.context().setOffline(true);
   await tid("view-edit").first().getByRole("button").click();
   await draw(0.6);
-  await doneWithin(2000, "no network");
+  await doneWithin(2000, "С2: no network");
   // the phone's copy is written a moment after a change (or when the page is left): wait for it, not for a time
   await settle(p, { quietMs: 300, maxMs: 3000 });
   await p.waitForFunction(([k, m]) => (((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements) || []).filter((e) => e.measurementId === m && e.kind === "run").length === 2, [DB_KEY, mid], { timeout: 8000 }).catch(() => h.expect(false, "both lines are in the phone's data"));
