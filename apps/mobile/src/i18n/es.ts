@@ -1005,6 +1005,7 @@ export const es: Dict = {
   "co.noLogo": "Aún sin logo",
   "co.pickLogo": "Elegir logo",
   "co.changeLogo": "Cambiar",
+  "co.removeLogo": "Quitar logotipo",
   "co.color": "Color de marca",
   "co.colorNote": "HEX, p. ej. #1E6FD9. Solo en documentos para el cliente.",
   "co.tradesNote": "La línea de trabajo no cambia presupuestos, clientes ni facturas: funcionan igual para todos. Elíjala en el lead, el presupuesto o el trabajo para ver cuál rinde más.",

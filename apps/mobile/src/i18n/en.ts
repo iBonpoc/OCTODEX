@@ -1005,6 +1005,7 @@ export const en: Dict = {
   "co.noLogo": "No logo yet",
   "co.pickLogo": "Choose a logo",
   "co.changeLogo": "Replace",
+  "co.removeLogo": "Remove logo",
   "co.color": "Brand color",
   "co.colorNote": "HEX, e.g. #1E6FD9. Used only on client documents.",
   "co.tradesNote": "A direction doesn't change estimates, clients or invoices: they work the same for everyone. Choose one on a lead, estimate or job to see which direction earns more.",
