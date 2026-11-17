@@ -533,7 +533,13 @@ export function Sheet({
     return { opacity: fade.value * scrimLevel(drag.value, sheetH.value || winH) };
   });
   const fullH = winH - insets.top - space[2];
-  const toastHere = useToastHost(open && visible);
+  const toastKey = useToastHost(open && visible);
+  // the toast stands above the sheet's pinned footer: the footer's top, from the window's bottom
+  const footerRef = useRef<React.ComponentRef<typeof View>>(null);
+  const footerUp = useCallback(
+    (then: (up: number) => void) => (footerRef.current ? footerRef.current.measureInWindow((_x: number, y: number) => then(Math.max(0, winH - y) + space[3])) : then(-1)),
+    [winH],
+  );
   const maxH = full || height === "large" ? fullH : height === "medium" ? winH * component.sheetMediumRatio : winH * component.sheetHeightRatio;
   return (
     <Modal visible={open} transparent animationType="none" onRequestClose={onBack ? () => { if (!leaving.current) onBack(); } : () => { if (!leaving.current && !live.current.onEscape?.()) requestClose(); }} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
@@ -688,7 +694,11 @@ export function Sheet({
               </GestureDetector>
             )}
             {footer && !ask ? (
-              <View testID="sheet-footer" style={{ paddingTop: space[2] }}>
+              <View
+                testID="sheet-footer"
+                ref={footerRef}
+                style={{ paddingTop: space[2] }}
+              >
                 {footer}
               </View>
             ) : null}
@@ -697,7 +707,7 @@ export function Sheet({
         </Animated.View>
       </KeyboardAvoidingView>
       {/* the toast of what is done in the sheet («⊖» → «Вернуть») stands over the sheet, not under its Modal */}
-      {toastHere}
+      <SheetToast hostKey={toastKey} footerUp={footer && !ask ? footerUp : undefined} />
       </GestureHandlerRootView>
     </ScreenScrollCtx.Provider>
     </Modal>
@@ -798,25 +808,43 @@ interface ToastItem {
 type ToastApi = { show: (text: string, undo?: GuardedUndo, opts?: { grow?: number }) => number; showing: (id: number) => boolean };
 const ToastCtx = createContext<ToastApi | null>(null);
 /**
- * Where the toast is drawn: an open sheet is a Modal over everything (a native window of its own), so a toast of the screen under it
- * would be hidden and its «Отменить» out of reach (spec 56 wave 4: «⊖» in «Контакты» offers «Вернуть»). The top open sheet hosts
- * the toast inside its Modal; with no sheet open the screen does.
+ * Where the toast is drawn (DS §15.2 «Место»): an open sheet is a Modal over everything (a native window of its own), so a toast of
+ * the screen under it would be hidden and its «Отменить» out of reach (spec 56 wave 4: «⊖» in «Контакты»). The top open sheet
+ * draws the toast inside its Modal, above its pinned footer; with no sheet open the screen does. Two contexts: the registration is
+ * stable (a toast never re-renders the sheets), the toast's state is read only by the small `SheetToast` of the top sheet.
  */
-type ToastHostApi = { view: (key: number) => ReactNode; host: (key: number, on: boolean) => void; top: number | null };
-const ToastHostCtx = createContext<ToastHostApi | null>(null);
+type ToastState = { item: ToastItem | null; top: number | null; done: () => void; late: (text: string) => void };
+const ToastHostRegCtx = createContext<((key: number, on: boolean) => void) | null>(null);
+const ToastStateCtx = createContext<ToastState | null>(null);
 let toastHostSeq = 0;
-/** a sheet that is open hosts the toast (the latest one opened); returns the toast to draw inside its Modal, or null */
-function useToastHost(open: boolean): ReactNode {
-  const ctx = useContext(ToastHostCtx);
+/** a sheet that is open hosts the toast (the latest one opened); returns its key */
+function useToastHost(open: boolean): number {
+  const host = useContext(ToastHostRegCtx);
   const key = useRef(0);
   if (!key.current) key.current = ++toastHostSeq;
-  const host = ctx?.host;
   useEffect(() => {
     if (!host) return;
     host(key.current, open);
     return () => host(key.current, false);
   }, [host, open]);
-  return ctx && open && ctx.top === key.current ? ctx.view(key.current) : null;
+  return key.current;
+}
+/**
+ * The toast inside a sheet's Modal: only for the top open sheet. With a pinned footer it stands above it — measured when the toast
+ * comes (the sheet has settled by then: no slide-in, the keyboard as it is now), drawn once measured.
+ */
+function SheetToast({ hostKey, footerUp }: { hostKey: number; footerUp?: (then: (up: number) => void) => void }) {
+  const st = useContext(ToastStateCtx);
+  const mine = !!st && st.top === hostKey;
+  const id = mine ? st!.item?.id : undefined;
+  const [at, setAt] = useState<{ id: number; up: number } | null>(null);
+  useEffect(() => {
+    if (id === undefined || !footerUp) return;
+    footerUp((up) => setAt({ id, up }));
+  }, [id, footerUp]);
+  if (!mine || !st!.item) return null;
+  if (footerUp && at?.id !== id) return null;
+  return <ToastView item={st!.item} onDone={st!.done} onLate={st!.late} bottomAt={footerUp && at && at.up >= 0 ? at.up : undefined} />;
 }
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -843,18 +871,23 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const [hosts, setHosts] = useState<number[]>([]);
   const host = useCallback((key: number, on: boolean) => setHosts((hs) => (on ? (hs.includes(key) ? hs : [...hs, key]) : hs.filter((k) => k !== key))), []);
   const top = hosts.length ? hosts[hosts.length - 1]! : null;
-  const view = (key: number) => <ToastView key={`host${key}`} item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} />;
+  const done = useCallback(() => setItem(null), [setItem]);
+  const late = useCallback((text: string) => show(text), [show]);
+  const api = useMemo(() => ({ show, showing }), [show, showing]);
+  const state = useMemo(() => ({ item, top, done, late }), [item, top, done, late]);
   return (
-    <ToastCtx.Provider value={{ show, showing }}>
-      <ToastHostCtx.Provider value={{ view, host, top }}>
-        {children}
-        {top === null ? <ToastView item={item} onDone={() => setItem(null)} onLate={(text) => show(text)} /> : null}
-      </ToastHostCtx.Provider>
+    <ToastCtx.Provider value={api}>
+      <ToastHostRegCtx.Provider value={host}>
+        <ToastStateCtx.Provider value={state}>
+          {children}
+          {top === null ? <ToastView item={item} onDone={done} onLate={late} /> : null}
+        </ToastStateCtx.Provider>
+      </ToastHostRegCtx.Provider>
     </ToastCtx.Provider>
   );
 }
 
-function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: () => void; onLate: (text: string) => void }) {
+function ToastView({ item, onDone, onLate, bottomAt }: { item: ToastItem | null; onDone: () => void; onLate: (text: string) => void; /** in a sheet: the bottom above its pinned footer */ bottomAt?: number }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const { wide } = useDevice();
@@ -866,11 +899,13 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
   if (!item) return null;
   // above the screen's pinned action bar when it has one (the toast must not cover «Сохранить»), on every width (DS §15.2; a
   // module's full-screen canvas gives the height of its bottom bar the same way — #1819: from 820 the toast lay on it too)
-  const bottom = wide ? toastBottom(wideToastBottom(insets.bottom), bar, space[3]) : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4], bar, space[3]);
+  const bottom = bottomAt ?? (wide ? toastBottom(wideToastBottom(insets.bottom), bar, space[3]) : toastBottom(Math.max(insets.bottom, space[3]) + size.tabbarH + space[4], bar, space[3]));
+  // a toast handed over between a sheet and the screen (the sheet saved and closed) is the same toast: it does not slide in again
+  const fresh = Date.now() - item.at < motion.durBase;
   return (
     <Animated.View
       key={item.id}
-      entering={reduce ? undefined : SlideInDown.duration(motion.durBase)}
+      entering={reduce || !fresh ? undefined : SlideInDown.duration(motion.durBase)}
       exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
       pointerEvents="box-none"
       style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]) + side, bottom, alignItems: "center", zIndex: 100 }}
@@ -897,6 +932,7 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
         {item.undo ? (
           <UndoButton
             key={item.at}
+            at={item.at}
             onPress={() => {
               // the second tap of the double tap that made the thing is not «Отменить» (item.at = when it showed or grew)
               if (!toastArmed(item.at, Date.now())) return;
@@ -914,16 +950,17 @@ function ToastView({ item, onDone, onLate }: { item: ToastItem | null; onDone: (
 const ARect = Animated.createAnimatedComponent(Rect);
 
 /** "Undo" with a ring around it that burns down over the 5 seconds the toast stays (reduced motion: static ring). */
-function UndoButton({ onPress }: { onPress: () => void }) {
+function UndoButton({ onPress, at }: { onPress: () => void; /** when the toast showed: the ring goes on from where it is (a toast handed over is not restarted) */ at: number }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const reduce = useReducedMotion();
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const left = useSharedValue(1);
   useEffect(() => {
-    left.value = 1;
-    if (!reduce) left.value = withTiming(0, { duration: motion.toastUndoMs, easing: Easing.linear });
-  }, [left, reduce]);
+    const gone = Math.min(Math.max(Date.now() - at, 0), motion.toastUndoMs);
+    left.value = 1 - gone / motion.toastUndoMs;
+    if (!reduce) left.value = withTiming(0, { duration: motion.toastUndoMs - gone, easing: Easing.linear });
+  }, [left, reduce, at]);
   const ring = component.toastRing;
   const w = (box?.w ?? 0) - ring;
   const h = (box?.h ?? 0) - ring;

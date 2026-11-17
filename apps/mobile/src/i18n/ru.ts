@@ -1578,7 +1578,7 @@ export const ru = {
   "src.kind": "Тип",
   "src.kind.marketplace": "Площадки",
   "src.kind.ads": "Реклама",
-  "src.kind.person": "Люди",
+  "src.kind.person": "По рекомендации",
   "src.kind.own": "Свои",
   "src.name": "Название или имя",
   "src.namePh": "Например: Коля (подрядчик), Nextdoor",
@@ -4545,6 +4545,11 @@ export const ru = {
   "cw4.tags": "Метки: {list}",
   "cw4.moreTags": "ещё {n}",
   "cw4.done": "Готово · {n}",
+  "cw4.billingOff": "Выключено — счета уходят на адрес объекта.",
+  "ds.ch.meta.title": "Одна строка фактов (А1в)",
+  "ds.ch.meta.hint": "Номер, статус и метки в одну строку без переноса; что не влезло — «+N». Нажатие на метки открывает их шторку.",
+  "ds.ch.meta.status": "Клиент",
+  "ds.ch.meta.tapped": "Нажаты метки",
   "cw4.reasonTitle": "Не обслуживаем: причина",
 } as const;
 

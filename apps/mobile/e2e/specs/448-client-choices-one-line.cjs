@@ -27,7 +27,7 @@ exports.run = async (h) => {
     const line = [...document.querySelectorAll('[data-testid="client-headline"]')].find((e) => e.offsetParent !== null);
     const r = (e) => e.getBoundingClientRect();
     const box = r(line);
-    const parts = [line.querySelector('[data-testid="client-status"]'), line.querySelector('[data-testid="client-tags"]')].filter(Boolean);
+    const parts = [line.querySelector('[data-testid="client-status"]'), line.querySelector('[data-testid="client-headline-tags"]')].filter(Boolean);
     return { lineH: box.height, parts: parts.map((e) => Math.round(r(e).top + r(e).height / 2)), lineMid: Math.round(box.top + box.height / 2) };
   });
   h.expect(tops.parts.length === 2, `status and tags are in the line (${tops.parts.length})`);
@@ -41,10 +41,10 @@ exports.run = async (h) => {
   await h.seed("octo.db.v5", raw);
   await h.go("/client/c1");
   await vis("client-headline").waitFor({ timeout: 8000 });
-  await shown("client-tags-more");
+  await shown("client-headline-more");
   const many = await p.evaluate(() => {
     const line = [...document.querySelectorAll('[data-testid="client-headline"]')].find((e) => e.offsetParent !== null);
-    const more = line.querySelector('[data-testid="client-tags-more"]');
+    const more = line.querySelector('[data-testid="client-headline-more"]');
     const lb = line.getBoundingClientRect();
     const mb = more.getBoundingClientRect();
     return { lineH: lb.height, moreRight: mb.right, lineRight: lb.right, text: more.innerText };
@@ -53,7 +53,7 @@ exports.run = async (h) => {
   h.expect(/^\+\d+$/.test(many.text.trim()) && many.moreRight <= many.lineRight + 1, `«+N» inside the line (${JSON.stringify(many)})`);
 
   // «Контакты · 2 ›» opens the sheet
-  h.expect(/Контакты\s*2\b/.test(await vis("client-people").innerText()), "the row «Контакты · 2»");
+  h.expect(/Контакты[\s\S]*Tom Mitchell[\s\S]*\b2\b/.test(await vis("client-people").innerText()), "the row «Контакты · 2»");
   await vis("client-people").getByRole("button").first().click();
   await h.sheet().getByTestId("people-sheet").waitFor({ timeout: 5000 });
   const sheet = h.sheet();
@@ -75,6 +75,17 @@ exports.run = async (h) => {
   await gone("people-0-phones-row-2");
   h.expect((await sheet.getByTestId("people-0-phones-row-1-value").locator("input").inputValue()) !== second, "«⊖» removed the number");
   await h.expectText(/Номер удалён/, "the toast offers to undo");
+  // the toast stands over the sheet (DS §15.2 «Место при открытой шторке»): «Вернуть» is the top thing at its point, above the footer
+  await shown("toast-undo");
+  const over = await p.evaluate(() => {
+    const u = [...document.querySelectorAll('[data-testid="toast-undo"]')].find((e) => e.offsetParent !== null);
+    const f = [...document.querySelectorAll('[data-testid="sheet-footer"]')].find((e) => e.offsetParent !== null);
+    const r = u.getBoundingClientRect();
+    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return { onTop: !!top && u.contains(top), bottom: r.bottom, footerTop: f ? f.getBoundingClientRect().top : null };
+  });
+  h.expect(over.onTop, `«Вернуть» is not covered by the sheet (${JSON.stringify(over)})`);
+  h.expect(over.footerTop === null || over.bottom <= over.footerTop, `the toast stands above the sheet's «Сохранить» (${JSON.stringify(over)})`);
   // «Отменить» works only toastArmMs after the toast showed (ui/toastArm.ts): press until the row is back (no fixed sleep)
   await expectBack(() => p.getByRole("button", { name: "Отменить", exact: true }).last().click(), "people-0-phones-row-2");
   h.expect((await sheet.getByTestId("people-0-phones-row-1-value").locator("input").inputValue()) === second, "«Отменить» brought the number back");
@@ -83,6 +94,10 @@ exports.run = async (h) => {
   await p.getByTestId("people-0-phones-row-2-label-primary").click();
   await p.getByRole("menu").waitFor({ state: "detached" });
   h.expect(/555-0188/.test(await sheet.getByTestId("people-0-phones-row-0-value").locator("input").inputValue()), "«Сделать основным» moved the number up");
+  h.expect(/основной/.test(await sheet.getByTestId("people-0-phones-row-0-note").innerText()), "«основной» under the first number");
+  // the fields of the group start at one x (the label slot has one width), the email too
+  const xs = await p.evaluate(() => ["people-0-phones-row-0-value", "people-0-phones-row-1-value", "people-0-emails-row-0-value"].map((id) => Math.round([...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.offsetParent !== null).getBoundingClientRect().left)));
+  h.expect(new Set(xs).size === 1, `the phone and email fields start at one x (${xs})`);
   // the language and «Кто это» are rows with a menu
   h.expect((await sheet.getByTestId("people-0-lang-button").count()) === 1 && (await sheet.getByTestId("people-1-role-button").count()) === 1, "«Язык ⌄» and «Кто это ⌄» are SelectField rows");
   await sheet.getByTestId("people-save").click();
@@ -101,6 +116,7 @@ exports.run = async (h) => {
   h.expect((await vis("client-source-button").getAttribute("aria-haspopup")) === "dialog", "«Источник ⌄» opens the sources' sheet");
   h.expect((await p.locator('[role="radio"]:visible, [role="tab"]:visible').count()) === 0, "no segments or chips in the form");
   h.expect((await p.getByTestId("client-billing-own-more").count()) === 0, "billing off: no address fields");
+  await h.expectText(/Выключено — счета уходят на адрес объекта/, "billing off says where the invoices go");
   await vis("client-billing-own").click();
   await shown("client-billing-own-more");
   h.expect((await vis("client-billing-own").getAttribute("aria-checked")) === "true", "the switch is on");

@@ -30,7 +30,7 @@ exports.run = async (h) => {
   await h.expectText(/Долг[\s\S]*\$0[\s\S]*Оплачено[\s\S]*\$582\b/, "owes / paid (one word each, #1417)");
   await h.expectText(/Контакты клиента[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
   // «Контакты · 2 ›» (spec 56 §3а.6): the client and the spouse
-  h.expect(/Контакты\s*2\b/.test(await p.getByTestId("client-people").locator("visible=true").first().innerText()), "the row «Контакты · 2»");
+  h.expect(/Контакты[\s\S]*Tom Mitchell[\s\S]*\b2\b/.test(await p.getByTestId("client-people").locator("visible=true").first().innerText()), "the row «Контакты · 2»");
   await h.expectText(/Выставлено/, "invoiced");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
@@ -90,7 +90,7 @@ exports.run = async (h) => {
   await h.go("/client/c1");
 
   // Tags sheet (rows with a check, «Готово · N»): add Favorite
-  await p.getByTestId("client-tags").locator("visible=true").first().click();
+  await p.getByTestId("client-headline-tags").locator("visible=true").first().click();
   await h.sheet().getByText("Избранный", { exact: true }).click();
   await h.sheet().getByTestId("tags-done").click();
   await sheetGone(p);

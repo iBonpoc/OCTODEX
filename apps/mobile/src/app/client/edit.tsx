@@ -136,6 +136,7 @@ export default function EditClient() {
           rows={phones.map((x) => ({ id: x.k, label: x.label, value: x.number }))}
           labels={(["mobile", "home", "work", "other"] as const).map((l) => ({ key: l, label: t(`phone.${l}`) }))}
           valueType="phone"
+          noteFor={(_r, k) => (k === 0 && phones.length > 1 ? t("person.primary") : undefined)}
           placeholder="(555) 555-0100"
           addLabel={t("cw4.addPhone")}
           removeLabel={t("cw4.removePhone")}
@@ -150,6 +151,7 @@ export default function EditClient() {
           rows={emails.map((x) => ({ id: x.k, label: "", value: x.address }))}
           labels={[]}
           valueType="email"
+          noteFor={(_r, k) => (k === 0 && emails.length > 1 ? t("person.primary") : undefined)}
           placeholder="client@example.com"
           addLabel={t("cw4.addEmail")}
           removeLabel={t("cw4.removeEmail")}
@@ -199,7 +201,7 @@ export default function EditClient() {
       {!creating ? (
           <FieldGroup>
             {/* off = the property's address (spec 56 §3а.5): the address fields stand right under the switch while it is on (DS §11 п.19) */}
-            <ToggleRow testID="client-billing-own" label={t("cw4.billingOther")} caption={t("client.f.billingHint")} value={billingOwn} onChange={setBillingOwn}>
+            <ToggleRow testID="client-billing-own" label={t("cw4.billingOther")} caption={billingOwn ? t("client.f.billingHint") : t("cw4.billingOff")} value={billingOwn} onChange={setBillingOwn}>
               <FieldGroup under>
                 <Labeled label={t("prop.street")}>
                   <TextField type="street" value={billing.line1} onChangeText={setB("line1")} placeholder={t("prop.street")} icon="pin" label={`${t("client.row.billing")}: ${t("prop.street")}`} />

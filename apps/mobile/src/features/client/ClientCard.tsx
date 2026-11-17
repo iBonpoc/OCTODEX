@@ -1,6 +1,5 @@
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { useRef, useState, type ReactElement, type ReactNode } from "react";
-import type { LayoutChangeEvent } from "react-native";
 import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
 import { router, type Href } from "expo-router";
@@ -25,11 +24,12 @@ import type { Customer, CustomerStatus, Property } from "@/data/types";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { useI18n, type DictKey } from "@/i18n";
 import { fabItems } from "@/nav/sections";
-import { Button, IconButton, MetaTag, StatusChip } from "@/ui/controls";
+import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { StatusPicker } from "@/ui/listCard";
 import { ViewTabs } from "@/ui/viewTabs";
+import { MetaLine } from "@/ui/metaLine";
 import { Card, CardList, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { cleanPhone, mailtoHref } from "@/features/contactLinks";
 
@@ -117,35 +117,39 @@ export function ClientCardBody({ c, tab: tabNow, onTab, frame }: { c: Customer; 
           side column 360 on a desktop (DS §12.3, #1416) */}
       <View testID="client-summary" style={{ width: "100%", gap: space[3] }}>
         {/* one line, never wrapped (spec 56 §3а.6): number · status · tags, the tags that do not fit — «+N»; the tags open their sheet */}
-        <OneLine
-          testID="client-headline"
-          fixed={[
-            c.number ? (
-              <T key="n" v="caption" tone="mut" tabular numberOfLines={1}>
-                {c.number}
-              </T>
-            ) : null,
-            office && statusOptions.length ? (
-              <Press key="s" testID="client-status" onPress={() => setPicking(true)} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
-                <StatusChip status={chip.s} label={t(chip.l)} />
-              </Press>
-            ) : (
-              <StatusChip key="s" status={chip.s} label={t(chip.l)} />
-            ),
-            c.taxExempt ? <StatusChip key="x" status="neutral" label={t("client.f.taxExempt")} soft /> : null,
-          ]}
-          tags={tags.map((x) => ({ id: x.id, label: tagLabel(x, t) }))}
-          onTags={office ? () => setSheet("tags") : undefined}
-          tagsLabel={t("cw4.tags", { list: tags.map((x) => tagLabel(x, t)).join(", ") })}
-          addLabel={office ? `＋ ${t("client.addTag")}` : undefined}
-          moreLabel={(n) => t("cw4.moreTags", { n })}
-        />
+        <View style={{ marginTop: -space[2] }}>
+          <MetaLine
+            testID="client-headline"
+            fixed={[
+              c.number ? (
+                <T key="n" v="caption" tone="mut" tabular numberOfLines={1}>
+                  {c.number}
+                </T>
+              ) : null,
+              office && statusOptions.length ? (
+                <Press key="s" testID="client-status" onPress={() => setPicking(true)} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
+                  <StatusChip status={chip.s} label={t(chip.l)} />
+                </Press>
+              ) : (
+                <StatusChip key="s" status={chip.s} label={t(chip.l)} />
+              ),
+              c.taxExempt ? <StatusChip key="x" status="neutral" label={t("client.f.taxExempt")} soft /> : null,
+            ]}
+            tags={tags.map((x) => ({ id: x.id, label: tagLabel(x, t) }))}
+            onTags={office ? () => setSheet("tags") : undefined}
+            tagsLabel={t("cw4.tags", { list: tags.map((x) => tagLabel(x, t)).join(", ") })}
+            addLabel={office ? `＋ ${t("client.addTag")}` : undefined}
+            moreLabel={(n) => t("cw4.moreTags", { n })}
+          />
+        </View>
         {/* «Контакты · N ›» (spec 56 §3а.6): the office edits them in the sheet at once; the technician reads the list */}
         {r.people.length > 1 || office ? (
           <View testID="client-people">
             <Card style={{ paddingVertical: space[1] }}>
               <ListRow
                 title={t("client.row.people")}
+                // the number counts people (the client and the others), the names say so (review of wave 4)
+                subtitle={r.people.map((p) => p.name || c.name).join(" · ")}
                 left={<Icon name="users" />}
                 right={
                   <T v="body" tone="mut" tabular>
@@ -419,84 +423,3 @@ function MoneyCell({ label, value, tone = "ink", testID }: { label: string; valu
 }
 
 
-/**
- * One line that never wraps (spec 56 §3а.6, DS §9 А1в): the fixed parts (number, status), then the tags as `MetaTag`; the tags
- * that do not fit go into «+N». Each tag's width is measured where it stands and kept, so the line knows what fits at any width.
- */
-function OneLine({
-  fixed,
-  tags,
-  onTags,
-  tagsLabel,
-  addLabel,
-  moreLabel,
-  testID,
-}: {
-  fixed: ReactNode[];
-  tags: { id: string; label: string }[];
-  onTags?: () => void;
-  tagsLabel: string;
-  /** «＋ Метка» when there are no tags (office) */
-  addLabel?: string;
-  moreLabel: (n: number) => string;
-  testID?: string;
-}) {
-  const gap = space[2];
-  const [rowW, setRowW] = useState(0);
-  const [fixedW, setFixedW] = useState(0);
-  const widths = useRef<Record<string, number>>({});
-  const [plusW, setPlusW] = useState(0);
-  const [, redraw] = useState(0);
-  const measured = tags.every((x) => widths.current[x.id] !== undefined);
-  // how many tags fit: all, while not measured yet (they are drawn to be measured, the line hides the overflow)
-  let shown = tags.length;
-  if (rowW && measured) {
-    const room = rowW - fixedW;
-    const sum = (k: number) => tags.slice(0, k).reduce((a, x) => a + widths.current[x.id]! + gap, 0);
-    if (sum(tags.length) > room) {
-      shown = 0;
-      for (let k = tags.length - 1; k >= 0; k--) if (sum(k) + (plusW || gap * 5) + gap <= room) { shown = k; break; }
-    }
-  }
-  const hidden = tags.length - shown;
-  const keep = (id: string) => (e: LayoutChangeEvent) => {
-    const w = Math.ceil(e.nativeEvent.layout.width);
-    if (widths.current[id] !== w) {
-      widths.current[id] = w;
-      redraw((n) => n + 1);
-    }
-  };
-  const tagsNode = (
-    <View style={{ flexDirection: "row", alignItems: "center", gap, flexShrink: 0 }}>
-      {tags.slice(0, shown).map((x) => (
-        <View key={x.id} onLayout={keep(x.id)} style={{ flexShrink: 0 }}>
-          <MetaTag label={x.label} />
-        </View>
-      ))}
-      {hidden > 0 ? (
-        <View testID="client-tags-more" onLayout={(e) => setPlusW(Math.ceil(e.nativeEvent.layout.width))} style={{ flexShrink: 0 }} accessibilityLabel={moreLabel(hidden)}>
-          <MetaTag label={`+${hidden}`} />
-        </View>
-      ) : null}
-      {!tags.length && addLabel ? (
-        <View testID="client-add-tag">
-          <MetaTag label={addLabel} />
-        </View>
-      ) : null}
-    </View>
-  );
-  return (
-    <View testID={testID} onLayout={(e) => setRowW(Math.floor(e.nativeEvent.layout.width))} style={{ flexDirection: "row", alignItems: "center", gap, overflow: "hidden", marginTop: -space[2] }}>
-      <View onLayout={(e) => setFixedW(Math.ceil(e.nativeEvent.layout.width) + gap)} style={{ flexDirection: "row", alignItems: "center", gap, flexShrink: 0 }}>
-        {fixed}
-      </View>
-      {onTags && (tags.length || addLabel) ? (
-        <Press testID="client-tags" onPress={onTags} visibleHeight={component.chip.h} accessibilityRole="button" accessibilityLabel={tags.length ? tagsLabel : addLabel}>
-          {tagsNode}
-        </Press>
-      ) : tags.length ? (
-        tagsNode
-      ) : null}
-    </View>
-  );
-}

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { View } from "react-native";
 import { localUndo } from "@/data/undo";
 import { useI18n } from "@/i18n";
-import { Button } from "@/ui/controls";
+import { Button, StatusChip } from "@/ui/controls";
+import { MetaLine } from "@/ui/metaLine";
 import { SelectField } from "@/ui/selectField";
 import { DoneCircle } from "@/ui/doneCircle";
 import { FracKeys, type FracKey } from "@/ui/fracKeys";
@@ -172,6 +173,18 @@ export function ChoiceSection() {
         />
         {/* the red row of a dangerous action (iOS «Контакты»: «Удалить контакт»), with «Вернуть» in the toast */}
         <ActionRow testID="showcase-action-row-bad" tone="bad" label={t("cw4.deleteContact")} onPress={() => toast.show(t("cw4.contactRemoved"), localUndo(() => undefined))} />
+      </Card>
+      <Card>
+        <T v="heading">{t("ds.ch.meta.title")}</T>
+        <T v="caption" tone="mut">{t("ds.ch.meta.hint")}</T>
+        <MetaLine
+          testID="showcase-meta-line"
+          fixed={[<StatusChip key="s" status="ok" label={t("ds.ch.meta.status")} />]}
+          tags={["VIP", "Pool", "Solar", "Two dogs", "Gate code", "Weekends"].map((x) => ({ id: x, label: x }))}
+          onTags={() => toast.show(t("ds.ch.meta.tapped"))}
+          tagsLabel={t("ds.ch.meta.title")}
+          moreLabel={(n) => t("cw4.moreTags", { n })}
+        />
       </Card>
       <Card>
         <T v="heading">{t("ds.ch.done.title")}</T>

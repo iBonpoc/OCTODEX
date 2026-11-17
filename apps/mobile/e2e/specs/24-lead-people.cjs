@@ -48,7 +48,7 @@ exports.run = async (h) => {
   h.expect(client.people[0].phones.length === 2, "and both of Tom's phones");
   await h.go(`/client/${client.id}`);
   // «Контакты · 2 ›» on the card (spec 56 §3а.6): Tom and Ann
-  h.expect(/Контакты\s*2\b/.test(await p.getByTestId("client-people").locator("visible=true").first().innerText()), "spouse among the client's contacts");
+  h.expect(/Контакты[\s\S]*Ann Becker[\s\S]*\b2\b/.test(await p.getByTestId("client-people").locator("visible=true").first().innerText()), "spouse among the client's contacts");
   await h.go(`/lead/${tom.id}`);
   await h.clickText("Обзор");
   await h.expectText(/Контакты клиента/, "the lead card shows the client's people");

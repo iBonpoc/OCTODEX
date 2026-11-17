@@ -101,6 +101,7 @@ export function PeopleEditSheet({
         rows={p.phones.map((x) => ({ id: x.k, label: x.label, value: x.number }))}
         labels={labels}
         valueType="phone"
+        noteFor={(_r, k) => (k === 0 && p.phones.length > 1 ? t("person.primary") : undefined)}
         placeholder={t("person.phone")}
         addLabel={t("cw4.addPhone")}
         removeLabel={t("cw4.removePhone")}
@@ -117,6 +118,7 @@ export function PeopleEditSheet({
         rows={p.emails.map((x) => ({ id: x.k, label: "", value: x.address }))}
         labels={[]}
         valueType="email"
+        noteFor={(_r, k) => (k === 0 && p.emails.length > 1 ? t("person.primary") : undefined)}
         placeholder={t("person.email")}
         addLabel={t("cw4.addEmail")}
         removeLabel={t("cw4.removeEmail")}

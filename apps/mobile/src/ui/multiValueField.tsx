@@ -1,6 +1,6 @@
 import { useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
-import { component, layout, size, space } from "@octo/design-tokens";
+import { component, layout, size, space, spaceHalf } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { IconButton, TextField } from "./controls";
 import type { FieldType } from "./fieldTypes";
@@ -48,7 +48,7 @@ function LabelButton<L extends string>({
     ...actions.map((a, i) => ({ key: `act:${a.key}`, label: a.label, group: i === 0, testID: testID ? `${testID}-${a.key}` : undefined })),
   ];
   return (
-    <View ref={ref} collapsable={false} style={{ maxWidth: component.valueLabelMax, flexShrink: 0 }}>
+    <View ref={ref} collapsable={false} style={{ width: component.valueLabelMax, flexShrink: 0 }}>
       <Press
         testID={testID}
         disabled={ro}
@@ -101,6 +101,7 @@ export function MultiValueField<L extends string>({
   renderValue,
   valueType = "text",
   placeholder,
+  noteFor,
   testID,
 }: {
   rows: MultiValue<L>[];
@@ -121,6 +122,8 @@ export function MultiValueField<L extends string>({
   renderValue?: (row: MultiValue<L>, index: number) => ReactNode;
   valueType?: FieldType;
   placeholder?: string;
+  /** a quiet line under a row (`caption mut`): «основной» under the first number when there are several */
+  noteFor?: (row: MultiValue<L>, index: number) => string | undefined;
   /** the group; a row — `<testID>-row-<i>`, its parts `-remove` / `-label` / `-value`; the add row — `<testID>-add` */
   testID?: string;
 }) {
@@ -129,19 +132,32 @@ export function MultiValueField<L extends string>({
     <View testID={testID} style={{ gap: space[1], maxWidth: layout.formMax }}>
       {rows.map((r, i) => {
         const id = testID ? `${testID}-row-${i}` : undefined;
+        const note = noteFor?.(r, i);
         return (
-          <View key={r.id} testID={id} style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-            {ro ? null : <IconButton bare tone="bad" icon="minusCircle" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
-            {labels.length || actionsFor?.(r, i).length ? (
-              <LabelButton row={r} labels={labels} actions={actionsFor?.(r, i) ?? []} menuTitle={menuTitle} onPick={(l) => onChange(r.id, { label: l })} testID={id ? `${id}-label` : undefined} />
-            ) : null}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              {renderValue ? (
-                renderValue(r, i)
+          <View key={r.id} style={{ gap: spaceHalf.hair }}>
+            <View testID={id} style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+              {ro ? null : <IconButton bare tone="bad" icon="minusCircle" label={removeLabel} onPress={() => onRemove(r.id)} testID={id ? `${id}-remove` : undefined} />}
+              {/* the label slot has one width (≤ `valueLabelMax`): every field of the group starts at one x, also a value with no label */}
+              {labels.length || actionsFor?.(r, i).length ? (
+                <LabelButton row={r} labels={labels} actions={actionsFor?.(r, i) ?? []} menuTitle={menuTitle} onPick={(l) => onChange(r.id, { label: l })} testID={id ? `${id}-label` : undefined} />
               ) : (
-                <TextField type={valueType} value={r.value} onChangeText={(v) => onChange(r.id, { value: v })} placeholder={placeholder} label={labels.find((l) => l.key === r.label)?.label ?? menuTitle} testID={id ? `${id}-value` : undefined} />
+                <View style={{ width: component.valueLabelMax, flexShrink: 0 }} />
               )}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                {renderValue ? (
+                  renderValue(r, i)
+                ) : (
+                  <TextField type={valueType} value={r.value} onChangeText={(v) => onChange(r.id, { value: v })} placeholder={placeholder} label={labels.find((l) => l.key === r.label)?.label ?? menuTitle} testID={id ? `${id}-value` : undefined} />
+                )}
+              </View>
             </View>
+            {note ? (
+              <View testID={id ? `${id}-note` : undefined} style={{ marginLeft: (ro ? 0 : component.dockBtn + space[2]) + component.valueLabelMax + space[2] }}>
+                <T v="caption" tone="mut">
+                  {note}
+                </T>
+              </View>
+            ) : null}
           </View>
         );
       })}
