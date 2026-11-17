@@ -32,13 +32,26 @@ begin
   if p_seen is not null and jsonb_typeof(p_seen) <> 'object' then
     raise exception 'seen: an object' using errcode = '22023';
   end if;
-  -- the item, locked: two writers of one item's cost (or its first cost row) go one after the other
-  select * into it from public.catalog_items i where i.id = p_item_id and i.deleted_at is null for update;
+  -- rights first, then locks (nobody else's item is ever locked by a call that is refused)
+  select * into it from public.catalog_items i where i.id = p_item_id and i.deleted_at is null;
   if it.id is null or not app.is_staff(it.company_id) then
     raise exception 'catalog item not found' using errcode = 'P0002';
   end if;
   if not app.can_view_costs(it.company_id) then
     raise exception 'our costs are not this person''s to change' using errcode = '42501', hint = 'no_costs';
+  end if;
+  -- locked as catalog_set_group_price does: an item of a price group — the whole group in one order (id), since the cost
+  -- spreads to it (t98); else the item alone. Two writers of one item, one group, or a group price at once wait, never deadlock
+  if app.price_group(it.attributes) is not null then
+    perform 1 from public.catalog_items i
+     where i.company_id = it.company_id and app.price_group(i.attributes) = app.price_group(it.attributes) and i.deleted_at is null
+     order by i.id for update;
+  else
+    perform 1 from public.catalog_items i where i.id = it.id for update;
+  end if;
+  select * into it from public.catalog_items i where i.id = p_item_id and i.deleted_at is null;
+  if it.id is null then
+    raise exception 'catalog item not found' using errcode = 'P0002';
   end if;
   select c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps into k
     from public.catalog_item_costs c where c.item_id = it.id and c.company_id = it.company_id for update;

@@ -1115,6 +1115,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           if (k.error && !["42501", "42P01", "PGRST205"].includes(k.error.code ?? "")) await run(Promise.resolve(k));
           return;
         }
+        // no right to our costs (42501 no_costs: the right was taken meanwhile) — the item itself is saved, as the side
+        // table's refusal below (sales never changes a cost on the phone: nothing of it was shown to them)
+        if (r.error?.code === "42501") return;
         await run(Promise.resolve(r));
       };
       // spec 53-0 (PRD 04 §9 «merge by field»): an item already there gets only the columns this save changed — a save
