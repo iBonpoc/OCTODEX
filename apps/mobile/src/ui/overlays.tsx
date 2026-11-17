@@ -297,7 +297,9 @@ export function Sheet({
   dirty?: boolean;
   /** "Save" in the unsaved-changes question */
   onSave?: () => void;
-  /** the unsaved-changes question with the words of a module's property windows (DS §7.3): «Не сохранять» `ghost`, «Назад» */
+  /** a property window of a module (DS §7.3): «Закрыть | Сохранить» in its `footer` (`useSheetClose()`), so no «✕» in the header;
+   *  the unsaved-changes question has the window's words — «Не сохранять» `ghost`, «Назад». Esc, Android «Назад», the scrim
+   *  and the swipe close or ask as in every sheet. */
   askBack?: boolean;
   /** the line under «Сохранить изменения?» — what was changed («Изменены длина и цвет») */
   askText?: string;
@@ -631,6 +633,8 @@ export function Sheet({
                   <View testID="sheet-title" style={{ flex: 1 }}>
                     <T v="title" numberOfLines={2}>{title ?? ""}</T>
                   </View>
+                  {/* a property window of a module (`askBack`) closes by «Закрыть» in its footer — no «✕» here (DS §7.3) */}
+                  {askBack ? null : (
                   <Press testID="sheet-close" onPress={() => requestClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
                     <View
                       style={{
@@ -645,6 +649,7 @@ export function Sheet({
                       <Icon name="close" s={size.iconSm} />
                     </View>
                   </Press>
+                  )}
                 </View>
               ) : (
                 <View style={{ height: space[2] }} />

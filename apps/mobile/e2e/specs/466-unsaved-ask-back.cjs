@@ -9,6 +9,8 @@
  * By testID; waits on what it checks.
  */
 const { sheetGone, pressEscUntilClosed } = require("../sheet.cjs");
+// - `askBack` is a property window: «Закрыть | Сохранить» in the footer, no «✕» in the header; Esc closes a clean one, the
+//   swipe on the grabber (390) with a change asks the same question
 
 exports.run = async (h) => {
   const p = h.page;
@@ -25,11 +27,17 @@ exports.run = async (h) => {
   await h.go("/settings/design-system/windows");
   await vis("showcase-windows").waitFor({ timeout: 8000 });
 
-  // nothing changed: «Закрыть» closes at once
+  // nothing changed: «Закрыть» closes at once; no «✕» in the header of a property window
   await open();
+  h.expect((await p.getByTestId("sheet-close").locator("visible=true").count()) === 0, "askBack: no «✕» in the sheet header");
   await vis("showcase-unsaved-close").click();
   await sheetGone(p);
   h.expect(true, "no change: «Закрыть» closes without a question");
+  // Esc closes a clean property window as any sheet
+  await open();
+  await pressEscUntilClosed(p);
+  await sheetGone(p);
+  h.expect(true, "Esc closes a clean property window");
 
   // a change, «Закрыть» → the question with the three words of the exception
   await open();
@@ -74,6 +82,23 @@ exports.run = async (h) => {
   await sheetGone(p);
   await open();
   h.expect((await field().inputValue()) === "K-style 5", "«Сохранить» kept the change");
+  // 390: the swipe down by the grabber with a change asks the same question
+  if (!wide) {
+    await field().fill("K-style 6");
+    await p.getByTestId("sheet-title").locator("visible=true").last().click(); // the field lets go of the keyboard
+    const g = await p.getByLabel("Шторка", { exact: true }).last().boundingBox(); // the grabber (as e2e 17)
+    const x = g.x + g.width / 2, y = g.y + g.height / 2;
+    await p.mouse.move(x, y);
+    await p.mouse.down();
+    for (let i = 1; i <= 12; i++) await p.mouse.move(x, y + (Math.min(260, p.viewportSize().height - y - 6) * i) / 12);
+    await p.mouse.up();
+    await vis("unsaved-ask").waitFor({ timeout: 4000 });
+    h.expect((await vis("unsaved-back").innerText()) === "Назад", "the swipe asks the same question");
+    await vis("unsaved-discard").click();
+    await sheetGone(p);
+    await open();
+    h.expect((await field().inputValue()) === "K-style 5", "«Не сохранять» after the swipe threw the change away");
+  }
   await vis("showcase-unsaved-close").click();
   await sheetGone(p);
 
