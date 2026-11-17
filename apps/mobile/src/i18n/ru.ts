@@ -4010,6 +4010,7 @@ export const ru = {
   "intake.state": "Штат",
   "intake.zip": "Индекс",
   "intake.service": "Вид работ",
+  "intake.lang": "Язык",
   "intake.message": "Что нужно сделать?",
   "intake.consent": "Согласен получать SMS от {company} по моей заявке. Может взиматься плата за сообщения и данные. Ответьте STOP, чтобы отказаться.",
   "intake.needContact": "Оставьте телефон или почту, чтобы вам ответили.",
