@@ -185,7 +185,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       if (id === "design-system") {
         return seg[2]
           ? { section: "settings", kind: "ds.title", up: { href: "/settings/design-system", label: K("ds.title") } }
-          : { section: "settings", kind: "ds.title", up: { href: "/settings", label: K("nav.mySettings") } };
+          : { section: "settings", kind: "ds.title", up: { href: "/settings", label: K("settings.title") } };
       }
       // «Удалить аккаунт» lives in the profile now: back goes to «Профиль и аккаунт» (LOG п.17, spec 26)
       if (id) return { section: "settings", kind: "acct.title", up: { href: "/settings/profile", label: K("fix.settings.profile") } };

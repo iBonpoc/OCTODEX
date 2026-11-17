@@ -104,21 +104,19 @@ export function ServiceCategoryEditor() {
         </Card>
       ) : null}
       <FieldGroup title={t("dir.addOwn")}>
-        <RowView>
-          <View style={{ flex: 1 }}>
-            <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} />
-          </View>
-          <Button
-            label={t("dir.add")}
-            icon="plus"
-            variant="secondary"
-            disabled={!own.trim() || ownTaken}
-            onPress={() => {
-              toast.show(t("dir.added"), store.saveServiceCategory({ name: own.trim() }).undo);
-              setOwn("");
-            }}
-          />
-        </RowView>
+        {/* the field takes the whole column, the button stands under it (#1427: in one row the placeholder was cut, the button overlapped) */}
+        <TextField type="title" value={own} onChangeText={setOwn} placeholder={t("dir.ownPlaceholder")} testID="dir-own" />
+        <Button
+          label={t("dir.add")}
+          icon="plus"
+          testID="dir-add"
+          variant="secondary"
+          disabled={!own.trim() || ownTaken}
+          onPress={() => {
+            toast.show(t("dir.added"), store.saveServiceCategory({ name: own.trim() }).undo);
+            setOwn("");
+          }}
+        />
         {ownTaken ? (
           <StatusNote tone="warn">{t("dir.taken")}</StatusNote>
         ) : null}
