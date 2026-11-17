@@ -43,4 +43,7 @@ describe("unit:supplierTaxOp — #1834", () => {
     // a second refusal of the same supplier replaces the card, not adds one
     expect(supplierTaxRejected(card, gone, "boom", Date.parse("2026-11-17T12:01:00Z"), who)).toHaveLength(1);
   });
+  it("supplier_tax_too_many (54000, a supplier with over 1000 items) is a refusal, not «try later» (a queue stuck on it)", () => {
+    expect(classify({ code: "54000", hint: "supplier_tax_too_many", status: 500 })).toBe("refusal");
+  });
 });

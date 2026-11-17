@@ -8,8 +8,9 @@
 --     must still be the stored one (else 40001, nothing changed); then the supplier's rate and the rate of every one of its items
 --     (catalog_item_costs.vendor_tax_bps) change in one transaction; t32 reprices the materials, the history gets a row per item
 --     (source 'supplier_tax'). Who may: app.is_staff and app.can_view_costs — the one rule of «who sees our costs» (#1837).
---     Lock order: the supplier → its catalog_items (by id) → their catalog_item_costs (by item_id), the same as
---     public.catalog_set_item_costs («Прайс», #1958): no two writers meet crosswise.
+--     Lock order: the supplier → its catalog_items (by id) → their catalog_item_costs (by item_id), as the planned
+--     catalog_set_item_costs («Прайс», #1958). A direct write of a cost row (an old phone) locks cost → item (t32), the other way
+--     round: the loser gets 40P01 and the queue repeats it; data are never damaged.
 --   * the rate has ONE writer: t14_supplier_tax_door (before update on suppliers) gives back the old rate when a phone changes it
 --     any other way than through public.supplier_set_tax (a transaction flag only the function sets). An old phone's whole-row upsert
 --     with a stale rate can neither change nor roll back the rate (the same trouble as #1958); the rest of its row is saved as before.
@@ -27,6 +28,7 @@
 -- snapshots and never change.
 
 -- ---- the history: a new source ------------------------------------------------------------------------------------------
+-- rule16: small (a check widened by one value, as 'receipt' in 20261116090000; one scan, no rewrite)
 alter table public.catalog_cost_history drop constraint if exists catalog_cost_history_source_check;
 alter table public.catalog_cost_history add constraint catalog_cost_history_source_check
   check (source in ('manual', 'initial', 'import_file', 'ai_scan', 'shelf_tag', 'module', 'receipt', 'supplier_tax'));
