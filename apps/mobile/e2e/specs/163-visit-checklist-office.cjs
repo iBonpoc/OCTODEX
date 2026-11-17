@@ -1,7 +1,7 @@
 /**
  * e2e 163 — the office edits a visit's checklist before it starts (docs/specs/08 §5, §7.4, §11.8 №8; step 14 CH3).
  * The demo inspection v6 came without items (sales books inspections — no snapshot): the director opens it → an empty
- * checklist → «Добавить из шаблона» → the demo template's items (from «Every job visit»), a second time it is «Добавлен».
+ * checklist → «Добавить из шаблона» → the demo template's items (from «Каждый выезд на работу»), a second time it is «Добавлен».
  * An item's text (a new line is cleaned), «Обязательный» off (the director), «Ниже» with «Отменить», a new required item.
  * The dispatcher may not turn «Обязательный» off; sales and the tech do not edit. Found by testID and the db.
  */
@@ -25,20 +25,20 @@ exports.run = async (h) => {
   await p.getByTestId("chk-from-template").last().getByRole("button").click();
   await h.sheet().getByText("Шаблоны чек-листов").waitFor();
   await h.shot("templates");
-  await h.sheet().getByRole("button", { name: "Every job visit" }).click();
+  await h.sheet().getByRole("button", { name: "Каждый выезд на работу" }).click();
   await h.expectText(/Добавлено пунктов: 4/, "the toast");
   let v = await until((x) => x.checklist.length === 4);
   h.expect(
-    v.checklist.map((x) => x.label).join("|") === "Protect floors and furniture|Confirm scope with the client|Clean up the work area|Walk through with the client",
+    v.checklist.map((x) => x.label).join("|") === "Защитить пол и мебель|Согласовать объём работ с клиентом|Убрать рабочее место|Пройти по работе с клиентом",
     `the template's items: ${v.checklist.map((x) => x.label).join("|")}`,
   );
-  h.expect(v.checklist.every((x) => x.templateId === "tpl-job" && x.templateName === "Every job visit" && !x.done && !x.id.startsWith("tpl-")), "a snapshot: new ids, the template's name");
+  h.expect(v.checklist.every((x) => x.templateId === "tpl-job" && x.templateName === "Каждый выезд на работу" && !x.done && !x.id.startsWith("tpl-")), "a snapshot: new ids, the template's name");
   await p.getByTestId("chk-edit-3").last().waitFor();
   await h.shot("added");
   // a second time: «Добавлен», no doubles
   await p.getByTestId("chk-from-template").last().getByRole("button").click();
   await h.sheet().getByText("Добавлен").waitFor();
-  h.expect((await h.sheet().getByRole("button", { name: "Every job visit" }).count()) === 0, "an added template is not pressed again");
+  h.expect((await h.sheet().getByRole("button", { name: "Каждый выезд на работу" }).count()) === 0, "an added template is not pressed again");
   // close by its own button and wait for it: Escape may not reach the sheet, and a swallowed wait hid that (CHECKS §9 п.3, сборка #419)
   await h.sheet().getByRole("button", { name: "Закрыть", exact: true }).last().click();
   await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).waitFor({ state: "visible" });

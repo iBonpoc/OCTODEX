@@ -58,7 +58,7 @@ exports.run = async (h) => {
   const a = await card("cat159a").innerText();
   // 2 leads today (the third is yesterday's), 1 won = 50 %; one job, two invoices before tax $1,500.01 → average $1,500.01
   h.expect(a.includes("Roof 159"), "direction name");
-  h.expect(/Лиды\s+2\b/.test(a) && /Выиграно\s+1 · 50%/.test(a), `leads of Roof 159: ${a}`);
+  h.expect(/Лиды\s+2\b/.test(a) && /Стали клиентами\s+1 · 50%/.test(a), `leads of Roof 159: ${a}`);
   // the card's own figure: whole dollars, right before its label (not the «$1,500.01» of the average ticket)
   h.expect(/(^|\n)\$1,500\s*\n\s*Выручка/.test(a), `revenue of Roof 159 = $1,500 (${a})`);
   h.expect(a.includes(money(150001)), `average ticket $1,500.01 (${a})`);

@@ -5,7 +5,7 @@ import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
 import { HelpButton, Sheet, SheetScroll } from "@/ui/overlays";
-import { Icon, T } from "@/ui/primitives";
+import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
@@ -165,7 +165,7 @@ export function WindowsSection() {
       <Sheet visible={open === "list"} onClose={close} title={t("ds.sheet.list")} height="large">
         <SheetScroll testID="showcase-sheet-list-scroll">
           {Array.from({ length: 24 }, (_, i) => (
-            <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} right={<Icon name="chevronRight" />} onPress={close} />
+            <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} onPress={close} />
           ))}
         </SheetScroll>
       </Sheet>

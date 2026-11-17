@@ -4,7 +4,7 @@ exports.run = async (h) => {
   await h.expectText(/Договор \| \$3,420 \| Выставлено \| \$342 \| Оплачено \| \$342 \| Осталось получить \| \$3,078/, "statement before");
   await h.page.getByRole("button", { name: /Выставить остаток \$3,078/ }).click(); await h.page.waitForTimeout(500);
   await h.expectText(/Выставлено \| \$3,420/, "fully invoiced");
-  await h.page.getByText(/Final balance/).first().click(); await h.page.waitForTimeout(700);
+  await h.page.getByText(/Остаток по договору/).first().click(); await h.page.waitForTimeout(700);
   const pay = async (amount, method) => {
     await h.page.getByRole("button", { name: "Принять оплату" }).click(); await h.page.waitForTimeout(300);
     await h.sheet().locator('input[inputmode="decimal"]').fill(amount);

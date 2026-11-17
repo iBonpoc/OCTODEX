@@ -30,7 +30,7 @@ type LinkFor = { name: string; link: string } | null;
 export default function Team() {
   const store = useStore();
   const { db } = store;
-  const { t } = useI18n();
+  const { t, tn } = useI18n();
   const toast = useToast();
   const auth = useAuth();
   const [open, setOpen] = useState(false);
@@ -103,7 +103,7 @@ export default function Team() {
       <ListCard
         key={m.id}
         title={m.name}
-        when={tech ? t("visits.count", { n: vs.length }) : undefined}
+        when={tech ? tn("visits.today", vs.length) : undefined}
         lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
         status={status}
         tags={[...m.roles.map((r) => t(`role.${r}`)), ...(m.kind === "sub" ? [t("team.sub")] : []), ...(m.id === db.me ? [t("team.you")] : [])]}

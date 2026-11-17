@@ -56,7 +56,7 @@ exports.run = async (h) => {
   // no cloud when all is saved and sent (#1274, founder 12.11): the data is saved, nothing is drawn for it at the top
   await savedOnce(p);
   h.expect((await tid("draw-local").count()) === 0, "all saved: no save mark at the top");
-  h.expect((await tid("draw-accuracy").count()) === 0, "no «Примерно — не для резки» at the top (#681)");
+  h.expect((await tid("draw-accuracy").count()) === 0, "no «Примерно — не для резки» at the top (#681)"); // i18n-old: ok — checks the old words are gone
   // «Свойства» on the toolbar of the phone (#687)
   if (!wide) {
     h.expect((await tid("draw-props").count()) === 0 && (await tid("draw-tool-select").count()) === 0, "no «Свойства» and no «Выбрать» on the toolbar (a double tap opens the properties, #1273)");

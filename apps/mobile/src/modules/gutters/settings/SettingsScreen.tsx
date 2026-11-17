@@ -6,6 +6,7 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
+import { sizeText } from "../sizeText";
 import { createContext, useContext, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -38,7 +39,7 @@ const inch = (s: string) => `${s}″`;
 /** i18n keys of the fastener choices (a value has dots and slashes) */
 const SCREW_KEY = { "10x1": "s10x1", "10x1.5": "s10x15", "10x2": "s10x2" } as const;
 const ANCHOR_KEY = { masonry: "any", "3/16x7/8": "a316", "1/4x1": "a14" } as const;
-const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
+const dsSize = sizeText; // one format everywhere (#1916)
 
 /** the refusal or note said under one field (by its testID): the last choice, too large, being read again */
 const WarnCtx = createContext<{ at: string; text: string } | null>(null);

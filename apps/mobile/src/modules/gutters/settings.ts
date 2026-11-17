@@ -87,6 +87,16 @@ export const PALETTES = {
 } as const;
 /** a palette's name is the module's data, never an app string (#1885: no brand in i18n) */
 export const PALETTE_NAMES: Record<keyof typeof PALETTES, string> = { berger: "Berger", servicePartners: "Service Partners" };
+/**
+ * The founder's full list (#679, founder 16.11: «вернуть мой полный список цветов, взять у двух поставщиков, объединить в
+ * единый список»): both cards of docs/prototypes/gutters-ref, one name once (case ignored), English names, the bigger card
+ * first. Names only — never a supplier's name in the app (#1885).
+ */
+export const PALETTE_ALL: readonly string[] = (() => {
+  const out: string[] = [];
+  for (const n of [...PALETTES.servicePartners, ...PALETTES.berger]) if (!out.some((o) => o.toLowerCase() === n.toLowerCase())) out.push(n);
+  return out;
+})();
 export const MAX_PALETTE = 60;
 export const MAX_COLOR_LEN = 40;
 /** what module_save_settings takes (bytes of the JSON; Postgres counts its own jsonb a little differently — a margin) */

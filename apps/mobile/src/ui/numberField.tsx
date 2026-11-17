@@ -42,6 +42,8 @@ type Common = {
   selectOnFocus?: boolean;
   /** the text is not a number now (the value did not move): a row that holds it must not close over it */
   onBad?: (bad: boolean) => void;
+  /** no «$» / «%» inside the field: the unit is shown by the switch beside it (`PctUsdField`, DS §9 А1е — not twice); `unit` stays */
+  bare?: boolean;
 };
 export type NumberFieldProps = Common &
   (
@@ -103,7 +105,7 @@ export function NumberField(props: NumberFieldProps) {
     return () => onBad?.(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bad]);
-  const sign = SIGN[props.kind];
+  const sign: { before?: string; after?: string } = props.bare ? {} : SIGN[props.kind];
   const unit = props.unit ?? sign.after;
   return (
     <View style={{ gap: space[1] }}>
