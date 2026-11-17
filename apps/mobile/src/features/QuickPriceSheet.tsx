@@ -39,9 +39,9 @@ export function QuickPriceSheet({ item, visible, onClose, onExited }: { item: Ca
 
   const noCosts = store.db.costsVisible === false;
   const asksCost = quickAsksCost(item, noCosts);
-  const locked = priceLocked(item, noCosts);
+  const locked = priceLocked(item, noCosts, store.db.catalog);
   const next = quickPriceItem(item, input, store.db.catalog, noCosts);
-  const changed = quickChanged(item, input, noCosts);
+  const changed = quickChanged(item, input, noCosts, store.db.catalog);
   const missing = quickNeed(item, input, noCosts);
   const pack = asksCost ? quickPack(item) : null;
   const unit = item.unit;

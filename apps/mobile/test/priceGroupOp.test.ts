@@ -7,7 +7,9 @@
  * - catalogMatch / starterLookup do not count priceGroup as an extra property; attributesLine does not show it.
  */
 import { describe, expect, it } from "vitest";
-import { groupPriceChanged, priceGroupOf } from "../src/data/priceGroup";
+import { groupPriceChanged, groupPriceLocked, joinedGroup, priceGroupOf } from "../src/data/priceGroup";
+import { priceLocked } from "../src/features/catalogEdit";
+import { quickChanged } from "../src/features/quickPrice";
 import { coalesceAt, coalesced } from "../src/data/outboxCoalesce";
 import { dropGroupPriceOps, groupPriceRejected } from "../src/data/outboxRejected";
 import type { OwnedItem, Owner } from "../src/data/outboxOwner";
@@ -90,5 +92,40 @@ describe("unit:priceGroupOp — #1913 PR2", () => {
     expect(starterLookup([before], { part: "gutter" }, "ft").item?.id).toBe("w");
     expect(starterLookup([white], { part: "gutter" }, "ft").item?.id).toBe("w");
     expect(attributesLine(white.attributes)).toBe("white · gutter");
+  });
+  it("a merge keeps the older write's item (what the phone saw is about that item's row); a write with costs never merges into one without", () => {
+    const q = [item("a", gp("g1", 900, 800, { itemId: "first" }))];
+    const merged = coalesced(q[0]!, item("b", gp("g1", 1000, 900, { itemId: "second" })));
+    expect(merged.op).toMatchObject({ itemId: "first", priceCents: 1000, expectedPriceCents: 800 });
+    expect(coalesceAt(q, gp("g1", 1000, 900, { costCents: 500, expectedCostCents: 450 }), me, null)).toBe(-1);
+  });
+
+  it("who does not see our costs: every item of a group with a material counted from its cost shows its price, not changes it", () => {
+    const G = "gutters:v1:g";
+    const counted = cat({ id: "m", priceFromCost: true, attributes: { priceGroup: G } });
+    const labor = cat({ id: "l", kind: "labor", priceCents: 500, attributes: { priceGroup: G } });
+    const alone = cat({ id: "a", kind: "labor", priceCents: 500 });
+    const catalog = [counted, labor, alone];
+    expect(groupPriceLocked(catalog, labor)).toBe(true);
+    expect(groupPriceLocked(catalog, alone)).toBe(false);
+    expect(priceLocked(labor, true, catalog)).toBe(true);
+    expect(priceLocked(labor, false, catalog)).toBe(false);
+    expect(priceLocked(labor, true)).toBe(false);
+    // the quick sheet: nothing to save, so no «saved»
+    expect(quickChanged(labor, { priceCents: 900 }, true, catalog)).toBe(false);
+    expect(quickChanged(alone, { priceCents: 900 }, true, catalog)).toBe(true);
+  });
+
+  it("joining a group: the group's price and placeholder; its costs only when it has some; staying in it — as typed", () => {
+    const G = "gutters:v1:g";
+    const peer = cat({ id: "p", priceCents: 1200, placeholder: true, costCents: 600, vendorTaxBps: 0, markupBps: 10000, attributes: { priceGroup: G } });
+    const mine = cat({ id: "n", priceCents: 5, costCents: 3, markupBps: 0, attributes: { priceGroup: G } });
+    expect(joinedGroup([peer], undefined, mine)).toMatchObject({ priceCents: 1200, placeholder: true, costCents: 600, markupBps: 10000 });
+    const noCost = { ...peer, costCents: undefined, vendorTaxBps: undefined, markupBps: undefined };
+    expect(joinedGroup([noCost], undefined, mine)).toMatchObject({ priceCents: 1200, costCents: 3, markupBps: 0 });
+    // already in the group: a price change goes through the group write, not here
+    expect(joinedGroup([peer], mine, { ...mine, priceCents: 9 }).priceCents).toBe(9);
+    // the first of its group: as typed
+    expect(joinedGroup([], undefined, mine).priceCents).toBe(5);
   });
 });

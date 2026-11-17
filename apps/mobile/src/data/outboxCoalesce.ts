@@ -17,6 +17,7 @@
 import type { Op } from "@/cloud/ops";
 import { createdOf, refsOf, uuidsOf } from "./outboxDeps";
 import { sameOwner, type Owner, type OwnedItem } from "./outboxOwner";
+import { carriesCosts } from "./priceGroup";
 
 const lower = (xs: Iterable<string>) => new Set([...xs].map((x) => x.toLowerCase()));
 /** every id an op names (made, own, referred to) */
@@ -36,7 +37,14 @@ export function coalesceAt(items: readonly OwnedItem[], op: Op, who: Owner | nul
     if (!who) return -1;
     for (let i = items.length - 1; i >= 0; i--) {
       const x = items[i]!;
-      if (x.id === inFlight || x.op.k !== "catalog.groupPrice" || x.op.group !== op.group) continue;
+      if (x.op.k !== "catalog.groupPrice" || x.op.group !== op.group) continue;
+      // the group's write on its way is the last one the server will see before this: never fold behind it (its expected
+      // price would be stale — review of PR2 №5)
+      if (x.id === inFlight) return -1;
+      // the same shape only: with costs into with costs, without into without (a role changed meanwhile — №4)
+      if (carriesCosts(x.op) !== carriesCosts(op)) return -1;
+      // known and accepted (code review of PR2): once merged, «Отменить» of the FIRST write finds no op of its own and
+      // says «too late» — the group's price is the last one typed; the second write's «Отменить» works as always
       return x.owner && sameOwner(x.owner, who) ? i : -1;
     }
     return -1;
@@ -61,7 +69,8 @@ export function coalesced(older: OwnedItem, newer: OwnedItem): OwnedItem {
   // #1913: the values of the newer, what the phone saw of the older (the server compares with what was there before both)
   if (older.op.k === "catalog.groupPrice" && newer.op.k === "catalog.groupPrice") {
     const o = older.op;
-    return { ...newer, op: { ...newer.op, expectedPriceCents: o.expectedPriceCents, expectedCostCents: o.expectedCostCents, expectedTaxBps: o.expectedTaxBps, expectedMarkupBps: o.expectedMarkupBps } };
+    // the item of the older (the group's write is checked against that item's row: what the phone saw is about it)
+    return { ...newer, op: { ...newer.op, itemId: o.itemId, expectedPriceCents: o.expectedPriceCents, expectedCostCents: o.expectedCostCents, expectedTaxBps: o.expectedTaxBps, expectedMarkupBps: o.expectedMarkupBps } };
   }
   const ids = (o: OwnedItem) => [...(o.made ?? []), ...(o.op.k === "module.op" ? o.op.made ?? [] : [])];
   const made = [...lower([...ids(older), ...ids(newer)])];

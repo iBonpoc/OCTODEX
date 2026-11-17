@@ -47,6 +47,8 @@ export const REJECT_REASONS = {
   invoice_void_forbidden: "inv.void.rej.role",
   // a payment into an invoice voided meanwhile (migration 20261112090000, t06_payment_not_void)
   invoice_void: "inv.void.rej.payment",
+  // #1913 (migration 20261117210000): a price group has at most 200 items
+  price_group_full: "price.group.rejFull",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
@@ -97,6 +99,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
   if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
+  // #1913: an item that did not go into its price group (full): never dropped silently
+  if (op.k === "catalog.save" && reason === "price_group_full") return { ...base, what: "price", href: `/catalog/${op.item.id}`, labelKey: "price.group.rejFull", reason };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };
@@ -188,14 +192,14 @@ export function dropGroupPriceOps(items: readonly OwnedItem[], group: string, wh
 
 /** the one card per group and person «the group's price was changed by someone else — yours $X is not saved»: the last
  *  price meant (the latest of the dropped writes) */
-export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null): RejectedOp[] {
+export function groupPriceRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null, labelKey = "price.group.rejConflict"): RejectedOp[] {
   const last = [...gone].reverse().find((x) => x.op.k === "catalog.groupPrice");
   if (!last || last.op.k !== "catalog.groupPrice") return [...prev];
   const op = last.op;
   const id = `groupPrice.${op.group}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
   const owner = last.owner ?? who ?? undefined;
   const rec: RejectedOp = {
-    id, ...(owner ? { owner } : {}), kind: "catalog.groupPrice", what: "price", href: `/catalog/${op.itemId}`, labelKey: "price.group.rejConflict",
+    id, ...(owner ? { owner } : {}), kind: "catalog.groupPrice", what: "price", href: `/catalog/${op.itemId}`, labelKey,
     groupPrice: { group: op.group, itemId: op.itemId, mineCents: op.priceCents, placeholder: op.placeholder }, error, at: new Date(now).toISOString(),
   };
   return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];

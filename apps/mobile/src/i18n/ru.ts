@@ -4446,6 +4446,8 @@ export const ru = {
   "photoUp.a11y": "не загрузилось",
   // spec 53 — quick price of one catalog item (wave 53-1)
   // #1913: one price for a price group
+  "price.group.rejRights": "Цена группы не сохранена: её считает приложение от закупки. Изменить её может тот, кто видит закупку",
+  "price.group.rejFull": "Позиция не сохранена: в группе цены уже 200 позиций. Уберите лишние из группы и сохраните снова",
   "price.group.rejConflict": "Цена группы не сохранена: её изменили на другом телефоне. Откройте позицию и поставьте цену заново",
   "att.rejected.price": "Цена группы не сохранена",
   // #1807 (53-0б): a price counted by the server from the cost

@@ -26,7 +26,7 @@ vi.mock("@/cloud/client", () => ({
     rpc: (name: string, args: unknown) => { rpcCalls.push({ kind: "rpc", name, args }); return Promise.resolve({ data: null, error: rpcError.next }); },
   },
 }));
-const auth = { ready: true, session: null as object | null, company: null as object | null, userId: null as string | null };
+const auth = { ready: true, session: null as object | null, company: null as object | null, userId: null as string | null, accessDenied: undefined as undefined | (() => void), membershipStamp: undefined as number | undefined };
 vi.mock("@/cloud/auth", () => ({ useAuth: () => auth }));
 type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void; reject: (e: unknown) => void };
 const deferred = <T,>(): Deferred<T> => {
@@ -112,7 +112,7 @@ type Value = {
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
 const signIn = (userId: string, companyId: string, role = "owner") => Object.assign(auth, { session: {}, userId, company: { companyId, role, companyName: "Co" } });
-const signOut = () => Object.assign(auth, { session: null, userId: null, company: null });
+const signOut = () => Object.assign(auth, { session: null, userId: null, company: null, accessDenied: undefined, membershipStamp: undefined });
 let root: Root<P> | null = null;
 beforeEach(() => {
   storage.clear();
@@ -132,7 +132,7 @@ const mat = (id: string, color: string, o: Partial<CatalogItem> = {}): CatalogIt
   id, kind: "material", name: `Gutter ${color} (test)`, unit: "ft", priceCents: 800, costCents: 400, vendorTaxBps: 0, markupBps: 10000,
   attributes: { part: "gutter", color, priceGroup: G }, ...o,
 });
-type GP = { k: string; itemId?: string; group?: string; priceCents?: number; expectedPriceCents?: number; costCents?: number | null; expectedCostCents?: number | null; item?: CatalogItem; fields?: string[] };
+type GP = { k: string; costs?: Record<string, unknown>; itemId?: string; group?: string; priceCents?: number; expectedPriceCents?: number; costCents?: number | null; expectedCostCents?: number | null; item?: CatalogItem; fields?: string[] };
 async function start(over: Partial<DB> = {}, role = "owner"): Promise<{ v: () => Value }> {
   signIn("u1", "c1", role);
   const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
@@ -223,5 +223,70 @@ describe("unit:groupPriceStore — #1913 PR2 (spec 33-gutters-price-key §4.6)",
     expect(cards).toHaveLength(1);
     expect(cards[0]).toMatchObject({ labelKey: "price.group.rejConflict", href: "/catalog/b", groupPrice: { group: G, mineCents: 1100 } });
     expect(server.loads.length).toBeGreaterThan(loads);
+  });
+  it("«not yours to price» (42501 price_from_cost): the group's writes go with a card at once — the memberships are not read again for it", async () => {
+    const reread = vi.fn();
+    const { v } = await start();
+    // the membership reread is armed (as in the app): before the fix a group refusal went there and waited
+    Object.assign(auth, { accessDenied: reread, membershipStamp: 1 });
+    root!.rerender({ children: null });
+    v().setOnline(false);
+    await settle();
+    v().saveGroupPrice("w", { priceCents: 900 });
+    await settle();
+    v().setOnline(true);
+    await settle();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    server.sends.find((x) => (x.op as GP).k === "catalog.groupPrice")!.d.reject(new PermanentError("the price is counted from the cost", 403, "42501", "price_from_cost"));
+    await settle();
+    expect(reread).not.toHaveBeenCalled();
+    const cards = v().rejectedOps.filter((c) => c.kind === "catalog.groupPrice");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({ labelKey: "price.group.rejRights", groupPrice: { group: G, mineCents: 900 } });
+    expect(sentOps("catalog.groupPrice")).toHaveLength(1);
+  });
+
+  it("an item's own save next to a group write carries no cost change (the group write carries them)", async () => {
+    const { v } = await start();
+    v().setOnline(false);
+    await settle();
+    v().saveCatalogItem({ ...v().db.catalog.find((c) => c.id === "w")!, priceCents: 1000, costCents: 500 });
+    await settle();
+    v().setOnline(true);
+    await settle();
+    expect(sentOps("catalog.save")[0]?.costs).toEqual({});
+  });
+
+  it("a cost cleared on a group item: the item's own save clears it, the group write never clears it", async () => {
+    const { v } = await start();
+    v().setOnline(false);
+    await settle();
+    v().saveCatalogItem({ ...v().db.catalog.find((c) => c.id === "w")!, priceCents: 1000, markupBps: undefined });
+    await settle();
+    v().setOnline(true);
+    await settle();
+    expect(sentOps("catalog.save")[0]?.costs).toEqual({ markupBps: null });
+    server.sends.find((x) => (x.op as GP).k === "catalog.save")?.d.resolve();
+    await settle();
+    const gp = sentOps("catalog.groupPrice")[0] as GP & { markupBps?: unknown; vendorTaxBps?: unknown };
+    expect(gp).toMatchObject({ priceCents: 1000, expectedPriceCents: 800 });
+    // the cleared markup is not in it (the server keeps a value it is not given): the cost the group had stays as it was
+    expect(gp.markupBps ?? null).toBeNull();
+    expect(gp.costCents).toBe(400);
+  });
+
+  it("an item put into a group takes the group's price and costs on the phone at once (as the server does)", async () => {
+    const { v } = await start({}, "owner");
+    v().setOnline(false);
+    await settle();
+    const black = v().db.catalog.find((c) => c.id === "x")!;
+    v().saveGroupPrice("w", { priceCents: 1200, costCents: 600 });
+    v().saveCatalogItem({ ...black, priceCents: 777, costCents: 111, attributes: { ...black.attributes, priceGroup: G } });
+    await settle();
+    expect(v().db.catalog.find((c) => c.id === "x")).toMatchObject({ priceCents: 1200, costCents: 600 });
+    // a new item of the group: the same
+    v().saveCatalogItem(mat("n", "red", { priceCents: 5, costCents: 3 }));
+    await settle();
+    expect(v().db.catalog.find((c) => c.id === "n")).toMatchObject({ priceCents: 1200, costCents: 600 });
   });
 });
