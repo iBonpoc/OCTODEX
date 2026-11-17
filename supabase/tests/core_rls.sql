@@ -5263,6 +5263,121 @@ select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'a switc
 select tst.ok((select every(location_notice_ack_at is null and status = 'deleted') from public.memberships where user_id = 'a5700000-0000-4000-8000-000000000009'), 'the notice marks are gone in both companies');
 \echo 'T57 + S22: deletion with a switched-off owner row and a notice mark ok'
 :as_super
+-- ---------------------------------------------------------------- T230 + T240 (spec 50, PR 50-2): the erasure queue and its job
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2300000-0000-4000-8000-000000000001', 't230a@x.test', '{"full_name":"T230 Person"}'),
+  ('a2300000-0000-4000-8000-000000000002', 't230b@x.test', '{"full_name":"T230 Other"}');
+insert into public.memberships (id, company_id, user_id, role, status) values
+  ('a2300000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-000000000001', 'tech', 'active'),
+  ('a2300000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-000000000002', 'tech', 'active');
+update public.memberships set title = 'Gutter pro', his_registration_number = 'HIS-230', color = '#112233' where id = 'a2300000-0000-4000-8000-0000000000a1';
+update public.memberships set title = 'Other title', his_registration_number = 'HIS-231' where id = 'a2300000-0000-4000-8000-0000000000a2';
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+  values ('a2300000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T230 item', 'ea', 100, false);
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 50, 'manual', 'a2300000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 60, 'manual', 'a2300000-0000-4000-8000-000000000002');
+insert into public.catalog_price_history (company_id, item_id, unit_price_cents, prev_unit_price_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 120, 100, 'manual', 'a2300000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 130, 120, 'manual', 'a2300000-0000-4000-8000-000000000002');
+reset role; set request.jwt.claim.sub = 'a2300000-0000-4000-8000-000000000001'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T230 the person deletes the account');
+select tst.ok((public.delete_account('DELETE') ->> 'repeat')::boolean, 'T230 again: the same success');
+:as_super
+select tst.ok((select count(*) = 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T230 one queue row for the erased person (a repeat adds none)');
+select tst.ok((select membership_ids = array['a2300000-0000-4000-8000-0000000000a1'::uuid] and done_at is null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T230 the row holds the membership ids and waits');
+select tst.ok(not exists (select 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000002'), 'T230 nobody else is queued');
+select tst.ok((select relrowsecurity and relforcerowsecurity from pg_class where oid = 'app.erase_queue'::regclass), 'T238 the queue has row security on and forced');
+select tst.ok(not has_table_privilege('authenticated', 'app.erase_queue', 'SELECT') and not has_table_privilege('anon', 'app.erase_queue', 'SELECT')
+              and not has_function_privilege('authenticated', 'app.erase_queue_run()', 'EXECUTE') and not has_function_privilege('anon', 'app.erase_queue_run()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_queue_run()', 'EXECUTE'),
+              'T238 the queue and the job: nobody from the API; the job for service_role only');
+-- the journal has the personal fields of the erased membership (the erasure's own update logged them) — before the job
+select count(*) as t240_rows_before from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1' \gset
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1'
+                       and (before ->> 'title' = 'Gutter pro' or before ->> 'his_registration_number' = 'HIS-230')), 'T240 before the job: the journal still holds the personal fields');
+-- the journal stays append-only: under the job's flag a change of anything but before/after is still refused
+do $$ begin
+  perform set_config('app.erasing_journal', 'on', true);
+  begin
+    update public.audit_log set action = 'tampered' where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1';
+    raise exception 'T240 NOT BLOCKED: an audit row changed';
+  exception when sqlstate '42501' then null;
+  end;
+end $$;
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 without the job the journal is append-only');
+-- the flag is not a secret: with it set, anon and authenticated (and anyone but the job's owner) still cannot rewrite the journal
+set role authenticated;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 authenticated with the flag cannot rewrite the journal');
+reset role; set role anon;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 anon with the flag cannot rewrite the journal');
+reset role; set role service_role;
+select set_config('app.erasing_journal', 'on', false);
+select tst.fails($q$update public.audit_log set before = null where entity_type = 'memberships'$q$, 'T240 service_role with the flag, outside the job, cannot rewrite the journal');
+reset role;
+select set_config('app.erasing_journal', '', false);
+reset role; set role service_role;
+select tst.ok(app.erase_queue_run() >= 1, 'T240 the job does the waiting people (the earlier deletions of this file too)');
+reset role;
+select tst.ok(not exists (select 1 from app.erase_queue where done_at is null), 'T240 nobody is left waiting (no failures)');
+select tst.ok((select done_at is not null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000001'), 'T240 marked done');
+select tst.ok(not exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1'
+                           and (before ->> 'title' is not null or after ->> 'title' is not null or before ->> 'his_registration_number' is not null
+                                or after ->> 'his_registration_number' is not null or before ->> 'color' is not null or after ->> 'color' is not null)),
+              'T240 the journal rows about the person lost title, HIS number and colour');
+select tst.ok((select count(*) from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1') = :t240_rows_before,
+              'T240 the rows themselves are all there (only before/after were redacted)');
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a1' and (before ? 'role' or after ? 'role')),
+              'T240 ids and codes stay in the redacted rows');
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'memberships' and entity_id = 'a2300000-0000-4000-8000-0000000000a2' and after ->> 'title' = 'Other title'),
+              'T240 another person''s journal rows are untouched');
+select tst.ok((select count(*) = 0 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000001')
+              and (select count(*) = 0 from public.catalog_price_history where by = 'a2300000-0000-4000-8000-000000000001'), 'T240 the catalog histories forget who (by = null)');
+select tst.ok((select count(*) = 1 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000002')
+              and (select count(*) = 1 from public.catalog_price_history where by = 'a2300000-0000-4000-8000-000000000002')
+              and (select count(*) = 2 from public.catalog_cost_history where item_id = 'a2300000-0000-4000-8000-0000000000c1')
+              and (select count(*) = 2 from public.catalog_price_history where item_id = 'a2300000-0000-4000-8000-0000000000c1'), 'T240 the other person''s history and every history row stay');
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T240 a second run does nothing');
+reset role;
+-- a failure of one person does not stop the others, leaves him waiting with a failed try, and a later run finishes him
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2300000-0000-4000-8000-000000000003', 't230c@x.test', '{"full_name":"T230 Failing"}'),
+  ('a2300000-0000-4000-8000-000000000004', 't230d@x.test', '{"full_name":"T230 Fine"}');
+insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, by) values
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 70, 'manual', 'a2300000-0000-4000-8000-000000000003'),
+  ('ca000000-0000-0000-0000-000000000000', 'a2300000-0000-4000-8000-0000000000c1', 80, 'manual', 'a2300000-0000-4000-8000-000000000004');
+insert into app.erase_queue (user_id, at) values
+  ('a2300000-0000-4000-8000-000000000003', now() - interval '1 hour'),
+  ('a2300000-0000-4000-8000-000000000004', now());
+create function tst.boom() returns trigger language plpgsql as $$ begin
+  if old."by" = 'a2300000-0000-4000-8000-000000000003' then raise exception 'T240 planted failure'; end if;
+  return new;
+end $$;
+create trigger t_boom before update on public.catalog_cost_history for each row execute function tst.boom();
+set role service_role;
+select app.erase_queue_run() as t240_done \gset
+reset role;
+select tst.ok(:t240_done = 1, format('T240 one person failed, the other was done in the same run (done=%s, waiting=%s)', :t240_done, (select string_agg(user_id::text || ':' || tries, ',') from app.erase_queue where done_at is null)));
+select tst.ok((select done_at is null and tries = 1 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000003'), 'T240 the failing one waits, with one failed try');
+select tst.ok((select done_at is not null and tries = 0 from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000004')
+              and not exists (select 1 from public.catalog_cost_history where by = 'a2300000-0000-4000-8000-000000000004'), 'T240 the other one is done and clean');
+drop trigger t_boom on public.catalog_cost_history;
+set role service_role;
+select app.erase_queue_run() as t240_done2 \gset
+reset role;
+select tst.ok(:t240_done2 = 1 and (select done_at is not null from app.erase_queue where user_id = 'a2300000-0000-4000-8000-000000000003'), 'T240 the next run finishes the one that failed');
+update app.erase_queue set tries = 5, done_at = null where user_id = 'a2300000-0000-4000-8000-000000000003';
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T240 after 5 failed tries a row is left alone (50-6 raises an alarm on it)');
+reset role;
+drop function tst.boom();
+\echo 'T230 + T240 (50-2): the erasure queue and the job ok'
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super
 -- (1) guard: every table with company_id, in every non-system schema, has the immutable trigger

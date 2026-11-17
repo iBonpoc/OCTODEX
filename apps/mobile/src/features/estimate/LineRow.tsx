@@ -223,9 +223,11 @@ function LineRowView(p: LineRowProps) {
         <View style={{ minHeight: size.rowMin, paddingVertical: space[2], gap: space[1], justifyContent: "center" }}>
           {full ? (
             <>
-              <T v="body" w="semibold" tone={hidden ? "mut" : "ink"} numberOfLines={2}>
-                {l.name || t("est.row.unnamed")}
-              </T>
+              <View testID={`est-title-${l.id}`}>
+                <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
+                  {l.name || t("est.row.unnamed")}
+                </T>
+              </View>
               {l.description ? (
                 <View testID={`est-desc-${l.id}`}>
                   <T v="caption" tone="mut" numberOfLines={2}>
@@ -246,9 +248,12 @@ function LineRowView(p: LineRowProps) {
           ) : (
             <>
               <RowView gap={space[4]}>
-                <T v="body" w="semibold" tone={hidden ? "mut" : "ink"} numberOfLines={1} style={{ flex: 1 }}>
-                  {l.name || t("est.row.unnamed")}
-                </T>
+                {/* the name wraps, never «…» (DS §4.3, #1427): the sum beside it keeps its width */}
+                <View testID={`est-title-${l.id}`} style={{ flex: 1, minWidth: 0 }}>
+                  <T v="body" w="semibold" tone={hidden ? "mut" : "ink"}>
+                    {l.name || t("est.row.unnamed")}
+                  </T>
+                </View>
                 {sum}
               </RowView>
               {hidden || l.optional || noPrice(l) || p.unhiddenMark || p.checkPrice ? <RowView style={{ flexWrap: "wrap" }}>{chips}</RowView> : null}

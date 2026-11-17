@@ -436,7 +436,6 @@ describe("design system: a form's fields have no plate (#1411)", () => {
   const SUBMIT_ROWS: Record<string, { n: number; why: string }> = {
     "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
-    "features/ServiceCategoryPicker.tsx": { n: 1, why: "«Добавить» свою категорию" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
     "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
   };
