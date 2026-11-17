@@ -24,6 +24,7 @@ exports.run = async (h) => {
   const back = tid("co-wizard-back");
   const bb = await back.boundingBox();
   const sb = await tid("co-save").boundingBox();
+  h.expect(!!bb && !!sb, "«Назад» and the main button are on the screen");
   h.expect(bb.x < sb.x && Math.abs(bb.y - sb.y) <= 2, `«Назад» on the left of «Сохранить и дальше», in one row (${bb.x},${bb.y} / ${sb.x},${sb.y})`);
   await back.locator('[role="button"]').first().click();
   await p.waitForURL((u) => u.pathname === "/company/profile" && u.search.includes("wizard=1"), { timeout: 8000 });
@@ -36,7 +37,9 @@ exports.run = async (h) => {
   const name = tid("co-group-profile").locator("input").first();
   const was = await name.inputValue();
   await name.fill("");
-  h.expect((await tid("co-save").locator('[role="button"]').first().getAttribute("aria-disabled")) === "true", "an empty name: «Сохранить и дальше» is off");
+  // wait for what is checked: the button turns off after the field re-renders
+  await p.waitForFunction(() => [...document.querySelectorAll('[data-testid="co-save"] [role="button"]')].some((e) => e.offsetParent !== null && e.getAttribute("aria-disabled") === "true"), null, { timeout: 4000 });
+  h.expect(true, "an empty name: «Сохранить и дальше» is off");
   await name.fill(was);
 
   // forward again: step 2 shows the kept street
@@ -58,4 +61,17 @@ exports.run = async (h) => {
   await tid("co-save").waitFor({ timeout: 8000 });
   h.expect((await tid("co-wizard-back").count()) === 0, "outside the wizard there is no «Назад»");
 
+
+  // review of #2002: an empty company name (step 1 skipped) does not stop «Назад» from keeping what is typed on step 2
+  await p.waitForFunction(() => !!JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.company, null, { timeout: 8000 });
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.company.name = "";
+  await h.seed("octo.db.v5", raw);
+  await h.go("/company/address?wizard=1");
+  await tid("co-wizard-back").waitFor({ timeout: 8000 });
+  await p.getByPlaceholder(/улица|Street|Улица/i).locator("visible=true").first().fill("471 No Name Street");
+  await tid("co-wizard-back").locator('[role="button"]').first().click();
+  await p.waitForURL((u) => u.pathname === "/company/profile", { timeout: 8000 });
+  await p.waitForFunction(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db?.company?.address?.line1 === "471 No Name Street", null, { timeout: 8000 });
+  h.expect(true, "an empty company name: what was typed on step 2 is kept by «Назад»");
 };

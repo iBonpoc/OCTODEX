@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Image, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -34,6 +34,10 @@ export default function CompanySection() {
   const toast = useToast();
   const c = store.db.company;
   const [draft, setDraft] = useState<Company | null>(c ? (JSON.parse(JSON.stringify(c)) as Company) : null);
+  // #2002 review: «Назад» saves only what was typed HERE — compared with the step as it opened, not with a company that
+  // changed meanwhile (a sync, another director); and one tap goes once
+  const opened = useRef(draft ? JSON.stringify(draft) : "");
+  const leaving = useRef(false);
   const step = SETUP_STEPS.includes(section) ? section : "profile";
   const isWizard = wizard === "1";
   const steps = SETUP_STEPS;
@@ -69,9 +73,11 @@ export default function CompanySection() {
   // the step before opens with its own fields and its own «Сохранить и дальше» (its required fields are asked there again)
   const prev = isWizard && idx > 0 ? steps[idx - 1] : undefined;
   const goPrev = () => {
-    if (!prev) return;
-    const changed = !listSection && JSON.stringify(draft) !== JSON.stringify(c);
-    if (changed && !ro && draft.name.trim()) {
+    if (!prev || leaving.current) return;
+    leaving.current = true;
+    // the name is on step 1 only: an empty name (step 1 skipped) does not stop what is typed on this step from being kept
+    const changed = !listSection && JSON.stringify(draft) !== opened.current;
+    if (changed && !ro) {
       const { licenses: _l, contacts: _c, id: _i, timezone: _tz, scheduleSettings: _s, businessHours: _h, leadDefaultAssigneeId: _a, ...patch } = draft;
       store.saveCompany({ ...patch, skipped: draft.skipped.filter((s) => s !== step) });
     }
