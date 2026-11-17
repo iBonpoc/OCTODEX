@@ -20,7 +20,7 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(st));
   });
   await h.go("/job/schedule?jobId=j3");
-  await p.getByRole("tab", { name: "Весь день" }).locator("visible=true").first().click(); await p.waitForTimeout(300);
+  await p.getByRole("switch", { name: "Весь день" }).locator("visible=true").first().click(); // a row with a switch (spec 56 wave 5а) await p.waitForTimeout(300);
   h.expect((await p.getByText("Длительность", { exact: false }).locator("visible=true").count()) === 0, "no length for a whole day");
   await h.expectText(/весь день/, "the summary says «весь день»");
   await h.expectText(/Клиент увидит только дату/, "the client gets the date only");
@@ -78,7 +78,7 @@ exports.run = async (h) => {
   const s = h.sheet();
   await h.expectText(/весь день · /, "the move form keeps «Весь день» (the summary has no hours)");
   h.expect((await s.getByText("Длительность", { exact: false }).count()) === 0, "and no length in the move form");
-  await s.getByRole("tab", { name: "По времени" }).click(); await p.waitForTimeout(300);
+  await s.getByRole("switch", { name: "Весь день" }).click(); // off: by the time again await p.waitForTimeout(300);
   await s.getByRole("button", { name: "Перенести" }).last().click(); await p.waitForTimeout(600);
   const moved = (await h.db()).visits.find((x) => x.id === v.id);
   h.expect(moved && !moved.allDay && moved.durationMin < 1380, `back to a time (${moved && moved.allDay} ${moved && moved.durationMin})`);

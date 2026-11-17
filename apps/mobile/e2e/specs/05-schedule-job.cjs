@@ -25,7 +25,7 @@ exports.run = async (h) => {
   const dayOffset = workdayOffset(3);
   await h.page.getByRole("radiogroup").first().getByRole("radio").nth(dayOffset).click();
   // the visit form (docs/specs/03 §7.1): person, a free slot, length, note
-  await h.page.getByRole("button", { name: "Ivan Sokolov" }).last().click();
+  await h.page.getByRole("option", { name: "Ivan Sokolov" }).last().click();
   await h.page.getByRole("radio", { name: /^1:00/ }).last().click();
   await h.page.getByRole("button", { name: "Длительность +15" }).last().click();
   await h.page.getByPlaceholder(/Собака во дворе/).last().fill("Gate code at the office");
