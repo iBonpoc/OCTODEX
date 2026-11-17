@@ -17,7 +17,7 @@ import { moduleActive, type ModuleEstimateStore } from "../registry";
 import { leadEstimatePropertyId } from "@/features/access";
 import { docLanguageFor } from "@/data/people";
 import type { DocLang } from "@/i18n/translate";
-import { gutterData, K, KEY, ownFields, putMeasurement, undoAll, withGutterData } from "./data";
+import { gutterData, K, KEY, ownFields, putMeasurement, removeMeasurement, undoAll, withGutterData } from "./data";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import { fromElements, type ElementRow, type MeasurementRow } from "./canvas/model";
 import { toMeasurement } from "./geometry";
@@ -293,4 +293,47 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResu
     // the lead's new client: all of them go back or none (DS §15.2)
     undo: undoAll(store, [t.undo, undoReady, undoSave]),
   };
+}
+
+/* ---------- «Удалить замер» with an estimate on it (#2013) ---------- */
+
+/** the open estimates with this measurement's lines: drafts (their lines are let go of the measurement) and sent ones (left as they are) */
+export function estimatesOn(db: Pick<DB, "estimates">, measurementId: string): { drafts: Estimate[]; sent: Estimate[] } {
+  const mine = db.estimates.filter((e) => !SIGNED.has(e.status) && e.status !== "declined" && hasLinesOf(e, measurementId));
+  return { drafts: mine.filter((e) => e.status === "draft"), sent: mine.filter((e) => e.status === "sent") };
+}
+
+/**
+ * The estimate's lines of this measurement become ordinary lines (#2013, director's option Б): the same name, quantity, price, cost —
+ * only the module's mark goes (no «Из замера», no «Обновить из замера» to a measurement that is gone). The drawing's page in the
+ * document is a picture of what was counted (withMeasurementPage): it stays. The same document back when nothing is of it.
+ */
+export function detachDoc(doc: EstimateDoc, measurementId: string): EstimateDoc {
+  let changed = false;
+  const options = doc.options.map((o) => ({
+    ...o,
+    lines: o.lines.map((l) => {
+      if (!ofMeasurement(l, measurementId)) return l;
+      changed = true;
+      const { source: _s, ...rest } = l as typeof l & { source?: unknown };
+      return rest as typeof l;
+    }),
+  }));
+  return changed ? { ...doc, options } : doc;
+}
+
+/**
+ * «Удалить замер» (#2013): the measurement goes (soft, removeMeasurement); its draft estimates keep their lines as ordinary ones (one
+ * save each, through the core's save — money through the engine, the queue); a sent estimate is not touched (its status and the client's
+ * copy stay — the director, 17.11). One «Отменить» takes all of it back, offline too. Null — nothing to delete; signed — the caller
+ * refuses before (signedOn).
+ */
+export function removeMeasurementDetached(store: ModuleEstimateStore, measurementId: string): GuardedUndo | null {
+  const { drafts } = estimatesOn(store.db, measurementId);
+  const saves = drafts.map((e) =>
+    store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: detachDoc(e.doc!, measurementId), ...(e.leadId ? { leadId: e.leadId } : {}) }),
+  );
+  const del = removeMeasurement(store, measurementId);
+  if (!del && !saves.length) return null;
+  return undoAll(store, [...saves, del]);
 }

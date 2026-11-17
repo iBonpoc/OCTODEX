@@ -65,7 +65,9 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { GridLayer } from "../canvas/GridLayer";
 import { useJsGestureConfig } from "../canvas/jsGestureConfig";
 import { listPreview, partName } from "../prices";
-import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate, signedOn } from "../estimateLink";
+import { clientLangOf, estimateAction, estimateOfMeasurement, estimatesOn, makeEstimate, removeMeasurementDetached, signedOn } from "../estimateLink";
+import { DeleteMeasurementSheet } from "../view/DeleteMeasurementSheet";
+import type { ModuleEstimateStore } from "@/modules/registry";
 import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, cornerCut, findCorners, capSide, houseSides, splashOff, runEnds, runLengthIn, toMeasurement, withoutDuplicates, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 import { localUndo, type GuardedUndo } from "@/data/undo";
@@ -1047,8 +1049,16 @@ export default function DrawScreen() {
     if (k === "relink") setLinkSheet(true);
     else if (k === "unlink") toast.show(t("mod.gutters.link.unlinked"), relink(store, m.id, null) ?? undefined);
     else if (signedOn(store.db, m.id)) toast.show(t("mod.gutters.draw.deleteSigned"));
-    else {
-      const undo = removeMeasurement(store, m.id);
+    // an open estimate stands on it: asked first (#2013)
+    else if (estimatesOn(store.db, m.id).drafts.length || estimatesOn(store.db, m.id).sent.length) setAskDelete(true);
+    else deleteNow();
+  };
+  const [askDelete, setAskDelete] = useState(false);
+  const deleteNow = () => {
+    setAskDelete(false);
+    if (!m) return;
+    {
+      const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, m.id) ?? removeMeasurement(store, m.id);
       flush();
       // to the list of measurements (founder 16.11, #1819: he stayed on an empty canvas «Замер»): the canvas of a deleted one is
       // never shown — the list below is popped to, else it takes this screen's place (goTo); «Отменить» brings it back there
@@ -1428,6 +1438,7 @@ export default function DrawScreen() {
         <AttrBody inSheet>{newBody(false)}</AttrBody>
       </Sheet>
       {m ? <LinkSheet visible={linkSheet} onClose={() => setLinkSheet(false)} measurementId={m.id} /> : null}
+      {m ? <DeleteMeasurementSheet visible={askDelete} on={estimatesOn(store.db, m.id)} onDelete={deleteNow} onClose={() => setAskDelete(false)} /> : null}
       <Menu visible={!!whoAt} anchor={whoAt} items={whoItems} onSelect={onWho} onClose={() => setWhoAt(null)} />
       <InputWindow visible={canSave && !!editRun} onClose={() => setLenEdit(null)}>
         {editRun ? <QuickLength key={editRun.id} fmt={ch.lenFormat} run={editRun} start={runLengthIn(editRun)} onLength={(n) => commit(setLength(cur.current.drawing, editRun.id, n))} onDone={() => setLenEdit(null)} onCancel={() => setLenEdit(null)} /> : null}

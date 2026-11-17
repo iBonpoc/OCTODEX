@@ -19,7 +19,9 @@ import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import type { MeasurementRow } from "../canvas/model";
 import { duplicateMeasurement, KEY, relink, removeMeasurement } from "../data";
-import { signedOn } from "../estimateLink";
+import { estimatesOn, removeMeasurementDetached, signedOn } from "../estimateLink";
+import type { ModuleEstimateStore } from "@/modules/registry";
+import { DeleteMeasurementSheet } from "./DeleteMeasurementSheet";
 import { measurementState } from "../measurements";
 import { LinkSheet } from "../draw/LinkSheet";
 
@@ -62,7 +64,15 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
       return;
     }
     if (signedOn(db, m.id)) return toast.show(t("mod.gutters.draw.deleteSigned"));
-    const undo = removeMeasurement(store, m.id);
+    // an open estimate stands on it: asked first (#2013); none — at once, with «Отменить»
+    const on = estimatesOn(db, m.id);
+    if (on.drafts.length || on.sent.length) return setAskDelete(true);
+    doDelete();
+  };
+  const [askDelete, setAskDelete] = useState(false);
+  const doDelete = () => {
+    setAskDelete(false);
+    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, m.id) ?? removeMeasurement(store, m.id);
     onGone();
     toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
   };
@@ -141,6 +151,7 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
         onClose={() => setMoreAt(null)}
       />
       <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
+      <DeleteMeasurementSheet visible={askDelete} on={estimatesOn(db, m.id)} onDelete={doDelete} onClose={() => setAskDelete(false)} />
     </View>
   );
 }
