@@ -1,9 +1,10 @@
 /**
  * unit:seeCosts — #1837 (spec 54 §4 №5): «who sees our costs» is one rule for the whole app.
  * - roleSeesCosts is the table of the server's app.can_view_costs (19 §9); the database test T364–T366 checks the same
- *   table against the function itself (supabase/tests/core_rls.sql) — change both together.
- * - seeCosts: what the last load said; not known yet in the cloud — no (an old cache never shows nor writes a cost);
- *   the demo (no server) — by its role.
+ *   table against the function itself (supabase/tests/core_rls.sql, T364) — change both together.
+ * - serverSaysCosts: what the last load said; not known yet in the cloud — no; the demo (no server) — yes.
+ * - seeCosts (what a screen shows): the server's «yes» and never in the tech view.
+ * - keepCosts (what a write carries): the costs the phone holds, unless the server said «no».
  * - The guard: no screen, feature or store code reads db.costsVisible itself — only features/access.ts.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
@@ -11,7 +12,7 @@ import { join, relative } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/cloud/client", () => ({ supabase: {} }));
-import { roleSeesCosts, seeCosts } from "../src/features/access";
+import { keepCosts, roleSeesCosts, seeCosts, serverSaysCosts } from "../src/features/access";
 import { costsVisibleFor } from "../src/cloud/repo";
 
 /** the server's roles × view_costs → app.can_view_costs (the same rows as T364 in core_rls.sql) */
@@ -36,17 +37,28 @@ describe("unit:seeCosts — #1837", () => {
     }
   });
 
-  it("a membership that is not active, or none: no", () => {
+  it("a membership that is not active, or none: no; an unknown role: no; view_costs as the text «true»: yes, as the server", () => {
     expect(roleSeesCosts("owner", true, false)).toBe(false);
     expect(costsVisibleFor({ role: "owner", status: "invited" })).toBe(false);
+    expect(costsVisibleFor({ role: "office", status: "disabled" })).toBe(false);
+    expect(costsVisibleFor({ role: "owner", status: "deleted" })).toBe(false);
     expect(costsVisibleFor(undefined)).toBe(false);
+    expect(roleSeesCosts("auditor", true)).toBe(false);
+    expect(costsVisibleFor({ role: "sales", status: "active", permissions_override: { view_costs: "true" } })).toBe(true);
   });
 
-  it("the phone: the load's answer wins; not known in the cloud — no; the demo — by role, the tech no", () => {
+  it("the phone: the load's answer wins; not known in the cloud — no; the demo — yes", () => {
+    expect(serverSaysCosts({ costsVisible: true }, "cloud")).toBe(true);
+    expect(serverSaysCosts({ costsVisible: false }, "demo")).toBe(false);
+    // an old cache (before the field) or before the first load: nothing is counted or written on a guess
+    expect(serverSaysCosts({}, "cloud")).toBe(false);
+    expect(serverSaysCosts({}, "demo")).toBe(true);
+  });
+
+  it("a screen shows costs on the server's «yes», never in the tech view (an owner who switched to «Мастер» too)", () => {
     expect(seeCosts({ costsVisible: true }, "sales", "cloud")).toBe(true);
+    expect(seeCosts({ costsVisible: true }, "tech", "cloud")).toBe(false);
     expect(seeCosts({ costsVisible: false }, "director", "cloud")).toBe(false);
-    expect(seeCosts({ costsVisible: false }, "director", "demo")).toBe(false);
-    // an old cache (before the field) or before the first load: no cost is shown or written on a guess
     expect(seeCosts({}, "director", "cloud")).toBe(false);
     expect(seeCosts({}, "director", "demo")).toBe(true);
     expect(seeCosts({}, "dispatcher", "demo")).toBe(true);
@@ -54,10 +66,17 @@ describe("unit:seeCosts — #1837", () => {
     expect(seeCosts({}, "tech", "demo")).toBe(false);
   });
 
+  it("a write carries the costs the phone holds unless the server said «no» (an unknown flag never drops them for good)", () => {
+    expect(keepCosts({})).toBe(true);
+    expect(keepCosts({ costsVisible: true })).toBe(true);
+    expect(keepCosts({ costsVisible: false })).toBe(false);
+  });
+
   it("guard: only features/access.ts reads db.costsVisible (the load writes it; a param of that name is a boolean)", () => {
     const SRC = join(__dirname, "../src");
-    // `<something db-like>.costsVisible` — a read of the stored flag, not a boolean parameter called costsVisible
-    const READ = /\b(?:db|d0|d|next|cur|raw|store\.db|dbRef\.current)\??\.costsVisible\b/;
+    // a read of the stored flag: `x.costsVisible`, `x?.costsVisible`, `x["costsVisible"]`, `{ costsVisible } = …` —
+    // but a boolean parameter or prop of that name (p.costsVisible, ctx.costsVisible, c./o.costsVisible) is not one
+    const READ = /(?<!\b(?:p|ctx|c|o))\??\.costsVisible\b|\[\s*["']costsVisible["']\s*\]|\{[^}=]*\bcostsVisible\b[^}=]*\}\s*=(?!=)/;
     const ALLOWED: Record<string, string> = {
       "features/access.ts": "the one rule",
       "cloud/repo.ts": "the load writes what the server said",

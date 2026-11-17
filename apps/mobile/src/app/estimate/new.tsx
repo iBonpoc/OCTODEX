@@ -6,7 +6,7 @@ import { haptics } from "@/ui/haptics";
 import { component, motion, space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, countedSections, discountBps, ppmToPctText, sectionSubtotals, taxRatePpm, type TaxSettings, type EstimateSection, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import { canMakeEstimateAt, canSeeEstimate, seeCosts as seesCosts } from "@/features/access";
+import { canMakeEstimateAt, canSeeEstimate, keepCosts, seeCosts as seesCosts } from "@/features/access";
 import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
 import { appendTemplate, canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, removeAppended, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
@@ -90,12 +90,15 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
   const [propertyId, setPropertyId] = useState(existing?.propertyId ?? draft?.propertyId ?? params.propertyId);
   // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
   const seeCosts = seesCosts(db, store.role, store.mode);
+  // #1837: what a write carries — a template's costs the phone holds go into the estimate (and back) unless the server
+  // said «no»; what is SHOWN is seeCosts (review №1: an unknown flag must not drop them for good)
+  const keep = keepCosts(db);
   const templates = pickableTemplates(db.estimateTemplates ?? []);
   const given = !existing && params.template ? templates.find((x) => x.id === params.template) : undefined;
   // §12 №10: the builder edits a template's lines (no client; «Сохранить шаблон») — the director and the office only
   // fixed when the screen opens: a template archived meanwhile (a sync) must not turn this into a new estimate (security check №2)
   const [tplEdit] = useState(() => (!existing && !given && params.editTemplate && canEditEstimateTemplates(store.role) ? templates.find((x) => x.id === params.editTemplate) : undefined));
-  const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts, !!given.module) : null));
+  const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, keep, !!given.module) : null));
   const [templateId, setTemplateId] = useState<string | undefined>(draft ? draft.templateId : given?.id);
   const [checkPrice, setCheckPrice] = useState<string[]>(draft?.checkPrice ?? fromTpl?.checkPrice ?? []);
   // lines that were hidden and came priced (a template line took the catalog price): shown to the client again — the mark stays until the row is opened
@@ -126,7 +129,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
       ? // an estimate saved already never gets the key here (one without a doc — an older phone's — starts empty, no Terms)
         existing.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)
       : tplEdit
-        ? templateForEdit(tplEdit, seeCosts)
+        ? templateForEdit(tplEdit, keep)
         : withNewTerms(draft?.doc ?? fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps), draft?.customerId ?? params.customerId),
   );
   const [title, setTitle] = useState(existing?.doc ? existing.title : draft?.title ?? tplEdit?.name ?? given?.name ?? "");
@@ -208,7 +211,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     // typed before stay (DS §8.13 «набранное не теряется»; code review: the empty editor replaced them)
     if (x && (inEditor || hasContent(doc))) return void addTemplate(x, hasContent(doc));
     if (x) {
-      const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
+      const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, keep, !!x.module);
       const ci = Math.max(0, r.doc.options.findIndex((o) => o.recommended));
       // the estimate's Terms stay: a template never carries them (spec 40 §7)
       setDoc(doc.terms !== undefined ? { ...r.doc, terms: doc.terms } : r.doc);
@@ -602,7 +605,7 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
    * number; «Добавлено позиций: N · Вернуть» takes out only what came (the edits since stay); «Кол-во» of the first that came
    */
   const addTemplate = (x: EstimateTemplate, typed: boolean) => {
-    const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
+    const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, keep, !!x.module);
     const a = appendTemplate(doc, r.doc, cur);
     const before = doc.options.length;
     setDoc(a.doc);
@@ -725,14 +728,14 @@ function EstimateBuilder({ drafts }: { drafts: ReturnType<typeof useEstimateDraf
     const settled = settleNow(false);
     if (!settled.closed) return;
     const tplDoc: EstimateDoc = { ...docWith(settled.option), options: docWith(settled.option).options.map((o) => ({ ...o, lines: o.lines.filter((l) => !isBlank(l)) })) };
-    const next = editedTemplate(live, tplDoc, seeCosts, name);
+    const next = editedTemplate(live, tplDoc, keep, name);
     if (!next) {
       toast.show(t("est.tpl.cannot"));
       return;
     }
     // the server checks the same: over the version this screen opened on, else «не сохранено» (row_version_conflict)
     const catalogUndos = writeCatalog(settled.newItems);
-    const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, tplDoc, seeCosts) });
+    const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, tplDoc, keep) });
     // «Отменить» (rule 5): the edit waits on the phone while the toast is up (SEND_AFTER_MS) — taken out of the queue
     toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), store.undoTogether([...catalogUndos, undo]));
     router.replace("/estimate/templates");

@@ -16711,9 +16711,12 @@ select tst.fails($q$insert into public.catalog_items (id, company_id, kind, name
 -- change both together.
 \echo 'T364 app.can_view_costs by role and view_costs = the phone''s table'
 :as_super
+-- its own companies and people, rolled back: nothing stays for the tests after it
+begin;
 do $t$
 declare
   r record; v_got boolean; i int := 0;
+  v_u uuid; v_c uuid;
 begin
   for r in select * from (values
     ('owner',         false, 'active', true),
@@ -16726,7 +16729,10 @@ begin
     ('subcontractor', false, 'active', false),
     ('subcontractor', true,  'active', false),
     ('office',        false, 'invited', false),
-    ('sales',         true,  'invited', false)
+    ('sales',         true,  'invited', false),
+    ('office',        false, 'disabled', false),
+    ('owner',         false, 'deleted', false),
+    ('owner',         false, 'active+deleted_at', false)
   ) as x(role, view_costs, status, sees) loop
     i := i + 1;
     -- a company of its own per row: no limit on owners or seats is in the way
@@ -16737,13 +16743,20 @@ begin
     delete from public.memberships where company_id = ('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
     insert into public.memberships (company_id, user_id, role, status, permissions_override)
       values (('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid, ('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid,
-              r.role, r.status, case when r.view_costs then '{"view_costs": true}'::jsonb else '{}'::jsonb end);
-    perform set_config('request.jwt.claim.sub', '36400000-0000-4000-8000-' || lpad(i::text, 12, '0'), true);
-    v_got := app.can_view_costs(('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid);
+              r.role, case when r.status = 'active+deleted_at' then 'active' else r.status end, case when r.view_costs then '{"view_costs": true}'::jsonb else '{}'::jsonb end);
+    v_u := ('36400000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+    v_c := ('36410000-0000-4000-8000-' || lpad(i::text, 12, '0'))::uuid;
+    -- an active membership with deleted_at (the phone never loads it — repo.ts reads deleted_at is null)
+    if r.status = 'active+deleted_at' then
+      update public.memberships set deleted_at = now() where company_id = v_c and user_id = v_u;
+    end if;
+    perform set_config('request.jwt.claim.sub', v_u::text, true);
+    v_got := app.can_view_costs(v_c);
     perform set_config('request.jwt.claim.sub', '', true);
     perform tst.ok(v_got = r.sees, format('T364 %s view_costs=%s %s: %s', r.role, r.view_costs, r.status, r.sees));
   end loop;
 end $t$;
+rollback;
 \echo 'T364 ok'
 
 \echo 'ALL TESTS PASSED'

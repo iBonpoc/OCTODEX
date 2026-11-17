@@ -21,7 +21,7 @@ import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
-import { canMakeEstimateAt, leadEstimatePropertyId, seeCosts } from "@/features/access";
+import { canMakeEstimateAt, keepCosts, leadEstimatePropertyId, serverSaysCosts } from "@/features/access";
 import { signTotalFor } from "@/cloud/legacyTotals";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -770,10 +770,9 @@ export function StoreProvider({
 
   const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
   const role = effectiveRole(savedRole, availableRoles);
-  // #1837: who sees our costs — one rule for the whole app (features/access.ts); the role of now, not of a closure
-  const appRoleRef = useRef(role);
-  appRoleRef.current = role;
-  const sees = (d: Pick<DB, "costsVisible"> = dbRef.current) => seeCosts(d, appRoleRef.current, modeRef.current);
+  // #1837: does the server give this person our costs — one rule (features/access.ts); the data's rule, not the view's
+  // (a cost change queued in the office view keeps its costs when sent from the tech view)
+  const sees = (d: Pick<DB, "costsVisible"> = dbRef.current) => serverSaysCosts(d, modeRef.current);
   useEffect(() => {
     if (savedRole !== role) setRole(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2773,7 +2772,7 @@ export function StoreProvider({
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
         if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
-        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), sees(d0));
+        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), keepCosts(d0));
         const job = d0.jobs.find((j) => j.id === jobId);
         const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
         const ids: ID[] = [];

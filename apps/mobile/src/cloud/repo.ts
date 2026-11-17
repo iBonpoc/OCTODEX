@@ -105,7 +105,9 @@ export function estimateTemplateFromDb(r: Row, costs: Row[], uses: Row[]): Estim
 /** #1837: the table of app.can_view_costs is in one place on the phone (features/access.ts roleSeesCosts) */
 export function costsVisibleFor(m: Row | undefined): boolean {
   if (!m) return false;
-  return roleSeesCosts(s(m.role), (m.permissions_override as { view_costs?: unknown } | null)?.view_costs === true, m.status === "active");
+  // the server reads view_costs as text cast to boolean: «true» as a string is a yes there too
+  const v = (m.permissions_override as { view_costs?: unknown } | null)?.view_costs;
+  return roleSeesCosts(s(m.role), v === true || v === "true", m.status === "active");
 }
 /**
  * A table the server does not have yet (a PR preview on an older database): [] — the caller reads the old place.

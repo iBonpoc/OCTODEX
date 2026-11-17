@@ -68,12 +68,10 @@ exports.run = async (h) => {
 
   // #1837: sales without our costs (the server's app.can_view_costs said no) edits the list but sees no cost, no margin,
   // no «В убытке» — the one rule (features/access.ts seeCosts), not the role
-  await p.evaluate(() => {
-    localStorage.setItem("octo.role.v1", JSON.stringify("sales"));
-    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
-    raw.db.costsVisible = false;
-    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-  });
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.costsVisible = false;
+  await h.seed("octo.db.v5", raw);
+  await h.seed("octo.role.v1", "sales");
   await h.go("/catalog");
   const salesCard = p.locator('[data-testid="list-card"]').filter({ hasText: LOSS }).first();
   await salesCard.waitFor({ timeout: 8000 });

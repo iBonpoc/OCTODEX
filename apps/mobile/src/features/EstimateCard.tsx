@@ -1,5 +1,5 @@
 import { APP_NAME } from "@/config/product";
-import { seeCosts } from "./access";
+import { keepCosts, seeCosts } from "./access";
 import { visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
@@ -768,7 +768,8 @@ function SaveTemplateSheet({ e, onClose, visible, onExited }: { e: Estimate; onC
   const [done, setDone] = useState(false);
   const save = () => {
     if (!e.doc || done || !name.trim()) return;
-    const costsSeen = seeCosts(store.db, store.role, store.mode);
+    // #1837: the template keeps the costs the phone holds unless the server said «no» (a write, not a view)
+    const costsSeen = keepCosts(store.db);
     const exempt = !!store.db.customers.find((c) => c.id === e.customerId)?.taxExempt;
     const tpl = { id: uid(), name, doc: toTemplateDoc(e.doc, costsSeen, exempt) };
     // what the server would refuse is never queued: say so instead of «сохранён»

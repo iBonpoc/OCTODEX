@@ -65,12 +65,18 @@ export const canMakeEstimateAt = (db: Pick<DB, "visits" | "jobs" | "leads">, w: 
 export const canEditCatalog = (role: Role) => role !== "tech";
 
 /**
- * #1837 (spec 54 §4 №5): who sees our costs — the server's app.can_view_costs (19 §9) is the only truth; every screen
- * and the store ask this one function, never db.costsVisible itself (guard: test/seeCostsGuard.test.ts).
- * - a server role, as app.can_view_costs: owner, admin, office — yes; tech, subcontractor — no; sales — only with
- *   view_costs; a membership that is not active — no (cloud/repo.ts costsVisibleFor; db T364–T366);
- * - the phone: what the last load said (DB.costsVisible). Not known yet in the cloud (an old cache, before the first
- *   load) — no: a cost is shown and written only on the server's «yes»; the demo (no server) by its role, the tech no.
+ * #1837 (spec 54 §4 №5): who sees our costs — the server's app.can_view_costs (19 §9) is the only truth; screens, the
+ * store and the features ask these functions, never db.costsVisible itself (guard: test/seeCosts.test.ts).
+ * - roleSeesCosts — the table of app.can_view_costs: owner, admin, office — yes; tech, subcontractor — no; sales — only
+ *   with view_costs; a membership that is not active (invited, disabled, deleted) — no; a deleted one is not loaded at all
+ *   (cloud/repo.ts costsVisibleFor; db T364). A role the phone does not know — no (the server would let it with
+ *   view_costs; its check constraint has none — the phone errs towards «no»).
+ * - serverSaysCosts — what the last load said (DB.costsVisible). Not known yet in the cloud (an old cache, before the
+ *   first load) — no: nothing is counted or written on a guess; the demo (no server) — yes.
+ * - seeCosts — what a screen SHOWS: the server's «yes», and never in the tech view (spec 06 §7.6 — an owner who switched
+ *   to «Мастер» shows no cost or margin on site either).
+ * - keepCosts — what a WRITE carries on: the costs the phone holds go on unless the server said «no» (the phone holds
+ *   only what the server gave it: an unknown flag must not drop a template's or an order's costs for good — review №1).
  */
 export function roleSeesCosts(role: string, viewCosts: boolean, active = true): boolean {
   if (!active) return false;
@@ -78,7 +84,9 @@ export function roleSeesCosts(role: string, viewCosts: boolean, active = true): 
   if (role === "sales") return viewCosts;
   return false;
 }
-export function seeCosts(db: Pick<DB, "costsVisible">, role: Role, mode: Mode): boolean {
+export function serverSaysCosts(db: Pick<DB, "costsVisible">, mode: Mode): boolean {
   if (typeof db.costsVisible === "boolean") return db.costsVisible;
-  return mode === "cloud" ? false : role !== "tech";
+  return mode !== "cloud";
 }
+export const seeCosts = (db: Pick<DB, "costsVisible">, role: Role, mode: Mode): boolean => role !== "tech" && serverSaysCosts(db, mode);
+export const keepCosts = (db: Pick<DB, "costsVisible">): boolean => db.costsVisible !== false;
