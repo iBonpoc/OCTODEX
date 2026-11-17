@@ -2307,7 +2307,7 @@ export const en: Dict = {
   "legal.err.needed": "Accept the Terms of Service and the Privacy Policy first.",
   "legal.err.outdated": "The terms have changed. Update the app to see the new text.",
   "legal.err.network": "Check the connection and try again — then it will save.",
-  "legal.gate.firstTitle": "Terms and privacy",
+  "legal.gate.firstTitle": "Terms",
   "legal.gate.firstBody": "Before you continue, read and accept the Terms of Service and the Privacy Policy.",
   "legal.gate.changedTitle": "The terms have changed",
   "legal.gate.changedBody": "We updated the Terms of Service or the Privacy Policy. To keep working, read and accept the new edition.",
