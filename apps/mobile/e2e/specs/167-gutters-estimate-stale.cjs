@@ -121,6 +121,9 @@ exports.run = async (h) => {
   // «Обновить из замера» → the review's «Перенести изменения в смету»: the same estimate, the quantity grows, the word is gone
   await h.go(`/estimate/${eid}`);
   await tid("module-gutters-stale-update").getByRole("button").click();
+  // the review asks first: an estimate is changed only by a press (opening a link never writes)
+  await tid("view-estimate-ask").waitFor({ timeout: 8000 });
+  await tid("view-estimate-ask-action").getByRole("button").click();
   await p.waitForURL(/\/estimate\/new\?id=/, { timeout: 8000 });
   h.expect(new URL(p.url()).searchParams.get("id") === eid, "the same estimate");
   await waitFor(async () => Number((await lineOf(eid, g.id))?.quantity) > q1, "the quantity grew");

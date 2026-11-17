@@ -159,7 +159,9 @@ const gutters: ModuleDef = {
     view: () => require("./view/ViewScreen").default,
     list: () => require("./list/MeasurementsScreen").default,
     start: () => require("./list/StartScreen").default,
-    bench: () => require("./bench/BenchScreen").default,
+    // the speed check is a developer's screen: registered only where it is offered (Expo Go, a development build) — the store build
+    // and the web have no such route at all, a link to it is «not found»
+    ...(benchOfferedHere() ? { bench: () => require("./bench/BenchScreen").default } : {}),
     settings: () => require("./settings/SettingsScreen").default,
     prices: () => require("./prices/PricesScreen").default,
   },

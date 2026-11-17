@@ -3687,6 +3687,8 @@ export const es: Dict = {
   "mod.gutters.sheet.scale": "Escala: {len}",
   "mod.gutters.sheet.panel": "Contorno {n} · canaletas {runs}",
   "mod.gutters.view.estimates": "Presupuestos de esta medición",
+  "mod.gutters.view.askMake": "¿Hacer el presupuesto con esta medición?",
+  "mod.gutters.view.askUpdate": "¿Actualizar el presupuesto con esta medición?",
   "mod.gutters.view.stale": "El dibujo cambió después del presupuesto: las cantidades se actualizarán, sus cambios manuales se quedan",
   "mod.gutters.view.link": "Vincular a un cliente o prospecto",
   "mod.gutters.view.empty": "Aún no hay dibujo: dibuje las canaletas",

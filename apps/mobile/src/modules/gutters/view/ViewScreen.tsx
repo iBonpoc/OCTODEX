@@ -20,6 +20,7 @@ import { canSeeClientMoney } from "@/features/clients";
 import { EstimateListCard } from "@/features/listCards";
 import { moduleActive, moduleHref } from "@/modules/registry";
 import { Button, StatusChip } from "@/ui/controls";
+import { Banner } from "@/ui/banner";
 import { Icon, T } from "@/ui/primitives";
 import { HelpButton, Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
@@ -140,12 +141,15 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
     toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
     router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}` as Href);
   };
-  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1: done once
+  // «Смета из замера» (the lead) and «Обновить из замера» (the estimate's note) come here with estimate=1. Opening a link never writes:
+  // an estimate to open is opened (nothing changes); one to make or update is ASKED — the person presses (the question on top)
   const auto = useRef(!!autoEstimate);
+  const [ask, setAsk] = useState(false);
   useEffect(() => {
     if (!auto.current || !m || !money$) return;
     auto.current = false;
-    if (action.kind === "make" || action.kind === "update" || action.kind === "open") doEstimate();
+    if (action.kind === "open") doEstimate();
+    else if (action.kind === "make" || action.kind === "update") setAsk(true);
   });
 
   // «чертёж как на бумаге» (founder 10.11, #739): a drawing sheet, not the canvas — the same one the PDFs carry
@@ -254,7 +258,17 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
           <View testID="view-empty"><T tone="mut">{t("mod.gutters.view.empty")}</T></View>
         ) : null}
 
-        {/* the main action by the state (#699) and «Править чертёж» */}
+        {/* the main action by the state (#699) and «Править чертёж»; came by a link to make / update the estimate — asked first */}
+        {ask && (action.kind === "make" || action.kind === "update") ? (
+          <Banner
+            tone="info"
+            testID="view-estimate-ask"
+            title={t(action.kind === "make" ? "mod.gutters.view.askMake" : "mod.gutters.view.askUpdate")}
+            action={{ label: t(action.kind === "make" ? "mod.gutters.est.make" : "mod.gutters.est.update"), onPress: () => { setAsk(false); doEstimate(); } }}
+            onClose={() => setAsk(false)}
+            closeLabel={t("common.close")}
+          />
+        ) : null}
         <View style={{ gap: space[2] }}>
           {money$ && action.kind === "needLead" ? (
             <View testID="view-action-link"><Button label={t("mod.gutters.view.link")} icon="user" onPress={() => setLinkOpen(true)} /></View>

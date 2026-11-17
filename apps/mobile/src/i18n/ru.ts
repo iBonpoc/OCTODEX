@@ -3687,6 +3687,8 @@ export const ru = {
   "mod.gutters.sheet.scale": "Масштаб: {len}",
   "mod.gutters.sheet.panel": "Контур {n} · gutter {runs}",
   "mod.gutters.view.estimates": "Сметы по замеру",
+  "mod.gutters.view.askMake": "Сделать смету из этого замера?",
+  "mod.gutters.view.askUpdate": "Обновить смету из этого замера?",
   "mod.gutters.view.stale": "Чертёж правили после сметы: количества обновятся, ваши ручные правки останутся",
   "mod.gutters.view.link": "Привязать к клиенту или лиду",
   "mod.gutters.view.empty": "Чертёж пуст — нарисуйте gutters",
