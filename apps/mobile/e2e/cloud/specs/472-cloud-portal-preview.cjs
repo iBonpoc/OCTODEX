@@ -33,10 +33,10 @@ exports.run = async (h, { seed, admin }) => {
 
   // two estimates of company A: E1 only sent; E2 with a 10% deposit (signed by the client and the company below)
   const C = uuid(); const P = uuid();
-  const est = [{ e: uuid(), v: uuid(), o: uuid(), dep: '{"kind":"none"}', title: `Nightly 472 sign ${run}` },
-               { e: uuid(), v: uuid(), o: uuid(), dep: '{"kind":"pct","bps":1000}', title: `Nightly 472 pay ${run}` }];
+  const est = [{ e: uuid(), v: uuid(), o: uuid(), l: uuid(), dep: '{"kind":"none"}', title: `Nightly 472 sign ${run}` },
+               { e: uuid(), v: uuid(), o: uuid(), l: uuid(), dep: '{"kind":"pct","bps":1000}', title: `Nightly 472 pay ${run}` }];
   const docOf = (x) => JSON.stringify({
-    options: [{ id: x.o, name: "Only", recommended: true, lines: [{ id: uuid(), group: "labor", name: "Nightly 472 line", quantity: "1", unit: "ea", unitPriceCents: 20000 }] }],
+    options: [{ id: x.o, name: "Only", recommended: true, lines: [{ id: x.l, group: "labor", name: "Nightly 472 line", quantity: "1", unit: "ea", unitPriceCents: 20000 }] }],
     settings: { discount: null, tax: { enabled: false, rateBps: 0, groups: { service: true, labor: true, material: true } }, deposit: JSON.parse(x.dep).kind === "pct" ? { kind: "pct", bps: 1000 } : { kind: "none" }, caHic: true },
   });
   const sql = [
@@ -48,7 +48,8 @@ exports.run = async (h, { seed, admin }) => {
       `insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule, calc_inputs) values ('${x.v}', '${A}', '${x.e}', 1, '${x.dep}', '${docOf(x)}');`,
       `update public.estimates set current_version_id = '${x.v}' where id = '${x.e}';`,
       `insert into public.estimate_options (id, company_id, version_id, name) values ('${x.o}', '${A}', '${x.v}', 'Only');`,
-      `insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('${A}', '${x.o}', 'labor', 'Nightly 472 line', 1, 20000);`,
+      // the same line as the document (send_estimate checks: same id, amount, not taxable — the tax is off)
+      `insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values ('${x.l}', '${A}', '${x.o}', 'labor', 'Nightly 472 line', 1, 20000, false);`,
     ]),
   ].join("\n");
   execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c", sql], { stdio: ["ignore", "ignore", "inherit"] });
