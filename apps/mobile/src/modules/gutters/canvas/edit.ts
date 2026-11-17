@@ -5,7 +5,7 @@
  */
 import { findCorners, runEnds, wouldDuplicate, overlapsRun, chainOf, houseSides, sameStory, nearestRun, projectOnRun, runLengthIn, MIN_TURN_DEG, SNAP_ANGLE_DEG, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
-import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, type DsAttrs } from "./attrs";
+import { changeDs, changeRun, MAX_RUN_IN, MILL_ONLY, sameAttrs, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
 import { DENOM } from "./format";
 
@@ -592,8 +592,16 @@ export function setStory(d: Drawing, id: string, story: Story): Drawing {
 export function setRunAttrs(d: Drawing, id: string, patch: Partial<DrawnRun["attrs"]>, ch?: Choices): Drawing {
   const r = d.runs.find((x) => x.id === id);
   if (!r) return d;
-  const attrs = changeRun(r.attrs, patch, ch);
-  if (attrs === r.attrs) return d;
+  return putRunAttrs(d, id, changeRun(r.attrs, patch, ch));
+}
+
+/**
+ * A run's attributes put as they are — the window's copy saved («Сохранить», #1858): it was made valid choice by choice
+ * (`changeRun`), so no rule runs again (a mount picked, then a kit: the kit stays). The same drawing back when nothing changes.
+ */
+export function putRunAttrs(d: Drawing, id: string, attrs: DrawnRun["attrs"]): Drawing {
+  const r = d.runs.find((x) => x.id === id);
+  if (!r || attrs === r.attrs || sameAttrs(attrs, r.attrs)) return d;
   // its downspouts «как у желоба» follow its colour (founder 09.11): those that had the gutter's colour take the new one
   const paint = (x: { finish?: string; color?: string }) => ((x.finish ?? (x.color ? "painted" : "mill")) === "mill" ? "@mill" : `c:${x.color}`);
   const was = paint(r.attrs), now = paint(attrs);
@@ -606,10 +614,19 @@ export function setRunAttrs(d: Drawing, id: string, patch: Partial<DrawnRun["att
 export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?: Choices): Drawing {
   const s = d.downspouts.find((x) => x.id === id);
   if (!s) return d;
-  const { id: _id, runId, atIn, ...was } = s;
+  const { id: _id, runId: _r, atIn: _a, ...was } = s;
   const attrs = changeDs(was, patch, ch);
+  return attrs === was ? d : putDsAttrs(d, id, attrs);
+}
+
+/** a downspout's attributes put as they are (the window's copy saved, see putRunAttrs) */
+export function putDsAttrs(d: Drawing, id: string, attrs: DsAttrs): Drawing {
+  const s = d.downspouts.find((x) => x.id === id);
+  if (!s) return d;
+  const { id: _id, runId, atIn, ...was } = s;
+  if (sameAttrs(attrs, was)) return d;
   // changed by hand it is the user's own now (no more `auto`): the program does not move it or count it as its own
-  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, auto: undefined, id, runId, atIn } : x)) };
+  return { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, auto: undefined, id, runId, atIn } : x)) };
 }
 
 /**

@@ -157,7 +157,7 @@ export function changeRun(a: RunAttrs, patch: Partial<RunAttrs>, ch?: Choices): 
     const mount = (n.mount ?? "fascia") as GutterMount;
     n.hanger = ch ? ch.hangerByMount[profile][mount] : defaultHangerKit(profile, mount);
   }
-  return same(a, n) ? a : n;
+  return sameAttrs(a, n) ? a : n;
 }
 
 /** a replacement value: the company's default if it fits, else the first the company installs, else the module's first */
@@ -201,7 +201,7 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
     const was = wallOf(a.shape, a.wall).wall;
     n.wall = ch ? wallValue(shape, was, ch) : was;
   }
-  return same(a, n) ? a : n;
+  return sameAttrs(a, n) ? a : n;
 }
 
 /**
@@ -252,7 +252,8 @@ export function dsCode(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "offset
   return s;
 }
 
-const same = (a: object, b: object) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
+/** the same attributes, whatever the order of their keys and with unset ones left out (no empty «назад» step, no false «изменено») */
+export const sameAttrs = (a: object, b: object) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const sorted = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).sort(([x], [y]) => (x < y ? -1 : 1)));
 
 /** feet, inches (a decimal one: 5.0625 is fine) and sixteenths (0–15) typed on the tape → inches (to 1/16″); nothing sensible (empty, 0, negative, too long) → null */
