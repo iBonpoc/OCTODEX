@@ -322,20 +322,33 @@ export function detachDoc(doc: EstimateDoc, measurementId: string): EstimateDoc 
   return changed ? { ...doc, options } : doc;
 }
 
+/** who deletes: a tech edits only the estimates he made (the server's can_edit_estimate: created_by = auth.uid()) */
+export interface Deleter { role: string; me?: string | null }
+const mayEdit = (e: Estimate, w: Deleter) => w.role !== "tech" || (!!w.me && e.createdBy === w.me);
+
 /**
- * «Удалить замер» (#2013): the measurement goes (soft, removeMeasurement); its draft estimates keep their lines as ordinary ones (one
- * save each, through the core's save — money through the engine, the queue); a sent estimate is not touched (its status and the client's
- * copy stay — the director, 17.11). One «Отменить» takes all of it back, offline too. Null — nothing to delete; signed — the caller
- * refuses before (signedOn).
+ * What stops «Удалить замер» (#2013): a signed estimate on it (never deleted — the server refuses too), or a draft estimate on it this
+ * person may not change (a tech and the office's draft: its lines could not be let go — the server would refuse the estimate's save
+ * and keep the removal). Null — it may go.
  */
-export function removeMeasurementDetached(store: ModuleEstimateStore, measurementId: string): GuardedUndo | null {
-  // a signed estimate stands on it: never deleted (the screens say why; the server refuses too) — the function itself refuses as well
-  if (signedOn(store.db, measurementId)) return null;
+export function deleteBlock(db: Pick<DB, "estimates">, measurementId: string, w: Deleter): "signed" | "notYours" | null {
+  if (signedOn(db, measurementId)) return "signed";
+  return estimatesOn(db, measurementId).drafts.some((e) => !mayEdit(e, w)) ? "notYours" : null;
+}
+
+/**
+ * «Удалить замер» (#2013): the measurement goes (soft, removeMeasurement) FIRST — not removed (the module is off meanwhile), nothing else
+ * is written; then its draft estimates keep their lines as ordinary ones (one save each, through the core's save — money through the
+ * engine, the queue); a sent estimate is not touched (its status and the client's copy stay — the director, 17.11). One «Отменить» takes
+ * all of it back, offline too. Null — nothing done (blocked: deleteBlock, or nothing to delete).
+ */
+export function removeMeasurementDetached(store: ModuleEstimateStore & { role?: string }, measurementId: string, w: Deleter = { role: store.role ?? "owner", me: store.db.me }): GuardedUndo | null {
+  if (deleteBlock(store.db, measurementId, w)) return null;
   const { drafts } = estimatesOn(store.db, measurementId);
+  const del = removeMeasurement(store, measurementId);
+  if (!del) return null;
   const saves = drafts.map((e) =>
     store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: detachDoc(e.doc!, measurementId), ...(e.leadId ? { leadId: e.leadId } : {}) }),
   );
-  const del = removeMeasurement(store, measurementId);
-  if (!del && !saves.length) return null;
-  return undoAll(store, [...saves, del]);
+  return undoAll(store, [del, ...saves]);
 }

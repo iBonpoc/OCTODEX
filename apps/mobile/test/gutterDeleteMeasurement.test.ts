@@ -132,7 +132,7 @@ afterEach(() => {
   root = null;
 });
 
-import { detachDoc, engineStaleMeasurements, estimatesOn, removeMeasurementDetached, signedOn, staleMeasurements } from "../src/modules/gutters/estimateLink";
+import { deleteBlock, detachDoc, engineStaleMeasurements, estimatesOn, removeMeasurementDetached, signedOn, staleMeasurements } from "../src/modules/gutters/estimateLink";
 import gutters from "../src/modules/gutters/module";
 import { gutterData } from "../src/modules/gutters/data";
 import { summarize } from "../src/features/estimateDoc";
@@ -144,7 +144,7 @@ function withLine(e: Estimate, status: Estimate["status"], sentAt?: string, srcE
   const doc = e.doc!;
   const o = doc.options[0]!;
   const line = { ...o.lines[0]!, id: "l-2013", name: "Gutter 5″ (test)", quantity: "21", unitPriceCents: 800, source: { ...src, ...srcExtra } };
-  return { ...e, status, ...(sentAt ? { sentAt } : { sentAt: undefined }), doc: { ...doc, options: [{ ...o, lines: [...o.lines, line] }, ...doc.options.slice(1)], pages: [{ id: `gutters-m-${MID}`, kind: "image", title: "Drawing", svg: "<svg/>" }] as unknown as Estimate["doc"] extends infer D ? D extends { pages?: infer P } ? P : never : never } };
+  return { ...e, status, ...(sentAt ? { sentAt } : { sentAt: undefined }), doc: { ...doc, options: [{ ...o, lines: [...o.lines, line] }, ...doc.options.slice(1)], pages: [{ id: `gutters:${MID}`, kind: "image", title: "Drawing", svg: "<svg/>" }] as unknown as Estimate["doc"] extends infer D ? D extends { pages?: infer P } ? P : never : never } };
 }
 /** the module's data around the measurement (С6, С2): its status, something drawn, the engine version on its line, more measurements */
 type G = { mStatus?: "draft" | "ready"; run?: boolean; engineVersion?: string; more?: string[] };
@@ -342,5 +342,31 @@ describe("unit:gutterDeleteMeasurement — #2013 (spec 33-gutters-workflow «У�
     v().setOnline(true);
     await settle();
     expect(server.sends).toHaveLength(0);
+  });
+
+  it("С7: монтажник и черновик офиса — удалить нельзя (строки не отвязать: сервер не даст сохранить смету), ничего не записано", async () => {
+    const { v, eid } = await startWith("draft");
+    const e = v().db.estimates.find((x) => x.id === eid)!;
+    const tech = { role: "tech", me: "someone-else" };
+    expect(e.createdBy).not.toBe("someone-else");
+    expect(deleteBlock(v().db, MID, tech)).toBe("notYours");
+    expect(removeMeasurementDetached(v() as unknown as ModuleEstimateStore, MID, tech)).toBeNull();
+    await settle();
+    expect(gutterData(v().db).measurements.some((m) => m.id === MID)).toBe(true);
+    // his own draft: he may
+    expect(deleteBlock(v().db, MID, { role: "tech", me: e.createdBy ?? "x" })).toBe(e.createdBy ? null : "notYours");
+    // the office may always
+    expect(deleteBlock(v().db, MID, { role: "office", me: "x" })).toBeNull();
+  });
+
+  it("С8: второй вызов (двойное нажатие) ничего не делает — первое «Отменить» возвращает всё", async () => {
+    const { v, eid } = await startWith("draft");
+    const first = removeMeasurementDetached(v() as unknown as ModuleEstimateStore, MID)!;
+    await settle();
+    expect(removeMeasurementDetached(v() as unknown as ModuleEstimateStore, MID)).toBeNull();
+    first();
+    await settle();
+    expect(gutterData(v().db).measurements.some((m) => m.id === MID)).toBe(true);
+    expect(v().db.estimates.find((x) => x.id === eid)!.doc!.options[0]!.lines.some((l) => (l as { source?: { measurementId?: string } }).source?.measurementId === MID)).toBe(true);
   });
 });

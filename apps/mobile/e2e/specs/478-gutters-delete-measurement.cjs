@@ -43,7 +43,7 @@ exports.run = async (h) => {
 
   const askDelete = async () => {
     await tid("view-more").getByRole("button").click();
-    await p.getByRole("menu").locator("visible=true").first().getByRole("menuitem", { name: "Удалить замер", exact: true }).click();
+    await tid("view-more-delete").click();
     await tid("m-delete-ask").waitFor({ timeout: 5000 });
   };
 
@@ -51,7 +51,7 @@ exports.run = async (h) => {
   await h.go(`/module/gutters/view?m=${encodeURIComponent(mid)}`);
   await tid("view-head").waitFor({ timeout: 8000 });
   await askDelete();
-  h.expect(/строки из замера станут обычными/.test(await tid("m-delete-ask").innerText()), "the question says the estimate stays, its lines become ordinary");
+  h.expect((await tid("m-delete-draft").count()) === 1 && (await tid("m-delete-sent").count()) === 0, "the question names the draft estimate (its lines become ordinary)");
   await h.shot("ask");
   await tid("m-delete-no").getByRole("button").click();
   await tid("m-delete-ask").waitFor({ state: "detached", timeout: 5000 });

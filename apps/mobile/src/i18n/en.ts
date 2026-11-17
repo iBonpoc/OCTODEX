@@ -3190,6 +3190,7 @@ export const en: Dict = {
   "mod.gutters.link.unlink": "Unlink (back to drafts)",
   "mod.gutters.link.unlinked": "Unlinked — the measurement is in drafts",
   "mod.gutters.draw.mDelete": "Delete measurement",
+  "mod.gutters.del.notYours": "The measurement cannot be deleted: the office has a draft estimate on it. Ask the office.",
   "mod.gutters.del.title": "Delete the measurement?",
   "mod.gutters.del.draft": "A draft estimate for {sum} is made from this measurement. It stays: its lines from the measurement become ordinary ones, the same total.",
   "mod.gutters.del.sent": "An estimate for {sum} was sent from this measurement: the client keeps it as it is.",

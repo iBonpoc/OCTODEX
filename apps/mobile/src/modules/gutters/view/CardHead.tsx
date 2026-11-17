@@ -18,10 +18,10 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import type { MeasurementRow } from "../canvas/model";
-import { duplicateMeasurement, KEY, relink, removeMeasurement } from "../data";
-import { estimatesOn, removeMeasurementDetached, signedOn } from "../estimateLink";
+import { duplicateMeasurement, KEY, relink } from "../data";
+import { deleteBlock, estimatesOn, removeMeasurementDetached } from "../estimateLink";
 import type { ModuleEstimateStore } from "@/modules/registry";
-import { DeleteMeasurementSheet } from "./DeleteMeasurementSheet";
+import { DeleteMeasurementSheet, NO_ESTIMATES } from "./DeleteMeasurementSheet";
 import { measurementState } from "../measurements";
 import { LinkSheet } from "../draw/LinkSheet";
 
@@ -31,6 +31,7 @@ type WhoKey = "relink" | "unlink";
 
 export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boolean; /** the card's measurement was deleted: leave it */ onGone: () => void }) {
   const store = useStore();
+  const deleter = { role: store.role, me: store.db.me };
   const { t } = useI18n();
   const toast = useToast();
   const db = store.db;
@@ -63,18 +64,30 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
       router.push(`${moduleHref("gutters", "view")}?m=${encodeURIComponent(r.id)}` as Href);
       return;
     }
-    if (signedOn(db, m.id)) return toast.show(t("mod.gutters.draw.deleteSigned"));
-    // an open estimate stands on it: asked first (#2013); none — at once, with «Отменить»
+    const block = deleteBlock(db, m.id, deleter);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    // an open estimate stands on it: asked first (#2013), the question holds what it said while it goes out; none — at once
     const on = estimatesOn(db, m.id);
-    if (on.drafts.length || on.sent.length) return setAskDelete(true);
+    if (on.drafts.length || on.sent.length) return setAskDelete(on);
     doDelete();
   };
-  const [askDelete, setAskDelete] = useState(false);
+  const [askDelete, setAskDelete] = useState<ReturnType<typeof estimatesOn> | null>(null);
+  /** one deletion at a time: a second press writes nothing and never puts an empty «Отменить» over the first one's (rule 5) */
+  const deleting = useRef(false);
   const doDelete = () => {
-    setAskDelete(false);
-    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, m.id) ?? removeMeasurement(store, m.id);
+    setAskDelete(null);
+    if (deleting.current) return;
+    // asked again at the press: signed meanwhile (the client on /p/) or not this person's to change — never deleted
+    const block = deleteBlock(store.db, m.id, deleter);
+    if (block) return toast.show(t(block === "signed" ? "mod.gutters.draw.deleteSigned" : "mod.gutters.del.notYours"));
+    deleting.current = true;
+    const undo = removeMeasurementDetached(store as unknown as ModuleEstimateStore, m.id, deleter);
+    if (!undo) {
+      deleting.current = false;
+      return toast.show(t("mod.gutters.est.off"));
+    }
     onGone();
-    toast.show(t("mod.gutters.draw.mDeleted"), undo ?? undefined);
+    toast.show(t("mod.gutters.draw.mDeleted"), undo);
   };
 
   const stateChip =
@@ -145,13 +158,13 @@ export function CardHead({ m, drawn, onGone }: { m: MeasurementRow; drawn: boole
         anchor={moreAt}
         items={[
           { key: "dup" as const, label: t("mod.gutters.card.duplicate") },
-          { key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true },
+          { key: "delete" as const, label: t("mod.gutters.draw.mDelete"), destructive: true, testID: "view-more-delete" },
         ]}
         onSelect={onMore}
         onClose={() => setMoreAt(null)}
       />
       <LinkSheet visible={linkOpen} onClose={() => setLinkOpen(false)} measurementId={m.id} />
-      <DeleteMeasurementSheet visible={askDelete} on={estimatesOn(db, m.id)} onDelete={doDelete} onClose={() => setAskDelete(false)} />
+      <DeleteMeasurementSheet visible={!!askDelete} on={askDelete ?? NO_ESTIMATES} onDelete={doDelete} onClose={() => setAskDelete(null)} />
     </View>
   );
 }
