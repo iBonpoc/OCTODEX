@@ -3,6 +3,7 @@
  * a change of a sent one is a new revision when sent again), «Отправить» (the PDF in English to share), «Отменить
  * заказ» (asked first). The tech of the job: where to pick it up, the lines without prices, «Отметить получение».
  */
+import { seeCosts } from "@/features/access";
 import { APP_NAME } from "@/config/product";
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
@@ -67,7 +68,7 @@ export default function PurchaseOrderScreen() {
   }
   const office = canEditOrders(role);
   const edit = office && linesEditable(found) && !db.purchaseOrdersLegacy;
-  const costs = db.costsVisible !== false && office;
+  const costs = seeCosts(db, role, store.mode) && office;
   const job = o.jobId ? db.jobs.find((j) => j.id === o.jobId) : undefined;
   const sup = o.supplierId ? (db.suppliers ?? []).find((s) => s.id === o.supplierId) : undefined;
   const supName = sup?.name ?? o.supplierName;
