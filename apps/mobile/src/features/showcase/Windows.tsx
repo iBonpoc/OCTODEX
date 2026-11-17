@@ -2,14 +2,15 @@ import { useState } from "react";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
+import { localUndo } from "@/data/undo";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
-import { HelpButton, Sheet, SheetScroll } from "@/ui/overlays";
+import { HelpButton, Sheet, SheetScroll, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list";
+type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list" | "toast";
 
 /** the third step of the chain: mounted by the owner's condition and recreated at each opening — the way a sheet is meant to be mounted */
 function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExited: () => void; onClose: () => void }) {
@@ -31,6 +32,8 @@ export function WindowsSection() {
   const [selfOpen, setSelfOpen] = useState(false); // the owner closes it by itself, from outside (a timer, a result): the person's close that is under way must not ask after it
   const [selfAsked, setSelfAsked] = useState(0);
   const [selfDone, setSelfDone] = useState(0);
+  const toast = useToast();
+  const [rows, setRows] = useState([1, 2, 3]); // «Шторка с тостом»: «Удалить» shows the toast over the sheet, «Отменить» brings the row back
   const chainC = useHeldSheet(open === "chainC" ? "c" : null); // a sheet mounted by the owner's condition: it goes out led, and starts fresh // how many times the stubborn sheet was asked to close
   const s = SECTIONS.find((x) => x.id === "windows")!;
   const close = () => {
@@ -74,6 +77,7 @@ export function WindowsSection() {
         {row("large", t("ds.sheet.large"), t("ds.sheet.largeHint"))}
         {row("pages", t("ds.sheet.pages"), t("ds.sheet.pagesHint"))}
         {row("list", t("ds.sheet.list"), t("ds.sheet.listHint"))}
+        {row("toast", t("ds.sheet.toast"), t("ds.sheet.toastHint"))}
         {row("stuck", t("ds.sheet.stuck"), t("ds.sheet.stuckHint"))}
         {row("chainA", t("ds.sheet.chain"), t("ds.sheet.chainHint"))}
         <View testID="showcase-sheet-self" style={{ gap: space[1] }}>
@@ -168,6 +172,28 @@ export function WindowsSection() {
             <ListRow key={i} title={`${t("ds.sheet.listRow")} ${i + 1}`} onPress={close} />
           ))}
         </SheetScroll>
+      </Sheet>
+      <Sheet visible={open === "toast"} onClose={close} title={t("ds.sheet.toast")} footer={<Button testID="showcase-toast-save" label={t("ds.sheet.save")} full onPress={close} />}>
+        {rows.map((n) => (
+          <View key={n} testID={`showcase-toast-row-${n}`}>
+          <ListRow
+            title={`${t("ds.sheet.listRow")} ${n}`}
+            right={
+              <Button
+                testID={`showcase-toast-remove-${n}`}
+                label={t("ds.sheet.toastRemove")}
+                variant="ghost"
+                size="sm"
+                onPress={() => {
+                  const before = rows;
+                  setRows(rows.filter((x) => x !== n));
+                  toast.show(t("ds.sheet.toastText"), localUndo(() => setRows(before)));
+                }}
+              />
+            }
+          />
+          </View>
+        ))}
       </Sheet>
       <Sheet visible={open === "large"} onClose={close} title={t("ds.sheet.large")} height="large" footer={<Button label={t("ds.sheet.save")} full onPress={close} />}>
         <T v="body">{t("ds.sheet.body")}</T>
