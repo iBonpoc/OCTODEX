@@ -16378,6 +16378,16 @@ select tst.ok(not has_function_privilege('anon', 'public.catalog_set_group_price
           and not has_function_privilege('authenticated', 'app.spread_group_price(uuid,text,uuid,boolean,boolean)', 'execute')
           and not has_function_privilege('authenticated', 'app.group_peer(uuid,text,uuid)', 'execute'),
   'T351 rule 18: the app runs only catalog_set_group_price; anon nothing');
+-- every role that writes catalog_items runs the index's function (the cloud e2e writes as service_role — #1978 CI)
+:as_super
+set role service_role;
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, attributes) values
+  ('53510000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'service', 'T351 by the server', 'ea', 1, '{"priceGroup":"t351:server"}');
+update public.catalog_items set unit_price_cents = 2 where id = '53510000-0000-4000-8000-0000000000f1';
+reset role;
+select tst.ok(pg_temp.p351('53510000-0000-4000-8000-0000000000f1') = 2
+          and (select bool_and(has_function_privilege(r, 'app.price_group(jsonb)', 'execute')) from unnest(array['authenticated', 'service_role']) r),
+  'T351 the server''s role writes catalog_items too (the index''s function is granted to every writer)');
 \echo 'T351 the group''s price function ok'
 
 -- T352: a group counted from its cost (53-0б): who sees costs writes the cost, each material counts the same price;

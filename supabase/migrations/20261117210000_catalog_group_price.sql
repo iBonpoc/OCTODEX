@@ -37,8 +37,9 @@ returns text language sql immutable parallel safe set search_path = '' as $$
   select nullif(btrim(coalesce(p_attrs ->> 'priceGroup', '')), '');
 $$;
 revoke all on function app.price_group(jsonb) from public, anon, authenticated;
--- the index below is computed as the writer: whoever writes catalog_items runs it (pure: reads only the given json)
-grant execute on function app.price_group(jsonb) to authenticated;
+-- the index below is computed as the writer: EVERY role that writes catalog_items runs it — the app (authenticated) and the
+-- server's own writes (service_role: edge functions, seeding; the cloud e2e) — pure: reads only the given json
+grant execute on function app.price_group(jsonb) to authenticated, service_role;
 -- the index below uses it: a change of its body needs `reindex index public.catalog_items_price_group_idx`
 
 -- the group's items of a company are found by this (catalog_items is not a big table — migrationGuard BIG_TABLES)
