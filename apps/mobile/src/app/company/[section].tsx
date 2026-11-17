@@ -9,7 +9,7 @@ import type { Address, Company, CompanyContact, CompanyLicense, EntityType, Lice
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
-import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { SETUP_STEPS, stepHint, stepTitle, wizardSteps, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
 import { CompanyTerms } from "@/features/CompanyTerms";
@@ -35,8 +35,10 @@ export default function CompanySection() {
   const c = store.db.company;
   const [draft, setDraft] = useState<Company | null>(c ? (JSON.parse(JSON.stringify(c)) as Company) : null);
   const step = SETUP_STEPS.includes(section) ? section : "profile";
-  const idx = SETUP_STEPS.indexOf(step);
   const isWizard = wizard === "1";
+  // the wizard's steps: «Направления» only when no direction was chosen at the first run (#2007)
+  const steps = c ? wizardSteps(c, store.db.serviceCategories, step) : SETUP_STEPS;
+  const idx = steps.indexOf(step);
   // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
   const ro = store.role !== "director";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
@@ -50,7 +52,7 @@ export default function CompanySection() {
   }
   const set = (p: Partial<Company>) => setDraft((d) => (d ? { ...d, ...p } : d));
   const goNext = () => {
-    const next = SETUP_STEPS[idx + 1];
+    const next = steps[idx + 1];
     if (isWizard && next) router.replace(`/company/${next}?wizard=1`);
     else if (isWizard) router.replace("/today");
     else back();
@@ -74,7 +76,7 @@ export default function CompanySection() {
       form
       title={t(stepTitle(step))}
       back={back}
-      subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: SETUP_STEPS.length }) : undefined}
+      subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: steps.length }) : undefined}
     >
       {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       <T v="body" tone="mut">
@@ -216,11 +218,11 @@ export default function CompanySection() {
       </ReadOnly>
       {ro ? null : listSection ? (
         isWizard ? (
-          <Button label={SETUP_STEPS[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
+          <Button label={steps[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
         ) : null
       ) : (
         <View testID="co-save">
-          <Button label={isWizard ? (SETUP_STEPS[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
+          <Button label={isWizard ? (steps[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
         </View>
       )}
       {isWizard && !ro ? <Button label={t("co.skip")} variant="ghost" full onPress={skip} /> : null}
