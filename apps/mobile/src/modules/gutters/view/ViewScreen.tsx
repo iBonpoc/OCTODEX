@@ -354,7 +354,7 @@ export function MeasurementView({ mid, estimate: autoEstimate, from, onGone, pan
             {dsTotals(spec.ds).map((g, i) => {
               const v = partView(t, { key: "ds", kind: "material", attrs: { shape: g.shape, size: g.size, ...(g.dsStyle ? { dsStyle: g.dsStyle } : {}), ...(g.material ? { material: g.material } : {}), ...(g.color ? { color: g.color } : {}) } }, fmt);
               const how = [
-                dsLine(t, { shape: g.shape, elbows: g.elbows, offsets: g.offsets }),
+                dsLine(t, { shape: g.shape, ...(g.bent ? { bent: true } : {}), elbows: g.elbows, offsets: g.offsets }),
                 ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(`mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`),
               ].filter(Boolean).join(" · ");
               const n0 = g.ns[0]!;
