@@ -88,14 +88,14 @@ exports.run = async (h) => {
   await escOnPage(p);
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/client/${owner}`), `Esc job → client (${p.url()})`);
-  const status = p.getByRole("button", { name: /^Статус клиента/ }).locator("visible=true").first();
+  // the status at the chip opens the one StatusPicker (DS §9 А10, spec 56 wave 4): Esc closes it and stays on the client
+  const status = p.getByTestId("client-status").locator("visible=true").first();
   if (await status.count()) {
     await status.click();
-    await p.waitForTimeout(300);
-    h.expect((await p.getByRole("menu").locator("visible=true").count()) > 0, "status menu open");
-    await pressEscUntilClosed(p, p.getByRole("menu").locator("visible=true").first());
-    await p.waitForTimeout(500);
-    h.expect((await p.getByRole("menu").locator("visible=true").count()) === 0, "Esc closed the menu");
+    const picker = p.locator('[aria-modal="true"]').last();
+    await picker.waitFor({ timeout: 5000 });
+    h.expect((await picker.getByRole("radio").count()) > 0, "status picker open");
+    await pressEscUntilClosed(p, picker);
     h.expect(p.url().includes(`/client/${owner}`), `…and stayed on the client (${p.url()})`);
   } else {
     h.expect(false, "the client's status button is on the client screen");

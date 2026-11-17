@@ -437,7 +437,7 @@ describe("design system: a form's fields have no plate (#1411)", () => {
     "app/job/[id].tsx": { n: 1, why: "«Добавить» заметку — отправляет набранное" },
     "features/JobLinesBlock.tsx": { n: 1, why: "«Сохранить» ставку налога" },
     "features/VisitChecklist.tsx": { n: 2, why: "«Добавить» пункт чек-листа" },
-    "features/client/ClientSheets.tsx": { n: 2, why: "«Удалить» человека; «Добавить» метку" },
+    "features/client/ClientSheets.tsx": { n: 1, why: "«Добавить» метку" },
   };
   it("a field's helper action is an icon inside it: no worded button in one row with a field", () => {
     const bad: string[] = [];

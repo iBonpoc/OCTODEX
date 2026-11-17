@@ -9,6 +9,12 @@ import { kitPrice } from "./estimateDoc";
 
 /** is the material's price counted from its cost here */
 export const countsFromCost = (it: Pick<CatalogItem, "kind">, noCosts: boolean) => it.kind === "material" && !noCosts;
+/**
+ * #1807 (53-0б, spec 53 §5.3б п.4): the server counts this material's price from its cost, and this person does not see
+ * our costs — the price is shown, not changed (the server would keep its own; no number tells why)
+ */
+export const priceLocked = (it: Pick<CatalogItem, "kind" | "priceFromCost">, noCosts: boolean) =>
+  it.kind === "material" && noCosts && !!it.priceFromCost;
 
 export function editPrice(it: CatalogItem, catalog: CatalogItem[], noCosts: boolean): number {
   if (countsFromCost(it, noCosts)) return catalogPrice(it.costCents ?? 0, it.vendorTaxBps ?? 0, it.markupBps ?? 0);
@@ -23,7 +29,8 @@ export function editClean(it: CatalogItem, catalog: CatalogItem[], noCosts: bool
     ...it,
     name: it.name.trim(),
     unit: it.unit.trim() || "ea",
-    priceCents: it.kind === "kit" ? 0 : editPrice(it, catalog, noCosts),
+    // a locked price is the one the phone read (never another one the server would replace)
+    priceCents: it.kind === "kit" ? 0 : priceLocked(it, noCosts) ? (catalog.find((c) => c.id === it.id)?.priceCents ?? it.priceCents) : editPrice(it, catalog, noCosts),
     costCents: it.kind === "kit" ? undefined : it.costCents,
   };
 }

@@ -14,6 +14,7 @@ import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
 import { canReview, missedCount, visitMissed, visitSettings } from "./checklist";
 import { failedPhotos } from "@/data/photoUpload";
+import { moneyText } from "@/i18n/translate";
 
 /** #1431: photos the cloud did not take are only on one phone — just under a lead waiting for a reply, above the rest */
 export const PHOTO_FAILED_SCORE = 990;
@@ -32,7 +33,10 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   /* docs/specs/08 §8 (CH2b): a finished visit left required items or photos undone — until «Просмотрено» or done */
   | "visitMissed"
   /* #1431: the cloud did not take photos of a visit — they are only on the phone that made them */
-  | "photoFailed";
+  | "photoFailed"
+  /* #1807 (spec 53 §5.3б п.4): a price someone sent for a material counted from its cost — the server kept the one from
+     the cost (an old build, sales without our costs) */
+  | "priceRecalc";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -71,6 +75,7 @@ export function attentionHref(it: AttentionItem): string {
     case "late":
     case "visitMissed":
     case "photoFailed": return `/visit/${it.refId}`;
+    case "priceRecalc": return `/catalog/${it.refId}`;
     default: return `/lead/${it.refId}`;
   }
 }
@@ -275,6 +280,41 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     const date = v ? new Date(v.start).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "";
     out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
+  out.push(...priceRecalcItems(db, role, now));
   return out.sort((a, b) => b.score - a.score);
+}
+
+/** #1807: below an estimate without a reply (700 +) and an inspection without an estimate (680): a price, not a client */
+export const PRICE_RECALC_SCORE = 650;
+/** how long a replaced price stays a reason (no «Понятно»: it goes by itself; the item's own history keeps it) */
+export const PRICE_RECALC_DAYS = 7;
+/**
+ * #1807 (spec 53 §5.3б п.4): one reason per material whose sent price the server replaced with the one from its cost, the
+ * last of the past 7 days. Only who sees our costs (the rows come only to them — catalog_price_recalc's RLS — and not to a
+ * tech in any case). The words: who sent what and what stayed.
+ */
+export function priceRecalcItems(db: Pick<DB, "priceRecalc" | "catalog" | "members" | "costsVisible">, role: Role, now: number): AttentionItem[] {
+  // a cache that is not a list (an old or broken one) is no reason
+  if (role === "tech" || db.costsVisible === false || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
+  const since = now - PRICE_RECALC_DAYS * 864e5;
+  const last = new Map<ID, NonNullable<DB["priceRecalc"]>[number]>();
+  for (const r of db.priceRecalc) {
+    if (!(Date.parse(r.at) >= since)) continue;
+    const had = last.get(r.itemId);
+    if (!had || Date.parse(r.at) > Date.parse(had.at)) last.set(r.itemId, r);
+  }
+  const out: AttentionItem[] = [];
+  for (const r of last.values()) {
+    const item = db.catalog.find((c) => c.id === r.itemId);
+    if (!item) continue;
+    const who = (r.by && db.members.find((m) => m.id === r.by)?.name) || "";
+    out.push({
+      id: `recalc-${r.itemId}`, kind: "priceRecalc", refId: r.itemId, name: item.name,
+      label: who ? "price.recalc.att" : "price.recalc.attNoWho",
+      params: { name: item.name, who, sent: moneyText(r.sentCents), kept: moneyText(r.serverCents) },
+      chip: "price.recalc.chip", status: "warn", score: PRICE_RECALC_SCORE,
+    });
+  }
+  return out;
 }
 
