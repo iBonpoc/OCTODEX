@@ -16787,24 +16787,24 @@ insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_c
 \echo 'T365 catalog_set_item_costs: who may'
 :as_sales_a
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = '42501',
-  'T365 sales without view_costs: 42501');
+  'T365 С5: sales without view_costs: 42501');
 :as_tech_a
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = 'P0002',
-  'T365 a tech: not found');
+  'T365 С5: a tech: not found');
 :as_office_a
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000b1', '{"unit_cost_cents": 400}', '{"unit_cost_cents": null}')$q$) = 'P0002',
-  'T365 another company''s item: not found');
+  'T365 С5: another company''s item: not found');
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000ff', '{"unit_cost_cents": 400}', null)$q$) = 'P0002',
-  'T365 an unknown item: not found');
+  'T365 С5: an unknown item: not found');
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{}', null)$q$) = '22023'
           and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_price_cents": 1}', null)$q$) = '22023'
           and pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '[1]', null)$q$) = '22023',
-  'T365 nothing, a field that is not a cost, not an object: 22023');
+  'T365 С5: nothing, a field that is not a cost, not an object: 22023');
 :as_super
 select tst.ok(not has_function_privilege('anon', 'public.catalog_set_item_costs(uuid,jsonb,jsonb)', 'EXECUTE')
           and has_function_privilege('authenticated', 'public.catalog_set_item_costs(uuid,jsonb,jsonb)', 'EXECUTE'),
-  'T365 rule 18: authenticated only');
-select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') is null, 'T365 nothing written by the refusals');
+  'T365 С5: rule 18: authenticated only');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') is null, 'T365 С5: nothing written by the refusals');
 
 -- T366: the first cost (the phone saw none), then a change over what it saw; the material's price follows (53-0б)
 \echo 'T366 written over what the phone saw; the price counts from it'
@@ -16813,44 +16813,44 @@ select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1',
   '{"unit_cost_cents": 400, "vendor_tax_bps": 0, "markup_bps": 10000}', '{"unit_cost_cents": null, "vendor_tax_bps": null, "markup_bps": null}');
 select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[400, 0, 10000]'::jsonb
           and (select unit_price_cents = 800 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
-  'T366 the first cost: $4.00 + 100% — the price $8.00');
+  'T366 С1: the first cost: $4.00 + 100% — the price $8.00');
 select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 500}', '{"unit_cost_cents": 400}');
 select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
           and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
-  'T366 $4.00 → $5.00 over what the phone saw; tax and markup untouched; the price $10.00');
+  'T366 С1: $4.00 → $5.00 over what the phone saw; tax and markup untouched; the price $10.00');
 select tst.ok((select source = 'manual' from public.catalog_cost_history where item_id = '53650000-0000-4000-8000-0000000000a1' order by at desc limit 1),
-  'T366 the cost history writes «manual»');
+  'T366 С1: the cost history writes «manual»');
 
 -- T367: someone changed it first (another phone, a price-list upload): 40001, nothing written — also an old phone's view
 \echo 'T367 a cost changed meanwhile: 40001, nothing written'
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 450}', '{"unit_cost_cents": 400}')$q$) = '40001',
-  'T367 the phone saw $4.00, the server has $5.00: 40001');
+  'T367 С2: the phone saw $4.00, the server has $5.00: 40001');
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"unit_cost_cents": 450}', null)$q$) = '40001',
-  'T367 «saw nothing» while there is a cost: 40001');
+  'T367 С2: «saw nothing» while there is a cost: 40001');
 select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 10000]'::jsonb
           and (select unit_price_cents = 1000 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
-  'T367 the cost and the price stay as the other one wrote them');
+  'T367 С2: the cost and the price stay as the other one wrote them');
 
 -- T368: field by field — only the fields sent are compared and written (a markup over a cost changed by another is fine)
 \echo 'T368 only the fields sent'
 select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"markup_bps": 5000}', '{"markup_bps": 10000}');
 select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, 0, 5000]'::jsonb
           and (select unit_price_cents = 750 from public.catalog_items where id = '53650000-0000-4000-8000-0000000000a1'),
-  'T368 the markup 100% → 50% over what the phone saw; the cost $5.00 kept; the price $7.50');
+  'T368 С3: the markup 100% → 50% over what the phone saw; the cost $5.00 kept; the price $7.50');
 
 -- T369: a null clears (the old path could not: t30 reads null as «not sent»)
 \echo 'T369 a cleared field'
 select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a1', '{"vendor_tax_bps": null}', '{"vendor_tax_bps": 0}');
-select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, null, 5000]'::jsonb, 'T369 the tax cleared, the rest kept');
+select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a1') = '[500, null, 5000]'::jsonb, 'T369 С4: the tax cleared, the rest kept');
 
 -- T370: an item of a price group — its cost goes to the group (#1913 t98), checked against the named item only
 \echo 'T370 a price group gets the cost'
 select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a2', '{"unit_cost_cents": 300, "markup_bps": 10000}', '{"unit_cost_cents": null, "markup_bps": null}');
 select tst.ok(pg_temp.k365('53650000-0000-4000-8000-0000000000a3') = '[300, null, 10000]'::jsonb
           and (select bool_and(unit_price_cents = 600) from public.catalog_items where id in ('53650000-0000-4000-8000-0000000000a2', '53650000-0000-4000-8000-0000000000a3')),
-  'T370 both colours: $3.00 + 100% — $6.00');
+  'T370 С7: both colours: $3.00 + 100% — $6.00');
 select tst.ok(pg_temp.st($q$select public.catalog_set_item_costs('53650000-0000-4000-8000-0000000000a3', '{"unit_cost_cents": 350}', '{"unit_cost_cents": null}')$q$) = '40001',
-  'T370 the other colour''s phone that saw none: 40001 (the group has a cost now)');
+  'T370 С7: the other colour''s phone that saw none: 40001 (the group has a cost now)');
 \echo 'T365–T370 ok'
 
 \echo 'ALL TESTS PASSED'

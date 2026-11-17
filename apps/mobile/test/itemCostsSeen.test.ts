@@ -3,6 +3,7 @@
  * (catalog_set_item_costs, migration 20261117240000, db T365–T370), never in the item's row nor a plain upsert — both
  * put it over whatever is there (t30's coalesce, the side table's upsert). An op queued by an older build (no `costs`)
  * sends no cost field at all. «Changed meanwhile» (40001 row_version_conflict) is a refusal, not «try later».
+ * Scenarios С1–С10: docs/specs/53-price-update.md §5.3в.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -43,7 +44,7 @@ beforeEach(() => {
 });
 
 describe("unit:itemCostsSeen — #1958 (а)", () => {
-  it("what the phone saw: the changed fields of the item before the change; a new item or no cost change — none", () => {
+  it("С1: what the phone saw: the changed fields of the item before the change; a new item or no cost change — none", () => {
     const prev = item();
     const it = item({ costCents: 500, markupBps: undefined });
     const costs = catalogCostChange(prev, it);
@@ -53,7 +54,7 @@ describe("unit:itemCostsSeen — #1958 (а)", () => {
     expect(catalogCostSeen(prev, {})).toBeUndefined();
   });
 
-  it("an item already there: the row without its cost, the cost over what the phone saw (one call, column names)", async () => {
+  it("С1: an item already there: the row without its cost, the cost over what the phone saw (one call, column names)", async () => {
     const op: Op = { k: "catalog.save", item: item({ name: "Coil 2 (test)", costCents: 500 }), costs: { costCents: 500 }, costsSeen: { costCents: 400 }, fields: ["name"] };
     await applyOp(op, "c1", "u1");
     const upd = calls.find((c) => c.kind === "update" && c.table === "catalog_items");
@@ -64,33 +65,33 @@ describe("unit:itemCostsSeen — #1958 (а)", () => {
     ]);
   });
 
-  it("only the cost changed: no row write at all, the cost over what the phone saw; a cleared field goes as null", async () => {
+  it("С1, С4: only the cost changed: no row write at all, the cost over what the phone saw; a cleared field goes as null", async () => {
     await applyOp({ k: "catalog.save", item: item({ markupBps: undefined }), costs: { markupBps: null }, costsSeen: { markupBps: 10000 }, fields: [] }, "c1", "u1");
     expect(calls.filter((c) => c.kind !== "rpc")).toEqual([]);
     expect(calls.at(-1)?.args).toEqual({ p_item_id: "i1", p_costs: { markup_bps: null }, p_seen: { markup_bps: 10000 } });
   });
 
-  it("an op queued by an older build (no `costs`): no cost field anywhere — never the three cached ones", async () => {
+  it("С6: an op queued by an older build (no `costs`): no cost field anywhere — never the three cached ones", async () => {
     await applyOp({ k: "catalog.save", item: item({ name: "Old (test)" }), fields: ["name"] }, "c1", "u1");
     await applyOp({ k: "catalog.save", item: item({ name: "Older (test)" }) }, "c1", "u1");
     expect(calls.some((c) => hasCost(c.row))).toBe(false);
     expect(calls.filter((c) => c.table === "catalog_item_costs" || c.kind === "rpc")).toEqual([]);
   });
 
-  it("a new item (nothing seen): its cost goes with it as before", async () => {
+  it("С8: a new item (nothing seen): its cost goes with it as before", async () => {
     await applyOp({ k: "catalog.save", item: item({ id: "n1" }), costs: { costCents: 400, vendorTaxBps: 0, markupBps: 10000 } }, "c1", "u1");
     expect(calls.some((c) => c.kind === "rpc")).toBe(false);
     expect(calls.some((c) => c.kind === "upsert" && c.table === "catalog_items" && hasCost(c.row))).toBe(true);
   });
 
-  it("«changed meanwhile» (40001 row_version_conflict) is a refusal the queue does not retry", async () => {
+  it("С2: «changed meanwhile» (40001 row_version_conflict) is a refusal the queue does not retry", async () => {
     next.rpc = { message: "the item's cost changed meanwhile", code: "40001", hint: "row_version_conflict" };
     const e = await applyOp({ k: "catalog.save", item: item({ costCents: 500 }), costs: { costCents: 500 }, costsSeen: { costCents: 400 }, fields: [] }, "c1", "u1").catch((x: unknown) => x);
     expect(classify(e)).toBe("refusal");
     expect(isRowConflict(e)).toBe(true);
   });
 
-  it("a server before the migration (PGRST202): the side table as before", async () => {
+  it("С9: a server before the migration (PGRST202): the side table as before", async () => {
     next.rpc = { message: "Could not find the function", code: "PGRST202" };
     await applyOp({ k: "catalog.save", item: item({ costCents: 500 }), costs: { costCents: 500 }, costsSeen: { costCents: 400 }, fields: [] }, "c1", "u1");
     expect(calls.filter((c) => c.kind === "upsert" && c.table === "catalog_item_costs").map((c) => c.row)).toEqual([{ item_id: "i1", company_id: "c1", unit_cost_cents: 500 }]);
