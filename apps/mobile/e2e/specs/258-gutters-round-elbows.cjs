@@ -1,7 +1,7 @@
 /**
- * e2e 258 — a round downspout without elbows of its own gets 45° ones, not «A» (#871, X-07). Every view.
+ * e2e 258 — a round downspout without elbows of its own gets one 75° elbow, never «A» (#871, X-07; «Расход v2» §2.15 №2). Every view.
  * A measurement with a corrugated rectangular, a plain rectangular and a round downspout, put straight into the store: the
- * crew's PDF lists the elbows of the round one as 45° and «A» only for the corrugated rectangular one; a plain one has none by
+ * crew's PDF lists the elbows of the round one as 75° and «A» only for the corrugated rectangular one; a 2×3 one without a kind has none by
  * default (#1776, founder 16.11: «у прямого водостока стандартно колен 0, у ребристого 3 штуки A»).
  * Finds things by testID; waits on what it checks (no pauses).
  */
@@ -51,13 +51,13 @@ exports.run = async (h) => {
   );
   const html = await p.evaluate(() => window.__pdf);
   // the elbow lines (#1766, #1800: a row is «<b>the supplier's name</b><br>properties | qty»): the corrugated rectangular one by
-  // its style «A Elbow 75°», the round one by its angle «Round Elbow 45°» — never «A»; the plain 2×3 one has none (#1776)
+  // its style «A Elbow 75°», the round one by its angle «Round Elbow 75°» (one, «Расход v2») — never «A»; the plain 2×3 one has none (#1776)
   const rows = [...html.matchAll(/<td><b>([^<]*)<\/b>(?:<br>([^<]*))?<\/td><td class="r">([^<]*)<\/td>/g)]
     .filter((m) => /Elbow \d+°$/.test(m[1]))
     .map((m) => `${m[1]} · ${m[2] || ""} = ${m[3]}`);
   h.expect(rows.length === 2, "two elbow lines (the corrugated rectangular one and the round one; the plain one has none): " + rows.join(" | "));
   h.expect(!rows.some((r) => /^2×3 /.test(r)), "no elbow line of the plain 2×3 one (#1776): " + rows.join(" | "));
   h.expect(rows.some((r) => /^3×4 A Elbow 75° · [^=]*= 3 \S+$/.test(r)), "the rectangular: 3 × A 75° — " + rows.join(" | "));
-  h.expect(rows.some((r) => /^\d″ Round Elbow 45° · [^=]*= 3 \S+$/.test(r)), "the round: 3 × 45°, no «A» — " + rows.join(" | "));
+  h.expect(rows.some((r) => /^\d″ Round Elbow 75° · [^=]*= 1 \S+$/.test(r)), "the round: 1 × 75°, no «A» — " + rows.join(" | "));
   await h.shot("round-elbows");
 };

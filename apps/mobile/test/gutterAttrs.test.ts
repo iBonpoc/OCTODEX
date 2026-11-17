@@ -81,10 +81,10 @@ describe("changeRun: зависимые поля", () => {
 });
 
 describe("changeDs: зависимые поля", () => {
-  it("круглый: размер 2×3 → 3″, колена A → 45° с тем же числом", () => {
+  it("круглый: размер 2×3 → 3″, колена A → 75° (умолчание круглого, «Расход v2») с тем же числом", () => {
     const a = changeDs({ ...DEFAULT_DS_ATTRS, elbows: [{ style: "A", qty: 4 }] }, { shape: "round" });
     expect(a.size).toBe("3");
-    expect(a.elbows).toEqual([{ style: "45", qty: 4 }]);
+    expect(a.elbows).toEqual([{ style: "75", qty: 4 }]);
     expect(DS_SIZES.round).toContain(a.size);
   });
   it("набор стены другой формы → та же стена, набор формы по умолчанию", () => {
@@ -93,10 +93,12 @@ describe("changeDs: зависимые поля", () => {
     const b = changeDs({ ...DEFAULT_DS_ATTRS, wall: "brick_hook_hd" }, { shape: "round" });
     expect(b.wall).toBe("brick_hook_hd"); // fits both shapes
   });
-  it("колена без записи — умолчание движка по виду (#1776): гладкий прямоугольный 0, ребристый 3 × A, круглый 3 × 45°", () => {
+  it("колена без записи — умолчание движка по виду (#1776, «Расход v2»): без вида 0, гладкий — 3 гиба по месту, ребристый 3 × A, круглый 1 × 75°", () => {
     expect(elbowCounts(DEFAULT_DS_ATTRS)).toEqual({ A: 0, B: 0 });
     expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "corrugated" })).toEqual({ A: 3, B: 0 });
-    expect(elbowCounts({ shape: "round" })).toMatchObject({ "45": 3 });
+    expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "plain" })).toEqual({ A: 3, B: 0 });
+    expect(elbowCounts({ ...DEFAULT_DS_ATTRS, dsStyle: "plain", elbowBend: "ready" })).toEqual({ A: 0, B: 0 });
+    expect(elbowCounts({ shape: "round" })).toEqual({ "30": 0, "45": 0, "60": 0, "75": 1, "90": 0 });
   });
 });
 
