@@ -19,7 +19,7 @@ export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 /** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
  *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price";
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge" | "price" | "supplier";
 /**
  * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
  * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
@@ -188,6 +188,26 @@ export function dropGroupPriceOps(items: readonly OwnedItem[], group: string, wh
   const mine = new Set(mineOf(items, who).map((x) => x.id));
   const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "catalog.groupPrice" && x.op.group === group;
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/**
+ * #1834: a supplier's tax refused as «someone changed it first» (row_version_conflict): it and every later waiting tax write of
+ * the same supplier go — each was built on the rate this one saw; sending them would quietly overwrite the other office's rate.
+ */
+export function dropSupplierTaxOps(items: readonly OwnedItem[], supplierId: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "supplier.tax" && x.op.supplierId === supplierId;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the card «the supplier's tax was not saved: someone changed it first» — it opens the supplier; one card per supplier and person */
+export function supplierTaxRejected(prev: readonly RejectedOp[], gone: readonly OwnedItem[], error: string, now: number, who: Owner | null): RejectedOp[] {
+  const last = [...gone].reverse().find((x) => x.op.k === "supplier.tax");
+  if (!last || last.op.k !== "supplier.tax") return [...prev];
+  const id = `supplierTax.${last.op.supplierId}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const owner = last.owner ?? who ?? undefined;
+  const rec: RejectedOp = { id, ...(owner ? { owner } : {}), kind: "supplier.tax", what: "supplier", href: `/suppliers/${last.op.supplierId}`, labelKey: "sup.rej.taxStale", error, at: new Date(now).toISOString() };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
 }
 
 /** the one card per group and person «the group's price was changed by someone else — yours $X is not saved»: the last

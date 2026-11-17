@@ -10,9 +10,13 @@
 --     (source 'supplier_tax'). Who may: app.is_staff and app.can_view_costs — the one rule of «who sees our costs» (#1837).
 --     Lock order: the supplier → its catalog_items (by id) → their catalog_item_costs (by item_id), the same as
 --     public.catalog_set_item_costs («Прайс», #1958): no two writers meet crosswise.
---   * t95_supplier_tax_moves (after update of purchase_tax_bps on suppliers): the rate of the supplier moves to its items on the
---     server whoever wrote it — public.supplier_set_tax, the app's upsert of the supplier (every phone, old ones too) or a server
---     writer. supplier_set_tax is the strict door (it checks what the phone saw); the trigger does the moving.
+--   * the rate has ONE writer: t14_supplier_tax_door (before update on suppliers) gives back the old rate when a phone changes it
+--     any other way than through public.supplier_set_tax (a transaction flag only the function sets). An old phone's whole-row upsert
+--     with a stale rate can neither change nor roll back the rate (the same trouble as #1958); the rest of its row is saved as before.
+--     A new supplier made with a rate (insert) is as it was — it has no items yet. A server writer (no JWT) is as it was.
+--   * t95_supplier_tax_moves (after update of purchase_tax_bps on suppliers): the rate moves to the supplier's items — only for
+--     a server writer or a person who sees our costs (a phone's change is already stopped by t14, and suppliers_update is
+--     owner/admin/office; this is a second wall).
 --   * t13_tax_follows_supplier (before insert or update on catalog_item_costs): an item WITH a supplier that has a rate always
 --     has that rate in its costs. An old phone's own rate (sent straight to catalog_item_costs, or through catalog_items where t30
 --     moves it into this table) is brought back to the supplier's: one guard catches both paths.
@@ -90,29 +94,55 @@ create trigger t94_item_supplier_tax after update of supplier_id on public.catal
   for each row when (old.supplier_id is distinct from new.supplier_id)
   execute function app.tg_item_supplier_tax();
 
--- ---- t95: the supplier's rate moves to its items, on the server, whoever wrote it ----------------------------------------
+-- ---- t14: the rate has one writer ---------------------------------------------------------------------------------------
+create or replace function app.tg_supplier_tax_door()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.purchase_tax_bps is distinct from old.purchase_tax_bps
+     and auth.uid() is not null
+     and coalesce(current_setting('app.supplier_tax_door', true), '') <> 'on' then
+    new.purchase_tax_bps := old.purchase_tax_bps;  -- the old phone's rate is not saved: «update the app» (a debt task, #1834)
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_supplier_tax_door() from public, anon, authenticated;
+drop trigger if exists t14_supplier_tax_door on public.suppliers;
+create trigger t14_supplier_tax_door before update on public.suppliers
+  for each row execute function app.tg_supplier_tax_door();
+
+-- ---- t95: the supplier's rate moves to its items, on the server ---------------------------------------------------------------
 -- Lock order: the supplier (the update that fired this) → its catalog_items (by id) → their catalog_item_costs (by item_id).
+-- One supplier with more than 1000 items is refused (a statement_timeout of the role would kill it halfway and block the queue).
 create or replace function app.tg_supplier_tax_moves()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   v_ids uuid[];
   v_n int := 0;
+  v_src text := coalesce(current_setting('app.cost_source', true), '');
 begin
-  -- a supplier left without a rate: the items keep their own (the phone asks the person)
-  if new.purchase_tax_bps is null then
-    perform set_config('app.supplier_tax_moved', '0', true);
+  perform set_config('app.supplier_tax_moved', '0', true);
+  -- a supplier left without a rate or in the trash: the items keep their own (the phone asks the person)
+  if new.purchase_tax_bps is null or new.deleted_at is not null then
+    return null;
+  end if;
+  -- second wall: nobody moves costs who does not see them (a server writer has no JWT)
+  if auth.uid() is not null and not app.can_view_costs(new.company_id) then
     return null;
   end if;
   select coalesce(array_agg(x.id order by x.id), '{}') into v_ids from (
     select i.id from public.catalog_items i
      where i.company_id = new.company_id and i.supplier_id = new.id order by i.id for update) x;
+  if cardinality(v_ids) > 1000 then
+    raise exception 'too many items for one supplier tax change' using errcode = '54000', hint = 'supplier_tax_too_many';
+  end if;
   perform 1 from public.catalog_item_costs k
    where k.company_id = new.company_id and k.item_id = any (v_ids) order by k.item_id for update;
   perform set_config('app.cost_source', 'supplier_tax', true);
   update public.catalog_item_costs k set vendor_tax_bps = new.purchase_tax_bps
    where k.company_id = new.company_id and k.item_id = any (v_ids) and k.vendor_tax_bps is distinct from new.purchase_tax_bps;
   get diagnostics v_n = row_count;
-  perform set_config('app.cost_source', '', true);
+  perform set_config('app.cost_source', v_src, true);  -- what a server writer set before us stays
   perform set_config('app.supplier_tax_moved', v_n::text, true);
   return null;
 end;
@@ -127,25 +157,34 @@ create trigger t95_supplier_tax_moves after update of purchase_tax_bps on public
 create or replace function public.supplier_set_tax(p_supplier uuid, p_tax_bps int, p_seen_bps int)
 returns int language plpgsql security definer set search_path = '' as $$
 declare
+  v_company uuid;
   s public.suppliers;
 begin
   if p_tax_bps is not null and p_tax_bps not between 0 and 10000 then
     raise exception 'tax: 0..10000 basis points' using errcode = '22023';
   end if;
-  -- 1. the supplier locked first (the order of locks: supplier → items → costs; the moving is t95)
-  select * into s from public.suppliers where id = p_supplier and deleted_at is null for update;
-  if s.id is null or not (app.is_staff(s.company_id) and app.can_view_costs(s.company_id)) then
+  -- the right is checked BEFORE a lock is taken (nobody blocks another company's row by a guessed id)
+  select company_id into v_company from public.suppliers where id = p_supplier and deleted_at is null;
+  if v_company is null or not (app.is_staff(v_company) and app.can_view_costs(v_company)) then
+    raise exception 'supplier not found' using errcode = 'P0002';
+  end if;
+  -- the supplier locked first (the order: supplier → items → costs; the moving is t95). NO KEY UPDATE: a phone that changes the
+  -- supplier of an item takes FOR KEY SHARE on this row (the foreign key) and would wait crosswise with FOR UPDATE
+  select * into s from public.suppliers where id = p_supplier and deleted_at is null for no key update;
+  if s.id is null then
     raise exception 'supplier not found' using errcode = 'P0002';
   end if;
   -- the phone saw another rate than the stored one: nothing changes, it reads again and asks (two offices, one supplier)
   if p_seen_bps is distinct from s.purchase_tax_bps then
-    raise exception 'the supplier''s tax changed meanwhile' using errcode = '40001', hint = 'supplier_tax_stale';
+    raise exception 'the supplier''s tax changed meanwhile' using errcode = '40001', hint = 'row_version_conflict';
   end if;
   if p_tax_bps is not distinct from s.purchase_tax_bps then
     return 0;
   end if;
   perform set_config('app.supplier_tax_moved', '0', true);
+  perform set_config('app.supplier_tax_door', 'on', true);
   update public.suppliers set purchase_tax_bps = p_tax_bps where id = s.id;
+  perform set_config('app.supplier_tax_door', '', true);
   return coalesce(nullif(current_setting('app.supplier_tax_moved', true), ''), '0')::int;
 end;
 $$;

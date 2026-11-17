@@ -16843,17 +16843,34 @@ select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 70
 update public.memberships set permissions_override = permissions_override - 'view_costs' where user_id = 'a0000000-0000-0000-0000-000000000005';
 :as_owner_b
 select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 800, 700)$q$, 'T375 С5 another company''s owner may not (the supplier is not found)');
-\echo 'T376 nothing to change'
-:as_owner_a
-select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 the same rate changes nothing (С6 idempotent)');
-select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1200, 900) = 3
-              and public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', null, 1200) = 0, 'T376 a cleared rate changes the supplier only');
+-- a second wall: the table itself — a sales person or the tech cannot update a supplier at all (0 rows), the items stay
+:as_sales_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
+:as_tech_a
+update public.suppliers set purchase_tax_bps = 1 where id = '37100000-0000-4000-8000-0000000000a3';
 :as_super
-select tst.ok((select purchase_tax_bps is null from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+select tst.ok((select purchase_tax_bps = 700 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a3')
+              and (select vendor_tax_bps = 700 from public.catalog_item_costs where item_id = '37100000-0000-4000-8000-0000000000b4'),
+  'T375 С5 sales and the tech cannot update a supplier: the rate and the items are as they were');
+\echo 'T376 the rate has one writer'
+-- С6: a phone's own upsert (a stale whole row, an old build, the offline queue) neither changes nor rolls back the rate; the rest is saved
+:as_owner_a
+update public.suppliers set purchase_tax_bps = 825, phone = '555-T376' where id = '37100000-0000-4000-8000-0000000000a1';
+:as_super
+select tst.ok((select purchase_tax_bps = 900 and phone = '555-T376' from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
+              and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 900),
+  'T376 С6 a phone''s upsert with an old rate does not roll the rate back nor move it to the items; its other fields are saved');
+:as_owner_a
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 С6 the same rate changes nothing');
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1200, 900) = 3, 'T376 С6 a new rate moves to the three items');
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'T376 new with a rate', 725);
+select tst.ok((select purchase_tax_bps = 725 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a9'), 'T376 С6 a new supplier made with a rate (insert) keeps it');
+:as_super
+select tst.ok((select purchase_tax_bps = 1200 from public.suppliers where id = '37100000-0000-4000-8000-0000000000a1')
               and (select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1200),
-  'T376 a supplier left without a rate: the items keep the last rate');
+  'T376 С6 the three items follow the door');
 \echo 'T377 the order of locks'
--- С7: the supplier, then its items, then their costs — the same as catalog_set_item_costs; a regression of the order shows here
+-- С7: the supplier, then its items, then their costs — the same as catalog_set_item_costs; the right is checked before any lock
 do $$ declare d text; a int; b int; c int; begin
   d := pg_get_functiondef('app.tg_supplier_tax_moves()'::regprocedure);
   a := position('from public.catalog_items i' in d);
@@ -16861,20 +16878,27 @@ do $$ declare d text; a int; b int; c int; begin
   perform tst.ok(a > 0 and b > a, 'T377 С7 locks in t95: items, then costs (the supplier is locked by the update that fires it)');
   perform tst.ok(d ~ 'order by i\.id for update' and d ~ 'order by k\.item_id for update', 'T377 С7 each set locked in key order');
   d := pg_get_functiondef('public.supplier_set_tax(uuid,integer,integer)'::regprocedure);
-  perform tst.ok(position('for update' in d) > 0 and position('from public.suppliers where id = p_supplier' in d) < position('update public.suppliers set' in d), 'T377 С7 supplier_set_tax locks the supplier first');
+  perform tst.ok(position('app.is_staff' in d) > 0 and position('app.is_staff' in d) < position('for no key update' in d),
+                 'T377 С7 the right is checked before the lock, the lock is NO KEY UPDATE (a phone''s foreign key waits crosswise with FOR UPDATE)');
 end $$;
--- the app''s own upsert of a supplier (every phone, the old ones too) moves the rate as well
-:as_office_a
-update public.suppliers set purchase_tax_bps = 1100 where id = '37100000-0000-4000-8000-0000000000a1';
-:as_super
-select tst.ok((select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1100),
-  'T376 С6 the supplier saved by a phone''s own upsert (also from the offline queue) moves the rate to its items on the server');
 \echo 'T378 rights'
 select tst.ok(has_function_privilege('authenticated', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
               and not has_function_privilege('anon', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
               and (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.supplier_set_tax(uuid,integer,integer)'::regprocedure),
   'T378 С8 supplier_set_tax: authenticated only, security definer, empty search_path');
-select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE'), 'T378 С8 the trigger functions are for nobody');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.tg_supplier_tax_moves()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_supplier_tax_door()', 'EXECUTE'),
+  'T378 С8 the trigger functions are for nobody');
+-- С9: one supplier with more than 1000 items is refused (no half-done change, the rate stays)
+:as_super
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('37100000-0000-4000-8000-0000000000aa', 'ca000000-0000-0000-0000-000000000000', 'T378 big', 500);
+insert into public.catalog_items (company_id, kind, name, unit, unit_price_cents, supplier_id)
+select 'ca000000-0000-0000-0000-000000000000', 'material', 'T378 item ' || g, 'ea', 0, '37100000-0000-4000-8000-0000000000aa' from generate_series(1, 1001) g;
+:as_owner_a
+select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000aa', 600, 500)$q$, 'T378 С9 more than 1000 items: refused');
+:as_super
+select tst.ok((select purchase_tax_bps = 500 from public.suppliers where id = '37100000-0000-4000-8000-0000000000aa'), 'T378 С9 the refused change left the rate as it was');
+delete from public.catalog_items where name like 'T378 item %';
 \echo 'T371–T378 ok'
 
 \echo 'ALL TESTS PASSED'
