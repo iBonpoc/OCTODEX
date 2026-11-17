@@ -16318,4 +16318,52 @@ select tst.ok((select kind = 'service' and unit_price_cents = 800 from public.ca
   'T350 a material without a cost: sales changes its kind and price as before');
 \echo 'T350 the kind of a counted material ok'
 
+-- ---------------------------------------------------------------- T360 (spec 50, PR 50-6): the schedule of the erasure jobs
+\echo 'T360 the erasure schedule'
+:as_super
+-- rights: for service_role only (rule 18), nobody from the API
+select tst.ok(not has_function_privilege('anon', 'app.erase_cron()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_cron()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_kick()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_stuck()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_purge_done()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_cron()', 'EXECUTE') and has_function_privilege('service_role', 'app.erase_stuck()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_purge_done()', 'EXECUTE') and has_function_privilege('service_role', 'app.erase_kick()', 'EXECUTE'),
+  'T360 the erasure job functions are for service_role only');
+-- no Vault and no pg_net here: the kick says false and breaks nothing
+select tst.ok(app.erase_kick() = false, 'T360 no Vault or pg_net: the kick is false, silently');
+-- the alarm counts only the rows that gave up (5 tries, not done), in both queues
+delete from app.erase_queue where user_id in ('36000000-0000-4000-8000-0000000000a1', '36000000-0000-4000-8000-0000000000a2', '36000000-0000-4000-8000-0000000000a3');
+delete from app.storage_erase_queue where path like '36000000-0000-4000-8000-000000000001/%';
+select app.erase_stuck() as t360_before \gset
+insert into app.erase_queue (user_id, tries) values ('36000000-0000-4000-8000-0000000000a1', 5);                        -- gave up
+insert into app.erase_queue (user_id, tries) values ('36000000-0000-4000-8000-0000000000a2', 4);                        -- still tries
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000a3', 5, now());        -- done
+insert into app.storage_erase_queue (bucket, path, tries) values ('files', '36000000-0000-4000-8000-000000000001/gave-up.jpg', 5);
+insert into app.storage_erase_queue (bucket, path, tries) values ('files', '36000000-0000-4000-8000-000000000001/waits.jpg', 2);
+select tst.ok(app.erase_stuck() = :t360_before + 2, 'T360 the alarm counts the person row and the object that gave up, not the others');
+-- cleanup: done for more than 7 days leaves, done yesterday and rows not done stay
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000b1', 0, now() - interval '8 days');
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000b2', 0, now() - interval '1 day');
+insert into app.storage_erase_queue (bucket, path, tries, done_at) values ('files', '36000000-0000-4000-8000-000000000001/old.jpg', 0, now() - interval '8 days');
+insert into app.storage_erase_queue (bucket, path, tries, done_at) values ('files', '36000000-0000-4000-8000-000000000001/new.jpg', 0, now() - interval '1 day');
+select app.erase_purge_done() >= 2 as t360_purged \gset
+select tst.ok(:'t360_purged'::boolean, 'T360 the cleanup counts what it removed');
+select tst.ok(not exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000b1')
+              and exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000b2')
+              and exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a1')
+              and not exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/old.jpg')
+              and exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/new.jpg')
+              and exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg'),
+  'T360 done for more than 7 days is gone; yesterday, waiting and given-up rows stay');
+-- the one call: runs the job, returns the counts, never throws
+select tst.ok((app.erase_cron() ->> 'kick') = 'false' and (app.erase_cron() ->> 'stuck')::int >= 2 and app.erase_cron() ? 'purged' and app.erase_cron() ? 'waiting',
+  'T360 erase_cron returns its counts and does not break without Vault');
+-- from the API: nobody
+set role authenticated;
+select tst.fails($q$select app.erase_cron()$q$, 'T360 authenticated cannot run the erasure job');
+select tst.fails($q$select app.erase_stuck()$q$, 'T360 authenticated cannot read the alarm');
+reset role;
+delete from app.erase_queue where user_id::text like '36000000-%';
+delete from app.storage_erase_queue where path like '36000000-0000-4000-8000-000000000001/%';
+\echo 'T360 the erasure schedule ok'
+
 \echo 'ALL TESTS PASSED'
