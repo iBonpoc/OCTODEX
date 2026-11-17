@@ -8,6 +8,13 @@ import type { CatalogItem } from "@/data/types";
 
 const norm = (v: string) => v.trim().toLowerCase();
 
+/** #1913 (the price-key spec, §4.3): properties the core keeps for itself, not the item's own (a price group): they
+ *  are never «extra» when matching and never shown on a card */
+export const SERVICE_PROPS: readonly string[] = ["priceGroup"];
+/** how many own properties an item has (its service ones not counted) */
+export const propertyCount = (a: Record<string, string> | undefined): number =>
+  Object.keys(a ?? {}).filter((k) => !SERVICE_PROPS.includes(k)).length;
+
 export function catalogMatch(catalog: readonly CatalogItem[], want: Record<string, string>): CatalogItem[] {
   const keys = Object.keys(want);
   if (!keys.length) return [];
@@ -16,7 +23,7 @@ export function catalogMatch(catalog: readonly CatalogItem[], want: Record<strin
     // own properties only: «constructor» or «toString» is never found on the object's prototype (security check C3 №5)
     return !!a && keys.every((k) => Object.prototype.hasOwnProperty.call(a, k) && typeof a[k] === "string" && norm(a[k]!) === norm(want[k]!));
   });
-  const extra = (it: CatalogItem) => Object.keys(it.attributes ?? {}).length - keys.length;
+  const extra = (it: CatalogItem) => propertyCount(it.attributes) - keys.length;
   return hits.sort((x, y) => extra(x) - extra(y) || x.name.localeCompare(y.name));
 }
 
@@ -24,6 +31,7 @@ export function catalogMatch(catalog: readonly CatalogItem[], want: Record<strin
  *  module's codes, not words of the app (rule 7) — the values are data, like the item's name */
 export const attributesLine = (a: Record<string, string> | undefined): string =>
   Object.entries(a ?? {})
+    .filter(([k]) => !SERVICE_PROPS.includes(k))
     .sort(([x], [y]) => x.localeCompare(y))
     .map(([, v]) => v)
     .join(" · ");

@@ -32,6 +32,8 @@ export function classify(e: unknown): Failure {
   // «someone else changed it first» (40001 + hint row_version_conflict, module_save_settings): a retry never helps — the
   // server's «no» before the code says «serialization, try later» (review #354 Б1)
   if (field(e, "hint") === "row_version_conflict") return "refusal";
+  // #1913: a price group is full (54000, 200 items) — the same write is refused every time, it is no «try later»
+  if (field(e, "hint") === "price_group_full") return "refusal";
   if (e instanceof Error && e.name === UNKNOWN_OP) return "transient";
   if (code && TRANSIENT_CODE.test(code)) return "transient";
   if (status) return status >= 500 || TRANSIENT_STATUS.has(status) ? "transient" : "refusal";
