@@ -47,6 +47,10 @@ exports.run = async (h) => {
   let db = await h.db();
   h.expect((db.payments || []).length === payments0, `С1 no payment written (${(db.payments || []).length} / ${payments0})`);
   h.expect(db.invoices.filter((i) => i.jobId === a.jobId).length === 1, "С1 no new invoice");
+  h.expect(!((db.visits.find((x) => x.id === a.id).payment || {}).amountCents > 0), "С1 the visit took no money");
+  // the closed visit shows no «$0.00 · Карта» and does not say the payment was saved
+  await p.getByText("Подпись сохранена.").locator("visible=true").first().waitFor({ timeout: 8000 });
+  h.expect((await p.getByText(/\$0(\.00)? · /).locator("visible=true").count()) === 0, "С1 no «$0.00 · Карта» line");
 
   // С4: > 0 — «Принять оплату» as before: the shown amount is what is written
   await h.go(`/visit/${b.id}`);

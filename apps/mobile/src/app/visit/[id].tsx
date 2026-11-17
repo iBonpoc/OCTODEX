@@ -288,6 +288,9 @@ export default function VisitScreen() {
             icon="check"
             full
             onPress={() => {
+              // review of #2018: «Закрыть выезд» never takes money — if the amount changed since the screen drew it (a sync),
+              // nothing is sent and the screen shows the amount with «Принять оплату» again
+              if (visitDueCents(store.db, v) > 0) return toast.show(t("visit.dueChanged"));
               haptic();
               toast.show(queuedHint() ?? t("toast.step", { step: t("st.done") }), store.payVisit(v.id, method));
             }}
@@ -346,7 +349,7 @@ export default function VisitScreen() {
             </T>
           </RowView>
           <T v="body" tone="mut">
-            {t("visit.completedHint")}
+            {t(v.payment && v.payment.amountCents > 0 ? "visit.completedHint" : "visit.completedHintSigned")}
           </T>
           {job && canSeeProfit(store.role) ? (() => {
             const p = jobProfit(db, job.id);
@@ -364,7 +367,8 @@ export default function VisitScreen() {
               </View>
             );
           })() : null}
-          {v.payment ? (
+          {/* a visit closed with nothing to pay keeps no «$0.00 · Карта» line (#2018) */}
+          {v.payment && v.payment.amountCents > 0 ? (
             <T v="body" tabular>
               {money(v.payment.amountCents)} · {t(`visit.pay${v.payment.method[0].toUpperCase()}${v.payment.method.slice(1)}` as "visit.payCard")}
             </T>
