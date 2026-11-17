@@ -7,11 +7,11 @@ import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind, Supplier } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { countsFromCost, editClean, editOk, editPrice } from "@/features/catalogEdit";
+import { countsFromCost, editClean, editOk, editPrice, priceLocked } from "@/features/catalogEdit";
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
 import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
-import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, ReadOnly, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { StatusNote } from "@/ui/statusNote";
@@ -51,6 +51,7 @@ export default function CatalogItemScreen() {
   // a cost the phone does not have would overwrite the real price
   const noCosts = store.db.costsVisible === false;
   const isMat = countsFromCost(it, noCosts);
+  const locked = priceLocked(it, noCosts);
   const price = editPrice(it, store.db.catalog, noCosts);
   const ok = editOk(it, noCosts);
   // spec 36: who sees suppliers picks one (the server reads none for sales and the tech)
@@ -104,9 +105,17 @@ export default function CatalogItemScreen() {
         <FieldGroup>
           <Labeled label={t("cat.price")}>
             <View testID="catalog-price">
-              <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
+              {/* #1807: counted by the server from a cost this person does not see — shown, not changed */}
+              <ReadOnly value={locked}>
+                <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
+              </ReadOnly>
             </View>
           </Labeled>
+          {locked ? (
+            <View testID="catalog-price-locked">
+              <T v="caption" tone="mut">{t("price.fromCost.locked")}</T>
+            </View>
+          ) : null}
         </FieldGroup>
       ) : null}
 

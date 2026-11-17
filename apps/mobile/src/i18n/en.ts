@@ -4445,6 +4445,11 @@ export const en: Dict = {
   "photoUp.retried": "Sending the photo again",
   "photoUp.a11y": "not uploaded",
   // spec 53 — quick price of one catalog item (wave 53-1)
+  // #1807 (53-0б): a price counted by the server from the cost
+  "price.recalc.att": "{name}: {who} set {sent} — {kept} kept from the cost",
+  "price.recalc.attNoWho": "{name}: the price {sent} was sent — {kept} kept from the cost",
+  "price.recalc.chip": "Price from cost",
+  "price.fromCost.locked": "The app counts this price from the cost. Someone who sees the cost can change it.",
   "price.quick.title": "Price",
   "price.quick.save": "Save price",
   "price.quick.cost": "Your cost per {unit}",
