@@ -15957,6 +15957,14 @@ select tst.ok((select unit_price_cents from public.catalog_items where id = '532
   'T328 an old office build''s hand price: $66.00 from the cost stays, noted');
 :as_owner_b
 select tst.ok(tst.cnt($q$select 1 from public.catalog_price_recalc$q$) = 0, 'T328 another company reads no recalc note');
+-- the night job keeps 90 days of notes (old builds die out); nobody but the server runs it
+:as_super
+insert into public.catalog_price_recalc (company_id, item_id, sent_price_cents, server_price_cents, at) values
+  ('ca000000-0000-0000-0000-000000000000', '53220000-0000-4000-8000-0000000000c1', 1, 2, now() - interval '91 days');
+select tst.ok(app.purge_price_recalc() = 1
+          and (select count(*) >= 3 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1'),
+  'T328 the night job removes a note older than 90 days and keeps the newer ones');
+select tst.ok(not has_function_privilege('authenticated', 'app.purge_price_recalc()', 'execute'), 'T328 the app does not run the night job');
 \echo 'T328 sales without our costs ok'
 
 -- T329: labor, service and a kit are not counted (spec 55 brings their modes)

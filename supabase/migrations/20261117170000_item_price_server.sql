@@ -265,3 +265,23 @@ begin
      and exists (select 1 from public.catalog_item_costs c where c.company_id = i.company_id and c.item_id = i.id and c.unit_cost_cents is not null);
   alter table public.catalog_items enable trigger user;
 end $$;
+
+-- ---- 90 days of recalc notes (spec 53 §5.3б п.4): the night job keeps the table small; old builds die out ---------------
+create or replace function app.purge_price_recalc()
+returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  delete from public.catalog_price_recalc where at < now() - interval '90 days';
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+revoke all on function app.purge_price_recalc() from public, anon, authenticated;
+do $$
+begin
+  if to_regnamespace('cron') is not null then
+    execute 'select cron.unschedule(jobid) from cron.job where jobname = $1' using 'price-recalc-purge';
+    execute $q$select cron.schedule('price-recalc-purge', '41 4 * * *', 'select app.purge_price_recalc()')$q$;
+  end if;
+end;
+$$;
