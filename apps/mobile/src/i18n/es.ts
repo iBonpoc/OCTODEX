@@ -4013,6 +4013,7 @@ export const es: Dict = {
   "intake.state": "Estado",
   "intake.zip": "Código postal",
   "intake.service": "Tipo de trabajo",
+  "intake.lang": "Idioma",
   "intake.message": "¿Qué necesita?",
   "intake.consent": "Acepto recibir mensajes de texto de {company} sobre mi solicitud. Pueden aplicarse tarifas de mensajes y datos. Responda STOP para cancelar.",
   "intake.needContact": "Deje un teléfono o un correo para que puedan responder.",
