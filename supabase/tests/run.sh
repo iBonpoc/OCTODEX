@@ -55,6 +55,8 @@ cp "$ROOT"/migrations/*.sql "$WORK"/
 cp "$ROOT"/../apps/mobile/test/fixtures/matchKeys.json "$WORK"/
 # the attached pages (spec 33 П24.7): the same examples as apps/mobile/test/docPages.test.ts (T165)
 cp "$ROOT"/../apps/mobile/test/fixtures/docPages.json "$WORK"/
+# #1807: the engine's catalogPrice = app.item_price_cents (packages/estimating-engine/test/catalogPrice.fixture.test.ts, T322)
+cp "$ROOT"/../packages/estimating-engine/test/fixtures/catalogPrice.json "$WORK"/
 # #1147: the totals the phone shows the client = the totals the server signs (apps/mobile/test/signTotals.test.ts, T195)
 cp "$ROOT"/../apps/mobile/test/fixtures/signTotals.json "$WORK"/
 # РС-6: the sections the client reads — the engine and the phone = app.client_sections (apps/mobile/test/clientSections.test.ts, T199)
@@ -97,4 +99,4 @@ if [[ -n "${CATALOG_OUT:-}" ]]; then
 fi
 echo "== tests core_rls.sql"
 VERB=(); [[ "${VERBOSE:-}" == "1" ]] && VERB=(-v verbose=1)
-"${PSQL[@]}" "${VERB[@]}" -v match_keys="$WORK/matchKeys.json" -v doc_pages="$WORK/docPages.json" -v sign_totals="$WORK/signTotals.json" -v client_sections="$WORK/clientSections.json" -f "$WORK/core_rls.sql"
+"${PSQL[@]}" "${VERB[@]}" -v match_keys="$WORK/matchKeys.json" -v doc_pages="$WORK/docPages.json" -v sign_totals="$WORK/signTotals.json" -v client_sections="$WORK/clientSections.json" -v catalog_price="$WORK/catalogPrice.json" -f "$WORK/core_rls.sql"
