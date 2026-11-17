@@ -11,7 +11,7 @@
  * «insert, or nothing if it is there» (catalog.save onlyNew): a second press, a second phone, the queue sending twice —
  * one item, and a price someone already set is never overwritten by the test one.
  */
-import { computeGutterParts, defaultElbowsFor, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
+import { bendOf, computeGutterParts, DEFAULT_GUTTER_RULES, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogMatch } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
@@ -53,13 +53,28 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
   if (own) return own;
   // #871: before the fix the engine counted «A» for a round downspout's elbows by default, and a company priced that row
   // («колено A round»). The 45° elbow takes that price until the company prices its own — nothing to move, no $0 line
-  const legacy = LEGACY_ROUND_ELBOW(want);
-  return legacy ? catalogMatch(pool, legacy)[0] : undefined;
+  for (const alt of ROUND_ELBOW_FALLBACK(want)) {
+    const it = catalogMatch(pool, alt)[0];
+    if (it) return it;
+  }
+  return undefined;
 }
 
-/** a round downspout's default 45° elbow → the same elbow under its old name «A» (see findItem); anything else → none */
-const LEGACY_ROUND_ELBOW = (w: Record<string, string>): Record<string, string> | null =>
-  w.part === "elbow" && w.shape === "round" && w.style === "45" ? { ...w, style: "A" } : null;
+/**
+ * The round elbow of the engine's DEFAULT degree (75°, «Расход v2») the company has not priced takes its round elbow of the same
+ * size and metal at 45°, then under its old name «A»; the 45° one takes «A» (#871; spec 33-gutters-consumption §2.7: the default
+ * changed under a company that priced 45°). Its own degree always wins. A degree set by hand (30°, 60°, 90°) never borrows: it shows
+ * «нет цены», as before (review of PR-1б).
+ */
+const ROUND_DEFAULT_STYLES = new Set(DEFAULT_GUTTER_RULES.defaultElbowsRound.map((e) => e.style).filter((s) => s !== "45"));
+const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>[] =>
+  w.part !== "elbow" || w.shape !== "round" ? [] : w.style === "45" ? [{ ...w, style: "A" }] : ROUND_DEFAULT_STYLES.has(w.style ?? "") ? [{ ...w, style: "45" }, { ...w, style: "A" }] : [];
+/** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
+export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
+  const it = findItem(catalog, p);
+  // the #871 «A» name of the 45° elbow is the same elbow under its old name — not another degree
+  return !!it && p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
+}
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
 export const PART_WORDS = new Set([
@@ -70,7 +85,7 @@ export const PART_WORDS = new Set([
   // a downspout's wall fasteners: the kit is named by its part (#1805: they were shown as codes)
   "sickle_hook", "u_bracket", "conductor_bracket", "brick_hook", "brick_hook_hd", "conductor_band", "hinged_hook", "pipe_cleat",
 ]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "bend", "tearoff", "tile", "cleaning", "flush", "guard_install"]);
 
 /* ---------- the parts the company prices ---------- */
 
@@ -83,6 +98,8 @@ export const LABOR_PARTS: readonly PartQty[] = [
   ...LABOR_STORIES.map((s) => labor(`labor.install.story${s}`, "ft", { work: "install", story: s })),
   ...LABOR_STORIES.map((s) => labor(`labor.downspout.story${s}`, "ea", { work: "downspout", story: s })),
   labor("labor.corner_cut", "ea", { work: "corner_cut" }),
+  // «Гиб по месту» (Р4, «Расход v2»): a plain rectangular downspout's elbows bent on site, each
+  labor("labor.bend", "ea", { work: "bend" }),
   labor("labor.tearoff", "ft", { work: "tearoff" }),
   labor("labor.tile", "ft", { work: "tile" }),
   // the starter estimates (#1323): a cleaning, a downspout flush and a guard installation are priced like the rest of the labor
@@ -102,10 +119,10 @@ export function sampleJob(raw: unknown): MeasurementInput {
   const ra = newRunAttrs(ch);
   const stock = { profile: ra.profile, size: ra.size, material: ra.material, gauge: ra.gauge, finish: ra.finish, color: ra.color };
   const run = (id: string, lengthIn: number, ends: MeasurementInput["runs"][number]["ends"]) => ({ ...ra, id, lengthIn, ends, houseSide: "R" as const });
-  // the downspout's elbow is in the price list whatever its kind: a plain rectangular one has none by default (#1776), so the
-  // sample gives it one A — a company that has elbows put on a plain one by hand still finds that elbow priced
+  // the downspout's elbow is in the price list whatever its kind: a plain rectangular one is bent on site by default («Расход v2»,
+  // the bend is a labor row), so the sample makes its elbow ready — a company that puts ready elbows on a plain one finds them priced
   const ds0 = newDsAttrs(ch) as Omit<MeasurementInput["downspouts"][number], "id" | "runId">;
-  const sampleDs = ds0.shape !== "round" && !ds0.elbows && defaultElbowsFor(ds0).length === 0 ? { ...ds0, elbows: [{ style: "A", qty: 1 }] } : ds0;
+  const sampleDs = ds0.shape !== "round" && !ds0.elbows && bendOf(ds0) === "field" ? { ...ds0, elbows: [{ style: "A", qty: 1 }], elbowBend: "ready" as const } : ds0;
   return {
     runs: [
       // guards on the first run: the price list gets the guard row too (the starter «Только guards», #1323)
@@ -171,7 +188,8 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
   const ids = new Set(catalog.map((it) => it.id));
   const out = new Map<string, CatalogItem>();
   for (const { key, part } of rows) {
-    if (findItem(catalog, part)) continue;
+    // a part priced only by another degree's item (§2.7) still gets its own: the price list shows it missing until there is one
+    if (findItem(catalog, part) && !priceFromOtherDegree(catalog, part)) continue;
     const id = stableItemId(companyId, key);
     if (ids.has(id) || out.has(id)) continue;
     out.set(id, {
@@ -222,8 +240,11 @@ type Tr = (key: DictKey, params?: Record<string, string | number>) => string;
  * elbows by their angle «колена 45° × 2». Nothing at all — "" (#814: no «колен 0»). The elbows come as the engine counts
  * them — unset is its default (measureSpec, elbowCounts).
  */
-export function dsLine(t: Tr, d: { shape?: string; elbows: readonly { style: string; qty: number }[]; offsets: readonly { lengthIn: number; qty: number }[] }): string {
+export function dsLine(t: Tr, d: { shape?: string; bent?: boolean; elbows: readonly { style: string; qty: number }[]; offsets: readonly { lengthIn: number; qty: number }[] }): string {
   const round = d.shape === "round";
+  // bent on site («Расход v2» §2.1): no elbows to buy — the bends by number (an offset on site is two of them, said by its length)
+  const bends = d.elbows.reduce((n, e) => n + Math.max(0, e.qty), 0);
+  if (d.bent) return [...(bends > 0 ? [t("mod.gutters.view.dsBends", { n: bends })] : []), ...d.offsets.filter((o) => o.qty > 0).map((o) => t("mod.gutters.view.dsOffset", { len: `${o.lengthIn}″`, n: o.qty }))].join(" · ");
   // a rectangular elbow by its style and the trade's angle «A 75°» (#1800); a round one by its angle «45°»
   const el = d.elbows.filter((e) => e.qty > 0).map((e) => t("mod.gutters.view.dsElbow", { style: round || /^\d+$/.test(e.style) ? `${e.style}°` : `${e.style} ${ELBOW_DEFAULT_DEG}°`, n: e.qty }));
   return [

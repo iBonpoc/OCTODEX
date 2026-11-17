@@ -26,7 +26,7 @@ import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow, priceFromOtherDegree } from "../prices";
 import { withAfter } from "@/data/undo";
 import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
@@ -82,7 +82,8 @@ export default function GutterPricesScreen() {
   const keep = (x: string) => x.replace(/ · /g, "\u00a0· ").replace(/ (\d+)$/, "\u00a0$1");
   const desktop = device === "desktop";
   const card = (row: PriceRow) => {
-    const it = findItem(catalog, row.part);
+    // a part priced only by another degree's elbow (§2.7) is shown missing here: the company prices its own
+    const it = priceFromOtherDegree(catalog, row.part) ? undefined : findItem(catalog, row.part);
     const title = keep(it ? it.name : nameOf(row.part));
     const unit = row.part.unit;
     if (it) {

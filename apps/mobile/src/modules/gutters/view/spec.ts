@@ -5,7 +5,7 @@
  * and the engine's parts in, rows out (the screen words them). Numbers are the drawing's own: gutter №n is the n-th
  * drawn (as the corner sheet says «Желоб n»), DS n the n-th downspout (as the canvas label).
  */
-import { dec, downspoutLengthIn, type Dec, type GutterSection, resolveGutterRules, type GutterRulesOverride, type MeasurementInput, type PartQty } from "@octo/estimating-engine";
+import { bendOf, dec, defaultOffsetsFor, downspoutLengthIn, fieldBendOf, type Dec, type GutterSection, resolveGutterRules, type GutterRulesOverride, type MeasurementInput, type PartQty } from "@octo/estimating-engine";
 import type { DictKey } from "@/i18n";
 import { cornerCut, findCorners, toMeasurement, type Drawing, type FoundCorner } from "../geometry";
 import { manyStories, storyOf, type Story } from "../canvas/scene";
@@ -37,10 +37,13 @@ export interface SpecDs {
   story: Story;
   shape: string;
   size: string;
-  /** elbows by style, the engine's way: unset — its default by kind (#1747, #1776: a plain rectangular one none, a corrugated one 3 × A «AAA», a round one 3 × 45°) */
+  /** elbows by style, the engine's way: unset — its default by kind (#1747, #1776, «Расход v2»: a plain rectangular one bent on site
+   *  3 × A, a corrugated one 3 × A «AAA», a round one 1 × 75°) */
   elbows: { style: string; qty: number }[];
-  /** offsets by length, inches */
+  /** offsets by length, inches (unset — the engine's default: a round one 1 × 2″) */
   offsets: { lengthIn: number; qty: number }[];
+  /** the elbows (and the offsets) are bent on site (`bendOf`): the view says «гиб по месту», not «Elbows» */
+  bent?: true;
   /** plain / corrugated; unset — plain */
   dsStyle?: string;
   material?: string;
@@ -99,12 +102,14 @@ export function measureSpec(d: Drawing, parts: readonly PartQty[], opts: { rules
       shape: String(s.shape),
       size: String(s.size),
       elbows: Object.entries(elbowCounts(s)).filter(([, q]) => q > 0).map(([style, qty]) => ({ style, qty })),
-      offsets: (s.offsets ?? []).filter((o) => Number.isFinite(o.qty) && o.qty > 0).map((o) => ({ lengthIn: o.lengthIn, qty: o.qty })),
+      offsets: (s.offsets ?? defaultOffsetsFor({ shape: s.shape === "round" ? "round" : "rect" }, rules)).filter((o) => Number.isFinite(o.qty) && o.qty > 0).map((o) => ({ lengthIn: o.lengthIn, qty: o.qty })),
+      ...(bendOf(s) === "field" ? { bent: true as const } : {}),
       ...(s.dsStyle ? { dsStyle: String(s.dsStyle) } : {}),
       ...(s.material ? { material: String(s.material) } : {}),
       ...(s.color ? { color: String(s.color) } : {}),
       bottom: String(s.bottom?.kind ?? "none"),
-      lengthIn: md ? downspoutLengthIn(md, mRun.get(md.runId)?.story ?? story, rules) : story * rules.storyHeightIn + rules.dsExtensionIn,
+      // the downspout the engine counts: the wall's length and what bending on site eats (§2.2), before the estimate rounds it
+      lengthIn: (md ? downspoutLengthIn(md, mRun.get(md.runId)?.story ?? story, rules) : story * rules.storyHeightIn + rules.dsExtensionIn) + fieldBendOf(s, rules).addedIn,
     };
   });
   return { runs, corners, ds, parts: parts.filter((p) => p.kind === "material" && Number(p.qty) > 0), manyStories: manyStories(d.runs) };
@@ -134,6 +139,8 @@ export interface DsKindTotal {
   lengthIn: number;
   elbows: { style: string; qty: number }[];
   offsets: { lengthIn: number; qty: number }[];
+  /** bent on site: a kind of its own (the same pipe with ready elbows is another row) */
+  bent?: true;
   bottoms: { kind: string; qty: number }[];
 }
 export function dsTotals(ds: readonly SpecDs[]): DsKindTotal[] {
@@ -144,8 +151,8 @@ export function dsTotals(ds: readonly SpecDs[]): DsKindTotal[] {
     else list.push({ ...x });
   };
   for (const d of ds) {
-    const key = [d.shape, d.size, d.dsStyle ?? "", d.material ?? "", d.color ?? ""].join("|");
-    const g = out.get(key) ?? { key, ns: [], shape: d.shape, size: d.size, ...(d.dsStyle ? { dsStyle: d.dsStyle } : {}), ...(d.material ? { material: d.material } : {}), ...(d.color ? { color: d.color } : {}), lengthIn: 0, elbows: [], offsets: [], bottoms: [] };
+    const key = [d.shape, d.size, d.dsStyle ?? "", d.material ?? "", d.color ?? "", d.bent ? "bent" : ""].join("|");
+    const g = out.get(key) ?? { key, ns: [], shape: d.shape, size: d.size, ...(d.dsStyle ? { dsStyle: d.dsStyle } : {}), ...(d.bent ? { bent: true as const } : {}), ...(d.material ? { material: d.material } : {}), ...(d.color ? { color: d.color } : {}), lengthIn: 0, elbows: [], offsets: [], bottoms: [] };
     out.set(key, g);
     g.ns.push(d.n);
     g.lengthIn += d.lengthIn;

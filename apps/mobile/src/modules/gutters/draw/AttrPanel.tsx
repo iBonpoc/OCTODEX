@@ -7,6 +7,7 @@
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
 import { sizeText } from "../sizeText";
+import { defaultOffsetsFor } from "@octo/estimating-engine";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, ScrollView, useWindowDimensions, View } from "react-native";
 import { measureAfterKeyboard } from "./afterKeyboard";
@@ -20,7 +21,7 @@ import { Menu } from "@/ui/overlays";
 import { fillStyle } from "@/ui/fill";
 import { SelectedCheck } from "@/ui/selectedCheck";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_KINDS, dsKindOf, DS_SHAPES, smallerSizes, elbowCounts, elbowPatch, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, MAX_RUN_IN, oneIn, tapeIn, unitFields, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { FracPicker } from "./FracPicker";
 import { inchesComplete, inchesTooBig, nextStage, type EntryStage } from "./lengthEntry";
@@ -480,7 +481,7 @@ function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
     <Field label={t(k("elbows"))} testID="attr-elbow-qty">
       {Object.entries(counts).map(([style, qty]) => (
         <View key={style} testID={`attr-elbow-${style}`}>
-          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs({ elbows: withElbowQty(ds, style, n) })} />
+          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs(elbowPatch(ds, style, n))} />
         </View>
       ))}
     </Field>
@@ -599,7 +600,8 @@ function DsLength({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<Ds
  */
 function Offsets({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
   const { t } = useI18n();
-  const off = ds.offsets?.[0];
+  // unset — the engine's default (a round one 1 × 2″, «Расход v2»): the window shows what the estimate counts
+  const off = ds.offsets ? ds.offsets[0] : defaultOffsetsFor({ shape: ds.shape })[0];
   const len = off?.lengthIn ?? OFFSETS_IN[0];
   const std = (OFFSETS_IN as readonly number[]).includes(len);
   const [own, setOwn] = useState(std ? "" : String(len));

@@ -15,7 +15,7 @@
 import { dec, jobLineQty, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
-import { findItem, matchKey } from "./prices";
+import { findItem, matchKey, priceFromOtherDegree } from "./prices";
 
 /** the engine's sections in the order the estimate shows them; labor last (О4) */
 export const SECTION_ORDER = ["gutter", "corners_caps", "fasteners", "downspouts", "adapters", "ds_bottom", "guards", "consumables", "labor"] as const;
@@ -86,7 +86,8 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
     const priceCents = valid ? listPrice : 0;
     // never a silent $0 (П23.1): no item, a broken price, or a $0 test price is «нет цены»; a real $0 is the company's choice
     const noPrice = !it || !valid || (priceCents === 0 && !!it.placeholder);
-    const lineName = it?.name ?? name(part);
+    // a price borrowed from another degree's elbow (§2.7) keeps the part's own name: the client never reads «45°» on a 75° elbow
+    const lineName = it && !priceFromOtherDegree(catalog, part) ? it.name : name(part);
     const cost = it ? catalogUnitCost(it) : undefined;
     return {
       id: uid(),

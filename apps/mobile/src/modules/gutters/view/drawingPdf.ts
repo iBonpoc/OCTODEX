@@ -76,7 +76,7 @@ export function drawingPdfHtml(x: DrawingPdfInput): string {
             // how many, the elbows, offsets and feet summed, the total length
             const v = partView(t, { key: "ds", kind: "material", attrs: { shape: g.shape, size: g.size, ...(g.dsStyle ? { dsStyle: g.dsStyle } : {}), ...(g.material ? { material: g.material } : {}), ...(g.color ? { color: g.color } : {}) } }, fmt);
             const what = [...v.props, `${dsNumbers(t, g.ns)} · ${partQty(t, { qty: String(g.ns.length), unit: "ea" }, fmt)}`].join(" · ");
-            const how = [dsLine(t, { shape: g.shape, elbows: g.elbows, offsets: g.offsets }), ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(t, `mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`)].filter(Boolean).join(" · ");
+            const how = [dsLine(t, { shape: g.shape, ...(g.bent ? { bent: true } : {}), elbows: g.elbows, offsets: g.offsets }), ...g.bottoms.map((b) => `${PART_WORDS.has(b.kind) ? t(`mod.gutters.pr.p.${b.kind}` as DictKey) : word(t, `mod.gutters.attr.b.${b.kind}`, b.kind)} × ${b.qty}`)].filter(Boolean).join(" · ");
             return `<tr><td><b>${esc(v.title)}</b><br>${esc(what)}</td><td>${esc(how)}</td><td class="r">${esc(len(g.lengthIn))}</td></tr>`;
           })
           .join("")}</table>`
