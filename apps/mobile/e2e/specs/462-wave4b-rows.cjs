@@ -57,5 +57,7 @@ exports.run = async (h) => {
   await vis("intake-lang-es").click();
   await h.expectText(/Cuéntele a Sunset Gutters lo que necesita/, "«Idioma ⌄» → Español: the page in Spanish");
   h.expect(/Idioma/.test(await vis("intake-lang-button").innerText()) && /Español/.test(await vis("intake-lang-button").innerText()), "the row shows «Idioma · Español»");
+  // the homeowner's page, not the app: its words follow the client's language (the app's is Russian), and it has no app menu
+  h.expect((await p.getByText(/^(Язык|Вид работ|Лиды|Клиенты)$/).locator("visible=true").count()) === 0, "no words of the app's language and no app menu on /f/");
   await h.shot("f");
 };
