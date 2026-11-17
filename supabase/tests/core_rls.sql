@@ -16903,4 +16903,42 @@ do $$ declare d text; a int; b int; begin
   perform tst.ok(position('job_cancel_reason' in d) > b, 'T390 С8 the guard''s rule is asked after the lock (a guard does not run in a definer)');
 end $$;
 
+\echo 'T391 no new money on a cancelled job ok'
+-- a visit finished before the cancel is paid later (record_visit_payment would make an invoice and a payment): both doors are shut
+:as_super
+insert into public.jobs (id, company_id, title, customer_id, property_id) values
+  ('39100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T391 finished visit', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T391 pending payment', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002'),
+  ('39100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T391 deleted', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('39100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-000000000001', now());
+update public.visits set status = 'en_route' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'on_site' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.visits set status = 'completed' where id = '39100000-0000-4000-8000-0000000000a1';
+update public.jobs set status = 'scheduled' where id = '39100000-0000-4000-8000-000000000001';
+update public.jobs set status = 'in_progress' where id = '39100000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok((public.cancel_job('39100000-0000-4000-8000-000000000001', 'Client left')) ->> 'status' = 'cancelled', 'T391 a job with a finished visit and no money is cancelled');
+:as_super
+select tst.fails_like($q$insert into public.invoices (company_id, customer_id, job_id, kind, total_cents)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000001', 'final', 100)$q$,
+  'job:cancelled%', 'T391 no invoice for a cancelled job');
+select tst.fails_like($q$insert into public.payments (company_id, visit_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000a1', 'c1a00000-0000-0000-0000-000000000002', 'cash', 100, 'succeeded', 't391-visit')$q$,
+  'job:cancelled%', 'T391 no payment on the finished visit of a cancelled job');
+-- a payment in transit counts as money (T384 the paid one, here the pending one)
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('39100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '39100000-0000-4000-8000-000000000002', 'final', 5000);
+update public.invoices set status = 'sent', sent_at = now() where id = '39100000-0000-4000-8000-0000000000b2';
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+values ('ca000000-0000-0000-0000-000000000000', '39100000-0000-4000-8000-0000000000b2', 'c1a00000-0000-0000-0000-000000000002', 'ach', 5000, 'pending', 't391-pending');
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000002', 'no')$q$, 'job:paid%', 'T391 a payment in transit: refund first');
+-- a deleted job answers as «not found»
+:as_super
+update public.jobs set deleted_at = now() where id = '39100000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.fails_like($q$select public.cancel_job('39100000-0000-4000-8000-000000000003', 'no')$q$, '%only the office%', 'T391 a deleted job: the same answer as «not found»');
+:as_super
+
 \echo 'ALL TESTS PASSED'

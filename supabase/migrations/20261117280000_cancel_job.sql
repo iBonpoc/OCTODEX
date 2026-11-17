@@ -83,3 +83,30 @@ end;
 $$;
 revoke all on function public.cancel_job(uuid, text) from public, anon;
 grant execute on function public.cancel_job(uuid, text) to authenticated;
+
+-- ---- no new money on a cancelled job ------------------------------------------------------------------------------------
+-- A visit finished before the cancel can still be paid later (public.record_visit_payment looks at the visit, not at the job and
+-- would make a new invoice and a payment on a cancelled job — security-check of #2015). Both doors close here, one rule for every
+-- writer (a phone's direct insert, the server's functions): no invoice and no payment of a visit for a job that is cancelled.
+-- A payment into an invoice goes through t06_payment_not_void (the cancel voided them). The check does not lock the job: the cancel
+-- holds it for update and a writer that read «not cancelled» a moment before is a payment taken on a live job.
+create or replace function app.tg_cancelled_job_no_money()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_job uuid;
+begin
+  if tg_table_name = 'invoices' then
+    v_job := new.job_id;
+  else
+    select v.job_id into v_job from public.visits v where v.id = new.visit_id and v.company_id = new.company_id;
+  end if;
+  if v_job is not null and exists (select 1 from public.jobs j where j.id = v_job and j.company_id = new.company_id and j.status = 'cancelled') then
+    raise exception 'job:cancelled' using errcode = '23514', hint = 'job_cancelled';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_cancelled_job_no_money() from public, anon, authenticated;
+create trigger t07_cancelled_job_no_money before insert on public.invoices
+  for each row when (new.job_id is not null) execute function app.tg_cancelled_job_no_money();
+create trigger t07_cancelled_job_no_money before insert on public.payments
+  for each row when (new.visit_id is not null) execute function app.tg_cancelled_job_no_money();

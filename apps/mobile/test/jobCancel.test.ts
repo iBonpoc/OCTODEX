@@ -27,8 +27,10 @@ describe("unit:jobCancel — #2015", () => {
     expect(jobCancelRefusal(db({ invoices: [invoice()], pendingPayments: [{ id: "pp", invoiceId: "i1", amountCents: 100, method: "ach", at: "2026-11-01" }] }), "j1", "x", "director")).toBe("paid");
   });
   it("С5. a visit on site or working; a done job", () => {
-    for (const step of ["on_site", "working", "signed", "paid"] as const) expect(jobCancelRefusal(db({ visits: [visit({ step })] }), "j1", "x", "director")).toBe("onSite");
+    for (const step of ["on_site", "working", "signed"] as const) expect(jobCancelRefusal(db({ visits: [visit({ step })] }), "j1", "x", "director")).toBe("onSite");
     expect(jobCancelRefusal(db({ visits: [visit({ step: "en_route" })] }), "j1", "x", "director")).toBeNull();
+    // «paid» is a visit the server has completed (repo.ts visitStep): it does not hold the cancel
+    expect(jobCancelRefusal(db({ visits: [visit({ step: "paid" })] }), "j1", "x", "director")).toBeNull();
     expect(jobCancelRefusal(db({ jobs: [job({ status: "done" })] }), "j1", "x", "director")).toBe("done");
   });
   it("С7. the reason: required, at most 500; a job that is gone", () => {

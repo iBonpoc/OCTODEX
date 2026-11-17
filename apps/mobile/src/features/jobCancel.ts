@@ -28,7 +28,7 @@ export function jobCancelRefusal(d: D, jobId: ID, reason: string, role: Role): J
   const job = d.jobs.find((j) => j.id === jobId);
   if (!job) return "gone";
   if (job.status === "done") return "done";
-  if (d.visits.some((v) => v.jobId === jobId && ["on_site", "working", "signed", "paid"].includes(v.step))) return "onSite";
+  if (d.visits.some((v) => v.jobId === jobId && ["on_site", "working", "signed"].includes(v.step))) return "onSite";
   if (jobHasPayment(d, jobId)) return "paid";
   if (role !== "director" && d.invoices.some((i) => i.jobId === jobId)) return "invoiceOpen";
   const why = reason.trim();

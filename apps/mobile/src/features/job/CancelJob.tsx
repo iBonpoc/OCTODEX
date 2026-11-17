@@ -28,6 +28,8 @@ export function CancelJobSheet({ jobId, visible, onClose }: { jobId: string; vis
   const confirm = () => {
     const why = store.cancelJob(jobId, reason);
     if (why) {
+      // a second tap while the sheet is closing: the job is cancelled already — nothing to say
+      if (why === "gone") return close();
       toast.show(t(`job.cancel.why.${why}` as DictKey));
       if (why !== "reason" && why !== "long") close();
       return;

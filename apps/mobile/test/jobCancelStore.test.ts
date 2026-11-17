@@ -125,4 +125,24 @@ describe("unit:jobCancelStore — #2015", () => {
     expect(valueOf(r).cancelJob("no-such-job", "x")).toBe("gone");
     expect(valueOf(r).db.jobs.some((j) => j.id === id)).toBe(true);
   });
+  it("С3/С4. ДАНО диспетчер и работа со счётом. КОГДА отмена. ТОГДА «invoiceOpen»; директор отменяет и невыехавшие выезды идут в cancelledVisits с причиной «we_cancelled», выполненный выезд и смета целы", async () => {
+    const r = await open((d) => {
+      const job = d.jobs[0]!;
+      return {
+        ...d,
+        visits: [...d.visits.filter((v) => v.jobId !== job.id), { id: "v-open", jobId: job.id, propertyId: job.propertyId, step: "scheduled", start: "2026-11-20T09:00:00Z", durationMin: 60 } as never, { id: "v-done", jobId: job.id, propertyId: job.propertyId, step: "paid", start: "2026-11-10T09:00:00Z", durationMin: 60 } as never],
+        invoices: d.invoices.filter((i) => i.jobId !== job.id).concat([{ id: "inv-d", customerId: d.customers[0]!.id, jobId: job.id, kind: "final", title: "F", totalCents: 1000, subtotalCents: 1000, taxCents: 0, paidCents: 0, dueDate: "2026-12-01", sentAt: "2026-11-01" } as never]),
+        payments: (d.payments ?? []).filter((p) => p.invoiceId !== "inv-d"),
+      };
+    });
+    const before = valueOf(r).db;
+    const job = before.jobs[0]!;
+    // the dispatcher with an invoice: refused by the pure rule (the demo role is the director — checked in unit:jobCancel)
+    expect(valueOf(r).cancelJob(job.id, "Client left")).toBeNull();
+    await settle();
+    const after = valueOf(r).db;
+    expect(after.cancelledVisits!.find((v) => v.id === "v-open")).toMatchObject({ cancelReason: "we_cancelled" });
+    expect(after.visits.some((v) => v.id === "v-done")).toBe(true);
+    expect(after.estimates).toEqual(before.estimates);
+  });
 });
