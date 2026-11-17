@@ -248,9 +248,15 @@ revoke all on function app.catalog_price_drift(uuid) from public, anon, authenti
 
 -- ---- what is stored: price_from_cost of every material with a cost (prices are NOT re-counted: an off-formula price
 -- stays until its cost changes, §5.3б п.2) ------------------------------------------------------------------------------
--- with the table's own triggers off, in one block (all or nothing): only this flag is set — no updated_at / row_version
--- bump (an item would look «changed today»), no vendor rewrite by t20, no price row. The table owner runs migrations
--- (no superuser needed, unlike session_replication_role); the lock is held for this one small update.
+-- Why the table's own triggers are off here (review of the director, 17.11): this update only fills the new flag of the
+-- data already stored — it must not run t31 (which would re-count prices of materials with a cost, against §5.3б п.2) nor
+-- t97 (which would write a price row for every such item into the price history), nor t10 (an updated_at / row_version
+-- bump: every item would look «changed today» and every phone would download the whole catalog again), nor t20 (a
+-- vendor rewrite from the supplier's name). In one block (all or nothing); the table owner runs migrations (no superuser
+-- needed, unlike session_replication_role).
+-- rule16: small (catalog_items is not a big table — migrationGuard BIG_TABLES; ALTER TABLE … DISABLE TRIGGER takes a
+-- table lock only for this one update of the materials with a cost, a few hundred rows a company; the phones' writes
+-- wait for it, none fails)
 do $$
 begin
   alter table public.catalog_items disable trigger user;
