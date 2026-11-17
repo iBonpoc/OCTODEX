@@ -31,7 +31,7 @@ exports.run = async (h) => {
   // one address → straight to its canvas
   await h.go(`/client/${one.id}`);
   await tid("module-gutters-measure").waitFor({ timeout: 8000 });
-  h.expect(/^Замер желобов$/.test((await tid("module-gutters-measure").innerText()).trim()), "the client's card: «Замер желобов»");
+  h.expect(/^Замер gutter$/.test((await tid("module-gutters-measure").innerText()).trim()), "the client's card: «Замер gutter»");
   await h.shot("client");
   await tid("module-gutters-measure").getByRole("button").click();
   await waitFor(() => /\/module\/gutters\/draw/.test(p.url()) && qp("property") === place.id, `the canvas of the client's address (${p.url()})`);

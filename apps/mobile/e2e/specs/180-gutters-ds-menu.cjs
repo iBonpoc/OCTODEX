@@ -73,7 +73,7 @@ exports.run = async (h) => {
   await panel().waitFor({ timeout: 5000 });
   await tid("attr-ds-size").waitFor({ timeout: 3000 });
   h.expect((await tid("attr-ds-size-value").count()) === 1 && (await tid("attr-color-value").count()) === 1, "size and colour are folded rows");
-  h.expect(/^Как у желоба/.test(await tid("attr-color-value").innerText()), "the colour: «Как у желоба»");
+  h.expect(/^Как у gutter/.test(await tid("attr-color-value").innerText()), "the colour: «Как у gutter»");
   h.expect((await tid("attr-finish").count()) === 0, "no painted / bare pair");
 
   // the length is a dropdown now (#1276: size, colour and length are folded rows): «по этажу» by default, a number of feet on a pick, back to «по этажу»
