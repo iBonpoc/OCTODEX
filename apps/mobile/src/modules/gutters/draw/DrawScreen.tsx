@@ -37,7 +37,7 @@ import { CanvasView, useCanvasGestures, useLive } from "../canvas/CanvasView";
 import { isDoubleTap, tapRule, type LastTap } from "../canvas/doubleTap";
 import { adopt, dsFor, patchDs, patchRun, pruneStored, readDefaults, resetKind, runFor, storeDefaults, type NewDefaults } from "../canvas/toolDefaults";
 import { CornerSheet } from "./CornerSheet";
-import { EndSheet } from "./EndSheet";
+import { EndSheet, endSheetTitle } from "./EndSheet";
 import { autoDownspouts, autoManaged, commitAuto, refillChain, shortChains } from "../canvas/autoDs";
 import { type Lift, liftTarget, addDownspout, cornerTick, drawSnap, drawTick, pullTick, withoutDs, alongAxis, endAt, finishStroke, flipFace, moveDs, cornerMovable, grabbedCorner, grabbedEnd, HELD_ORIGINAL, moveCorner, sameDirection, swingEnd, splitCorner, setCapOff, setCornerAngle, setCornerSplash, hitTest, onCornerPoint, lineRefused, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { holdBegin, holdCancel, holdFire, holdMove, holdIsTap, type Hold } from "../canvas/holdLift";
@@ -1030,7 +1030,7 @@ export default function DrawScreen() {
     // what a double tap opens, as rows too (a screen reader has no double tap, a phone on its side has no panel): the properties of the picked
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
-    ...endRows.map((r) => ({ key: `end${r.end}` as const, label: t(endRun0?.noCap?.[r.end] ? "mod.gutters.end.titleBare" : "mod.gutters.end.titleCap", { s: t(r.side === "L" ? "mod.gutters.end.left" : "mod.gutters.end.right") }) })),
+    ...endRows.map((r) => ({ key: `end${r.end}` as const, label: endSheetTitle(t, !!endRun0?.noCap?.[r.end], r.side) })),
     // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
@@ -1439,7 +1439,12 @@ export default function DrawScreen() {
         {quick ? <QuickLength fmt={ch.lenFormat} run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} onCancel={cancelQuick} /> : null}
       </InputWindow>
       {/* «Конец желоба» (a double tap on a free end, #1273): the cap is there / none, the line's face L ↔ R */}
-      <Sheet visible={canSave && !!endRun} onClose={() => setEndSheet(null)}>
+      <Sheet
+        visible={canSave && !!endRun}
+        onClose={() => setEndSheet(null)}
+        title={endRun && endSheet ? endSheetTitle(t, !!endRun.noCap?.[endSheet.end], capSide(endSheet.end, houseSides(drawing)(endRun))) : undefined}
+        help={{ title: t("mod.gutters.end.cap"), body: t("mod.gutters.end.help") }}
+      >
         {endRun && endSheet ? (
           <EndSheet
             capOff={!!endRun.noCap?.[endSheet.end]}
@@ -1454,7 +1459,7 @@ export default function DrawScreen() {
           />
         ) : null}
       </Sheet>
-      <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)}>
+      <Sheet visible={canSave && !!corner} onClose={() => setCornerSheet(null)} title={t("mod.gutters.draw.cornerTitle")} help={{ body: t("mod.gutters.draw.cornerHelp") }}>
         {corner ? (
           <CornerSheet
             d={drawing}

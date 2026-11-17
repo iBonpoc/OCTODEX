@@ -81,10 +81,16 @@ exports.run = async (h) => {
   await tid("end-sheet").waitFor({ timeout: 5000 });
   // the head names the end by the letter its cap carries; the «End Cap» switch off: the end has no cap (stored in the gutter's
   // geometry), the head says «Конец gutter · …»; on again puts it back (spec 56 §3а.2)
-  const title = async () => (await tid("end-title").innerText()).trim();
+  const title = async () => (await tid("sheet-title").innerText()).trim();
   h.expect(/^End Cap · (Left|Right)$/.test(await title()), `the head: «${await title()}»`);
   await tid("end-cap").click();
   await waitFor(async () => /^Конец gutter · (Left|Right)$/.test(await title()), "the head without the cap");
+  // the «?» is the sheet's own (DS Б7, #1964): its help is a page inside the sheet, «‹» goes back to the switch
+  await tid("sheet-help").click();
+  await tid("sheet-help-page").waitFor({ timeout: 5000 });
+  h.expect(/стену, столб или другой gutter/.test(await tid("sheet-help-page").innerText()), "the help says when the cap is off");
+  await p.getByRole("button", { name: /^(Назад|Back|Atrás)/ }).last().click();
+  await tid("end-cap").waitFor({ timeout: 5000 });
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt && e.geom.noCap && e.geom.noCap.some(Boolean)), KEY, { timeout: 8000 });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 1, null, { timeout: 5000 });
   // closed and opened again: a double tap on the end WITHOUT a cap opens the end's sheet (not the gutter's properties) — the «End Cap» switch is there (review of #1366)

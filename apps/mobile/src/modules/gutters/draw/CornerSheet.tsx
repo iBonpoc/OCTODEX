@@ -1,6 +1,6 @@
 /**
- * The corner's sheet (#1276, founder 12.11; spec 33 §1; spec 56 §3а.2, wave G, founder 16.11 — variant A): the title «Угол» and its «?»
- * (what the kinds mean, and that the side of the whole line changes); three tiles «Наружный · Внутренний | Разъединить» (`OptionTiles`);
+ * The corner's sheet (#1276, founder 12.11; spec 33 §1; spec 56 §3а.2, wave G, founder 16.11 — variant A): its head «Угол» and the «?»
+ * (what the kinds mean, and that the side of the whole line changes) are the `Sheet`'s own (`title` + `help`, DS Б1/Б7); three tiles «Наружный · Внутренний | Разъединить» (`OptionTiles`);
  * the splash guard of an inside corner right under them (`ToggleRow`); the drawing of the corner and a `Card` for each piece — along
  * the wall, along the face, the cut; the triangle for an angle taken on site. Only components of src/ui (rule 29).
  * The sheet only shows and asks: the drawing's edits are the owner's (`DrawScreen`).
@@ -9,7 +9,6 @@ import { useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
-import { HelpButton } from "@/ui/overlays";
 import { OptionTiles } from "@/ui/optionTile";
 import { T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
@@ -36,11 +35,6 @@ export function CornerSheet({ d, f, cut, fmt, splashOn, onKind, onSplash, onSpli
   const kind = f.kind === "bay" ? null : f.kind === "in" ? "in" : "out";
   return (
     <View testID="corner-sheet" style={{ gap: space[3] }}>
-      {/* the title and its «?» right after it (DS Б7) */}
-      <RowView style={{ gap: space[2], alignItems: "center" }}>
-        <T v="heading" w="semibold">{t("mod.gutters.draw.cornerTitle")}</T>
-        <HelpButton title={t("mod.gutters.draw.cornerTitle")} text={t("mod.gutters.draw.cornerHelp")} testID="corner-help" />
-      </RowView>
       {f.kind === "bay" ? <T tone="mut">{t("mod.gutters.draw.cornerBay")}</T> : null}
       {/* the kind and «Разъединить угол» (#933: two gutters with their own end caps; «Назад» and the toast bring it back) — one row of tiles */}
       <OptionTiles
