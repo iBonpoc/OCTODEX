@@ -5205,6 +5205,7 @@ select tst.ok(not has_function_privilege('authenticated', 'app.erase_personal_ro
 select tst.ok(not has_function_privilege('anon', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'anon: no erase_account');
 select tst.ok(not has_function_privilege('authenticated', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'internal: erase_account (only delete_account calls it)');
 select tst.ok(not has_function_privilege('public', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'public: no erase_account');
+select tst.ok(not has_function_privilege('service_role', 'app.erase_account(uuid,uuid[])', 'EXECUTE'), 'service_role: no erase_account yet (spec 45 §5.6 grants it with its own caller)');
 select tst.ok((select prosecdef from pg_proc where oid = 'app.erase_account(uuid,uuid[])'::regprocedure), 'erase_account is security definer (the wrapper delete_account calls it as the owner)');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_user_erased_guard()', 'EXECUTE'), 'internal: the users guard');
 -- the watchman: every column that points to a person is classified — a new table must say what happens on deletion

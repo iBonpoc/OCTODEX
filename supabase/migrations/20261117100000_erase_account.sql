@@ -6,6 +6,8 @@
 --     companies, every write and the postconditions. It takes the person as an argument, so the support path of spec 45 §5.6
 --     (platform_delete_account) can call the same erasure later without the caller's sign-in. It stands behind delete_account (the
 --     checks above); nobody else may call it (rule 18: revoke from public, anon, authenticated — no grant at all).
+-- A later caller (platform_delete_account, spec 45 §5.6) must repeat the wrapper's duties: the lock timeout, the lock on the person's
+-- profile row, the «already deleted» success, the same error mapping (OD001 / «try again» / OD002) — erase_account itself does none of them.
 -- The errors map in delete_account as before: our refusals OD001 as they are; a lock conflict → «try again»; anything else → OD002.
 -- Rule 16: nothing is renamed or dropped; the signature and the result of delete_account are the same.
 
