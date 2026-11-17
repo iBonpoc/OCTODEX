@@ -2,6 +2,7 @@ import { APP_NAME } from "@/config/product";
 import { useRef, useState, type ComponentRef } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
+import { invoiceOwes } from "@octo/estimating-engine";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
@@ -127,7 +128,7 @@ export default function ReceiptScreen() {
         {advance ? <View testID="rcpt-advance">{line(t("rcpt.forInvoice"), t("mny.adv.noInvoice"))}</View> : null}
         {fee ? <View testID="rcpt-fee">{line(t("mny.refund.fee"), money(fee))}</View> : null}
         <Divider />
-        {inv ? line(t("rcpt.balanceAfter"), money(Math.max(0, inv.totalCents - inv.paidCents))) : null}
+        {inv ? line(t("rcpt.balanceAfter"), money(invoiceOwes(inv))) : null}
         {p.refundedCents ? <View testID="rcpt-refunded">{line(t("mny.refund.refundedLabel"), money(p.refundedCents))}</View> : null}
         {p.refundPendingCents ? <View testID="rcpt-refund-pending">{line(t("mny.refund.inTransit"), money(p.refundPendingCents))}</View> : null}
         {advance ? (
