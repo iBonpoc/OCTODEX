@@ -3058,7 +3058,7 @@ export const es: Dict = {
   "mod.gutters.draw.splash": "Protector en la esquina",
   "mod.gutters.draw.cutTitle": "Corte",
   "mod.gutters.draw.cutAngle": "esquina {deg}°",
-  "mod.gutters.draw.cutRun": "Canaleta {n}",
+  "mod.gutters.draw.cutRun": "Gutter {n}",
   "mod.gutters.draw.cutWallCol": "Por la pared",
   "mod.gutters.draw.cutFaceCol": "Por el frente",
   "mod.gutters.draw.cutMiter": "Corte",

@@ -3058,7 +3058,7 @@ export const ru = {
   "mod.gutters.draw.splash": "Отбойник на угле",
   "mod.gutters.draw.cutTitle": "Раскрой",
   "mod.gutters.draw.cutAngle": "угол {deg}°",
-  "mod.gutters.draw.cutRun": "Желоб {n}",
+  "mod.gutters.draw.cutRun": "Gutter {n}",
   "mod.gutters.draw.cutWallCol": "По стене",
   "mod.gutters.draw.cutFaceCol": "По лицу",
   "mod.gutters.draw.cutMiter": "Рез",
