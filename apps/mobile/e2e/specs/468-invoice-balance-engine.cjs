@@ -7,7 +7,8 @@
 const { atMinute, todayKey } = require("../companyTime.cjs");
 const whole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const money = (c) => whole.format(c / 100);
-const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
+const setRole = (h, r) => h.seed("octo.role.v1", r); // from a page without the app (CHECKS §9 №12)
+const { settle } = require("../settle.cjs");
 const owes = (i) => Math.max(0, i.totalCents - i.paidCents);
 
 exports.run = async (h) => {
@@ -70,9 +71,11 @@ exports.run = async (h) => {
   h.expect(new RegExp("INV-E468A[\\s\\S]*\\$242[\\s\\S]*INV-E468B").test(page), "client page: the partly paid invoice shows what is left, $242");
   h.expect((await p.getByRole("button", { name: "Pay by card" }).count()) === 1, "client page: one pay button — the overpaid invoice has none");
   await p.getByRole("button", { name: "Pay by card" }).first().click();
-  await p.waitForTimeout(300);
-  await h.sheet().getByRole("button", { name: /Pay \$242/ }).click();
-  await p.waitForTimeout(800);
+  const payNow = h.sheet().getByRole("button", { name: /Pay \$242/ });
+  await payNow.waitFor();
+  await payNow.click();
+  await payNow.waitFor({ state: "hidden" }); // the sheet left: the payment is booked
+  await settle(p, { quietMs: 120, maxMs: 2000 }); // the store writes it (pagehide)
   const after = await h.db();
   h.expect(after.invoices.find((i) => i.id === "i-e468-a").paidCents === 34200, "client page: the payment is exactly what was left, the invoice is paid in full");
   h.expect(after.invoices.find((i) => i.id === "i-e468-b").paidCents === 29000, "client page: the overpaid invoice was not touched");
