@@ -290,6 +290,9 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   expansionJointPart: false,
 };
 
+/** the steps the estimate's downspout may be rounded up to, feet (Н8) */
+export const DS_ROUND_STEPS_FT: readonly number[] = [1, 5, 10];
+
 /** Company rule overrides: kit maps merge with the defaults by id, the wall table by shape and wall, joints by field. */
 export type GutterRulesOverride = Partial<Omit<GutterRules, "joints">> & {
   joints?: Partial<Record<JointKind, Partial<JointRule>>>;
@@ -338,11 +341,13 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
   const wholeOr = (v: unknown, def: number) => (typeof v === "number" && Number.isInteger(v) && v >= 0 ? v : def);
   r.fieldBends = wholeOr(r.fieldBends, d.fieldBends);
   r.bendInDefault = wholeOr(r.bendInDefault, d.bendInDefault);
-  r.dsRoundUpFt = wholeOr(r.dsRoundUpFt, d.dsRoundUpFt);
+  // the estimate's downspout step is one of 1 / 5 / 10 ft (Н8): a blank field (0) or anything else never stops the rounding silently
+  if (!DS_ROUND_STEPS_FT.includes(r.dsRoundUpFt)) r.dsRoundUpFt = d.dsRoundUpFt;
   r.bendInBySize = Object.fromEntries(Object.entries(r.bendInBySize).map(([k, v]) => [k, wholeOr(v, d.bendInBySize[k] ?? r.bendInDefault)]));
-  const list = <T extends { qty: number }>(v: unknown, def: T[]): T[] => (Array.isArray(v) && v.every((x) => x && typeof x === "object" && Number.isInteger((x as T).qty) && (x as T).qty >= 0) ? (v as T[]) : def);
-  r.defaultElbowsRound = list(r.defaultElbowsRound, d.defaultElbowsRound);
-  r.defaultOffsetsRound = list(r.defaultOffsetsRound, d.defaultOffsetsRound).filter((o) => Number.isInteger(o.lengthIn) && o.lengthIn > 0);
+  const list = <T extends { qty: number }>(v: unknown, def: T[], ok: (x: T) => boolean): T[] =>
+    Array.isArray(v) && v.every((x) => !!x && typeof x === "object" && Number.isInteger((x as T).qty) && (x as T).qty >= 0 && ok(x as T)) ? (v as T[]) : def;
+  r.defaultElbowsRound = list(r.defaultElbowsRound, d.defaultElbowsRound, (e) => typeof e.style === "string" && e.style.trim() !== "");
+  r.defaultOffsetsRound = list(r.defaultOffsetsRound, d.defaultOffsetsRound, (o) => Number.isInteger(o.lengthIn) && o.lengthIn > 0);
   return r;
 }
 
@@ -594,20 +599,24 @@ export function defaultOffsetsFor(ds: Pick<MeasuredDownspout, "shape">, rules: P
  * own length; each bend takes the company's inches for the size. Ready-made elbows — nothing (they are parts).
  */
 export function fieldBendOf(ds: Pick<MeasuredDownspout, "shape" | "size" | "dsStyle" | "elbows" | "offsets" | "elbowBend">, rules: Pick<GutterRules, "defaultElbows" | "defaultElbowsPlain" | "defaultElbowsRound" | "defaultOffsetsRound" | "fieldBends" | "bendInBySize" | "bendInDefault"> = DEFAULT_GUTTER_RULES): { bends: number; perBendIn: number; offsetIn: number; addedIn: number } {
-  const perBendIn = rules.bendInBySize[ds.size] ?? rules.bendInDefault;
+  // own keys only: a size like «constructor» never reads the object's prototype (as catalogMatch, security check C3 №5)
+  const perBendIn = Object.prototype.hasOwnProperty.call(rules.bendInBySize, ds.size) ? rules.bendInBySize[ds.size]! : rules.bendInDefault;
   if (bendOf(ds) !== "field") return { bends: 0, perBendIn, offsetIn: 0, addedIn: 0 };
   let bends = 0;
   let offsetIn = 0;
-  for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) bends += Math.max(0, e.qty);
+  // a count or a length that is not a number is none (an old or broken record never gives NaN inches)
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, v) : 0);
+  for (const e of ds.elbows ?? defaultElbowsFor(ds, rules)) bends += num(e.qty);
   for (const o of ds.offsets ?? defaultOffsetsFor(ds, rules)) {
-    if (o.qty <= 0) continue;
-    bends += 2 * o.qty;
-    offsetIn += Math.max(0, o.lengthIn) * o.qty;
+    const q = num(o.qty);
+    if (q <= 0) continue;
+    bends += 2 * q;
+    offsetIn += num(o.lengthIn) * q;
   }
   return { bends, perBendIn, offsetIn, addedIn: bends * perBendIn + offsetIn };
 }
 
-/** a downspout's estimate length: rounded up to the step, inches (Д1); 0 or less — as it is */
+/** a downspout's estimate length: rounded up to the step, inches (Д1); a step of 0 or less — as it is */
 export function dsRoundedIn(lengthIn: number, stepFt: number): number {
   const step = stepFt * 12;
   return step > 0 ? Math.ceil(lengthIn / step) * step : lengthIn;
@@ -831,7 +840,8 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
     const dsAttrs = { shape: ds.shape, size: ds.size, ...(ds.dsStyle ? { dsStyle: ds.dsStyle } : {}), material: ds.material, ...(ds.gauge ? { gauge: ds.gauge } : {}), ...(ds.finish ? { finish: ds.finish } : {}), ...(ds.color ? { color: ds.color } : {}) };
     const dsKey = [sz, ds.material, ...(ds.gauge ? [seg(ds.gauge)] : []), color].join(".");
     acc.add({ key: `ds.${dsKey}`, section: "downspouts", unit: "ft", use: "estimate", kind: "material", attrs: dsAttrs }, ft(dec(billIn)),
-      billIn !== pipeIn ? { rule: "ds_round_up", params: { downspouts: 1, lengthIn: pipeIn, stepFt: rules.dsRoundUpFt, ft: billIn / 12 }, setting: "dsRoundUpFt" } : undefined);
+      // every downspout of the line says it (one that needed no rounding too): the reason's feet are always the line's (§2.13)
+      rules.dsRoundUpFt > 1 ? { rule: "ds_round_up", params: { downspouts: 1, lengthIn: pipeIn, stepFt: rules.dsRoundUpFt, ft: billIn / 12 }, setting: "dsRoundUpFt" } : undefined);
     const kind = sticksByKind.get(dsKey);
     if (kind) kind.lengths.push(pipeIn);
     else sticksByKind.set(dsKey, { attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) }, lengths: [pipeIn] });

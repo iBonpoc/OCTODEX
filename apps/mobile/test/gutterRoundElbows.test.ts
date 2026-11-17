@@ -107,6 +107,9 @@ describe("the money of the round elbow (#871, §2.7, rule 15)", () => {
     expect(lines[0]!.unitPriceCents).toBe(1450);
     expect(lines[0]!.source!.noPrice).toBeUndefined();
     expect(sum(lines)).toBe(1450);
+    // the line keeps the part's own name: the client never reads «45°» on a 75° elbow (review of PR-1б)
+    expect(lines[0]!.name).not.toContain("Round elbow 45");
+    expect(lines[0]!.name).toContain("75");
   });
   it("…then the old «A» one (#871: priced before the 45° fix)", () => {
     const legacy = [item("iA", elbow, 1234, "A")];
@@ -120,7 +123,11 @@ describe("the money of the round elbow (#871, §2.7, rule 15)", () => {
     expect(sum(elbowLines(all))).toBe(1500);
     expect(findItem(all.slice(0, 2), elbow)?.id).toBe("i45");
   });
-  it("only round elbows borrow, and only the 45° and «A» prices: a rectangular elbow never, a 90° price never lends", () => {
+  it("only the round DEFAULT degree borrows, and only the 45° and «A» prices: a rectangular elbow never, a 90° price never lends, a 30° / 60° / 90° set by hand shows «нет цены» as before", () => {
+    for (const st of ["30", "60", "90"]) {
+      const hand = { ...elbow, key: elbow.key.replace("elbow.75.", `elbow.${st}.`), attrs: { ...elbow.attrs, style: st } };
+      expect(findItem([item("i45", elbow, 1450, "45"), item("iA", elbow, 1234, "A")], hand), st).toBeUndefined();
+    }
     const ribbed = job("rect");
     const rectElbow = computeGutterParts({ ...ribbed, downspouts: [{ ...ribbed.downspouts[0]!, dsStyle: "corrugated" }] }).parts.find((p) => p.attrs.part === "elbow")!;
     const round45 = { ...elbow, key: elbow.key.replace("elbow.75.", "elbow.45."), attrs: { ...elbow.attrs, style: "45" } };
@@ -131,11 +138,17 @@ describe("the money of the round elbow (#871, §2.7, rule 15)", () => {
     expect(findItem([item("iA", elbow, 1234, "A")], round45)?.id).toBe("iA");
     expect(priceFromOtherDegree([item("iA", elbow, 1234, "A")], rectElbow)).toBe(false);
   });
-  it("«create the missing items» does not make a second item next to the 45° one it borrows", () => {
+  it("«create the missing items» makes the 75° its own item next to the 45° one it borrows — the company learns it has no 75° price", () => {
     const c45 = item("i45", elbow, 1450, "45");
     const rows = [{ key: elbow.key, part: elbow }] as never;
-    expect(missingItems("c1", rows, [c45], (p) => partName(tFor("en"), p))).toEqual([]);
-    expect(missingItems("c1", rows, [], (p) => partName(tFor("en"), p))).toHaveLength(1);
+    const made = missingItems("c1", rows, [c45], (p) => partName(tFor("en"), p));
+    expect(made).toHaveLength(1);
+    expect(made[0]!.attributes).toMatchObject({ part: "elbow", style: "75" });
+    // once it has its own, it is the 75°'s and nothing more is made
+    expect(missingItems("c1", rows, [c45, { ...made[0]!, placeholder: false }], (p) => partName(tFor("en"), p))).toEqual([]);
+    // the old «A» price of the 45° default (#871) still makes nothing new: that one is the same elbow
+    const round45 = { ...elbow, key: elbow.key.replace("elbow.75.", "elbow.45."), attrs: { ...elbow.attrs, style: "45" } };
+    expect(missingItems("c1", [{ key: round45.key, part: round45 }] as never, [item("iA", elbow, 1234, "A")], (p) => partName(tFor("en"), p))).toEqual([]);
   });
   it("«Обновить»: the 75° line gets the 45° price, a hand-set price on another line stays", () => {
     const old = fresh.map((p) => (p.attrs.part === "elbow" ? { ...p, key: p.key.replace("elbow.75.", "elbow.45."), attrs: { ...p.attrs, style: "45" } } : p));

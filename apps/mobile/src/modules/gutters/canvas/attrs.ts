@@ -7,7 +7,7 @@
  * Changing a choice another one depends on (profile → size and hanger kit, material → gauge and finish, shape →
  * size and elbows, mount → the default kit, wall → the default wall kit) fixes the dependent fields in the same step.
  */
-import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultElbowsFor, defaultHangerKit, defaultOffsetsFor, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
+import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, bendOf, defaultElbowsFor, defaultHangerKit, defaultOffsetsFor, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
 import type { Choices } from "../settings";
 import { DENOM, MM_OF, MM_PER_IN, type LenUnit } from "./format";
@@ -214,6 +214,15 @@ export function elbowCounts(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "e
   const out: Record<string, number> = Object.fromEntries(ELBOW_STYLES[shape].map((s) => [s, 0]));
   for (const e of a.elbows ?? defaultElbowsFor({ shape, ...(a.dsStyle ? { dsStyle: a.dsStyle } : {}), ...(a.elbowBend ? { elbowBend: a.elbowBend } : {}) })) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
   return out;
+}
+
+/**
+ * One style's count changed in the window: the patch. A downspout bent on site stays bent on site — its count is of bends
+ * (review of PR-1б: an elbow list without `elbowBend` reads as ready-made, `bendOf`, and the estimate would swap bends for parts).
+ */
+export function elbowPatch(a: Pick<DsAttrs, "shape" | "dsStyle" | "elbows" | "elbowBend">, style: string, qty: number): Pick<DsAttrs, "elbows" | "elbowBend"> {
+  const elbows = withElbowQty(a, style, qty);
+  return bendOf(a) === "field" ? { elbows, elbowBend: "field" } : { elbows };
 }
 
 /** one style's count changed: the list the engine reads (styles with 0 left out; all 0 — one style at 0, not the default) */

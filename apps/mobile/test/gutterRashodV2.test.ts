@@ -17,6 +17,7 @@ import { newDoc, optionTotals } from "../src/features/estimateDoc";
 import { linesFromParts, resyncLines, type ModuleLine } from "../src/modules/gutters/estimate";
 import { engineChangedFor, estimateAction } from "../src/modules/gutters/estimateLink";
 import { fromElements, toElements } from "../src/modules/gutters/canvas/model";
+import { elbowPatch } from "../src/modules/gutters/canvas/attrs";
 import { toMeasurement } from "../src/modules/gutters/geometry";
 import { readRules, toRulesOverride } from "../src/modules/gutters/settings";
 import { dsLine, matchAttrs } from "../src/modules/gutters/prices";
@@ -66,7 +67,7 @@ describe("the money of a downspout bent on site (Д1, Д6, Р4; rule 8 — the c
 describe("Т1: the parts version 5 — told, never recounted by itself", () => {
   const d = drawing();
   // what version 4 counted for the plain one: no elbows, no bends, the feet as drawn (20 ft)
-  const v4 = linesFromParts(partsOf(d, { fieldBends: 0, dsRoundUpFt: 0 }), [], name, uid, "rev1", M, "2026-11-16T10:00:00Z", "4") as ModuleLine[];
+  const v4 = linesFromParts(partsOf(d, { fieldBends: 0, dsRoundUpFt: 1 }), [], name, uid, "rev1", M, "2026-11-16T10:00:00Z", "4") as ModuleLine[];
   it("the version is 5", () => expect(GUTTER_PARTS_VERSION).toBe("5"));
   it("a draft of version 4 says «Расчёт изменился», «Обновить» is offered, and asking changes nothing in it", () => {
     const e = estimate(v4);
@@ -126,5 +127,21 @@ describe("the view says what the engine counts", () => {
     const one = (n: number, bent: boolean): SpecDs => ({ n, id: `d${n}`, story: 1, shape: "rect", size: "3x4", dsStyle: "plain", elbows: [{ style: "A", qty: 3 }], offsets: [], bottom: "none", lengthIn: 138, ...(bent ? { bent: true as const } : {}) } as SpecDs);
     const g = dsTotals([one(1, true), one(2, false), one(3, true)]);
     expect(g.map((x) => [x.ns, !!x.bent])).toEqual([[[1, 3], true], [[2], false]]);
+  });
+});
+
+describe("the window keeps a downspout bent on site (review of PR-1б, blocking 1)", () => {
+  it("a plain one without elbows: 3 → 4 in the window is 4 bends on site, not 4 ready elbows — the estimate's money follows the bends", () => {
+    const patch = elbowPatch({ shape: "rect", dsStyle: "plain" }, "A", 4);
+    expect(patch).toEqual({ elbows: [{ style: "A", qty: 4 }], elbowBend: "field" });
+    const ps = partsOf(drawing({ dsStyle: "plain", ...patch }));
+    expect(ps.find((p) => p.key === "labor.bend")?.qty).toBe("4");
+    expect(ps.some((p) => p.attrs.part === "elbow")).toBe(false);
+    // 240″ + 4 × 6″ = 264″ → 30 ft
+    expect(ps.find((p) => p.key.startsWith("ds."))?.qty).toBe("30");
+  });
+  it("a ready one stays ready: a corrugated one, or a plain one made ready", () => {
+    expect(elbowPatch({ shape: "rect", dsStyle: "corrugated" }, "A", 4)).toEqual({ elbows: [{ style: "A", qty: 4 }] });
+    expect(elbowPatch({ shape: "rect", dsStyle: "plain", elbowBend: "ready" }, "A", 2)).toEqual({ elbows: [{ style: "A", qty: 2 }] });
   });
 });

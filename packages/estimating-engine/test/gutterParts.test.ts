@@ -761,17 +761,28 @@ describe("«Расход v2» PR-1б: Д1 — the estimate's downspout up to 10 
     expect(q(ps, "ds.rect.3x4.alu.white")).toBe("50");
     expect(ps.find((p) => p.key === "ds.rect.3x4.alu.white")!.why!.params).toMatchObject({ downspouts: 2, lengthIn: 408, ft: 50 });
   });
-  it("a corrugated one of 2 stories with ready elbows: 20 ft, nothing to round, no reason", () => {
+  it("a corrugated one of 2 stories with ready elbows: 20 ft, nothing to round — the reason still holds the line's feet", () => {
     const ps = job([{ dsStyle: "corrugated" }]);
     expect(q(ps, "ds.rect.3x4.corrugated.alu.white")).toBe("20");
-    expect(ps.find((p) => p.key === "ds.rect.3x4.corrugated.alu.white")!.why).toBeUndefined();
+    expect(ps.find((p) => p.key === "ds.rect.3x4.corrugated.alu.white")!.why!.params).toMatchObject({ downspouts: 1, lengthIn: 240, ft: 20 });
   });
-  it("a plain one of 2 stories, bent on site by default: 240″ + 3 × 6″ = 258″ → 30 ft (step 10), 22 ft (step 1), 21.5 ft (step 0); 3 sticks; straps from 240″", () => {
+  it("the reason adds up to the line: 240″ and 264″ of one kind → 50 ft, «2 downspouts, 504″, 50 ft» (§2.13)", () => {
+    const ps = job([{ heightIn: 240 }, { heightIn: 264 }]);
+    expect(q(ps, "ds.rect.3x4.alu.white")).toBe("50");
+    expect(ps.find((p) => p.key === "ds.rect.3x4.alu.white")!.why!.params).toEqual({ downspouts: 2, lengthIn: 504, stepFt: 10, ft: 50 });
+  });
+  it("Н8: the step is 1, 5 or 10 ft; a blank field (0) or another number is the default 10 — never «not rounded» by mistake", () => {
+    expect(q(job([{ heightIn: 264 }], { dsRoundUpFt: 5 }), "ds.rect.3x4.alu.white")).toBe("25");
+    expect(q(job([{ heightIn: 264 }], { dsRoundUpFt: 0 }), "ds.rect.3x4.alu.white")).toBe("30");
+    expect(q(job([{ heightIn: 264 }], { dsRoundUpFt: 7 }), "ds.rect.3x4.alu.white")).toBe("30");
+    // whole feet: no reason (nothing to say beyond the feet)
+    expect(job([{ heightIn: 264 }], { dsRoundUpFt: 1 }).find((p) => p.key === "ds.rect.3x4.alu.white")!.why).toBeUndefined();
+  });
+  it("a plain one of 2 stories, bent on site by default: 240″ + 3 × 6″ = 258″ → 30 ft (step 10), 22 ft (step 1); 3 sticks; straps from 240″", () => {
     const plain = { dsStyle: "plain" as const, elbows: undefined };
     const ps = job([plain]);
     expect(q(ps, "ds.rect.3x4.plain.alu.white")).toBe("30");
     expect(q(job([plain], { dsRoundUpFt: 1 }), "ds.rect.3x4.plain.alu.white")).toBe("22");
-    expect(q(job([plain], { dsRoundUpFt: 0 }), "ds.rect.3x4.plain.alu.white")).toBe("21.5");
     expect(q(ps, "dsstick.rect.3x4.plain.alu.white")).toBe("3");
     // the wall fasteners count the wall, not the bends: 240″ at 60″ → 4 (from 258″ it would be 5)
     expect(ps.find((p) => p.why?.rule === "ds_straps_per_ds")!.why!.params).toMatchObject({ lengthIn: 240, straps: 4 });
@@ -845,12 +856,19 @@ describe("«Расход v2» PR-1б: Д6, Д7, Р4 — bends on site", () => {
     expect(q(ps, "labor.bend")).toBeUndefined();
   });
   it("§2.15 №3: the inches of a bend are the company's, by size — 3×4, 3 bends → +18″; 3×4 at 8″ → +24″; a size not in the table — the default", () => {
-    expect(q(parts({ elbows: undefined }, { dsRoundUpFt: 0 }), "ds.rect.3x4.plain.alu.white")).toBe("11.5");
-    expect(q(parts({ elbows: undefined }, { dsRoundUpFt: 0, bendInBySize: { "3x4": 8 } }), "ds.rect.3x4.plain.alu.white")).toBe("12");
+    expect(dsLine(parts({ elbows: undefined })).why!.params.lengthIn).toBe(138);
+    expect(dsLine(parts({ elbows: undefined }, { bendInBySize: { "3x4": 8 } })).why!.params.lengthIn).toBe(144);
     // the table is merged: 2x3 keeps its 6″ when the company changes 3x4
     expect(resolveGutterRules({ bendInBySize: { "3x4": 8 } }).bendInBySize).toEqual({ "2x3": 6, "3x4": 8, "4x5": 6 });
-    const odd = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", size: "5x6", elbows: undefined })] }, { dsRoundUpFt: 0, bendInDefault: 7 }).parts;
-    expect(q(odd, "ds.rect.5x6.plain.alu.white")).toBe("11.75");
+    const odd = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", size: "5x6", elbows: undefined })] }, { bendInDefault: 7 }).parts;
+    expect(odd.find((p) => p.key === "ds.rect.5x6.plain.alu.white")!.why!.params.lengthIn).toBe(141);
+    // a size named like an object's own word never reads the prototype: the default, not NaN
+    const proto = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", size: "constructor", elbows: undefined })] }).parts;
+    expect(proto.find((p) => p.key === "ds.rect.constructor.plain.alu.white")!.why!.params.lengthIn).toBe(138);
+    // broken counts and lengths are none, never NaN
+    const broken = computeGutterParts({ runs: [run({ id: "1", lengthIn: 240 })], corners: [], downspouts: [ds({ id: "d", runId: "1", dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: Number.NaN }], offsets: [{ lengthIn: Number.NaN, qty: 1 }, { lengthIn: 4, qty: "x" as never }] })] }).parts;
+    expect(q(broken, "labor.bend")).toBe("2");
+    expect(broken.find((p) => p.key === "ds.rect.3x4.plain.alu.white")!.why!.params.lengthIn).toBe(132);
   });
   it("the company's bends of a plain one (Н2): 2 → +12″, 2 bends; 0 → none", () => {
     expect(q(parts({ elbows: undefined }, { fieldBends: 2 }), "labor.bend")).toBe("2");
@@ -859,6 +877,9 @@ describe("«Расход v2» PR-1б: Д6, Д7, Р4 — bends on site", () => {
   it("a blank or broken setting is the default, never NaN (a field left empty is a number on the screen)", () => {
     const r = resolveGutterRules({ fieldBends: -1, bendInDefault: 1.5, dsRoundUpFt: Number.NaN, bendInBySize: { "3x4": -2 } } as never);
     expect([r.fieldBends, r.bendInDefault, r.dsRoundUpFt, r.bendInBySize["3x4"]]).toEqual([3, 6, 10, 6]);
+    // broken round defaults: the defaults, not an empty list
+    const rr = resolveGutterRules({ defaultOffsetsRound: [{ lengthIn: -2, qty: 1 }], defaultElbowsRound: [{ style: 75 as never, qty: 1 }] });
+    expect([rr.defaultOffsetsRound, rr.defaultElbowsRound]).toEqual([[{ lengthIn: 2, qty: 1 }], [{ style: "75", qty: 1 }]]);
   });
   it("bends and the estimate's downspout are «use: estimate» — never in the supplier order (Т3)", () => {
     const ps = parts({ elbows: undefined });

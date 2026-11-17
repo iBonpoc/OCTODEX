@@ -44,7 +44,11 @@ const PARAMS: Partial<Record<string, string[]>> = {
   coil_reserve: ["runs", "reserveFt"],
   corner_allowance: ["outCount", "outIn", "inCount", "inIn"],
   adapter_per_bottom: ["part", "bottoms"],
+  ds_round_up: ["downspouts", "lengthIn", "stepFt", "ft"],
+  bend_in_place: ["downspouts", "bends", "perBendIn", "addedIn"],
 };
+/** a line of the drawing whose quantity the engine changed says how («Расход v2»: the downspout rounded up, the bends on site) */
+const DRAWN_WITH_REASON = new Set(["ds_round_up", "bend_in_place"]);
 const JOINT_KEYS = ["sections", "perSection", "endcaps", "perEndcap", "outlets", "perOutlet", "dsJoints", "perDsJoint", "cutCorners", "perCutCorner", "stripCorners", "perStripCorner", "prefabCorners", "perPrefabCorner"];
 PARAMS.rivets_per_joints = [...JOINT_KEYS, "rivets"];
 PARAMS.sealant_points = [...JOINT_KEYS, "points", "perTube", "tubes"];
@@ -81,8 +85,8 @@ describe("every derived part says why (§2.13)", () => {
       const { parts } = computeGutterParts(rich(), over as never);
       const silent = parts.filter((p) => !fromDrawing(p) && !p.why).map((p) => p.key);
       expect(silent).toEqual([]);
-      // the drawing's own parts say nothing
-      expect(parts.filter((p) => fromDrawing(p) && p.why).map((p) => p.key)).toEqual([]);
+      // the drawing's own parts say nothing — but the ones whose quantity the engine changed (the rounded downspout, the bends)
+      expect(parts.filter((p) => fromDrawing(p) && p.why && !DRAWN_WITH_REASON.has(p.why.rule)).map((p) => p.key)).toEqual([]);
     });
   }
   it("every reason is a rule of the closed list, its numbers are numbers or words, and it is never in attrs", () => {

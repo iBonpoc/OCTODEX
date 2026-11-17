@@ -11,7 +11,7 @@
  * «insert, or nothing if it is there» (catalog.save onlyNew): a second press, a second phone, the queue sending twice —
  * one item, and a price someone already set is never overwritten by the test one.
  */
-import { bendOf, computeGutterParts, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
+import { bendOf, computeGutterParts, DEFAULT_GUTTER_RULES, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogMatch } from "@/features/catalogMatch";
 import type { DictKey } from "@/i18n";
@@ -61,15 +61,19 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
 }
 
 /**
- * A round elbow of a degree the company has not priced takes its round elbow of the same size and metal at 45°, then under its old
- * name «A» (#871; spec 33-gutters-consumption §2.7: the default became 75°, a company priced 45°). Its own degree always wins.
+ * The round elbow of the engine's DEFAULT degree (75°, «Расход v2») the company has not priced takes its round elbow of the same
+ * size and metal at 45°, then under its old name «A»; the 45° one takes «A» (#871; spec 33-gutters-consumption §2.7: the default
+ * changed under a company that priced 45°). Its own degree always wins. A degree set by hand (30°, 60°, 90°) never borrows: it shows
+ * «нет цены», as before (review of PR-1б).
  */
+const ROUND_DEFAULT_STYLES = new Set(DEFAULT_GUTTER_RULES.defaultElbowsRound.map((e) => e.style).filter((s) => s !== "45"));
 const ROUND_ELBOW_FALLBACK = (w: Record<string, string>): Record<string, string>[] =>
-  w.part !== "elbow" || w.shape !== "round" ? [] : w.style === "45" ? [{ ...w, style: "A" }] : w.style === "A" ? [] : [{ ...w, style: "45" }, { ...w, style: "A" }];
+  w.part !== "elbow" || w.shape !== "round" ? [] : w.style === "45" ? [{ ...w, style: "A" }] : ROUND_DEFAULT_STYLES.has(w.style ?? "") ? [{ ...w, style: "45" }, { ...w, style: "A" }] : [];
 /** the line's item is another degree's (see findItem): the estimate says «проверьте цену» for it */
 export function priceFromOtherDegree(catalog: readonly CatalogItem[], p: Pick<PartQty, "key" | "kind" | "attrs" | "unit">): boolean {
   const it = findItem(catalog, p);
-  return !!it && p.attrs.part === "elbow" && p.attrs.shape === "round" && it.attributes?.style !== undefined && it.attributes.style !== p.attrs.style;
+  // the #871 «A» name of the 45° elbow is the same elbow under its old name — not another degree
+  return !!it && p.attrs.part === "elbow" && p.attrs.shape === "round" && ROUND_DEFAULT_STYLES.has(p.attrs.style ?? "") && it.attributes?.style !== p.attrs.style;
 }
 
 /** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
@@ -184,7 +188,8 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
   const ids = new Set(catalog.map((it) => it.id));
   const out = new Map<string, CatalogItem>();
   for (const { key, part } of rows) {
-    if (findItem(catalog, part)) continue;
+    // a part priced only by another degree's item (§2.7) still gets its own: the price list shows it missing until there is one
+    if (findItem(catalog, part) && !priceFromOtherDegree(catalog, part)) continue;
     const id = stableItemId(companyId, key);
     if (ids.has(id) || out.has(id)) continue;
     out.set(id, {
