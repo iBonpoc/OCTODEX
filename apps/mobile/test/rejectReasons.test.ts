@@ -38,6 +38,8 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       po_stale: "po.rej.stale",
       po_received_office: "po.rej.officeOnly",
       po_not_open: "po.rej.notOpen",
+      // #1913: a price group has at most 200 items (migration 20261117210000, db T362)
+      price_group_full: "price.group.rejFull",
     });
     for (const key of Object.values(REJECT_REASONS))
       for (const dict of [ru, en, es] as Record<string, string>[]) expect(dict[key], key).toMatch(/\S/);

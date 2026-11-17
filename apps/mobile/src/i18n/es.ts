@@ -4459,6 +4459,11 @@ export const es: Dict = {
   "photoUp.retried": "Enviando la foto otra vez",
   "photoUp.a11y": "sin subir",
   // spec 53 — quick price of one catalog item (wave 53-1)
+  // #1913: one price for a price group
+  "price.group.rejRights": "El precio del grupo no se guardó: la app lo calcula según el costo. Lo puede cambiar quien ve el costo",
+  "price.group.rejFull": "El artículo no se guardó: su grupo de precio ya tiene 200 artículos. Quite algunos del grupo y guarde otra vez",
+  "price.group.rejConflict": "El precio del grupo no se guardó: lo cambiaron en otro teléfono. Abra el artículo y ponga el precio otra vez",
+  "att.rejected.price": "Precio del grupo no guardado",
   // #1807 (53-0б): a price counted by the server from the cost
   "price.recalc.att": "{name}: {who} puso {sent} — se mantuvo {kept} según el costo",
   "price.recalc.attNoWho": "{name}: se envió el precio {sent} — se mantuvo {kept} según el costo",
