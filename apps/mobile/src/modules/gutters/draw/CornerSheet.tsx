@@ -1,19 +1,18 @@
 /**
  * The corner's sheet (#1276, founder 12.11; spec 33 §1; spec 56 §3а.2, wave G, founder 16.11 — variant A): the title «Угол» and its «?»
  * (what the kinds mean, and that the side of the whole line changes); three tiles «Наружный · Внутренний | Разъединить» (`OptionTiles`);
- * the drawing of the corner and a card for each piece — along the wall, along the face, the cut; the splash guard of an inside corner
- * (`ToggleRow`); the triangle for an angle taken on site. Only components of src/ui (rule 29).
+ * the splash guard of an inside corner right under them (`ToggleRow`); the drawing of the corner and a `Card` for each piece — along
+ * the wall, along the face, the cut; the triangle for an angle taken on site. Only components of src/ui (rule 29).
  * The sheet only shows and asks: the drawing's edits are the owner's (`DrawScreen`).
  */
 import { useState } from "react";
 import { View } from "react-native";
-import { component, radius, space } from "@octo/design-tokens";
+import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
-import { useTheme } from "@/theme/ThemeProvider";
 import { HelpButton } from "@/ui/overlays";
 import { OptionTiles } from "@/ui/optionTile";
 import { T } from "@/ui/primitives";
-import { RowView } from "@/ui/surfaces";
+import { Card, RowView } from "@/ui/surfaces";
 import { ToggleRow } from "@/ui/toggleRow";
 import { fmtLen, type LenFormat } from "../canvas/format";
 import { fmtDeg } from "../canvas/cornerPlan";
@@ -32,9 +31,9 @@ export function CornerSheet({ d, f, cut, fmt, splashOn, onKind, onSplash, onSpli
   onAngle: (deg: number) => void;
 }) {
   const { t } = useI18n();
-  const { c } = useTheme();
   const [sketchW, setSketchW] = useState(0);
-  const kind = f.kind === "in" ? "in" : "out";
+  // a bay corner is neither: no tile is marked, and a tap changes nothing (the owner keeps it)
+  const kind = f.kind === "bay" ? null : f.kind === "in" ? "in" : "out";
   return (
     <View testID="corner-sheet" style={{ gap: space[3] }}>
       {/* the title and its «?» right after it (DS Б7) */}
@@ -55,6 +54,8 @@ export function CornerSheet({ d, f, cut, fmt, splashOn, onKind, onSplash, onSpli
         action={{ label: t("mod.gutters.draw.unlink"), icon: "unlink", onPress: onSplit, testID: "corner-split" }}
         testID="corner-kind"
       />
+      {/* the splash guard of an inside corner — right under the tiles that bring it (DS §11 п.19) */}
+      {f.kind === "in" ? <ToggleRow label={t("mod.gutters.draw.splash")} value={splashOn} onChange={onSplash} testID="corner-splash" /> : null}
       {cut ? (
         <View testID="corner-cut" style={{ gap: space[2] }}>
           <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
@@ -66,7 +67,8 @@ export function CornerSheet({ d, f, cut, fmt, splashOn, onKind, onSplash, onSpli
           </RowView>
           {/* a card for each piece: along the wall · along the face · the cut */}
           {cut.runs.map((r) => (
-            <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[2], padding: space[3], borderRadius: radius.card, borderWidth: component.hairline, borderColor: c.bd }}>
+            <Card key={r.id} inner style={{ gap: space[2] }}>
+              <View testID={`corner-cut-${r.id}`} style={{ gap: space[2] }}>
               <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: d.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
               <RowView style={{ gap: space[3], alignItems: "flex-start" }}>
                 <View style={{ flex: 1 }}>
@@ -82,11 +84,11 @@ export function CornerSheet({ d, f, cut, fmt, splashOn, onKind, onSplash, onSpli
                   <View testID="cut-miter"><T v="body" tabular>{`${fmtDeg(cutAngleDeg(180 - cut.angleDeg))}°`}</T></View>
                 </View>
               </RowView>
-            </View>
+              </View>
+            </Card>
           ))}
         </View>
       ) : null}
-      {f.kind === "in" ? <ToggleRow label={t("mod.gutters.draw.splash")} value={splashOn} onChange={onSplash} testID="corner-splash" /> : null}
       <CornerTriangle key={f.id} d={d} f={f} onAngle={onAngle} />
     </View>
   );

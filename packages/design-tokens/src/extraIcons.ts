@@ -49,7 +49,7 @@ export const extraIcons = {
   cornerOut: "M12 3l9 9-9 9-9-9z",
   cornerIn: "M12 3l9 9-9 9-9-9zM12 11l1 1-1 1-1-1z",
   // «Разъединить» a corner of a drawing (spec 56 §3а.2, OptionTiles action): the link broken in two, with the gap marks
-  unlink: "M9.5 14.5l-2 2a3.5 3.5 0 0 1-5-5l2-2M14.5 9.5l2-2a3.5 3.5 0 0 1 5 5l-2 2M8 3v3M3 8h3M16 21v-3M21 16h-3",
+  unlink: "M9 8H6a4 4 0 0 0 0 8h3M15 8h3a4 4 0 0 1 0 8h-3M12 4v3M12 17v3",
   // cross-section profiles of a long open-top part (a trade module shows the chosen one in its tool, #1274); first sketches on a 24 grid in the
   // app's stroke: open at the top, so they are not taken for the closed round / rectangular tube shapes (`dsRect`, `dsRound`); the founder may redraw them
   xsK: "M6 4v13a3 3 0 0 0 3 3h6a3 3 0 0 0 3-3V9.5c0-1.4-1-2.2-2.4-2.2H13",

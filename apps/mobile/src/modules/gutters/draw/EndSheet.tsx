@@ -33,7 +33,7 @@ export function EndSheet({ capOff, side, onCap, onFlip }: {
         <View testID="end-title" style={{ flexShrink: 1 }}><T v="heading" w="semibold" numberOfLines={1}>{title}</T></View>
         <HelpButton title={t("mod.gutters.end.cap")} text={t("mod.gutters.end.help")} testID="end-help" />
       </RowView>
-      <ToggleRow label={t("mod.gutters.end.cap")} value={!capOff} onChange={(on) => onCap(!on)} testID="end-cap" />
+      <ToggleRow label={t("mod.gutters.end.cap")} caption={t("mod.gutters.end.caption")} value={!capOff} onChange={(on) => onCap(!on)} testID="end-cap" />
       <View testID="end-flip">
         <ListRow title={t("mod.gutters.end.flipTo", { s: word(side === "L" ? "R" : "L") })} left={<Icon name="repeat" s={sizes.iconMd} color={c.ink} />} chevron={false} onPress={onFlip} />
       </View>

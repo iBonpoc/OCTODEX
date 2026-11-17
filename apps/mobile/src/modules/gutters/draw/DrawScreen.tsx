@@ -805,7 +805,11 @@ export default function DrawScreen() {
   const cut = corner ? cornerCut(drawing, corner) : null;
   const cornerKind = (kind: "in" | "out") => {
     // the sheet stays open (founder 09.11: a tap closed it) — the kind switches, the cut below follows
-    if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
+    if (!corner || corner.kind === kind || corner.kind === "bay") return;
+    // the kind flips the whole line's face: said by a toast with «Вернуть», as «Поменять сторону» does (spec 56 §3а.2)
+    const before = cur.current.drawing;
+    commit(flipFace(before, corner.runs[0].id));
+    toast.show(t("mod.gutters.end.flipped"), localUndo(() => commit(before, cur.current.drawing, true)));
   };
   // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK). The
   // module does not save (off, past the trial — founder О2): the photos it has are shown, nothing is added (M5e)

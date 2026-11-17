@@ -1,7 +1,7 @@
 /**
  * e2e 210 — часть 1 пачки основателя 09.11 (docs/specs/33-gutters-canvas.md П20.18): подписи открывают своё, отбойник,
  * панель, единица показа. Every view.
- * - a corner's chip tapped → the corner sheet; an inside corner has «Отбойник на угле» on, its dashed mark on the
+ * - a corner's chip tapped → the corner sheet; an inside corner has «Брызговик» on, its dashed mark on the
  *   drawing; off → the mark goes; on → back;
  * - a downspout's fittings word tapped → its menu; «Водосток» on that downspout → its menu again, no second one;
  * - «Назад» then «Вперёд» on the toolbar (no «Ещё»); «Удалить» at the top only while something is picked;
