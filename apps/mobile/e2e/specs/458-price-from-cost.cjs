@@ -51,7 +51,7 @@ exports.run = async (h) => {
   // the office: the replaced price is a reason, and it opens the item
   await seed(true);
   await h.go("/triage");
-  await h.expectText(/цена \$65 от .*оставлена \$60 по закупке|присланная цена \$65 — оставлена \$60 по закупке/, "the office sees the replaced price: sent $65, $60 kept");
+  await h.expectText(/цена \$65, оставлена \$60 по закупке|присланная цена \$65 — оставлена \$60 по закупке/, "the office sees the replaced price: sent $65, $60 kept");
   await h.shot("office-reason");
   await p.getByText(/оставлена \$60 по закупке/).locator("visible=true").first().click();
   await p.waitForURL((u) => u.pathname === `/catalog/${ID}`, { timeout: 8000 });

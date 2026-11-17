@@ -11,7 +11,7 @@ import { countsFromCost, editClean, editOk, editPrice, priceLocked } from "@/fea
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
 import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
-import { Button, ChoiceChips, IconButton, ReadOnly, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, ReadOnly, TextField, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { StatusNote } from "@/ui/statusNote";
@@ -51,7 +51,9 @@ export default function CatalogItemScreen() {
   // a cost the phone does not have would overwrite the real price
   const noCosts = store.db.costsVisible === false;
   const isMat = countsFromCost(it, noCosts);
-  const locked = priceLocked(it, noCosts);
+  // by the stored item: switching the kind on this screen does not unlock its price (the store keeps the kind too)
+  const locked = priceLocked(found ?? it, noCosts);
+  const outerRo = useReadOnly();
   const price = editPrice(it, store.db.catalog, noCosts);
   const ok = editOk(it, noCosts);
   // spec 36: who sees suppliers picks one (the server reads none for sales and the tech)
@@ -106,7 +108,7 @@ export default function CatalogItemScreen() {
           <Labeled label={t("cat.price")}>
             <View testID="catalog-price">
               {/* #1807: counted by the server from a cost this person does not see — shown, not changed */}
-              <ReadOnly value={locked}>
+              <ReadOnly value={locked || outerRo}>
                 <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
               </ReadOnly>
             </View>

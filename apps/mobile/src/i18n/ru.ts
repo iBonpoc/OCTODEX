@@ -4446,7 +4446,7 @@ export const ru = {
   "photoUp.a11y": "не загрузилось",
   // spec 53 — quick price of one catalog item (wave 53-1)
   // #1807 (53-0б): a price counted by the server from the cost
-  "price.recalc.att": "{name}: цена {sent} от {who} — оставлена {kept} по закупке",
+  "price.recalc.att": "{name}: {who} — цена {sent}, оставлена {kept} по закупке",
   "price.recalc.attNoWho": "{name}: присланная цена {sent} — оставлена {kept} по закупке",
   "price.recalc.chip": "Цена по закупке",
   "price.fromCost.locked": "Цену считает приложение от закупки. Изменить её может тот, кто видит закупку.",

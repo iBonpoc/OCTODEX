@@ -284,7 +284,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   return out.sort((a, b) => b.score - a.score);
 }
 
-/** #1807: between a photo not uploaded and an unanswered estimate — a price the person meant is not the one stored */
+/** #1807: below an estimate without a reply (700 +) and an inspection without an estimate (680): a price, not a client */
 export const PRICE_RECALC_SCORE = 650;
 /** how long a replaced price stays a reason (no «Понятно»: it goes by itself; the item's own history keeps it) */
 export const PRICE_RECALC_DAYS = 7;
@@ -294,13 +294,14 @@ export const PRICE_RECALC_DAYS = 7;
  * tech in any case). The words: who sent what and what stayed.
  */
 export function priceRecalcItems(db: Pick<DB, "priceRecalc" | "catalog" | "members" | "costsVisible">, role: Role, now: number): AttentionItem[] {
-  if (role === "tech" || db.costsVisible === false || !db.priceRecalc?.length) return [];
+  // a cache that is not a list (an old or broken one) is no reason
+  if (role === "tech" || db.costsVisible === false || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
   const since = now - PRICE_RECALC_DAYS * 864e5;
   const last = new Map<ID, NonNullable<DB["priceRecalc"]>[number]>();
   for (const r of db.priceRecalc) {
     if (!(Date.parse(r.at) >= since)) continue;
     const had = last.get(r.itemId);
-    if (!had || r.at > had.at) last.set(r.itemId, r);
+    if (!had || Date.parse(r.at) > Date.parse(had.at)) last.set(r.itemId, r);
   }
   const out: AttentionItem[] = [];
   for (const r of last.values()) {

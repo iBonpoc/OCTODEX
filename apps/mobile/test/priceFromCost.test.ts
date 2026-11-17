@@ -8,6 +8,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { editClean, priceLocked } from "../src/features/catalogEdit";
+import { quickChanged, quickPriceItem } from "../src/features/quickPrice";
 import { attentionHref, buildAttention, priceRecalcItems, PRICE_RECALC_DAYS } from "../src/features/attention";
 import { makeSeed } from "../src/data/seed";
 import { ru } from "../src/i18n/ru";
@@ -34,6 +35,15 @@ describe("unit:priceFromCost — the price counted by the server (#1807)", () =>
     // not locked (sales on a hand-priced material): the typed price, as before
     const hand = mat({ priceFromCost: false });
     expect(editClean({ ...hand, priceCents: 6500 }, [hand], true).priceCents).toBe(6500);
+  });
+
+  it("the quick price sheet: a locked price is no change — no save, no «saved», the sample mark stays (review of 53-0б-2)", () => {
+    const stored = mat({ priceFromCost: true, placeholder: true });
+    expect(quickChanged(stored, { priceCents: 6500 }, true)).toBe(false);
+    expect(quickPriceItem(stored, { priceCents: 6500 }, [stored], true)).toMatchObject({ priceCents: 6000, placeholder: true });
+    // not locked: the typed price, as before
+    const hand = mat({ priceFromCost: false });
+    expect(quickChanged(hand, { priceCents: 6500 }, true)).toBe(true);
   });
 
   it("the words of the lock tell why, with no number, in every language", () => {

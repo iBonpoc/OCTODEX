@@ -19,7 +19,7 @@ const readBacks: string[] = [];
 const readBackRow: { value: { id: string; deleted_at: string | null } | null } = { value: { id: "i1", deleted_at: null } };
 function builder(table: string) {
   const b: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "is", "order", "limit", "in", "not", "range"]) b[m] = () => b;
+  for (const m of ["select", "eq", "is", "order", "limit", "in", "not", "range", "gte"]) b[m] = () => b;
   b.then = (ok: (r: unknown) => unknown, bad?: (e: unknown) => unknown) =>
     Promise.resolve(
       dropped.has(table)
