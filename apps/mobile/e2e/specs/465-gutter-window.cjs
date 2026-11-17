@@ -106,6 +106,7 @@ exports.run = async (h) => {
   }, "«Сохранить»: the store has brown and 30′ 0½″");
   await waitFor(async () => (await labels()).some((t) => /30′/.test(t)), "the drawing shows the new length");
   await h.shot("saved");
+  if (wide) h.expect((await panel().count()) > 0 && (await tid("attr-title").innerText()).startsWith("Gutter № 1"), "820/1280: after «Сохранить» the panel stays on the same gutter");
 
   // ONE «Назад» takes both back
   if (wide) {

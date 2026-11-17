@@ -793,7 +793,7 @@ export default function DrawScreen() {
   /** «Сохранить»: the copy into the drawing; false — the length is not a number, the window stays */
   const saveWin = (): boolean => {
     if (!winFor) return true;
-    const { drawing: next, bad } = applyDraft(cur.current.drawing, winFor.dr);
+    const { drawing: next, bad } = applyDraft(cur.current.drawing, winFor.dr, winFor.base);
     if (bad) {
       setLenBad(true);
       return false;

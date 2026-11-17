@@ -72,13 +72,32 @@ export const isDirty = (d: Drawing, dr: AttrDraft | null): boolean => {
 };
 
 /**
- * «Сохранить»: the copy into the drawing, one drawing back (one step of «Назад»). A length that is not a number is not
- * saved — `bad`, the window stays open and says so under the field. Nothing changed — the same drawing.
+ * What the copy changed against the attributes it opened from, put over the attributes the drawing has NOW (a three-way save,
+ * review #1858 №1): a corner picked at once, an end dragged meanwhile — kept; a field the copy took away (a colour of a bare one) — gone.
  */
-export function applyDraft(d: Drawing, dr: AttrDraft): { drawing: Drawing; bad: boolean } {
-  if (dr.kind === "ds") return { drawing: putDsAttrs(d, dr.id, dr.attrs), bad: false };
-  const ch = draftChanges(d, dr);
-  let next = putRunAttrs(d, dr.id, dr.attrs);
+function mergeAttrs<A extends object>(base: A, copy: A, now: A): A {
+  const out: Record<string, unknown> = { ...(now as Record<string, unknown>) };
+  const b = base as Record<string, unknown>, c = copy as Record<string, unknown>;
+  for (const key of new Set([...Object.keys(b), ...Object.keys(c)])) {
+    if (JSON.stringify(b[key]) === JSON.stringify(c[key])) continue;
+    if (c[key] === undefined) delete out[key];
+    else out[key] = c[key];
+  }
+  return out as A;
+}
+
+/**
+ * «Сохранить»: the copy into the drawing, one drawing back (one step of «Назад»). Only what the copy changed is written, over the
+ * drawing as it is now (`base` — the drawing the copy was taken from; none — `d`). A length that is not a number is not saved —
+ * `bad`, the window stays open and says so under the field. Nothing changed — the same drawing.
+ */
+export function applyDraft(d: Drawing, dr: AttrDraft, base: Drawing = d): { drawing: Drawing; bad: boolean } {
+  const was = draftOf(base, dr.id);
+  const now = draftOf(d, dr.id);
+  if (!was || !now || was.kind !== dr.kind || now.kind !== dr.kind) return { drawing: d, bad: false };
+  if (dr.kind === "ds") return { drawing: putDsAttrs(d, dr.id, mergeAttrs(was.attrs as DsAttrs, dr.attrs, now.attrs as DsAttrs)), bad: false };
+  const ch = draftChanges(base, dr);
+  let next = putRunAttrs(d, dr.id, mergeAttrs(was.attrs as RunAttrs, dr.attrs, now.attrs as RunAttrs));
   if (ch.length) {
     const n = draftLengthIn(dr);
     if (n === null) return { drawing: d, bad: true };

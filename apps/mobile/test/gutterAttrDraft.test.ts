@@ -110,3 +110,35 @@ describe("копия окна", () => {
     expect(applyDraft(gone, dr).drawing).toBe(gone);
   });
 });
+
+describe("чертёж изменился, пока копия открыта (ревью #1858 №1)", () => {
+  it("угол выбран сразу, пока в копии цвет: «Сохранить» пишет цвет и не возвращает старый угол", () => {
+    let dr = draftOf(D, "r1")!;
+    dr = patchDraft(dr, { color: "brown" });
+    const now = setRunAttrs(D, "r1", { cornerMethod: { a: "prefab" } });
+    const saved = applyDraft(now, dr, D).drawing.runs[0]!.attrs;
+    expect(saved.color).toBe("brown");
+    expect(saved.cornerMethod).toEqual({ a: "prefab" });
+  });
+  it("конец линии перетащили, пока в копии цвет: длина остаётся новой, «введённой» не становится", () => {
+    let dr = draftOf(D, "r1")!;
+    dr = patchDraft(dr, { color: "brown" });
+    const dragged: Drawing = { ...D, runs: [{ ...run, b: [300, 0] as [number, number], lengthIn: undefined }] };
+    const out = applyDraft(dragged, dr, D).drawing;
+    expect(out.runs[0]!.attrs.color).toBe("brown");
+    expect(out.runs[0]!.b).toEqual([300, 0]);
+    expect(out.runs[0]!.lengthIn).toBeUndefined();
+  });
+  it("длину ввели в окне, пока чертёж менялся: пишется введённая", () => {
+    const dr = setDraftLen(draftOf(D, "r1")!, { ft: "30", inc: "0", e16: 0 });
+    const now = setRunAttrs(D, "r1", { cornerMethod: { a: "prefab" } });
+    expect(runLengthIn(applyDraft(now, dr, D).drawing.runs[0]!)).toBe(360);
+  });
+  it("копия убрала поле (без покраски), чертёж его не трогал: поле убрано", () => {
+    let dr = draftOf(D, "r1")!;
+    dr = patchDraft(dr, { finish: "mill" });
+    const saved = applyDraft(D, dr, D).drawing.runs[0]!.attrs;
+    expect(saved.finish).toBe("mill");
+    expect(saved.color).toBeUndefined();
+  });
+});
