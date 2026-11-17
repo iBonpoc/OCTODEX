@@ -204,35 +204,39 @@ Apple 4.8: «равноценный вход» (на деле Sign in with Apple
 
 ## 9. Облако — что делает основатель (пошагово; ключи и пароли в чат и задачи не пишем)
 
-**Этап A — сразу (вход заработает у основателя в сборке 1731; приложение менять не надо):**
-1. Supabase → OCTODEX-APP → Authentication → Emails → **Confirm signup** и **Magic Link**: тема и текст из
-   `supabase/templates/*.html` (§7). Убедиться, что в тексте нет `{{ .ConfirmationURL }}`.
-2. Authentication → Sign In / Providers → Email: «Confirm email» — **вкл.**; Email OTP Expiration — **600**; длина — **8**
-   (длину ставить вместе с выходом PR-1: старая сборка 1731 принимает и 8 цифр).
-3. Там же: Anonymous sign-ins — **выкл.**
+**17.11.2026: этапы A и B сливаются.** Шаблоны писем на бесплатном тарифе Supabase со встроенной почтой менять нельзя
+(Management API: «Email template modification is not available for free tier projects using the default email provider.
+Please upgrade your plan or configure a custom SMTP provider», `entitlement_required`). Pro ($25/мес) шаблоны откроет, но
+встроенная почта по-прежнему шлёт только команде проекта — не решает. Решение основателя (через аудит, 17.11): Resend
+(бесплатно) + домен + DNS + SMTP в форме Supabase. Уже выставлено исполнителем через Management API по слову основателя
+(17.11): Email OTP Expiration — **600** (длина уже была **8**; «Confirm email» вкл., анонимный вход выкл., ручное
+связывание выкл., безопасная смена почты вкл. — проверено).
 
-**Этап B — своя почта (только после PR-2 и проверки §8 на боевом):**
-1. resend.com → аккаунт с 2FA → Domains → Add `auth.gorix.app`.
+**Шаги основателя** (подробно, по экранам — `docs/guides/resend-email-setup.md`):
+1. resend.com → аккаунт (с 2FA) → Domains → Add `auth.gorix.app`.
 2. У регистратора gorix.app — записи, которые покажет Resend (SPF, DKIM, MX для отскоков), и DMARC
    `_dmarc.auth.gorix.app TXT "v=DMARC1; p=none"` (через 2–4 недели — `p=quarantine`). Дождаться «Verified».
 3. Resend → API Keys → ключ «Sending access» только для `auth.gorix.app`. Click/open tracking — **выкл.**
 4. Supabase → Authentication → SMTP Settings → custom SMTP: host `smtp.resend.com`, port `465`, user `resend`, password —
-   ключ из п.3 (только в панель), sender `login@auth.gorix.app`, name `GoRix`.
-5. Authentication → Rate Limits: emails per hour — **4** на бесплатном Resend (100/день) или **300** на Pro; minimum
-   interval per user — **60 с** (= `RESEND_S`); sign-ups and sign-ins — **30 / 5 мин / IP**; token verifications —
-   **30 / 5 мин / IP**.
-6. Шаблоны Reset password, Change email, Invite — нейтральный текст без ссылки (§7).
-7. Проверка: вход с адреса не из команды → письмо «GoRix» с кодом во «Входящих».
+   ключ из п.3 (только в форму), sender `login@auth.gorix.app`, name `GoRix`.
+
+**Дальше — исполнитель** (Management API, по слову основателя): темы и тексты Confirm signup и Magic Link из
+`supabase/templates/*.html` (§7); Rate Limits: emails per hour — **4** на бесплатном Resend (100/день; при Pro — 300),
+minimum interval per user — **60 с** (= `RESEND_S`), sign-ups and sign-ins — **30 / 5 мин / IP**, token verifications —
+**30 / 5 мин / IP**; шаблоны Reset password, Change email, Invite — нейтральный текст без ссылки (§7). Проверка: вход с
+адреса не из команды → письмо «GoRix» с кодом во «Входящих».
+
+**Риск до #1787:** со своей почтой регистрация открывается любому адресу, а защита от чужого аккаунта (§8 Р10, #1787)
+ещё не влита. До её влития ссылку на приложение публично не давать (закрытый тест TestFlight — можно).
 
 ## 10. Порядок, старые сборки, что в каком PR (план реализации, WORKER п.6)
 
 | Шаг | Что | Кто проверяет (не автор) |
 |---|---|---|
-| Облако A | шаблоны, срок 600, «Confirm email» вкл., анонимный вход выкл. | основатель руками; ночная сверка (ниже) |
+| Облако (A+B, 17.11) | основатель: Resend, домен, DNS, SMTP в форме; исполнитель через API: шаблоны, лимиты (срок 600 — уже) | основатель; ночная сверка (#1788) |
 | **PR-1** (ветка `claude/exciting-johnson-7z6wrp`) | экран §6, шаблоны и `CODE_LENGTH = 8`, сторож, правки документов §13, без `emailRedirectTo`, без `signUpPassword`; DS-пункты **[DS]** — в DESIGN-SYSTEM.md и витрину; снимки «было/стало» 390 light; строка «Натив:» (клавиатура, подстановка 8 цифр) | code-reviewer, design-reviewer, security-check → руководитель; основатель на iPhone |
 | **PR-2** (зоны (б) + (а)) | функция `request-code` (§8 Р10), её тест, облачный тест, приложение зовёт функцию; подсчёт записей с паролем | security-check, code-reviewer → руководитель |
 | Облако: регистрация выкл. | после того как сборка с PR-2 разошлась | основатель; облачный тест |
-| Облако B | Resend (бесплатный), лимиты | основатель |
 | Ночная сверка облака (Ж-е) | Management API: confirmations, срок, длина, темы и тексты шаблонов, регистрация выкл., лимиты | зона «Проверки»; **до открытия всем** |
 | Открыть всем | Resend Pro, Политика с Resend (S42) | основатель |
 
