@@ -12,7 +12,7 @@
 create table if not exists app.storage_erase_queue (
   id       uuid primary key default public.uuid_generate_v7(),
   bucket   text not null check (bucket = 'files'),
-  path     text not null check (path ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[^/ ][^ ]*$' and path !~ '(^|/)\.\.(/|$)' and length(path) <= 512),
+  path     text not null check (path ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(/[A-Za-z0-9._-]+)+$' and path !~ '(^|/)\.\.(/|$)' and length(path) <= 512),
   at       timestamptz not null default now(),
   tries    int not null default 0,   -- failed removals only; a row is left after 5 (50-6 raises an alarm)
   done_at  timestamptz,
@@ -155,10 +155,16 @@ begin
          where ff.id = q.avatar_file_id and ff.created_by = q.user_id and ff.kind = 'photo'
            and ff.job_id is null and ff.visit_id is null and ff.customer_id is null and ff.measurement_id is null;
         if found then
-          if f.storage_key is not null then
+          if f.storage_key is null then
+            delete from public.files where id = f.id;     -- never uploaded: no object
+          elsif f.storage_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(/[A-Za-z0-9._-]+)+$' and f.storage_key !~ '(^|/)\.\.(/|$)' and length(f.storage_key) <= 512 then
             insert into app.storage_erase_queue (bucket, path) values ('files', f.storage_key) on conflict (bucket, path) do nothing;
+            delete from public.files where id = f.id;
+          else
+            -- a key of an odd shape (the app's own is <company>/<id>.<ext>): the queue refuses it and the rest of the erasure must not fail with
+            -- it — the row stays (the object keeps its reference), the warning says so, a person looks at it
+            raise warning 'erase_queue_run: a profile picture key of an odd shape was left for a person to look at';
           end if;
-          delete from public.files where id = f.id;
         end if;
       end if;
       -- nothing of the person is left in what this job owns
@@ -169,7 +175,8 @@ begin
          or exists (select 1 from public.catalog_price_history where by = q.user_id)
          or exists (select 1 from public.catalog_cost_history where by = q.user_id)
          or (q.avatar_file_id is not null and exists (select 1 from public.files ff where ff.id = q.avatar_file_id and ff.created_by = q.user_id
-                and ff.kind = 'photo' and ff.job_id is null and ff.visit_id is null and ff.customer_id is null and ff.measurement_id is null)) then
+                and ff.kind = 'photo' and ff.job_id is null and ff.visit_id is null and ff.customer_id is null and ff.measurement_id is null
+                and (ff.storage_key is null or ff.storage_key ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(/[A-Za-z0-9._-]+)+$'))) then
         raise exception 'erasure by the queue incomplete';
       end if;
       update app.erase_queue set done_at = now() where user_id = q.user_id;
@@ -187,6 +194,8 @@ revoke all on function app.erase_queue_run() from public, anon, authenticated;
 grant execute on function app.erase_queue_run() to service_role;
 
 -- the edge function's three calls (not for people: service_role only)
+-- Two callers may claim the same rows at once (the claim holds its lock only for the statement): harmless — removing an object twice is not an
+-- error for the Storage API — the worst is a doubled count. Idempotent on purpose.
 create or replace function public.storage_erase_claim(p_limit int default 50)
 returns table (id uuid, bucket text, path text) language sql security definer set search_path = '' as $$
   select q.id, q.bucket, q.path from app.storage_erase_queue q

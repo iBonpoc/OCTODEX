@@ -12,7 +12,7 @@
  */
 export const BUCKET = "files";
 /** the same shape as the check of app.storage_erase_queue.path */
-export const PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[^/ ][^ ]*$/;
+export const PATH = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(\/[A-Za-z0-9._-]+)+$/;
 export const MAX_PATH = 512;
 export const BATCH = 50;
 /** rounds of «claim → remove» in one call: a call never runs for ever */
@@ -65,15 +65,27 @@ export async function drainStorageQueue(deps: EraseDeps): Promise<Report> {
       await deps.fail(bad.map((r) => r.id)).catch(() => deps.log?.("erase-storage: fail mark failed"));
     }
     if (good.length) {
-      const r = await deps.remove(BUCKET, good.map((x) => x.path)).catch((e: Error) => ({ error: { message: e.message } }));
-      const ids = good.map((x) => x.id);
-      if (r.error) {
-        rep.failed += good.length;
-        deps.log?.(`erase-storage: remove failed for ${good.length} objects`); // a count, never the names
-        await deps.fail(ids).catch(() => deps.log?.("erase-storage: fail mark failed"));
-      } else {
+      const first = await deps.remove(BUCKET, good.map((x) => x.path)).catch((e: Error) => ({ error: { message: e.message } }));
+      if (!first.error) {
         rep.removed += good.length;
-        await deps.done(ids).catch(() => deps.log?.("erase-storage: done mark failed"));
+        await deps.done(good.map((x) => x.id)).catch(() => deps.log?.("erase-storage: done mark failed"));
+      } else if (good.length === 1) {
+        rep.failed += 1;
+        deps.log?.("erase-storage: remove failed for 1 object"); // a count, never the names
+        await deps.fail([good[0].id]).catch(() => deps.log?.("erase-storage: fail mark failed"));
+      } else {
+        // one odd object must not spoil the others' tries: one by one
+        const okIds: string[] = [];
+        const badIds: string[] = [];
+        for (const g of good) {
+          const one = await deps.remove(BUCKET, [g.path]).catch((e: Error) => ({ error: { message: e.message } }));
+          (one.error ? badIds : okIds).push(g.id);
+        }
+        rep.removed += okIds.length;
+        rep.failed += badIds.length;
+        if (badIds.length) deps.log?.(`erase-storage: remove failed for ${badIds.length} objects`);
+        if (okIds.length) await deps.done(okIds).catch(() => deps.log?.("erase-storage: done mark failed"));
+        if (badIds.length) await deps.fail(badIds).catch(() => deps.log?.("erase-storage: fail mark failed"));
       }
     }
     // a failed removal or nothing good in this round: the same rows would come again — stop, the next call tries again
@@ -93,26 +105,25 @@ export interface Res {
 }
 const json = (status: number, body: unknown): Res => ({ status, body: JSON.stringify(body), headers: { "Content-Type": "application/json" } });
 
-/**
- * The role claim of the bearer token. The gateway has ALREADY verified the signature (verify_jwt = true in config.toml), so only the
- * payload is read here; a token that is not a service-role token is refused (an anon or a person's token passes the gateway too).
- */
-export function roleOf(authorization: string | null): string | null {
-  const jwt = /^Bearer\s+(\S+)$/i.exec(authorization ?? "")?.[1];
-  const part = jwt?.split(".")[1];
-  if (!part) return null;
-  try {
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(part.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(b64)) as { role?: unknown };
-    return typeof payload.role === "string" ? payload.role : null;
-  } catch {
-    return null;
-  }
+/** constant-time equality of two strings (no early exit on the first differing character) */
+export function sameKey(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  let diff = a.length ^ b.length;
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) diff |= (a.charCodeAt(i) || 0) ^ (b.charCodeAt(i) || 0);
+  return diff === 0;
 }
+/** the bearer token of the request, or "" */
+export const bearerOf = (authorization: string | null): string => /^Bearer\s+(\S+)$/i.exec(authorization ?? "")?.[1] ?? "";
 
-export async function handleErase(req: Req, deps: EraseDeps): Promise<Res> {
+/**
+ * Two walls: the gateway verifies the token's signature (verify_jwt = true in config.toml), and here the token must BE the service key
+ * (constant-time, as send-push does for its key) — an anon or a person's token passes the gateway but not this; a function deployed without
+ * the gateway's check is still shut. `serviceKey` is the function's own SUPABASE_SERVICE_ROLE_KEY, never logged.
+ */
+export async function handleErase(req: Req, deps: EraseDeps, serviceKey: string): Promise<Res> {
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
-  if (roleOf(req.header("authorization")) !== "service_role") return json(403, { error: "forbidden" });
+  if (!sameKey(bearerOf(req.header("authorization")), serviceKey)) return json(403, { error: "forbidden" });
   const rep = await drainStorageQueue(deps);
   return json(200, rep);
 }

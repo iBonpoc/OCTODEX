@@ -5432,6 +5432,37 @@ select tst.ok(public.storage_erase_done(array[:'t239_id'::uuid]) = 1, 'T239 a re
 select tst.ok(public.storage_erase_done(array[:'t239_id'::uuid]) = 0, 'T239 and only once');
 select tst.ok((select count(*) = 0 from public.storage_erase_claim(10)), 'T239 nothing is left to claim');
 reset role;
+-- an own photo that is linked to something (a client) is not a profile picture: never queued, never deleted; an odd key is left for a person
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a2390000-0000-4000-8000-000000000007', 't239c@x.test', '{"full_name":"T239 Linked"}'),
+  ('a2390000-0000-4000-8000-000000000008', 't239d@x.test', '{"full_name":"T239 Odd key"}');
+insert into public.files (id, company_id, kind, storage_key, created_by, customer_id) values
+  ('a2390000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/linked-own.jpg', 'a2390000-0000-4000-8000-000000000007', 'c3900000-0000-4000-8000-000000000001');
+insert into public.files (id, company_id, kind, storage_key, created_by) values
+  ('a2390000-0000-4000-8000-0000000000f5', 'ca000000-0000-0000-0000-000000000000', 'photo', 'ca000000-0000-0000-0000-000000000000/Odd Name.jpg', 'a2390000-0000-4000-8000-000000000008');
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f4' where id = 'a2390000-0000-4000-8000-000000000007';
+update public.users set avatar_file_id = 'a2390000-0000-4000-8000-0000000000f5' where id = 'a2390000-0000-4000-8000-000000000008';
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000007'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person whose picture is linked to a client deletes the account');
+reset role; set request.jwt.claim.sub = 'a2390000-0000-4000-8000-000000000008'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T239 the person with an odd key deletes the account');
+:as_super
+set role service_role;
+select app.erase_queue_run() >= 2 as t239_ran2 \gset
+reset role;
+select tst.ok(:'t239_ran2'::boolean, 'T239 the job ran again');
+select tst.ok(exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f4'), 'T239 an own photo linked to a client stays (it is the client''s record)');
+select tst.ok(not exists (select 1 from app.storage_erase_queue where path like '%linked-own.jpg'), 'T239 and is not queued');
+select tst.ok(exists (select 1 from public.files where id = 'a2390000-0000-4000-8000-0000000000f5') and not exists (select 1 from app.storage_erase_queue where path like '%Odd Name%'),
+              'T239 an odd key: not queued, the row stays with its reference');
+select tst.ok((select count(*) = 2 from app.erase_queue where user_id in ('a2390000-0000-4000-8000-000000000007', 'a2390000-0000-4000-8000-000000000008') and done_at is not null and tries = 0),
+              'T239 the rest of the erasure of both people is done (one odd file never fails it)');
+set role service_role;
+select tst.ok(app.erase_queue_run() = 0, 'T239 a repeat of the job changes nothing');
+reset role;
 \echo 'T239 (50-3): the Storage erase queue ok'
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super

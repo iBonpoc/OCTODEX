@@ -6,7 +6,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { BATCH, MAX_ROUNDS, drainStorageQueue, handleErase, roleOf, safePath, type EraseDeps, type Row } from "../../../supabase/functions/erase-storage/handler";
+import { BATCH, MAX_ROUNDS, bearerOf, drainStorageQueue, handleErase, safePath, sameKey, type EraseDeps, type Row } from "../../../supabase/functions/erase-storage/handler";
 import { handleDelete, type DeleteDeps } from "../../../supabase/functions/delete-account/handler";
 
 const C = "ca000000-0000-4000-8000-000000000000";
@@ -31,17 +31,17 @@ describe("unit:eraseStorage — what may be removed", () => {
   it("only <company uuid>/<name> of the bucket files", () => {
     expect(safePath("files", `${C}/a.jpg`)).toBe(true);
     expect(safePath("files", `${C}/sub/a.jpg`)).toBe(true);
-    for (const p of ["", "/", "/x", "../x", `${C}/`, `${C}/../cb000000-0000-4000-8000-000000000000/x`, "files/x.jpg", "not-a-uuid/x.jpg", `${C}/a b.jpg`, `${C}/${"x".repeat(600)}`]) {
+    for (const p of ["", "/", "/x", "../x", `${C}/`, `${C}/../cb000000-0000-4000-8000-000000000000/x`, "files/x.jpg", "not-a-uuid/x.jpg", `${C}/a b.jpg`, `${C}/a\nb.jpg`, `${C}/%2e%2e/x`, `${C}/${"x".repeat(600)}`]) {
       expect(safePath("files", p), p).toBe(false);
     }
     expect(safePath("other", `${C}/a.jpg`)).toBe(false);
   });
-  it("reads the role claim of a token; garbage is no role", () => {
-    expect(roleOf(`Bearer ${jwt("service_role")}`)).toBe("service_role");
-    expect(roleOf(`Bearer ${jwt("anon")}`)).toBe("anon");
-    expect(roleOf(null)).toBeNull();
-    expect(roleOf("Bearer not-a-jwt")).toBeNull();
-    expect(roleOf("Bearer a.%%%.c")).toBeNull();
+  it("the key comparison: equal only when equal, never on empty", () => {
+    expect(sameKey("abc", "abc")).toBe(true);
+    for (const [x, y] of [["abc", "abd"], ["abc", "abcd"], ["", ""], ["abc", ""], ["", "abc"]] as const) expect(sameKey(x, y), `${x}|${y}`).toBe(false);
+    expect(bearerOf("Bearer k1")).toBe("k1");
+    expect(bearerOf(null)).toBe("");
+    expect(bearerOf("Basic x")).toBe("");
   });
 });
 
@@ -58,6 +58,20 @@ describe("unit:eraseStorage — the drain", () => {
     expect(calls.some((c) => c.startsWith("done"))).toBe(false);
     expect(logs.join(" ")).not.toContain(C);
     expect(logs.join(" ")).not.toContain("a.jpg");
+  });
+  it("a failing batch is retried one by one: only the odd object counts a try, the others are done", async () => {
+    const { d, calls } = fake([[row("a"), row("b"), row("c")]], {
+      remove: async (b, paths) => (paths.length > 1 || paths[0].endsWith("/b.jpg") ? { error: { message: "x" } } : { error: null }),
+    });
+    expect(await drainStorageQueue(d)).toEqual({ removed: 2, failed: 1, refused: 0 });
+    expect(calls).toContain("done r-a,r-c");
+    expect(calls).toContain("fail r-b");
+  });
+  it("a failing done or fail mark does not crash the drain", async () => {
+    const { d } = fake([[row("a")], []], { done: async () => { throw new Error("db"); } });
+    expect(await drainStorageQueue(d)).toEqual({ removed: 1, failed: 0, refused: 0 });
+    const { d: d2 } = fake([[row("a")]], { remove: async () => ({ error: { message: "x" } }), fail: async () => { throw new Error("db"); } });
+    expect(await drainStorageQueue(d2)).toEqual({ removed: 0, failed: 1, refused: 0 });
   });
   it("a row of a wrong shape is never sent to the API and counts a failed try", async () => {
     const { d, calls } = fake([[row("a", { path: "../x" }), row("b", { bucket: "other" })], []]);
@@ -84,20 +98,26 @@ describe("unit:eraseStorage — the drain", () => {
 });
 
 describe("unit:eraseStorage — the entry", () => {
+  const KEY = "service-key-xyz";
   const req = (method: string, auth: string | null) => ({ method, header: (n: string) => (n.toLowerCase() === "authorization" ? auth : null) });
-  it("POST with a service-role token drains; anon, a person, no token, GET are refused before any call", async () => {
+  it("POST with the service key drains; anon, a person's token, no token, a wrong key, GET are refused before any call", async () => {
     const { d, calls } = fake([[row("a")], []]);
-    expect((await handleErase(req("POST", `Bearer ${jwt("service_role")}`), d)).status).toBe(200);
+    expect((await handleErase(req("POST", `Bearer ${KEY}`), d, KEY)).status).toBe(200);
     const before = calls.length;
-    for (const [m, a] of [["POST", `Bearer ${jwt("anon")}`], ["POST", `Bearer ${jwt("authenticated")}`], ["POST", null], ["POST", "Bearer x"], ["GET", `Bearer ${jwt("service_role")}`]] as const) {
-      const r = await handleErase(req(m, a), d);
-      expect([403, 405]).toContain(r.status);
+    for (const [m, a] of [["POST", `Bearer ${jwt("anon")}`], ["POST", `Bearer ${jwt("service_role")}`], ["POST", null], ["POST", "Bearer x"], ["GET", `Bearer ${KEY}`]] as const) {
+      const r = await handleErase(req(m, a), d, KEY);
+      expect([403, 405], `${m} ${a}`).toContain(r.status);
     }
     expect(calls.length).toBe(before);
   });
+  it("a function without its key configured answers nobody", async () => {
+    const { d, calls } = fake([[row("a")], []]);
+    expect((await handleErase(req("POST", "Bearer "), d, "")).status).toBe(403);
+    expect(calls.length).toBe(0);
+  });
   it("the answer holds counters only", async () => {
     const { d } = fake([[row("a")], []]);
-    const r = await handleErase(req("POST", `Bearer ${jwt("service_role")}`), d);
+    const r = await handleErase(req("POST", `Bearer ${KEY}`), d, KEY);
     expect(JSON.parse(r.body)).toEqual({ removed: 1, failed: 0, refused: 0 });
   });
 });
@@ -140,6 +160,12 @@ describe("unit:eraseStorage — deployed and configured", () => {
   it("release.yml deploys it; config.toml asks for a verified token", () => {
     expect(read(".github/workflows/release.yml")).toMatch(/supabase functions deploy erase-storage --project-ref "\$PROJECT_REF" --yes/);
     expect(read("supabase/config.toml")).toMatch(/\[functions\.erase-storage\]\s*\nverify_jwt = true/);
+  });
+  it("the service key is compared (constant time), not only the token's role claim", () => {
+    const src = read("supabase/functions/erase-storage/handler.ts") + read("supabase/functions/erase-storage/index.ts");
+    expect(src).toMatch(/sameKey\(bearerOf\(/);
+    expect(src).toMatch(/storageDeps\(admin\), SERVICE\)/);
+    expect(read(".github/workflows/release.yml")).not.toMatch(/no-verify-jwt/);
   });
   it("the entry never logs the service key and takes the paths only from the queue", () => {
     const src = read("supabase/functions/erase-storage/index.ts") + read("supabase/functions/erase-storage/deps.ts");

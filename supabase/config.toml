@@ -10,7 +10,7 @@ enable_confirmations = true
 verify_jwt = true
 
 # 50-3 (docs/specs/50 §3.2): removes the objects the erasure queued (app.storage_erase_queue) through the Storage API. A valid JWT is
-# required by the gateway AND the handler needs role = service_role in it (pg_cron in 50-6 and delete-account call it); no person calls it.
+# required by the gateway AND the handler needs the token to be the service key itself (pg_cron in 50-6 and delete-account call it); no person calls it.
 [functions.erase-storage]
 verify_jwt = true
 

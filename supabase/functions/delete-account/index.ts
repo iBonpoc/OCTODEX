@@ -28,7 +28,11 @@ Deno.serve(async (req: Request) => {
         const { error } = await admin.auth.admin.deleteUser(uid, true);
         return { error: error ? { message: error.message } : null };
       },
-      eraseStorage: () => drainStorageQueue(storageDeps(admin)),
+      // in the background: the answer to the person never waits for Storage (EdgeRuntime keeps the worker until it ends)
+      eraseStorage: async () => {
+        const job = drainStorageQueue(storageDeps(admin)).catch(() => {});
+        (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(job);
+      },
       log: (m) => console.warn(m),
     },
   );
