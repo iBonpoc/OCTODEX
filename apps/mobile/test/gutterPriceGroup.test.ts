@@ -8,7 +8,7 @@ import type { CatalogItem } from "../src/data/types";
 import type { PartQty } from "@octo/estimating-engine";
 import { catalogMatch } from "../src/features/catalogMatch";
 import { colouredPart, groupAttrs, groupText, priceGroupKey, transitionGroups, transitionWrites } from "../src/modules/gutters/prices/groups";
-import { findItem, matchAttrs } from "../src/modules/gutters/prices";
+import { findItem, matchAttrs, missingItems, laborRows } from "../src/modules/gutters/prices";
 import { linesFromParts, resyncLines } from "../src/modules/gutters/estimate";
 
 const it_ = (id: string, color: string | undefined, o: Partial<CatalogItem> = {}): CatalogItem => ({
@@ -34,7 +34,7 @@ const uid = () => `l${++n}`;
 const total = (ls: readonly { quantity: unknown; unitPriceCents: number }[]) => ls.reduce((s, l) => s + Math.round(Number(String(l.quantity)) * l.unitPriceCents), 0);
 
 describe("группа цены (§4.1, §6 №1, 10, 14, 19)", () => {
-  it("белая и коричневая одной детали — одна группа; без цвета — не в группе; цветная без finish = painted; mill и painted — разные; другая единица — другая", () => {
+  it("С1: белая и коричневая одной детали — одна группа; без цвета — не в группе; цветная без finish = painted; mill и painted — разные; другая единица — другая", () => {
     const w = it_("w", "white"), b = it_("b", "brown");
     expect(priceGroupKey(w)).toBe(priceGroupKey(b));
     expect(colouredPart(it_("plain", undefined))).toBe(false);
@@ -47,7 +47,7 @@ describe("группа цены (§4.1, §6 №1, 10, 14, 19)", () => {
     const a = it_("a", "white", { attributes: { ...it_("a", "white").attributes!, custom: "1" } });
     expect(findItem([a, it_("b", "brown")], part("white"))?.id).toBe("a");
   });
-  it("ключ ≤ 120 символов, вид gutters:v1:<16 hex>, одинаков на эталонных свойствах (сторож хеша)", () => {
+  it("С11: ключ ≤ 120 символов, вид gutters:v1:<16 hex>, одинаков на эталонных свойствах (сторож хеша)", () => {
     const k = priceGroupKey(it_("w", "white"));
     expect(k).toMatch(/^gutters:v1:[0-9a-f]{16}$/);
     expect(k.length).toBeLessThanOrEqual(120);
@@ -59,7 +59,7 @@ describe("группа цены (§4.1, §6 №1, 10, 14, 19)", () => {
   it("groupAttrs: без color и priceGroup, finish выведен", () => {
     expect(groupAttrs({ part: "gutter", color: "white", priceGroup: "x" })).toEqual({ part: "gutter", finish: "painted" });
   });
-  it("catalogMatch не считает priceGroup лишним: до и после перехода находится та же позиция (§6 №18)", () => {
+  it("С13: catalogMatch не считает priceGroup лишним: до и после перехода находится та же позиция (§6 №18)", () => {
     const w = it_("w", "white"), b = it_("b", "brown");
     const want = matchAttrs(part("white"));
     const before = catalogMatch([w, b], want)[0]?.id;
@@ -70,30 +70,30 @@ describe("группа цены (§4.1, §6 №1, 10, 14, 19)", () => {
 });
 
 describe("переход (§4.4 п.2, §6 №2, 3, 6, 11, 12, 15)", () => {
-  it("до перехода ничего не двигается: цена каждой строки сметы та же, что у своей позиции", () => {
+  it("С2: до перехода ничего не двигается: цена каждой строки сметы та же, что у своей позиции", () => {
     const cat = [it_("w", "white"), it_("b", "brown", { priceCents: 900 })];
     expect(findItem(cat, part("white"))?.priceCents).toBe(800);
     expect(findItem(cat, part("brown"))?.priceCents).toBe(900);
   });
-  it("одинаковая цена — группа «одна цена», выбирать нечего", () => {
+  it("С3: одинаковая цена — группа «одна цена», выбирать нечего", () => {
     const gs = transitionGroups([it_("w", "white"), it_("b", "brown")]);
     expect(gs).toHaveLength(1);
     expect(gs[0]!.options).toHaveLength(1);
     expect(gs[0]!.why).toEqual({ k: "same" });
   });
-  it("разные цены: у большинства цветов — предложена она и сказано почему", () => {
+  it("С4: разные цены: у большинства цветов — предложена она и сказано почему", () => {
     const g = transitionGroups([it_("w", "white"), it_("b", "brown"), it_("c", "clay", { priceCents: 900, updatedAt: "2026-11-15T00:00:00Z" })])[0]!;
     expect(g.options[g.suggested]!.priceCents).toBe(800);
     expect(g.why).toEqual({ k: "most", n: 2, of: 3 });
   });
-  it("все разные: предложена последняя правка (её день); без времени — меньший id", () => {
+  it("С5: все разные: предложена последняя правка (её день); без времени — меньший id", () => {
     const g = transitionGroups([it_("w", "white", { updatedAt: "2026-11-10T00:00:00Z" }), it_("b", "brown", { priceCents: 900, updatedAt: "2026-11-12T00:00:00Z" })])[0]!;
     expect(g.options[g.suggested]!.priceCents).toBe(900);
     expect(g.why).toEqual({ k: "last", at: "2026-11-12T00:00:00Z" });
     const h = transitionGroups([it_("z", "white"), it_("a", "brown", { priceCents: 900 })])[0]!;
     expect(h.options[h.suggested]!.sourceId).toBe("a");
   });
-  it("«Сделать одну цену»: у всех priceGroup и цена выбора (цена, placeholder, себестоимость, налог, наценка); код, упаковка — свои; источник первым", () => {
+  it("С6: «Сделать одну цену»: у всех priceGroup и цена выбора (цена, placeholder, себестоимость, налог, наценка); код, упаковка — свои; источник первым", () => {
     const g = transitionGroups([it_("w", "white", { updatedAt: "2026-11-10T00:00:00Z" }), it_("b", "brown", { priceCents: 900, costCents: 450, markupBps: 10000, updatedAt: "2026-11-12T00:00:00Z" })])[0]!;
     const white = g.options.findIndex((o) => o.priceCents === 800);
     const out = transitionWrites(g, white, true);
@@ -105,12 +105,12 @@ describe("переход (§4.4 п.2, §6 №2, 3, 6, 11, 12, 15)", () => {
     expect(out.map((x) => [x.supplierSku, x.packSize])).toEqual([["SKU-w", "10"], ["SKU-b", "10"]]);
     expect(out.map((x) => x.attributes!.color)).toEqual(["white", "brown"]);
   });
-  it("кто не видит себестоимость: поля себестоимости не трогаются", () => {
+  it("С7: кто не видит себестоимость: поля себестоимости не трогаются", () => {
     const g = transitionGroups([it_("w", "white"), it_("b", "brown", { priceCents: 900, costCents: 450 })])[0]!;
     const out = transitionWrites(g, g.suggested, false);
     expect(out.find((x) => x.id === "b")!.costCents).toBe(450);
   });
-  it("после перехода экран больше ничего не предлагает; позиция, выпавшая из группы (старый телефон), предлагается снова с ценой группы", () => {
+  it("С8: после перехода экран больше ничего не предлагает; позиция, выпавшая из группы (старый телефон), предлагается снова с ценой группы", () => {
     const cat = [it_("w", "white"), it_("b", "brown", { priceCents: 900 })];
     const g = transitionGroups(cat)[0]!;
     const done = transitionWrites(g, g.suggested, true);
@@ -128,7 +128,7 @@ describe("переход (§4.4 п.2, §6 №2, 3, 6, 11, 12, 15)", () => {
 });
 
 describe("деньги: старые сметы не меняются, пока человек не нажал «Обновить смету» (условие руководителя)", () => {
-  it("смета белого и коричневого: после перехода сохранённые строки те же; «Обновить» — цена группы", () => {
+  it("С9: смета белого и коричневого: после перехода сохранённые строки те же; «Обновить» — цена группы", () => {
     const cat0 = [it_("w", "white", { updatedAt: "2026-11-12T00:00:00Z" }), it_("b", "brown", { priceCents: 900, costCents: 450 })];
     const parts = [part("white"), part("brown")];
     const saved = linesFromParts(parts, cat0, name, uid);
@@ -142,5 +142,17 @@ describe("деньги: старые сметы не меняются, пока 
     const updated = resyncLines(saved, linesFromParts(parts, cat1, name, uid));
     expect(total(updated)).toBe(100 * 800 + 100 * 800);
     expect(updated.map((l) => l.catalogItemId).sort()).toEqual(["b", "w"]);
+  });
+});
+
+describe("созданное модулем (§4.3)", () => {
+  it("С12: «Создать позиции сразу» — цветные позиции модуля сразу в своей группе, работы и без цвета — без группы", () => {
+    const rows = [{ key: "gw", part: part("white") }, { key: "gb", part: part("brown") }, ...laborRows()];
+    const made = missingItems("demo", rows, [], (p) => `x ${p.key}`);
+    const w = made.find((x) => x.attributes?.color === "white")!, b = made.find((x) => x.attributes?.color === "brown")!;
+    expect(w.attributes!.priceGroup).toMatch(/^gutters:v1:[0-9a-f]{16}$/);
+    expect(w.attributes!.priceGroup).toBe(b.attributes!.priceGroup);
+    expect(made.filter((x) => x.kind === "labor").every((x) => !x.attributes?.priceGroup)).toBe(true);
+    expect(transitionGroups(made)).toEqual([]);
   });
 });

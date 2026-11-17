@@ -1,5 +1,5 @@
 /**
- * e2e 470 — «Одна цена на все цвета» (#1913 PR3; spec 33-gutters-price-key §4.4 п.2, §7а п.3). Every view.
+ * e2e 470 — «Одна цена на все цвета» (#1913 PR3; spec 33-gutters-price-key §4.4 п.2, §7а п.3; приёмка §6а С3–С8 на экране). Every view.
  * - The price list has a part in white $8 and brown $9 (no group yet): the price screen says it once (one banner), the sheet shows
  *   «было» per colour and the suggested price WITH why; the person picks; «Сделать одну цена» — both items one price and one group;
  *   their supplier codes stay; «Отменить» puts it all back.

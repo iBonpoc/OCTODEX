@@ -158,7 +158,7 @@ const flush = async () => {
 };
 
 describe("unit:gutterPriceGroupStore — the transition offline (#1913 PR3, director 17.11)", () => {
-  it("offline: all of it on the phone at once, nothing sent; back online — item saves by fields, no group write (no 40001 loop)", async () => {
+  it("С10: offline: all of it on the phone at once, nothing sent; back online — item saves by fields, no group write (no 40001 loop)", async () => {
     const { v } = await start([coloured("w", "white", { updatedAt: "2026-11-12T00:00:00Z" }), coloured("b", "brown", { priceCents: 900, costCents: 450 })]);
     v().setOnline(false);
     await settle();
@@ -179,7 +179,7 @@ describe("unit:gutterPriceGroupStore — the transition offline (#1913 PR3, dire
     for (const o of saves) expect(o.fields ?? []).not.toContain("supplier_sku");
   });
 
-  it("offline, «Отменить»: every item back as it was (price, no group); back online nothing of the group stays", async () => {
+  it("С10: offline, «Отменить»: every item back as it was (price, no group); back online nothing of the group stays", async () => {
     const { v } = await start([coloured("w", "white", { updatedAt: "2026-11-12T00:00:00Z" }), coloured("b", "brown", { priceCents: 900, costCents: 450 })]);
     v().setOnline(false);
     await settle();
