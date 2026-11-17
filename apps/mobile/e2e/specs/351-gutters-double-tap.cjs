@@ -1,7 +1,7 @@
 /**
  * e2e 351 — #1273 (founder 12.11, spec 33 §3): the canvas's double tap. A SINGLE tap picks at once and does nothing else (no sheet, no flip
  * of a cap, no corner sheet) and never waits for a second; the SECOND tap on the same object inside motion.doubleTapMs opens what the
- * object has: a gutter — its properties (a sheet on the phone), a free end — «Конец желоба» (the cap there / none, L ↔ R), a corner — its
+ * object has: a gutter — its properties (a sheet on the phone), a free end — «End Cap · Left/Right» (the cap there / none, the side), a corner — its
  * sheet; two taps on the empty place — the whole drawing; with «Водосток» two quick taps on a gutter put ONE downspout. «Вписать» left
  * the header — it is a row of «⋯». Every view. Finds things by testID; waits on what it checks (no pauses).
  */
@@ -13,6 +13,11 @@ exports.run = async (h) => {
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
   const svg = () => p.getByTestId("draw-svg").first();
+  const waitFor = async (ok, what, tries = 40) => {
+    let v = await ok();
+    for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
+    h.expect(!!v, what);
+  };
   const frames = () => p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // what a tap would have done is drawn
   const stroke = async (a, b) => {
     await p.mouse.move(a[0], a[1]);
@@ -58,7 +63,7 @@ exports.run = async (h) => {
   h.expect(true, "a double tap on a gutter: its properties");
   await h.shot("run");
 
-  // — a free end: a single tap does not flip the cap; the second opens «Конец желоба»
+  // — a free end: a single tap does not flip the cap; the second opens «End Cap · …»
   const caps = () => svg().locator('[id^="cap:"]').evaluateAll((gs) => gs.map((g) => g.id));
   const capIds = await caps();
   h.expect(capIds.length === 2, `two caps (${capIds.join(", ")})`);
@@ -74,28 +79,33 @@ exports.run = async (h) => {
   await pastDoubleTap(p);
   await doubleTap(p, capAt[0], capAt[1]);
   await tid("end-sheet").waitFor({ timeout: 5000 });
-  // «без заглушки»: the end has no cap (stored in the gutter's geometry), «с заглушкой» puts it back
-  await tid("end-cap-off").click();
+  // the head names the end by the letter its cap carries; the «End Cap» switch off: the end has no cap (stored in the gutter's
+  // geometry), the head says «Конец gutter · …»; on again puts it back (spec 56 §3а.2)
+  const title = async () => (await tid("end-title").innerText()).trim();
+  h.expect(/^End Cap · (Left|Right)$/.test(await title()), `the head: «${await title()}»`);
+  await tid("end-cap").click();
+  await waitFor(async () => /^Конец gutter · (Left|Right)$/.test(await title()), "the head without the cap");
   await p.waitForFunction((k) => ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt && e.geom.noCap && e.geom.noCap.some(Boolean)), KEY, { timeout: 8000 });
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 1, null, { timeout: 5000 });
-  // closed and opened again: a double tap on the end WITHOUT a cap opens «Конец желоба» (not the gutter's properties) — «с заглушкой» is there (review of #1366)
+  // closed and opened again: a double tap on the end WITHOUT a cap opens the end's sheet (not the gutter's properties) — the «End Cap» switch is there (review of #1366)
   await closeSheet();
   await pastDoubleTap(p);
   await canvasAt(p, capAt[0], capAt[1]);
   await doubleTap(p, capAt[0], capAt[1]);
   await tid("end-sheet").waitFor({ timeout: 5000 });
-  await tid("end-cap-on").click();
+  h.expect((await tid("end-cap").getAttribute("aria-checked")) === "false", "the switch is off");
+  await tid("end-cap").click();
   await p.waitForFunction(() => document.querySelectorAll('[data-testid="draw-svg"] [id^="cap:"]').length === 2, null, { timeout: 5000 });
-  await p.waitForFunction((k) => !((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt && e.geom.noCap && e.geom.noCap.some(Boolean)), KEY, { timeout: 8000 }); // «с заглушкой»: the mark is gone from the saved copy too
+  await p.waitForFunction((k) => !((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters?.elements || []).some((e) => e.kind === "run" && !e.deletedAt && e.geom.noCap && e.geom.noCap.some(Boolean)), KEY, { timeout: 8000 }); // the switch on: the mark is gone from the saved copy too
   await h.shot("end");
   await closeSheet();
 
-  // the same as rows of «⋯» (a screen reader has no double tap): «Конец желоба · L/R» of the picked gutter's free ends, and «Свойства» on the phone
+  // the same as rows of «⋯» (a screen reader has no double tap): «End Cap · Left/Right» of the picked gutter's free ends, and «Свойства» on the phone
   const menuRow = async (re) => {
     await p.getByTestId("draw-who").locator("visible=true").getByRole("button").click();
     await p.getByText(re).last().click();
   };
-  await menuRow(/^Конец желоба · [LR]$/);
+  await menuRow(/^End Cap · (Left|Right)$/);
   await tid("end-sheet").waitFor({ timeout: 5000 });
   await closeSheet();
   if (!wide) {

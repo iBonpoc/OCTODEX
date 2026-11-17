@@ -147,7 +147,7 @@ exports.run = async (h) => {
   await doubleTap(p, k.x + k.width / 2, k.y + k.height / 2);
   await tid("corner-sheet").waitFor({ timeout: 5000 });
   const kind0 = (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim();
-  const other = kind0 === "наружный" ? "внутренний" : "наружный";
+  const other = kind0 === "Наружный" ? "Внутренний" : "Наружный";
   await tid("corner-kind").getByRole("radio", { name: other, exact: true }).click();
   await waitFor(async () => (await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === other, `switched to ${other}`);
   h.expect((await tid("corner-sheet").count()) === 1, "the sheet stays open");
@@ -173,7 +173,7 @@ exports.run = async (h) => {
   const cm = [deg.x, deg.y];
   const far = (qs) => qs.reduce((n, q) => n + Math.hypot(q.x - cm[0], q.y - cm[1]), 0) / qs.length;
   const faceOut = far(at(/^лицевая /)) > far(at(/^стена /));
-  h.expect(faceOut === (kind0 === "наружный"), `${kind0}: the face is ${kind0 === "наружный" ? "outside" : "inside"} the angle`);
+  h.expect(faceOut === (kind0 === "Наружный"), `${kind0}: the face is ${kind0 === "Наружный" ? "outside" : "inside"} the angle`);
   // 4) the triangle in plain words
   h.expect(/^A — /.test(await tid("tri-a").innerText()) && /^B — /.test(await tid("tri-b").innerText()) && /^C — /.test(await tid("tri-c").innerText()), "A, B, C in plain words");
   await h.shot("corner");

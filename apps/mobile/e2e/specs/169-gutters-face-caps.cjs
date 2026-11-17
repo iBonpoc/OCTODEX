@@ -59,7 +59,7 @@ exports.run = async (h) => {
   await p.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))); // two frames: what the tap would have done is drawn
   h.expect(JSON.stringify(await caps()) === JSON.stringify(c0), "a single tap on a cap flips nothing");
   await pastDoubleTap(p); // the single tap above is a first tap on its own, not the first half of the next pair
-  // the second tap on the same cap: «Конец желоба» — a row there swaps the caps' side (the whole line's face)
+  // the second tap on the same cap: «End Cap · …» — «Поменять сторону» there swaps the caps' side (the whole line's face)
   await p.mouse.click(...capAt);
   await p.mouse.click(...capAt);
   await tid("end-sheet").waitFor({ timeout: 5000 });
@@ -94,7 +94,7 @@ exports.run = async (h) => {
 
   // a tap on the corner → «Угол» → the other kind
   const k0 = await openCorner();
-  const other = k0 === "наружный" ? "внутренний" : "наружный";
+  const other = k0 === "Наружный" ? "Внутренний" : "Наружный";
   await tid("corner-kind").getByRole("radio", { name: other, exact: true }).click();
   // the sheet stays open after the choice (founder 09.11, версия 474): the choice shows, then the sheet is closed
   await waitFor(async () => ((await tid("corner-kind").locator('[aria-checked="true"]').innerText()).trim() === other), `${other} picked`);

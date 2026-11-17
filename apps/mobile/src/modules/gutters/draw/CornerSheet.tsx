@@ -1,32 +1,30 @@
 /**
- * The corner's sheet (#1276, founder 12.11: «чертёж угла — каша, ничего не понятно»; spec 33 §1): from the top — the kind (outside / inside) as two
- * pictures with their words and one line what it changes; the drawing of the corner (two gutters from above as strips, the wall solid, the face
- * dashed, the cut line, the arc with its degrees); under it a table for each piece — along the wall, along the face, the cut; one line that the
- * measure is rough; the splash guard of an inside corner; «Разъединить угол»; the triangle for an angle taken on site.
+ * The corner's sheet (#1276, founder 12.11; spec 33 §1; spec 56 §3а.2, wave G, founder 16.11 — variant A): the title «Угол» and its «?»
+ * (what the kinds mean, and that the side of the whole line changes); three tiles «Наружный · Внутренний | Разъединить» (`OptionTiles`);
+ * the drawing of the corner and a card for each piece — along the wall, along the face, the cut; the splash guard of an inside corner
+ * (`ToggleRow`); the triangle for an angle taken on site. Only components of src/ui (rule 29).
  * The sheet only shows and asks: the drawing's edits are the owner's (`DrawScreen`).
  */
 import { useState } from "react";
 import { View } from "react-native";
-import { component, radius, size as sizes, space } from "@octo/design-tokens";
+import { component, radius, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button, StatusChip, Toggle } from "@/ui/controls";
-import { fillStyle } from "@/ui/fill";
-import { Icon, Press, T } from "@/ui/primitives";
+import { HelpButton } from "@/ui/overlays";
+import { OptionTiles } from "@/ui/optionTile";
+import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { SelectedCheck } from "@/ui/selectedCheck";
+import { ToggleRow } from "@/ui/toggleRow";
 import { fmtLen, type LenFormat } from "../canvas/format";
 import { fmtDeg } from "../canvas/cornerPlan";
 import { cutAngleDeg, type CornerCutRun, type Drawing, type FoundCorner } from "../geometry";
 import { CornerSketch, CornerTriangle } from "./CornerSketch";
 
-export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, onSplit, onAngle }: {
+export function CornerSheet({ d, f, cut, fmt, splashOn, onKind, onSplash, onSplit, onAngle }: {
   d: Drawing;
   f: FoundCorner;
   cut: { angleDeg: number; runs: CornerCutRun[] } | null;
   fmt: LenFormat;
-  /** the lengths were taped (not rough) */
-  tape: boolean;
   splashOn: boolean;
   onKind: (kind: "in" | "out") => void;
   onSplash: (on: boolean) => void;
@@ -39,33 +37,24 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
   const kind = f.kind === "in" ? "in" : "out";
   return (
     <View testID="corner-sheet" style={{ gap: space[3] }}>
-      <T v="heading" w="semibold">{t("mod.gutters.draw.cornerTitle")}</T>
+      {/* the title and its «?» right after it (DS Б7) */}
+      <RowView style={{ gap: space[2], alignItems: "center" }}>
+        <T v="heading" w="semibold">{t("mod.gutters.draw.cornerTitle")}</T>
+        <HelpButton title={t("mod.gutters.draw.cornerTitle")} text={t("mod.gutters.draw.cornerHelp")} testID="corner-help" />
+      </RowView>
       {f.kind === "bay" ? <T tone="mut">{t("mod.gutters.draw.cornerBay")}</T> : null}
-      {/* the kind: two pictures with their words (the diamond is hollow outside and has a dot inside, as on the canvas); the choice is the «Заливка» */}
-      <View testID="corner-kind"><RowView style={{ gap: space[2] }}>
-        {(["out", "in"] as const).map((k) => {
-          const on = kind === k;
-          const label = t(k === "in" ? "mod.gutters.attr.ck.in" : "mod.gutters.attr.ck.out");
-          return (
-            <View key={k} style={{ flex: 1 }}>
-              <Press
-                onPress={() => onKind(k)}
-                accessibilityRole="radio"
-                accessibilityLabel={label}
-                accessibilityState={{ selected: on, checked: on }}
-                {...({ "aria-checked": on } as object)}
-                visibleHeight={component.button.phone}
-                style={{ height: component.button.phone, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: space[2], borderRadius: radius.pill, ...(on ? fillStyle(c) : { backgroundColor: "transparent" }), borderWidth: component.hairline, borderColor: on ? "transparent" : c.bd }}
-              >
-                <Icon name={k === "in" ? "cornerIn" : "cornerOut"} s={sizes.iconSm} color={on ? c.ink : c.mut} />
-                <T v="body" w="semibold" style={{ color: on ? c.ink : c.mut }}>{label}</T>
-                {on ? <SelectedCheck small /> : null}
-              </Press>
-            </View>
-          );
-        })}
-      </RowView></View>
-      <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
+      {/* the kind and «Разъединить угол» (#933: two gutters with their own end caps; «Назад» and the toast bring it back) — one row of tiles */}
+      <OptionTiles
+        label={t("mod.gutters.draw.cornerTitle")}
+        items={[
+          { key: "out", label: t("mod.gutters.draw.kindOut"), icon: "cornerOut" },
+          { key: "in", label: t("mod.gutters.draw.kindIn"), icon: "cornerIn" },
+        ]}
+        value={kind}
+        onChange={onKind}
+        action={{ label: t("mod.gutters.draw.unlink"), icon: "unlink", onPress: onSplit, testID: "corner-split" }}
+        testID="corner-kind"
+      />
       {cut ? (
         <View testID="corner-cut" style={{ gap: space[2] }}>
           <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
@@ -95,17 +84,9 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
               </RowView>
             </View>
           ))}
-          {/* the measure is rough: ONE line, at the bottom of the cut */}
         </View>
       ) : null}
-      {f.kind === "in" ? (
-        <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
-          <T v="body" style={{ flex: 1 }}>{t("mod.gutters.draw.splash")}</T>
-          <View testID="corner-splash"><Toggle on={splashOn} onChange={onSplash} label={t("mod.gutters.draw.splash")} /></View>
-        </RowView>
-      ) : null}
-      {/* «Разъединить угол» (#933): two gutters with their own end caps; «Назад» and the toast bring it back */}
-      <View testID="corner-split"><Button label={t("mod.gutters.draw.cornerSplit")} variant="secondary" size="sm" onPress={onSplit} /></View>
+      {f.kind === "in" ? <ToggleRow label={t("mod.gutters.draw.splash")} value={splashOn} onChange={onSplash} testID="corner-splash" /> : null}
       <CornerTriangle key={f.id} d={d} f={f} onAngle={onAngle} />
     </View>
   );

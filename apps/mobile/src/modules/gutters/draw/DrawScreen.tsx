@@ -800,7 +800,6 @@ export default function DrawScreen() {
     setSelected(null);
     later.current();
   };
-  const tape = m?.accuracy === "tape";
   const endRun = endSheet ? drawing.runs.find((r) => r.id === endSheet.id) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
@@ -1017,7 +1016,7 @@ export default function DrawScreen() {
   // the free ends of the picked gutter (a corner and a butted end have no cap to talk about; «без заглушки» stays one)
   const endRun0 = canSave ? drawing.runs.find((r) => r.id === selected) : undefined;
   const endRows = (() => {
-    if (!endRun0) return [] as { end: 0 | 1; side: string }[];
+    if (!endRun0) return [] as { end: 0 | 1; side: "L" | "R" }[];
     const found = findCorners(drawing), kinds = runEnds(drawing, found)[endRun0.id], hs = houseSides(drawing)(endRun0);
     return ([0, 1] as const).filter((e) => !!endRun0.noCap?.[e] || kinds?.[e]?.kind === "cap").map((e) => ({ end: e, side: capSide(e, hs) }));
   })();
@@ -1027,7 +1026,7 @@ export default function DrawScreen() {
     // what a double tap opens, as rows too (a screen reader has no double tap, a phone on its side has no panel): the properties of the picked
     // gutter / downspout, and «Конец желоба» of each of its free ends (named by the letter the cap carries on the canvas)
     ...(canSave && sel && !wide ? [{ key: "props" as const, label: t("mod.gutters.attr.props") }] : []),
-    ...endRows.map((r) => ({ key: `end${r.end}` as const, label: `${t("mod.gutters.end.title")} · ${r.side}` })),
+    ...endRows.map((r) => ({ key: `end${r.end}` as const, label: t(endRun0?.noCap?.[r.end] ? "mod.gutters.end.titleBare" : "mod.gutters.end.titleCap", { s: t(r.side === "L" ? "mod.gutters.end.left" : "mod.gutters.end.right") }) })),
     // where the toolbar sits (#739); «Точность замера» is gone — nothing is written about how it was measured (#768, #1764)
     { key: "place", label: t("mod.gutters.draw.placeItem") },
     { key: "layers", label: t("mod.gutters.draw.layersItem") },
@@ -1440,9 +1439,14 @@ export default function DrawScreen() {
         {endRun && endSheet ? (
           <EndSheet
             capOff={!!endRun.noCap?.[endSheet.end]}
-            side={houseSides(drawing)(endRun)}
+            side={capSide(endSheet.end, houseSides(drawing)(endRun))}
             onCap={(off) => commit(setCapOff(cur.current.drawing, endSheet.id, endSheet.end, off))}
-            onFlip={() => commit(flipFace(cur.current.drawing, endSheet.id))}
+            onFlip={() => {
+              // the whole line's face flips at once: the toast brings it back (spec 56 §3а.2)
+              const before = cur.current.drawing;
+              commit(flipFace(before, endSheet.id));
+              toast.show(t("mod.gutters.end.flipped"), localUndo(() => commit(before, cur.current.drawing, true)));
+            }}
           />
         ) : null}
       </Sheet>
@@ -1453,7 +1457,6 @@ export default function DrawScreen() {
             f={corner}
             cut={cut}
             fmt={ch.lenFormat}
-            tape={tape}
             splashOn={!splashOff(drawing, corner)}
             onKind={cornerKind}
             onSplash={(on) => commit(setCornerSplash(cur.current.drawing, corner, on))}
