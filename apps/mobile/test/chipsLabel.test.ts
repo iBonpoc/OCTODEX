@@ -39,7 +39,7 @@ export function chipTags(src: string): { tag: string; line: number }[] {
 }
 
 /** how many <ChoiceChips> are still the old chips (no `label`). Lower it as screens move over; never raise it. */
-const LEGACY_MAX = 56; // 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/ language and kind of work, «Местоположение»)
+const LEGACY_MAX = 55; // 72 → 59: spec 56 wave 4 (client) took 8 old chips away; 59 → 56: wave 4б (/f/, «Местоположение»); 56 → 55: the catalog item type (§3а.4)
 
 describe("ChoiceChips name their field (#1095)", () => {
   const legacy: string[] = [];
