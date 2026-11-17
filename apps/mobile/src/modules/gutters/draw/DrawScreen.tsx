@@ -1328,7 +1328,8 @@ export default function DrawScreen() {
           ) : null}
           {inStore ? (
             // the header's buttons are one height (DS §19а: «высота кнопки 36»; founder 16.11, #1752: «Готово другого размера»)
-            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" onPress={() => void done()} /></View>
+            // one accent on the screen (rule 2): wider, while the window shows «Сохранить», «Готово» steps back to `secondary`
+            <View testID="draw-done"><Button label={t("mod.gutters.view.done")} size="phone" variant={wide && attrs ? "secondary" : "primary"} onPress={() => void done()} /></View>
           ) : null}
         </RowView>
         {canSave ? null : (

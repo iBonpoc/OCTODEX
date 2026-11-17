@@ -18,6 +18,7 @@ import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { FracKeys, FRAC_KEYS, type FracKey } from "@/ui/fracKeys";
 import { SelectField } from "@/ui/selectField";
+import { HelpButton } from "@/ui/overlays";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Menu } from "@/ui/overlays";
@@ -151,22 +152,28 @@ const e16Of = (k: FracKey) => FRAC_KEYS.indexOf(k) * 2;
  */
 function LengthRow({ len, onLen, bad }: { len: LenFields; onLen: (x: Partial<LenFields>) => void; bad?: boolean }) {
   const { t } = useI18n();
+  // the inches are at fault when they are not a number below 12; else the feet (empty, 0, too long)
+  const inN = len.inc.trim() === "" ? 0 : Number(len.inc);
+  const inBad = !Number.isFinite(inN) || inN < 0 || inN >= 12;
   return (
     <Field label={t(k("length"))} testID="attr-length">
-      <RowView style={{ gap: space[2], alignItems: "center" }}>
-        <View style={{ width: component.qtyFieldW }} testID="attr-length-ft">
-          <TextField type="integer" value={len.ft} onChangeText={(ft) => onLen({ ft })} label={t(k("ft"))} selectOnFocus />
-        </View>
-        <T v="body" tone="mut">{t(k("ft"))}</T>
-        <View style={{ width: component.qtyFieldW }} testID="attr-length-in">
-          <TextField type="number" value={len.inc} onChangeText={(inc) => onLen({ inc })} label={t(k("in"))} selectOnFocus />
-        </View>
-        <FracText value={len.e16} testID="attr-length-frac" />
-        <T v="body" tone="mut">{t(k("in"))}</T>
-      </RowView>
+      {/* ft · in, the unit beside the field (inside it — once the core's narrow field keeps its suffix in, #1858 note to Экраны); the fraction is
+          the keys' (no second glyph beside the field). Not a number:
+          the error under the field at fault — `alert`, `bad`, its frame `bad` (DS §11 п.2) */}
+      <View testID={bad ? "attr-length-bad" : undefined}>
+        <RowView style={{ gap: space[2], alignItems: "flex-start" }}>
+          <View style={{ flex: 1, minWidth: 0 }} testID="attr-length-ft">
+            <TextField type="integer" value={len.ft} onChangeText={(ft) => onLen({ ft })} label={t(k("ft"))} selectOnFocus error={bad && !inBad ? t(w("badFt")) : undefined} />
+          </View>
+          <View style={{ minHeight: sizes.fieldPhone, justifyContent: "center" }}><T v="body" tone="mut">{t(k("ft"))}</T></View>
+          <View style={{ flex: 1, minWidth: 0 }} testID="attr-length-in">
+            <TextField type="number" value={len.inc} onChangeText={(inc) => onLen({ inc })} label={t(k("in"))} selectOnFocus error={bad && inBad ? t(w("badIn")) : undefined} />
+          </View>
+          <View style={{ minHeight: sizes.fieldPhone, justifyContent: "center" }}><T v="body" tone="mut">{t(k("in"))}</T></View>
+        </RowView>
+      </View>
       <FracKeys value={keyOf(len.e16)} onKey={(key) => onLen({ e16: e16Of(key) })} testID="attr-length-fracs" />
       <Pull ft={len.ft} inc={len.inc} e16={len.e16} onPull={(x) => onLen({ ft: String(x.ft), inc: String(x.inch), e16: x.sixteenths })} testID="attr-length-tape" />
-      {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
 }
@@ -424,7 +431,11 @@ export function RunAttrsView({
       {/* «Для новых желобов»: its title, «Сбросить» and the line under it are the owner's (DrawScreen), above these rows */}
       {forNew ? null : (
         <View style={{ gap: space[1] }} testID="attr-title">
-          <T v="heading" w="semibold">{n ? t(w("runN"), { n }) : t(k("run"))}</T>
+          <RowView style={{ alignItems: "center", gap: space[2] }}>
+            <T v="heading" w="semibold">{n ? t(w("runN"), { n }) : t(k("run"))}</T>
+            {/* «?» at the window's title stays (DS Б7, table of the Gutters window) */}
+            <HelpButton title={n ? t(w("runN"), { n }) : t(k("run"))} text={t(w("runHelp"))} testID="attr-help" />
+          </RowView>
           <T v="caption" tone="mut">{fmtLen(run.lengthIn ?? drawnLengthIn(run), ch.lenFormat)}</T>
         </View>
       )}

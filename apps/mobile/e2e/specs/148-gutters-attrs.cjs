@@ -92,7 +92,7 @@ exports.run = async (h) => {
   h.expect((await tid("attr-more").count()) === 0, "no «Ещё» in the gutter's window");
   h.expect((await tid("attr-finish").count()) === 0, "no separate painted / bare: «Без покраски» is a colour (founder 09.11)");
   if (!wide) await h.shot("props");
-  h.expect(/K$/.test(await attrValue(p, "attr-profile")), "K-style by default");
+  h.expect(/K-Style$/.test(await attrValue(p, "attr-profile")), "K-Style by default, its full name");
   await chooseAttr(p, "attr-profile", "half_round");
   await waitFor(async () => /Полукруглый$/.test(await attrValue(p, "attr-profile")), "half round picked");
   h.expect(/^5″/.test(await attrValue(p, "attr-size")), "the size follows: 5″");
