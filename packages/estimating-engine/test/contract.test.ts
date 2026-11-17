@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { visitPayment, acceptPayment, canIssue, clientMoney, contractStatement, invoiceOwes, invoiceTaxShare, progressAmount } from "../src/contract.js";
+import { visitPayment, acceptPayment, canIssue, clientMoney, contractStatement, invoiceOwes, invoicesOwe, invoiceTaxShare, progressAmount } from "../src/contract.js";
 import { parseMoneyToCents } from "../src/custom.js";
 
 describe("contract statement", () => {
@@ -126,6 +126,9 @@ describe("money rule 8 debts (#1550, #1553, #1537)", () => {
     expect(invoiceOwes({ totalCents: 51000, paidCents: 51000 })).toBe(0);
     expect(invoiceOwes({ totalCents: 51000, paidCents: 60000 })).toBe(0);
     expect(invoiceOwes({ totalCents: 0, paidCents: 0 })).toBe(0);
+    // a list owes the sum of what each owes: an overpaid invoice takes nothing from the others (#1898)
+    expect(invoicesOwe([{ totalCents: 51000, paidCents: 20000 }, { totalCents: 10000, paidCents: 15000 }, { totalCents: 700, paidCents: 0 }])).toBe(31700);
+    expect(invoicesOwe([])).toBe(0);
   });
   it("#1553: a void invoice is not taken off the contract (invoiced, paid, to invoice, due, remaining)", () => {
     const live = { totalCents: 20000, paidCents: 20000 };
