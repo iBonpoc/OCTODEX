@@ -72,6 +72,9 @@ try {
   // an old native module: the splash goes as it did
 }
 
+/** the splash goes now (the crash screen replaces BootRoot, which would have hidden it on its first layout) */
+export const releaseSplash = (): void => void splash()?.hideAsync().catch(() => {});
+
 const BootCtx = createContext<() => void>(() => {});
 
 /** the shell calls it once it is on screen — before the paint, so the layer is over the shell in its very first frame */
@@ -80,12 +83,12 @@ export function useBootDone(): void {
   useLayoutEffect(() => done(), [done]);
 }
 
-function deviceDocLang(): DocLang {
+export function deviceDocLang(): DocLang {
   const code = getLocales()[0]?.languageCode ?? "en";
   return code === "ru" || code === "es" ? code : "en";
 }
 
-function reload(): void {
+export function reload(): void {
   if (Platform.OS === "web") globalThis.location?.reload();
   else Updates.reloadAsync().catch(() => {});
 }
