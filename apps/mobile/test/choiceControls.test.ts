@@ -43,7 +43,6 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
   const CHECKED_ALLOWED = ["ui/doneCircle.tsx", "ui/toggleRow.tsx"];
   const CHECKED_LEGACY: Record<string, number> = {
     "features/LegalAgree.tsx": 2,
-    "features/VisitChecklist.tsx": 2,
     "features/estimate/OptionsCard.tsx": 2,
     "features/showcase/Rows.tsx": 1,
     "modules/gutters/draw/AttrPanel.tsx": 1,
@@ -87,9 +86,7 @@ describe("choice controls (DS §21.2 п.27, spec 56 §9.3)", () => {
     "app/settings/index.tsx": 2,
     "app/team.tsx": 1,
     "features/EstimateView.tsx": 1,
-    "features/JobLinesBlock.tsx": 2,
     "features/PushSettings.tsx": 2,
-    "features/VisitChecklist.tsx": 2,
     "features/estimate/LineRow.tsx": 4,
     "features/showcase/Haptics.tsx": 1,
     "features/showcase/Rows.tsx": 2,

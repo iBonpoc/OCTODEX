@@ -104,7 +104,7 @@ const CREATES: Creates = {
   "job.create": (o) => [o.id], "job.update": none, "job.tags": none, "jobLine.save": (o) => (o.isNew ? [o.line.id] : []),
   "jobLine.remove": none, "jobLine.restore": none, "jobType.save": (o) => (o.isNew ? [o.jobType.id] : []),
   "estimate.category": none, "property.update": none, "property.save": (o) => [o.property.id], "property.gate": none,
-  "note.add": (o) => [o.id], "note.update": none, "catalog.save": (o) => [o.item.id], "catalog.remove": none,
+  "note.add": (o) => [o.id], "note.update": none, "catalog.save": (o) => [o.item.id], "catalog.groupPrice": none, "catalog.remove": none,
   "notice.read": none, "estimate.sign": none, "estimate.countersign": (o) => [o.jobId, o.invoiceId], "estimate.revoke": none,
   "estimate.decline": none, "estimate.reopen": none, "member.signature": (o) => [o.id], "member.update": none,
   "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id, ...(o.receiptFileId ? [o.receiptFileId] : [])],

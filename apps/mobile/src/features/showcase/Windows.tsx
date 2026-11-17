@@ -3,13 +3,13 @@ import { useHeldSheet } from "@/ui/heldSheet";
 import { View } from "react-native";
 import { motion, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
-import { Button } from "@/ui/controls";
-import { HelpButton, Sheet, SheetScroll } from "@/ui/overlays";
+import { Button, TextField } from "@/ui/controls";
+import { HelpButton, Sheet, SheetScroll, UnsavedDialog, useSheetClose } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
-type Which = null | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list";
+type Which = null | "unsaved" | "fit" | "footer" | "medium" | "large" | "pages" | "stuck" | "chainA" | "chainB" | "chainC" | "list";
 
 /** the third step of the chain: mounted by the owner's condition and recreated at each opening — the way a sheet is meant to be mounted */
 function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExited: () => void; onClose: () => void }) {
@@ -19,6 +19,13 @@ function ChainSheetC({ visible, onExited, onClose }: { visible: boolean; onExite
       <T v="body">{t("ds.sheet.chainBodyC")}</T>
     </Sheet>
   );
+}
+
+/** «Закрыть» of a property window (DS §7.3): the sheet's own close — with unsaved changes it asks first (`useSheetClose`) */
+function CloseButton() {
+  const { t } = useI18n();
+  const close = useSheetClose();
+  return <Button testID="showcase-unsaved-close" label={t("common.close")} variant="secondary" size="bar" full onPress={close} />;
 }
 
 /** Windows (DS §10): the sheet in every height, with the pinned bottom bar and with a page inside. */
@@ -32,6 +39,11 @@ export function WindowsSection() {
   const [selfAsked, setSelfAsked] = useState(0);
   const [selfDone, setSelfDone] = useState(0);
   const chainC = useHeldSheet(open === "chainC" ? "c" : null); // a sheet mounted by the owner's condition: it goes out led, and starts fresh // how many times the stubborn sheet was asked to close
+  // «Сохранить изменения?» with the words of a module's property windows (DS §7.3, #1858): a sheet and the window beside a canvas
+  const [kept, setKept] = useState("");
+  const [draft, setDraft] = useState("");
+  const [dialog, setDialog] = useState(false);
+  const [dialogSaved, setDialogSaved] = useState(0);
   const s = SECTIONS.find((x) => x.id === "windows")!;
   const close = () => {
     setOpen(null);
@@ -68,6 +80,16 @@ export function WindowsSection() {
         </View>
       </Card>
       <Card>
+        {row("unsaved", t("ds.unsaved.sheet"), t("ds.unsaved.sheetHint"))}
+        <View testID="showcase-unsaved-dialog" style={{ gap: space[1] }}>
+          <Button label={t("ds.unsaved.dialog")} variant="secondary" onPress={() => setDialog(true)} />
+          <T v="caption" tone="mut">
+            {t("ds.unsaved.dialogHint")}
+          </T>
+          <View testID="showcase-unsaved-saved">
+            <T v="caption">{t("ds.unsaved.saved", { n: dialogSaved })}</T>
+          </View>
+        </View>
         {row("fit", t("ds.sheet.fit"), t("ds.sheet.fitHint"))}
         {row("footer", t("ds.sheet.footer"), t("ds.sheet.footerHint"))}
         {row("medium", t("ds.sheet.medium"), t("ds.sheet.mediumHint"))}
@@ -139,6 +161,45 @@ export function WindowsSection() {
           <Button label={t("ds.sheet.stuckDone")} onPress={close} />
         </View>
       </Sheet>
+      <Sheet
+        visible={open === "unsaved"}
+        onClose={() => {
+          setDraft(kept);
+          close();
+        }}
+        title={t("ds.unsaved.sheet")}
+        dirty={draft !== kept}
+        askBack
+        askText={t("ds.unsaved.sheetText")}
+        onSave={() => {
+          setKept(draft);
+          close();
+        }}
+        footer={
+          <RowView>
+            <View style={{ flex: 1 }}>
+              <CloseButton />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Button testID="showcase-unsaved-save" label={t("ds.sheet.save")} size="bar" full onPress={() => { setKept(draft); close(); }} />
+            </View>
+          </RowView>
+        }
+      >
+        <View testID="showcase-unsaved-field">
+          <TextField type="title" value={draft} onChangeText={setDraft} placeholder={t("ds.unsaved.field")} label={t("ds.unsaved.field")} />
+        </View>
+      </Sheet>
+      <UnsavedDialog
+        visible={dialog}
+        text={t("ds.unsaved.dialogText")}
+        onSave={() => {
+          setDialogSaved((n) => n + 1);
+          setDialog(false);
+        }}
+        onDiscard={() => setDialog(false)}
+        onBack={() => setDialog(false)}
+      />
       <Sheet visible={open === "fit"} onClose={close} title={t("ds.sheet.fit")}>
         <T v="body">{t("ds.sheet.body")}</T>
       </Sheet>
