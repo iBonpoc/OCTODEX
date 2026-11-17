@@ -2,7 +2,7 @@ const { sheetGone, waited } = require("../sheet.cjs");
 /**
  * Spec 56 wave 4 — the client (§3а.3, §3а.5, §3а.6), every view, by testID:
  * - «Контакты клиента»: no chips and no segments left (no radio, tablist or checkbox in the sheet); the phone's label menu changes its
- *   kind; «⊕ Добавить телефон» adds a row; «⊖» removes it and «Отменить» brings it back; «Сделать основным» moves a number up and
+ *   kind; «⊕ Добавить телефон» adds a row; «⊖» removes it (its undo toast over the sheet — the separate PR); «Сделать основным» moves a number up and
  *   the saved primary is the first one;
  * - the client form: «Источник» is a SelectField row; «Счета на другой адрес» shows and hides the address fields under it;
  * - the client card: number, status and tags on one line (one top, no wrap); «Контакты · N» opens the sheet.
@@ -11,13 +11,6 @@ exports.run = async (h) => {
   const p = h.page;
   const vis = (id) => p.getByTestId(id).locator("visible=true").first();
   const shown = (id, timeout = 4000) => p.waitForFunction((id) => [...document.querySelectorAll(`[data-testid="${id}"]`)].some((e) => e.offsetParent !== null), id, { timeout });
-  const expectBack = async (press, id) => {
-    for (let i = 0; i < 10; i++) {
-      await press();
-      if (await shown(id, 700).then(() => true, () => false)) return;
-    }
-    throw new Error(`${id} did not come back`);
-  };
   const gone = (id) => p.waitForFunction((id) => ![...document.querySelectorAll(`[data-testid="${id}"]`)].some((e) => e.offsetParent !== null), id, { timeout: 4000 });
 
   // the card: one line «CLT-0001 · ✓ Клиент · VIP · Постоянный», never wrapped
@@ -69,29 +62,15 @@ exports.run = async (h) => {
   await sheet.getByTestId("people-0-phones-add").click();
   await shown("people-0-phones-row-2");
   await sheet.getByTestId("people-0-phones-row-2-value").locator("input").fill("6265550188");
-  // «⊖» removes the second number, «Отменить» brings it back
+  // «⊖» removes the second number (the new one moves up to row 1)
   const second = await sheet.getByTestId("people-0-phones-row-1-value").locator("input").inputValue();
   await sheet.getByTestId("people-0-phones-row-1-remove").click();
   await gone("people-0-phones-row-2");
   h.expect((await sheet.getByTestId("people-0-phones-row-1-value").locator("input").inputValue()) !== second, "«⊖» removed the number");
-  await h.expectText(/Номер удалён/, "the toast offers to undo");
-  // the toast stands over the sheet (DS §15.2 «Место при открытой шторке»): «Вернуть» is the top thing at its point, above the footer
-  await shown("toast-undo");
-  const over = await p.evaluate(() => {
-    const u = [...document.querySelectorAll('[data-testid="toast-undo"]')].find((e) => e.offsetParent !== null);
-    const f = [...document.querySelectorAll('[data-testid="sheet-footer"]')].find((e) => e.offsetParent !== null);
-    const r = u.getBoundingClientRect();
-    const top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
-    return { onTop: !!top && u.contains(top), bottom: r.bottom, footerTop: f ? f.getBoundingClientRect().top : null };
-  });
-  h.expect(over.onTop, `«Вернуть» is not covered by the sheet (${JSON.stringify(over)})`);
-  h.expect(over.footerTop === null || over.bottom <= over.footerTop, `the toast stands above the sheet's «Сохранить» (${JSON.stringify(over)})`);
-  // «Отменить» works only toastArmMs after the toast showed (ui/toastArm.ts): press until the row is back (no fixed sleep)
-  await expectBack(() => p.getByRole("button", { name: "Отменить", exact: true }).last().click(), "people-0-phones-row-2");
-  h.expect((await sheet.getByTestId("people-0-phones-row-1-value").locator("input").inputValue()) === second, "«Отменить» brought the number back");
+  // the undo toast over the open sheet is the separate PR (DS §15.2, rule 27: checked on the iPhone with #1964)
   // «Сделать основным» on the new number: it goes up and is saved as the primary
-  await sheet.getByTestId("people-0-phones-row-2-label").click();
-  await p.getByTestId("people-0-phones-row-2-label-primary").click();
+  await sheet.getByTestId("people-0-phones-row-1-label").click();
+  await p.getByTestId("people-0-phones-row-1-label-primary").click();
   await p.getByRole("menu").waitFor({ state: "detached" });
   h.expect(/555-0188/.test(await sheet.getByTestId("people-0-phones-row-0-value").locator("input").inputValue()), "«Сделать основным» moved the number up");
   h.expect(/основной/.test(await sheet.getByTestId("people-0-phones-row-0-note").innerText()), "«основной» under the first number");
