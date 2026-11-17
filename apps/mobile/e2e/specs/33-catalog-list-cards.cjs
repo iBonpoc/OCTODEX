@@ -6,7 +6,8 @@
  *   (spec 06 §7.6 exception for the catalog: the price is needed for an estimate on site);
  * - groups by kind under «All»;
  * - «В убытке» (catalogItemEconomics, #98): a service priced below its cost → the office sees the sign, a red edge and a
- *   negative margin; other cards have a real cost and margin, not «—»; the technician sees no sign.
+ *   negative margin; other cards have a real cost and margin, not «—»; the technician sees no sign;
+ * - #1837: sales without our costs (db.costsVisible false) sees neither the tiles nor the sign (one rule, not the role).
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 
@@ -64,4 +65,19 @@ exports.run = async (h) => {
   h.expect(/\$[\d,.]+ \//.test(body), "tech sees the selling price");
   h.expect(!body.includes("Себестоимость") && !body.includes("Маржа"), "tech never sees cost or margin");
   h.expect(body.includes(LOSS) && !body.includes("В убытке"), "tech never sees «В убытке»");
+
+  // #1837: sales without our costs (the server's app.can_view_costs said no) edits the list but sees no cost, no margin,
+  // no «В убытке» — the one rule (features/access.ts seeCosts), not the role
+  const raw = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5")));
+  raw.db.costsVisible = false;
+  await h.seed("octo.db.v5", raw);
+  await h.seed("octo.role.v1", "sales");
+  await h.go("/catalog");
+  const salesCard = p.locator('[data-testid="list-card"]').filter({ hasText: LOSS }).first();
+  await salesCard.waitFor({ timeout: 8000 });
+  const sb = await p.locator("body").innerText();
+  h.expect(/\$[\d,.]+ \//.test(sb), "sales sees the selling price");
+  h.expect(!sb.includes("Себестоимость") && !sb.includes("Маржа") && !sb.includes("В убытке"), "sales without costs: no cost, margin or loss sign");
+  h.expect(!(await hasEdge(salesCard)), "no red edge either");
+  await h.shot("sales-no-costs");
 };

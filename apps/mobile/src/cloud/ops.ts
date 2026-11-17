@@ -268,6 +268,13 @@ export type Op =
   /** fields (spec 53-0): the item's columns this save changed (catalogItemChange) — an item already on the server gets only
    *  these (PRD 04 §9, merge by field); none (a new item, an op queued by an older build) — the whole row */
   | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange; fields?: string[] }
+  /** #1913 (the price-key spec, §4.6): one price for the whole price group of `itemId` (catalog_set_group_price).
+   *  `expected*` — the item's values on the phone before the change: someone else changed them first → 40001
+   *  row_version_conflict, nothing written. Costs only for who sees them (absent otherwise). `group` — its priceGroup, for
+   *  merging and dropping in the queue. */
+  | { k: "catalog.groupPrice"; itemId: string; group: string; priceCents: number; placeholder: boolean;
+      costCents?: number | null; vendorTaxBps?: number | null; markupBps?: number | null;
+      expectedPriceCents: number; expectedCostCents?: number | null; expectedTaxBps?: number | null; expectedMarkupBps?: number | null }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   /** sent: the estimate was already sent when the client signed on the phone (#1126; an older app's op has none);
@@ -640,6 +647,15 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
     case "po.save":
       return savePurchaseOrder(op, c);
+    case "catalog.groupPrice": {
+      const { error, status } = await supabase.rpc("catalog_set_group_price", {
+        p_item_id: op.itemId, p_price_cents: op.priceCents, p_placeholder: op.placeholder,
+        p_cost_cents: op.costCents ?? null, p_tax_bps: op.vendorTaxBps ?? null, p_markup_bps: op.markupBps ?? null,
+        p_expected_price_cents: op.expectedPriceCents,
+        p_expected_cost_cents: op.expectedCostCents ?? null, p_expected_tax_bps: op.expectedTaxBps ?? null, p_expected_markup_bps: op.expectedMarkupBps ?? null,
+      });
+      return run(Promise.resolve({ error, status }));
+    }
     case "po.receive": {
       const { error, status } = await supabase.rpc("po_receive", {
         p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })),

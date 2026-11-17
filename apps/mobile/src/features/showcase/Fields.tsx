@@ -8,7 +8,7 @@ import { formatPhoneUS } from "@/ui/inputFormat";
 import { NumberField } from "@/ui/numberField";
 import { formatBps, formatCents } from "@/ui/numberInput";
 import { T } from "@/ui/primitives";
-import { FieldGroup, FormMain, SectionTitle } from "@/ui/surfaces";
+import { FieldGroup, FormMain, RowView, SectionTitle } from "@/ui/surfaces";
 import { SECTIONS } from "./registry";
 
 /**
@@ -23,6 +23,8 @@ export function FieldsSection() {
   const [cents, setCents] = useState(123450);
   const [bps, setBps] = useState(825);
   const [qty, setQty] = useState("2.5");
+  const [ft, setFt] = useState("12");
+  const [inch, setInch] = useState("7 1/2");
   const [days, setDays] = useState(12);
   const paste = async () => {
     const v = await Clipboard.getStringAsync().catch(() => "");
@@ -72,6 +74,18 @@ export function FieldsSection() {
         </View>
         <NumberField kind="qty" label={t("ds.fields.qty")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={qty} onChange={setQty} testID="showcase-num-qty" />
         <NumberField kind="integer" label={t("ds.fields.integer")} value={days} onChange={setDays} testID="showcase-num-integer" />
+        {/* two narrow fields in one row (#1990): the unit stays inside its own frame on a phone */}
+        <T v="caption" tone="mut">{t("ds.fields.narrow")}</T>
+        <View testID="showcase-num-narrow">
+        <RowView style={{ alignItems: "flex-start" }}>
+          <View style={{ flex: 1 }}>
+            <NumberField kind="qty" label={t("ds.fields.ft")} unit="ft" unitWord={t("ds.fields.qtyWord")} qty={ft} onChange={setFt} testID="showcase-num-ft" />
+          </View>
+          <View style={{ flex: 1 }}>
+            <NumberField kind="qty" label={t("ds.fields.in")} unit="in" unitWord={t("ds.fields.inWord")} qty={inch} onChange={setInch} testID="showcase-num-in" />
+          </View>
+        </RowView>
+        </View>
       </FieldGroup>
     </View>
   );
