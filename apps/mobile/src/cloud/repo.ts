@@ -19,6 +19,7 @@ import { isContractKind } from "@/features/contractInvoice";
 import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry, Photo, PriceHistoryEntry } from "@/data/types";
 import { priceHistoryFromRow } from "@/features/catalogCard";
+import { roleSeesCosts } from "@/features/access";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -101,11 +102,12 @@ export function estimateTemplateFromDb(r: Row, costs: Row[], uses: Row[]): Estim
   };
 }
 
+/** #1837: the table of app.can_view_costs is in one place on the phone (features/access.ts roleSeesCosts) */
 export function costsVisibleFor(m: Row | undefined): boolean {
-  if (!m || m.status !== "active") return false;
-  if (["owner", "admin", "office"].includes(s(m.role))) return true;
-  if (["tech", "subcontractor"].includes(s(m.role))) return false;
-  return (m.permissions_override as { view_costs?: unknown } | null)?.view_costs === true;
+  if (!m) return false;
+  // the server reads view_costs as text cast to boolean: «true» as a string is a yes there too
+  const v = (m.permissions_override as { view_costs?: unknown } | null)?.view_costs;
+  return roleSeesCosts(s(m.role), v === true || v === "true", m.status === "active");
 }
 /**
  * A table the server does not have yet (a PR preview on an older database): [] — the caller reads the old place.
