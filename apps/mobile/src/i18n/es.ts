@@ -939,6 +939,7 @@ export const es: Dict = {
   "co.saved": "Guardado",
   "co.saveNext": "Guardar y seguir",
   "co.next": "Siguiente",
+  "co.back": "Atrás",
   "co.finish": "Terminar",
   "co.skip": "Omitir, lo haré después",
   "co.step.profile": "Nombre y datos legales",

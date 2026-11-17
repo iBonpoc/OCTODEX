@@ -938,6 +938,7 @@ export const ru = {
   "co.saved": "Сохранено",
   "co.saveNext": "Сохранить и дальше",
   "co.next": "Дальше",
+  "co.back": "Назад",
   "co.finish": "Готово",
   "co.skip": "Пропустить, заполню позже",
   "co.step.profile": "Название и реквизиты",
