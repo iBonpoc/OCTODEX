@@ -7,7 +7,7 @@
  * By testID and the store; waits on what it checks. Seeded on the app's own data (editDb, as e2e 152).
  */
 const KEY = "octo.db.v5";
-const ATTR = { part: "gutter", profile: "k", size: "5", material: "aluminum", gauge: ".027" };
+const ATTR = { part: "gutter", profile: "k", size: "5", material: "aluminum", gauge: ".027", finish: "painted" };
 
 exports.run = async (h) => {
   const p = h.page;
@@ -29,8 +29,12 @@ exports.run = async (h) => {
   await editDb((db) => ({ ...db, catalog: [...db.catalog.filter((x) => !x.id.startsWith("e2e-470")), mk("e2e-470-w", "white", 800, "W-1", "2026-11-12T10:00:00.000Z"), mk("e2e-470-b", "brown", 900, "B-1", "2026-11-10T10:00:00.000Z")] }));
   await h.go("/module/gutters/prices");
   await tid("gpr-screen").waitFor({ timeout: 8000 });
-  await tid("gpr-pg").waitFor({ timeout: 5000 });
-  h.expect((await p.getByTestId("gpr-missing-n").locator("visible=true").count()) === 0, "one banner on the screen (DS Б9): the one-price one first");
+  // the most urgent banner first (DS §15.3): parts with no item; made, then the one-price banner comes (the made ones are in their groups)
+  if (await p.getByTestId("gpr-missing-n").locator("visible=true").count()) {
+    h.expect((await p.getByTestId("gpr-pg").locator("visible=true").count()) === 0, "one banner on the screen (DS Б9): «Нет в прайсе» first");
+    await tid("gpr-missing-n-action").getByRole("button").click();
+  }
+  await tid("gpr-pg").waitFor({ timeout: 8000 });
   await h.shot("banner");
   await tid("gpr-pg-action").getByRole("button").click();
   await tid("gpr-pg-sheet").waitFor({ timeout: 5000 });
@@ -57,7 +61,8 @@ exports.run = async (h) => {
   await h.shot("done");
 
   // «Отменить»: all of it back
-  await p.getByTestId("toast-undo").locator("visible=true").first().click();
+  // the transition's own toast (the newest)
+  await p.getByTestId("toast-undo").locator("visible=true").last().click();
   await p.waitForFunction((k) => {
     const c = ((JSON.parse(localStorage.getItem(k) || "null") || {}).db?.catalog || []).filter((x) => x.id.startsWith("e2e-470"));
     const by = Object.fromEntries(c.map((x) => [x.id, x]));

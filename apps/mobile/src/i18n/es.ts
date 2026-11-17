@@ -3386,6 +3386,7 @@ export const es: Dict = {
   "mod.gutters.pg.sameN": "Ya un precio para todos los colores — piezas: {n}",
   "mod.gutters.pg.price": "Precio para todos los colores",
   "mod.gutters.pg.whyMost": "Sugerido: lo tienen {n} de {of} colores",
+  "mod.gutters.pg.whyReal": "Sugerido: es su precio, los demás son de muestra",
   "mod.gutters.pg.whyLast": "Sugerido: cambiado al último, {d}",
   "mod.gutters.pg.whyFirst": "Sugerido: el primero en orden (sin fechas de cambio)",
   "mod.gutters.pg.yours": "Su elección",

@@ -127,7 +127,7 @@ afterEach(() => {
   root = null;
 });
 
-import { transitionGroups, transitionWrites } from "../src/modules/gutters/prices/groups";
+import { groupPriceOf, priceGroupKey, transitionGroups, transitionWrites } from "../src/modules/gutters/prices/groups";
 
 const coloured = (id: string, color: string, o: Partial<CatalogItem> = {}): CatalogItem => ({
   id, kind: "material", name: `Gutter ${color} (test)`, unit: "ft", priceCents: 800, costCents: 400, vendorTaxBps: 0, markupBps: 10000, supplierSku: `SKU-${id}`,
@@ -201,5 +201,25 @@ describe("unit:gutterPriceGroupStore — the transition offline (#1913 PR3, dire
       const l = last(id);
       if (l) expect([l.priceCents, l.attributes?.priceGroup]).toEqual([byId(id).priceCents, undefined]);
     }
+  });
+
+  it("С19: a group the database keeps already (a sample item in it) and a real colour outside: the chosen price to the group first, then the colour joins — both that price", async () => {
+    const m0 = coloured("m", "white", { placeholder: true, priceCents: 300, costCents: 150 });
+    const m = { ...m0, attributes: { ...m0.attributes!, priceGroup: priceGroupKey(m0) } };
+    const { v } = await start([m, coloured("b", "brown", { priceCents: 900, costCents: 450 })]);
+    v().setOnline(false);
+    await settle();
+    const g = transitionGroups(v().db.catalog.filter((c) => c.id === "m" || c.id === "b"))[0]!;
+    expect(g.insideId).toBe("m");
+    const c = g.suggested;
+    const undos = [v().saveGroupPrice(g.insideId!, groupPriceOf(g, c, true)), ...transitionWrites(g, c, true).map((it) => v().saveCatalogItem(it))];
+    await settle();
+    const byId = (id: string) => v().db.catalog.find((x) => x.id === id)!;
+    expect([byId("m").priceCents, byId("b").priceCents]).toEqual([900, 900]);
+    expect([byId("m").placeholder, byId("b").placeholder]).toEqual([false, false]);
+    expect(byId("b").attributes?.priceGroup).toBe(g.key);
+    [...undos].reverse().forEach((u) => u());
+    await settle();
+    expect([byId("m").priceCents, byId("b").priceCents, byId("b").attributes?.priceGroup]).toEqual([300, 900, undefined]);
   });
 });

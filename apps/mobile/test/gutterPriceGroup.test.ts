@@ -28,6 +28,8 @@ const it_ = (id: string, color: string | undefined, o: Partial<CatalogItem> = {}
   packSize: "10",
   attributes: { part: "gutter", profile: "k", size: "5", material: "aluminum", gauge: ".027", ...(color ? { color } : {}) },
   ...o,
+  // a material's price is its cost × markup (catalogUnitPrice): a price given without a cost has the cost that makes it
+  ...(o.priceCents !== undefined && o.costCents === undefined ? { costCents: o.priceCents / 2 } : {}),
 });
 const part = (color: string): PartQty =>
   ({ key: "gutter", section: "gutter", qty: "100", unit: "ft", use: "estimate", kind: "material", attrs: { profile: "k", size: "5", material: "aluminum", gauge: ".027", color } }) as unknown as PartQty;
@@ -119,10 +121,12 @@ describe("переход (§4.4 п.2, §6 №2, 3, 6, 11, 12, 15)", () => {
     const done = transitionWrites(g, g.suggested, true);
     expect(transitionGroups(done)).toEqual([]);
     const fell = done.map((x) => (x.id === "b" ? { ...x, attributes: { ...x.attributes!, priceGroup: "" }, priceCents: 700 } : x));
-    const again = transitionGroups(fell);
+    const again = transitionGroups(fell.map((x) => (x.id === "b" ? { ...x, costCents: 350 } : x)));
     expect(again).toHaveLength(1);
-    expect(again[0]!.options).toHaveLength(1);
-    expect(again[0]!.options[0]!.priceCents).toBe(done[0]!.priceCents);
+    // its own price and the group's: the group's is suggested (a tie: the group the database keeps wins), the person may keep its own
+    expect(again[0]!.options[again[0]!.suggested]!.priceCents).toBe(done[0]!.priceCents);
+    expect(again[0]!.insideId).toBe("w");
+    expect(transitionWrites(again[0]!, again[0]!.suggested, true).map((x) => x.id)).toEqual(["b"]);
   });
   it("позиции без цвета и других деталей (не модуля) группы не получают", () => {
     const wire = { ...it_("wire", "red"), attributes: { part: "wire", color: "red" } };
@@ -199,5 +203,35 @@ describe("созданное модулем (§4.3)", () => {
     expect(w.attributes!.priceGroup).toBe(b.attributes!.priceGroup);
     expect(made.filter((x) => x.kind === "labor").every((x) => !x.attributes?.priceGroup)).toBe(true);
     expect(transitionGroups(made)).toEqual([]);
+  });
+});
+
+describe("ревью PR3 (code-reviewer №1, 3, 5, 6)", () => {
+  it("С17: лишнее свойство custom у старой позиции группу не рвёт — белая с custom и коричневая — одна группа", () => {
+    const w = it_("w", "white", { attributes: { ...it_("w", "white").attributes!, custom: "1" } });
+    expect(priceGroupKey(w)).toBe(priceGroupKey(it_("b", "brown")));
+    expect(transitionGroups([w, it_("b", "brown", { priceCents: 900 })])).toHaveLength(1);
+  });
+  it("С18: одна видимая цена при разной себестоимости — один вариант (человек видит одну цену); источник — последняя правка", () => {
+    const g = transitionGroups([it_("w", "white", { costCents: 400, markupBps: 10000 }), it_("b", "brown", { costCents: 500, markupBps: 6000, updatedAt: "2026-11-12T00:00:00Z" })])[0]!;
+    expect(g.options).toHaveLength(1);
+    expect(g.options[0]!.sourceId).toBe("b");
+  });
+  it("С19: примерная цена созданной модулем позиции группы не берёт верх над реальными ценами цветов", () => {
+    const made = it_("m", "white", { attributes: { ...it_("m", "white").attributes!, finish: "painted" }, placeholder: true, priceCents: 300, updatedAt: "2026-11-17T00:00:00Z" });
+    const key = priceGroupKey(made);
+    const inside = { ...made, attributes: { ...made.attributes!, priceGroup: key } };
+    const g = transitionGroups([inside, it_("b", "brown", { priceCents: 900 })])[0]!;
+    expect(g.options).toHaveLength(2);
+    expect(g.options[g.suggested]!.priceCents).toBe(900);
+    expect(g.why).toEqual({ k: "real" });
+    expect(g.insideId).toBe("m");
+  });
+  it("С20: «Создать позиции сразу» при готовой группе — новый цвет сразу с ценой группы (в любом режиме)", () => {
+    const b = it_("b", "brown", { priceCents: 900 });
+    const grouped = { ...b, attributes: { ...b.attributes!, priceGroup: priceGroupKey(b) } };
+    const made = missingItems("demo", [{ key: "gw", part: { ...part("white"), attrs: { ...part("white").attrs, finish: "painted" } } as PartQty }], [grouped], (p) => `x ${p.key}`);
+    const w = made.find((x) => x.attributes?.color === "white")!;
+    expect([w.attributes!.priceGroup, w.priceCents, w.placeholder]).toEqual([grouped.attributes!.priceGroup, 900, false]);
   });
 });

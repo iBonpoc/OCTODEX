@@ -3386,6 +3386,7 @@ export const ru = {
   "mod.gutters.pg.sameN": "Уже одна цена у всех цветов — деталей: {n}",
   "mod.gutters.pg.price": "Цена для всех цветов",
   "mod.gutters.pg.whyMost": "Предложена: такая у {n} цветов из {of}",
+  "mod.gutters.pg.whyReal": "Предложена: это ваша цена, остальные — примерные",
   "mod.gutters.pg.whyLast": "Предложена: её меняли последней, {d}",
   "mod.gutters.pg.whyFirst": "Предложена: первая по порядку (дат правок нет)",
   "mod.gutters.pg.yours": "Выбрано вами",

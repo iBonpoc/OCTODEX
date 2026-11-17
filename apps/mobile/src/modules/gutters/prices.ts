@@ -193,7 +193,7 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
     if (findItem(catalog, part) && !priceFromOtherDegree(catalog, part)) continue;
     const id = stableItemId(companyId, key);
     if (ids.has(id) || out.has(id)) continue;
-    out.set(id, {
+    const made: CatalogItem = {
       id,
       kind: part.kind === "labor" ? "labor" : "material",
       name: name(part).slice(0, 200),
@@ -203,7 +203,12 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
       ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
       attributes: withGroup(part.unit, matchAttrs(part)),
-    });
+    };
+    // a colour of a part whose group is there: the group's price, as the store and the server give a joining item (in every mode —
+    // the store does it only in the cloud; review of PR3 №6)
+    const g = made.attributes?.priceGroup;
+    const peer = g ? catalog.find((c) => c.attributes?.priceGroup === g) : undefined;
+    out.set(id, peer ? { ...made, priceCents: peer.priceCents, placeholder: peer.placeholder, costCents: peer.costCents, vendorTaxBps: peer.vendorTaxBps, markupBps: peer.markupBps } : made);
   }
   return [...out.values()];
 }

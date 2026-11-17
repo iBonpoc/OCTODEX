@@ -9,7 +9,7 @@
  * The director and the office (catalog rights, staff) change them; only while the module is active (founder О2).
  * Every object is a card (rule 12); the bind picker in a sheet lists rows.
  */
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -32,7 +32,7 @@ import { QuickPriceSheet } from "@/features/QuickPriceSheet";
 import { quickSheetKey } from "@/features/quickPrice";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { seeCosts } from "@/features/access";
-import { transitionGroups, transitionWrites } from "./groups";
+import { groupPriceOf, transitionGroups, transitionWrites } from "./groups";
 import { TransitionSheet } from "./TransitionSheet";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
@@ -79,13 +79,26 @@ export default function GutterPricesScreen() {
   const groups = useMemo(() => (active ? transitionGroups(catalog) : []), [active, catalog]);
   const canGroup = staff && seeCosts(store.db, store.role, store.mode);
   const [pgOpen, setPgOpen] = useState(false);
+  /** one «Сделать одну цену» at a time: a second press before the page redraws writes nothing and never puts an empty «Отменить»
+   *  in place of the first one's (rule 5; review of PR3 №2, as `made` above) */
+  const grouping = useRef(false);
   const doGroups = (choice: Record<string, number>) => {
     setPgOpen(false);
+    if (grouping.current) return;
+    grouping.current = true;
     const sees = seeCosts(store.db, store.role, store.mode);
-    // the source of each group first: it starts the group with its price, the others join it (they take its price — store and server)
-    const undos = groups.flatMap((g) => transitionWrites(g, choice[g.key] ?? g.suggested, sees).map((it) => store.saveCatalogItem(it)));
-    toast.show(store.online ? t("mod.gutters.pg.done", { n: groups.length }) : t("offline.queued"), store.undoTogether(undos));
+    const undos = groups.flatMap((g) => {
+      const c = choice[g.key] ?? g.suggested;
+      // a group the database keeps already: its price first (the store's group write), then the others join it and take that price
+      const head = g.insideId ? [store.saveGroupPrice(g.insideId, groupPriceOf(g, c, sees))] : [];
+      return [...head, ...transitionWrites(g, c, sees).map((it) => store.saveCatalogItem(it))];
+    });
+    toast.show(store.online ? t("mod.gutters.pg.done", { n: groups.length }) : t("offline.queued"), withAfter(store.undoTogether(undos), () => { grouping.current = false; }));
   };
+  // the page has redrawn with what was written (these groups are gone, or «Отменить» brought them back): the next press is a new one
+  useEffect(() => {
+    grouping.current = false;
+  }, [groups]);
   const bind = (it: CatalogItem, row: PriceRow) => {
     setBindFor(null);
     const undo = store.saveCatalogItem(bindItem(it, row.part));

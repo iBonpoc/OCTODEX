@@ -45,7 +45,7 @@ export function TransitionSheet({ visible, groups, onClose, onDone }: { visible:
   };
   const colours = (g: TransitionGroup, i: number) =>
     g.options[i]!.itemIds.map((id) => colorLabel(g.items.find((x) => x.id === id)?.attributes?.color ?? "")).join(", ");
-  const whyText = (w: Why) => (w.k === "most" ? t(k("whyMost"), { n: w.n, of: w.of }) : w.k === "last" ? (w.at ? t(k("whyLast"), { d: day(w.at) }) : t(k("whyFirst"))) : "");
+  const whyText = (w: Why) => (w.k === "most" ? t(k("whyMost"), { n: w.n, of: w.of }) : w.k === "real" ? t(k("whyReal")) : w.k === "last" ? (w.at ? t(k("whyLast"), { d: day(w.at) }) : t(k("whyFirst"))) : "");
   return (
     <Sheet
       visible={visible}
