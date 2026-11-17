@@ -6,7 +6,6 @@
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useState } from "react";
 import { View } from "react-native";
-import { haptics } from "@/ui/haptics";
 import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { ChecklistItem, Visit } from "@/data/types";
@@ -14,8 +13,10 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { canAddItem, canAttachPhoto, canRemoveItem, canSetRequired, canTick, cleanText, itemDone, itemKind, itemRequired, itemSkipped, itemsFromTemplate, LABEL_MAX, templatesForVisit, type Missing } from "@/features/checklist";
 import { PhotoStrip } from "@/features/PhotoStrip";
-import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
-import { Icon, Press, T } from "@/ui/primitives";
+import { Button, StatusChip, TextField } from "@/ui/controls";
+import { DoneCircle } from "@/ui/doneCircle";
+import { ToggleRow } from "@/ui/toggleRow";
+import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, ListRow, RowView } from "@/ui/surfaces";
 import { type GuardedUndo } from "@/data/undo";
@@ -103,40 +104,12 @@ function ItemRow({ v, item }: { v: Visit; item: ChecklistItem }) {
     );
   }
   const may = canTick(store.role, v, !item.done);
+  // «сделано» of an item — the one done circle (spec 56 §6, DS §9 А4), not a square checkbox; what is under the label stays under it
   return (
-    <Press
-      testID={`chk-item-${item.id}`}
-      disabled={!may}
-      onPress={() => {
-        haptics.selection();
-        store.toggleCheck(v.id, item.id);
-      }}
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: item.done, disabled: !may }}
-      accessibilityLabel={item.label}
-      style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.hitMin }}
-    >
-      <View
-        style={{
-          width: component.checkbox.size,
-          height: component.checkbox.size,
-          borderRadius: component.checkbox.radius,
-          borderWidth: component.checkbox.border,
-          borderColor: item.done ? c.status.ok.fill : c.bd,
-          backgroundColor: item.done ? c.status.ok.fill : "transparent",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        {item.done ? <Icon name="check" s={size.iconSm} color={c.status.ok.on} /> : null}
-      </View>
-      <View style={{ flex: 1, gap: space[1] }}>
-        <T v="body" tone={item.done ? "mut" : "ink"} style={{ textDecorationLine: item.done ? "line-through" : "none" }}>
-          {item.label}
-        </T>
-        {sub}
-      </View>
-    </Press>
+    <View style={{ gap: space[1] }}>
+      <DoneCircle testID={`chk-item-${item.id}`} done={item.done} disabled={!may} label={item.label} title={item.label} onChange={() => store.toggleCheck(v.id, item.id)} />
+      {sub ? <View style={{ paddingLeft: component.checkbox.size + space[3] }}>{sub}</View> : null}
+    </View>
   );
 }
 
@@ -257,12 +230,7 @@ export function ChecklistEditor({ v, title }: { v: Visit; title?: string }) {
           </View>
           <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={add} />
         </RowView>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" style={{ flex: 1 }}>
-            {t("chk3.required")}
-          </T>
-          <Toggle label={`${t("chk3.required")} · ${t("check.add")}`} on={extraRequired} onChange={setExtraRequired} />
-        </RowView>
+        <ToggleRow testID="chk-extra-required" label={t("chk3.required")} value={extraRequired} onChange={setExtraRequired} />
         <View testID="chk-from-template">
           <Button label={t("chk3.fromTemplate")} icon="plus" variant="secondary" full onPress={() => setPicking(true)} />
         </View>
@@ -324,12 +292,16 @@ function EditItemSheet({ v, item, onClose, visible, onExited }: { v: Visit; item
     <Sheet visible={visible} onExited={onExited} onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
       <View testID="chk-edit-sheet" style={{ gap: space[2] }}>
         <TextField label={t("chk3.label")} type="text" value={label} onChangeText={(x) => setLabel(x.slice(0, LABEL_MAX))} />
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" style={{ flex: 1 }}>
-            {t("chk3.required")}
-          </T>
-          {lockedOn ? <StatusChip status="neutral" label={t("chk3.required")} /> : <Toggle label={t("chk3.required")} on={required} onChange={setRequired} />}
-        </RowView>
+        {lockedOn ? (
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="body" style={{ flex: 1 }}>
+              {t("chk3.required")}
+            </T>
+            <StatusChip status="neutral" label={t("chk3.required")} />
+          </RowView>
+        ) : (
+          <ToggleRow testID="chk-edit-required" label={t("chk3.required")} value={required} onChange={setRequired} />
+        )}
         {lockedOn ? (
           <T v="caption" tone="mut">
             {t("chk3.directorOnly")}
