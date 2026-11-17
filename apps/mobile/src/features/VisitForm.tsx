@@ -101,7 +101,7 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
   const { db, role } = useStore();
   const planner = canPlan([role]);
-  const { t, day, dayOf, time } = useI18n();
+  const { t, tn, day, dayOf, time } = useI18n();
   const [calendar, setCalendar] = useState(false);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const days = useMemo(() => {
@@ -113,7 +113,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   const range = (v: Visit) => visitWhen(v, time, t("plan5.allDay"));
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
-    return vs.length ? t("vf.load", { n: vs.length, ranges: vs.map(range).join(", ") }) : t("vf.free");
+    return vs.length ? tn("vf.load", vs.length, { ranges: vs.map(range).join(", ") }) : t("vf.free");
   };
   return (
     <View style={{ gap: space[3] }}>
@@ -147,7 +147,9 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         {planner ? <View>
           <ListRow title={`${f.techIds.length === 0 ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
           {techs.map((m) => (
-            <ListRow key={m.id} title={`${f.techIds.includes(m.id) ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.toggleTech(m.id); f.setMinute(null); }} />
+            <View key={m.id} testID={`vf-tech-${m.id}`}>
+              <ListRow title={`${f.techIds.includes(m.id) ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.toggleTech(m.id); f.setMinute(null); }} />
+            </View>
           ))}
         </View> : null}
       </Field>

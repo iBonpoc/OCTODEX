@@ -6,6 +6,7 @@
  * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
+import { sizeText } from "../sizeText";
 import { useEffect, useRef, useState } from "react";
 import { Keyboard, ScrollView, useWindowDimensions, View } from "react-native";
 import { measureAfterKeyboard } from "./afterKeyboard";
@@ -30,7 +31,7 @@ import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, t
 
 const k = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
-const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
+const dsSize = sizeText; // one format everywhere (#1916)
 const elbow = (s: string) => (/^\d+$/.test(s) ? `${s}°` : s);
 
 /** a colour: the module's own words are translated; the company's palette names are its supplier's words (data) */

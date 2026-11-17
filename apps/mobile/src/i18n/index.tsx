@@ -4,9 +4,9 @@ import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
 import { dayKeyLabel, dayLabel, formatDayKey, getZone, timeLabel, zonedFormat, type DayKey } from "@/features/zone";
 import type { DictKey } from "./ru";
-import { translate, type DocLang, type Lang, type Params } from "./translate";
+import { durationText, moneyText, plural, setAppLang, translate, type DocLang, type Lang, type Params, type PluralBase } from "./translate";
 
-export { tFor, DOC_LANGS, DOC_LANG_LABEL, type DocLang, type Lang } from "./translate";
+export { tFor, DOC_LANGS, DOC_LANG_LABEL, type DocLang, type Lang, type PluralBase } from "./translate";
 export const languages: { id: Lang; label: string }[] = [
   { id: "en", label: "English" },
   { id: "ru", label: "Русский" },
@@ -23,6 +23,10 @@ export interface I18nCtx {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (key: DictKey, params?: Params) => string;
+  /** a counted phrase through Intl.PluralRules: tn("vf.load", 3, { ranges }) → «3 выезда · …» (DS §4.2) */
+  tn: (base: PluralBase, n: number, params?: Params) => string;
+  /** minutes in words: «4 ч», «1 ч 30 мин», «45 мин» (DS §4.5) */
+  duration: (min: number) => string;
   money: (cents: number) => string;
   /** whole dollars for tight places (KPI tiles) */
   moneyWhole: (cents: number) => string;
@@ -38,10 +42,11 @@ const Ctx = createContext<I18nCtx | null>(null);
 
 /** Money and dates are always US formats ($, en-US) — the business operates in the US. */
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang, ready] = usePersistentState<Lang>("octo.lang.v1", deviceLang);
+  // before the children render: the store below seeds the demo in this language (#1223)
+  if (ready) setAppLang(lang);
   const t = useCallback(
     (key: DictKey, params?: Params) => translate(lang, key, params),
     [lang],
@@ -53,8 +58,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       lang,
       setLang,
       t,
-      money: (cents) => (cents % 100 === 0 ? usd.format(cents / 100) : usdCents.format(cents / 100)),
-      moneyWhole: (cents) => usd.format(roundCents(dec(cents).div(100))),
+      tn: (base, n, params) => plural(lang, base, n, params),
+      duration: (min) => durationText(lang, min),
+      // a negative amount with «−» (U+2212), not a hyphen (DS §4.5, #1427)
+      money: moneyText,
+      moneyWhole: (cents) => {
+        const v = roundCents(dec(cents).div(100));
+        return v < 0 ? `−${usd.format(-v)}` : usd.format(v);
+      },
       time: (iso) => timeLabel(iso),
       day: (iso) => dayLabel(iso, locale),
       dayOf: (k) => dayKeyLabel(k, locale),
@@ -80,7 +91,7 @@ export function I18nOverride({ lang, children }: { lang: DocLang; children: Reac
 
 /** The context inside I18nOverride: the client's language for t / lang / day; money as is; setLang does nothing. Pure. */
 export function overrideI18n(parent: I18nCtx, lang: DocLang): I18nCtx {
-  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), day: docDayOf, dayOf: (k) => formatDayKey(k, DOC_DAY_OPTS) };
+  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), tn: (base, n, params) => plural(lang, base, n, params), duration: (min) => durationText(lang, min), day: docDayOf, dayOf: (k) => formatDayKey(k, DOC_DAY_OPTS) };
 }
 /** A calendar day «YYYY-MM-DD» (invoices.due_date, estimates.valid_until) is that day as it is — `new Date()` of it is UTC
  *  midnight, the day before in Los Angeles (#605; the same rule as docPdf.docDay and zone.dayLabel); a moment — the

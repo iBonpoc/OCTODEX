@@ -96,7 +96,6 @@ export function CornerSheet({ d, f, cut, fmt, tape, splashOn, onKind, onSplash, 
             </View>
           ))}
           {/* the measure is rough: ONE line, at the bottom of the cut */}
-          {!tape ? <View testID="corner-cut-rough"><StatusChip status="warn" label={t("mod.gutters.draw.accRoughCut")} soft /></View> : null}
         </View>
       ) : null}
       {f.kind === "in" ? (

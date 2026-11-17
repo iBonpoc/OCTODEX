@@ -14,7 +14,7 @@ const { signIn, waitRows } = require("../signIn.cjs");
 const { helpers } = require("../../h.cjs");
 
 const LINE = "Nightly test line (тестовые)";
-const PRICE = "1850"; // test price
+const PRICE = "1850"; // a sample price (rule 9)
 
 exports.run = async (h, { seed, admin, browser, BASE }) => {
   const p = h.page;
@@ -126,7 +126,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   const [y, m, d] = inv.due_date.split("-").map(Number);
   const dueLabel = new Intl.DateTimeFormat("ru", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(Date.UTC(y, m - 1, d, 12));
   // the visible line of THIS screen (hidden screens of the stack stay in the page and have their own «Срок …»)
-  const dueLine = await p.getByText(/^Срок .+ · Отправлена/).locator("visible=true").last().innerText();
+  const dueLine = await p.getByText(/^Срок .+ · Отправлен/).locator("visible=true").last().innerText();
   h.expect(dueLine.startsWith(`Срок ${dueLabel} ·`), `the due day ${inv.due_date} = «${dueLabel}» on the invoice screen («${dueLine}»)`);
   await h.shot("paid");
 };

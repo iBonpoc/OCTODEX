@@ -14,6 +14,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { VoidInvoiceCards } from "@/features/invoice/VoidInvoice";
+import { invoiceTitle } from "@/features/invoiceTitle";
 
 /**
  * One word of an invoice's status everywhere it is shown — its card, the list, the job's statement, the client's and the
@@ -96,7 +97,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
                 density="compact"
                 testID={`statement-invoice-${i.id}`}
                 lead={{ kind: "icon", icon: "invoice" }}
-                title={i.title || t(`inv.kind.${i.kind ?? "final"}` as DictKey)}
+                title={invoiceTitle(i, t)}
                 when={[i.number, t("money.due", { date: day(i.dueDate) }), i.paidCents > 0 && i.paidCents < i.totalCents ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined].filter(Boolean).join(" · ")}
                 value={money(i.totalCents)}
                 status={{ tone: chip.s, label: t(chip.l, chip.p) }}

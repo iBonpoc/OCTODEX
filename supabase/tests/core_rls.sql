@@ -15713,4 +15713,95 @@ select tst.ok((select status = 'draft' and current_version_id = 'f2920000-0000-4
               'T292 sent → draft: a new version without the elbow line; the sent version (what the client got) keeps its lines');
 \echo 'T292 a sent estimate keeps the lines it went with ok'
 
+-- ---------------------------------------------------------------- T321: receiving a supplier order writes the cost history (#1836)
+-- the first time a line came: one 'receipt' row with the price paid per the item's own unit (a pack ÷ pack_size, UP to the
+-- cent, #1849), the order's supplier; a repeat or a tick taken back and put again — nothing new; the item's own cost stays
+-- (В8 #1832); the tech who receives never reads the history
+:as_owner_a
+insert into public.suppliers (id, company_id, name, purchase_tax_bps) values ('53210000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T321 Supply (test)', 950);
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps, pack_size, supplier_id) values
+  ('53210000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 elbow', 'ea', 500, 300, 950, 2000, 3, '53210000-0000-4000-8000-0000000000a1');
+insert into public.purchase_orders (id, company_id, supplier_id, job_id) values
+  ('53210000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000a1', 'e1a00000-0000-0000-0000-000000000001');
+insert into public.purchase_order_lines (id, company_id, po_id, position, catalog_item_id, name, qty, unit) values
+  ('53210000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000001', 0, '53210000-0000-4000-8000-0000000000c1', 'T321 elbow box', 2, 'box'),
+  ('53210000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000001', 1, null, 'T321 no item', 1, 'ea');
+insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values
+  ('53210000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 1000),
+  ('53210000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 700);
+update public.purchase_orders set status = 'sent' where id = '53210000-0000-4000-8000-000000000001';
+create or replace function pg_temp.t321_rows() returns bigint language sql as $f$
+  select count(*) from public.catalog_cost_history where company_id = 'ca000000-0000-0000-0000-000000000000' and source = 'receipt'
+     and item_id = '53210000-0000-4000-8000-0000000000c1' $f$;
+:as_super
+select tst.ok(pg_temp.t321_rows() = 0, 'T321 nothing received — no receipt row');
+-- the tech of the job receives one line: the history gets the price paid
+:as_tech_a
+select tst.ok(public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":1}]') = 'partially_received',
+  'T321 the tech of the job receives a line');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '53210000-0000-4000-8000-0000000000c1'$q$) = 0,
+  'T321 the tech never reads the cost history');
+:as_super
+select tst.ok(pg_temp.t321_rows() = 1
+          and (select unit_cost_cents = 334 and supplier_id = '53210000-0000-4000-8000-0000000000a1' and vendor_tax_bps = 950
+                      and po_line_id = '53210000-0000-4000-8000-0000000000b1' and by = 'a0000000-0000-0000-0000-000000000003'
+                 from public.catalog_cost_history where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c1'),
+  'T321 one receipt row: $10.00 a box of 3 → $3.34 an elbow (up to the cent), the order''s supplier, the item''s tax, who received');
+select tst.ok((select unit_cost_cents = 300 from public.catalog_item_costs where item_id = '53210000-0000-4000-8000-0000000000c1'),
+  'T321 the item''s own cost stays (В8 #1832: only the history)');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b2'$q$) = 0,
+  'T321 a line without a catalog item writes no history');
+-- the same marking again, more of the same line, a tick taken back and put again: nothing new
+:as_office_a
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":1}]');
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":2}]');
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":0}]');
+select public.po_receive('53210000-0000-4000-8000-000000000001', '[{"id":"53210000-0000-4000-8000-0000000000b1","received":2},{"id":"53210000-0000-4000-8000-0000000000b2","received":1}]');
+:as_super
+select tst.ok(pg_temp.t321_rows() = 1, 'T321 a repeat, more, a tick back and again — still one receipt row for the line');
+-- an item without a pack size (the pack is the unit), a line without a cost row, an item without its costs row
+:as_owner_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53210000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 no pack, no costs', 'ea', 900),
+  ('53210000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'material', 'T321 no line cost', 'ea', 900);
+insert into public.purchase_orders (id, company_id, supplier_id) values
+  ('53210000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000a1');
+insert into public.purchase_order_lines (id, company_id, po_id, position, catalog_item_id, name, qty, unit) values
+  ('53210000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000002', 0, '53210000-0000-4000-8000-0000000000c2', 'T321 c2', 1, 'ea'),
+  ('53210000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-000000000002', 1, '53210000-0000-4000-8000-0000000000c3', 'T321 c3', 1, 'ea');
+insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values
+  ('53210000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 777);
+update public.purchase_orders set status = 'sent' where id = '53210000-0000-4000-8000-000000000002';
+select public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":1},{"id":"53210000-0000-4000-8000-0000000000b4","received":1}]');
+:as_super
+select tst.ok((select count(*) = 1 and min(unit_cost_cents) = 777 and bool_and(vendor_tax_bps is null) from public.catalog_cost_history
+                where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c2'),
+  'T321 no pack size — the pack''s price as is; no costs row of the item — the tax is empty');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where source = 'receipt' and item_id = '53210000-0000-4000-8000-0000000000c3'$q$) = 0,
+  'T321 a line without a cost row writes no history');
+-- the item's supplier changed in the same transaction keeps the receipt's own (the order's) supplier
+:as_owner_a
+insert into public.suppliers (id, company_id, name) values ('53210000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T321 Other (test)');
+select public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":0}]');
+:as_super
+delete from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b3';
+:as_owner_a
+do $t$ begin
+  perform public.po_receive('53210000-0000-4000-8000-000000000002', '[{"id":"53210000-0000-4000-8000-0000000000b3","received":1}]');
+  update public.catalog_items set supplier_id = '53210000-0000-4000-8000-0000000000a2' where id = '53210000-0000-4000-8000-0000000000c2';
+end $t$;
+:as_super
+select tst.ok((select supplier_id = '53210000-0000-4000-8000-0000000000a1' from public.catalog_cost_history where source = 'receipt' and po_line_id = '53210000-0000-4000-8000-0000000000b3'),
+  'T321 a receipt keeps the order''s supplier when the item''s supplier changes in the same transaction');
+-- the app never writes the source or the line itself
+:as_office_a
+select tst.fails($q$insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents, source, po_line_id) values
+  ('ca000000-0000-0000-0000-000000000000', '53210000-0000-4000-8000-0000000000c1', 1, 'receipt', '53210000-0000-4000-8000-0000000000b2')$q$,
+  'T321 the app does not write a receipt row by hand');
+:as_super
+select tst.ok(has_function_privilege('authenticated', 'public.po_receive(uuid, jsonb, bigint)', 'execute')
+          and not has_function_privilege('anon', 'public.po_receive(uuid, jsonb, bigint)', 'execute'),
+  'T321 po_receive — the app only (rule 18)');
+\echo 'T321 a receipt writes the cost history ok'
+
 \echo 'ALL TESTS PASSED'

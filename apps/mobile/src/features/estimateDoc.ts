@@ -389,13 +389,16 @@ export type SendIssueKind = "noPrice" | "testPrice" | "gone";
 export const SEND_ISSUE_KINDS: SendIssueKind[] = ["noPrice", "testPrice", "gone"];
 export type SendIssueLine = { lineId: string; optionId: string; name: string };
 export type SendIssues = Record<SendIssueKind, SendIssueLine[]>;
-export function sendIssues(doc: EstimateDoc): SendIssues {
+/** `firstSend` (#1873): a sample catalog price is reminded about once — before the estimate first goes to the client (a
+ *  draft); a sent estimate sent again, or its PDF, says nothing about it. */
+export function sendIssues(doc: EstimateDoc, opts: { firstSend?: boolean } = {}): SendIssues {
+  const samples = opts.firstSend !== false;
   const out: SendIssues = { noPrice: [], testPrice: [], gone: [] };
   for (const o of doc.options)
     for (const l of activeLines(o.lines)) {
       if (zeroQty(l)) continue;
       const marks = lineMarks(l);
-      for (const k of SEND_ISSUE_KINDS) if (marks.includes(k)) out[k].push({ lineId: l.id, optionId: o.id, name: l.name.trim() || "—" });
+      for (const k of SEND_ISSUE_KINDS) if (marks.includes(k) && (k !== "testPrice" || samples)) out[k].push({ lineId: l.id, optionId: o.id, name: l.name.trim() || "—" });
     }
   return out;
 }

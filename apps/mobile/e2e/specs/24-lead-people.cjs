@@ -17,7 +17,7 @@ exports.run = async (h) => {
   await h.click("Телефоны, email и люди");
   await h.sheet().getByRole("button", { name: "Телефон", exact: true }).first().click();
   await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(1).pressSequentially("6265550199");
-  await h.sheet().getByRole("button", { name: /Дополнительный контакт/ }).click();
+  await h.sheet().getByRole("button", { name: /Добавить контакт/ }).click();
   await h.sheet().getByPlaceholder("Имя", { exact: true }).last().fill("Ann Becker");
   await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(2).pressSequentially("6265550177");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();

@@ -5,7 +5,7 @@ vi.mock("expo-localization", () => ({ getLocales: () => [{ languageCode: "ru" }]
 vi.mock("@/data/persist", () => ({ usePersistentState: () => ["ru", () => {}, true] }));
 
 import { overrideI18n, type I18nCtx } from "../src/i18n";
-import { translate } from "../src/i18n/translate";
+import { durationText, plural, translate } from "../src/i18n/translate";
 import { setZone } from "../src/features/zone";
 
 const setLang = vi.fn();
@@ -13,6 +13,8 @@ const app: I18nCtx = {
   lang: "ru",
   setLang,
   t: (k, p) => translate("ru", k, p),
+  tn: (b, n, p) => plural("ru", b, n, p),
+  duration: (m) => durationText("ru", m),
   money: (c) => `$${c / 100}`,
   moneyWhole: (c) => `$${Math.round(c / 100)}`,
   time: () => "10:00 AM",

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gutters windows</title>
+<!-- Прототип окон модуля Gutters (этап 0, задание руководителя №13, 16.11). Значения — токены «Наряда» (packages/design-tokens):
+     светлая тема, кнопки 36 / зона 44, поля и строки 44, радиусы card 16 / field 12, шрифт 15/13/11.5. ?f=ds|run|run-new|run-unsaved|corner|canvas|link|draft|tab &t=light|dark -->
+<style>
+[data-t=light]{--page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--solid:#F9F7F5;--bd:rgba(20,22,30,.1);--bdField:rgba(20,22,30,.5);--track:rgba(20,22,30,.09);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#0B6290;--s2:#8A4F00;--node:#15161A;--grid:rgba(20,22,30,.05);--grid2:rgba(20,22,30,.1);--scrim:rgba(20,22,30,.25);--warnT:#944600;--okT:#176428;--infoT:#3647C4;--sh:0 1px 3px rgba(60,50,40,.12);--badT:#B4232A}
+[data-t=dark]{--page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--solid:#33363C;--bd:rgba(255,255,255,.14);--bdField:rgba(255,255,255,.38);--track:rgba(255,255,255,.12);--acc:#FBFF00;--onacc:#0B0C0F;--s1:#7FD4FF;--s2:#FFC46B;--node:#F2F3F5;--grid:rgba(255,255,255,.06);--grid2:rgba(255,255,255,.11);--scrim:rgba(0,0,0,.42);--warnT:#FFB47E;--okT:#9CF0A8;--infoT:#C2CCFF;--sh:0 1px 3px rgba(0,0,0,.4);--badT:#FFAAAA}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Onest,-apple-system,"SF Pro Text",system-ui,sans-serif;background:var(--bg);color:var(--ink);width:390px;font-size:15px;line-height:1.35}
+.scr{position:relative;width:390px;min-height:844px;overflow:hidden}
+svg.cv{position:absolute;left:0;top:0;width:390px;height:844px}
+.ic{width:22px;height:22px;flex:none}
+/* header of the canvas: every control 36 high, one shape (pill / circle), «Готово» the only accent */
+.hdr{position:absolute;left:12px;right:12px;top:12px;display:flex;gap:8px;align-items:center}
+.b36{height:36px;min-width:36px;border-radius:18px;background:var(--surf2);border:1px solid var(--bd);display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 12px;font-size:15px;font-weight:600;white-space:nowrap;color:var(--ink)}
+.b36.round{padding:0;width:36px}
+.b36.acc{background:var(--acc);color:var(--onacc);border-color:transparent}
+.b36.sec{background:var(--surf2)}
+.sp{flex:1}
+/* toolbar */
+.tb{position:absolute;left:12px;right:12px;bottom:92px;height:60px;border-radius:20px;background:var(--solid);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around;font-size:11.5px;color:var(--mut)}
+.tb .c{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:52px;padding:4px 6px;border-radius:12px}
+.tb .c.on{background:var(--surf2);box-shadow:var(--sh);color:var(--ink);font-weight:600}
+.fld{position:absolute;left:12px;bottom:44px;height:36px;display:flex;align-items:center;gap:8px;font-size:13px;background:var(--surf2);border:1px solid var(--bd);border-radius:18px;padding:0 12px}
+/* sheet */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--solid);border-radius:20px 20px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.15)}
+.sheet.static{position:relative;margin-top:96px;margin-bottom:34px}
+.grab{width:36px;height:4px;border-radius:2px;background:var(--track);margin:8px auto 0}
+.sh{display:flex;align-items:center;gap:8px;padding:10px 16px 6px}
+.sh h2{font-size:20px;font-weight:700;flex:1}
+.sh .sub{display:block;font-size:13px;color:var(--mut);font-weight:500;margin-top:2px}
+.body{padding:4px 16px 16px;display:flex;flex-direction:column;gap:16px}
+.lbl{font-size:13px;font-weight:600;color:var(--mut);text-transform:uppercase;letter-spacing:.04em;margin:0 4px 6px}
+/* icon tiles (shape / profile / corner kind): on view, one row */
+.tiles{display:grid;gap:8px}
+.tiles.c4{grid-template-columns:repeat(4,1fr)}.tiles.c5{grid-template-columns:repeat(5,1fr)}.tiles.c2{grid-template-columns:repeat(2,1fr)}
+.tile{position:relative;min-height:64px;border-radius:12px;border:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:11.5px;color:var(--mut);text-align:center;padding:6px 2px;line-height:1.15}
+.tile svg{width:26px;height:26px}
+.tile.on{background:var(--surf2);box-shadow:var(--sh);color:var(--ink);font-weight:600;border-color:var(--bd)}
+.tile .chk{position:absolute;right:4px;top:4px;width:14px;height:14px}
+/* segmented */
+.seg{display:flex;background:var(--track);border-radius:10px;padding:2px;height:36px}
+.seg span{flex:1;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--mut);border-radius:8px}
+.seg span.on{background:var(--surf2);color:var(--ink);font-weight:600;box-shadow:var(--sh)}
+/* inset group of rows (iOS settings) */
+.grp{background:var(--surf2);border:1px solid var(--bd);border-radius:16px;overflow:hidden}
+.row{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 14px;font-size:15px}
+.row+.row{border-top:1px solid var(--bd)}
+.row .k{flex:1;white-space:nowrap}
+.row .v{color:var(--mut);display:flex;align-items:center;gap:4px}
+.row .v svg{width:16px;height:16px}
+.row.sub{min-height:52px}
+.row .stack{flex:1;display:flex;flex-direction:column}
+.row .stack small{font-size:13px;color:var(--mut)}
+.stp{display:flex;align-items:center;gap:0}
+.stp b{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);background:var(--surf2);display:flex;align-items:center;justify-content:center;font-weight:500;color:var(--ink);font-size:18px}.stp b.off{color:var(--track);background:transparent}.stp i{font-style:normal;width:56px;text-align:center;font-weight:600;font-size:17px;font-variant-numeric:tabular-nums}
+.row.del{color:var(--badT);font-weight:600}.row.del small{color:var(--mut);font-weight:400}
+.tb2{position:absolute;left:12px;right:12px;bottom:92px;height:60px;border-radius:24px;background:var(--solid);border:1px solid var(--bd);display:flex;align-items:center;justify-content:space-around}
+.tb2 .c{width:36px;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;color:var(--ink)}.tb2 .c.on{background:var(--ink);color:var(--bg);box-shadow:var(--sh)}
+.tile.h36{flex-direction:row;min-height:44px;gap:8px;font-size:15px}.tile.h36 svg{width:20px;height:20px}
+.lc{display:flex;gap:12px;align-items:flex-start}.lc .av{width:40px;height:40px;border-radius:20px;border:1px solid var(--bd);display:flex;align-items:center;justify-content:center;flex:none}
+.tog{width:42px;height:24px;border-radius:12px;background:var(--track);position:relative}
+.tog::after{content:"";position:absolute;left:2px;top:2px;width:20px;height:20px;border-radius:10px;background:var(--solid);box-shadow:var(--sh)}.tog.on::after{background:var(--bg)}
+.tog.on{background:var(--ink)}.tog.on::after{left:20px}
+@media (max-width:819px){body[data-f="run"] .cv,body[data-f="run-unsaved"] .cv{transform:translateY(-230px)}body[data-f="run-new"] .cv,body[data-f="run-new-err"] .cv{transform:translateY(-340px)}}
+@media (min-width:820px){body[data-f^="run"] .scrim{display:none}}
+@media (max-width:819px){.sheet.static.pinned{position:absolute!important;left:0!important;right:0!important;bottom:34px!important;top:96px;margin:0!important;display:flex;flex-direction:column;overflow:hidden}.sheet.static.pinned .body{flex:1;overflow:auto}.sheet.static.pinned .body>*{flex-shrink:0}}
+.qm::before{content:"";position:absolute;inset:-13px}
+@media (min-width:820px){.sheet.static{height:calc(min(100vh, 844px) - 32px)!important;min-height:0!important;display:flex;flex-direction:column;overflow:hidden}.sheet.static .body{flex:1;overflow:auto}.sheet.static .body>*{flex-shrink:0}.sheet.static .foot{padding-bottom:12px}}
+.note.dz{border:1px dashed var(--bd);border-radius:8px;padding:6px 8px;font-style:italic}
+@media (min-width:820px){body{width:auto}.scr{width:100%}.sheet.static{position:absolute!important;left:auto!important;right:0!important;top:0!important;bottom:auto!important;width:360px;margin:0!important;border-radius:0;min-height:844px;box-shadow:-8px 0 30px rgba(0,0,0,.12)}.sheet.static .grab{display:none}}
+.note{font-size:13px;color:var(--mut);margin:6px 4px 0}
+.ph{border:1.5px dashed var(--bd);border-radius:12px;padding:12px;font-size:13px;color:var(--mut)}
+.foot{padding:8px 16px 28px;border-top:1px solid var(--bd);display:flex;gap:8px}
+.btnw{flex:1;height:36px;border-radius:18px;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;background:var(--surf2);border:1px solid var(--bd)}
+.btnw.acc{background:var(--acc);color:var(--onacc);border:0}
+.inp{height:44px;border-radius:12px;border:1px solid var(--bdField);background:var(--surf);display:flex;align-items:center;padding:0 12px;gap:8px;font-size:17px}
+.inp.focus{border-color:var(--ink);border-width:2px}
+.inp .ph2{color:var(--mut)}
+table.cut{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.cut th{font-weight:500;color:var(--mut);text-align:right;padding:4px 0}table.cut th:first-child,table.cut td:first-child{text-align:left}
+table.cut td{text-align:right;padding:6px 0;border-top:1px solid var(--bd)}
+/* list screen */
+.top{padding:12px 16px 0}
+.crumb{font-size:13px;color:var(--mut);height:24px;display:flex;align-items:center}
+.ttl{display:flex;align-items:center;gap:8px;margin:4px 0 12px}
+.ttl h1{font-size:28px;font-weight:700}
+.q{width:22px;height:22px;border-radius:11px;border:1.5px solid var(--mut);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--mut)}
+.card{background:var(--surf2);border:1px solid var(--bd);border-radius:16px;padding:12px 14px;display:flex;flex-direction:column;gap:4px}
+.card .t{font-weight:600;display:flex;gap:8px;align-items:center}
+.card .t > span:first-child{flex:1}
+.card .m{font-size:13px;color:var(--mut)}
+.chip{font-size:13px;font-weight:600;padding:2px 8px;border-radius:10px;display:inline-flex;gap:4px;align-items:center;border:1px solid var(--bd)}
+.secH{display:flex;align-items:baseline;gap:8px;margin:18px 4px 8px}
+.secH b{font-size:17px}.secH span{font-size:13px;color:var(--mut)}
+.tabbar{position:absolute;left:0;right:0;bottom:34px;height:84px;background:var(--solid);border-top:1px solid var(--bd);display:flex;justify-content:space-around;padding-top:8px;font-size:11px;color:var(--mut)}
+.tabbar div{display:flex;flex-direction:column;align-items:center;gap:2px}
+.tabbar .on{color:var(--ink);font-weight:600}
+.cap{position:absolute;left:0;right:0;bottom:0;z-index:5;padding:6px 12px;font-size:11px;color:var(--mut);background:var(--bg);border-top:1px dashed var(--bd)}
+.qm{position:relative;display:inline-flex;width:18px;height:18px;border-radius:9px;border:1.2px solid var(--mut);color:var(--mut);font-size:11px;font-weight:700;align-items:center;justify-content:center;margin-left:6px;vertical-align:middle;flex:none}
+.wait{display:inline-block;font-size:11px;font-weight:600;color:var(--infoT);border:1px solid var(--bd);border-radius:8px;padding:1px 6px;margin-left:6px;vertical-align:middle;text-transform:none;letter-spacing:0}
+.sw{display:flex;gap:10px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent)}.sw div{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:11.5px;color:var(--mut);min-width:52px}
+.sw i{width:36px;height:36px;border-radius:18px;border:1px solid var(--bd);display:block;position:relative}.sw .on i{}.sw .on{color:var(--ink);font-weight:600}
+.dd{display:inline-flex;align-items:center;gap:2px;height:32px;padding:0 10px;border-radius:16px;border:1px solid var(--bd);background:var(--surf2);font-weight:600;font-size:15px}
+.menu{position:absolute;background:var(--solid);border:1px solid var(--bd);border-radius:14px;box-shadow:0 8px 24px rgba(0,0,0,.18);width:240px;z-index:4;overflow:hidden}
+.menu div{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 14px;gap:8px;font-size:15px}.menu div+div{border-top:1px solid var(--bd)}
+.opt{display:flex;align-items:center;gap:10px;min-height:52px;padding:6px 14px}.opt+.opt{border-top:1px solid var(--bd)}.opt .stack{flex:1;display:flex;flex-direction:column}.opt small{font-size:13px;color:var(--mut)}
+.disabled{opacity:.45}
+</style></head>
+<body><div class="scr" id="scr"></div><script src="i18n.js"></script>
+<script>
+const q=new URLSearchParams(location.search),F=q.get('f')||'ds';document.body.dataset.t=q.get('t')||'light';document.body.dataset.f=F;
+const C=getComputedStyle(document.body),k=n=>C.getPropertyValue('--'+n).trim();
+const P={alert:"M12 3l9.5 17h-19zM12 10v4.5M12 17.2v.3",camera:"M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7",plus:"M12 5v14M5 12h14",search:"M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",cr:"M9 6l6 6-6 6",cl:"M15 6l-6 6 6 6",cd:"M6 9l6 6 6-6",check:"M5 12.5l4.5 4.5L19 7.5",more:"M6 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0M12 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0M18 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0",close:"M6 6l12 12M18 6L6 18",undo:"M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3",redo:"M15 14l5-5-5-5M20 9H9a5 5 0 0 0 0 10h3",trash:"M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13",link:"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 10 18.7l1-1",user:"M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0",users:"M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 4.2a3.5 3.5 0 0 1 0 6.6",note:"M8 4h8v3H8zM6 5.5a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6.5a1 1 0 0 0-1-1M9 12h6M9 16h4",home:"M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10",pencil:"M4 20l1-4L16 5a2 2 0 0 1 3 3L8 19z",
+dsRect:"M5 7h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1z",dsRectRibbed:"M5 7h14a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM8 7v2.5M12 7v2.5M16 7v2.5M8 17v-2.5M12 17v-2.5M16 17v-2.5",dsRound:"M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16z",dsRoundRibbed:"M12 4a8 8 0 1 0 0 16 8 8 0 0 0 0-16zM12 4v2.6M12 20v-2.6M4 12h2.6M20 12h-2.6M6.3 6.3l1.9 1.9M17.7 17.7l-1.9-1.9M17.7 6.3l-1.9 1.9M6.3 17.7l1.9-1.9",
+xsK:"M5 4v15h11l1.5-3-1.5-1 2-5-1.5-1 1.5-3M19 6a1 1 0 1 0 0.01 0",xsHalf:"M4 8a8 8 0 0 0 16 0M4 8a1.3 1.3 0 1 1-0.01 0M20 8a1.3 1.3 0 1 1-0.01 0",xsFascia:"M6 9v10h12V3",xsBox:"M5 5v14h14V5",xsEuro:"M4 8a8 8 0 0 0 16 0M20 8h1.5v-1.5M4 8a1.3 1.3 0 1 1-0.01 0",
+down:"M12 3v15M6 12l6 6 6-6",chain:"M9 3h6a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zM12 10v4M9 14h6a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2z",toGut:"M4 5v7h12M12 8l4 4-4 4M17 18h4",cornerOut:"M12 3l9 9-9 9-9-9z",cornerIn:"M12 3l9 9-9 9-9-9zM12 11l1 1-1 1-1-1z"};
+const ic=(n,s=22,col='currentColor',sw=1.75)=>`<svg class="ic" style="width:${s}px;height:${s}px" viewBox="0 0 24 24"><path d="${P[n]}" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const chk=`<svg class="chk" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="${k('ink')}"/><path d="${P.check}" fill="none" stroke="${k('bg')}" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const tile=(icon,label,on,cls='')=>`<div class="tile ${cls} ${on?'on':''}">${ic(icon,26)}<span>${label}</span>${on?chk:''}</div>`;
+const row=(key,val,opts={})=>`<div class="row ${opts.sub?'sub':''}">${opts.icon?ic(opts.icon,20,k('mut')):''}${opts.sub?`<div class="stack"><span>${key}</span><small>${opts.sub}</small></div>`:`<span class="k">${key}</span>`}${opts.ctrl??`<span class="v">${val}${ic('cr',16)}</span>`}</div>`;
+const qm='<span class="qm">?</span>',wait='';
+const fin=(v,u,w=88)=>`<div class="inp" style="width:${w}px;justify-content:space-between"><span>${v}</span><span style="color:var(--mut)">${u}</span></div>`;
+const frac=on=>`<div role="group" style="display:flex;gap:4px;margin-top:8px">${['0','⅛','¼','⅜','½','⅝','¾','⅞'].map(x=>`<span class="chip" role="button" style="height:44px;flex:1;min-width:0;border-radius:10px;justify-content:center;font-size:15px;${x===on?'background:var(--surf2);box-shadow:var(--sh);color:var(--ink);font-weight:600':'color:var(--mut)'}">${x}</span>`).join('')}</div>`;
+const dd=v=>`<span class="dd">${v}${ic('cd',14)}</span>`;
+const stp=n=>`<span class="stp"><b class="${n?'':'off'}">−</b><i>${n}</i><b>+</b></span>`;
+const sel=(key,val,icon)=>row(key,'',{icon,ctrl:`<span class="v">${val}${ic('cd',16)}</span>`});
+const seg=(items,on)=>`<div class="seg">${items.map((x,i)=>`<span class="${i===on?'on':''}">${x}</span>`).join('')}</div>`;
+let grid='';for(let x=0;x<390;x+=24)grid+=`<line x1="${x}" y1="0" x2="${x}" y2="844" stroke="${x%96?k('grid'):k('grid2')}"/>`;for(let y=0;y<844;y+=24)grid+=`<line x1="0" y1="${y}" x2="390" y2="${y}" stroke="${y%96?k('grid'):k('grid2')}"/>`;
+const runL=(a,b,col=k('s1'),len,sel)=>{let s='';if(sel)s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k('ink')}" stroke-width="12" stroke-linecap="round"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${k('bg')}" stroke-width="8" stroke-linecap="round"/>`;s+=`<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="${col}" stroke-width="${sel?6:4}" stroke-linecap="round"/>`;for(const p of [a,b])s+=`<circle cx="${p[0]}" cy="${p[1]}" r="5" fill="${k('bg')}" stroke="${k('node')}" stroke-width="2"/>`;if(len){const v=Math.abs(b[0]-a[0])<2;s+=`<text x="${v?a[0]+12:(a[0]+b[0])/2}" y="${v?(a[1]+b[1])/2:a[1]-12}" font-size="12" font-weight="600" fill="${k('ink')}" text-anchor="${v?'start':'middle'}">${len}</text>`;}return s;};
+const dsM=(p,n)=>`<rect x="${p[0]-15}" y="${p[1]-10}" width="30" height="20" rx="3" fill="${k('s1')}" stroke="${k('bg')}" stroke-width="2"/><text x="${p[0]}" y="${p[1]+4}" font-size="11" font-weight="700" fill="${k('bg')}" text-anchor="middle">D${n}</text>`;
+const canvas=(extra='')=>`<svg class="cv" viewBox="0 0 390 844">${grid}${runL([40,300],[300,300],k('s1'),F.startsWith('run')?"№ 1 · 21′ 8½″":"21′ 8″",F==='run'||F==='run-unsaved'||F==='run-first'||F==='run-plate')}${runL([300,300],[300,470],k('s1'),F.startsWith('run')?"№ 2 · 14′ 2″":"14′ 2″",F==='run-new'||F==='run-new-err')}${dsM([300,430],1)}${extra}</svg>`;
+const hdr=`<div class="hdr"><span class="b36 round">${ic('cl',20)}</span><span class="b36">${ic('link',18)}Привязать</span><span class="b36 round">${ic('camera',20)}</span><span class="b36 round">${ic('more',20)}</span><span class="sp"></span><span class="b36 acc">Готово</span></div>`;
+const toolbar=(on)=>`<div class="tb"><div class="c ${on==='line'?'on':''}">${ic('xsK')}Gutter</div><div class="c ${on==='ds'?'on':''}">${ic('dsRect')}Downspout</div><div class="c"><span style="font-size:13px;font-weight:700;border:2px solid ${k('s1')};border-radius:10px;padding:0 6px">Эт 1</span>Этаж</div><div class="c">${ic('undo')}Назад</div><div class="c">${ic('redo')}Вперёд</div><div class="c">${ic('trash')}Удалить</div></div>`;
+const field=`<div class="fld">${ic('dsRect',18)}<b>Downspouts 1</b><span style="color:var(--mut)">· 35′ 10″ gutter</span></div>`;
+const cap=t=>`<div class="cap">${t}</div>`;
+const sheet=(title,sub,body,foot='',save=true)=>`<div class="sheet static"><div class="grab"></div><div class="sh"><h2>${title}${sub?` <span class="sub">${sub}</span>`:''}</h2><span class="b36 round" aria-label="Закрыть">${ic('close',18)}</span></div><div class="body">${body}</div>${foot||(save?`<div class="foot"><span class="btnw acc">Сохранить</span></div>`:'')}</div>`;
+let H='';
+if(F==='ds'||F==='ds-copper'||F==='ds-deg'||F==='ds-plain'){
+ const cu=F==='ds-copper',pl=F==='ds-plain';
+ const swatch=(c,n,on)=>`<div class="${on?'on':''}"><i style="background:${c}">${on?'<svg style="position:absolute;right:-4px;top:-4px;width:16px;height:16px" viewBox="0 0 24 24"><circle cx="12" cy="12" r="11" fill="'+k('ink')+'"/><path d="'+P.check+'" fill="none" stroke="'+k('bg')+'" stroke-width="2.6" stroke-linecap="round"/></svg>':''}</i>${n}</div>`;
+ const elb=(n,v,q)=>row(n,'',{ctrl:`${dd(v)}<span style="width:8px"></span>${stp(q)}`});
+ H=sheet('Downspout','D1 · gutter 1-2',`
+ <div class="grp">${F==='ds'?sel('Форма'+qm,'<span style="color:var(--mut)">Выберите</span>','dsRect')+sel('Размер'+qm,'<span style="color:var(--mut)">Выберите</span>'):sel('Форма'+qm,cu?'Круглый':pl?'Прямой':'Прямой ребристый',cu?'dsRound':pl?'dsRect':'dsRectRibbed')+sel('Размер'+qm,cu?'4″':'3×4')}</div>${cu||pl?'':'<div class="note dz">Меню: Прямой · Прямой ребристый · Круглый · Круглый ребристый — значок разреза слева в строке. Без умолчания (основатель 16.11): форма, размер и цвет пустые — «Выберите», пока не выбраны на объекте; «последний выбранный» не подставляется.</div>'}
+ <div class="grp">${row('Материал'+qm,cu?'Медь':'Алюминий')}</div>
+ <div class="grp ${cu?'disabled':''}">${row('Цвет','',{ctrl:`<span class="v"><i style="width:18px;height:18px;border-radius:9px;background:#FFFFFF;border:1px solid var(--bd);display:inline-block"></i>${cu?'—':F==='ds'?'<span style="color:var(--mut)">Выберите</span>':'Как у gutter (High Gloss White)'}${ic('cr',16)}</span>`})}</div>${cu?`<div class="note" style="margin-top:-8px">Медь, цинк и нержавейку не красят — цвет не выбирается.</div>`:''}
+ ${cu?`<div class="grp">${row('Пайка меди'+qm,'7 позиций',{sub:'добавится в смету сама: припой, флюс, заклёпки…',icon:'note'})}</div>`:''}
+ <div><div class="grp">${sel('Отсчёт места'+qm,'От левого end cap')}${row('Расстояние','',{ctrl:`<span style="display:flex;gap:8px">${fin('3','ft',76)}${fin('0','in',76)}</span>`})}</div></div>
+ <div><div class="grp">${sel('Куда уходит вода'+qm,'Downspout')}${row('Длина downspout'+qm,'По этажу · 10′')}</div><div class="note dz">Меню: Downspout · Rain chain · В другой gutter. Без значков (основатель 16.11).</div></div>
+ <div><div class="lbl">Elbows и офсеты${qm}</div>${cu?'':`<div class="grp" style="margin-bottom:8px">${sel('Elbows','',null).replace('<span class="v">','<span class="v">'+(pl?'Гнём по месту':'Готовые'))}</div>`}<div class="grp">${cu?elb('Elbow','75°',0)+elb('Офсет','2″',0):pl?elb('Elbow A','75°',2)+elb('Elbow B','75°',1)+elb('Офсет A','2″',0)+elb('Офсет B','2″',0):elb('Elbow A','75°',F==='ds'?0:3)+elb('Elbow B','75°',0)+elb('Офсет A','2″',0)+elb('Офсет B','2″',0)}</div>${pl?'<div class="note">Из самого downspout: в закупку не идут. В смету — +6″ длины downspout на elbow и работа за elbow (настройка компании).</div>':''}</div>
+ <div class="grp">${row('Низ downspout'+qm,'Ничего')}${row('Редкие детали'+qm,'Нет')}${row('Сито в выпуск (strainer)'+qm,'',{ctrl:'<span class="tog on"></span>'})}${row('Снять старый downspout'+qm,'',{ctrl:'<span class="tog"></span>'})}${row('Фото этого места'+qm,'0',{icon:'camera'})}</div>
+ <div class="grp"><div class="row del sub">${ic('trash',20,k('badT'))}<div class="stack"><span>Удалить downspout, оставить выпуск</span><small>Останется только выпуск в gutter; «Отменить» 5 с</small></div></div><div class="row del sub">${ic('trash',20,k('badT'))}<div class="stack"><span>Удалить downspout и выпуск</span><small>Убрать совсем; «Отменить» 5 с</small></div></div></div>`)+(F==='ds-deg'?`<div class="menu" style="left:110px;top:842px"><div style="justify-content:flex-start"><span style="width:16px;flex:none"></span>30°</div><div style="justify-content:flex-start"><span style="width:16px;flex:none"></span>45°</div><div style="justify-content:flex-start"><span style="width:16px;flex:none"></span>60°</div><div style="justify-content:flex-start;font-weight:600">${ic('check',16)}75°</div><div style="justify-content:flex-start"><span style="width:16px;flex:none"></span>90°</div></div>`:'')+cap(pl?'Стало v4: гладкий — elbows гнут по месту из downspout':cu?'Стало v3: круглый медный — одно «Elbow» и один «Офсет», цвет выключен':F==='ds-deg'?'Стало v2: градус elbows — выбор по нажатию на «75°»':'Стало v5: окно downspout — форма, размер, отсчёт, elbows — строки с меню (спека 56, #1797)');
+}
+if(F==='ds-color'){
+ const pal=[['#D9DACF','Как у gutter (High Gloss White)',1],['#D9DACF','High Gloss White'],['#DCDDD8','Satin'],['#DBDBD1','Linen'],['#DDDED9','Low Gloss White'],['#D4CFB9','Almond'],['#D6CFB3','Crème'],['#CEC7B5','Sandcastle'],['#CFC0A3','Ivory'],['#B9AE94','Wicker'],['#A69F8D','Clay'],['#968777','Wood Beige'],['#988567','Buckskin Brown'],['#A9AEAA','Colonial Grey'],['#878886','Dark Grey'],['#68655E','Terratone'],['#535456','Tuxedo Grey'],['#4B3D3B','Royal Brown'],['#423934','Musket Brown'],['#433F3D','Harvest Brown'],['#504B46','Bronze'],['#222428','Black'],['#678197','Blue'],['#344C47','Green'],['#714340','Red']];
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Цвет</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="inp" style="gap:8px">${ic('search',18,k('mut'))}<span style="color:var(--mut)">Поиск цвета</span></div>${(()=>{const o=([c,n,on],sub)=>`<div class="opt"><i style="width:20px;height:20px;border-radius:10px;background:${c};border:1px solid var(--bdField);flex:none"></i><div class="stack"><span>${n}</span>${sub?`<small>${sub}</small>`:''}</div>${on?ic('check',20,k('ink')):''}</div>`;return `<div class="grp">${o(pal[0],'меняется вместе с gutter')}</div><div class="grp">${pal.slice(1).map(x=>o(x)).join('')}</div>`})()}</div></div>`+cap('Стало v3: цвет — 24 цвета палитры поставщика (по карте основателя) — набор по умолчанию, палитра — настройка компании');
+}
+if(F==='copper-kit'){
+ const r3=(t,d,q)=>`<div class="opt"><div class="stack"><span>${t}</span><small>${d}</small></div><span style="font-variant-numeric:tabular-nums;font-weight:600">${q}</span></div>`;
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Пайка меди</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">Медь паяют. Эти расходники приложение добавит в смету само; число — из чертежа: швы, углы, end caps, выпуски. Нормы — настройка компании (тестовые).</div><div class="grp">${r3('Припой 50/50 (олово-свинец)','на каждое соединение · брусок ¼ lb','2 lb')}${r3('Флюс кислотный (хлорид цинка)','на те же соединения','1 pint')}${r3('Заклёпки медные','2 ряда, шаг ≤ 2″ по шву','60 шт')}${r3('Кронштейны медь / латунь','1 на 30″ (снег) или 36″','14 шт')}${r3('Хомуты downspout медь / латунь','на каждый downspout','4 шт')}${r3('Газ для паяльника (MAPP / пропан)','на объект','1 баллон')}${r3('Сода, абразив (Scotch-Brite)','очистка и нейтрализация флюса','1 набор')}</div>
+ <div class="grp">${row('Бессвинцовый припой (95/5)'+qm,'',{ctrl:'<span class="tog"></span>'})}${row('Лак Incralac (по желанию)','',{ctrl:'<span class="tog"></span>'})}</div>
+ <div class="note">⚠ В смете с медью нельзя алюминий и оцинковку (гальваническая пара) — приложение предупредит.</div></div></div>`+cap('Стало v4: медь — набор «Пайка меди» добавляется в смету сам (ресёрч: CDA, Revere, Stortz)');
+}
+if(F==='ds-rare'){
+ const r2=(t,d,c)=>`<div class="opt"><div class="stack"><span>${t}</span><small>${d}</small></div>${c}</div>`;
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Редкие детали</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">Ставятся по случаю. Нужно — поставьте число.</div><div class="grp">${r2('Переходное elbow A→B','поворот и вбок одной деталью',stp(0))}${r2('Y-тройник','два downspout в один',stp(0))}${r2('Воронка (funnel)','сверху downspout под выпуском',stp(0))}${r2('Редуктор','переход на меньший размер downspout',stp(0))}${r2('Cleanout','люк для прочистки downspout',stp(0))}${r2('Отвод в бочку (diverter)','часть воды в бочку',stp(1))}${r2('Leader head (conductor head)','короб-воронка на стене сверху',stp(0))}</div>
+ <div><div class="grp">${sel('Стена'+qm,'Дерево')}${row('Креплений','',{sub:'правило: 2 на 10 ft downspout',ctrl:stp(2)})}</div></div></div></div>`+cap('Стало v2: «Редкие детали» — страница с пояснениями; стена и число креплений здесь');
+}
+if(F==='run-mount'){
+ const o=(t,d,on)=>`<div class="opt"><div class="stack"><span>${t}</span><small>${d}</small></div>${on?ic('check',20):''}</div>`;
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Крепится к</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">От этого зависят кронштейны.</div><div class="grp">${o('Лобовая доска (fascia)','обычный случай: на доску по краю крыши')}${o('Стропила (rafter tail)','доски нет — на концы стропил')}${o('Под кровлю (roof strap)','доски нет — лентой под кровельный материал')}${o('Карниз (crown moulding)','на фигурный карниз')}${o('Наклонная доска','доска стоит под углом',true)}</div><div class="grp">${row('Клиновая подкладка (wedge)?'+qm,'',{ctrl:'<span class="tog on"></span>'})}</div><div class="grp">${row('Подходящие кронштейны','Hidden hanger + wedge')}</div><div class="note">Кронштейны сами не меняем — предлагаем.</div></div></div>`+cap('Стало v3: «Крепится к» — наклонная доска спрашивает про клин (wedge); кронштейны предлагаем, а не меняем');
+}
+if(F==='ds-bottom'){
+ const o=(t,d,on)=>`<div class="opt"><div class="stack"><span>${t}</span><small>${d}</small></div>${on?ic('check',20):''}</div>`;
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Низ downspout</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body"><div class="note" style="margin:0">Что ставим у земли, где вода выходит из downspout.</div><div class="grp">${o('Ничего','downspout заканчивается elbow',true)}${o('Удлинитель','жёсткий, отводит воду от стены')}${o('Гибкий рукав','гофрированный, складывается')}${o('Откидной (flip-up)','поднимается, чтобы не мешал')}${o('Отбойная плита (splash block)','лоток под elbow')}${o('Ввод в дренаж (drain adapter)','переходник в дренаж в земле')}${o('Pop-up emitter','выпуск в газоне, открывается водой')}${o('Бочка','вода в бочку для полива')}${o('Чугунный boot','коммерческий, в землю')}${o('На нижнюю крышу','вода стекает на крышу ниже')}</div></div></div>`+cap('Стало v2: «Низ downspout» — список с пояснениями, по умолчанию «Ничего»');
+}
+if(F==='run'||F==='run-new'||F==='run-unsaved'||F==='run-new-err'||F==='run-first'||F==='run-plate'){
+ // v6 (основатель 16.11 ~06:45, #1857): «Gutter № N»; длина ft · in · дробь (0 видно), лента под длиной, без «Рулетка» и «Применить»;
+ // размер · цвет · этаж одной строкой, профиль — меню со значком; материал, толщина, край крыши, кронштейны — меню;
+ // «Закрыть | Сохранить» внизу (DS 1.18.0 §7.3 исключение); без умолчаний у нового (#1858); цвет один на замер (#1859)
+ const nw=F==='run-new'||F==='run-new-err', err=F==='run-new-err';
+ // no defaults on a new gutter (#1858): every choice «Выберите»; the storey is the canvas's one; the colour is the measurement's (#1859)
+ const pick='<span style="color:var(--mut);font-weight:400">Выберите</span>';
+ const bad=`border:1px solid var(--badT)`, fieldBd=`border:1px solid var(--bdField)`;
+ // an error under its own field: 6 under the field, 16 to the next (DS §11 п.2–3)
+ const errLine=t=>`<div style="display:flex;gap:6px;align-items:center;color:var(--badT);font-size:13px;padding:0 14px 8px">${ic('alert',16,k('badT'))}${t}</div>`;
+ // a field-menu row (SelectField): its own error under it when it is empty and «Сохранить» was pressed
+ const fld=(label,val,empty,msg,icon)=>err&&empty?`<div style="${bad};border-radius:12px;margin:2px">${sel(label,pick,icon)}${errLine(msg)}</div>`:sel(label,empty?pick:val,icon);
+ const grp=(html)=>`<div class="grp" style="${fieldBd}">${html}</div>`;
+ const mini=(k2,v,e,fl)=>`<div style="flex:${fl||1};min-width:0;display:flex;flex-direction:column;gap:2px;padding:8px 10px;${e&&err?bad+';border-radius:12px':''}"><small style="color:var(--mut);font-size:13px">${k2}</small><span style="display:flex;align-items:center;gap:8px;color:var(--ink)">${v}${ic('cd',14)}</span></div>`;
+ // DS §3.4 п.3: materialSwatch 20, flex:none, space[2] to the name
+ const sw='<i style="flex:none;width:20px;height:20px;border-radius:10px;background:#D9DACF;border:1px solid var(--bdField);display:inline-block"></i>';
+ // the tape: 1/16″ a tick (7 px), an inch every 16 ticks (112 px, labelled), the value under the mark in the middle; edges fade (it scrolls)
+ const tapeAt=(totalIn)=>{const W=358,c=W/2,px=7;let g='';const first=Math.ceil((totalIn*16-c/px));for(let t=first;t*px<=(totalIn*16*px+c);t++){const x=c+(t-totalIn*16)*px;if(x<2||x>W-2)continue;const h=t%16===0?22:t%8===0?16:t%4===0?11:7;g+=`<line x1="${x}" y1="4" x2="${x}" y2="${4+h}" stroke="${k('mut')}" stroke-width="1.2"/>`;if(t%16===0&&x>22&&x<W-22&&Math.abs(x-c)>24){const inch=t/16,ft=Math.floor(inch/12),i=inch%12;g+=`<text x="${x}" y="40" font-size="11" fill="${k('mut')}" text-anchor="middle">${ft}′ ${i}″</text>`;}}return `<svg viewBox="0 0 ${W} 44" style="width:100%;height:44px;margin-top:8px;border-radius:10px;background:var(--surf2);border:1px solid var(--bdField);-webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)">${g}<rect x="${c-1.5}" y="2" width="3" height="40" rx="1.5" fill="${k('ink')}"/></svg>`;};
+ const len=nw?14*12+2:21*12+8.5;
+ const body=`
+ ${grp(fld('Профиль'+qm,'K-Style',nw,'Выберите профиль','xsK'),nw)}
+ <div>${`<div class="grp" style="display:flex;flex-direction:row;${fieldBd}">${mini('Размер',nw?pick:'5″',true,1.3)}<span style="width:1px;background:var(--bd)"></span>${mini('Цвет',sw+'<span style="min-width:0">White</span>',false,1.5)}<span style="width:1px;background:var(--bd)"></span>${mini('Этаж','1',false,0.8)}</div>`}${nw&&err?errLine('Выберите размер').replace('padding:0 14px 8px','padding:6px 4px 0'):''}<div class="note">Цвет один на весь замер: смена меняет все gutters&nbsp;(3).</div></div>
+ <div><div class="lbl">Длина${qm}</div><div style="display:flex;gap:8px;align-items:center">${fin(nw?'14':'21','ft')}${fin(nw?'2':'8','in')}</div>${frac(nw?'0':'½')}${tapeAt(len)}</div>
+ ${grp(fld('Материал'+qm,'Алюминий',nw,'Выберите материал')+fld('Толщина'+qm,'0.027″',nw,'Выберите толщину'),nw)}
+ <div><div class="lbl">Крепление${qm}</div>${grp(fld('Край крыши'+qm,'Fascia',nw,'Выберите край крыши')+fld('Кронштейны'+qm,'Hidden hanger',nw,'Выберите кронштейны'),nw)}</div>
+ ${grp(fld('Защита от листьев'+qm,'Нет',nw,'Выберите защиту (или «Нет»)'),nw)}
+ <div><div class="lbl">Демонтаж${qm}</div>${grp(row('Снять старый gutter','',{ctrl:'<span class="tog"></span>'}),false)}</div>
+ ${grp(row('Фото для бригады'+qm,'Нет фото',{icon:'camera',sub:'снимок этого места: увидит бригада'}),false)}
+ ${nw?'':`<div class="grp"><div class="row del">${ic('trash',20,k('badT'))}Удалить gutter</div></div>`}`;
+ // DS 1.18.0 §7.3: «Закрыть | Сохранить» in one row, 44 each, 12 apart, no «✕»; pinned at the bottom; «Сохранить» never greys out
+ const foot=`<div class="foot" style="gap:12px"><span class="btnw" style="height:44px;border-radius:22px;border:1px solid var(--bdField)">Закрыть</span><span class="btnw acc" style="height:44px;border-radius:22px;border:1px solid transparent">Сохранить</span></div>`;
+ if(F==='run-plate'){
+  // the selected gutter on the canvas: its plate says number and length only — no colour (#1859, one colour a measurement)
+  H=`<div class="scr">${canvas()}<div style="position:absolute;left:12px;bottom:170px;display:flex;align-items:center;gap:8px;min-height:44px;box-sizing:border-box;padding:0 12px;border-radius:14px;background:var(--solid);border:1px solid var(--bd);box-shadow:var(--sh);font-weight:600">${ic('xsK',18)}Gutter №&nbsp;1 · 21′ 8½″<span style="color:var(--mut);font-weight:400">· 5″ K-Style</span>${ic('cr',16,k('mut'))}</div>${cap('Стало v6: плашка выбранного на холсте — номер и длина, без цвета (#1859); номер стоит у длины на чертеже: «№ 1 · 21′ 8½″» — та же длина, что в окне; выбранная линия обведена')}</div>`;
+ } else {
+  H=sheet((nw?'Gutter № 2':'Gutter № 1')+qm,nw?'новый · Линия 1':'Линия 1 · 21′ 8½″',body,foot);
+  if(!q.get('all')) H=H.replace('class="sheet static"','class="sheet static pinned"');
+  // «Закрыть» внизу — без второго «✕» в шапке (основатель: «Сохранить» и «Закрыть»)
+  H=H.replace(/<span class="b36 round" aria-label="Закрыть">[\s\S]*?<\/span>/,'');
+ }
+ if(F==='run-unsaved') H+=`<div style="position:absolute;inset:0;background:var(--scrim);display:flex;align-items:center;justify-content:center;padding:24px;z-index:6"><div style="background:var(--solid);box-shadow:var(--sh);border-radius:16px;padding:20px;width:100%;max-width:320px;display:flex;flex-direction:column;gap:8px"><b style="font-size:17px">Сохранить изменения?</b><span style="color:var(--mut);margin-bottom:4px">Изменены длина и цвет. Цвет поменяется у всех 3 gutters.</span><span class="btnw acc" style="flex:none;height:44px;border-radius:22px">Сохранить</span><span class="btnw" style="flex:none;height:44px;border-radius:22px;background:transparent;border:0">Не сохранять</span><span class="btnw" style="flex:none;height:44px;border-radius:22px;border-color:var(--bdField)">Назад</span></div></div>`;
+ if(F!=='run-plate') H+=cap(err?'Стало v6: «Сохранить» с пустыми полями не гаснет — пустые строки в красной рамке, под ними «Выберите …» со значком; окно прокручено к первой':nw?'Стало v6: новый gutter — всё «Выберите» (без умолчаний, #1858); этаж — текущий холста, цвет — замера (один на замер, #1859); «Удалить» нет — «Закрыть» и так отбрасывает':F==='run-unsaved'?'Стало v6: «Закрыть» с несохранённым — «Сохранить изменения?»: Сохранить · Не сохранять · Назад, столбиком по 44 (DS §7.3)':'Стало v6: «Gutter № N»; размер · цвет · этаж одной строкой; длина с дробью и лентой 1/16″; «Закрыть | Сохранить» внизу (#1857)');
+}
+if(F==='corner'||F==='corner-in'){
+ const inner=F==='corner-in';
+ const sk=`<svg viewBox="0 0 300 200" style="width:100%;height:170px"><rect x="40" y="40" width="190" height="22" fill="${k('surf2')}"/><rect x="208" y="40" width="22" height="150" fill="${k('surf2')}"/><path d="M40 62H208V190" fill="none" stroke="${k('ink')}" stroke-width="3"/><path d="M40 40H230V190" fill="none" stroke="${k('ink')}" stroke-width="2" stroke-dasharray="5 4"/><path d="M208 62L230 40" stroke="${k('ink')}" stroke-width="2.5"/><path d="M190 62A18 18 0 0 0 208 80" fill="none" stroke="${k('mut')}" stroke-width="1.5" stroke-dasharray="6 3 1 3"/><text x="180" y="96" font-size="13" font-weight="600" font-weight="600" fill="${k('ink')}">90°</text><text x="120" y="30" font-size="13" font-weight="600" fill="${k('ink')}" text-anchor="middle">лицевая 24′ 4″</text><text x="120" y="80" font-size="13" font-weight="600" fill="${k('ink')}" text-anchor="middle">стена 23′ 11″</text></svg>`;
+ const skIn=`<svg viewBox="0 0 300 200" style="width:100%;height:170px"><rect x="40" y="62" width="168" height="22" fill="${k('surf2')}"/><rect x="186" y="62" width="22" height="128" fill="${k('surf2')}"/><path d="M40 62H208V190" fill="none" stroke="${k('ink')}" stroke-width="3"/><path d="M40 84H186V190" fill="none" stroke="${k('ink')}" stroke-width="2" stroke-dasharray="5 4"/><path d="M208 62L186 84" stroke="${k('ink')}" stroke-width="2.5"/><text x="120" y="50" font-size="13" font-weight="600" fill="${k('ink')}" text-anchor="middle">стена 23′ 11″</text><text x="110" y="104" font-size="13" font-weight="600" fill="${k('ink')}" text-anchor="middle">лицевая 23′ 6″</text><text x="222" y="60" font-size="13" font-weight="600" font-weight="600" fill="${k('ink')}">90°</text></svg>`;
+ const cut=(n,w,f)=>`<div class="grp" style="padding:10px 14px"><div style="font-weight:600;font-size:13px">Gutter ${n}</div><table class="cut"><tr><th>По стене</th><th>По лицу</th><th>Рез</th></tr><tr><td style="text-align:left">${w}</td><td><b>${f}</b></td><td>45°</td></tr></table></div>`;
+ const segI=(on)=>`<div class="seg">${[['cornerOut','Наружный'],['cornerIn','Внутренний']].map(([i,t],j)=>`<span class="${j===on?'on':''}" style="gap:6px">${ic(i,16)}${t}</span>`).join('')}</div>`;
+ H=sheet('Угол','1-1 / 1-2',`
+ <div><div class="lbl">Вид угла${qm}</div><div class="grp">${[['cornerOut','Наружный',!inner,'угол дома наружу: лицевая длиннее стены'],['cornerIn','Внутренний',inner,'угол внутрь: лицевая короче стены']].map(([i,t,on,d])=>`<div class="opt">${ic(i,20,k('mut'))}<div class="stack"><span>${t}</span><small>${d}</small></div>${on?ic('check',20,k('ink')):''}</div>`).join('')}</div><div class="note">Сменится сторона всей линии</div></div>
+ ${inner?skIn:sk}
+ <div><div class="grp">${sel('Как делаем угол'+qm,'Резать')}</div><div class="note">Прибавка на этот угол: <b>${inner?'+7″':'+14″'}</b> — уже в закупке рулона, отдельно не добавляйте. Запас рулона: 1 линия +3 ft, 2 и больше +6 ft (настройки).</div></div>
+ <div><div class="lbl">Раскрой · угол 90°</div><div style="display:flex;flex-direction:column;gap:8px">${inner?cut('1-1','23′ 11″','23′ 6″')+cut('1-2','25′ 11″','25′ 6″'):cut('1-1','23′ 11″','24′ 4″')+cut('1-2','25′ 11″','26′ 4″')}</div></div>
+ <div class="grp">${inner?row('Брызговик на угол'+qm,'',{ctrl:'<span class="tog on"></span>'}):''}${row('Измерить угол'+qm,'',{icon:'pencil'})}</div>
+ <div class="grp"><div class="row del">Разъединить угол</div></div>`,'',false)+cap(inner?'Стало v5: внутренний угол — вид и способ строками с меню; прибавка +7″ видна':'Стало v5: наружный угол — вид и способ строками с меню; прибавка +14″ видна');
+}
+if(F==='corner-tri'){
+ const fig=`<svg viewBox="0 0 340 300" style="width:100%;height:290px">
+ <path d="M60 60H320M60 60V290" stroke="${k('ink')}" stroke-width="6" stroke-linecap="round"/>
+ <circle cx="60" cy="60" r="7" fill="${k('ink')}"/><text x="72" y="50" font-size="13" font-weight="600" fill="${k('ink')}">вершина угла</text>
+ <path d="M60 78H240" stroke="${k('mut')}" stroke-width="1.5"/><path d="M60 72v12M240 72v12" stroke="${k('mut')}" stroke-width="1.5"/><text x="150" y="98" font-size="14" font-weight="700" fill="${k('ink')}" text-anchor="middle">A = 24″</text>
+ <path d="M78 60V240" stroke="${k('mut')}" stroke-width="1.5"/><path d="M72 60h12M72 240h12" stroke="${k('mut')}" stroke-width="1.5"/><text x="88" y="160" font-size="14" font-weight="700" fill="${k('ink')}">B = 24″</text>
+ <circle cx="240" cy="60" r="8" fill="${k('bg')}" stroke="${k('ink')}" stroke-width="3"/><circle cx="60" cy="240" r="8" fill="${k('bg')}" stroke="${k('ink')}" stroke-width="3"/>
+ <text x="250" y="45" font-size="12" fill="${k('mut')}">метка</text><text x="20" y="262" font-size="12" fill="${k('mut')}">метка</text>
+ <path d="M240 60L60 240" stroke="${k('ink')}" stroke-width="3" stroke-dasharray="8 6"/><text x="170" y="170" font-size="16" font-weight="700" fill="${k('ink')}">C — рулеткой</text>
+ </svg>`;
+ H=`<div class="sheet static"><div class="grab"></div><div class="sh"><span class="b36">${ic('cl',16)}Назад</span><h2 style="font-size:17px">Измерить угол</h2><span class="b36 round">${ic('close',18)}</span></div><div class="body">
+ <div class="note" style="margin:0">1. От вершины угла (где сходятся доски) отмерьте 24″ по каждой стороне и поставьте метки. 2. Рулеткой измерьте расстояние между метками — это C.</div>${fig}
+ <div class="grp" style="padding:10px 14px;font-size:13px"><div><b>угол = arccos((A² + B² − C²) / (2·A·B))</b></div><div style="color:var(--mut);margin-top:4px">Пример: A = 24″, B = 24″, C = 33 15⁄16″ → <b style="color:var(--ink)">90°</b></div></div>
+ <div><div class="lbl">C — между метками</div><div style="display:flex;gap:8px;align-items:center">${fin('33','in',100)}${dd('15⁄16')}</div></div>
+ <div class="grp">${row('A и B','24″ и 24″ — изменить')}</div>
+ <div class="grp" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center"><span>Угол</span><b style="font-size:20px">90°</b></div>
+ </div><div class="foot"><span class="btnw acc">Поставить угол 90°</span></div></div>`+cap('Стало v3: от вершины угла, метки по 24″, вводится одно число C; формула и пример на схеме');
+}
+if(F==='canvas'){
+ const tb=`<div class="tb2"><span style="color:var(--mut)">⋮⋮</span><div class="c on">${ic('xsK')}</div><div class="c">${ic('dsRect')}</div><div class="c" style="width:auto"><span style="font-size:13px;font-weight:700;border:2px solid ${k('s1')};border-radius:14px;padding:4px 8px">Эт 1</span></div><div class="c">${ic('undo')}</div><div class="c">${ic('redo')}</div><div class="c">${ic('trash')}</div></div><div class="fld" style="bottom:44px"><b>Gutter · 25′ 11″</b></div>`;
+ const hd=`<div class="hdr"><span class="b36 round">${ic('cl',20)}</span><span class="b36">${ic('plus',18)}Привязать</span><span class="sp"></span><span class="b36" style="padding:0 10px">${ic('camera',20)}<span style="font-size:13px">2</span></span><span class="b36 round">${ic('more',20)}</span><span class="b36 acc">Готово</span></div>`;
+ H=`<div class="scr">${canvas()}${hd}${tb}${cap('Стало: шапка — 5 кнопок высотой 36 одной формы; 📷 с числом фото; «Готово» 36. Панель и плашка — как сейчас')}</div>`;
+}
+if(F==='link'||F==='draft'){
+ const draft=F==='draft';
+ H=sheet('Привязать замер','',`
+ ${seg(['Лиды','Клиенты','Черновик'],draft?2:0)}
+ ${draft?`<div><div class="lbl">Название черновика</div><div class="inp focus">Дом на Maple, задний двор<span class="sp"></span>${ic('close',16,k('mut'))}</div><div class="note">Видно в списке «Черновики» на вкладке Gutters. Привязать к лиду или клиенту можно потом.</div></div>`
+ :`<div class="inp">${ic('search',18,k('mut'))}<span class="ph2">Имя, телефон или адрес</span></div>
+  <div class="grp">${row('Maria Lopez','',{icon:'user',sub:'412 Oak St · лид от 14 нояб.',ctrl:ic('check',20,k('ink'))})}${row('John Carter','',{icon:'user',sub:'88 Pine Ave · лид от 12 нояб.',ctrl:''})}${row('Kevin Brooks','',{icon:'user',sub:'лид от 10 нояб.',ctrl:''})}</div><div class="grp">${row('Новый лид','',{icon:'plus',sub:'По телефону и имени'})}</div>`}`,
+ `<div class="foot"><span class="btnw acc">${draft?'Сохранить черновик':'Привязать к Maria Lopez'}</span></div>`,false)+cap(draft?'Стало: «Привязать» → «Черновик»: поле названия, сохраняется':'Стало: «Привязать» — три вкладки: лиды, клиенты, черновик');
+}
+if(F==='tab'){
+ const card=(icon,t,date,chip,line)=>`<div class="card"><div class="lc"><span class="av">${ic(icon,20)}</span><div style="flex:1;display:flex;flex-direction:column;gap:6px"><div class="t"><span>${t}</span><span class="m">${date}</span></div>${chip}<div class="m">${line}</div></div></div></div>`;
+ const ch=(col,i,txt)=>`<span><span class="chip" style="color:${col}">${i} ${txt}</span></span>`;
+ H=`<div class="scr" style="background:linear-gradient(160deg,rgba(124,224,138,.25),var(--bg) 35%,var(--bg) 70%,rgba(255,160,60,.18))"><div class="top"><div class="crumb">GoRix v1.0.0 · 1736 · вс, 15 нояб. 5:14 PM</div>
+ <div class="ttl"><h1>Gutters</h1><span class="q">?</span></div>
+ <div style="display:flex;gap:8px"><div class="inp" style="flex:1">${ic('search',18,k('mut'))}<span class="ph2">Поиск</span></div><span class="b36 acc" style="align-self:center">${ic('plus',18)}Новый замер</span></div>
+ <div style="display:flex;gap:8px;margin-top:10px;overflow:hidden;-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent)">${['Все · 4','Черновики · 2','Без сметы · 1','Смета · 1','Подписана'].map((x,i)=>`<span class="chip" style="height:32px;padding:0 12px;font-size:13px;white-space:nowrap;flex:none;${i===0?'background:var(--surf2);box-shadow:var(--sh);color:var(--ink)':'color:var(--mut)'}">${x}</span>`).join('')}</div>
+ <div class="secH"><b>Черновики</b><span>2</span></div>
+ <div style="display:flex;flex-direction:column;gap:8px">${card('pencil','Дом на Maple, задний двор','вчера',ch(k('mut'),'▢','Черновик'),'Gutters: 3 · 62 ft · downspouts: 2')}${card('pencil','Без названия','15 нояб.',ch(k('mut'),'▢','Черновик'),'Gutters: 2 · 50 ft · downspouts: 3')}</div>
+ <div class="secH"><b>Привязанные к клиентам и лидам</b><span>2</span></div>
+ <div style="display:flex;flex-direction:column;gap:8px">${card('user','Лид · Maria Lopez','14 нояб.',ch(k('warnT'),'⚠','Без сметы'),'412 Oak St · gutters: 4 · 96 ft')}${card('users','Клиент · John Carter','12 нояб.',ch(k('infoT'),'◷','Смета отправлена'),'88 Pine Ave · gutters: 2 · 40 ft')}</div></div>
+ <div class="tabbar" style="left:16px;right:16px;bottom:44px;border-radius:24px;height:60px;border:1px solid var(--bd)"><div>${ic('home')}Главная</div><div>${ic('note')}План</div><div>${ic('users')}Чаты</div><div>${ic('users')}Клиенты</div><div class="on" style="background:var(--surf2);box-shadow:var(--sh);border-radius:12px">${ic('note')}Gutters</div><div>${ic('more')}Ещё</div></div>${cap('Стало v2: сверху поиск, жёлтая «＋ Новый замер», фильтры; ниже — черновики и привязанные')}</div>`;
+}
+document.getElementById('scr').outerHTML=F==='canvas'||F==='tab'||F==='run-plate'?H:`<div class="scr">${canvas()}<div class="scrim"></div>${H}</div>`;
+const sh=document.querySelector('.sheet.static');if(sh&&sh.offsetHeight+130<844){sh.style.position='absolute';sh.style.left='0';sh.style.right='0';sh.style.bottom='34px';sh.style.margin='0';}
+if(q.get('l'))translatePage(q.get('l'));
+</script></body></html>

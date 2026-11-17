@@ -78,7 +78,7 @@ export type BeforeSend =
 export function beforeSend(db: Pick<DB, "customers">, e: Pick<Estimate, "customerId" | "status" | "doc">, opts: { force?: boolean } = {}): BeforeSend {
   if (!canServe(db, e.customerId)) return { ok: false, reason: "no_service" };
   if (e.doc) {
-    const issues = sendIssues(e.doc);
+    const issues = sendIssues(e.doc, { firstSend: e.status === "draft" });
     const canForce = issues.noPrice.length === 0;
     if (!canForce || (!opts.force && issueCount(issues) > 0)) return { ok: false, reason: "lines", issues, canForce };
   }

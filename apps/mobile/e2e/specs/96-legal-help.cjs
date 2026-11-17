@@ -22,7 +22,7 @@ exports.run = async (h) => {
   const tick = vis("legal-agree");
   await tick.waitFor({ timeout: 4000 });
   h.expect((await tick.getAttribute("aria-checked")) === "false", "the tick starts empty");
-  await h.expectText(/Я принимаю.*Условия использования.*и.*Политика конфиденциальности/s, "the words say that ticking is agreeing");
+  await h.expectText(/Я принимаю.*Условия использования.*и.*Политику конфиденциальности/s, "the words say that ticking is agreeing");
   await p.getByPlaceholder("Email").locator("visible=true").last().fill("owner@example.com");
   h.expect(await btn("Получить код").isDisabled(), "a good email, no tick: «Получить код» is off");
   await tick.click();

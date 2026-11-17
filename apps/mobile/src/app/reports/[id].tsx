@@ -23,7 +23,7 @@ const AGE: Record<AgingBucket, DictKey> = { current: "rpt.age.current", d1_30: "
 export default function Report() {
   const { id, p: pParam } = useLocalSearchParams<{ id: string; p?: string }>();
   const { db, role } = useStore();
-  const { t, money, moneyWhole } = useI18n();
+  const { t, tn, money, moneyWhole } = useI18n();
   const { device } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/reports"));
   const r = asReport(id);
@@ -66,11 +66,12 @@ export default function Report() {
     </Card>
   );
   /** rows of one breakdown: a detail of the one report (rule 12: lines inside one card) */
-  const breakdown = (title: string, rows: CentsTotal<string>[], name: (k: string) => string, whole: number) => (
+  // the count says what is counted: «1 оплата», «2 счёта» (#1427 047/049; not «1 шт»)
+  const breakdown = (title: string, rows: CentsTotal<string>[], name: (k: string) => string, whole: number, of: "rpt.share.pay" | "rpt.share.inv") => (
     <Card>
       <SectionTitle title={title} />
       {rows.map((x, n) => (
-        <ListRow key={x.key} title={name(x.key)} subtitle={t("rpt.share", { n: x.count, pct: whole > 0 ? Math.floor((x.cents * 200 + whole) / (2 * whole)) : 0 })} right={<T v="body" tabular>{money(x.cents)}</T>} />
+        <ListRow key={x.key} title={name(x.key)} subtitle={tn(of, x.count, { pct: whole > 0 ? Math.floor((x.cents * 200 + whole) / (2 * whole)) : 0 })} right={<T v="body" tabular>{money(x.cents)}</T>} />
       ))}
     </Card>
   );
@@ -110,8 +111,8 @@ export default function Report() {
         {total(t("rpt.collected.title"), c.totalCents, t("rpt.collected.note", { n: c.count }))}
         {c.count === 0 ? <Empty icon="wallet" title={t("mny.payments.empty")} /> : (
           <>
-            {breakdown(t("rpt.byMethod"), c.byMethod, method, c.totalCents)}
-            {breakdown(t("rpt.byPerson"), c.byPerson, personName, c.totalCents)}
+            {breakdown(t("rpt.byMethod"), c.byMethod, method, c.totalCents, "rpt.share.pay")}
+            {breakdown(t("rpt.byPerson"), c.byPerson, personName, c.totalCents, "rpt.share.pay")}
           </>
         )}
       </>
@@ -173,7 +174,7 @@ export default function Report() {
       <>
         {head(csvBtn(rows, [t("rpt.source"), t("rpt.count"), t("rpt.amount")]))}
         {total(t("rpt.sources.revenue"), s.totalCents, t("rpt.sources.hint"))}
-        {s.rows.length === 0 ? <Empty icon="megaphone" title={t("rpt.sources.empty")} /> : breakdown(t("rpt.source"), s.rows, sourceName, s.totalCents)}
+        {s.rows.length === 0 ? <Empty icon="megaphone" title={t("rpt.sources.empty")} /> : breakdown(t("rpt.source"), s.rows, sourceName, s.totalCents, "rpt.share.inv")}
       </>
     );
   }

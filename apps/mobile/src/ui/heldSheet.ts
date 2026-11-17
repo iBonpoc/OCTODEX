@@ -15,6 +15,12 @@ export function heldStep<T>(prev: HeldState<T>, value: T | null | undefined): He
   const cameBack = v !== null && prev.seen === null && prev.held !== null;
   return { seen: v, held: v ?? prev.held, opening: cameBack ? prev.opening + 1 : prev.opening };
 }
+/** the sheet has left: let go of the data (unless it came back meanwhile) and count a new opening — a body that stays
+ *  mounted with `held.opening` in its key starts fresh next time, even when nothing was held at the next open (#1826:
+ *  the price sheet kept what was typed for the previous item) */
+export function heldExit<T>(p: HeldState<T>): HeldState<T> {
+  return p.seen === null && p.held !== null ? { ...p, held: null, opening: p.opening + 1 } : p;
+}
 
 /**
  * A sheet whose owner mounts it by data (`{x ? <XSheet x={x} /> : null}`, `if (!x) return null`) would vanish at once
@@ -28,7 +34,7 @@ export function useHeldSheet<T>(value: T | null | undefined): { value: T | null;
   const cur = heldStep(st, value);
   if (cur !== st) setSt(cur);
   // the sheet is gone: let go of the data, unless it has come back meanwhile
-  const onExited = useCallback(() => setSt((p) => (p.seen === null && p.held !== null ? { ...p, held: null } : p)), []);
+  const onExited = useCallback(() => setSt(heldExit), []);
   return { value: value ?? cur.held, visible: value != null, opening: cur.opening, onExited };
 }
 
