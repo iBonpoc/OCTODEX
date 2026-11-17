@@ -22,8 +22,12 @@ begin
   perform set_config('app.item_price_due', '', true);
 
   -- #1965: an author without our costs does not turn a counted material into another kind (the lock is not got round)
-  if tg_op = 'UPDATE' and old.kind = 'material' and old.price_from_cost and new.kind is distinct from 'material'
-     and auth.uid() is not null and not app.can_view_costs(new.company_id) then
+  -- by the cost itself, not price_from_cost: the flag is not re-counted in the Trash (check of #1965). A kind-only change is
+  -- dropped without a note (only a sent price is noted, below)
+  if tg_op = 'UPDATE' and old.kind = 'material' and new.kind is distinct from 'material'
+     and auth.uid() is not null and not app.can_view_costs(new.company_id)
+     and exists (select 1 from public.catalog_item_costs c
+                  where c.item_id = old.id and c.company_id = new.company_id and c.unit_cost_cents is not null) then
     new.kind := old.kind;
   end if;
   -- a new row has no cost row yet (t95 moves the cost with an update of the row, and that update counts the price)
