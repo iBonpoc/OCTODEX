@@ -12,7 +12,8 @@ vi.mock("@/cloud/client", () => ({
 }));
 import { applyOp } from "../src/cloud/ops";
 import { classify } from "../src/data/outboxRetry";
-import { dropSupplierTaxOps, supplierTaxRejected, type OwnedItem } from "../src/data/outboxRejected";
+import { dropSupplierTaxOps, supplierTaxRejected } from "../src/data/outboxRejected";
+import type { OwnedItem } from "../src/data/outboxOwner";
 
 const who = { userId: "u1", companyId: "c1" };
 const item = (id: string, supplierId: string, taxBps: number | null, seenBps: number | null): OwnedItem =>
