@@ -16845,7 +16845,7 @@ update public.memberships set permissions_override = permissions_override - 'vie
 select tst.fails($q$select public.supplier_set_tax('37100000-0000-4000-8000-0000000000a3', 800, 700)$q$, 'T375 С5 another company''s owner may not (the supplier is not found)');
 \echo 'T376 nothing to change'
 :as_owner_a
-select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 the same rate changes nothing');
+select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 900, 900) = 0, 'T376 the same rate changes nothing (С6 idempotent)');
 select tst.ok(public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', 1200, 900) = 3
               and public.supplier_set_tax('37100000-0000-4000-8000-0000000000a1', null, 1200) = 0, 'T376 a cleared rate changes the supplier only');
 :as_super
@@ -16868,13 +16868,13 @@ end $$;
 update public.suppliers set purchase_tax_bps = 1100 where id = '37100000-0000-4000-8000-0000000000a1';
 :as_super
 select tst.ok((select count(*) = 3 from public.catalog_item_costs where item_id::text in ('37100000-0000-4000-8000-0000000000b1', '37100000-0000-4000-8000-0000000000b2', '37100000-0000-4000-8000-0000000000b3') and vendor_tax_bps = 1100),
-  'T377 С1 the supplier saved by a phone''s own upsert moves the rate to its items on the server');
+  'T376 С6 the supplier saved by a phone''s own upsert (also from the offline queue) moves the rate to its items on the server');
 \echo 'T378 rights'
 select tst.ok(has_function_privilege('authenticated', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
               and not has_function_privilege('anon', 'public.supplier_set_tax(uuid,integer,integer)', 'EXECUTE')
               and (select prosecdef and proconfig @> array['search_path=""'] from pg_proc where oid = 'public.supplier_set_tax(uuid,integer,integer)'::regprocedure),
-  'T378 supplier_set_tax: authenticated only, security definer, empty search_path');
-select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE'), 'T378 the trigger functions are for nobody');
+  'T378 С8 supplier_set_tax: authenticated only, security definer, empty search_path');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_tax_follows_supplier()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_item_supplier_tax()', 'EXECUTE'), 'T378 С8 the trigger functions are for nobody');
 \echo 'T371–T378 ok'
 
 \echo 'ALL TESTS PASSED'
