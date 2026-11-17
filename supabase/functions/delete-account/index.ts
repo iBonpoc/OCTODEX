@@ -2,6 +2,8 @@
 // Deployed by .github/workflows/release.yml after the migrations; verify_jwt = true (supabase/config.toml).
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { CLEARED_METADATA, handleDelete } from "./handler.ts";
+import { drainStorageQueue } from "../erase-storage/handler.ts";
+import { storageDeps } from "../erase-storage/deps.ts";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -25,6 +27,11 @@ Deno.serve(async (req: Request) => {
         if (upd.error) return { error: { message: upd.error.message } };
         const { error } = await admin.auth.admin.deleteUser(uid, true);
         return { error: error ? { message: error.message } : null };
+      },
+      // in the background: the answer to the person never waits for Storage (EdgeRuntime keeps the worker until it ends)
+      eraseStorage: async () => {
+        const job = drainStorageQueue(storageDeps(admin)).catch(() => {});
+        (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime?.waitUntil?.(job);
       },
       log: (m) => console.warn(m),
     },
