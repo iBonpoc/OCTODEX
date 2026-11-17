@@ -25,10 +25,12 @@ describe("the speed check's route", () => {
     const g = await load();
     expect(Object.keys(g.screens ?? {})).not.toContain("bench");
     expect(Object.keys(g.screens ?? {})).toEqual(expect.arrayContaining(["draw", "view", "list", "settings", "prices"]));
+    expect(g.fullScreen).not.toContain("bench");
   });
   it("Expo Go / a development build (offered): the screen is there", async () => {
     env.offered = true;
     const g = await load();
     expect(Object.keys(g.screens ?? {})).toContain("bench");
+    expect(g.fullScreen).toContain("bench");
   });
 });
