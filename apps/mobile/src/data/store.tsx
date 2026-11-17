@@ -54,7 +54,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { backoffMs, classify, isAccessDenied, isModuleInactive, isUnknownOp, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, liveOf, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropGroupPriceOps, dropModuleOps, dropSettingsOps, dropTemplateOps, groupPriceRejected, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, onSharedForget, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -66,6 +66,7 @@ import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchase
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { sameValue, undoOwn } from "@/data/undoOwn";
 import { markOf, markUndo, NO_UNDO, type GuardedUndo } from "@/data/undo";
+import { groupPriceChanged, groupPriceLocked, joinedGroup, priceGroupOf, withoutGroupCosts, type GroupPriceInput } from "./priceGroup";
 import { cleanCardFields, itemForSave, localPriceEntries, mergePriceHistory } from "@/features/catalogCard";
 import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
@@ -488,6 +489,8 @@ interface StoreCtx {
   /** «Команда → Сотрудник»: title, HIS number; the right to sign — owner only */
   updateMember: (id: ID, patch: { title?: string; hisNumber?: string; canSignContracts?: boolean }) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
+  /** #1913: one price for the whole price group of the item (catalog.groupPrice); not in a group — nothing */
+  saveGroupPrice: (itemId: ID, v: GroupPriceInput) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
   saveSupplier: (x: Supplier) => GuardedUndo;
@@ -953,7 +956,9 @@ export function StoreProvider({
         inFlight.current = item.id;
         setSendingId(item.id);
         try {
-          const sent = await applyOp(item.op, w.companyId, w.userId);
+          // #1913: a group's price write of someone who does not see our costs (now — a role may have changed since it was
+          // queued) never carries costs to the server
+          const sent = await applyOp(dbRef.current.costsVisible === true ? item.op : withoutGroupCosts(item.op), w.companyId, w.userId);
           inFlight.current = null;
           setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
@@ -1025,7 +1030,11 @@ export function StoreProvider({
           // #1633 A2: «no rights» (42501) may mean the person was just removed from the company or given another role: no
           // try is spent until the memberships are read again (a removed person's ops are never dropped by it — they wait
           // for «Убрать»); confirmed since and still here — a «no» like any other
-          if (isAccessDenied(e) && accessDeniedRef.current && stampRef.current !== undefined) {
+          // #1913: «a group counted from its cost is not yours to price» (42501, hint price_from_cost) is about the group,
+          // not the membership: no reread of the memberships for it (handled with the group conflicts below)
+          const groupDenied =
+            item.op.k === "catalog.groupPrice" && isAccessDenied(e) && (e as { hint?: unknown } | null)?.hint === "price_from_cost";
+          if (!groupDenied && isAccessDenied(e) && accessDeniedRef.current && stampRef.current !== undefined) {
             const at = deniedAt.current.get(item.id);
             // the memberships were just read again on such a signal and I am still here: a plain «no» (e2e 118)
             const checked = checkedAtRef.current;
@@ -1098,6 +1107,22 @@ export function StoreProvider({
             dropped = true;
             const rej = templateRejected(item, msg, Date.now(), w);
             setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
+            setOutbox(outboxRef.current);
+            continue;
+          }
+          // #1913: a group's price changed on another phone first (row_version_conflict): this write and the later ones of
+          // the same group go now (each was built on this one's expected price), one card with the price meant; the
+          // truth is read again (the screen offers «Поставить $X» against the price the server has now)
+          // …and the same for «not yours to price» (42501 price_from_cost: a group counted from its cost): no five tries
+          if (item.op.k === "catalog.groupPrice" && (isRowConflict(e) || groupDenied)) {
+            const { kept, gone } = dropGroupPriceOps(outboxRef.current, item.op.group, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            setRejected((prev) => groupPriceRejected(prev, gone, msg, Date.now(), w, groupDenied ? "price.group.rejRights" : undefined));
             setOutbox(outboxRef.current);
             continue;
           }
@@ -1266,6 +1291,43 @@ export function StoreProvider({
     },
     [runnable, setQueue, setOutbox],
   );
+
+  /**
+   * #1913 (the price-key spec, §4.6): one price for the whole price group of `prev` — on the phone at once (every live
+   * item of the group: price, placeholder; costs only for who sees them), to the server as one op catalog.groupPrice
+   * against what the phone saw (`prev`): someone else changed it first → the server says so (40001), nothing is lost.
+   * A group counted from its cost and a person who does not see costs: nothing (the price is not theirs to set — 53-0б).
+   */
+  const groupPriceWrite = (prev: CatalogItem, v: GroupPriceInput): GuardedUndo => {
+    const d0 = dbRef.current;
+    const group = priceGroupOf(prev);
+    if (!group) return NO_UNDO;
+    // only a «yes» is a yes (unknown is no, as the screens: review of PR2 №1); the local data of a demo has no server to refuse
+    const seesCosts = d0.costsVisible === true || modeRef.current !== "cloud";
+    const inGroup = (x: CatalogItem) => priceGroupOf(x) === group;
+    if (!seesCosts && groupPriceLocked(d0.catalog, prev)) return NO_UNDO;
+    const placeholder = v.placeholder ?? !!prev.placeholder;
+    const cost = seesCosts ? { costCents: v.costCents ?? prev.costCents, vendorTaxBps: v.vendorTaxBps ?? prev.vendorTaxBps, markupBps: v.markupBps ?? prev.markupBps } : {};
+    const now = new Date().toISOString();
+    const op: Op = {
+      k: "catalog.groupPrice", itemId: prev.id, group, priceCents: v.priceCents, placeholder,
+      expectedPriceCents: prev.priceCents,
+      ...(seesCosts
+        ? {
+            costCents: cost.costCents ?? null, vendorTaxBps: cost.vendorTaxBps ?? null, markupBps: cost.markupBps ?? null,
+            expectedCostCents: prev.costCents ?? null, expectedTaxBps: prev.vendorTaxBps ?? null, expectedMarkupBps: prev.markupBps ?? null,
+          }
+        : {}),
+    };
+    return mutate(
+      "catalog.groupPrice",
+      (d) => ({
+        ...d,
+        catalog: d.catalog.map((x) => (inGroup(x) ? { ...x, priceCents: v.priceCents, placeholder, ...cost, updatedAt: now, ...(d.me ? { updatedBy: d.me } : {}) } : x)),
+      }),
+      op,
+    );
+  };
 
   const patchVisit = (d: DB, id: ID, fn: (v: Visit) => Visit): DB => ({
     ...d,
@@ -2631,7 +2693,22 @@ export function StoreProvider({
         // #1807 (53-0б-2): a material whose price the server counts from a cost this person does not see keeps its price and
         // its kind, from any caller (the server would keep its own; the phone must not show another one meanwhile)
         const locked = dbRef.current.costsVisible === false && prev?.kind === "material" && !!prev.priceFromCost;
-        const it = locked && prev ? { ...it1, kind: prev.kind, priceCents: prev.priceCents, placeholder: prev.placeholder } : it1;
+        const it2a = locked && prev ? { ...it1, kind: prev.kind, priceCents: prev.priceCents, placeholder: prev.placeholder } : it1;
+        // #1913: joining a group, the item takes the group's price (the server does the same; review of PR2)
+        const it2 = modeRef.current === "cloud" ? joinedGroup(dbRef.current.catalog, prev, it2a) : it2a;
+        // #1913: an item of a price group — its price goes through the group (catalog.groupPrice: the whole group, against
+        // what the phone saw); the rest of the item goes as before, without the price fields
+        const viaGroup = modeRef.current === "cloud" && !!prev && !!priceGroupOf(prev) && priceGroupOf(it2) === priceGroupOf(prev) && groupPriceChanged(prev, it2);
+        // a cost cleared (it had one, now none) is not a group write: the item's own save clears it and the server spreads that
+        // to the group (catalog_set_group_price keeps a value it is not given — review of PR2 №2)
+        const cleared = !!prev && ((prev.costCents != null && it2.costCents == null) || (prev.vendorTaxBps != null && it2.vendorTaxBps == null) || (prev.markupBps != null && it2.markupBps == null));
+        const it = viaGroup && prev
+          ? { ...it2, priceCents: prev.priceCents, placeholder: prev.placeholder, ...(cleared ? {} : { costCents: prev.costCents, vendorTaxBps: prev.vendorTaxBps, markupBps: prev.markupBps }) }
+          : it2;
+        const groupUndo = viaGroup && prev
+          ? () => groupPriceWrite(cleared ? { ...prev, costCents: it2.costCents, vendorTaxBps: it2.vendorTaxBps, markupBps: it2.markupBps } : prev,
+              cleared ? { priceCents: it2.priceCents, placeholder: !!it2.placeholder } : { priceCents: it2.priceCents, placeholder: !!it2.placeholder, costCents: it2.costCents, vendorTaxBps: it2.vendorTaxBps, markupBps: it2.markupBps })
+          : null;
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
         const costs = catalogCostChange(prev, it);
         // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
@@ -2641,7 +2718,7 @@ export function StoreProvider({
         const priceHist = dbRef.current.costsVisible === false ? [] : localPriceEntries(prev, it, uid, now, dbRef.current.me ?? undefined);
         // on the phone: changed now, by me (the server writes its own); in the queue: never these columns
         const local: CatalogItem = { ...it, updatedAt: now, ...(dbRef.current.me ? { updatedBy: dbRef.current.me } : {}), ...(prev ? {} : { createdAt: now, ...(dbRef.current.me ? { createdBy: dbRef.current.me } : {}) }) };
-        return mutate(
+        const undoItem = mutate(
           "catalog.save",
           (d) => ({
             ...d,
@@ -2651,6 +2728,12 @@ export function StoreProvider({
           }),
           { k: "catalog.save", item: itemForSave(it), costs, ...withFields(prev, it) },
         );
+        if (!groupUndo) return undoItem;
+        return undoTogether([undoItem, groupUndo()]);
+      },
+      saveGroupPrice: (itemId, v) => {
+        const prev = dbRef.current.catalog.find((x) => x.id === itemId);
+        return prev ? groupPriceWrite(prev, v) : NO_UNDO;
       },
       saveSupplier: (x0) => {
         const x = cleanSupplier(x0);

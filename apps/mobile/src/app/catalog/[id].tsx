@@ -72,7 +72,7 @@ export default function CatalogItemScreen() {
   const noCosts = store.db.costsVisible === false;
   const isMat = countsFromCost(it, noCosts);
   // by the stored item: switching the kind on this screen does not unlock its price (the store keeps the kind too)
-  const locked = priceLocked(found ?? it, noCosts);
+  const locked = priceLocked(found ?? it, noCosts, store.db.catalog);
   const outerRo = useReadOnly();
   const price = editPrice(it, store.db.catalog, noCosts);
   const ok = editOk(it, noCosts);

@@ -16318,6 +16318,92 @@ select tst.ok((select kind = 'service' and unit_price_cents = 800 from public.ca
   'T350 a material without a cost: sales changes its kind and price as before');
 \echo 'T350 the kind of a counted material ok'
 
+-- ---------------------------------------------------------------- T363 (spec 50, PR 50-6): the schedule of the erasure jobs
+\echo 'T363 the erasure schedule'
+:as_super
+-- rights: for service_role only (rule 18), nobody from the API
+select tst.ok(has_function_privilege('service_role', 'app.erase_retry()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_retry()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_kick_ok(text, text)', 'EXECUTE')
+              and (select bool_and(prosecdef and proconfig @> array['search_path=""']) from pg_proc where oid in ('app.erase_cron()'::regprocedure, 'app.erase_stuck()'::regprocedure,
+                   'app.erase_purge_done()'::regprocedure, 'app.erase_kick()'::regprocedure, 'app.erase_retry()'::regprocedure)),
+  'T363 retry is for service_role; the five job functions are security definer with an empty search_path');
+-- the address and the key: a project host and a JWT pass; anything else does not
+select tst.ok(app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co.evil.test/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://evil.test/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('http://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/send-push', 'aaa.bbb.ccc')
+              and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', 'sb_secret_abcdefghijklmnop')
+              and not app.erase_kick_ok(null, 'aaa.bbb.ccc') and not app.erase_kick_ok('https://abcdefghij0123456789.supabase.co/functions/v1/erase-storage', null),
+  'T363 erase_kick_ok: a project host and a JWT pass, a foreign host, http, another function, a non-JWT key and nulls do not');
+select tst.ok(not has_function_privilege('anon', 'app.erase_cron()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_cron()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_kick()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.erase_stuck()', 'EXECUTE')
+              and not has_function_privilege('authenticated', 'app.erase_purge_done()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_cron()', 'EXECUTE') and has_function_privilege('service_role', 'app.erase_stuck()', 'EXECUTE')
+              and has_function_privilege('service_role', 'app.erase_purge_done()', 'EXECUTE') and has_function_privilege('service_role', 'app.erase_kick()', 'EXECUTE'),
+  'T363 the erasure job functions are for service_role only');
+-- no Vault and no pg_net here: the kick says false and breaks nothing
+select tst.ok(app.erase_kick() = false, 'T363 no Vault or pg_net: the kick is false, silently');
+-- the alarm counts only the rows that gave up (5 tries, not done), in both queues
+delete from app.erase_queue where user_id in ('36000000-0000-4000-8000-0000000000a1', '36000000-0000-4000-8000-0000000000a2', '36000000-0000-4000-8000-0000000000a3');
+delete from app.storage_erase_queue where path like '36000000-0000-4000-8000-000000000001/%';
+select app.erase_stuck() as t360_before \gset
+insert into app.erase_queue (user_id, tries) values ('36000000-0000-4000-8000-0000000000a1', 5);                        -- gave up
+insert into app.erase_queue (user_id, tries) values ('36000000-0000-4000-8000-0000000000a2', 4);                        -- still tries
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000a3', 5, now());        -- done
+insert into app.storage_erase_queue (bucket, path, tries) values ('files', '36000000-0000-4000-8000-000000000001/gave-up.jpg', 5);
+insert into app.storage_erase_queue (bucket, path, tries) values ('files', '36000000-0000-4000-8000-000000000001/waits.jpg', 2);
+select tst.ok(app.erase_stuck() = :t360_before + 2, 'T363 the alarm counts the person row and the object that gave up, not the others');
+-- a row that waits for more than 2 days counts too (no Vault, a refused key, a function not deployed)
+insert into app.erase_queue (user_id, tries, at) values ('36000000-0000-4000-8000-0000000000a4', 0, now() - interval '3 days');
+select tst.ok(app.erase_stuck() = :t360_before + 3, 'T363 a row that waits for more than 2 days is counted');
+delete from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a4';
+-- retry: the rows that gave up get five more tries, the others are not touched
+select app.erase_retry() >= 2 as t360_retried \gset
+select tst.ok(:'t360_retried'::boolean and not exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a1' and tries >= 5)
+              and (select tries from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a2') = 4
+              and (select tries from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg') = 0,
+  'T363 retry gives the rows that gave up five more tries and leaves the others');
+update app.erase_queue set tries = 5 where user_id = '36000000-0000-4000-8000-0000000000a1';
+update app.storage_erase_queue set tries = 5 where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg';
+-- cleanup: done for more than 7 days leaves, done yesterday and rows not done stay
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000b1', 0, now() - interval '8 days');
+insert into app.erase_queue (user_id, tries, done_at) values ('36000000-0000-4000-8000-0000000000b2', 0, now() - interval '1 day');
+insert into app.storage_erase_queue (bucket, path, tries, done_at) values ('files', '36000000-0000-4000-8000-000000000001/old.jpg', 0, now() - interval '8 days');
+insert into app.storage_erase_queue (bucket, path, tries, done_at) values ('files', '36000000-0000-4000-8000-000000000001/new.jpg', 0, now() - interval '1 day');
+select count(*) as t360_done_old from app.erase_queue where done_at < now() - interval '7 days' \gset
+select count(*) as t360_done_old2 from app.storage_erase_queue where done_at < now() - interval '7 days' \gset
+select tst.ok(app.erase_purge_done() = :t360_done_old + :t360_done_old2, 'T363 the cleanup removes exactly the rows done for more than 7 days');
+select tst.ok(not exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000b1')
+              and exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000b2')
+              and exists (select 1 from app.erase_queue where user_id = '36000000-0000-4000-8000-0000000000a1')
+              and not exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/old.jpg')
+              and exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/new.jpg')
+              and exists (select 1 from app.storage_erase_queue where path = '36000000-0000-4000-8000-000000000001/gave-up.jpg'),
+  'T363 done for more than 7 days is gone; yesterday, waiting and given-up rows stay');
+-- the one call: runs the job, returns the counts, never throws
+select app.erase_cron() as t360_cron \gset
+select tst.ok((:'t360_cron'::jsonb ->> 'kick') = 'false' and (:'t360_cron'::jsonb ->> 'stuck')::int >= 2 and (:'t360_cron'::jsonb) ? 'purged',
+  'T363 erase_cron returns its counts and does not break without Vault');
+-- the schedule: where pg_cron exists, two jobs with these names, one each (the migration repeated makes no second one)
+do $$
+declare v_a int; v_b int;
+begin
+  if to_regnamespace('cron') is not null then
+    execute $q$select count(*) from cron.job where jobname = 'erase-people'$q$ into v_a;
+    execute $q$select count(*) from cron.job where jobname = 'erase-storage'$q$ into v_b;
+    if v_a <> 1 or v_b <> 1 then raise exception 'FAILED: T363 the two erasure jobs exist once each where pg_cron exists'; end if;
+  end if;
+end $$;
+-- from the API: nobody
+set role authenticated;
+select tst.fails($q$select app.erase_cron()$q$, 'T363 authenticated cannot run the erasure job');
+select tst.fails($q$select app.erase_stuck()$q$, 'T363 authenticated cannot read the alarm');
+select tst.fails($q$select app.erase_retry()$q$, 'T363 authenticated cannot give rows more tries');
+reset role;
+delete from app.erase_queue where user_id::text like '36000000-%';
+delete from app.storage_erase_queue where path like '36000000-0000-4000-8000-000000000001/%';
+\echo 'T363 the erasure schedule ok'
 
 -- ================================================================ T351–T362: one price for a «price group» (#1913 PR1, spec 33-gutters-price-key §4.6)
 -- A group: items of one company with the same attributes.priceGroup (the module writes it; the core does not know why).
