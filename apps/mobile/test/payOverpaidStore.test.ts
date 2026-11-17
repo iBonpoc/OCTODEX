@@ -1,6 +1,7 @@
 /**
- * unit:payOverpaidStore — #1995 (rule 8): the amount the store books for «Принять оплату» is what the engine says the invoice owes
- * (invoiceOwes), never total − paid by hand. Harness as test/demoKeepStore.test.ts.
+ * unit:payOverpaidStore — #1995 (rule 8): what «Принять оплату» and the deposit book. The behaviour did not change (acceptPayment already
+ * clamped the amount), so these two fix the RESULT; the refactor itself — no `total − paid` by hand in the store — is held by
+ * test/invoiceOwesGuard.test.ts (red before). Harness as test/demoKeepStore.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -55,7 +56,7 @@ import { StoreProvider } from "../src/data/store";
 import { makeSeed } from "../src/data/seed";
 import type { DB, ID, PaymentMethod } from "../src/data/types";
 
-type Value = { db: DB; mode: string; payInvoice: (id: ID, method: PaymentMethod) => unknown };
+type Value = { db: DB; mode: string; payInvoice: (id: ID, method: PaymentMethod) => unknown; payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => unknown };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
 let root: Root<P> | null = null;
@@ -69,7 +70,6 @@ afterEach(() => {
   root?.unmount();
   root = null;
 });
-
 
 const open = async (mutate: (db: DB) => DB) => {
   const db = mutate(makeSeed());
@@ -94,12 +94,23 @@ describe("unit:payOverpaidStore — #1995", () => {
   });
   it("С2. ДАНО счёт 1 840, оплачено 600. КОГДА «Принять оплату». ТОГДА записан платёж ровно на остаток 1 240, счёт оплачен", async () => {
     const r = await open((d) => ({ ...d, invoices: d.invoices.map((i) => (i.id === "i1" ? { ...i, paidCents: 60000 } : i)) }));
-    const n = valueOf(r).db.payments.length;
+    const before = valueOf(r).db;
+    const n = before.payments.length;
     valueOf(r).payInvoice("i1", "cash");
     await settle();
     const after = valueOf(r).db;
     expect(after.payments.length).toBe(n + 1);
-    expect(after.payments[0]!.amountCents).toBe(124000);
+    expect(after.payments.find((x) => x.invoiceId === "i1" && !before.payments.some((y) => y.id === x.id))!.amountCents).toBe(124000);
     expect(after.invoices.find((i) => i.id === "i1")!.paidCents).toBe(184000);
+  });
+  it("С3. ДАНО депозитный счёт 342, оплачено 100 (смета e5, работа j1). КОГДА «Принять депозит». ТОГДА платёж ровно на остаток 242", async () => {
+    const r = await open((d) => ({ ...d, invoices: d.invoices.map((i) => (i.id === "i5" ? { ...i, paidCents: 10000 } : i)) }));
+    const before = valueOf(r).db;
+    valueOf(r).payDeposit("e5", "cash");
+    await settle();
+    const after = valueOf(r).db;
+    const paid = after.payments.filter((x) => x.invoiceId === "i5" && !before.payments.some((y) => y.id === x.id));
+    expect(paid.map((x) => x.amountCents)).toEqual([24200]);
+    expect(after.invoices.find((i) => i.id === "i5")!.paidCents).toBe(34200);
   });
 });
