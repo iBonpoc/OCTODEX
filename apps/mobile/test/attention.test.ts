@@ -98,3 +98,18 @@ describe("unit:attention — overdue invoices by role", () => {
     expect(att.some((a) => a.kind === "overdue")).toBe(false);
   });
 });
+
+/** #1995 (rule 8): the amount of the «просрочен» line is what the invoice still owes (the engine's invoiceOwes) */
+describe("unit:attention — the amount of an overdue invoice (#1995)", () => {
+  const overdueOf = (patch: Partial<{ totalCents: number; paidCents: number }>) => {
+    const db = makeSeed();
+    const d2 = { ...db, invoices: db.invoices.map((i) => (i.id === "i1" ? { ...i, ...patch } : i)) };
+    return buildAttention(d2, "director").find((x) => x.kind === "overdue" && x.refId === "i1");
+  };
+  it("С4. ДАНО просроченный счёт 1 840, оплачено 600. КОГДА строится «Требует внимания». ТОГДА сумма строки 1 240", () => {
+    expect(overdueOf({ paidCents: 60000 })?.amountCents).toBe(124000);
+  });
+  it("С5. ДАНО просроченный счёт, оплачено больше итога. КОГДА строится «Требует внимания». ТОГДА строки нет", () => {
+    expect(overdueOf({ paidCents: 190000 })).toBeUndefined();
+  });
+});
