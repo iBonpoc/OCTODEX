@@ -1,4 +1,6 @@
+import type { Mode } from "@/data/store";
 import { timing, type StatusName } from "@octo/design-tokens";
+import { seeCosts } from "./access";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
@@ -98,7 +100,7 @@ export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpe
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
 /** a refused money change is always first: above every other score (a lead waiting N minutes is 1000 + N, review #263 №1) */
 export const REJECTED_SCORE = Number.MAX_SAFE_INTEGER;
-export function buildAttention(db: DB, role: Role = "director", now: number = Date.now(), extra: { rejected?: readonly RejectedOp[] } = {}): AttentionItem[] {
+export function buildAttention(db: DB, role: Role = "director", now: number = Date.now(), extra: { rejected?: readonly RejectedOp[]; mode?: Mode } = {}): AttentionItem[] {
   const out: AttentionItem[] = [];
   // a money change the server refused (the store's list — the signed-in person's own): first, the phone showed it as done
   for (const r of extra.rejected ?? []) {
@@ -280,7 +282,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     const date = v ? new Date(v.start).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz }) : "";
     out.push({ id: `photo-${visitId}`, kind: "photoFailed", refId: visitId, name, label: "photoUp.att", params: { n, name, date }, chip: "photoUp.chip", status: "bad", score: PHOTO_FAILED_SCORE });
   }
-  out.push(...priceRecalcItems(db, role, now));
+  out.push(...priceRecalcItems(db, role, now, extra.mode));
   return out.sort((a, b) => b.score - a.score);
 }
 
@@ -293,9 +295,11 @@ export const PRICE_RECALC_DAYS = 7;
  * last of the past 7 days. Only who sees our costs (the rows come only to them — catalog_price_recalc's RLS — and not to a
  * tech in any case). The words: who sent what and what stayed.
  */
-export function priceRecalcItems(db: Pick<DB, "priceRecalc" | "catalog" | "members" | "costsVisible">, role: Role, now: number): AttentionItem[] {
+/** `mode`: the store's (the screens pass it); a pure caller without one — the demo's rule */
+export function priceRecalcItems(db: Pick<DB, "priceRecalc" | "catalog" | "members" | "costsVisible">, role: Role, now: number, mode: Mode = "demo"): AttentionItem[] {
   // a cache that is not a list (an old or broken one) is no reason
-  if (role === "tech" || db.costsVisible === false || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
+  // #1837: who sees our costs (features/access.ts) — the tech view never
+  if (!seeCosts(db, role, mode) || !Array.isArray(db.priceRecalc) || !db.priceRecalc.length) return [];
   const since = now - PRICE_RECALC_DAYS * 864e5;
   const last = new Map<ID, NonNullable<DB["priceRecalc"]>[number]>();
   for (const r of db.priceRecalc) {

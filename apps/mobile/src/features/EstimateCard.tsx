@@ -1,4 +1,5 @@
 import { APP_NAME } from "@/config/product";
+import { keepCosts, seeCosts } from "./access";
 import { visitWhen } from "@/features/schedule";
 import { useHeldSheet } from "@/ui/heldSheet";
 import { useEffect, useMemo, useRef, useState, type ComponentRef, type ReactElement, type ReactNode } from "react";
@@ -79,8 +80,8 @@ export function EstimateCardBody({ e, openSend, frame }: { e: Estimate; openSend
   ].filter(Boolean);
   const tplHeld = useHeldSheet(universal && tplOpen ? e : null); // the sheet goes out before it is unmounted (#1163)
   // the office: the margin, or why it is not counted (debt 5); who may not see costs (a tech, sales without view_costs —
-  // the server's app.can_view_costs, db.costsVisible) never sees it: their lines come without costs (review PR-A №1)
-  const margin = store.role === "tech" || db.costsVisible === false ? null : marginView(e);
+  // the server's app.can_view_costs, features/access.ts seeCosts) never sees it: their lines come without costs (review PR-A №1)
+  const margin = seeCosts(db, store.role, store.mode) ? marginView(e) : null;
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
@@ -767,9 +768,10 @@ function SaveTemplateSheet({ e, onClose, visible, onExited }: { e: Estimate; onC
   const [done, setDone] = useState(false);
   const save = () => {
     if (!e.doc || done || !name.trim()) return;
-    const seeCosts = store.db.costsVisible ?? store.role !== "tech";
+    // #1837: the template keeps the costs the phone holds unless the server said «no» (a write, not a view)
+    const costsSeen = keepCosts(store.db);
     const exempt = !!store.db.customers.find((c) => c.id === e.customerId)?.taxExempt;
-    const tpl = { id: uid(), name, doc: toTemplateDoc(e.doc, seeCosts, exempt) };
+    const tpl = { id: uid(), name, doc: toTemplateDoc(e.doc, costsSeen, exempt) };
     // what the server would refuse is never queued: say so instead of «сохранён»
     if (!cleanEstimateTemplate(tpl)) {
       toast.show(t("est.tpl.cannot"));

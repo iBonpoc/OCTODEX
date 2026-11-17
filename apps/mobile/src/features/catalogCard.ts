@@ -84,7 +84,8 @@ export interface ItemUsage {
 const signed = (e: Estimate) => (e.status === "approved" || e.status === "awaiting_countersign") && !!e.approval && !!e.doc?.options?.length;
 
 /** what an item did, from what this device has (the spec's counters — no server table) */
-export function itemUsage(db: Pick<DB, "estimates" | "purchaseOrders" | "costsVisible">, itemId: ID): ItemUsage {
+/** `costs`: does this person see our costs (features/access.ts seeCosts) — the profit only then */
+export function itemUsage(db: Pick<DB, "estimates" | "purchaseOrders">, itemId: ID, costs: boolean): ItemUsage {
   let inEstimates = 0;
   let sold = dec(0);
   let revenue = 0;
@@ -127,7 +128,7 @@ export function itemUsage(db: Pick<DB, "estimates" | "purchaseOrders" | "costsVi
   }
   return {
     inEstimates, soldQty: sold.toString(), revenueCents: revenue,
-    profitCents: db.costsVisible === false ? null : profit, boughtQty: bought.toString(),
+    profitCents: costs ? profit : null, boughtQty: bought.toString(),
   };
 }
 
