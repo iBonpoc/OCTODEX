@@ -54,7 +54,7 @@ exports.run = async (h, { seed, admin }) => {
   await call("POST", "/rest/v1/rpc/portal_accept", { p_token: tokens[1], p_option_id: est[1].o, p_addon_ids: [], p_signer: "Ann Client 472", p_svg: "M0 0 L10 10", p_consent: true, p_channel: "portal" }, seed.anonKey);
   await call("POST", "/rest/v1/rpc/countersign_estimate", { p_estimate_id: est[1].e, p_svg: "M0 0 L9 9", p_member_signature_id: null, p_job_id: null, p_invoice_id: null }, owner.access_token);
   const [job] = await waitRows(admin, `jobs?estimate_id=eq.${est[1].e}&select=id`, (r) => r.length === 1, "the job of the signed estimate");
-  const [inv] = await waitRows(admin, `invoices?job_id=eq.${job.id}&select=id,total,paid`, (r) => r.length === 1, "the deposit invoice");
+  const [inv] = await waitRows(admin, `invoices?job_id=eq.${job.id}&select=id`, (r) => r.length === 1, "the deposit invoice");
 
   await signIn(h, a1);
 
