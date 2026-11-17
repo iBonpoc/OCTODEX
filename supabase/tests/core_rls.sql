@@ -16568,8 +16568,8 @@ select tst.fails($q$select public.catalog_set_group_price('53620000-0000-4000-80
 :as_super
 do $t$ begin
   set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = 150 where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000';
   update public.catalog_items set unit_price_cents = 100 where id = '53510000-0000-4000-8000-0000000000a1';
-  update public.catalog_items set unit_price_cents = 150 where id = '53510000-0000-4000-8000-0000000000a2';
   set local session_replication_role = origin;
 end $t$;
 :as_office_a
@@ -16579,8 +16579,8 @@ select tst.ok(public.catalog_set_group_price('53510000-0000-4000-8000-0000000000
 :as_super
 do $t$ begin
   set local session_replication_role = replica;
+  update public.catalog_items set unit_price_cents = 100 where attributes ->> 'priceGroup' = 't351:hand' and company_id = 'ca000000-0000-0000-0000-000000000000';
   update public.catalog_items set unit_price_cents = 150 where id = '53510000-0000-4000-8000-0000000000a1';
-  update public.catalog_items set unit_price_cents = 100 where id in ('53510000-0000-4000-8000-0000000000a2');
   set local session_replication_role = origin;
 end $t$;
 :as_office_a
