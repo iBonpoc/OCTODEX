@@ -2,6 +2,7 @@ import { APP_NAME } from "@/config/product";
 import { useEffect, useState } from "react";
 import { Image, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
+import { invoiceOwes } from "@octo/estimating-engine";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { I18nOverride, useI18n, type DictKey } from "@/i18n";
@@ -145,7 +146,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
     if (!payingInv) return;
     try {
       if (data.source === "local") {
-        store.recordPayment(payingInv.id, payingInv.totalCents - payingInv.paidCents, "card", "stripe-simulated", true);
+        store.recordPayment(payingInv.id, invoiceOwes(payingInv), "card", "stripe-simulated", true);
       } else {
         setRemote(await paySimulated(token, payingInv.id));
       }
@@ -215,7 +216,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
               <SectionTitle title={t("portal.invoices")} />
               <CardList>
                 {data.invoices.map((inv) => {
-                  const bal = Math.max(0, inv.totalCents - inv.paidCents);
+                  const bal = invoiceOwes(inv);
                   // ACH on its way is not money yet, but the client must not be asked for it again
                   const toPay = Math.max(0, bal - inv.pendingCents);
                   const sent = outcome[inv.id];
@@ -301,7 +302,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
       </View>
       <SimulatedCheckout
         visible={!!payingInv}
-        amountCents={payingInv ? payingInv.totalCents - payingInv.paidCents : 0}
+        amountCents={payingInv ? invoiceOwes(payingInv) : 0}
         title={payingInv ? [payingInv.number, payingInv.title].filter(Boolean).join(" · ") : ""}
         onClose={() => setPaying(null)}
         onPaid={paySim}
