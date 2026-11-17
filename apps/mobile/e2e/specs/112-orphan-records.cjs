@@ -52,7 +52,8 @@ exports.run = async (h) => {
   const sheet = h.sheet();
   const save = sheet.getByRole("button", { name: "Сохранить", exact: true }).last();
   h.expect((await save.isDisabled()) === true, "no save while nobody is chosen");
-  await sheet.getByRole("radio", { name: me.name }).click(); await p.waitForTimeout(300);
+  await sheet.getByTestId("task-who-button").click(); // «Кто ⌄» is a row with a menu (spec 56 wave 5а)
+  await p.getByTestId(`task-who-${me.id}`).locator("visible=true").first().click(); await p.waitForTimeout(300);
   await save.click(); await p.waitForTimeout(700);
   db = await h.db();
   h.expect(db.tasks.find((x) => x.id === "e2e-torph").assigneeId === me.id, "the task is mine now");

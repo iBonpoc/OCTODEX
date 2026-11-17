@@ -27,7 +27,8 @@ import { PhotoStrip } from "@/features/PhotoStrip";
 import { canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
 import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
-import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls";
+import { Button, IconButton, StatusChip, Steps } from "@/ui/controls";
+import { SelectField } from "@/ui/selectField";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -286,12 +287,10 @@ export default function VisitScreen() {
               {money(visitDueCents(db, v))}
             </T>
           </View>
-          <T v="caption" tone="mut">
-            {t("visit.method")}
-          </T>
-          <Segmented
-            full
+          {/* the method — a value of the form, a row with a menu (spec 56 §3 row 4); the same codes go into the payment */}
+          <SelectField<typeof method>
             testID="visit-method"
+            label={t("visit.method")}
             value={method}
             onChange={setMethod}
             items={[
