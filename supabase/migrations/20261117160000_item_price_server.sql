@@ -38,14 +38,24 @@ revoke all on function app.item_price_cents(bigint, int, int) from public, anon,
 -- a cost has an upper bound ($1 000 000 a unit): the formula stays far from bigint (check 2, N4)
 alter table public.catalog_item_costs drop constraint if exists catalog_item_costs_cost_max;
 alter table public.catalog_item_costs add constraint catalog_item_costs_cost_max check (unit_cost_cents <= 100000000) not valid;
-alter table public.catalog_item_costs validate constraint catalog_item_costs_cost_max;
+-- validated only when no stored cost is above it (the migration must not abort on old data; such a row stays as it is, new
+-- writes are checked); the phone's money input has its own MAX_CENTS
+do $$
+begin
+  if not exists (select 1 from public.catalog_item_costs where unit_cost_cents > 100000000) then
+    alter table public.catalog_item_costs validate constraint catalog_item_costs_cost_max;
+  else
+    raise notice 'catalog_item_costs_cost_max left not valid: % stored cost(s) above $1 000 000',
+      (select count(*) from public.catalog_item_costs where unit_cost_cents > 100000000);
+  end if;
+end $$;
 
 -- ---- price_from_cost: «the price is counted from the cost» (readable by every member; no cost in it) -------------------
 alter table public.catalog_items add column if not exists price_from_cost boolean not null default false;
 
 -- ---- catalog_price_recalc: a price a client sent and the server replaced (old builds; the office is told) ------------
 create table if not exists public.catalog_price_recalc (
-  id                 uuid primary key default gen_random_uuid(),
+  id                 uuid primary key default public.uuid_generate_v7(),
   company_id         uuid not null references public.companies (id),
   item_id            uuid not null,
   sent_price_cents   bigint not null,
@@ -132,7 +142,8 @@ begin
 
   v_price := app.item_price_cents(k.unit_cost_cents, k.vendor_tax_bps, k.markup_bps);
   v_can   := auth.uid() is null or app.can_view_costs(new.company_id);
-  v_sent  := new.unit_price_cents is distinct from old.unit_price_cents;
+  -- a null price is no «sent price»: the item's own not null refuses the row (never an error of the note below)
+  v_sent  := new.unit_price_cents is not null and new.unit_price_cents is distinct from old.unit_price_cents;
   v_other := v_sent or old.kind is distinct from 'material' or (old.deleted_at is not null and new.deleted_at is null);
   if not (v_due or v_other) then
     return new;  -- a rename, a photo, a code: an off-formula price stays (spec 53 §5.3б п.2)
@@ -140,20 +151,28 @@ begin
 
   -- a price the client sent and the server replaces: noted for the office, unless it is a stale echo (an old phone sends
   -- its whole cached row: the sent price is the price this item had before its last change)
-  if v_sent and new.unit_price_cents is distinct from (case when v_due or v_can then v_price else old.unit_price_cents end) then
+  if v_sent and new.unit_price_cents is distinct from (case when v_can then v_price else old.unit_price_cents end) then
     select exists (
       select 1 from (select h.prev_unit_price_cents from public.catalog_price_history h
                       where h.company_id = new.company_id and h.item_id = old.id and h.unit_price_cents is not null
                       order by h.at desc, h.id desc limit 1) last
        where last.prev_unit_price_cents = new.unit_price_cents) into v_echo;
-    if not v_echo then
+    -- the same price sent again by the same person is one note (a phone retrying, or saving again and again)
+    if not v_echo and not exists (
+         select 1 from (select r.sent_price_cents, r.by from public.catalog_price_recalc r
+                         where r.company_id = new.company_id and r.item_id = old.id
+                         order by r.at desc, r.id desc limit 1) last
+          where last.sent_price_cents = new.unit_price_cents and last.by is not distinct from auth.uid()) then
+      -- the FK is on old.id: a client that changes the id and sends a price fails its own save, nothing else
       insert into public.catalog_price_recalc (company_id, item_id, sent_price_cents, server_price_cents, by)
       values (new.company_id, old.id, new.unit_price_cents,
-              case when v_due or v_can then v_price else old.unit_price_cents end, auth.uid());
+              case when v_can then v_price else old.unit_price_cents end, auth.uid());
     end if;
   end if;
 
-  if v_due or v_can then
+  -- the formula only for an author who sees our costs (or none: a migration, a server job). The «price due» flag never
+  -- grants it: t30 and t32 run for such an author anyway, so a forged flag gives a non-viewer nothing (security check)
+  if v_can then
     new.unit_price_cents := v_price;
   else
     -- without our costs the author never gets the formula back (check 2, Б1): the price stays as it was
@@ -212,7 +231,8 @@ create or replace function app.catalog_price_drift(p_company uuid)
 returns table (item_id uuid, unit_price_cents bigint, formula_cents bigint)
 language plpgsql stable security definer set search_path = '' as $$
 begin
-  if not app.can_view_costs(p_company) then
+  -- a person must see our costs; a server job (no JWT) may read it
+  if auth.uid() is not null and not app.can_view_costs(p_company) then
     raise exception 'only who sees the costs' using errcode = '42501';
   end if;
   return query
@@ -223,8 +243,8 @@ begin
        and i.unit_price_cents is distinct from app.item_price_cents(c.unit_cost_cents, c.vendor_tax_bps, c.markup_bps);
 end;
 $$;
-revoke all on function app.catalog_price_drift(uuid) from public, anon;
-grant execute on function app.catalog_price_drift(uuid) to authenticated;
+-- no grant yet: the app schema is not exposed; 55-1 adds a public wrapper with its grant (rule 18)
+revoke all on function app.catalog_price_drift(uuid) from public, anon, authenticated;
 
 -- ---- what is stored: price_from_cost of every material with a cost (prices are NOT re-counted: an off-formula price
 -- stays until its cost changes, §5.3б п.2) ------------------------------------------------------------------------------

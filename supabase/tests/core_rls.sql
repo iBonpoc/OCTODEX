@@ -15898,10 +15898,13 @@ update public.catalog_items set name = 'T327 coil again', unit_cost_cents = 5000
  where id = '53220000-0000-4000-8000-0000000000c1';
 select tst.ok((select unit_price_cents from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1') = 6000,
   'T327 a rename (new phone, old phone with the same cost) keeps the off-formula $60.00');
-:as_office_a
+:as_super
 select tst.ok((select count(*) = 1 and min(formula_cents) = 5500 from app.catalog_price_drift('ca000000-0000-0000-0000-000000000000')
                 where item_id = '53220000-0000-4000-8000-0000000000c1'),
-  'T327 the office sees it in the list of off-formula prices (for 55-1)');
+  'T327 the list of off-formula prices (for 55-1) has it');
+select tst.ok(not has_function_privilege('authenticated', 'app.catalog_price_drift(uuid)', 'execute'),
+  'T327 the list is not callable by the app yet (55-1 adds a wrapper)');
+:as_office_a
 \echo 'T327 a rename ok'
 
 -- T328: sales without view_costs (the audit's conditions 17.11): never gets the formula back, nor our costs; a replaced price
@@ -15916,6 +15919,10 @@ select tst.ok((select unit_price_cents from public.catalog_items where id = '532
   'T328 sales turning it into labor and back gets no formula either');
 select tst.ok((select price_from_cost from public.catalog_items where id = '53220000-0000-4000-8000-0000000000c1'),
   'T328 sales sees that the price is counted (no number in it)');
+-- the same price saved again is one note; a null price is refused by the item itself (not by the note)
+update public.catalog_items set unit_price_cents = 6500 where id = '53220000-0000-4000-8000-0000000000c1';
+select tst.fails($q$update public.catalog_items set unit_price_cents = null where id = '53220000-0000-4000-8000-0000000000c1'$q$,
+  'T328 a null price is refused');
 select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
           and tst.cnt($q$select 1 from public.catalog_price_history where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
           and tst.cnt($q$select 1 from public.catalog_price_recalc where item_id = '53220000-0000-4000-8000-0000000000c1'$q$) = 0
