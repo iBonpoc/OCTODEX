@@ -750,6 +750,12 @@ describe("«Расход v2» PR-1б: Д1 — the estimate's downspout up to 10 
     const why = ps.find((p) => p.key === "ds.rect.3x4.alu.white")!.why!;
     expect(why).toEqual({ rule: "ds_round_up", params: { downspouts: 1, lengthIn: 264, stepFt: 10, ft: 30 }, setting: "dsRoundUpFt" });
   });
+  it("the sticks come from the real lengths, not the rounded ones: two of 22 ft → 60 ft in the estimate, 5 sticks (from 30 ft each — 6)", () => {
+    const ps = job([{ heightIn: 264 }, { heightIn: 264 }]);
+    expect(q(ps, "ds.rect.3x4.alu.white")).toBe("60");
+    expect(q(ps, "dsstick.rect.3x4.alu.white")).toBe("5");
+    expect(ps.find((p) => p.key === "dsstick.rect.3x4.alu.white")!.use).toBe("purchase");
+  });
   it("each downspout on its own: 22 ft + 12 ft → 30 + 20 = 50 ft (not 34 → 40)", () => {
     const ps = job([{ heightIn: 264 }, { heightIn: 144 }]);
     expect(q(ps, "ds.rect.3x4.alu.white")).toBe("50");

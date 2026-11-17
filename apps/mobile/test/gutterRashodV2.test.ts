@@ -19,7 +19,9 @@ import { engineChangedFor, estimateAction } from "../src/modules/gutters/estimat
 import { fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { toMeasurement } from "../src/modules/gutters/geometry";
 import { readRules, toRulesOverride } from "../src/modules/gutters/settings";
-import { matchAttrs } from "../src/modules/gutters/prices";
+import { dsLine, matchAttrs } from "../src/modules/gutters/prices";
+import { tFor } from "../src/i18n/translate";
+import { dsTotals, type SpecDs } from "../src/modules/gutters/view/spec";
 
 const M = "m1";
 const name = (p: PartQty) => `${p.attrs.part ?? p.attrs.work ?? p.key}`;
@@ -45,17 +47,15 @@ describe("the money of a downspout bent on site (Д1, Д6, Р4; rule 8 — the c
     id, kind: p.kind === "labor" ? "service" : "material", name: id, unit: p.unit, priceCents, ...(p.kind === "labor" ? {} : { costCents: priceCents, vendorTaxBps: 0, markupBps: 0 }), attributes: matchAttrs(p),
   } as CatalogItem);
   const lines = linesFromParts(ps, [item("ds", ds, 850), item("bend", bend, 1500)], name, uid, "r1", M) as ModuleLine[];
-  const lineOf = (k: string) => lines.find((l) => l.source.key.includes(k))!;
+  const lineOf = (k: string) => lines.find((l) => l.source!.key.includes(k))!;
   it("2 storeys: 240″ + 3 bends × 6″ = 258″ → 30 ft at $8.50 = $255.00; «Гиб по месту» 3 × $15.00 = $45.00; no elbow line", () => {
     expect(lineOf("part=downspout").quantity).toBe("30");
     expect(lineOf("work=bend").quantity).toBe("3");
-    expect(lines.some((l) => l.source.key.includes("part=elbow"))).toBe(false);
+    expect(lines.some((l) => l.source!.key.includes("part=elbow"))).toBe(false);
     const t = optionTotals(newDoc(), { id: "o", name: "o", lines: lines as never });
-    expect(30 * 850).toBe(25500);
-    expect(t.groupSubtotals.labor).toBe(3 * 1500);
-    // the downspout's line is the material it is, nothing else priced here: 30 × 850 cents
-    expect(lineOf("part=downspout").unitPriceCents * Number(lineOf("part=downspout").quantity)).toBe(25500);
+    // the core's totals (rule 8): material $255.00, labor $45.00 — only the two priced lines carry money
     expect(t.groupSubtotals.material).toBe(25500);
+    expect(t.groupSubtotals.labor).toBe(4500);
   });
   it("a company that bills whole feet (Н8 = 1): 258″ → 22 ft = $187.00", () => {
     const whole = linesFromParts(partsOf(drawing(), { dsRoundUpFt: 1 }), [item("ds", ds, 850)], name, uid, "r1", M) as ModuleLine[];
@@ -74,7 +74,7 @@ describe("Т1: the parts version 5 — told, never recounted by itself", () => {
     expect(engineChangedFor(e, M, GUTTER_PARTS_VERSION, db(d, e))).toBe(true);
     expect(estimateAction(db(d, e), m, true)).toEqual({ kind: "update", estimateId: "e1" });
     expect(JSON.stringify(e.doc)).toBe(before);
-    expect(v4.find((l) => l.source.key.includes("part=downspout"))!.quantity).toBe("20");
+    expect(v4.find((l) => l.source!.key.includes("part=downspout"))!.quantity).toBe("20");
   });
   it("a sent one is not told and keeps its 20 ft; a signed one is only opened", () => {
     const sent = estimate(v4, "sent");
@@ -84,12 +84,12 @@ describe("Т1: the parts version 5 — told, never recounted by itself", () => {
     expect(estimateAction(db(d, signed), m, true)).toMatchObject({ kind: "open", signed: true });
   });
   it("only the person's «Обновить» brings 30 ft and «Гиб по месту» 3; a price set by hand on another line stays", () => {
-    const e = estimate(v4.map((l) => (l.source.key.includes("part=outlet") ? { ...l, unitPriceCents: 4321 } : l)));
+    const e = estimate(v4.map((l) => (l.source!.key.includes("part=outlet") ? { ...l, unitPriceCents: 4321 } : l)));
     const now = linesFromParts(partsOf(d), [], name, uid, "rev2", M, "2026-11-17T10:00:00Z", GUTTER_PARTS_VERSION) as ModuleLine[];
     const out = resyncLines(e.doc!.options[0]!.lines as ModuleLine[], now);
-    expect(out.find((l) => l.source.key.includes("part=downspout"))!.quantity).toBe("30");
-    expect(out.find((l) => l.source.key.includes("work=bend"))!.quantity).toBe("3");
-    expect(out.find((l) => l.source.key.includes("part=outlet"))!.unitPriceCents).toBe(4321);
+    expect(out.find((l) => l.source!.key.includes("part=downspout"))!.quantity).toBe("30");
+    expect(out.find((l) => l.source!.key.includes("work=bend"))!.quantity).toBe("3");
+    expect(out.find((l) => l.source!.key.includes("part=outlet"))!.unitPriceCents).toBe(4321);
     expect(engineChangedFor(estimate(out), M, GUTTER_PARTS_VERSION, db(d, estimate(out)))).toBe(false);
   });
   it("a drawing whose count did not change (a corrugated one of 20 ft) is not told by the new version", () => {
@@ -100,15 +100,31 @@ describe("Т1: the parts version 5 — told, never recounted by itself", () => {
 });
 
 describe("rule 16: `elbowBend` lives through saving and reading, and an old app that copies the attributes keeps it", () => {
-  it("saved and read back: the same", () => {
-    const d = drawing({ dsStyle: "plain", elbowBend: "ready", elbows: [{ style: "A", qty: 2 }] });
-    const back = fromElements(toElements(d as never, M));
-    expect(back.downspouts[0]!.elbowBend).toBe("ready");
-    expect(partsOf(back).some((p) => p.key === "labor.bend")).toBe(false);
+  it("saved and read back, the word reaches the engine: a plain one without elbows made «ready» has no bends, «field» has 3", () => {
+    const ready = fromElements(toElements(drawing({ dsStyle: "plain", elbowBend: "ready" }) as never, M));
+    expect(ready.downspouts[0]!.elbowBend).toBe("ready");
+    expect(partsOf(ready).some((p) => p.key === "labor.bend")).toBe(false);
+    const field = fromElements(toElements(drawing({ dsStyle: "corrugated", elbowBend: "field" }) as never, M));
+    expect(partsOf(field).find((p) => p.key === "labor.bend")?.qty).toBe("3");
+    expect(partsOf(field).some((p) => p.attrs.part === "elbow")).toBe(false);
   });
   it("an old phone that does not know it copies the attributes as they are (`{ ...attrs }`): the word stays", () => {
     const rows = toElements(drawing({ dsStyle: "plain", elbowBend: "field", elbows: [{ style: "A", qty: 2 }] }) as never, M);
     const oldPhone = rows.map((r) => ({ ...r, attrs: { ...(r.attrs as object) } }));
     expect(fromElements(oldPhone).downspouts[0]!.elbowBend).toBe("field");
+  });
+});
+
+describe("the view says what the engine counts", () => {
+  it("bent on site: «Гиб по месту × 3», not «Elbows»; ready: «Elbows A × 3»", () => {
+    const t = tFor("ru");
+    expect(dsLine(t, { shape: "rect", bent: true, elbows: [{ style: "A", qty: 3 }], offsets: [] })).toBe("Гиб по месту × 3");
+    expect(dsLine(t, { shape: "rect", bent: true, elbows: [{ style: "A", qty: 2 }], offsets: [{ lengthIn: 4, qty: 1 }] })).toBe("Гиб по месту × 2 · Offset 4″ × 1");
+    expect(dsLine(t, { shape: "rect", elbows: [{ style: "A", qty: 3 }], offsets: [] })).toContain("Elbows");
+  });
+  it("a bent one and a ready one of the same pipe are two kinds in the totals", () => {
+    const one = (n: number, bent: boolean): SpecDs => ({ n, id: `d${n}`, story: 1, shape: "rect", size: "3x4", dsStyle: "plain", elbows: [{ style: "A", qty: 3 }], offsets: [], bottom: "none", lengthIn: 138, ...(bent ? { bent: true as const } : {}) } as SpecDs);
+    const g = dsTotals([one(1, true), one(2, false), one(3, true)]);
+    expect(g.map((x) => [x.ns, !!x.bent])).toEqual([[[1, 3], true], [[2], false]]);
   });
 });
