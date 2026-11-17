@@ -16170,4 +16170,32 @@ select tst.ok((select condeferrable = false and convalidated from pg_constraint 
   'T331 the bound is validated');
 \echo 'T331 the flags ok'
 
+
+-- ---------------------------------------------------------------- T350: sales does not turn a counted material into another kind (#1965)
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53500000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'material', 'T350 coil', 'ft', 0);
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps) values
+  ('53500000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 1000, 0, 1000);
+-- an old build of sales: «service» with its own price in one save
+:as_sales_a
+update public.catalog_items set kind = 'service', unit_price_cents = 500 where id = '53500000-0000-4000-8000-0000000000c1';
+select tst.ok((select kind = 'material' and unit_price_cents = 1100 and price_from_cost from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 sales cannot make a counted material a service: still a material, $11.00 from the cost, not its $5.00');
+:as_office_a
+select tst.ok((select count(*) = 1 and bool_and(sent_price_cents = 500 and server_price_cents = 1100)
+                 from public.catalog_price_recalc where item_id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 the office is told: sales sent $5.00, $11.00 stayed');
+-- who sees our costs changes the kind as before; a material without a cost — sales too
+update public.catalog_items set kind = 'labor' where id = '53500000-0000-4000-8000-0000000000c1';
+select tst.ok((select kind = 'labor' and not price_from_cost from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c1'),
+  'T350 the office changes the kind as before');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents) values
+  ('53500000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'material', 'T350 hand', 'ea', 700);
+:as_sales_a
+update public.catalog_items set kind = 'service', unit_price_cents = 800 where id = '53500000-0000-4000-8000-0000000000c2';
+select tst.ok((select kind = 'service' and unit_price_cents = 800 from public.catalog_items where id = '53500000-0000-4000-8000-0000000000c2'),
+  'T350 a material without a cost: sales changes its kind and price as before');
+\echo 'T350 the kind of a counted material ok'
+
 \echo 'ALL TESTS PASSED'
