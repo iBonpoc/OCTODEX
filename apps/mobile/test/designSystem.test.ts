@@ -88,7 +88,6 @@ describe("design system: components", () => {
   });
   // a Press drawn as a button / tile / chip by the screen itself: its own background, radius or border in the tag
   const RULE29_STYLED_PRESS: Record<string, number> = {
-    "features/DatePick.tsx": 1,
     "features/PhotoStrip.tsx": 2,
     "features/PlanParts.tsx": 1,
     "features/estimate/SwipeRow.tsx": 1,

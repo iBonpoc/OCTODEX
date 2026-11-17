@@ -1,5 +1,5 @@
 /**
- * e2e 469 — spec 56 wave 5б (#1869, scenarios С1–С8 of spec 56 §10.1), DS А7 `DateField`; every view, by testID; days are the company's (Los Angeles), so this
+ * e2e 469 — spec 56 wave 5б (#1869, scenarios С1–С12 of spec 56 §10.1), DS А7 `DateField`; every view, by testID; days are the company's (Los Angeles), so this
  * spec is also run at 11:50 PM and 12:10 AM there (E2E_NOW=2026-11-16T07:50:00Z / 08:10:00Z, the lead's condition):
  * - showcase «Поля»: the row «Дата · Завтра, …»; a tap opens «Сегодня · Завтра» and the calendar under it; «Сегодня» — one tap;
  *   a calendar day; days before the company's today are not picked; «Без даты» in an optional one;
@@ -7,6 +7,7 @@
  *   as that company day and minute; the cancel reasons are rows with a check (radio), no «✓ » in the text.
  */
 const { todayKey, addDays, dayKey, minuteOf } = require("../companyTime.cjs");
+const { pressEscUntilClosed } = require("../sheet.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -28,11 +29,38 @@ exports.run = async (h) => {
   if (await p.getByTestId(`showcase-date-day-${yesterday}`).locator("visible=true").count())
     h.expect((await tid(`showcase-date-day-${yesterday}`).getAttribute("aria-disabled")) === "true", `С3 ${yesterday} (before today) is not picked`);
   h.expect((await tid(`showcase-date-day-${today}`).getAttribute("aria-disabled")) !== "true", "С3 today is picked");
+  // С9: the states differ by shape — the chosen day a filled circle, today a ring with no fill (not only the weight)
+  const look = (k) => p.evaluate((id) => {
+    const cell = [...document.querySelectorAll(`[data-testid="${id}"]`)].find((e) => e.offsetParent !== null);
+    // the shape: the descendant drawn as a circle (radius ≥ a third of its width)
+    const dot = [cell, ...cell.querySelectorAll("div")].find((d) => { const r = d.getBoundingClientRect(); return r.width > 20 && parseFloat(getComputedStyle(d).borderTopLeftRadius) >= r.width / 3; }) || cell;
+    const cs = getComputedStyle(dot);
+    return { state: cell.getAttribute("data-state") || "", bg: cs.backgroundColor, ring: parseFloat(cs.borderTopWidth) || 0, label: cell.getAttribute("aria-label") };
+  }, `showcase-date-day-${k}`);
+  const sel = await look(tomorrow), now = await look(today);
+  h.expect(/selected/.test(sel.state) && !/rgba\(0, 0, 0, 0\)|transparent/.test(sel.bg), `С9 the chosen day is a filled circle (${JSON.stringify(sel)})`);
+  h.expect(/today/.test(now.state) && now.ring > 0 && /rgba\(0, 0, 0, 0\)|transparent/.test(now.bg), `С9 today is a ring with no fill (${JSON.stringify(now)})`);
+  h.expect(/сегодня/.test(now.label), `С9 the screen reader hears «сегодня» (${now.label})`);
+  // С11: on the month of `min` there is no «‹»; the panel is not wider than popoverW (360) — at 1280 too
+  h.expect((await p.getByTestId("showcase-date-day-prev-off").locator("visible=true").count()) === 1 && (await p.getByTestId("showcase-date-day-prev").locator("visible=true").count()) === 0, "С11 no «‹» on the month of min");
+  const pw = (await tid("showcase-date-panel").boundingBox()).width;
+  h.expect(pw <= 360 + 1, `С11 the calendar is not wider than 360 (${pw})`);
+  // С12: the calendar is one Tab stop; the arrows move the focus by a day and a week (web, WAI-ARIA date grid)
+  const stops = await p.evaluate(() => [...document.querySelectorAll('[data-testid^="showcase-date-day-2"]')].filter((e) => e.offsetParent !== null && e.getAttribute("tabindex") === "0").map((e) => e.getAttribute("data-testid")));
+  h.expect(stops.length === 1 && stops[0] === `showcase-date-day-${tomorrow}`, `С12 one Tab stop — the chosen day (${stops.join(", ")})`);
+  await tid(`showcase-date-day-${tomorrow}`).focus();
+  await p.keyboard.press("ArrowRight");
+  await p.waitForFunction((id) => document.activeElement?.getAttribute("data-testid") === id, `showcase-date-day-${addDays(tomorrow, 1)}`, { timeout: 3000 });
+  await p.keyboard.press("ArrowDown");
+  await p.waitForFunction((id) => document.activeElement?.getAttribute("data-testid") === id, `showcase-date-day-${addDays(tomorrow, 8)}`, { timeout: 3000 });
+  h.expect(true, "С12 → a day, ↓ a week");
   await h.shot("open");
   // «Сегодня» — one tap: the value and the calendar closes
   await tid("showcase-date-today").click();
   await tid("showcase-date-panel").waitFor({ state: "hidden", timeout: 4000 });
   h.expect(/Сегодня/.test(await tid("showcase-date-row-button").innerText()), "С2 «Сегодня» in one tap");
+  // С10: the focus is back on the row after a pick (web)
+  await p.waitForFunction(() => document.activeElement?.getAttribute("data-testid") === "showcase-date-row-button", null, { timeout: 3000 }).then(() => h.expect(true, "С10 the focus is back on the row"), () => h.expect(false, "С10 the focus is back on the row"));
   // a calendar day: today + 5 (in this month or the next: «Вперёд»)
   const later = addDays(today, 5);
   await tid("showcase-date-row-button").click();
@@ -76,6 +104,18 @@ exports.run = async (h) => {
   h.expect(dayKey(made.start) === tomorrow, `С7 saved on the company's tomorrow (${dayKey(made.start)} / ${tomorrow})`);
   h.expect(minuteOf(made.start) === minute, `С7 saved at the slot's minute (${minuteOf(made.start)} / ${minute})`);
   await p.locator('[aria-modal="true"]').last().getByRole("button", { name: "Не сейчас" }).click();
+
+  // С10: in a sheet («Перенести»), the first Esc closes the open calendar, not the sheet; the next one the sheet
+  await h.go(`/visit/${made.id}`);
+  await p.getByRole("button", { name: "Перенести", exact: true }).first().click();
+  await tid("vf-date-row-button").waitFor({ timeout: 5000 });
+  h.expect((await p.getByTestId("vf-date-today").locator("visible=true").count()) === 0, "С10 «Перенести» has one row of quick dates (its own), no «Сегодня · Завтра»");
+  await tid("vf-date-row-button").click();
+  await tid("vf-date-panel").waitFor({ timeout: 4000 });
+  await pressEscUntilClosed(p, p.getByTestId("vf-date-panel").locator("visible=true").first());
+  h.expect((await p.getByTestId("sheet-panel").locator("visible=true").count()) === 1, "С10 the first Esc closed the calendar, the sheet stays");
+  // …and the next Esc closes the sheet
+  await pressEscUntilClosed(p);
 
   // — the cancel reasons: rows with a check (radio), the text without «✓ »
   await h.go(`/visit/${made.id}`);

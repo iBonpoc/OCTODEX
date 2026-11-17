@@ -31,6 +31,8 @@ export function SelectField<K extends string>({
   labelAbove,
   onOpen,
   expanded,
+  controls,
+  rowRef,
 }: {
   label: string;
   value: K | null | undefined;
@@ -52,6 +54,10 @@ export function SelectField<K extends string>({
   onOpen?: () => void;
   /** with `onOpen`: what the owner opened under the row is open now (DateField's calendar) — read to the screen reader */
   expanded?: boolean;
+  /** with `expanded`: the id of what opens under the row (`aria-controls`; no `aria-haspopup` — it is not a popup) */
+  controls?: string;
+  /** the row itself — the owner gives the focus back to it (DateField after a pick) */
+  rowRef?: (n: React.ComponentRef<typeof View> | null) => void;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
@@ -85,7 +91,7 @@ export function SelectField<K extends string>({
           {label}
         </T>
       ) : null}
-      <View ref={ref} collapsable={false}>
+      <View ref={(n) => { ref.current = n; rowRef?.(n); }} collapsable={false}>
         <Press
           testID={testID ? `${testID}-button` : undefined}
           onPress={open}
@@ -98,7 +104,7 @@ export function SelectField<K extends string>({
           accessibilityState={{ expanded: !!anchor || picker || !!expanded, disabled: !!(disabled || ro) }}
           // the web reads `aria-expanded` only when it is set on the element (as est-bar-total does)
           {...({ "aria-expanded": !!anchor || picker || !!expanded } as object)}
-          aria-haspopup={long || onOpen ? "dialog" : "menu"}
+          {...(expanded !== undefined && onOpen ? ({ "aria-controls": controls } as object) : ({ "aria-haspopup": long || onOpen ? "dialog" : "menu" } as object))}
           style={{
             minHeight: size.fieldPhone,
             flexDirection: "row",

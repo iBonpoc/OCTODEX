@@ -119,7 +119,15 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   return (
     <View style={{ gap: space[3] }}>
       {/* the day — one row, the calendar opens under it (DS А7, spec 56 §3: «день в форме — DateField»); the company's days */}
-      <DateField testID="vf-date" label={t("sch.date")} value={f.day} onChange={(k) => { if (k) { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); } }} />
+      <DateField
+        testID="vf-date"
+        label={t("sch.date")}
+        value={f.day}
+        // «Перенести» has its own quick dates with a time (quickStarts below) — one row of quick choices, not two
+        quick={!f.exceptId}
+        // the same day again keeps the chosen time; another day takes its own first free one
+        onChange={(k) => { if (k && k !== f.day) { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); } }}
+      />
       {f.exceptId ? (
         // moving a visit: quick dates on the company's calendar and clock (13 §3.6)
         <RowView style={{ flexWrap: "wrap" }}>
@@ -161,7 +169,8 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         <ToggleRow testID="vf-all-day" label={t("plan5.allDay")} value={f.allDay} onChange={(on) => f.setAllDay(on)} />
       ) : null}
       {f.allDay ? null : (<>
-      <Field label={t("sch.start")}>
+      {/* «Начало» once: the row says it (the old caption over the chips is gone, review of 5б) */}
+      <View style={{ gap: space[1] }}>
         {/* «Начало ⌄» — the free slots of the day (display only: the busy rule is formWarnings/freeSlots, unchanged); ± below */}
         {f.slots.length ? (
           <SelectField<string>
@@ -179,7 +188,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           <T v="title" tabular>{time(f.value.start)}</T>
           <IconButton icon="plus" label={`${t("vf.otherTime")} +${f.hours.stepMin}`} onPress={() => f.setMinute(Math.min(SCHEDULE_DEFAULTS.latestMin, f.startMin + f.hours.stepMin))} />
         </RowView>
-      </Field>
+      </View>
       <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={SCHEDULE_DEFAULTS.durationStepMin} min={SCHEDULE_DEFAULTS.durationStepMin} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={f.setDuration} />
       </>)}
       {noteLabel ? (
